@@ -629,9 +629,8 @@ vote_material_and_certified_reference_pins_are_not_relaxed_by_quorum_equivalence
     {ok, Decoded} = quod_atomic:decode_control(Wire),
     ?assertEqual(quod_atomic:control_material(Control), quod_atomic:control_material(Decoded)),
     lists:foreach(fun(BadRef) ->
-        ?assertNot(quod_dtx:certified_entry_ref_matches(
-                     Target, maps:get(entry, Phase), Control, BadRef,
-                     maps:get(committee, Phase)))
+        ?assertNot(quod_dtx:certified_entry_claim_matches(
+                     Target, maps:get(entry, Phase), Control, BadRef))
     end, changed_reference_claims(Ref)),
     {quod_dtx_vote, 4, Group, Target, Bundle, prepared} = quod_atomic:control_body(Control),
     BadBundles = [setelement(1, Bundle, maps:get(origin, F)),
@@ -981,17 +980,23 @@ signed_control(Target, Record, Sequence, F) ->
     Control.
 
 certified_phase(Target = {Ns, Anchor}, Control, Slot, Signers) ->
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, Slot),
+    Era = quod_ledger:initial_era(Target),
+    Position = {Era, Slot - 1},
+    %% Reducer fixture, not a complete source history. The quorum signatures
+    %% below authenticate the same exact block under independent signer sets.
+    {ok, Block} = quod_ledger:new_block(Position, {Era, Slot - 2, <<0:256>>},
+                                      {batch, [{dtx, Control}]}, Slot),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Hash = quod_simplex:block_hash(Block),
     Committee = lists:sort([maps:get(pubkey, S) || S <- Signers]),
     Shares = maps:from_list([{maps:get(pubkey, S),
-               quod_simplex:make_share(Domain, commit, Slot, Hash, S)} || S <- Signers]),
+               quod_simplex:make_share(Domain, commit, Position, Hash, S)} || S <- Signers]),
     [A, B, C, D] = Committee,
     Make = fun(Keys) ->
-        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Slot, Hash,
+        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Position, Hash,
                        [maps:get(K, Shares) || K <- Keys], Committee),
-        Entry = quod_ledger:entry(Block, Cert),
+        ?assert(quod_simplex:verify_cert(Domain, Cert, Committee)),
+        Entry = quod_ledger:entry(Slot, Block, Cert),
         {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
         {Entry, Ref}
     end,
@@ -999,8 +1004,8 @@ certified_phase(Target = {Ns, Anchor}, Control, Slot, Signers) ->
     {OtherEntry, OtherRef} = Make([B, C, D]),
     ?assertNotEqual(Ref, OtherRef),
     ?assert(quod_dtx:same_certified_ref(Ref, OtherRef)),
-    ?assert(quod_dtx:certified_entry_ref_matches(Target, Entry, Control, OtherRef, Committee)),
-    ?assert(quod_dtx:certified_entry_ref_matches(Target, OtherEntry, Control, Ref, Committee)),
+    ?assert(quod_dtx:certified_entry_claim_matches(Target, Entry, Control, OtherRef)),
+    ?assert(quod_dtx:certified_entry_claim_matches(Target, OtherEntry, Control, Ref)),
     #{control => Control, entry => Entry, ref => Ref, alternate_ref => OtherRef,
       committee => Committee}.
 

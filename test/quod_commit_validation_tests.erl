@@ -66,7 +66,7 @@ read_certificate(ProofId, N) ->
                  key => quod_identity:key_term({Signer, Seed})},
     {ok, AnchorRef} = quod_dtx:certified_ref(
                         Ns, Anchor, 2, <<(N + 100):256>>, <<(N + 200):256>>,
-                        <<"certified-read-qc">>),
+                        quod_ct:fixture_finality(1, <<(N + 100):256>>)),
     PlanDigest = <<(N + 300):256>>,
     CommitteeId = <<(N + 400):256>>,
     {ok, Vote} = quod_read_certificate:sign(

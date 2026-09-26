@@ -14,6 +14,45 @@
 
 -define(NS, <<"quod:dtx">>).
 
+era_reference_names_material_height_and_a_compact_preferred_head_test() ->
+    F = #{identity := Identity, era := Era, transaction := Tx} = quod_ct:protocol_fixture(<<"ref:era">>),
+    Root = maps:get(protocol_root, maps:get(projection, F)),
+    {ok, B} = quod_ledger:new_block({Era, 19}, Root, {batch, [Tx]}, 1),
+    {ok, K} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(B), empty, 1),
+    Cert = quod_ct:protocol_certificate(K, F), Entry = quod_ledger:entry(2, B, Cert),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Tx),
+    ?assertMatch({quod_dtx_ref, 3, _, _, 2, _, _, _}, Ref),
+    ?assertEqual({ok, {Identity, 2, element(3, quod_ledger:block_ref(B)), Tx#transaction.tx_id}},
+                  quod_dtx:certified_ref_claim(Ref)),
+    ?assertEqual({ok, Cert}, quod_ledger:decode_finality_head(element(8, Ref))),
+    ?assertEqual(nomatch, binary:match(element(8, Ref), K#block.block_bytes)),
+    ?assertNot(quod_dtx:validate_certified_ref(setelement(2, Ref, 2))),
+    ?assertNot(quod_dtx:validate_certified_ref(setelement(8, Ref, <<"not a head">>))).
+
+era_verified_selected_entry_discharges_an_unavailable_preferred_witness_test() ->
+    F = #{identity := Identity, era := Era, transaction := Tx} = quod_ct:protocol_fixture(<<"ref:selected">>),
+    Projection = maps:get(projection, F), Root = maps:get(protocol_root, Projection),
+    {ok, B} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    {ok, K} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B), empty, 1),
+    Selected = quod_ledger:entry(2, B, quod_ct:protocol_certificate(B, F)),
+    Preferred = quod_ledger:entry(2, B, quod_ct:protocol_certificate(K, F)),
+    %% The selected evidence independently verifies. K need not remain in this
+    %% archive, and no property of its unused bytes can replace that check.
+    ?assertEqual(ok, quod_ct:verify_finality(Identity, Selected, Projection)),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Preferred, Tx),
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Selected, Tx, Ref)),
+    Bad = (quod_ct:protocol_certificate(K, F))#cert{
+             sigs = [{maps:get(pubkey, maps:get(signer, F)), <<0:512>>}]},
+    {ok, BadBytes} = quod_ledger:encode_finality_head(Bad),
+    Unused = setelement(8, Ref, BadBytes),
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Selected, Tx, Unused)),
+    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:finality_begin(
+      Identity, quod_ledger:entry(2, B, Bad), Projection)),
+    lists:foreach(fun(Mismatched) ->
+        ?assertNot(quod_dtx:certified_entry_claim_matches(Identity, Selected, Tx, Mismatched))
+    end, [setelement(3, Ref, <<"other">>), setelement(4, Ref, <<99:256>>),
+          setelement(5, Ref, 3), setelement(6, Ref, <<99:256>>), setelement(7, Ref, <<99:256>>)]).
+
 %% ------------------------------------------------------------------
 %% harness
 %% ------------------------------------------------------------------
@@ -1226,12 +1265,13 @@ certified_entry_ref_binds_exact_entry_test() ->
     Slot = 9,
     Timestamp = 1234,
     Payload = {batch, [{dtx, Control}]},
+    Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Slot - 1, Payload, Timestamp),
+                    {Era, Slot}, {Era, Slot - 1, key(251)}, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
-    Cert = #cert{kind = commit, slot = Slot,
-                 block_hash = BlockHash, sigs = []},
-    Entry = quod_ledger:entry(Block, Cert),
+    Cert = #cert{kind = commit, era = Era, slot = Slot,
+                 block_hash = BlockHash, sigs = [{key(250), <<0:512>>}]},
+    Entry = quod_ledger:entry(Slot, Block, Cert),
     View = quod_ledger:entry_view(Entry),
     {{ok, Ref}, {call_count, Counts}} = tprof:profile(fun() ->
         quod_dtx:certified_entry_ref(Target, Entry, Control)
@@ -1241,7 +1281,7 @@ certified_entry_ref_binds_exact_entry_test() ->
     {ok, Expected} =
         quod_dtx:certified_ref(
           Ns, Anchor, Slot, BlockHash, quod_atomic:record_digest(Control),
-          term_to_binary(Cert, [deterministic])),
+          finality_bytes(Cert)),
     ?assertEqual(Expected, Ref),
     {ok, RefusedMaterial} = quod_atomic:select_vote(
                             quod_atomic:control_material(Control), {refused, [vote_deadline]}),
@@ -1251,17 +1291,15 @@ certified_entry_ref_binds_exact_entry_test() ->
                  quod_dtx:certified_entry_ref(Target, Entry, OtherControl)),
     ?assertEqual({error, invalid_certified_entry},
                  quod_dtx:certified_entry_ref({Ns, key(252)}, Entry, Control)),
-    %% Every hash-covered entry field and the certificate's own slot binding
-    %% are checked; neither can be replaced while retaining the same ref.
+    %% Hash-covered block fields cannot change while retaining the same
+    %% artifact. Material height and witness-head view are distinct.
     ?assertEqual({error, bad_entry},
                  quod_ledger:from_entry_view(
                    View#entry{timestamp = Timestamp + 1})),
     ?assertEqual({error, invalid_certified_entry},
                  quod_dtx:certified_entry_ref(Target, View, Control)),
-    ?assertEqual(
-       {error, invalid_certified_entry},
-       quod_dtx:certified_entry_ref(
-         Target, quod_ledger:entry(Block, Cert#cert{slot = Slot + 1}), Control)).
+    ?assertException(error, {badmatch, false},
+       quod_ledger:entry(Slot, Block, Cert#cert{era = key(252)})).
 
 certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     F = quod_ct:signed_atomic_fixture(#{}),
@@ -1270,8 +1308,9 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     Slot = 9,
     Timestamp = 1234,
     Payload = {batch, [{dtx, Control}]},
+    Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Slot - 1, Payload, Timestamp),
+                    {Era, Slot}, {Era, Slot - 1, key(251)}, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Identities = [begin
@@ -1282,41 +1321,44 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     Committee = lists:sort([Pub || {Pub, _} <- Identities]),
     Shares = maps:from_list(
                [{Pub, quod_simplex:make_share(
-                        Domain, commit, Slot, BlockHash, Signer)}
+                        Domain, commit, {Era, Slot}, BlockHash, Signer)}
                 || {Pub, Signer} <- Identities]),
     [A, B, C, D] = Committee,
     Form = fun(Keys) ->
                    {ok, Cert} = quod_simplex:form_cert(
-                                  Domain, commit, Slot, BlockHash,
+                                  Domain, commit, {Era, Slot}, BlockHash,
                                   [maps:get(Key, Shares) || Key <- Keys],
                                   Committee),
                    Cert
            end,
     RefCert = Form([A, B, C]),
     LocalCert = Form([B, C, D]),
-    RefEntry = quod_ledger:entry(Block, RefCert),
-    LocalEntry = quod_ledger:entry(Block, LocalCert),
+    RefEntry = quod_ledger:entry(Slot, Block, RefCert),
+    LocalEntry = quod_ledger:entry(Slot, Block, LocalCert),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, RefEntry, Control),
     %% This is the live N=4 case: both replicas certified the same immutable
     %% block, but each retained a different valid three-of-four proof.
     ?assertNotEqual(term_to_binary(RefCert, [deterministic]),
                     term_to_binary(LocalCert, [deterministic])),
-    ?assert(quod_dtx:certified_entry_ref_matches(
-              Target, LocalEntry, Control, Ref, Committee)),
+    ?assert(quod_simplex:verify_cert(Domain, RefCert, Committee)),
+    ?assert(quod_simplex:verify_cert(Domain, LocalCert, Committee)),
+    ?assert(quod_dtx:certified_entry_claim_matches(Target, LocalEntry, Control, Ref)),
     BadDigestRef = setelement(7, Ref, key(16#d1)),
-    ?assertNot(quod_dtx:certified_entry_ref_matches(
-                 Target, LocalEntry, Control, BadDigestRef, Committee)),
+    ?assertNot(quod_dtx:certified_entry_claim_matches(
+                 Target, LocalEntry, Control, BadDigestRef)),
     OtherHash = key(16#d2),
     OtherShares = [quod_simplex:make_share(
-                     Domain, commit, Slot, OtherHash, Signer)
+                     Domain, commit, {Era, Slot}, OtherHash, Signer)
                    || {_Pub, Signer} <- Identities],
     {ok, OtherCert} = quod_simplex:form_cert(
-                        Domain, commit, Slot, OtherHash,
+                        Domain, commit, {Era, Slot}, OtherHash,
                         lists:sublist(OtherShares, 3), Committee),
     BadProofRef = setelement(
-                    8, Ref, term_to_binary(OtherCert, [deterministic])),
-    ?assertNot(quod_dtx:certified_entry_ref_matches(
-                 Target, LocalEntry, Control, BadProofRef, Committee)).
+                    8, Ref, finality_bytes(OtherCert)),
+    %% An unused head is a hint, not claim identity or the selection's proof.
+    %% LocalCert independently authenticates this exact direct-finality block.
+    ?assert(quod_dtx:certified_entry_claim_matches(
+                 Target, LocalEntry, Control, BadProofRef)).
 
 certified_entry_ref_binds_pinned_genesis_test() ->
     Ns = <<"quod:certified-genesis">>,
@@ -1325,8 +1367,8 @@ certified_entry_ref_binds_pinned_genesis_test() ->
                  diff = [], read_check = #{}, author = <<71:256>>,
                  sig = none},
     {ok, Block} = quod_ledger:new_block(
-                    1, 0, {batch, [Genesis]}, 0),
-    Entry = quod_ledger:entry(Block, none),
+                    {genesis, 0}, none, {batch, [Genesis]}, 0),
+    Entry = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Target = {Ns, Anchor},
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Genesis),
@@ -1344,10 +1386,12 @@ certified_entry_ref_binds_pinned_genesis_test() ->
     ?assertEqual({error, bad_entry},
                  quod_ledger:from_entry_view(
                    (quod_ledger:entry_view(Entry))#entry{timestamp = 1})),
-    {ok, OtherBlock} = quod_ledger:new_block(1, 0, {batch, [Genesis]}, 1),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, {batch, [Genesis]}, 1)),
+    OtherGenesis = Genesis#transaction{diff = [{assert, {{another, fact}, true}}]},
+    {ok, OtherBlock} = quod_ledger:new_block({genesis, 0}, none, {batch, [OtherGenesis]}, 0),
     ?assertEqual({error, invalid_certified_entry},
                  quod_dtx:certified_entry_ref(
-                   Target, quod_ledger:entry(OtherBlock, none), Genesis)).
+                   Target, quod_ledger:entry(1, OtherBlock, none), OtherGenesis)).
 
 %% ------------------------------------------------------------------
 %% V1 control fixtures
@@ -1371,7 +1415,7 @@ signed(Target, Record, Admission, Sequence, Signer) ->
 
 protocol_ref({Ns, Anchor}, Slot, Record) ->
     {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, Slot, key(150 + Slot),
-                  quod_atomic:record_digest(Record), <<"shape-only-not-certified">>),
+                  quod_atomic:record_digest(Record), quod_ct:fixture_finality(Slot, key(150 + Slot))),
     Ref.
 
 noncanonical_plan_blob(Plan) ->
@@ -1561,3 +1605,5 @@ tuple(Plan) -> Plan.
 plan(Tuple) -> Tuple.
 readiness(Control, Projection) ->
     quod_atomic:proposal_readiness(quod_atomic:control_material(Control), Projection).
+
+finality_bytes(Cert) -> {ok, Bytes} = quod_ledger:encode_finality_head(Cert), Bytes.

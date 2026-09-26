@@ -45,7 +45,6 @@ prepared material all pass through the existing canonical validators.
           publications := [tuple()], applied_ops := [op()],
           changed_heads := [term()], deferred_acks := [tuple()],
           stats := stats()} |
-        #{kind := noop, stats := stats()} |
         #{kind := unexpected, payload := term(), stats := stats()} |
         #{kind := already_applied, stats := stats()}.
 
@@ -127,8 +126,6 @@ apply_entry_view(#entry{index = Index, data = Data,
             apply_dtx_batch_entry(
               [Control || {_Kind, Control} <- TaggedControls],
               Entry, Floor, Projection0);
-        noop ->
-            publish(Index, Floor, Projection0, result(noop));
         invalid ->
             publish(Index, Floor, Projection0,
                     (result(unexpected))#{payload => Data})

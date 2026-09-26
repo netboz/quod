@@ -57,7 +57,6 @@ websocket_info({committed, Ns, _Slot, E}, State) ->
     case maps:get(kind, Block) of
         content -> committed_block_frame(Ns, Block, State);
         dtx_batch -> committed_block_frame(Ns, Block, State);
-        noop -> {ok, State};
         invalid -> {ok, State}
     end;
 websocket_info({applied_live, #{ns := Ns, height := H, tx_id := Id}}, State) ->

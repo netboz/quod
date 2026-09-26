@@ -117,9 +117,12 @@ resolve_fixture(Dir, Suffix, Mode) ->
     {ok, VoteControl2} = quod_atomic:sign_control(
                           Origin, VoteMaterial2, OriginAdmission, 2, 3, Local),
     {VoteEntry1, VoteEntry1Alt} = certified_entries(
-                                  Origin, 2, 1, [VoteControl1], Identities, Committee),
+                                  Origin, 2, maps:get(protocol_root, OriginProjection),
+                                  [VoteControl1], Identities, Committee),
+    {ok, VoteBlock1} = quod_ledger:block_from_entry(VoteEntry1),
     {VoteEntry2, _} = certified_entries(
-                      Origin, 3, 2, [VoteControl2], Identities, Committee),
+                      Origin, 3, quod_ledger:block_ref(VoteBlock1),
+                      [VoteControl2], Identities, Committee),
     {ok, VoteRef1} = quod_dtx:certified_entry_ref(Origin, VoteEntry1, VoteControl1),
     {ok, VoteRef1Alt} = quod_dtx:certified_entry_ref(
                         Origin, VoteEntry1Alt, VoteControl1),
@@ -127,19 +130,20 @@ resolve_fixture(Dir, Suffix, Mode) ->
     ?assertNotEqual(VoteRef1, VoteRef1Alt),
     ?assert(quod_dtx:same_certified_ref(VoteRef1, VoteRef1Alt)),
     lists:foreach(
-      fun(Ref) ->
-          ?assert(quod_dtx:certified_entry_ref_matches(
-                    Origin, VoteEntry1, VoteControl1, Ref, Committee))
-      end, [VoteRef1, VoteRef1Alt]),
+      fun({Certified, Ref}) ->
+          ?assertEqual(ok, quod_ct:verify_finality(Origin, Certified, OriginProjection)),
+          ?assert(quod_dtx:certified_entry_claim_matches(
+                    Origin, VoteEntry1, VoteControl1, Ref))
+      end, [{VoteEntry1, VoteRef1}, {VoteEntry1Alt, VoteRef1Alt}]),
     %% Advance both actual negative Vote histories with their finality;
     %% neither the target DTX projection nor readiness is manufactured.
     {ok, OriginIndex} = quod_dtx_phase_index:open(
                          filename:join(Dir, "origin-phase"), OriginNs),
     try
         quod_ct:with_network_identity(maps:get(network, F1), fun() ->
-            {ok, OP1, _} = quod_simplex:history_advance(
+            {ok, OP1, _} = quod_ct:history_advance(
                              Origin, VoteEntry1, OriginProjection, OriginIndex),
-            {ok, _OP2, _} = quod_simplex:history_advance(
+            {ok, _OP2, _} = quod_ct:history_advance(
                               Origin, VoteEntry2, OP1, OriginIndex)
         end)
     after
@@ -185,7 +189,7 @@ with_journals(F = #{dir := Dir, target := {Ns, Anchor}, storage_ns := StorageNs}
         try
             {ok, Store0} = quod_ledger_store:open(StorageNs, LocalDir),
             try
-                {ok, Store} = quod_ledger_store:append(Store0, [maps:get(genesis, F)]),
+                {ok, Store} = quod_ledger_store:append(Store0, {none, [maps:get(genesis, F)]}),
                 {ok, Index} = quod_dtx_phase_index:open(
                                 filename:join(Dir, "target-phase"), StorageNs),
                 try
@@ -250,11 +254,15 @@ exercise(Mode, F = #{target := Target, projection := Before,
                    unrelated_only -> [CQ];
                    exact -> [CP1, CQ]
                end,
-    {Entry, _} = certified_entries(Target, 2, 1, Controls,
+    {Entry, _} = certified_entries(Target, 2, maps:get(protocol_root, Before), Controls,
                                    maps:get(identities, F), maps:get(committee, F)),
-    ?assertEqual(ok, quod_catchup:verify_entry(Target, Entry, Before)),
-    {ok, Store} = quod_ledger_store:append(Store0, [Entry]),
-    {ok, After, _Effects} = quod_simplex:history_advance(Target, Entry, Before, Index),
+    ?assertEqual(ok, quod_ct:verify_finality(Target, Entry, Before)),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    Bytes = quod_ledger:block_bytes(Block),
+    Proof = {quod_ledger_store:proof_frame_size(Bytes),
+             fun([]) -> done; ([B]) -> {B, []} end, [Bytes]},
+    {ok, Store} = quod_ledger_store:append(Store0, {Proof, [Entry]}),
+    {ok, After, _Effects} = quod_ct:history_advance(Target, Entry, Before, Index),
     ?assertEqual(2, maps:get(Lane, maps:get(dtx_lanes, After))),
     %% Unvoted aborts retire their active rows. Exact inclusion and stale
     %% alternatives must therefore be checked against the real phase index,
@@ -497,24 +505,30 @@ genesis(Ns, Committee) ->
     {Entry, Identity, Projection}.
 
 state({Ns, Anchor}, Projection, Signer = #{pubkey := Pub}, Journal, Index) ->
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Root = maps:get(protocol_root, Projection),
+    Tip = {Root, maps:get(timestamp, Projection)},
     quod_simplex:test_install_projection(Projection, quod_simplex:test_state(
       #{ns => Ns, genesis_hash => Anchor, slot => 1,
         self => Pub, id => Signer, sync => ready, prolog_ready => true,
         signing_journal => Journal, phase_index => Index,
-        consensus_domain => quod_simplex:consensus_domain(Ns, Anchor)})).
+        archive_tip => Tip,
+        eng => quod_simplex:eng_new(Domain, maps:get(committee, Projection), Tip),
+        consensus_domain => Domain})).
 
-certified_entries({Ns, Anchor}, Slot, Parent, Controls, Identities, Committee) ->
-    {ok, Block} = quod_ledger:new_block(Slot, Parent, payload(Controls), Slot),
+certified_entries({Ns, Anchor}, Height, Parent = {Era, View, _}, Controls, Identities, Committee) ->
+    Position = {Era, View + 1},
+    {ok, Block} = quod_ledger:new_block(Position, Parent, payload(Controls), Height),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = maps:map(fun(_, Signer) ->
-        quod_simplex:make_share(Domain, commit, Slot, Hash, Signer)
+        quod_simplex:make_share(Domain, commit, Position, Hash, Signer)
     end, Identities),
     [A, B, C, D] = Committee,
     Make = fun(Keys) ->
-        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Slot, Hash,
+        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Position, Hash,
                          [maps:get(Key, Shares) || Key <- Keys], Committee),
-        quod_ledger:entry(Block, Cert)
+        quod_ledger:entry(Height, Block, Cert)
     end,
     {Make([A, B, C]), Make([B, C, D])}.
 

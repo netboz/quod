@@ -181,10 +181,10 @@ queue_case(Root) ->
     Identity = identity(First),
     Counts = atomics:new(2, []),
     Fetch1 = fetch(First), Fetch2 = fetch(Other),
-    Fetch = fun(P, E, Ns, From, To) ->
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         case Ns =:= maps:get(ns, First) of
-            true -> atomics:add_get(Counts, 1, 1), Fetch1(P, E, Ns, From, To);
-            false -> atomics:add_get(Counts, 2, 1), Fetch2(P, E, Ns, From, To)
+            true -> atomics:add_get(Counts, 1, 1), Fetch1(P, E, Ns, Query, Deadline, Consume);
+            false -> atomics:add_get(Counts, 2, 1), Fetch2(P, E, Ns, Query, Deadline, Consume)
         end
     end,
     Holder = holder(Identity),
@@ -272,8 +272,8 @@ session_case(Root) ->
 discovery_case(Root, Mode) ->
     Fixture = fixture(), Identity = identity(Fixture),
     Count = atomics:new(1, []), BaseFetch = fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
-        atomics:add_get(Count, 1, 1), BaseFetch(P, E, Ns, From, To)
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
+        atomics:add_get(Count, 1, 1), BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     Seed = start_owner(Root, Fetch),
     assert_verified(request(Seed, Fixture, 5000)),
@@ -440,7 +440,7 @@ cancel_denied_case(Root, source_down) ->
         quod_foreign_log_tests:start_local_borrow_source(
             filename:join(Root, "source"), Fixture),
     CacheRoot = filename:join(Root, "cache"),
-    Owner = start_owner(CacheRoot, fun(_, _, _, _, _) -> error(local_read_used_network) end),
+    Owner = start_owner(CacheRoot, fun(_, _, _, _, _, _) -> error(local_read_used_network) end),
     try
         ?assertMatch({ok, #{phase := resolve}},
             quod_foreign_log:verify_local(View, maps:get(ref, Fixture), resolve, infinity)),

@@ -37,6 +37,7 @@ malformed_requests_are_refused_before_owner_work_test() ->
     with_case(F, current, fun(C) ->
         WrongTarget = {maps:get(ns, F), digest(wrong_expected_anchor)},
         Cases = [{identity(F), malformed, resolve},
+                 {identity(F), setelement(8, Ref, <<"malformed-finality">>), resolve},
                  {WrongTarget, Ref, resolve},
                  {identity(F), setelement(3, Ref, <<"wrong:namespace">>), resolve},
                  {identity(F), setelement(4, Ref, digest(wrong_ref_anchor)), resolve},
@@ -104,7 +105,7 @@ nonhosted_identity_routes_once(Mode) ->
         %% Cold routed work positively controls full-open and forward-fold
         %% tracing. Persisted-cache replay has its own restart control below.
         ?assert(calls(T, quod_foreign_log, open_cache, 5) > 0),
-        ?assert(calls(T, quod_catchup, verify_forward, 6) > 0),
+        ?assert(calls(T, quod_catchup, range_accept, 5) > 0),
         ?assert(calls(T, quod_ledger_store, open, 3) > 0),
         receive {resolver_fetch, _, _} -> ok
         after 0 -> error(routed_positive_control_did_not_fetch)
@@ -238,13 +239,8 @@ capture_owner_death_before_a_usable_view_stays_unavailable_test() ->
 sufficient_invalid_local_evidence_never_falls_back_test() ->
     F = fixture(),
     Ref = maps:get(ref, F),
-    Cert = binary_to_term(element(8, Ref), [safe]),
-    [{Pub, _}] = Cert#cert.sigs,
-    BadSig = setelement(8, Ref, term_to_binary(Cert#cert{sigs = [{Pub, <<0:512>>}]})),
     Cases = [{setelement(6, Ref, digest(changed_hash)), resolve, invalid_foreign_reference},
              {setelement(7, Ref, digest(changed_record)), resolve, invalid_foreign_reference},
-             {setelement(8, Ref, <<"malformed-finality">>), resolve, invalid_foreign_reference},
-             {BadSig, resolve, invalid_foreign_reference},
              {Ref, vote, phase_mismatch}],
     with_case(F, current, fun(C) ->
         lists:foreach(fun({R, Phase, Error}) ->
@@ -268,18 +264,17 @@ current_era_accepts_distinct_valid_quorum_subsets_test() ->
         {ok, B} = resolve(C, Other, transaction, deadline(3000)),
         ?assertEqual(A, B),
         ?assertEqual(5, length(maps:get(committee, A))),
-        %% This certificate really verifies under a different committee, but
-        %% cannot authenticate an equal claim against this resident era.
+        %% An unused preferred head cannot change the authority of the
+        %% selected resident proof, even when its signers are outsiders.
         Outsiders = new_members(4),
         WrongEra = reference_with_signers(F, Ref, lists:sublist(Outsiders, 3)),
         assert_cert_valid_for(F, WrongEra, Outsiders),
-        ?assertEqual({error, invalid_foreign_reference},
-                     resolve(C, WrongEra, transaction, deadline(3000))),
+        ?assertEqual({ok, A}, resolve(C, WrongEra, transaction, deadline(3000))),
         assert_no_foreign_work(traces()),
         assert_no_fetch()
     end).
 
-historical_era_keeps_its_committee_and_checks_supplied_proofs_test() ->
+historical_era_uses_verified_resident_proof_despite_unused_hints_test() ->
     F = committee_fixture(true),
     Ref = maps:get(ref, F),
     Members = maps:get(members, F),
@@ -287,9 +282,9 @@ historical_era_keeps_its_committee_and_checks_supplied_proofs_test() ->
     NewMembers = lists:sublist(Members, 4),
     WrongEra = reference_with_signers(F, Ref, lists:sublist(NewMembers, 3)),
     assert_cert_valid_for(F, WrongEra, NewMembers),
-    Cert = binary_to_term(element(8, Ref), [safe]),
+    {ok, Cert} = quod_ledger:decode_finality_head(element(8, Ref)),
     [{Pub, _} | Rest] = Cert#cert.sigs,
-    BadSig = setelement(8, Ref, term_to_binary(Cert#cert{sigs = [{Pub, <<0:512>>} | Rest]})),
+    BadSig = reference_with_head(Ref, Cert#cert{sigs = [{Pub, <<0:512>>} | Rest]}),
     Alternate = reference_with_signers(F, Ref, tl(Members)),
     with_case(F, current, fun(C) ->
         {ok, A} = resolve(C, Ref, transaction, deadline(3000)),
@@ -298,11 +293,10 @@ historical_era_keeps_its_committee_and_checks_supplied_proofs_test() ->
         ?assertEqual(A, B),
         lists:foreach(fun(R) ->
             ?assert(quod_dtx:same_certified_ref(Ref, R)),
-            ?assertEqual({error, invalid_foreign_reference},
-                         resolve(C, R, transaction, deadline(3000)))
-        end, [WrongEra, BadSig, setelement(8, Ref, <<"malformed-finality">>)]),
+            ?assertEqual({ok, A}, resolve(C, R, transaction, deadline(3000)))
+        end, [WrongEra, BadSig]),
         T = traces(),
-        ?assertEqual(5, calls(T, quod_simplex, history_view_at, 3)),
+        ?assertEqual(4, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_worker, 7)),
         assert_no_fetch()
@@ -570,9 +564,9 @@ with_case(F, Mode, Fun) ->
     SourceDir = temp_dir("source"),
     Parent = self(),
     Fetch0 = quod_foreign_log_tests:chain_fetch(maps:get(ns, F), maps:get(chain, F)),
-    Fetch = fun(Peer, Endpoint, Ns, From, To) ->
-        Parent ! {resolver_fetch, From, To},
-        Fetch0(Peer, Endpoint, Ns, From, To)
+    Fetch = fun(Peer, Endpoint, Ns, Query, Deadline, Consume) ->
+        Parent ! {resolver_fetch, Query, Deadline},
+        Fetch0(Peer, Endpoint, Ns, Query, Deadline, Consume)
     end,
     Owner = quod_foreign_log_tests:start_owner(CacheDir, Fetch),
     Source = case Mode of
@@ -603,13 +597,10 @@ start_source(Dir, F, Mode) ->
     Parent = self(),
     {Pid, Monitor} = spawn_monitor(fun() ->
         {ok, Store0} = quod_ledger_store:open(maps:get(ns, F), Dir),
-        {ok, Store} = quod_ledger_store:append(Store0, maps:get(chain, F)),
-        {Ns, Anchor} = identity(F),
+        {Ns, _} = identity(F),
         {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
-        {ok, _, Projection, Delta} = quod_catchup:verify_forward(
-            Ns, Anchor, quod_simplex:history_projection(identity(F)), 1,
-            maps:get(chain, F), Index),
-        ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+        {Store, Projection} = install_entries(Store0, identity(F),
+            quod_simplex:history_projection(identity(F)), Index, maps:get(chain, F)),
         true = quod_reg:reg({quod_simplex, Ns}),
         %% Applied=0 deliberately proves this is a committed-history borrow,
         %% not an execution-readiness requirement. Keep only the real live era.
@@ -676,14 +667,18 @@ source_loop(Store, View, Index, Mode, Parent, Captures) ->
 %% Protocol fixture, not consensus admission: real window verification and
 %% append-then-index installation, with one retained owner index throughout.
 append_verified_suffix(Store, View, Index, Entries) ->
-    {Ns, Anchor} = maps:get(identity, View),
-    Projection0 = maps:get(projection, View),
-    {ok, Entries, Projection, Delta} = quod_catchup:verify_forward(
-        Ns, Anchor, Projection0, maps:get(slot, View) + 1, Entries,
-        maps:get(history_index, Projection0)),
-    {ok, Store1} = quod_ledger_store:append(Store, Entries),
-    ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+    {Store1, Projection} = install_entries(Store, maps:get(identity, View),
+        maps:get(projection, View), Index, Entries),
     {Store1, indexed_source_view(Store1, Projection, Index)}.
+
+install_entries(Store, Identity, Projection, Index, Entries) ->
+    lists:foldl(fun(Entry, {S, P}) ->
+        {ok, #{projection := P1, delta := Delta, proof := Proof}} =
+            quod_ct:history_group(Identity, Entry, P, Index),
+        {ok, S1} = quod_ledger_store:append(S, {Proof, [Entry]}),
+        ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+        {S1, P1}
+    end, {Store, Projection}, Entries).
 
 indexed_source_view(Store, Projection, Index) ->
     H = quod_ledger_store:last(Store),
@@ -785,7 +780,8 @@ trace_patterns() ->
      {quod_foreign_log, spawn_verification_worker, 3},
      {quod_foreign_log, open_cache, 5},
      {quod_foreign_log, replay_cache, 6},
-     {quod_catchup, verify_forward, 6},
+     {quod_catchup, range_accept, 5},
+     {quod_catchup, verify_forward_group, 5},
      {quod_ledger_store, open, 3},
      {quod_ledger_store, open_ro, 3},
      {quod_ledger_store, open_ro_snapshot, 1},
@@ -823,7 +819,8 @@ assert_no_foreign_work(T) ->
                    {quod_foreign_log, spawn_verification_worker, 3},
                    {quod_foreign_log, open_cache, 5},
                    {quod_foreign_log, replay_cache, 6},
-                   {quod_catchup, verify_forward, 6},
+                   {quod_catchup, range_accept, 5},
+                   {quod_catchup, verify_forward_group, 5},
                    {quod_ledger_store, open, 3},
                    {quod_ledger_store, open_ro, 3}]).
 
@@ -848,15 +845,16 @@ committee_fixture(RemoveMember) ->
     Keys = [K || {K, _} <- Members],
     GenesisTx = quod_simplex:test_genesis_tx(#{committee => tl(Keys), node_addr => {"127.0.0.1", 19000}},
                                               Ns, Author, digest(genesis_incarnation)),
-    {ok, Genesis} = quod_ledger:new_entry(1, {batch, [GenesisTx]}, 0, none),
-    {ok, Block} = quod_ledger:block_from_entry(Genesis),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    Genesis = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Identity = {Ns, Anchor},
-    {ok, [Genesis], P} = quod_catchup:verify_forward(Ns, Anchor, quod_simplex:history_projection(Identity), 1, [Genesis]),
+    {ok, P} = quod_simplex:history_validate_advance(Identity, Genesis,
+        quod_simplex:history_projection(Identity)),
     {ok, Binding} = quod_simplex:history_binding(Identity, Author, P),
     Tx = signed_transaction(Identity, Binding, Author, Signer, 1,
                             [{assert, {{resolver_fact, true}, true}}]),
-    Entry = committee_entry(Identity, Members, 2, Tx),
+    Entry = committee_entry(Identity, Members, 2, maps:get(protocol_root, P), Tx),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Tx),
     Tail = case RemoveMember of
         false -> [];
@@ -864,7 +862,8 @@ committee_fixture(RemoveMember) ->
             Removed = lists:last(Keys),
             Removal = signed_transaction(Identity, Binding, Author, Signer, 2,
                                          [{retract, {{peer_admitted, Removed, undefined, undefined, Removed}, true}}]),
-            [committee_entry(Identity, Members, 3, Removal)]
+            {ok, EntryBlock} = quod_ledger:block_from_entry(Entry),
+            [committee_entry(Identity, Members, 3, quod_ledger:block_ref(EntryBlock), Removal)]
     end,
     #{ns => Ns, anchor => Anchor, pub => Author, members => Members,
       ref => Ref, chain => [Genesis, Entry | Tail]}.
@@ -885,23 +884,29 @@ signed_transaction(Identity, Binding, Author, Signer, Seq, Diff) ->
     {ok, Tx} = quod_transaction:sign(Binding, quod_transaction:bind_id(Identity, Tx0), Signer),
     Tx.
 
-committee_entry({Ns, Anchor}, Members, Slot, Tx) ->
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [Tx]}, 0),
+committee_entry({Ns, Anchor}, Members, Height, {Era, View, _} = Parent, Tx) ->
+    Position = {Era, View + 1},
+    {ok, Block} = quod_ledger:new_block(Position, Parent, {batch, [Tx]}, 0),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
-    Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, Slot, Hash, Signer))#share.sig}
+    Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, Position, Hash, Signer))#share.sig}
             || {Pub, Signer} <- lists:sublist(Members, 4)],
-    quod_ledger:entry(Block, #cert{kind = commit, slot = Slot, block_hash = Hash, sigs = Sigs}).
+    quod_ledger:entry(Height, Block, #cert{kind = commit, era = Era, slot = View + 1,
+                                          block_hash = Hash, sigs = Sigs}).
 
 reference_with_signers(F, Ref, Signers) ->
-    Slot = element(5, Ref),
-    Hash = element(6, Ref),
+    {ok, #cert{era = Era, slot = View, block_hash = Hash} = Cert} =
+        quod_ledger:decode_finality_head(element(8, Ref)),
     Domain = quod_simplex:consensus_domain(maps:get(ns, F), maps:get(anchor, F)),
-    Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, Slot, Hash, Signer))#share.sig}
+    Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, {Era, View}, Hash, Signer))#share.sig}
             || {Pub, Signer} <- Signers],
-    setelement(8, Ref, term_to_binary(#cert{kind = commit, slot = Slot, block_hash = Hash, sigs = Sigs}, [deterministic])).
+    reference_with_head(Ref, Cert#cert{sigs = Sigs}).
+
+reference_with_head(Ref, Cert) ->
+    {ok, Bytes} = quod_ledger:encode_finality_head(Cert),
+    setelement(8, Ref, Bytes).
 
 assert_cert_valid_for(F, Ref, Members) ->
     Domain = quod_simplex:consensus_domain(maps:get(ns, F), maps:get(anchor, F)),
-    ?assert(quod_simplex:verify_cert(Domain, binary_to_term(element(8, Ref), [safe]),
-                                    [K || {K, _} <- Members])).
+    {ok, Cert} = quod_ledger:decode_finality_head(element(8, Ref)),
+    ?assert(quod_simplex:verify_cert(Domain, Cert, [K || {K, _} <- Members])).

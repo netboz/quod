@@ -114,11 +114,11 @@ exact_target_wait_prefers_the_installed_local_identity_test() ->
                   quod_reg:prop({runtime, Ns})))),
         %% A stale incarnation's ready edge never releases the exact wait.
         quod_reg:publish({runtime, Ns},
-                         {proof_ready, {Ns, <<0:256>>}, self()}),
+                         {proof_ready, {Ns, <<0:256>>}, self(), self(), 1}),
         receive {Ref, _} -> ?assert(false) after 20 -> ok end,
         atomics:put(State, 1, 1),
         quod_reg:publish({runtime, Ns},
-                         {proof_ready, Identity, self()}),
+                         {proof_ready, Identity, self(), self(), 2}),
         receive {Ref, {ok, local}} -> ok
         after 1000 -> ?assert(false)
         end,

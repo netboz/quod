@@ -15,7 +15,7 @@ cursor continuation lives only in `quod_client_cursor`.
 -export([start_link/0, submit/9, cursor/4, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([test_start_link/1, test_submit/10, test_cursor/5, test_stats/1,
+-export([test_start_link/1, test_start_link/2, test_submit/10, test_cursor/5, test_stats/1,
          test_cursor_target_result/1, test_submit_target_result/2]).
 -endif.
 
@@ -34,7 +34,8 @@ cursor continuation lives only in `quod_client_cursor`.
 -record(s, {
     channel :: binary(),
     subscribed = true :: boolean(),
-    open_fun = fun quod_quic:open_link_pinned/3 :: fun(),
+    open_fun = fun quod_quic:open_link_pinned_lease/3 :: fun(),
+    release_fun = fun quod_quic:release_link_pinned/4 :: fun(),
     correlations = #{} :: map(),
     inbound = #{} :: map(),
     routes = #{} :: map(),
@@ -47,7 +48,11 @@ start_link() ->
 
 -ifdef(TEST).
 test_start_link(OpenFun) when is_function(OpenFun, 3) ->
-    gen_server:start_link(?MODULE, {test, OpenFun}, []).
+    test_start_link(OpenFun, fun(_, _, _, _) -> ok end).
+
+test_start_link(OpenFun, ReleaseFun)
+  when is_function(OpenFun, 3), is_function(ReleaseFun, 4) ->
+    gen_server:start_link(?MODULE, {test, OpenFun, ReleaseFun}, []).
 
 test_submit(Router, Route, Owner, Evidence, RequestBytes, Signature,
             CursorBinding, TraceCarrier, ExpiresMs, TimeoutMs) ->
@@ -134,9 +139,10 @@ init([]) ->
     Channel = quod_client_goal_endpoint:channel(),
     true = quod_reg:subscribe({channel, Channel}),
     {ok, #s{channel = Channel}};
-init({test, OpenFun}) ->
+init({test, OpenFun, ReleaseFun}) ->
     {ok, #s{channel = quod_client_goal_endpoint:channel(),
-            subscribed = false, open_fun = OpenFun}}.
+            subscribed = false, open_fun = OpenFun,
+            release_fun = ReleaseFun}}.
 
 handle_call(
   {submit, Route, Owner, Evidence, RequestBytes, Signature, CursorBinding,
@@ -148,20 +154,24 @@ handle_call(
                          Request, S0) of
         {ok, PeerKey, Endpoint, RouteKey, Frame} ->
             Router = self(),
-            OpenFun = S0#s.open_fun,
+            OpenRef = (S0#s.open_fun)(PeerKey, Endpoint, S0#s.channel),
+            Lease = {PeerKey, Endpoint, OpenRef},
             {Worker, MRef} = spawn_monitor(
                                fun() ->
                                    outbound_open_worker(
-                                     Router, From, PeerKey, Endpoint,
+                                     Router, From, PeerKey, OpenRef,
                                      Request, Frame, TimeoutMs, RouteKey,
-                                     ExpiresMs, Evidence, OpenFun)
+                                     ExpiresMs, Evidence)
                                end),
             Corr = #{worker => Worker, mref => MRef, peer => PeerKey,
                      link => undefined, request => Request,
+                     open_ref => OpenRef,
+                     lease => case RouteKey of none -> Lease; _ -> none end,
                      route_key => RouteKey, kind => submit,
                      started_at => quod_time:mono_ms()},
             Routes1 = reserve_route(
-                        RouteKey, Worker, ExpiresMs, Evidence, S0#s.routes),
+                        RouteKey, Worker, ExpiresMs, Evidence, Lease,
+                        S0#s.routes),
             {noreply, track_owner_peaks(
              S0#s{correlations =
                        (S0#s.correlations)#{RequestId => Corr},
@@ -229,6 +239,14 @@ handle_info(
         undefined ->
             {noreply, S0}
     end;
+handle_info({link_up, Ref, Peer, Channel, _Link} = Notice,
+            S = #s{channel = Channel}) ->
+    forward_open_notice(Ref, Peer, Notice, S),
+    {noreply, S};
+handle_info({link_error, Ref, Peer, Channel} = Notice,
+            S = #s{channel = Channel}) ->
+    forward_open_notice(Ref, Peer, Notice, S),
+    {noreply, S};
 handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
     {noreply, down(MRef, Pid, Reason, S0)};
 handle_info({route_expired, RouteKey, Token}, S0) ->
@@ -310,19 +328,27 @@ admit_route(Key, #s{routes = Routes}) ->
         true -> {error, busy}
     end.
 
-reserve_route(none, _Worker, _ExpiresMs, _Evidence, Routes) -> Routes;
-reserve_route(Key, Worker, ExpiresMs, Evidence, Routes) ->
-    Routes#{Key => #{state => pending, busy => Worker,
+reserve_route(none, _Worker, _ExpiresMs, _Evidence, _Lease, Routes) -> Routes;
+reserve_route(Key, Worker, ExpiresMs, Evidence, Lease, Routes) ->
+    Routes#{Key => #{state => pending, busy => Worker, lease => Lease,
                      expires_ms => ExpiresMs, evidence => Evidence,
                      started_at => quod_time:mono_ms()}}.
 
-outbound_open_worker(Router, From, Peer, Endpoint, Request, Frame,
-                     TimeoutMs, RouteKey, ExpiresMs, Evidence, OpenFun) ->
+%% The router owns the lease; workers only await its acquisition notice.
+%% A cursor retains that exact lease after its opening worker returns.
+forward_open_notice(Ref, Peer, Notice, #s{correlations = Correlations}) ->
+    maps:foreach(
+      fun(_, #{open_ref := R, peer := P, worker := Worker})
+            when R =:= Ref, P =:= Peer -> Worker ! Notice;
+         (_, _) -> ok
+      end, Correlations).
+
+outbound_open_worker(Router, From, Peer, OpenRef, Request, Frame,
+                     TimeoutMs, RouteKey, ExpiresMs, Evidence) ->
     CallerMRef = monitor(process, element(1, From)),
     RouterMRef = monitor(process, Router),
     Deadline = quod_time:mono_ms() + TimeoutMs,
     Channel = quod_client_goal_endpoint:channel(),
-    OpenRef = OpenFun(Peer, Endpoint, Channel),
     receive
         {link_up, OpenRef, Peer, Channel, Link} ->
             case bind_and_send(Router, Request, Peer, Link, Frame) of
@@ -654,18 +680,26 @@ install_route(RouteKey, Peer, Link, ExpiresMs, S0) ->
               expiry_timer => Timer, expiry_token => Token,
               expires_ms => ExpiresMs,
               evidence => maps:get(evidence, Pending),
+              lease => maps:get(lease, Pending),
               started_at => maps:get(started_at, Pending)},
     S0#s{routes = (S0#s.routes)#{RouteKey => Route}}.
 
 drop_route(RouteKey, Result, S0) ->
     case maps:take(RouteKey, S0#s.routes) of
         {Route, Routes1} ->
+            release_lease(Route, S0),
             cancel_route_timer(Route),
             demonitor_optional(maps:get(link_mref, Route, undefined)),
             observe_router_terminal(
               route, Result, maps:get(started_at, Route)),
             S0#s{routes = Routes1};
         error -> S0
+    end.
+
+release_lease(Row, #s{channel = Channel, release_fun = Release}) ->
+    case maps:get(lease, Row, none) of
+        {Peer, Endpoint, Ref} -> Release(Peer, Endpoint, Channel, Ref);
+        none -> ok
     end.
 
 cancel_route_timer(#{expiry_timer := Timer}) ->
@@ -678,6 +712,7 @@ demonitor_optional(MRef) -> demonitor(MRef, [flush]), ok.
 down(MRef, Pid, Reason, S0) ->
     case take_correlation(MRef, Pid, S0#s.correlations) of
         {ok, Corr, Correlations1} ->
+            release_lease(Corr, S0),
             Result = worker_result(Reason),
             observe_router_terminal(
               outbound, Result, maps:get(started_at, Corr)),

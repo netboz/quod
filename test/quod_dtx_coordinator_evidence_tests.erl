@@ -38,7 +38,7 @@ remote_first_cohosted(Mode) ->
         %% cannot become a second evidence lookup or prefix replay.
         Jobs = calls(quod_foreign_log, spawn_verification_worker, Calls),
         ?assertMatch([[_, {follow, Target, _, _}, _]], Jobs),
-        ?assertEqual([], calls(quod_catchup, verify_forward, Calls)),
+        ?assertEqual([], calls(quod_catchup, range_accept, Calls)),
         ?assertEqual([], full_opens(Calls)),
         ?assertEqual(1, length(calls(quod_ledger_store, open_ro_snapshot, Calls))),
         ?assertEqual(1, length(calls(quod_ledger_store, read_at, Calls))),
@@ -67,7 +67,7 @@ no_owner_one_routed_job_test_() ->
             ?assertEqual(1, length(calls(quod_foreign_log, spawn_verification_worker, Calls))),
             %% Positive controls: this same trace really sees historical replay
             %% and a full store open on the cold routed path.
-            ?assert(length(calls(quod_catchup, verify_forward, Calls)) > 0),
+            ?assert(length(calls(quod_catchup, range_accept, Calls)) > 0),
             ?assert(length(full_opens(Calls)) > 0),
             ?assertEqual(1, length(calls(quod_foreign_log, verify_reference_deadline, Calls)))
         end)
@@ -348,7 +348,7 @@ outer_phase_walk_stops_after_committed_reference_test_() ->
             ?assertEqual(retry, Result),
             ?assertEqual([], calls(quod_foreign_log, spawn_verification_worker, Calls)),
             ?assertEqual([], calls(quod_ledger_store, open_ro_snapshot, Calls)),
-            ?assertEqual([], calls(quod_catchup, verify_forward, Calls)),
+            ?assertEqual([], calls(quod_catchup, range_accept, Calls)),
             ?assertEqual([], full_opens(Calls)),
             receive {remote_phase_replied, UnusedPeer, Ref} ->
                 error(retried_same_reference_without_progress)
@@ -365,17 +365,24 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
             {ok, [{FirstPeer, _}, {SecondPeer, _}, {_ThirdPeer, _}]} =
                 quod_foreign_log:route_hints(Target, []),
             {Ref, ReferencePeer} = case Proof of
-                invalid_signature ->
-                    Cert = binary_to_term(element(8, GoodRef), [safe]),
+                unused_invalid_hint ->
+                    {ok, Cert} = quod_ledger:decode_finality_head(element(8, GoodRef)),
                     [{Pub, _Sig}] = Cert#cert.sigs,
-                    BadRef = setelement(8, GoodRef,
-                      term_to_binary(Cert#cert{sigs = [{Pub, <<0:512>>}]})),
+                    {ok, BadHead} = quod_ledger:encode_finality_head(Cert#cert{sigs = [{Pub, <<0:512>>}]}),
+                    BadRef = setelement(8, GoodRef, BadHead),
                     ?assert(quod_dtx:same_certified_ref(GoodRef, BadRef)),
-                    %% Every delivery peer serves the same shaped reference;
-                    %% only its supplied finality signature is invalid.
+                    %% The exact resident entry has its own verified witness.
+                    %% This unused bad hint must neither grant nor remove authority.
                     Router ! {phase_reference, BadRef, self()},
                     receive {phase_reference_ready, Router} -> ok
                     after 1000 -> error(no_bad_proof_configuration)
+                    end,
+                    {BadRef, FirstPeer};
+                wrong_claim ->
+                    BadRef = setelement(7, GoodRef, <<246:256>>),
+                    Router ! {phase_reference, BadRef, self()},
+                    receive {phase_reference_ready, Router} -> ok
+                    after 1000 -> error(no_bad_claim_configuration)
                     end,
                     {BadRef, FirstPeer};
                 valid ->
@@ -408,7 +415,8 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
             after 1000 -> error(local_delivery_failure_did_not_fall_through)
             end,
             case Proof of
-                invalid_signature -> ?assertEqual(retry, Result);
+                wrong_claim -> ?assertEqual(retry, Result);
+                unused_invalid_hint -> ?assertMatch({ok, _}, Result);
                 valid ->
                     ?assertMatch({ok, _}, Result),
                     receive {remote_phase_failed, FirstPeer} -> ok
@@ -423,7 +431,7 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
             after 0 -> ok
             end
         end)
-    end}} || Mode <- [uncertain, ordinary], Proof <- [invalid_signature, valid]].
+    end}} || Mode <- [uncertain, ordinary], Proof <- [wrong_claim, unused_invalid_hint, valid]].
 
 %% Complement the held-owner/runtime checks with a placement guard: moving
 %% the allowance calculation into run_wave_work/3 would otherwise hide time
@@ -575,7 +583,7 @@ start_local_owner(F, Dir) ->
     {Pid, Monitor} = spawn_monitor(fun() ->
         Ns = maps:get(ns, F),
         {ok, Empty} = quod_ledger_store:open(Ns, Dir),
-        {ok, Store} = quod_ledger_store:append(Empty, maps:get(chain, F)),
+        {ok, Store} = quod_ct:append_direct_history(Empty, maps:get(chain, F)),
         {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
         try
             %% Reuse the signed history's existing owner-view constructor;
@@ -699,7 +707,7 @@ traced(Owners, Fun, Drive) ->
             {quod_foreign_log, verify_reference_deadline, 5},
             {quod_foreign_log, spawn_verification_worker, 3},
             {quod_simplex, history_view_at, 3},
-            {quod_catchup, verify_forward, 6},
+            {quod_catchup, range_accept, 5},
             {quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
             {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},
             {quod_ledger_store, open_ro_snapshot, 1},

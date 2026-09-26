@@ -226,14 +226,16 @@ deterministic proposer for the declared slot. It may collect the request or
 park it until that slot opens, but it never derives a replacement destination
 from its own frontier.
 
-While an unresolved target slot remains usable, later submissions from the
-same author reuse that destination and slot. If the slot finalizes, matching
-submissions resolve successfully. An excluded ordinary submission remains in
-origin custody and becomes eligible for a new placement only after the origin
-has durably applied the whole finalized prefix and adopted any committee
-change. Queued later sequences remain behind it. Membership-changing
-submissions keep their terminal skip/re-proof rule. This preserves signed
-sequence order without exposing slot closure as an ordinary caller retry.
+While a target view remains usable, later submissions from the same author
+share its placement. Certified view/era changes retire obsolete placement and
+wake the same custody owner to re-place identical signed bytes, as specified
+in `finality-round-recovery-plan.md` §4.5. This is not proof of exclusion or
+permission to create another operation. The original identity, sequence and
+deadline survive. If the selected notarized parent already contains that
+sequence, custody waits for material finality; only the durable history can
+establish inclusion or a stale sequence. Membership-changing submissions use
+the same custody and original deadline; their singleton selection and Prolog
+parent validation remain in force. Displacement never authorizes re-proving.
 
 Once a destination holds the request, it sends `relay_accepted`. There is no
 periodic relay retransmit or result probe. The author retains the exact attempt;

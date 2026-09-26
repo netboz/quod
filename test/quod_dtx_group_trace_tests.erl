@@ -170,26 +170,26 @@ mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime) ->
                 ParentToken = {1, Anchor},
                 AtParent = quod_simplex:test_state_set(history_head, ParentToken, Retained),
                 S3 = quod_trace:with_context(Ctx, fun() ->
-                    quod_simplex:test_propose_dtx_wave(2, Envelopes, [], AtParent)
+                    quod_simplex:test_propose_dtx_wave(1, Envelopes, [], AtParent)
                 end),
                 Proposed = quod_trace_tests:take_span(
                              <<"consensus.proposal_created">>, otel_span:trace_id(Parent)),
                 ?assertEqual(otel_span:span_id(Parent), Proposed#span.parent_span_id),
                 ProposedAttrs = otel_attributes:map(Proposed#span.attributes),
-                ?assertEqual(2, maps:get('quod.consensus.slot', ProposedAttrs)),
-                ?assertEqual(1, maps:get('quod.consensus.parent', ProposedAttrs)),
+                ?assertEqual(1, maps:get('quod.consensus.slot', ProposedAttrs)),
+                ?assertEqual(0, maps:get('quod.consensus.parent', ProposedAttrs)),
                 ?assertEqual(<<"dtx">>, maps:get('quod.proposal.kind', ProposedAttrs)),
                 ?assertEqual(2, maps:get('quod.batch.transactions', ProposedAttrs)),
                 ?assertEqual(<<"boundary">>, maps:get('quod.consensus.observation', ProposedAttrs)),
                 {Hash, Engine} = receive
                     {'$gen_cast', {dtx_verdict_req, {wave, [_, _]}, _Timestamp, 2,
-                                   ReplyTo, {2, CandidateHash, ParentToken}, _Context}} ->
+                                   ReplyTo, {1, CandidateHash, ParentToken}, _Context}} ->
                         ?assertEqual(self(), ReplyTo),
                         {CandidateHash, self()}
                 after 1000 -> error(parent_validation_not_sent)
                 end,
                 _ = quod_simplex:test_on_dtx_verdict(
-                      2, Hash, ParentToken, Engine, 1, abstain, S3),
+                      1, Hash, ParentToken, Engine, 1, abstain, S3),
                 Verdict = quod_trace_tests:take_span(
                   <<"consensus.parent_verdict_received">>, otel_span:trace_id(Parent)),
                 ?assert(Proposed#span.end_time =< Verdict#span.start_time),
@@ -217,7 +217,7 @@ mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime) ->
                 after 0 -> ok
                 end,
                 ?assertEqual(unchanged, quod_simplex:test_trace_block(
-                  2, none, <<"mixed.group.validation">>, S3, fun() -> unchanged end)),
+                  1, none, <<"mixed.group.validation">>, S3, fun() -> unchanged end)),
                 Span = quod_trace_tests:take_span(<<"mixed.group.validation">>),
                 ?assertEqual(otel_span:trace_id(Parent), Span#span.trace_id),
                 ?assertEqual(otel_span:span_id(Parent), Span#span.parent_span_id),
@@ -247,12 +247,13 @@ history_only_group_recovery_has_no_ambient_parent_test() ->
             %% Reconstruct a committed own row through the current reducer.
             %% This real signed/QC entry is a local protocol fixture, not an
             %% admitted node, foreign-history verifier or replay integration.
-            {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, Control}]}, 1),
+            Era = quod_ledger:initial_era(Origin),
+            {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [{dtx, Control}]}, 1),
             Hash = quod_simplex:block_hash(Block),
             Signer = maps:get(node_identity, F),
             #share{sig = Sig} = quod_simplex:make_share(
-              quod_simplex:consensus_domain(Ns, Anchor), commit, 2, Hash, Signer),
-            Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = 2,
+              quod_simplex:consensus_domain(Ns, Anchor), commit, {Era, 1}, Hash, Signer),
+            Entry = quod_ledger:entry(2, Block, #cert{kind = commit, era = Era, slot = 1,
               block_hash = Hash, sigs = [{maps:get(pubkey, Signer), Sig}]}),
             {ok, VoteRef} = quod_dtx:certified_entry_ref(Origin, Entry, Control),
             {ok, _History, Projection, []} = quod_atomic:reduce(
@@ -389,14 +390,15 @@ with_fixture(Fun) ->
     Admission = maps:get(admission, F),
     Dir = filename:join("/tmp", "quod_group_trace_" ++ binary_to_list(Suffix)),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Root = {quod_ledger:initial_era({Ns, Anchor}), 0, Anchor},
     {ok, Journal} = quod_signing_journal:initialize(Ns, Domain, Dir),
     try
         S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
           consensus_domain => Domain, self => Author, id => Identity,
           validators => [Author], author_admissions => #{Author => Admission},
-          sync => ready, slot => 1, approved => 1, last_applied => 0,
+          sync => ready, slot => 1, history_head => {1, Anchor}, archive_tip => {Root, 0}, last_applied => 0,
           prolog_ready => false, signing_journal => Journal,
-          eng => quod_simplex:eng_new(Domain, [Author], 1)}),
+          eng => quod_simplex:eng_new(Domain, [Author], {Root, 0})}),
         Fun(F, S, {Journal, Dir})
     after
         catch quod_signing_journal:close(Journal),

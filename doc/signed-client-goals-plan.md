@@ -1084,8 +1084,12 @@ the capability for exact equality. A target opens the ordinary
 `quod_client_cursor` under the authenticated gateway key and that same cursor
 id. Next, Accept, and Stop pass through the gateway route to the same target;
 the target accepts them only from the authenticated peer and exact link that
-opened the cursor. The cursor owner monitors that link directly, so the target
-router does not retain a second cursor table. No target can inspect the
+opened the cursor. The gateway router holds an explicit transport lease:
+ordinary requests release it on completion; a cursor route retains it through
+Next and releases it on termination, expiry or loss. A short-lived request
+worker never owns the cursor's transport lifetime. Router death releases its
+leases through the existing transport monitor. The cursor owner monitors that
+link directly, so the target router does not retain a second cursor table. No target can inspect the
 gateway's browser session, and no second cursor continuation or proof state
 lives at the gateway.
 

@@ -136,7 +136,8 @@ export type Actor = { kind: 'node'; identity: PeerId } | AgentActor
 export type Cert = {
   kind: string
   signers: PeerId[]
-  child_slot?: number
+  head_view: number
+  era: string
 } | null
 
 export type NsSummary = {
@@ -146,14 +147,14 @@ export type NsSummary = {
   role: string
   syncing: boolean
   committee: PeerId[]
-  approved: number
-  finality_slot: number
-  finality_leader: PeerId | null
+  protocol_view: number
+  protocol_era: string | null
+  notarized_view: number
+  view_leader: PeerId | null
   proposal_slot: number
   next_proposer: PeerId | null
   proposal_open: boolean
-  progress_phase: 'idle' | 'awaiting_proposal' | 'awaiting_notarization' | 'awaiting_commit'
-  progress_quorum_ready: boolean
+  progress_phase: 'idle' | 'awaiting_proposal' | 'awaiting_notarization'
   genesis: string | null
 }
 
@@ -164,7 +165,7 @@ export type TxsPage = { txs: LedgerRow[]; height: number; next_before: number | 
 export type Block = {
   slot: number
   time: number
-  kind: 'content' | 'dtx_batch' | 'noop' | 'invalid'
+  kind: 'content' | 'dtx_batch' | 'invalid'
   cert: Cert
   txs: TxFull[]
   controls?: Control[]
@@ -216,7 +217,7 @@ export type TxOutcome = {
 
 export type FoundTx = {
   tx: TxFull
-  block: { slot: number; time: number; noop: boolean; cert: Cert }
+  block: { slot: number; time: number; cert: Cert }
   outcome: TxOutcome
 }
 

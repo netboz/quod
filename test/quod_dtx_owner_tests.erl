@@ -199,6 +199,7 @@ with_owner(Fun) ->
     {ok, {group, Ns, Anchor, Pub, Admission, _}} = quod_atomic:source_group_ref(
         quod_atomic:control_material(maps:get(source_control, F))),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Root = {quod_ledger:initial_era({Ns, Anchor}), 0, Anchor},
     Dir = filename:join("/tmp", "quod-owner-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
     {ok, Journal} = quod_signing_journal:initialize(Ns, Domain, Dir),
@@ -207,7 +208,8 @@ with_owner(Fun) ->
         S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => Pub,
               id => maps:get(signer, F), validators => [Pub],
               author_admissions => #{Pub => Admission}, sync => ready, prolog_ready => true,
-              consensus_domain => Domain, slot => 1, history_head => {1, <<42:256>>},
+              consensus_domain => Domain, slot => 1, history_head => {1, Anchor},
+              archive_tip => {Root, 0}, eng => quod_simplex:eng_new(Domain, [Pub], {Root, 0}),
               phase_index => Index, signing_journal => Journal}),
         Fun(F, S, Dir, Domain, {Admission, Pub})
     after

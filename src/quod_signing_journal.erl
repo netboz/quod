@@ -4,8 +4,9 @@ Crash-durable signing state for one ontology on one validator.
 
 The journal is the sole local anti-equivocation authority for consensus votes
 and DTX sequence allocation. A support decision retains the exact canonical
-block in the same synced frame until that slot commits, so restart cannot lose
-the body named by the durable latch. Its one pending atomic row owns source
+block in the same synced frame until the selected ancestry and material group
+are durably archived, so restart cannot lose the body named by the durable
+latch. Its one pending atomic row owns source
 responsibility before private binding, bound own material before selection,
 and finally this role's signed vote for redriving after a crash. Every new
 decision is persisted and datasync'd before its signature may be exposed.
@@ -22,7 +23,7 @@ accepts only the compact result of an already-validated history fold.
 -include("quod_ledger.hrl").
 
 -export([initialize/3, recover/3, reconcile/2, close/1,
-         rounds/1, supported_blocks/1, dtx_floor/2, pending_dtx/1,
+         rounds/1, supported_block/2, dtx_floor/2, pending_dtx/1,
          pending_transactions/1,
          record_support/2, record_vote/4, record_dtx/2, record_dtx_intent/2, record_transaction/4,
          bind_transaction/2,
@@ -31,7 +32,7 @@ accepts only the compact result of an already-validated history fold.
               pending_dtx_row/0, pending_dtx/0]).
 
 -ifdef(TEST).
--export([compact/1, test_frame/1, test_max_frame_payload_bytes/0]).
+-export([compact/1, test_frame/1, test_max_frame_payload_bytes/0, supported_blocks/1]).
 -endif.
 
 %% New file and record domain.  Recognized superseded vote/signing-journal
@@ -44,14 +45,15 @@ accepts only the compact result of an already-validated history fold.
 -define(QSJ2_MAGIC, 16#51534A32). %% "QSJ2"
 -define(QSJ3_MAGIC, 16#51534A33). %% transaction V13 envelopes
 -define(QSJ4_MAGIC, 16#51534A34). %% Begin/Prepare/Decision/Finalize envelopes
--define(MAGIC,      16#51534A35). %% "QSJ5": atomic Vote/Resolve/Complete
--define(FORMAT_VERSION, 5).
+-define(QSJ5_MAGIC, 16#51534A35). %% slot-bound atomic Vote/Resolve/Complete
+-define(MAGIC,      16#51534A36). %% "QSJ6": era/view decisions and body custody
+-define(FORMAT_VERSION, 6).
 -define(HDR_BYTES, 12).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(COMPACT_BYTES, (1024 * 1024)).
 
 %% Exact deterministic-ETF overhead of
-%% {quod_signing_pending_dtx,5,Admission,Author,MaxU64,Group,Body,Envelope}
+%% {quod_signing_pending_dtx,6,Admission,Author,MaxU64,Group,Body,Envelope}
 %% outside the two variable blobs.  The boundary therefore follows the shared
 %% DTX limits automatically instead of duplicating their current values.
 -define(PENDING_WRAPPER_BYTES, 163).
@@ -62,7 +64,8 @@ accepts only the compact result of an already-validated history fold.
 -type block_hash() :: <<_:256>>.
 -type final_vote() :: none | {commit, block_hash()} | complaint.
 -type round() :: #{support := none | block_hash(), final := final_vote()}.
--type rounds() :: #{non_neg_integer() => round()}.
+-type position() :: {<<_:256>>, pos_integer()}.
+-type rounds() :: #{position() => round()}.
 -type lane() :: {<<_:256>>, <<_:256>>}. %% {AuthorAdmission, Author}
 -type pending_dtx_row() ::
         #{lane := lane(), sequence := non_neg_integer(),
@@ -161,8 +164,17 @@ rounds(#journal{rounds = Rounds}) ->
               #{support => Support, final => Final}
       end, Rounds).
 
+-doc "Return the exact body owned by one durable era/view support latch.".
+-spec supported_block(handle(), position()) -> #block{} | none.
+supported_block(#journal{rounds = Rounds}, Position) ->
+    case maps:get(Position, Rounds, none) of
+        #{block := #block{} = Block} -> Block;
+        _ -> none
+    end.
+
+-ifdef(TEST).
 -doc "Return exact blocks retained with this validator's live support latches.".
--spec supported_blocks(handle()) -> #{pos_integer() => #block{}}.
+-spec supported_blocks(handle()) -> #{position() => #block{}}.
 supported_blocks(#journal{rounds = Rounds}) ->
     maps:fold(
       fun(Slot, #{block := #block{} = Block}, Acc) ->
@@ -170,6 +182,7 @@ supported_blocks(#journal{rounds = Rounds}) ->
          (_Slot, _Round, Acc) ->
               Acc
       end, #{}, Rounds).
+-endif.
 
 -doc "Return the safe floor: max(local allocation, reconciled committed floor).".
 -spec dtx_floor(handle(), lane()) -> non_neg_integer().
@@ -210,7 +223,7 @@ record_support(_J, _Block) ->
     error(invalid_supported_block).
 
 -doc "Persist one final-vote latch before its signature is exposed.".
--spec record_vote(handle(), commit | complaint, pos_integer(),
+-spec record_vote(handle(), commit | complaint, position(),
                   block_hash() | none) -> {ok, handle()}.
 record_vote(J = #journal{rounds = Rounds}, Kind, Slot, BH) ->
     ok = valid_vote(Kind, Slot, BH),
@@ -377,15 +390,21 @@ retire_transaction(J = #journal{transactions = Transactions},
 
 -doc "Raise live floors and prune retired state only from validated history.".
 -spec reconcile(handle(),
-                #{committed_slot := non_neg_integer(),
+                #{archived_protocol := #{<<_:256>> => non_neg_integer() | sealed},
                   live_dtx_lanes := #{lane() => non_neg_integer()},
                   current_admissions := #{<<_:256>> => <<_:256>>},
                   pending_dtx := #{<<_:256>> => lane()}}) -> {ok, handle()}.
 reconcile(J = #journal{rounds = Rounds, dtx_floors = Floors,
                        pending_dtx = PendingDtx}, Validated) ->
     case valid_reconciliation(Validated, PendingDtx) of
-        {ok, Slot, LiveLanes, Admissions, PendingDtx1} ->
-            Rounds1 = maps:filter(fun(S, _) -> S > Slot end, Rounds),
+        {ok, Archived, LiveLanes, Admissions, PendingDtx1} ->
+            Rounds1 = maps:filter(
+              fun({Era, View}, _) ->
+                  case maps:get(Era, Archived, 0) of
+                      sealed -> false;
+                      Through -> View > Through
+                  end
+              end, Rounds),
             Floors1 = reconciled_floors(
                         Floors, LiveLanes, Admissions, PendingDtx1),
             J1 = J#journal{rounds = Rounds1, dtx_floors = Floors1,
@@ -558,18 +577,19 @@ canonical_transaction_identity(Body, TxId, Sequence, Author) ->
 
 empty_round() -> #{support => none, final => none, block => none}.
 
-supported_block(#block{slot = Slot, block_bytes = Bytes} = Block)
+supported_block(#block{era = <<_:256>> = Era, slot = Slot, block_bytes = Bytes} = Block)
   when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
        is_binary(Bytes),
        byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
     case quod_ledger:valid_block_view(Block) of
-        true -> {ok, Slot, crypto:hash(sha256, Bytes), Bytes};
+        true -> {ok, {Era, Slot}, crypto:hash(sha256, Bytes), Bytes};
         false -> error
     end;
 supported_block(_) ->
     error.
 
-apply_support(Block = #block{slot = Slot}, BH, Rounds) ->
+apply_support(Block = #block{era = Era, slot = View}, BH, Rounds) ->
+    Slot = {Era, View},
     Round = maps:get(Slot, Rounds, empty_round()),
     Round1 = apply_round_vote(support, Slot, BH, Round),
     Round2 =
@@ -606,10 +626,10 @@ apply_round_vote(complaint, _Slot, none, #{final := complaint} = Round) ->
 apply_round_vote(complaint, Slot, none, #{final := Other}) ->
     error({vote_conflict, Slot, Other, complaint}).
 
-valid_vote(commit, Slot, BH) when is_integer(Slot), Slot >= 1,
+valid_vote(commit, {<<_:256>>, Slot}, BH) when is_integer(Slot), Slot >= 1,
                                   Slot =< ?MAX_SLOT, is_binary(BH),
                                   byte_size(BH) =:= 32 -> ok;
-valid_vote(complaint, Slot, none) when is_integer(Slot), Slot >= 1,
+valid_vote(complaint, {<<_:256>>, Slot}, none) when is_integer(Slot), Slot >= 1,
                                        Slot =< ?MAX_SLOT -> ok;
 valid_vote(Kind, Slot, BH) -> error({invalid_vote, Kind, Slot, BH}).
 
@@ -708,6 +728,7 @@ legacy_version(<<?QSJ1_MAGIC:32, _/binary>>) -> {signing, 1};
 legacy_version(<<?QSJ2_MAGIC:32, _/binary>>) -> {signing, 2};
 legacy_version(<<?QSJ3_MAGIC:32, _/binary>>) -> {signing, 3};
 legacy_version(<<?QSJ4_MAGIC:32, _/binary>>) -> {signing, 4};
+legacy_version(<<?QSJ5_MAGIC:32, _/binary>>) -> {signing, 5};
 legacy_version(_) -> none.
 
 torn_tail(_Fd, Offset, strict) ->
@@ -834,14 +855,14 @@ apply_record({quod_signing_transaction_retired, ?FORMAT_VERSION,
 apply_record(Other, _Rounds, _Floors, _Pending, _Effects, Offset) ->
     error({signing_journal_bad_record, Other, Offset}).
 
-decoded_supported_block(Slot, Bytes)
+decoded_supported_block({<<_:256>> = Era, Slot} = Position, Bytes)
   when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
        is_binary(Bytes),
        byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
     case quod_ledger:decode_block(Bytes) of
-        {ok, #block{slot = Slot} = Block} ->
+        {ok, #block{era = Era, slot = Slot} = Block} ->
             case supported_block(Block) of
-                {ok, Slot, BH, Bytes} -> {ok, Block, BH};
+                {ok, Position, BH, Bytes} -> {ok, Block, BH};
                 _ -> error
             end;
         _ ->
@@ -922,15 +943,15 @@ trim(Fd, Offset) ->
 %%%===================================================================
 
 valid_reconciliation(
-  #{committed_slot := Slot, live_dtx_lanes := Live,
+  #{archived_protocol := Archived, live_dtx_lanes := Live,
     current_admissions := Admissions,
     pending_dtx := ValidatedPending} = Summary, PendingDtx)
-  when map_size(Summary) =:= 4, is_integer(Slot), Slot >= 0,
-       Slot =< ?MAX_SLOT,
+  when map_size(Summary) =:= 4, is_map(Archived),
        is_map(Live), map_size(Live) =< ?MAX_VALIDATORS,
        is_map(Admissions), map_size(Admissions) =< ?MAX_VALIDATORS,
        is_map(ValidatedPending) ->
-    case valid_live_lanes(maps:to_list(Live)) andalso
+    case valid_archived_protocol(maps:to_list(Archived)) andalso
+         valid_live_lanes(maps:to_list(Live)) andalso
          valid_admissions(maps:to_list(Admissions)) andalso
          valid_pending_refs(maps:to_list(ValidatedPending)) of
         true ->
@@ -939,10 +960,20 @@ valid_reconciliation(
                              maps:get(GroupId, ValidatedPending, undefined)
                                  =:= Lane
                      end, PendingDtx),
-            {ok, Slot, Live, Admissions, Kept};
+            {ok, Archived, Live, Admissions, Kept};
         false -> error
     end;
 valid_reconciliation(_, _) -> error.
+
+%% The ledger owner supplies these floors only after syncing the selected
+%% ancestry. Material height alone grants no release. `sealed` requires a
+%% certified terminal membership block and durable old-era serving evidence;
+%% an unknown era is retained, never inferred retired by binary ordering.
+valid_archived_protocol([]) -> true;
+valid_archived_protocol([{<<_:256>>, sealed} | Rest]) -> valid_archived_protocol(Rest);
+valid_archived_protocol([{<<_:256>>, View} | Rest])
+  when is_integer(View), View >= 0, View =< ?MAX_SLOT -> valid_archived_protocol(Rest);
+valid_archived_protocol(_) -> false.
 
 reconciled_floors(LocalFloors, CommittedFloors, Admissions, PendingDtx) ->
     %% An allocated sequence is anti-equivocation state even before its

@@ -111,6 +111,26 @@ or recover an unresolved operation by declaring it aborted. No snapshot root or 
    old network and uncertain requests until that boundary; archive them as
    unresolved rather than resubmitting them on a new identity.
 
+### Readiness after restart or rebuild
+
+A hosted ontology can become ready again at the same material height. Empty
+protocol carriers and complaints must not manufacture ledger progress to wake
+its dependants. Simplex's existing installed proof-ready notification identifies
+the anchored ontology, current Simplex and Prolog processes, and a monotonically
+increasing local event generation. The existing foreign-history owner subscribes
+with its other progress interests, ignores superseded owners and generations,
+and reconfirms through its ordinary capture/verifier. A fresh rebuild generation
+also wakes dependants when neither process has changed. The event grants no
+proof, signing or application authority and changes no caller deadline. No
+polling, extra recovery owner or public uncertain-write resubmission is added.
+
+A protocol-readiness dip may race an already completed ordinary Prolog proof.
+The existing ingress queue retains that unsigned request, including across a
+history re-seat, under its original arrival/deadline. It revalidates before
+signing when the owner becomes capable again. Recovery grants no signing,
+voting or application permission. Inbound relay placements are still invalidated
+on re-seat; their originating custody remains responsible for the exact bytes.
+
 ### Existing-path integration and deletion obligations
 
 | Existing seam | Required replacement / retained responsibility |
@@ -124,6 +144,69 @@ or recover an unresolved operation by declaring it aborted. No snapshot root or 
 | `quod_dtx:certified_entry_ref_matches/5`, `quod_foreign_log` | Match the exact immutable material claim with a fully verified selected witness. Preserve local-host ownership, historical committee lookup and original caller deadlines. |
 | `quod_ingress_state`, Simplex relay/custody reconciliation | Derive leader placement from era/view, retaining the original signed request and existing event-driven ownership. Retire obsolete placement on view/era changes without creating a fresh operation. |
 | `quod_committed_projection`, Prolog, outcome/phase indexes and runtime | Consume contiguous material entries only. Empty carriers produce no KB mutation, result, runtime reaction or effect; a real empty-diff transaction still does. Existing AM3/atomic result publication remains after durable application. |
+
+A cold joiner's configured anchor is an initial protocol root, not installed
+material history. Payload and membership admission remain closed until genesis
+is verified and durably installed. That first group establishes custody only
+for the identical configured root; later Prolog application separately governs
+proof readiness. Startup archive folds use the same genesis transition from an
+absent prior tip.
+
+### Observer delivery through the shared proof path
+
+A compact entry notification may name a finalizing descendant whose ancestry
+is not in the observer's archive. It is therefore a receipt, not a second
+self-contained verification path. The feed's existing single monitored pull
+worker acquires proof groups through ordinary catch-up; Simplex remains the
+only archive writer. The feed owner does no network work.
+
+A settled observer coalesces consecutively received live heights after its
+installed prefix into one volatile interval. Gaps do not widen it, and durable
+head advancement retires the covered portion. This interval records receipt
+only: every material entry and consequence still requires the shared finality
+and transaction verifier. The sink freezes that interval before append and
+selects live versus replay per material entry, including when one proof group
+contains both. Unapplied older history, gap repair outside the interval, and
+restart reconstruction remain replay. Only acknowledged live entries are
+relayed onward; no historical row creates a live receipt.
+
+A newer receipt can wake another acquisition after the current worker exits;
+worker exit without a new receipt cannot retry itself. Temporary proof staging
+is owned before file creation and dies with the worker. Reactions, policy and
+application consequences remain in Prolog; this adds no message journal,
+execution queue, polling loop or alternate domain engine.
+
+The receiver reuses exact-envelope authentication only within one bounded
+transport page, across its material entries and proof blocks. That context is
+discarded at the page boundary and never substitutes for historical committee,
+author admission, transaction semantics or the complete ancestry check. Senders
+obtain the preceding material cutoff hash through the existing opaque indexed
+reader; computing that hash does not reauthenticate its payload or grant any
+receiver authority.
+
+### Missing live bodies after archive installation
+
+Material-history recovery cannot replace a missing live body merely because
+its commit certificate is known. An empty finalizer may be newer than the
+archive's selected proof while material height is unchanged. Retain the
+existing exact, support-certificate-backed body request within the live engine
+window, including after a commit certificate arrives. Its reply still passes
+the ordinary hash, parent, ancestry and payload checks; it grants no separate
+signing or application authority. History recovery remains responsible for
+missing material groups.
+
+The consensus engine serves a retained notarized body by its exact hash and
+protocol view. Once the body has been pruned, the owner answers with its latest
+verified archived CommitQC. That certificate enters the peer's ordinary
+certificate handling and existing certified-history recovery. It is a recovery
+hint backed by finality, not an assertion that the requested body is retained.
+The receiver still verifies the complete selected ancestry and material group.
+
+The owner retains that immutable certificate only after archive append, and
+recovers it during the existing startup fold. Protocol views never become disk
+ledger offsets. No mailbox-blocking disk search, second body index or new
+transport grammar is introduced; an exact material claim remains independent
+of the archive's choice of finality witness.
 
 ## 1. Throughput is a design requirement
 
@@ -971,6 +1054,19 @@ wake existing owners, including unchanged live links and same-peer revisits.
 Re-place identical retained signed submissions and operation/group identities.
 A view advance is not proof of exclusion; only finalized history resolves it.
 No new author sequence, client request or fabricated abort.
+
+The source cut applies this rule to membership transactions too. The earlier
+`ingress-owner.md` exception excluded them from custody and depended on a
+complaint producing a terminal ledger row. That exception cannot survive the
+view/height separation: a removal directed at a dead leader otherwise remains
+stranded while views advance. Membership uses the existing custody, lane and
+deadline owner. Its singleton selection, installed-parent gate, author order
+and Prolog verdict remain. A placement change or locally refused proposal is
+not a terminal outcome. An independently submitted invalid membership request
+may remain unresolved until its original deadline; it is never automatically
+re-proved with fresh signing state. Exact-byte re-placement and expiry are
+covered for both admit and remove, with real dead-leader removal acceptance.
+This amendment participates in the completed-cut consensus review before commit.
 
 **Closed for the fixed-era baseline:** per-view support and final-vote latches,
 plus supported-body custody, generalize the existing atomic-retention pattern.

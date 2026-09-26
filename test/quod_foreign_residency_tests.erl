@@ -30,15 +30,15 @@ persistence_failure(Stage) ->
     First = {"127.0.0.1", 29999}, Second = {"127.0.0.1", 19000},
     Base = quod_foreign_log_tests:chain_fetch(Ns, Chain),
     Parent = self(), Tag = make_ref(),
-    Fetch = fun(P, Endpoint, N, From, To) ->
-        Parent ! {persistence_source, Tag, Endpoint, From, To},
+    Fetch = fun(P, Endpoint, N, Query, Deadline, Consume) ->
+        Parent ! {persistence_source, Tag, Endpoint, Query, Deadline},
         case {Endpoint, get({?MODULE, armed})} of
             {First, undefined} ->
                 put({?MODULE, armed}, true),
                 ok = quod_foreign_log:test_fail_persist_after(Stage);
             _ -> ok
         end,
-        Base(P, Endpoint, N, From, To)
+        Base(P, Endpoint, N, Query, Deadline, Consume)
     end,
     Dir = quod_foreign_log_tests:temp_dir("post-mutation-cursor"),
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -61,10 +61,11 @@ persistence_failure(Stage) ->
                 ?assertEqual([], [S || S = {E, _, _} <- Sources, E =:= Second]),
                 ?assertEqual({error, retry}, Result),
                 ?assertEqual(0, maps:get(resident_verified, quod_foreign_log:stats())),
-                %% The completed physical append is intentionally preserved
-                %% for the existing cold recovery owner; it is not served
+                %% The first complete group survives the injected failure;
+                %% the second group was never installed. Cold recovery owns
+                %% that physical prefix; it is not served
                 %% using the pre-append cursor or silently deleted to retry.
-                assert_physical_entries(Dir, Identity, Chain)
+                assert_physical_entries(Dir, Identity, [hd(Chain)])
         end
     after
         quod_foreign_log_tests:stop_owner(Owner),
@@ -88,14 +89,14 @@ failed_tip_confirmation() ->
     PrefixFetch = quod_foreign_log_tests:chain_fetch(Ns, [Genesis]),
     FullFetch = quod_foreign_log_tests:chain_fetch(Ns, Chain),
     Mode = atomics:new(1, []), Parent = self(),
-    Fetch = fun(P, E, N, From, To) ->
-        Parent ! {freshness_fetch, From},
-        case atomics:get(Mode, 1) of
-            0 -> PrefixFetch(P, E, N, From, To);
-            1 when From > 2 -> {error, retry};
-            1 -> FullFetch(P, E, N, From, To);
-            2 -> FullFetch(P, E, N, From, To);
-            3 -> error({confirmed_unchanged_head_fetched, From})
+    Fetch = fun(P, E, N, Query, Deadline, Consume) ->
+        Parent ! {freshness_fetch, Query},
+        case {atomics:get(Mode, 1), Query} of
+            {0, _} -> PrefixFetch(P, E, N, Query, Deadline, Consume);
+            {1, {range, From, _}} when From > 2 -> {error, retry};
+            {1, _} -> FullFetch(P, E, N, Query, Deadline, Consume);
+            {2, _} -> FullFetch(P, E, N, Query, Deadline, Consume);
+            {3, _} -> error({confirmed_unchanged_head_fetched, Query})
         end
     end,
     Dir = quod_foreign_log_tests:temp_dir("failed-tip-residency"),
@@ -176,10 +177,10 @@ follow_borrow_refusal() ->
     SourceDir = quod_foreign_log_tests:temp_dir("follow-borrow-source"),
     Base = quod_foreign_log_tests:chain_fetch(Ns, Prefix),
     Allowed = atomics:new(1, []),
-    Fetch = fun(P, E, N, F, T) ->
+    Fetch = fun(P, E, N, Query, Deadline, Consume) ->
         case atomics:get(Allowed, 1) of
-            0 -> Base(P, E, N, F, T);
-            1 -> error({retained_exact_reference_refetched, F})
+            0 -> Base(P, E, N, Query, Deadline, Consume);
+            1 -> error({retained_exact_reference_refetched, Query})
         end
     end,
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -310,17 +311,18 @@ with_installation_state(Height, Fun) ->
         %% Callback-state fixture, not an admitted consensus job. Its read
         %% capability and returned cursor now use real verified disk resources;
         %% resident_verified with no index/snapshot is not a valid state.
-        {ok, [_], P1, D1} = quod_catchup:verify_forward(
-            Ns, Anchor, quod_simplex:history_projection(Identity), 1, [Genesis], PhaseIndex),
+        {ok, #{projection := P1, delta := D1, proof := Proof1}} =
+            quod_ct:history_group(Identity, Genesis,
+                quod_simplex:history_projection(Identity), PhaseIndex),
+        {ok, Store1} = quod_ledger_store:append(Store0, {Proof1, [Genesis]}),
         ok = quod_dtx_phase_index:commit_delta(PhaseIndex, D1),
-        {ok, Store1} = quod_ledger_store:append(Store0, [Genesis]),
         Snapshot1 = quod_ledger_store:snapshot(Store1),
-        {ok, [_], P2, D2} = quod_catchup:verify_forward(
-            Ns, Anchor, P1, 2, [Vote], PhaseIndex),
+        {ok, #{projection := P2, delta := D2, proof := Proof2}} =
+            quod_ct:history_group(Identity, Vote, P1, PhaseIndex),
         {Projection, Store} = case Height of
             1 -> {P1, Store1};
             2 ->
-                {ok, Store2} = quod_ledger_store:append(Store1, [Vote]),
+                {ok, Store2} = quod_ledger_store:append(Store1, {Proof2, [Vote]}),
                 ok = quod_dtx_phase_index:commit_delta(PhaseIndex, D2),
                 {P2, Store2}
         end,
@@ -389,18 +391,24 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
     ContactEndpoint = {"127.0.0.1", 29999},
     PrefixFetch = quod_foreign_log_tests:chain_fetch(Ns, Prefix),
     FullFetch = quod_foreign_log_tests:chain_fetch(Ns, Chain),
+    PartialFetch = quod_foreign_log_tests:chain_fetch(Ns, lists:sublist(Chain, 2)),
     Phase = atomics:new(1, []),
     Parent = self(),
-    Fetch = fun(P, Endpoint, RequestedNs, From, To) ->
-        Parent ! {residency_fetch, atomics:get(Phase, 1), Endpoint, From, To},
-        case {atomics:get(Phase, 1), Endpoint, Mode} of
-            {0, Good, _} -> PrefixFetch(P, Endpoint, RequestedNs, From, To);
-            {1, ContactEndpoint, transient_fallback} -> {error, retry};
-            {1, ContactEndpoint, partial_fallback} when From =:= 2 ->
-                {ok, [lists:nth(2, Chain)], RequestedSlot};
-            {1, ContactEndpoint, partial_fallback} when From =:= 3 ->
+    Fetch = fun(P, Endpoint, RequestedNs, Query, Deadline, Consume) ->
+        Parent ! {residency_fetch, atomics:get(Phase, 1), Endpoint, Query},
+        case {atomics:get(Phase, 1), Endpoint, Mode, Query} of
+            {0, Good, _, _} ->
+                PrefixFetch(P, Endpoint, RequestedNs, Query, Deadline, Consume);
+            {1, ContactEndpoint, transient_fallback, _} -> {error, retry};
+            {1, ContactEndpoint, partial_fallback, {range, 2, _}} ->
+                Continuation = {residency_partial, 1},
+                {ok, Consumed, 2, done} = PartialFetch(P, Endpoint, RequestedNs, Query,
+                    Deadline, fun(Parts, 2, done) -> Consume(Parts, RequestedSlot, Continuation) end),
+                {ok, Consumed, RequestedSlot, Continuation};
+            {1, ContactEndpoint, partial_fallback, {continue, residency_partial, 1}} ->
                 {error, retry};
-            {1, _, _} -> FullFetch(P, Endpoint, RequestedNs, From, To)
+            {1, _, _, _} ->
+                FullFetch(P, Endpoint, RequestedNs, Query, Deadline, Consume)
         end
     end,
     Dir = quod_foreign_log_tests:temp_dir("verified-cursor"),
@@ -448,18 +456,18 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
         ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
         ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),
         case Mode of
-            healthy -> ?assertMatch([{1, Good, RequestedSlot, _}], Fetches);
+            healthy -> ?assertMatch([{1, Good, {range, RequestedSlot, _}}], Fetches);
             transient_fallback ->
-                ?assertMatch([{1, ContactEndpoint, RequestedSlot, _},
-                              {1, Good, RequestedSlot, _}], Fetches);
+                ?assertMatch([{1, ContactEndpoint, {range, RequestedSlot, _}},
+                              {1, Good, {range, RequestedSlot, _}}], Fetches);
             partial_fallback ->
-                ?assertMatch([{1, ContactEndpoint, 2, 3},
-                              {1, ContactEndpoint, 3, 3},
-                              {1, Good, 3, 3}], Fetches);
+                ?assertMatch([{1, ContactEndpoint, {range, 2, 3}},
+                              {1, ContactEndpoint, {continue, residency_partial, 1}},
+                              {1, Good, {range, 3, 3}}], Fetches);
             definitive_fallback ->
                 %% The first source supplied the exact suffix. The second
                 %% definitive arm must inspect that cursor, not re-fetch it.
-                ?assertMatch([{1, ContactEndpoint, RequestedSlot, _}], Fetches)
+                ?assertMatch([{1, ContactEndpoint, {range, RequestedSlot, _}}], Fetches)
         end,
         ?assertMatch(#{resident_verified := 1}, quod_foreign_log:stats()),
         assert_retained_entries(Owner, Identity, Chain)
@@ -561,6 +569,6 @@ call_count({M, F, A}, Calls) ->
 
 drain_fetches() -> drain_fetches([]).
 drain_fetches(Acc) ->
-    receive {residency_fetch, Phase, Endpoint, From, To} ->
-        drain_fetches([{Phase, Endpoint, From, To} | Acc])
+    receive {residency_fetch, Phase, Endpoint, Query} ->
+        drain_fetches([{Phase, Endpoint, Query} | Acc])
     after 0 -> lists:reverse(Acc) end.

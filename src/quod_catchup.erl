@@ -1,41 +1,41 @@
 -module(quod_catchup).
 -moduledoc """
-Per-namespace **catch-up** endpoint — the path by which a joining node pulls the committed block log
-(each block with the quorum certificate that finalized it) so it can **trustlessly** replay a namespace it
-was not present for (`mode=join`, Simplex 4).
+The existing per-namespace certified-history endpoint and shared proof verifier.
 
-Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_link`
-channel, separate from `quod_simplex`'s `{log, Ns}` channel:
+The server captures one immutable archive view from Simplex and streams
+complete proof/material groups through bounded, credited pages. One retained
+reader owns that source descriptor and cursor across continuations, under its
+original deadline and exact source/link lifetimes. An entry-only response is
+not a proof format: empty protocol carriers live in the selected witness and
+never become material ledger rows.
 
-- **Server** (any Member holding the durable log): asks the existing consensus owner for a copy of its
-  already-verified sparse ledger index, then reads the committed artifact range through a separate
-  **read-only** handle. The worker never shares the writer's raw descriptor and never rescans the full
-  log. One authenticated link grant admits one reader through ordered response
-  acceptance. Concurrent logical requests remain in their producer's rows;
-  range and frame bounds protect the byte grammar, not a worker population cap.
-- **Client** (a joiner): `contact/1` samples ONE download contact — the live, self-filtered Brahms view
-  first, the static seeds (minus this node's own `node_addr`) as the cold-start fallback
-  (`quod_brahms:sample_contact/2`) — and `pull/4` requests `[From, To]` from it. The contact is STICKY for
-  a whole catch-up run and re-sampled only on the next attempt (see `contact/1`). The caller (`mode=join`
-  init) drives the loop and **verifies each block's cert** against the committee it reconstructs — the
-  server is never trusted (the certificate is the proof).
+The existing recovery, foreign-history or observer worker consumes each page,
+verifies the descendant-to-prefix ancestry and transactions once, then hands
+complete groups to its existing writer. A staging file is temporary, unlinked
+before bytes are written and closed on worker death. Append acknowledgement
+precedes staging reuse, projection publication and journal custody release.
+Transport receipt or caller-supplied witness preference grants no authority.
 
-Committed entries cross this channel only as their canonical byte envelopes.
-The target endpoint decodes those bytes into its local view; a foreign-history
-consumer keeps unknown application symbols opaque. Catch-up request ids are
-random 128-bit binaries, so the bounded inner grammar needs no fleet-local
-runtime terms or unsafe decoder. Trustlessness still comes from certificate
-verification at the caller, never from the serving peer.
+`pull/5` retains page credit through the calling worker's consumption. `catch_up/7`
+drives the same group verifier for hosted recovery and observers, pinning the
+original owner and returning its installed views between groups. Foreign jobs
+thread their existing cache cursor through `range_begin/7` and `range_accept/5`.
+Local consumers materialize application symbols; foreign readers retain the
+wrapped vocabulary. All finality uses the caller-pinned namespace/genesis
+identity and the historical certifying committee, never the serving peer.
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 -include("quod_transport_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, read_blocks/3, stats/1,
-         channel/1, encode_frame/2, decode_frame/2, decode_entries/2, page_stats/1,
-         verify_forward/5, verify_forward/6, verify_entry/3,
+-export([start_link/2, contact/1, contacts/2, pull/5, read_blocks/3, stats/1,
+         channel/1, encode_frame/2, decode_frame/2,
+         finality_begin/3, finality_block/2, verify_finality/4, verify_forward_group/5,
+         transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
+         range_begin/7, range_accept/5, range_context/1,
          catch_up/7]).
+-export_type([finality_cursor/0, transfer/0, transfer_sender/0, range_receiver/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3]).
@@ -48,13 +48,15 @@ verification at the caller, never from the serving peer.
                                          %% larger frame), so we leave headroom for the envelope
 
 -record(client_pull, {
-          from :: gen_server:from(),
+          from :: gen_server:from() | none,
+          caller :: pid(),
           timer :: reference(),
           caller_monitor :: reference(),
           contact :: term(),
-          range :: {pos_integer(), log_index()},
+          query :: term(),
           deadline :: integer(),
-          sent = none :: none | {pid(), reference(), binary()},
+          sent = none :: none | {pid(), reference(), binary()} |
+                              {decoding, pid(), reference(), binary(), binary()},
           started_ms :: integer()
          }).
 
@@ -64,7 +66,17 @@ verification at the caller, never from the serving peer.
 -record(reader, {link :: pid(), link_monitor :: reference(), worker :: pid() | none,
                  monitor = none :: reference() | none, timer = none :: reference() | none,
                  source = none, result = none, retiring = false,
+                 operation = none, sequence = 0, sent = false,
                  started_ms :: integer()}).
+
+-record(transfer, {binding, last, next, projection, index, mode, stage,
+                    entries = [], finality = pending}).
+-opaque transfer() :: #transfer{}.
+-record(transfer_sender, {next, last, current = none, pending = none}).
+-opaque transfer_sender() :: #transfer_sender{}.
+-record(range_receiver, {binding, to, mode, stage, context, projection, index,
+                          transfer = none, height = none}).
+-opaque range_receiver() :: #range_receiver{}.
 
 -record(s, {ns       :: binary(),
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
@@ -76,8 +88,9 @@ verification at the caller, never from the serving peer.
             bindings = #{} :: #{term() => #binding{}},
             contacts = #{} :: #{term() => reference()},
             transport_monitor :: reference(),
-            inflight = #{} :: #{reference() => #reader{}},
+            inflight = #{} :: #{binary() => #reader{}},
                                       %% server: one exact row per live read worker
+            page_operations = #{} :: #{reference() => binary()},
             inflight_peak = 0 :: non_neg_integer()}).
 
 -ifdef(TEST).
@@ -98,7 +111,7 @@ Sample ONE download contact for a catch-up run: the live, self-filtered Brahms v
 this namespace's static seeds — minus this node's own `node_addr` — as the cold-start fallback
 (`quod_brahms:sample_contact/2`). `none` when the node is isolated (no view, no usable seed).
 
-The caller passes the pick EXPLICITLY to every `pull/4` of the run — ONE contact per attempt,
+The caller passes the pick EXPLICITLY to every `pull/5` of the run — ONE contact per attempt,
 re-sampled only on the NEXT attempt: consecutive windows from different-height contacts would trip
 `catch_up`'s `no_progress` guard mid-run (and a run must stay glued to one fully-caught-up contact,
 the shape the 24-joiner/81k-slot cold-join relied on).
@@ -118,16 +131,40 @@ contacts(Ns, Limit) when is_integer(Limit), Limit > 0 ->
         Pid -> try gen_server:call(Pid, {contacts, Limit}, 5000) catch exit:_ -> [] end
     end.
 
--doc "Pull committed entries `[From, To]` from a node id or `{Host, Port}` contact. Returns the entries + the server's height.".
--spec pull(binary(), pos_integer(), log_index(), node_id() | endpoint()) ->
-        {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
-pull(Ns, From, To, Contact) ->
+-doc "Consume one credited history page in its existing worker under the range's original deadline.".
+-spec pull(binary(), term(), node_id() | endpoint(), integer(),
+           fun(([term()], non_neg_integer(), done | {binary(), pos_integer()}) ->
+                   {ok, term()} | {error, term()})) ->
+          {ok, term(), non_neg_integer(), done | {binary(), pos_integer()}} | {error, term()}.
+pull(Ns, Query, Contact, Deadline, Consume) when is_function(Consume, 3) ->
     Started = quod_time:mono_ms(),
     case quod_reg:where({quod_catchup, Ns}) of
         undefined -> {error, no_catchup_endpoint};
-        Pid -> try gen_server:call(Pid, {pull, From, To, Contact, Started},
-                                  ?REQ_TIMEOUT_MS + 1000)
-               catch exit:_ -> {error, timeout} end
+        Pid ->
+            case pull_owner_call(Pid, {pull, Query, Contact, Started, Deadline}, Deadline) of
+                {consume_page, Key, Parts, Height, Continuation} ->
+                    case quod_time:mono_ms() < Deadline of
+                        false -> {error, timeout};
+                        true ->
+                            Result = Consume(Parts, Height, Continuation),
+                            Verdict = case Result of {ok, _} -> accepted; _ -> rejected end,
+                            Completion = pull_owner_call(Pid, {complete_pull_page, Key, Verdict}, Deadline),
+                            case {Completion, Result} of
+                                {ok, {ok, Value}} -> {ok, Value, Height, Continuation};
+                                {_, {error, _} = Error} -> Error;
+                                _ -> {error, timeout}
+                            end
+                    end;
+                {error, _} = Error -> Error
+            end
+    end.
+
+pull_owner_call(Pid, Request, Deadline) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            try gen_server:call(Pid, Request, Remaining)
+            catch exit:_ -> {error, timeout} end;
+        _ -> {error, timeout}
     end.
 
 -doc "Current catch-up work and owner-lifetime peaks for one hosted ontology.".
@@ -157,7 +194,7 @@ encode_frame(Ns, Term) when is_binary(Ns) ->
     {ok, Inner} = quod_safe_term:encode_canonical(
                     Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
     {ok, Outer} = quod_safe_term:encode_canonical(
-      {catchup, Ns, Inner},
+      {catchup, 3, Ns, Inner},
       ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
     Outer.
 
@@ -168,7 +205,7 @@ decode_frame(Ns, Payload)
   when is_binary(Ns), is_binary(Payload),
        byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
     case quod_safe_term:decode_wrapped(Payload, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
-        {ok, {catchup, Ns, Bin}}
+        {ok, {catchup, 3, Ns, Bin}}
           when is_binary(Bin),
                byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
             case quod_safe_term:decode_wrapped(
@@ -184,135 +221,89 @@ decode_frame(Ns, Payload)
 decode_frame(_Ns, _Payload) ->
     {error, frame_too_large}.
 
-decode_wire_term({blocks_credit, <<_:128>> = Grant}, Bytes) ->
-    {ok, {blocks_credit, Grant}, Bytes};
-decode_wire_term({blocks_req, <<_:128>> = Grant, <<_:128>> = ReqId, From, To}, Bytes)
-  when is_integer(From), From > 0, is_integer(To), To >= From ->
-    {ok, {blocks_req, Grant, ReqId, From, To}, Bytes};
-decode_wire_term(
-  {blocks_resp_bytes, <<_:128>> = Grant, <<_:128>>,
-   EntryBlobs, Height, <<_:128>> = Next} = Term, Bytes)
-  when is_list(EntryBlobs), is_integer(Height), Height >= 0 ->
-    case Grant =/= Next andalso valid_blob_page(EntryBlobs, 0, 0) of
+decode_wire_term({history_credit3, <<_:128>> = Grant}, Bytes) ->
+    {ok, {history_credit3, Grant}, Bytes};
+decode_wire_term({history_request3, <<_:128>>, <<_:128>>, Query} = Term, Bytes) ->
+    case valid_transfer_query(Query) of
         true -> {ok, Term, Bytes};
         false -> {error, bad_frame}
     end;
 decode_wire_term(
-  {blocks_err, <<_:128>> = Grant, <<_:128>>, Reason, <<_:128>> = Next} = Term, Bytes)
+  {history_page3, <<_:128>> = Grant, <<_:128>>, Parts, Height,
+   Continuation, <<_:128>> = Next} = Term, Bytes)
+  when is_integer(Height), Height >= 0 ->
+    case Grant =/= Next andalso valid_transfer_continuation(Continuation)
+         andalso valid_transfer_parts(Parts, 0, 0) of
+        true -> {ok, Term, Bytes};
+        false -> {error, bad_frame}
+    end;
+decode_wire_term(
+  {history_error3, <<_:128>> = Grant, <<_:128>>, Reason, <<_:128>> = Next} = Term, Bytes)
   when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error) ->
     {ok, Term, Bytes};
 decode_wire_term(_Term, _Bytes) ->
     {error, bad_frame}.
 
-valid_blob_page([], _Count, _Bytes) -> true;
-valid_blob_page([Blob | Rest], Count, Bytes)
-  when is_binary(Blob), Count < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
-       Bytes + byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
-    valid_blob_page(Rest, Count + 1, Bytes + byte_size(Blob));
-valid_blob_page(_, _, _) -> false.
+valid_transfer_query({range, From, To}) ->
+    is_integer(From) andalso From > 0 andalso is_integer(To) andalso To >= From;
+valid_transfer_query({continue, Token, Sequence}) ->
+    valid_transfer_continuation({Token, Sequence});
+valid_transfer_query(_) -> false.
 
-%% The transport validates only opaque blob bounds. The receiving reader owns
-%% this one decode, selecting local or wrapped vocabulary before verification.
--spec decode_entries([binary()], materialized | wrapped) ->
-          {ok, [quod_ledger:entry_artifact()]} | {error, bad_frame}.
-decode_entries(Blobs, SymbolMode)
-  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
-    case valid_blob_page(Blobs, 0, 0) of
-        true ->
-            case quod_ledger:decode_entries(Blobs, SymbolMode) of
-                {ok, Entries} -> {ok, Entries};
-                {error, _} -> {error, bad_frame}
-            end;
-        false -> {error, bad_frame}
-    end.
+valid_transfer_continuation(done) -> true;
+valid_transfer_continuation({<<_:128>>, Sequence}) -> is_integer(Sequence) andalso Sequence > 0;
+valid_transfer_continuation(_) -> false.
 
--doc "Bound a decoded catch-up page by the shared entry-count and encoded-byte limits.".
--spec page_stats(term()) ->
-          {ok, non_neg_integer(), non_neg_integer()} | {error, term()}.
-page_stats(Entries) ->
-    page_stats(Entries, 0, 0).
-
-page_stats([], Count, Bytes) ->
-    {ok, Count, Bytes};
-page_stats([Entry | Rest], Count, Bytes)
-  when Count < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES ->
-    case quod_ledger:encode_entry(Entry) of
-        {ok, EntryBytes} ->
-            Bytes1 = Bytes + byte_size(EntryBytes),
-            case Bytes1 =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
-                true -> page_stats(Rest, Count + 1, Bytes1);
-                false -> {error, page_too_large}
-            end;
-        {error, _} ->
-            {error, malformed_page}
-    end;
-page_stats([Entry | _], _Count, _Bytes) ->
-    case quod_ledger:encode_entry(Entry) of
-        {ok, _EnvelopeBytes} -> {error, too_many_entries};
-        {error, _} -> {error, malformed_page}
-    end;
-page_stats(_Malformed, _Count, _Bytes) ->
-    {error, malformed_page}.
-
--doc """
-Read the exact stored envelope bytes `[From, To]` (bounded by count, bytes and
-the captured committed height) through a read-only store view. CRC and outer
-index checks protect transport integrity, not transaction authority. The
-consumer must still decode and verify every entry before using its contents.
-The existing server worker opens/closes its own handle; no owner is blocked.
-""".
--spec serve_blocks(binary(), quod_ledger_store:session(), non_neg_integer(), log_index()) ->
-          {ok, [binary()], log_index()} | {error, term()}.
-serve_blocks(Ns, Snapshot, From, To) ->
-    StartedNative = erlang:monotonic_time(),
-    Result = serve_blocks_measured(Ns, Snapshot, From, To),
-    observe_serve_stage(serve_read_total, Result, StartedNative),
-    Result.
-
-serve_blocks_measured(Ns, Snapshot, From, To) ->
-    case measure_serve_stage(
-           serve_snapshot_resume,
-           fun() -> quod_ledger_store:open_ro_snapshot(Snapshot) end) of
-        {error, _} = E -> E;
-        {ok, Store}    ->
-            try
-                case quod_ledger_store:namespace(Store) of
-                    Ns -> read_blocks(Store, From, To, bytes);
-                    _ -> {error, wrong_namespace}
-                end
-            after quod_ledger_store:close(Store)
-            end
-    end.
-
-%% Cold cache recovery and projection actually consume entries, whereas the
-%% server forwards opaque envelopes. Both use one bounded CRC/index reader;
-%% transport never authenticates payloads merely to extract their same bytes.
+%% Read already-verified material for the derived foreign projection. This
+%% bounded work unit is not a history transport or a certificate verifier.
 -spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
           {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 read_blocks(Store, From0, To) ->
-    read_blocks(Store, From0, To, all).
-
-read_blocks(Store, From0, To, Form) ->
     From = max(1, From0),
     try
         LastI = quod_ledger_store:last(Store),
         To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
         {ok, Es} = measure_serve_stage(
                      serve_range_read,
-                     fun() -> quod_ledger_store:read_range(Store, From, To1, Form) end),
+                     fun() -> quod_ledger_store:read_range(Store, From, To1, all) end),
         {ok, cap_bytes(Es, 0), LastI}
     catch _:R -> {error, R}
     end.
 
-serve_hosted_blocks(Ns, From, To, Deadline, Owner, OperationRef) ->
+serve_hosted_range(Ns, From, To, Deadline, Owner, Token, Gate) ->
     case measure_serve_stage(
            serve_snapshot_lookup,
            fun() -> quod_simplex:history_view(Ns, committed, Deadline) end) of
         {ok, #{snapshot := Snapshot} = View} ->
-            case gen_server:call(Owner, {page_source, OperationRef, View},
+            case gen_server:call(Owner, {page_source, Token, View},
                                  max(0, Deadline - quod_time:mono_ms())) of
-                ok -> serve_blocks(Ns, Snapshot, From, To);
+                ok ->
+                    {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
+                    try
+                        Ns = quod_ledger_store:namespace(Store),
+                        serve_transfer_pages(Store, transfer_open(Store, From, To),
+                                             Owner, Token, 0, Deadline, Gate)
+                    after quod_ledger_store:close(Store) end;
                 {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+serve_transfer_pages(Store, Cursor, Owner, Token, Sequence, Deadline, Gate) ->
+    case transfer_page(Store, Cursor) of
+        {ok, Parts, Next} ->
+            Continuation = case Next of done -> done; _ -> {Token, Sequence + 1} end,
+            Owner ! {reader_result, Token, self(),
+                     {ok, Parts, quod_ledger_store:last(Store), Continuation}},
+            reader_gate(after_result, Gate, Token),
+            case Next of
+                done -> ok;
+                _ ->
+                    receive
+                        {continue_transfer, Token, NextSequence} when NextSequence =:= Sequence + 1 ->
+                            serve_transfer_pages(Store, Next, Owner, Token, NextSequence, Deadline, Gate)
+                    after max(0, Deadline - quod_time:mono_ms()) -> {error, not_ready}
+                    end
             end;
         {error, _} = Error -> Error
     end.
@@ -329,14 +320,10 @@ observe_serve_stage(Stage, Result, StartedNative) ->
       erlang:monotonic_time() - StartedNative).
 
 serve_stage_result({ok, _}) -> ok;
-serve_stage_result({ok, _, _}) -> ok;
 serve_stage_result({error, _}) -> failed.
 
-%% The longest PREFIX of `Es` whose serialized size stays within ?RESP_BUDGET, so the whole response frame
-%% fits quod_link's 1 MiB cap (it EXITs the link on a larger frame). Always keeps ≥ 1 entry so a joiner
-%% makes progress and loops for the rest. The shared singleton-block ceiling guarantees that one maximum
-%% canonical entry plus its certificate and response framing fits this budget; the boundary test pins that
-%% invariant, so no separate chunking protocol exists.
+%% Keep one bounded materializer work unit, including at least one legal
+%% material entry. Transport separately pages proof groups with its cursor.
 cap_bytes([], _Acc) -> [];
 cap_bytes([E | Rest], Acc) ->
     EntryBytes = case E of
@@ -349,274 +336,398 @@ cap_bytes([E | Rest], Acc) ->
         false -> []
     end.
 
-%%%===================================================================
-%%% trustless forward-verification (the client's trust core)
-%%%===================================================================
+-doc """
+Capture a material range for the existing reader. The last selected archive
+group is completed even if it extends beyond To; certified material cannot be
+silently discarded from its witness. Groups share pages instead of adding a
+network round trip for every historical transaction.
+""".
+-spec transfer_open(quod_ledger_store:handle(), pos_integer(), pos_integer()) -> transfer_sender().
+transfer_open(Store, From, To) when is_integer(From), From > 0, is_integer(To), To >= From ->
+    #transfer_sender{next = From, last = min(To, quod_ledger_store:last(Store))}.
+
+-doc "Produce a bounded page without restarting its proof cursor; retain one lookahead item.".
+-spec transfer_page(quod_ledger_store:handle(),
+                    transfer_sender() | done) ->
+          {ok, [term()], transfer_sender() | done} | {error, term()}.
+transfer_page(_Store, done) -> {ok, [], done};
+transfer_page(Store, State) -> transfer_page(Store, State, [], 0, 0).
+
+transfer_page(Store, State = #transfer_sender{pending = Pending}, Acc, Count, Size) ->
+    Next = case Pending of
+        none -> next_transfer_part(Store, State);
+        _ -> {ok, Pending, State#transfer_sender{pending = none}}
+    end,
+    case Next of
+        done -> {ok, lists:reverse(Acc), done};
+        {ok, Part, State1} ->
+            case quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
+                {ok, Encoded} when Count < ?MAX_BLOCKS, Size + byte_size(Encoded) =< ?RESP_BUDGET ->
+                    transfer_page(Store, State1, [Part | Acc], Count + 1,
+                                  Size + byte_size(Encoded));
+                {ok, _} -> {ok, lists:reverse(Acc), State1#transfer_sender{pending = Part}};
+                {error, _} -> {error, transfer_part_too_large}
+            end
+    end.
+
+next_transfer_part(_Store, #transfer_sender{current = none, next = Next, last = Last})
+  when Next > Last -> done;
+next_transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
+    {ok, Last, Cursor} = quod_ledger_store:transfer_cursor(Store, First),
+    {ok, {group, First, Last}, S#transfer_sender{next = Last + 1, current = Cursor}};
+next_transfer_part(Store, S = #transfer_sender{current = Cursor}) ->
+    case quod_ledger_store:transfer_next(Store, Cursor) of
+        done -> {ok, end_group, S#transfer_sender{current = none}};
+        {ok, Part, Next} -> {ok, Part, S#transfer_sender{current = Next}}
+    end.
+
+-doc "Start one selected group under the caller's pinned projection and owned temporary stage.".
+-spec transfer_begin({binary(), <<_:256>>}, pos_integer(), map(), term(),
+                     materialized | wrapped, quod_ledger_store:proof_stage()) ->
+          {ok, transfer()} | {error, term()}.
+transfer_begin(Binding, Last, Projection, Index, Mode, Stage)
+  when is_integer(Last), Last > 0, (Mode =:= materialized orelse Mode =:= wrapped) ->
+    First = case maps:get(history_head, Projection, none) of
+        none -> 1;
+        {Height, _} -> Height + 1
+    end,
+    case Last >= First of
+        true -> {ok, #transfer{binding = Binding, last = Last, next = First,
+                               projection = Projection, index = Index, mode = Mode, stage = Stage}};
+        false -> {error, stale_window}
+    end;
+transfer_begin(_, _, _, _, _, _) -> {error, malformed_transfer}.
 
 -doc """
-Verify a pulled chain **by induction** — the joiner trusts nothing the server sent, only the certificates.
-`GenesisHash` is the caller's trusted 32-byte slot-1 anchor. Together with `Ns`
-it derives the consensus signature domain; neither value is accepted from the
-serving peer. `Projection0` contains the committee and admission state AS OF
-slot `From`; `Entries` MUST be a CONTIGUOUS ascending run starting at
-`From` (a gap, reorder, or non-artifact element is a forged/incomplete history and is rejected — so a
-malicious server cannot drop a committee-changing block to shift the fold, nor prepend a fake genesis to a
-mid-chain window). For each entry, verify its finalizing certificate against the committee AS-OF-that-slot,
-then advance the shared history projection. Returns `{ok, Verified, Projection1}` or `{error, Reason}` at
-the first bad entry (which the caller must NOT persist).
-
-Per entry, branching on the CERT kind (not the payload): an explicit **commit** cert binds the reconstructed
-tagged block; an **implicit** proof is restricted to an ordinary non-membership batch and binds the parent's
-support cert and its immediate child's commit cert; and a **complaint** cert (block_hash=none) finalizes a
-canonical `noop` skip (it authorizes no payload). DTX controls are explicit-finality barriers and can never
-be finalized implicitly. The genesis block (slot 1) uses the canonical batch encoding and carries
-**no** cert — it is the out-of-band trust anchor, so a genesis window
-(`From=1`, an empty projection) is accepted only when that entry hashes to the supplied
-`GenesisHash`. A malformed cert, a wrong
-`(kind, slot, block_hash)`, or one that fails the `⅔` check against the committee-as-of-slot is rejected.
+Consume bounded pages once, preserving the same finality cursor until the
+exact certified prefix is reached. The existing fetch owner must charge bytes
+and check its original deadline before this call. Only a complete selected
+group returns append material and an index delta; an interrupted proof exposes
+neither. The stage/source lifetime is the enclosing worker callback.
 """.
--spec verify_forward(binary(), binary(), quod_simplex:history_projection(),
-                     pos_integer(), [quod_ledger:entry_artifact()]) ->
-        {ok, [quod_ledger:entry_artifact()], quod_simplex:history_projection()} | {error, term()}.
-verify_forward(Ns, GenesisHash, Projection0, From, Entries)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
-    Domain = quod_simplex:consensus_domain(Ns, GenesisHash),
-    Binding = {Ns, GenesisHash},
-    case verify_forward_domain(Binding, Domain, Projection0, From, Entries, []) of
-        {ok, Verified, Projection1} ->
-            case anchor_ok(From, Verified, GenesisHash) of
-                true  -> {ok, Verified, Projection1};
-                false -> {error, bad_anchor}
-            end;
-        {error, _} = Error ->
-            Error
-    end;
-verify_forward(_Ns, _GenesisHash, _Projection0, _From, _Entries) ->
-    {error, bad_anchor}.
-
--doc """
-Verify one fetched window through the exact DTX phase index without mutating it.
-
-The returned opaque delta contains every phase-history and committee-era
-change in this window. The sole ledger owner appends and installs it before
-publishing the resulting projection.
-""".
--spec verify_forward(binary(), binary(), quod_simplex:history_projection(),
-                     pos_integer(), [quod_ledger:entry_artifact()],
-                     quod_dtx_phase_index:index()) ->
-        {ok, [quod_ledger:entry_artifact()], quod_simplex:history_projection(),
-         quod_dtx_phase_index:delta()} |
-        {error, term()}.
-verify_forward(Ns, GenesisHash, Projection0, From, Entries, PhaseIndex)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
-    Binding = {Ns, GenesisHash},
-    Delta0 = quod_dtx_phase_index:new_delta(),
-    case verify_forward_phase(
-           Binding, Projection0, From, Entries, PhaseIndex, Delta0, []) of
-        {ok, Verified, Projection1, Delta1} ->
-            case anchor_ok(From, Verified, GenesisHash) of
-                true -> {ok, Verified, Projection1, Delta1};
-                false -> {error, bad_anchor}
-            end;
-        {error, _} = Error ->
-            Error
-    end;
-verify_forward(_Ns, _GenesisHash, _Projection0, _From, _Entries, _PhaseIndex) ->
-    {error, bad_anchor}.
-
-verify_forward_phase(_Binding, Projection, _Next, [], _PhaseIndex, Delta, Acc) ->
-    {ok, lists:reverse(Acc), Projection, Delta};
-verify_forward_phase(Binding, Projection, Next, [Entry | Rest],
-                     PhaseIndex, Delta0, Acc) ->
-    case entry_index(Entry) of
-        Next ->
-            case quod_simplex:history_preview_advance(
-                   Binding, Entry, Projection, PhaseIndex, Delta0) of
-                {ok, Projection1, _Effects, Delta1} ->
-                    verify_forward_phase(
-                      Binding, Projection1, Next + 1, Rest,
-                      PhaseIndex, Delta1, [Entry | Acc]);
+-spec transfer_accept(transfer(), [{entry | proof, binary()}], more | done) ->
+          {more, transfer()} | {done, map()} | {error, term()}.
+transfer_accept(T, Parts, End) when End =:= more; End =:= done ->
+    case valid_transfer_parts(Parts, 0, 0) of
+        true ->
+            case transfer_parts(Parts, T, quod_transaction:decode_context()) of
+                {ok, T1, _Decoded} when End =:= more -> {more, T1};
+                {ok, T1, _Decoded} -> finish_transfer(T1);
                 {error, _} = Error -> Error
             end;
-        I when is_integer(I) -> {error, {noncontiguous, Next, I}};
-        error -> {error, {malformed_entry, Next}}
+        false -> {error, malformed_transfer_page}
     end;
-verify_forward_phase(_Binding, _Projection, Next, _ImproperTail,
-                     _PhaseIndex, _Delta, _Acc) ->
-    {error, {malformed_entry, Next}}.
+transfer_accept(_, _, _) -> {error, malformed_transfer_page}.
 
-verify_forward_domain(_Binding, _Domain, Projection, _Next, [], Acc) ->
-    {ok, lists:reverse(Acc), Projection};
-verify_forward_domain(Binding, Domain, Projection, Next, [E | Rest], Acc) ->
-    case entry_index(E) of
-        Next ->
-            case verify_entry(Binding, Domain, E, Projection) of
-                ok ->
-                    case quod_simplex:history_validate_advance(
-                           Binding, E, Projection) of
-                        {ok, Projection1} ->
-                            verify_forward_domain(
-                              Binding, Domain, Projection1,
-                              Next + 1, Rest, [E | Acc]);
+valid_transfer_parts([], _Count, _Bytes) -> true;
+valid_transfer_parts([Part | Rest], Count, Size) when Count < ?MAX_BLOCKS ->
+    case valid_transfer_part(Part) andalso quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
+        {ok, Encoded} when Size + byte_size(Encoded) =< ?RESP_BUDGET ->
+            valid_transfer_parts(Rest, Count + 1, Size + byte_size(Encoded));
+        _ -> false
+    end;
+valid_transfer_parts(_, _, _) -> false.
+
+valid_transfer_part({Kind, Bytes}) when Kind =:= entry; Kind =:= proof -> is_binary(Bytes);
+valid_transfer_part({group, First, Last}) ->
+    is_integer(First) andalso First > 0 andalso is_integer(Last) andalso Last >= First;
+valid_transfer_part(end_group) -> true;
+valid_transfer_part(_) -> false.
+
+transfer_parts([], T, Decoded) -> {ok, T, Decoded};
+transfer_parts([{entry, Bytes} | Rest],
+               T = #transfer{next = Next, last = Last, mode = Mode, entries = Entries}, Decoded)
+  when Next =< Last ->
+    case quod_ledger:decode_entry(Bytes, Mode, Decoded) of
+        {ok, Entry, Decoded1} ->
+            case quod_ledger:entry_index(Entry) of
+                Next ->
+                    T1 = T#transfer{entries = [Entry | Entries], next = Next + 1},
+                    case begin_transfer_finality(T1) of
+                        {ok, T2} -> transfer_parts(Rest, T2, Decoded1);
                         {error, _} = Error -> Error
                     end;
-                Error -> Error
+                _ -> {error, noncontiguous_transfer}
             end;
-        I when is_integer(I) -> {error, {noncontiguous, Next, I}};
-        error -> {error, {malformed_entry, Next}}
+        {error, _} -> {error, malformed_entry}
     end;
-verify_forward_domain(_Binding, _Domain, _Projection, Next, _ImproperTail, _Acc) ->
-    {error, {malformed_entry, Next}}.    %% a hostile improper list after an otherwise-valid prefix
+transfer_parts([{proof, Bytes} | Rest], T = #transfer{finality = {more, Cursor}, stage = Stage}, Decoded) ->
+    case finality_block(Cursor, Bytes, Decoded) of
+        {{error, _} = Error, _} -> Error;
+        {Progress, Decoded1} ->
+            Stage1 = quod_ledger_store:stage_proof(Stage, Bytes),
+            transfer_parts(Rest, T#transfer{finality = Progress, stage = Stage1}, Decoded1)
+    end;
+transfer_parts(_, _, _) -> {error, unexpected_transfer_part}.
 
-entry_index(Entry) ->
-    try (quod_ledger:entry_view(Entry))#entry.index
-    catch error:_ -> error
+begin_transfer_finality(T = #transfer{next = Next, last = Last}) when Next =< Last -> {ok, T};
+begin_transfer_finality(T = #transfer{binding = Binding, entries = Entries, projection = P}) ->
+    case finality_begin(Binding, lists:reverse(Entries), P) of
+        ok -> {ok, T#transfer{finality = {done, genesis}}};
+        {more, _} = Cursor -> {ok, T#transfer{finality = Cursor}};
+        {error, _} = Error -> Error
     end.
 
-entry_data(Entry) -> (quod_ledger:entry_view(Entry))#entry.data.
-
--doc "Verify one persisted entry's local finality against its parent projection.".
--spec verify_entry({binary(), <<_:256>>}, quod_ledger:entry_artifact(),
-                   quod_simplex:history_projection()) ->
-          ok | {error, term()}.
-verify_entry({Ns, <<_:256>> = Anchor} = Binding, Entry,
-             Projection) when is_binary(Ns) ->
-    verify_entry(
-      Binding, quod_simplex:consensus_domain(Ns, Anchor), Entry, Projection).
-
-%% Verify ONE entry's finalizing cert against the committee-as-of-its-slot. Branch on the CERT kind (not the
-%% payload): a complaint cert finalizes a `noop` SKIP; a commit cert finalizes a tagged content/DTX block.
-%% A complaint cert over non-`noop` data, or any other cert shape, is rejected — a complaint proves
-%% "skip slot I" and authorizes no payload.
-verify_entry(Binding, Domain, E, Projection) ->
-    Committee = quod_simplex:history_committee(Projection),
-    case verify_entry_finality(
-           Binding, Domain, E, quod_ledger:entry_view(E), Committee, Projection) of
-        ok -> ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-verify_entry_finality(_Binding, _Domain, E, #entry{index = 1, cert = none},
-                      _Committee, _Projection) ->
-    case entry_block(E) of
-        {ok, _Block} -> ok;   %% genesis is pinned out of band, but must still be structurally valid
-        error -> {error, {malformed_entry, 1}}
+finish_transfer(#transfer{binding = Binding, entries = Rev, projection = P,
+                           index = Index, finality = {done, Summary}, stage = Stage}) ->
+    Entries = lists:reverse(Rev),
+    case preview_group(Binding, Entries, P, Index, quod_dtx_phase_index:new_delta()) of
+        {ok, Projection, Delta} ->
+            {done, #{entries => Entries, proof => quod_ledger_store:staged_proof_source(Stage),
+                     projection => Projection, delta => Delta, finality => Summary}};
+        {error, _} = Error -> Error
     end;
-verify_entry_finality(_Binding, _Domain, _E, #entry{index = I, cert = none},
-                      _Committee, _Projection) ->
-    {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
-verify_entry_finality(_Binding, Domain, _E, #entry{index = I, data = noop, timestamp = 0,
-                                          cert = #cert{kind = complaint} = Cert},
-                      Committee, _Projection) ->
-    verify_finalizer(Domain, Cert, complaint, I, none, Committee);
-verify_entry_finality(Binding, Domain, E,
-                      #entry{index = I, cert = #implicit_cert{} = Proof},
-                      Committee, Projection) ->
-    verify_implicit(Binding, Domain, E, I, Proof, Committee, Projection);
-verify_entry_finality(_Binding, Domain, E,
-                      #entry{index = I, cert = #cert{kind = commit} = Cert},
-                      Committee, _Projection) ->
-    case entry_block(E) of
-        {ok, Block} ->
-            BH = quod_simplex:block_hash(Block),
-            verify_finalizer(Domain, Cert, commit, I, BH, Committee);
-        error ->
-            {error, {malformed_entry, I}}
-    end;
-verify_entry_finality(_Binding, _Domain, _E, #entry{index = I},
-                      _Committee, _Projection) ->
-    {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
+finish_transfer(_) -> {error, incomplete_transfer}.
 
-verify_implicit(Binding, Domain, E, I,
-                #implicit_cert{support = Support,
-                               child = #block{slot = ChildSlot, parent = I,
-                                              payload = ChildPayload,
-                                              timestamp = ChildTs} = Child,
-                               commit = Commit}, Committee, Projection)
-  when ChildSlot =:= I + 1 ->
-    case {entry_block(E), quod_simplex:well_formed_block(Child)} of
-        {{ok, Parent}, true} ->
-            ParentBH = quod_simplex:block_hash(Parent),
-            ChildBH = quod_simplex:block_hash(Child),
-            ImplicitEligible = implicit_content(entry_data(E))
-                               andalso implicit_content(ChildPayload),
-            case ImplicitEligible of
+-doc "Thread the existing fetch worker's context through complete groups on the shared page grammar.".
+-spec range_begin({binary(), <<_:256>>}, pos_integer(), materialized | wrapped,
+                  quod_ledger_store:proof_stage(), term(), map(), term()) -> range_receiver().
+range_begin(Binding, To, Mode, Stage, Context, Projection, Index) ->
+    #range_receiver{binding = Binding, to = To, mode = Mode, stage = Stage,
+                     context = Context, projection = Projection, index = Index}.
+
+-spec range_context(range_receiver()) -> term().
+range_context(#range_receiver{context = Context}) -> Context.
+
+-doc """
+Consume a bounded, decoded transport page. Install receives one fully verified
+group and the worker's context, and returns its new committed projection/index
+view. No owner is mutated by verification. The same staged file is reclaimed
+after each acknowledged group, not retained for the whole historical range.
+""".
+-spec range_accept(range_receiver(), [term()], non_neg_integer(),
+                   done | {binary(), pos_integer()},
+                   fun((map(), term()) -> {ok, term(), map(), term()} |
+                                           {error, term()} | {error, term(), term()})) ->
+          {ok, range_receiver()} | {error, term(), range_receiver()}.
+range_accept(R = #range_receiver{height = Height, projection = P}, Parts, RemoteHeight, Continuation, Install)
+  when is_integer(RemoteHeight), RemoteHeight >= 0,
+       (Height =:= none orelse Height =:= RemoteHeight) ->
+    LocalHeight = case maps:get(history_head, P, none) of none -> 0; {I, _} -> I end,
+    case RemoteHeight >= LocalHeight of
+        false -> {error, source_behind, R};
+        true ->
+            %% Authentication reuse belongs only to this bounded page. It is
+            %% not retained in either cursor and cannot become authority for
+            %% committee, reference, freshness or finality decisions.
+            case valid_transfer_parts(Parts, 0, 0) of
+                false -> {error, malformed_transfer_page, R};
                 true ->
-                    case verify_finalizer(
-                           Domain, Support, support, I, ParentBH, Committee) of
-                        ok ->
-                            case verify_finalizer(
-                                   Domain, Commit, commit, ChildSlot, ChildBH,
-                                   Committee) of
-                                ok ->
-                                    ValidChild =
-                                        quod_simplex:valid_history_entry(
-                                          Binding, ChildSlot, ChildPayload,
-                                          ChildTs,
-                                          Projection),
-                                    case ValidChild andalso
-                                         ChildTs >= Parent#block.timestamp of
-                                        true  -> ok;
-                                        false -> {error, {cert_mismatch, I}}
-                                    end;
-                                {error, _} -> {error, {bad_implicit_cert, I}}
-                            end;
-                        {error, _} -> {error, {bad_implicit_cert, I}}
+                    case consume_range_parts(Parts, R#range_receiver{height = RemoteHeight},
+                                             Install, quod_transaction:decode_context()) of
+                        {ok, Next = #range_receiver{transfer = Active}, _}
+                          when Continuation =:= done, Active =/= none ->
+                            {error, incomplete_transfer, Next};
+                        {ok, Next, _} -> {ok, Next};
+                        Other -> Other
+                    end
+            end
+    end;
+range_accept(R, _, _, _, _) -> {error, changed_transfer_height, R}.
+
+consume_range_parts([], R, _Install, Decoded) -> {ok, R, Decoded};
+consume_range_parts([{group, First, Last} | Rest],
+  R = #range_receiver{transfer = none, binding = Binding, projection = P,
+                       index = Index, mode = Mode, stage = Stage, to = To, height = H}, Install, Decoded)
+  when First =< To, Last =< H ->
+    Expected = case maps:get(history_head, P, none) of none -> 1; {I, _} -> I + 1 end,
+    case First =:= Expected andalso transfer_begin(Binding, Last, P, Index, Mode, Stage) of
+        {ok, Transfer} -> consume_range_parts(Rest, R#range_receiver{transfer = Transfer}, Install, Decoded);
+        _ -> {error, noncontiguous_transfer, R}
+    end;
+consume_range_parts([end_group | Rest],
+  R = #range_receiver{transfer = T, context = Context}, Install, Decoded) when T =/= none ->
+    case finish_transfer(T) of
+        {done, Group} ->
+            case Install(Group, Context) of
+                {ok, NextContext, P, Index} ->
+                    Stage = quod_ledger_store:reset_proof_stage(T#transfer.stage),
+                    consume_range_parts(Rest, R#range_receiver{transfer = none,
+                        context = NextContext, projection = P, index = Index, stage = Stage}, Install, Decoded);
+                {error, Why, FailedContext} -> {error, Why, R#range_receiver{context = FailedContext}};
+                {error, Why} -> {error, Why, R}
+            end;
+        {error, Why} -> {error, Why, R}
+    end;
+consume_range_parts([Part | Rest], R = #range_receiver{transfer = T}, Install, Decoded) when T =/= none ->
+    case transfer_parts([Part], T, Decoded) of
+        {ok, T1, Decoded1} -> consume_range_parts(Rest, R#range_receiver{transfer = T1}, Install, Decoded1);
+        {error, Why} -> {error, Why, R}
+    end;
+consume_range_parts(_, R, _, _) -> {error, unexpected_transfer_part, R}.
+
+%% One backward proof cursor belongs to the existing verification job. Its
+%% root is the already-certified material prefix, never a peer's declaration.
+%% It retains neither the whole witness nor a second copy of ontology state.
+-record(finality_cursor, {index, root, targets, expected, root_timestamp,
+                          ceiling = infinity, found = false,
+                          child_empty = false,
+                          material_above = false, head,
+                          head_timestamp = undefined, material_tip = none,
+                          highest_claim}).
+-opaque finality_cursor() :: #finality_cursor{}.
+
+-doc "Verify streamed ancestry once, distinguishing an exact claim from complete material custody.".
+-spec verify_finality({binary(), <<_:256>>}, quod_ledger:entry_artifact() | [quod_ledger:entry_artifact()],
+                      quod_simplex:history_projection(), {fun((term()) -> term()), term()}) ->
+          {ok, genesis | map()} | {error, term()}.
+verify_finality(Binding, Entries, Projection, {Next, State}) when is_function(Next, 1) ->
+    case finality_begin(Binding, Entries, Projection) of
+        ok -> {ok, genesis};
+        {more, Cursor} -> consume_finality(Cursor, Next, State);
+        {error, _} = Error -> Error
+    end.
+
+-doc "Authenticate an archive group and preview its domain/index changes without mutating the owner.".
+-spec verify_forward_group({binary(), <<_:256>>}, [quod_ledger:entry_artifact()],
+                           quod_simplex:history_projection(), quod_dtx_phase_index:index(),
+                           {fun((term()) -> term()), term()}) ->
+          {ok, quod_simplex:history_projection(), quod_dtx_phase_index:delta(), genesis | map()} |
+          {error, term()}.
+verify_forward_group(Binding, Entries, Projection, PhaseIndex, Source) ->
+    case verify_finality(Binding, Entries, Projection, Source) of
+        {ok, Summary} ->
+            case preview_group(Binding, Entries, Projection, PhaseIndex,
+                               quod_dtx_phase_index:new_delta()) of
+                {ok, P, Delta} -> {ok, P, Delta, Summary};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+preview_group(_Binding, [], Projection, _Index, Delta) -> {ok, Projection, Delta};
+preview_group(Binding, [Entry | Rest], Projection, Index, Delta) ->
+    case quod_simplex:history_preview_verified(Binding, Entry, Projection, Index, Delta) of
+        {ok, P1, _Effects, Delta1} -> preview_group(Binding, Rest, P1, Index, Delta1);
+        {error, _} = Error -> Error
+    end.
+
+consume_finality(Cursor, Next, State) ->
+    case Next(State) of
+        {ok, Bytes, State1} ->
+            case finality_block(Cursor, Bytes) of
+                {more, Cursor1} -> consume_finality(Cursor1, Next, State1);
+                {done, Summary} -> {ok, Summary};
+                {error, _} = Error -> Error
+            end;
+        done -> {error, {incomplete_finality, Cursor#finality_cursor.index}};
+        {error, _} = Error -> Error
+    end.
+
+-doc "Check one head QC for contiguous material claims, retaining one cursor across proof pages.".
+-spec finality_begin({binary(), <<_:256>>}, quod_ledger:entry_artifact() | [quod_ledger:entry_artifact()],
+                     quod_simplex:history_projection()) ->
+          ok | {more, finality_cursor()} | {error, term()}.
+finality_begin(Binding, Entry, Projection) when not is_list(Entry) ->
+    finality_begin(Binding, [Entry], Projection);
+finality_begin({Ns, <<_:256>> = Anchor}, [Entry | Rest], Projection) when is_binary(Ns) ->
+    #entry{index = I, cert = Cert} = quod_ledger:entry_view(Entry),
+    {ok, B} = entry_block(Entry),
+    Target = quod_ledger:block_ref(B),
+    case {I, Target, Cert, maps:get(history_head, Projection, none),
+          maps:get(protocol_root, Projection, none)} of
+        {1, {genesis, 0, Anchor}, none, none, none} when Rest =:= [] -> ok;
+        {I, {Era, V, _}, #cert{kind = commit, era = Era, slot = Head, block_hash = Hash},
+         {Height, _}, {Era, RootView, _} = Root}
+          when I =:= Height + 1, V > RootView, Head >= V ->
+            Domain = quod_simplex:consensus_domain(Ns, Anchor),
+            case finality_targets(Rest, I + 1, Era, V, Head, Cert, [Target]) of
+                {ok, Targets} ->
+                    case quod_simplex:verify_cert(Domain, Cert, quod_simplex:history_committee(Projection)) of
+                        true -> {more, #finality_cursor{index = I, root = Root, targets = Targets,
+                                          expected = {Era, Head, Hash}, head = {Era, Head, Hash},
+                                          highest_claim = hd(Targets),
+                                          root_timestamp = maps:get(timestamp, Projection)}};
+                        false -> {error, {bad_cert, I}}
                     end;
-                false ->
-                    {error, {cert_mismatch, I}}
+                error -> {error, {invalid_finality_group, I}}
             end;
-        _ ->
-            {error, {malformed_entry, I}}
-    end;
-verify_implicit(_Binding, _Domain, _E, I, _Proof, _Committee, _Projection) ->
-    {error, {cert_mismatch, I}}.
-
-%% Implicit finality relies on a child being valid under exactly the same
-%% committee as its parent. Membership batches and every DTX control are
-%% explicit barriers, so only an ordinary committee-stable content batch is
-%% eligible. Keep the full union explicit: a future payload kind must choose.
-implicit_content(Data) ->
-    case quod_ledger:classify(Data) of
-        {content, _Transactions} ->
-            quod_simplex:committee_delta(Data) =:= {[], []};
-        {controls, _Controls} -> false;
-        noop -> false;
-        invalid -> false
+        _ -> {error, {cert_mismatch, I}}
     end.
 
-entry_block(E) ->
-    case quod_ledger:block_from_entry(E) of
-        {ok, #block{} = Block} ->
-            case quod_simplex:well_formed_block(Block) of
-                true -> {ok, Block};
-                false -> error
-            end;
-        error -> error
+%% One archive group shares one selected head. Its material claims are checked
+%% together while the witness passes once, rather than once per ancestor.
+finality_targets([], _Index, _Era, _Previous, _Head, _Cert, Acc) -> {ok, Acc};
+finality_targets([Entry | Rest], Index, Era, Previous, Head, Cert, Acc) ->
+    case {quod_ledger:entry_view(Entry), entry_block(Entry)} of
+        {#entry{index = Index, cert = Cert}, {ok, #block{era = Era, slot = V} = B}}
+          when V > Previous, V =< Head ->
+            finality_targets(Rest, Index + 1, Era, V, Head, Cert, [quod_ledger:block_ref(B) | Acc]);
+        _ -> error
+    end;
+finality_targets(_, _, _, _, _, _, _) -> error.
+
+-doc "Authenticate one exact parent link; completion requires reaching the certified prefix.".
+-spec finality_block(finality_cursor(), binary()) ->
+          {done, map()} | {more, finality_cursor()} | {error, term()}.
+finality_block(Cursor, Bytes) ->
+    {Result, _} = finality_block(Cursor, Bytes, quod_transaction:decode_context()),
+    Result.
+
+finality_block(Cursor = #finality_cursor{index = I, expected = Expected}, Bytes, Decoded) ->
+    case quod_ledger:decode_block(Bytes, wrapped, Decoded) of
+        {ok, B, Decoded1} ->
+            Result = case quod_ledger:block_ref(B) =:= Expected of
+                true -> finality_link(Cursor, B);
+                false -> {error, {wrong_finality_link, I}}
+            end,
+            {Result, Decoded1};
+        {error, _} -> {{error, {malformed_finality_link, I}}, Decoded}
     end.
 
-%% The cert must name exactly this (kind, slot, block_hash) and carry ⅔ valid
-%% signatures of the committee over the caller's locally derived
-%% namespace/genesis domain. `verify_cert/3` is total and applies the
-%% committee-size bound before signature-list traversal or crypto work.
-verify_finalizer(Domain, #cert{kind = K, slot = Sl, block_hash = BH} = Cert,
-                 K, Sl, BH, Committee) ->
-    case quod_simplex:verify_cert(Domain, Cert, Committee) of
-        true  -> ok;
-        false -> {error, {bad_cert, Sl}}
-    end;
-verify_finalizer(_Domain, _Cert, _K, Sl, _BH, _Committee) ->
-    {error, {cert_mismatch, Sl}}.
+finality_link(C = #finality_cursor{index = I, root = Root, targets = Targets,
+                                  expected = Expected, root_timestamp = RootTs,
+                                  ceiling = Ceiling, found = Found,
+                                  child_empty = ChildEmpty,
+                                  material_above = Above},
+              #block{parent = Parent, timestamp = Ts, payload = Payload}) ->
+    Material = Payload =/= empty,
+    Membership = case quod_ledger:classify(Payload) of
+        {content, Transactions} ->
+            lists:any(fun(T) -> quod_simplex:committee_delta(T) =/= {[], []} end, Transactions);
+        _ -> false
+    end,
+    Matches = case Targets of [Expected | _] -> true; _ -> false end,
+    %% A material descendant of terminal M is invalid even with a valid head
+    %% certificate. Between supplied material heights only empty carriers are
+    %% legal: a correctly signed proof must not conceal a missing ledger entry.
+    case (Ceiling =:= infinity orelse Ts =< Ceiling) andalso Ts >= RootTs
+         andalso (not ChildEmpty orelse Ts =:= Ceiling)
+         andalso not (Membership andalso Above)
+         andalso not (Found andalso Material andalso not Matches) of
+        false -> {error, {invalid_finality_path, I}};
+        true ->
+            Remaining = case Matches of true -> tl(Targets); false -> Targets end,
+            Found1 = Found orelse Matches,
+            HeadTs = case C#finality_cursor.head_timestamp of undefined -> Ts; T -> T end,
+            MaterialTip = case {C#finality_cursor.material_tip, Material} of
+                {none, true} -> Expected;
+                {Tip, _} -> Tip
+            end,
+            C1 = C#finality_cursor{expected = Parent, ceiling = Ts, targets = Remaining,
+                                   child_empty = not Material,
+                                   found = Found1, material_above = Above orelse Material,
+                                   head_timestamp = HeadTs, material_tip = MaterialTip},
+            MinView = case Remaining of [] -> element(2, Root); [{_, V, _} | _] -> V end,
+            case Parent of
+                Root when Remaining =:= [], Material orelse Ts =:= RootTs ->
+                    {done, #{head => C1#finality_cursor.head, head_timestamp => HeadTs,
+                             material_tip => MaterialTip,
+                             complete_group => MaterialTip =:= C1#finality_cursor.highest_claim}};
+                {_, ParentView, _} when ParentView > element(2, Root), ParentView >= MinView ->
+                    {more, C1};
+                _ -> {error, {wrong_finality_root, I}}
+            end
+    end.
+
+entry_block(E) -> quod_ledger:block_from_entry(E).
 
 -doc """
 Drive trustless catch-up from one same-turn owner capture, including height zero.
 Each window is verified once against that read-only phase/era index. The worker
 never opens an index, replays a prefix, or mutates the owner's table.
 
-`Sink(Entries, Projection, Delta)` checks the base, appends, installs the
+`Sink(Group)` checks the base, appends proof and material together, installs the
 verified delta, and returns the new owner view before any next window. An
 overtaken window is refused, never trimmed or verified a second time.
 The exact initial owner remains pinned throughout the run.
@@ -625,97 +736,85 @@ The target height is the maximum reported in this run: a regressing contact
 cannot truncate catch-up. The slot-1 genesis hash is pinned out of band.
 """.
 -spec catch_up(
-        binary(), binary(),
-        fun((pos_integer()) ->
-                {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}),
-        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection(),
-             quod_dtx_phase_index:delta()) ->
-                {ok, quod_simplex:history_view()} | {error, term()}),
+        binary(), binary(), fun((term(), integer(), function()) -> term()),
+        fun((map()) -> {ok, quod_simplex:history_view()} | {error, term()}),
         pos_integer(), quod_simplex:history_projection(),
-        #{history_view := quod_simplex:history_view()}) ->
+        #{history_view := quod_simplex:history_view(), stage_path := file:filename_all()}) ->
           {ok, log_index()} | {error, term()}.
-catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink, From,
+catch_up(Ns, <<_:256>> = Anchor, Fetch, Sink, From,
          #{history_index := _} = Projection,
-         #{history_view := #{identity := {Ns, GenesisHash}, slot := Height,
-                             owner := Owner, snapshot := _,
-                             projection := Projection} = View})
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_function(Fetch, 1), is_function(Sink, 3),
-       is_integer(From), From >= 1, From =:= Height + 1,
-       is_pid(Owner) ->
-    catch_up_loop(Ns, GenesisHash, Fetch, Sink, View, From, 0);
-catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _From, _Projection, _Options) ->
-    {error, bad_catchup_options}.
+         #{history_view := #{identity := {Ns, Anchor}, slot := Height,
+                             owner := Owner, snapshot := _, projection := Projection} = View,
+           stage_path := Path})
+  when is_binary(Ns), byte_size(Ns) > 0, is_function(Fetch, 3), is_function(Sink, 1),
+       is_integer(From), From >= 1, From =:= Height + 1, is_pid(Owner) ->
+    quod_ledger_store:with_proof_stage(Path, fun(Stage) ->
+        catch_up_loop({Ns, Anchor}, Fetch, Sink, View, From, 0, Stage)
+    end);
+catch_up(_, _, _, _, _, _, _) -> {error, bad_catchup_options}.
 
-catch_up_loop(Ns, GenesisHash, Fetch, Sink, View = #{owner := Owner}, From, MaxH) ->
-    case is_process_alive(Owner) of
-        false -> {error, owner_down};
+catch_up_loop(Binding, Fetch, Sink, View = #{owner := Owner, projection := Projection},
+              From, MaxHeight, Stage) ->
+    To = From + ?MAX_BLOCKS - 1,
+    Deadline = quod_time:mono_ms() + ?REQ_TIMEOUT_MS,
+    Range = range_begin(Binding, To, materialized, Stage, View, Projection,
+                        maps:get(history_index, Projection)),
+    Install = fun(Group, CurrentView) ->
+        case sink_window(Sink, Group, CurrentView) of
+            {ok, NextView = #{projection := P}} ->
+                {ok, NextView, P, maps:get(history_index, P)};
+            {error, _} = Error -> Error
+        end
+    end,
+    case fetch_range_pages(Fetch, {range, From, To}, Deadline, Range, Install, Owner) of
+        {ok, Received, Height} ->
+            NextView = #{slot := Last} = range_context(Received),
+            Target = max(MaxHeight, Height),
+            case Last >= Target of
+                true -> {ok, Target};
+                false when Last < From -> {error, no_progress};
+                false -> catch_up_loop(Binding, Fetch, Sink, NextView, Last + 1, Target, Stage)
+            end;
+        {error, _} = Error -> Error
+    end.
+
+fetch_range_pages(Fetch, Query, Deadline, Range, Install, Owner) ->
+    case is_process_alive(Owner) andalso Deadline > quod_time:mono_ms() of
+        false -> {error, owner_unavailable};
         true ->
-            Fetched = Fetch(From),
-            case is_process_alive(Owner) of
-                false -> {error, owner_down};
-                true -> case Fetched of
-                {error, R} ->
-                    {error, {fetch, R}};
-                {ok, Entries, H} when is_integer(H), H >= 0 ->
-                    Target = max(MaxH, H),
-                    case Entries of
-                        [] when From > Target -> {ok, Target};
-                        [] -> {error, no_progress};
-                        _ -> catch_up_window(Ns, GenesisHash, Fetch, Sink,
-                                             View, From, Target, Entries)
-                    end;
-                _MalformedResponse ->
-                    {error, {fetch, bad_response}}
+            Consume = fun(Parts, Height, Continuation) ->
+                case is_process_alive(Owner) of
+                    false -> {error, owner_down};
+                    true ->
+                        case range_accept(Range, Parts, Height, Continuation, Install) of
+                            {ok, _} = Ok -> Ok;
+                            {error, Why, _Retained} -> {error, Why}
+                        end
                 end
+            end,
+            case Fetch(Query, Deadline, Consume) of
+                {ok, Next, Height, done} -> {ok, Next, Height};
+                {ok, Next, _Height, {Token, Sequence}} ->
+                    fetch_range_pages(Fetch, {continue, Token, Sequence}, Deadline, Next, Install, Owner);
+                {error, _} = Error -> Error;
+                _ -> {error, malformed_transfer_response}
             end
     end.
 
-catch_up_window(Ns, GenesisHash, Fetch, Sink,
-                #{projection := #{history_index := Index} = Projection} = View,
-                From, Target, Entries) ->
-    case verify_forward(Ns, GenesisHash, Projection, From, Entries, Index) of
-        {ok, Verified, Projection1, Delta} ->
-            case sink_window(Sink, Verified, Projection1, Delta, View) of
-                {ok, NextView} ->
-                    Next = From + length(Verified),
-                    case Next > Target of
-                        true -> {ok, Target};
-                        false -> catch_up_loop(Ns, GenesisHash, Fetch, Sink,
-                                               NextView, Next, Target)
-                    end;
-                {error, R} -> {error, {sink, R}}
-            end;
-        {error, bad_anchor} -> {error, bad_anchor};
-        {error, R} -> {error, {verify, R}}
-    end.
-
-%% Bind the acknowledgement to the exact window and original writer. Continue
-%% from its new capture, not a projection carrying the previous window's index.
-sink_window(Sink, Verified, Projection, Delta,
+%% A complete group remains owned by the staging worker until the exact sink
+%% acknowledges its archive append, delta installation and new captured view.
+sink_window(Sink, Group = #{entries := Entries, projection := Projection},
             #{owner := Owner, identity := Identity}) ->
-    Height = (quod_ledger:entry_view(lists:last(Verified)))#entry.index,
+    Height = quod_ledger:entry_index(lists:last(Entries)),
     Head = maps:get(history_head, Projection),
-    case Sink(Verified, Projection, Delta) of
+    case is_process_alive(Owner) andalso Sink(Group) of
         {ok, #{owner := Owner, identity := Identity, slot := Height,
                snapshot := _, projection := #{history_head := Head,
-                                              history_index := _}} = View} ->
-            {ok, View};
+                                              history_index := _}} = View} -> {ok, View};
         {error, _} = Error -> Error;
+        false -> {error, owner_down};
         _ -> {error, invalid_history_view}
     end.
-
-%% Only the FIRST window (From=1, containing genesis at slot 1) is anchor-checked: the genesis block must
-%% HASH to the pinned genesis hash — pinning its full content (committee AND root ontology), so a server
-%% can't forge a genesis that merely derives the right committee. Later windows are trusted through the
-%% committee threaded from the (anchored) verified prefix.
-anchor_ok(1, [E | _], GenesisHash) ->
-    case {entry_index(E), entry_block(E)} of
-        {1, {ok, Block}} -> quod_simplex:block_hash(Block) =:= GenesisHash;
-        _ -> false
-    end;
-anchor_ok(1, _Verified, _GenesisHash) -> false;   %% From=1 but the first entry isn't genesis
-anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window
 
 %%%===================================================================
 %%% gen_server
@@ -732,8 +831,11 @@ handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, quod_brahms:sample_contact(Ns, Seeds), S};
 handle_call({contacts, Limit}, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, contact_candidates(Ns, Seeds, Limit), S};
-handle_call({pull, From, To, Contact, Started}, ReplyTo, S) ->
-    begin_pull(Contact, From, To, Started, ReplyTo, S);
+handle_call({pull, Query, Contact, Started, Deadline}, ReplyTo, S) ->
+    begin_pull(Contact, Query, Deadline, Started, ReplyTo, S);
+handle_call({complete_pull_page, Key, Verdict}, {Caller, _}, S) ->
+    {Reply, Next} = complete_pull_page(Key, Verdict, Caller, S),
+    {reply, Reply, Next};
 handle_call({page_source, Op, View}, {Worker, _}, S0) ->
     case maps:get(Op, S0#s.inflight, undefined) of
         #reader{worker = Worker, source = none, retiring = false} = Row ->
@@ -768,7 +870,9 @@ test_call(test_recovery_state, S) ->
                 S#s.bindings),
               readers => maps:map(
                 fun(_, R) -> #{worker => R#reader.worker, link => R#reader.link,
-                               result => R#reader.result, retiring => R#reader.retiring} end,
+                               result => R#reader.result, retiring => R#reader.retiring,
+                               operation => R#reader.operation, sequence => R#reader.sequence,
+                               started_ms => R#reader.started_ms} end,
                 S#s.inflight)}, S};
 test_call({test_hold_next_reader, Point, TestPid}, S)
   when (Point =:= before_read orelse Point =:= after_result), is_pid(TestPid) ->
@@ -789,21 +893,39 @@ reader_gate(_, _, _) -> ok.
 
 handle_cast(_Msg, S) -> {noreply, S}.
 
-handle_info({catchup_request, Link, Op, From, To, StartedMs}, S)
+handle_info({catchup_request, Link, Op, {range, From, To}, StartedMs}, S)
   when is_pid(Link), is_reference(Op), is_integer(From), From > 0,
        is_integer(To), To >= From, is_integer(StartedMs) ->
     {noreply, start_reader(Link, Op, From, To, StartedMs, S)};
-handle_info({reader_result, Op, Worker, Result}, S0) ->
-    case maps:get(Op, S0#s.inflight, undefined) of
+handle_info({catchup_request, Link, Op, {continue, Token, Sequence}, _StartedMs}, S) ->
+    {noreply, continue_reader(Link, Op, Token, Sequence, S)};
+handle_info({reader_result, Token, Worker, Result}, S0) ->
+    case maps:get(Token, S0#s.inflight, undefined) of
         #reader{worker = Worker, result = none, retiring = false} = Row ->
-            {noreply, put_reader(Op, Row#reader{result = Result}, S0)};
+            Row1 = Row#reader{result = Result},
+            case Result of
+                {ok, _, _, {Token, _}} ->
+                    case reader_result_live(Row1) of
+                        true -> {noreply, send_reader_result(Token, Row1, S0)};
+                        false -> {noreply, cancel_reader(Token, {error, not_ready}, false, S0)}
+                    end;
+                _ -> {noreply, put_reader(Token, Row1, S0)}
+            end;
         _ -> {noreply, S0}
     end;
 handle_info({catchup_page_sent, Link, Op}, S0) ->
-    case maps:get(Op, S0#s.inflight, undefined) of
-        #reader{link = Link, worker = none, result = Result} = Row ->
-            {noreply, retire_reader(Op, Row, terminal_result(Result), S0)};
-        _ -> {noreply, S0}
+    case maps:take(Op, S0#s.page_operations) of
+        {Token, Operations} ->
+            case maps:get(Token, S0#s.inflight, undefined) of
+                #reader{link = Link, operation = Op, result = {ok, _, _, {Token, Seq}}} = Row ->
+                    {noreply, put_reader(Token, Row#reader{operation = none, result = none,
+                                            sent = false, sequence = Seq},
+                                        S0#s{page_operations = Operations})};
+                #reader{link = Link, operation = Op, worker = none, result = Result} = Row ->
+                    {noreply, retire_reader(Token, Row, terminal_result(Result), S0)};
+                _ -> {noreply, S0}
+            end;
+        error -> {noreply, S0}
     end;
 handle_info({page_deadline, Op}, S0) ->
     {noreply, cancel_reader(Op, {error, not_ready}, false, S0)};
@@ -865,51 +987,77 @@ terminate(_Reason, S) ->
     maps:foreach(fun(_, P) ->
         cancel_timer(P#client_pull.timer),
         erlang:demonitor(P#client_pull.caller_monitor, [flush]),
-        gen_server:reply(P#client_pull.from, {error, unavailable})
+        reply_pull(P#client_pull.from, {error, unavailable})
     end, S#s.pending),
     ok.
 
 start_reader(Link, Op, From, To, Started, S = #s{ns = Ns}) ->
-    %% The link has already spent its one grant. There is no population cap.
-    %% The linked worker and its exact row survive result delivery until DOWN.
-    case maps:is_key(Op, S#s.inflight) orelse not is_process_alive(Link) of
+    %% A granted page opens one retained range reader, not another executor.
+    %% Its original timer/source/link ownership spans all continuation pages.
+    case maps:is_key(Op, S#s.page_operations) orelse not is_process_alive(Link) of
         true -> S;
         false ->
+            Token = crypto:strong_rand_bytes(16),
             Deadline = Started + ?REQ_TIMEOUT_MS,
-            LinkMonitor = erlang:monitor(process, Link, [{tag, {page_link_down, Op}}]),
+            LinkMonitor = erlang:monitor(process, Link, [{tag, {page_link_down, Token}}]),
             Row = #reader{link = Link, link_monitor = LinkMonitor,
-                          worker = none, started_ms = Started},
+                          operation = Op, worker = none, started_ms = Started},
+            S1 = S#s{page_operations = (S#s.page_operations)#{Op => Token}},
             case Deadline =< quod_time:mono_ms() of
-                true -> send_reader_result(Op, Row#reader{result = {error, not_ready}}, S);
-                false -> spawn_reader(Ns, Op, From, To, Deadline, Row, S)
+                true -> send_reader_result(Token, Row#reader{result = {error, not_ready}}, S1);
+                false -> spawn_reader(Ns, Token, From, To, Deadline, Row, S1)
             end
     end.
 
-spawn_reader(Ns, Op, From, To, Deadline, Row, S) ->
-            Owner = self(),
-            Gate = take_reader_gate(),
-            {Worker, MRef} = spawn_opt(fun() ->
-                reader_gate(before_read, Gate, Op),
-                Result = try
-                    case serve_hosted_blocks(Ns, From, To, Deadline, Owner, Op) of
-                        {ok, _Blobs, _Height} = Page -> Page;
-                        {error, _} -> {error, not_ready}
-                    end
-                catch _:_ -> {error, server_error}
-                end,
-                Owner ! {reader_result, Op, self(), Result},
-                reader_gate(after_result, Gate, Op)
-            end, [link, {monitor, [{tag, {page_worker_down, Op}}]}]),
-            Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
-                                     self(), {page_deadline, Op}),
-            put_reader(Op, Row#reader{worker = Worker, monitor = MRef, timer = Timer}, S).
+continue_reader(Link, Op, Token, Sequence, S) ->
+    case maps:get(Token, S#s.inflight, undefined) of
+        #reader{link = Link, operation = none, sequence = Sequence, worker = Worker,
+                 retiring = false, sent = false} = Row when is_pid(Worker) ->
+            case reader_result_live(Row) andalso is_process_alive(Worker) of
+                true ->
+                    Worker ! {continue_transfer, Token, Sequence},
+                    put_reader(Token, Row#reader{operation = Op},
+                      S#s{page_operations = (S#s.page_operations)#{Op => Token}});
+                false ->
+                    quod_link:complete_page(Link, Op, {error, not_ready}),
+                    cancel_reader(Token, {error, not_ready}, false, S)
+            end;
+        _ ->
+            %% An old or foreign-link token cannot take over a retained cursor.
+            quod_link:complete_page(Link, Op, {error, not_ready}),
+            S
+    end.
+
+spawn_reader(Ns, Token, From, To, Deadline, Row, S) ->
+    Owner = self(),
+    Gate = take_reader_gate(),
+    {Worker, MRef} = spawn_opt(fun() ->
+        reader_gate(before_read, Gate, Token),
+        Result = try serve_hosted_range(Ns, From, To, Deadline, Owner, Token, Gate)
+                 catch _:_ -> {error, server_error}
+                 end,
+        case Result of
+            ok -> ok;
+            {error, _} -> Owner ! {reader_result, Token, self(), {error, not_ready}}
+        end
+    end, [link, {monitor, [{tag, {page_worker_down, Token}}]}]),
+    Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
+                             self(), {page_deadline, Token}),
+    put_reader(Token, Row#reader{worker = Worker, monitor = MRef, timer = Timer}, S).
 
 put_reader(Op, R, S) ->
     Rows = (S#s.inflight)#{Op => R},
     S#s{inflight = Rows, inflight_peak = max(S#s.inflight_peak, map_size(Rows))}.
 
-reader_down(Op, MRef, Worker, S) ->
-    case maps:get(Op, S#s.inflight, undefined) of
+reader_down(Token, MRef, Worker, S) ->
+    case maps:get(Token, S#s.inflight, undefined) of
+        #reader{worker = Worker, monitor = MRef, sent = true} = Row ->
+            %% A partial response already owns this grant; never send a second
+            %% result for it after a worker fault. Link loss invalidates the turn.
+            quod_link:close(Row#reader.link),
+            retire_reader(Token, Row, error, S);
+        #reader{worker = Worker, monitor = MRef, operation = none} = Row ->
+            retire_reader(Token, Row, error, S);
         #reader{worker = Worker, monitor = MRef} = Row0 ->
             Result = case reader_result_live(Row0) of
                 false -> {error, not_ready};
@@ -917,19 +1065,17 @@ reader_down(Op, MRef, Worker, S) ->
                             none -> {error, server_error}; R -> R
                         end
             end,
-            cleanup_source(Row0#reader.source),
-            cancel_timer(Row0#reader.timer),
-            Row = Row0#reader{worker = none, source = none, timer = none, result = Result},
-            send_reader_result(Op, Row, S);
+            Row = Row0#reader{worker = none, monitor = none, result = Result},
+            send_reader_result(Token, Row, S);
         _ -> S
     end.
 
-send_reader_result(Op, Row, S) ->
+send_reader_result(Token, Row, S) ->
     case Row#reader.retiring orelse not is_process_alive(Row#reader.link) of
-        true -> retire_reader(Op, Row, link_down, S);
+        true -> retire_reader(Token, Row, link_down, S);
         false ->
-            quod_link:complete_page(Row#reader.link, Op, Row#reader.result),
-            put_reader(Op, Row, S)
+            quod_link:complete_page(Row#reader.link, Row#reader.operation, Row#reader.result),
+            put_reader(Token, Row#reader{sent = true}, S)
     end.
 
 reader_result_live(#reader{started_ms = Started, source = Source}) ->
@@ -940,15 +1086,17 @@ reader_result_live(#reader{started_ms = Started, source = Source}) ->
             quod_simplex:history_view_live(#{owner => Pid, identity => Identity})
     end.
 
-cancel_reader(Op, Result, Retiring, S) ->
-    case maps:get(Op, S#s.inflight, undefined) of
-        #reader{worker = none} = Row when Retiring ->
-            retire_reader(Op, Row, link_down, S);
-        #reader{worker = none} -> S;
+cancel_reader(Token, Result, Retiring, S) ->
+    case maps:get(Token, S#s.inflight, undefined) of
+        #reader{worker = none} = Row ->
+            quod_link:close(Row#reader.link),
+            retire_reader(Token, Row, error, S);
         #reader{worker = Worker} = Row ->
+            Retire = Retiring orelse Row#reader.sent orelse Row#reader.operation =:= none,
+            case Row#reader.sent of true -> quod_link:close(Row#reader.link); false -> ok end,
             exit(Worker, kill),
-            put_reader(Op, Row#reader{result = Result,
-                                     retiring = Retiring orelse Row#reader.retiring}, S);
+            put_reader(Token, Row#reader{result = Result,
+                           retiring = Retire orelse Row#reader.retiring}, S);
         _ -> S
     end.
 
@@ -965,16 +1113,16 @@ cleanup_reader(R) ->
 retire_reader(Op, Row, Result, S) ->
     cleanup_reader(Row),
     record_server_terminal(Result, elapsed_ms(Row#reader.started_ms),
-                           S#s{inflight = maps:remove(Op, S#s.inflight)}).
+                           S#s{inflight = maps:remove(Op, S#s.inflight),
+                                page_operations = maps:remove(Row#reader.operation, S#s.page_operations)}).
 
-begin_pull(Contact, From, To, Started, ReplyTo, S0)
-  when is_integer(From), From > 0, is_integer(To), To >= From,
-       is_integer(Started) ->
-    case is_binary(Contact) andalso byte_size(Contact) =:= 32 orelse
-         quod_quic:valid_endpoint(Contact) of
+begin_pull(Contact, Query, Deadline, Started, ReplyTo, S0)
+  when is_integer(Deadline), is_integer(Started) ->
+    case valid_transfer_query(Query) andalso
+         (is_binary(Contact) andalso byte_size(Contact) =:= 32 orelse
+          quod_quic:valid_endpoint(Contact)) of
         false -> {reply, {error, bad_contact}, S0};
         true ->
-            Deadline = Started + ?REQ_TIMEOUT_MS,
             Remaining = Deadline - quod_time:mono_ms(),
             Caller = element(1, ReplyTo),
             case {Remaining > 0, is_process_alive(Caller)} of
@@ -988,9 +1136,9 @@ begin_pull(Contact, From, To, Started, ReplyTo, S0)
                                           [{tag, {pull_caller_down, ReqId}}]),
                     {Ref, S1} = ensure_binding(Contact, Caller, S0),
                     B = maps:get(Ref, S1#s.bindings),
-                    Pull = #client_pull{from = ReplyTo, timer = Timer,
+                    Pull = #client_pull{from = ReplyTo, caller = Caller, timer = Timer,
                                         caller_monitor = MRef, contact = Contact,
-                                        range = {From, To}, deadline = Deadline,
+                                        query = Query, deadline = Deadline,
                                         started_ms = Started},
                     S2 = put_client_pull(ReqId, Pull,
                            put_binding(B#binding{waiting = queue:in(ReqId, B#binding.waiting)}, S1)),
@@ -1030,7 +1178,7 @@ borrower_down(Ref, Caller, MRef, S0) ->
             case maps:get(Caller, Borrowers, none) of
                 MRef ->
                     S1 = put_binding(B#binding{borrowers = maps:remove(Caller, Borrowers)}, S0),
-                    Owned = [Id || {Id, #client_pull{from = {Pid, _}, contact = Contact}} <-
+                    Owned = [Id || {Id, #client_pull{caller = Pid, contact = Contact}} <-
                                        maps:to_list(S1#s.pending),
                                    Pid =:= Caller, Contact =:= B#binding.contact],
                     S2 = lists:foldl(fun(Id, Acc) ->
@@ -1116,11 +1264,11 @@ drive_binding(Ref, S0) ->
                     S1 = put_binding(B#binding{waiting = Rest}, S0),
                     case maps:get(ReqId, S1#s.pending, undefined) of
                         undefined -> drive_binding(Ref, S1);
-                        #client_pull{range = {From, To}} = P ->
+                        #client_pull{query = Query} = P ->
                             case P#client_pull.deadline =< quod_time:mono_ms() of
                                 true -> drive_binding(Ref, complete_pull(ReqId, {error, timeout}, S1));
                                 false ->
-                                    quod_link:request_page(Link, Ref, Grant, ReqId, From, To),
+                                    quod_link:request_page(Link, Ref, Grant, ReqId, Query),
                                     Pending = (S1#s.pending)#{ReqId => P#client_pull{
                                                 sent = {Link, Ref, Grant}}},
                                     put_binding(B#binding{waiting = Rest, active = ReqId, credit = none},
@@ -1134,30 +1282,48 @@ drive_binding(Ref, S0) ->
 finish_page(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
     case {maps:get(Ref, S0#s.bindings, undefined), maps:get(ReqId, S0#s.pending, undefined)} of
         {#binding{link = Link, active = ReqId, retiring = false} = B,
-         #client_pull{sent = {Link, Ref, Grant}, deadline = Deadline}} ->
+         #client_pull{sent = {Link, Ref, Grant}, deadline = Deadline} = P} ->
             case Deadline > quod_time:mono_ms() of
-              false -> cancel_pull(ReqId, {error, timeout}, S0);
-              true ->
-               Reply = case Result of
-                {ok, Blobs, Height} ->
-                    case decode_entries(Blobs, materialized) of
-                        {ok, Entries} -> {ok, Entries, Height};
-                        {error, _} -> {error, malformed_page}
-                    end;
-                {error, Reason} -> {error, Reason}
-            end,
-            S1 = complete_pull(ReqId, Reply, S0),
-               drive_binding(Ref, put_binding(B#binding{active = none, credit = NextGrant}, S1))
+                false -> cancel_pull(ReqId, {error, timeout}, S0);
+                true ->
+                    case Result of
+                        {ok, Parts, Height, Continuation} ->
+                            Key = {ReqId, Link, Ref, Grant},
+                            gen_server:reply(P#client_pull.from,
+                              {consume_page, Key, Parts, Height, Continuation}),
+                            %% The caller consumes this page; the endpoint never
+                            %% decodes application bytes or blocks on staging.
+                            put_client_pull(ReqId, P#client_pull{from = none,
+                                sent = {decoding, Link, Ref, Grant, NextGrant}}, S0);
+                        {error, _} = Error ->
+                            S1 = complete_pull(ReqId, Error, S0),
+                            drive_binding(Ref, put_binding(B#binding{active = none, credit = NextGrant}, S1))
+                    end
             end;
         _ -> S0
     end.
+
+complete_pull_page({ReqId, Link, Ref, Grant}, Verdict, Caller, S0) ->
+    case {maps:get(Ref, S0#s.bindings, undefined), maps:get(ReqId, S0#s.pending, undefined)} of
+        {#binding{link = Link, active = ReqId, retiring = false} = B,
+         #client_pull{caller = Caller, from = none, deadline = Deadline,
+                       sent = {decoding, Link, Ref, Grant, NextGrant}}} ->
+            case Verdict =:= accepted andalso Deadline > quod_time:mono_ms() of
+                true ->
+                    S1 = complete_pull(ReqId, ok, S0),
+                    {ok, drive_binding(Ref, put_binding(B#binding{active = none, credit = NextGrant}, S1))};
+                false -> {{error, timeout}, cancel_pull(ReqId, {error, malformed_page}, S0)}
+            end;
+        _ -> {{error, stale_page}, S0}
+    end;
+complete_pull_page(_, _, _, S) -> {{error, stale_page}, S}.
 
 complete_pull(ReqId, Reply, S) ->
     case maps:take(ReqId, S#s.pending) of
         {P, Pending} ->
             cancel_timer(P#client_pull.timer),
             erlang:demonitor(P#client_pull.caller_monitor, [flush]),
-            gen_server:reply(P#client_pull.from, Reply),
+            reply_pull(P#client_pull.from, Reply),
             record_client_terminal(terminal_result(Reply), elapsed_ms(P#client_pull.started_ms),
                                    S#s{pending = Pending});
         error -> S
@@ -1165,17 +1331,19 @@ complete_pull(ReqId, Reply, S) ->
 
 cancel_pull(ReqId, Reply, S0) ->
     case maps:get(ReqId, S0#s.pending, undefined) of
-        #client_pull{sent = {Link, Ref, _}} ->
-            B = maps:get(Ref, S0#s.bindings),
-            quod_link:close(Link),
-            put_binding(B#binding{retiring = true, credit = none},
-                        complete_pull(ReqId, Reply, S0));
         #client_pull{contact = Contact} ->
             Ref = maps:get(Contact, S0#s.contacts),
             B = maps:get(Ref, S0#s.bindings),
-            Waiting = queue:filter(fun(Id) -> Id =/= ReqId end, B#binding.waiting),
-            drive_binding(Ref, put_binding(B#binding{waiting = Waiting},
-                                          complete_pull(ReqId, Reply, S0)));
+            case B#binding.active of
+                ReqId ->
+                    quod_link:close(B#binding.link),
+                    put_binding(B#binding{retiring = true, credit = none},
+                                complete_pull(ReqId, Reply, S0));
+                _ ->
+                    Waiting = queue:filter(fun(Id) -> Id =/= ReqId end, B#binding.waiting),
+                    drive_binding(Ref, put_binding(B#binding{waiting = Waiting},
+                                                  complete_pull(ReqId, Reply, S0)))
+            end;
         undefined -> S0
     end.
 
@@ -1209,7 +1377,12 @@ put_client_pull(ReqId, Pull, S0) ->
     S0#s{pending = Pending1,
          pending_peak = max(S0#s.pending_peak, map_size(Pending1))}.
 
+reply_pull(none, _) -> ok;
+reply_pull(From, Reply) -> gen_server:reply(From, Reply).
+
+terminal_result(ok) -> completed;
 terminal_result({ok, _, _}) -> completed;
+terminal_result({ok, _, _, _}) -> completed;
 terminal_result({error, _}) -> error.
 
 record_client_terminal(Result, DurationMs, S0) ->

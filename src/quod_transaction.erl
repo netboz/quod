@@ -61,11 +61,11 @@ accepted.
 %% finalized its ledger position.
 -define(VERSION, 15). %% one atomic Vote/Resolve/Complete format break
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
--define(RELAY_ATTEMPT_VERSION, 1).
+-define(RELAY_ATTEMPT_VERSION, 2).
 -define(PUBKEY_BYTES, 32).
 -define(SIGNATURE_BYTES, 64).
 -define(SUBMISSION_ID_BYTES, 16).
--define(COMMITTEE_ID_BYTES, 32).
+-define(ERA_BYTES, 32).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(OPERATION_CANCEL_DOMAIN, <<"quod.operation.cancel.v1">>).
 
@@ -1109,18 +1109,18 @@ submission_id({submit, Author, Signature, _Canonical}) ->
 Return the stable 16-byte identity of one exact relay placement.
 
 The domain-separated digest binds an exact signed submission to its namespace,
-committee view, target slot, and target validator. Retargeting the unchanged
+consensus era, target view, and target validator. Retargeting the unchanged
 submission therefore keeps its `submission_id/1` but receives a distinct attempt
 id. Malformed inputs return `error`; this helper is total at the relay boundary.
 """.
 -spec relay_attempt_id(binary(), binary(), binary(), pos_integer(), binary()) ->
         binary() | error.
-relay_attempt_id(Ns, SubmissionId, CommitteeId, TargetSlot, Target)
+relay_attempt_id(Ns, SubmissionId, Era, TargetSlot, Target)
   when is_binary(Ns),
        is_binary(SubmissionId),
        byte_size(SubmissionId) =:= ?SUBMISSION_ID_BYTES,
-       is_binary(CommitteeId),
-       byte_size(CommitteeId) =:= ?COMMITTEE_ID_BYTES,
+       is_binary(Era),
+       byte_size(Era) =:= ?ERA_BYTES,
        is_integer(TargetSlot),
        TargetSlot >= 1,
        TargetSlot =< ?MAX_SLOT,
@@ -1129,12 +1129,12 @@ relay_attempt_id(Ns, SubmissionId, CommitteeId, TargetSlot, Target)
     Canonical =
         term_to_binary(
           {?RELAY_ATTEMPT_DOMAIN, ?RELAY_ATTEMPT_VERSION,
-           Ns, SubmissionId, CommitteeId, TargetSlot, Target},
+           Ns, SubmissionId, Era, TargetSlot, Target},
           [deterministic]),
     <<Id:?SUBMISSION_ID_BYTES/binary, _/binary>> =
         crypto:hash(sha256, Canonical),
     Id;
-relay_attempt_id(_Ns, _SubmissionId, _CommitteeId, _TargetSlot, _Target) ->
+relay_attempt_id(_Ns, _SubmissionId, _Era, _TargetSlot, _Target) ->
     error.
 
 -doc """

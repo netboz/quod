@@ -20,6 +20,7 @@ without failback.
          release_claim_and_await_expiry/3]).
 -export([bind_node/2, submit_node/1, await_goal/3, await_agent/3,
          resumed_work/4, restart_runtime/2, diagnostics/0,
+         operation_diagnostics/2,
          await_node_principal/2, assert_old_key_fenced/2]).
 
 -define(NS, <<"agent:failover">>).
@@ -130,13 +131,25 @@ uncertain_claim_recovers(Config, Restart) ->
         {ok, #{status := committed, height := Height}} =
             call(B, quod_prolog, outcome, [TargetRef]),
         lists:foreach(fun(N) ->
+            Deadline = quod_time:mono_ms() + 30000,
             ok = call(N, quod_ct, await_applied, [?NS, Height, 30000]),
-            ?assertMatch({ok, [#{}], _}, call(N, quod_prolog, prove_ro,
-                [?NS, {findall, {'X'}, {delivered, {'X'}}, [durable_delivery]}]))
+            {Bindings, ObservedHeight} = call(N, ?MODULE, await_goal,
+                [?NS, {findall, {'X'}, {delivered, {'X'}}, [durable_delivery]},
+                 max(0, Deadline - quod_time:mono_ms())]),
+            ?assert(is_map(Bindings)),
+            ?assert(ObservedHeight >= Height)
         end, Nodes),
         ?assertMatch({ok, #{status := committed}}, call(B, quod_prolog, outcome, [ClaimRef])),
         ct:pal("Original operation completed after custody expiry; restart=~p, target height=~p",
                [Restart, Height])
+    catch Class:Reason:Stack ->
+        ct:pal("Original claim recovery: ~p", [
+            catch call(B, ?MODULE, operation_diagnostics, [SourceNs, OperationRef])]),
+        lists:foreach(fun(N) ->
+            ct:pal("Node ~p recovery state: ~p", [maps:get(node_namespace, N),
+                catch call(N, ?MODULE, diagnostics, [])])
+        end, Nodes),
+        erlang:raise(Class, Reason, Stack)
     after
         lists:foreach(fun({N, Owner}) -> catch call(N, sys, resume, [Owner]) end, Held),
         catch call(B, erlang, send, [Prolog, {release_claim, Token}]),
@@ -343,8 +356,14 @@ assert_replicated(Nodes, Height, Host, Key, OldKey, Work) ->
         {'\\+', {agent_failure_report, actor, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}},
         {'\\+', {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}}}]),
     lists:foreach(fun(N) ->
+        Deadline = quod_time:mono_ms() + 30000,
         ok = call(N, quod_ct, await_applied, [?NS, Height, 30000]),
-        ?assertMatch({ok, [#{}], _}, call(N, quod_prolog, prove_ro, [?NS, Goal]))
+        %% Reaching the applied height does not finish the replay handshake.
+        %% Observe the existing readiness edge within the same allowance.
+        {Bindings, ObservedHeight} = call(N, ?MODULE, await_goal,
+            [?NS, Goal, max(0, Deadline - quod_time:mono_ms())]),
+        ?assert(is_map(Bindings)),
+        ?assert(ObservedHeight >= Height)
     end, Nodes).
 
 stop_host(Old, Config) ->
@@ -666,8 +685,8 @@ operation_diagnostics(Ns, Ref) ->
 progress_diagnostics(Ns) ->
     {_, State} = sys:get_state(quod_reg:where({quod_simplex, Ns})),
     #{head => quod_simplex:test_progress(State),
-      rearms => quod_simplex:test_progress_rearms(State),
-      support_grace => quod_simplex:test_support_grace(State)}.
+      position => quod_simplex:test_protocol_position(State),
+      pools => quod_simplex:test_engine_pool_sizes(State)}.
 
 await_goal(Ns, Goal, Timeout) ->
     true = quod_reg:subscribe({runtime, Ns}),

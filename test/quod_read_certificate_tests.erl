@@ -56,19 +56,20 @@ encoder_bound_is_already_enforced_by_binding_test() ->
     F = fixture(1), Certificate = certificate(F, maps:get(signers, F)),
     {ok, Blob} = quod_read_certificate:encode(Certificate),
     ?assertEqual(erlang:external_size(Certificate), byte_size(Blob)),
+    {Ns, Anchor} = element(3, Certificate),
     Ref = element(6, Certificate),
-    Overhead = byte_size(Blob) - byte_size(element(8, Ref)),
-    AtRef = setelement(8, Ref, binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES - Overhead)),
-    AtLimit = setelement(6, Certificate, AtRef),
+    Overhead = byte_size(Blob) - 2 * byte_size(Ns),
+    AtNs = binary:copy(<<"n">>, (?QUOD_MAX_DTX_BODY_BYTES - Overhead) div 2),
+    AtRef = setelement(3, Ref, AtNs),
+    AtLimit = setelement(6, setelement(3, Certificate, {AtNs, Anchor}), AtRef),
     {ok, AtBytes} = quod_read_certificate:encode(AtLimit),
-    ?assertEqual(?QUOD_MAX_DTX_BODY_BYTES, byte_size(AtBytes)),
+    ?assert(byte_size(AtBytes) =< ?QUOD_MAX_DTX_BODY_BYTES),
+    ?assert(byte_size(AtBytes) >= ?QUOD_MAX_DTX_BODY_BYTES - 1),
     ?assertEqual({ok, AtBytes}, quod_scope_wire:encode_payload(read_certificate, AtLimit)),
-    AboveRef = setelement(8, AtRef, <<(element(8, AtRef))/binary, 0>>),
-    %% Each carried reference is individually well-formed. Only the complete
-    %% certificate's byte bound distinguishes these two inputs; no signatures
-    %% or finality authority are claimed by this shape-only control.
+    AboveNs = <<AtNs/binary, "n">>,
+    AboveRef = setelement(3, Ref, AboveNs),
     ?assert(quod_dtx:validate_certified_ref(AboveRef)),
-    Oversized = setelement(6, Certificate, AboveRef),
+    Oversized = setelement(6, setelement(3, Certificate, {AboveNs, Anchor}), AboveRef),
     ?assertEqual(error, quod_read_certificate:binding(Oversized)),
     ?assertEqual({error, invalid_read_certificate}, quod_read_certificate:encode(Oversized)),
     ?assertEqual({error, {protocol_error, bad_payload}},
@@ -166,15 +167,17 @@ certified_ref(F, Target, Slot, RecordDigest) ->
 
 certified_ref(F, {Ns, Anchor}, Slot, RecordDigest, Signers) ->
     BlockHash = digest(20 + Slot),
+    Position = {quod_ledger:initial_era({Ns, Anchor}), Slot - 1},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = [quod_simplex:make_share(
-                Domain, commit, Slot, BlockHash, Signer)
+                Domain, commit, Position, BlockHash, Signer)
               || Signer <- Signers],
     {ok, Cert} = quod_simplex:form_cert(
-                   Domain, commit, Slot, BlockHash, Shares, committee(F)),
+                   Domain, commit, Position, BlockHash, Shares, committee(F)),
+    {ok, Finality} = quod_ledger:encode_finality_head(Cert),
     {ok, Ref} = quod_dtx:certified_ref(
                   Ns, Anchor, Slot, BlockHash, RecordDigest,
-                  term_to_binary(Cert, [deterministic])),
+                  Finality),
     Ref.
 
 digest(N) ->

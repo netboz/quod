@@ -257,6 +257,8 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                 %% barrier has not released it. Startup continues from state,
                 %% without replaying this event or sending a manual wake.
                 stop_ontology(Receiver),
+                ?assertEqual({error, not_ready}, quod_simplex:history_view_at(
+                    {ReceiverNs, element(3, ReceiverRef)}, 1, quod_time:mono_ms() + 1000)),
                 Resumed = start_ontology(ReceiverNs, Dir, Identity, [], [],
                             #{mode => join, genesis_hash => element(3, ReceiverRef)}),
                 try
@@ -457,6 +459,32 @@ fipa_competing_completions({agent_instance_ref, Ns, Anchor, receiver}, Key, Id) 
 fipa_request_result(Ref) ->
     receive
         {agent_request_finished, _, _, #{reference := Ref}, _, {ok, _, Outcome}} -> Outcome;
+        {agent_request_finished, Owner, Child, #{reference := Ref}, _,
+         {error, {outcome_unknown, Operation}} = Result} ->
+            %% Keep the first failure's actual owner and retained outcome;
+            %% diagnostics neither resubmit nor change the assertion below.
+            Ns = element(2, Ref),
+            Outcome = quod_prolog:outcome(Operation),
+            Underlying = case Outcome of
+                {ok, #{outcome_ref := {group, _, _, _, _, _} = Group}} ->
+                    quod_prolog:outcome(Group);
+                _ -> none
+            end,
+            io:format("FIPA uncertain completion: ~p~n", [
+                #{owner => Owner, child => Child,
+                  current_owner => quod_reg:where({quod_runtime, Ns}),
+                  outcome => Outcome, group => Underlying,
+                  consensus => maps:with([slot, protocol_view, last_applied,
+                      custody_depth, custody_ready, progress_timeouts,
+                      owner_current, dtx_admission_waiting, syncing],
+                      quod_simplex:stats(Ns)),
+                  foreign_history => quod_foreign_log:test_lifecycle_state()}]),
+            %% Observe only the original operation's receipt, without another
+            %% submission. An atomic group receipt can still name a pending
+            %% group; this is not evidence that the domain transition finished.
+            Receipt = catch quod_ct:await_operation_complete(Ns, Operation, 15000),
+            io:format("FIPA original operation receipt after uncertainty: ~p~n", [Receipt]),
+            Result;
         {agent_request_finished, _, _, #{reference := Ref}, _, Result} -> Result
     after 10000 -> error({fipa_request_result_missing, Ref}) end.
 
@@ -670,8 +698,10 @@ node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
         ?assertMatch({ok, _, {normalized, {failed, _}}},
                      Submit({node_authorized_goal, Ns, Anchor, true})),
         Source = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
-        {ok, SourceText} = file:read_file(Source),
-        {ok, #{goal := Rule}} = quod_client_goal_parser:parse(SourceText, 2),
+        [SourceRule] = [Term || {':-', {node_authorized_goal, _, _, _}, _} = Term
+                          <- quod_prolog:read_terms(Source)],
+        RuleText = iolist_to_binary([erlog_io:writeq1(SourceRule), $.]),
+        {ok, #{goal := Rule}} = quod_client_goal_parser:parse(RuleText, 2),
         {ok, Bytes, Signature} = quod_node_actor:signed_goal(
           execute, {assertz, Rule}, crypto:strong_rand_bytes(32), quod_time:now_ms() + 10000),
         ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, NodeNs, NodeAnchor, _}}}},
@@ -1324,18 +1354,27 @@ with_host(Fun, ExtraFacts, NodePolicy) ->
     {ok, RefBlob} = quod_wire_term:encode_canonical(Ref),
     {ok, Key} = quod_agent_vault:generate(RefBlob),
     true = quod_reg:subscribe({agent, Ref}),
-    try Fun(#{namespace => Ns, reference => Ref, node => Node, key => Key,
-              directory => Dir, identity => Identity})
+    Result = try
+        {ok, Fun(#{namespace => Ns, reference => Ref, node => Node, key => Key,
+                   directory => Dir, identity => Identity})}
+    catch Class:Reason:Stack -> {failed, Class, Reason, Stack}
     after
         quod_reg:unsubscribe({agent, Ref}),
         quod_reg:unsubscribe({agent_hosting, Ns}),
         stop_ontology(ActorOntology), stop_ontology(NodeOntology),
         gen_server:stop(Vault), gen_server:stop(Auth), gen_server:stop(Router),
-        file:del_dir_r(Dir),
         ok = file:delete(BeamPath),
         lists:foreach(fun({K, undefined}) -> application:unset_env(quod, K);
                          ({K, {ok, V}}) -> application:set_env(quod, K, V)
                       end, Saved)
+    end,
+    case Result of
+        {ok, Value} ->
+            ok = file:del_dir_r(Dir),
+            Value;
+        {failed, FailureClass, FailureReason, FailureStack} ->
+            io:format("Failed hosted-agent fixture retained at ~s~n", [Dir]),
+            erlang:raise(FailureClass, FailureReason, FailureStack)
     end.
 
 start_ontology(Ns, Dir, Identity, Diff, Terms) ->
@@ -1351,6 +1390,13 @@ start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,
     quod_reg:unsubscribe({runtime, Ns}),
+    %% This fixture directly owns namespace supervisors. Retain the same
+    %% anchored hosting declaration that the real namespace manager keeps
+    %% across a child restart; a dead child must not become a foreign target.
+    {ok, #{content := Content} = Projection} = application:get_env(quod, namespace_desired),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    application:set_env(quod, namespace_desired,
+        Projection#{content => Content#{Ns => #{genesis_hash => Anchor}}}),
     Sup.
 
 stop_ontology(Sup) ->

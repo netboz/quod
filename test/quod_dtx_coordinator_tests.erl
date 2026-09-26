@@ -906,7 +906,7 @@ cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
           Request = {submit, <<200:128>>, RecordBlob},
           RequestId = element(2, Request),
           Digest = quod_atomic:record_digest(Vote),
-          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 1, F),
+          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 2, F),
           ?assertEqual(
              uncertain,
              quod_dtx_coordinator:test_local_submit_result(
@@ -966,7 +966,7 @@ remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
           RequestId = element(2, Request),
           Digest = quod_atomic:record_digest(Vote),
           {_Target, _Control, Ref} = evidence(
-                                      maps:get(origin, F), Vote, 1, F),
+                                      maps:get(origin, F), Vote, 2, F),
           Peer = digest(214),
           Live = {"127.0.0.1", 3214},
           Historical = {"127.0.0.1", 3215},
@@ -1071,7 +1071,7 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
           Vote = maps:get(vote, F),
           {ok, RecordBlob} = quod_atomic:encode_record(Vote),
           Digest = quod_atomic:record_digest(Vote),
-          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 1, F),
+          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 2, F),
           Sources = [{remote, digest(211), [{"127.0.0.1", 3211}]},
                      {remote, digest(212), [{"127.0.0.1", 3212}]},
                      {remote, digest(213), [{"127.0.0.1", 3213}]}],
@@ -1264,7 +1264,7 @@ phase_evidence_structure_fails_loudly_test() ->
       fun(F) ->
           Vote = maps:get(vote, F),
           Target = maps:get(origin, F),
-          {Control, Entry, Ref} = certified_control(Target, Vote, 1, F),
+          {Control, Entry, Ref} = certified_control(Target, Vote, 2, F),
           Pub = maps:get(pubkey, maps:get(signer, F)),
           Evidence =
               #{identity => Target, phase => vote, generation => 0,
@@ -1298,6 +1298,7 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           #entry{cert = #cert{block_hash = BlockHash}} =
               quod_ledger:entry_view(Entry0),
           {ok, Block} = quod_ledger:block_from_entry(Entry0),
+    Position = {Block#block.era, Block#block.slot},
           Domain = quod_simplex:consensus_domain(Ns, Anchor),
           Validators =
               [begin
@@ -1308,12 +1309,12 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           Committee = lists:sort([Pub || {Pub, _} <- Validators]),
           Shares = maps:from_list(
                      [{Pub, quod_simplex:make_share(
-                              Domain, commit, 2, BlockHash, Signer)}
+                              Domain, commit, Position, BlockHash, Signer)}
                       || {Pub, Signer} <- Validators]),
           [A, B, C, D] = Committee,
           Form = fun(Keys) ->
                          {ok, Cert} = quod_simplex:form_cert(
-                                        Domain, commit, 2, BlockHash,
+                                        Domain, commit, Position, BlockHash,
                                         [maps:get(Key, Shares)
                                          || Key <- Keys],
                                         Committee),
@@ -1321,8 +1322,8 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
                  end,
           RetainedCert = Form([A, B, C]),
           SuppliedCert = Form([B, C, D]),
-          Entry = quod_ledger:entry(Block, RetainedCert),
-          SuppliedEntry = quod_ledger:entry(Block, SuppliedCert),
+          Entry = quod_ledger:entry(2, Block, RetainedCert),
+          SuppliedEntry = quod_ledger:entry(2, Block, SuppliedCert),
           {ok, Ref} = quod_dtx:certified_entry_ref(
                         Target, SuppliedEntry, Control),
           Evidence =
@@ -1378,7 +1379,7 @@ applied_fixture(F) ->
     %% Compact observations stand for completed verifier callbacks. No whole
     %% foreign plan enters the coordinator's snapshot.
     Evidence = maps:from_list([{{resolve,T},
-        #{ref => Ref,generation => Gen,outcome => commit,own_vote => dtx_test_ref(T,1,digest(230))}}
+        #{ref => Ref,generation => Gen,outcome => commit,own_vote => dtx_test_ref(T,2,digest(230))}}
         || {applied,T,_,Ref,Gen,_} <- Commands]),
     ?assertNot(lists:member(Origin,[A,B])),
     Snapshot = (quod_dtx_recovery:empty())#{evidence := Evidence},
@@ -2025,19 +2026,18 @@ certified_control(Target, Record, Slot,
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, Slot, Slot, Signer),
     Payload = {batch, [{dtx, Control}]},
+    Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Slot - 1, Payload, 0),
-    BlockHash = quod_simplex:block_hash(Block),
-    Entry = quod_ledger:entry(
-              Block, #cert{kind = commit, slot = Slot,
-                           block_hash = BlockHash, sigs = []}),
+                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Payload, 0),
+    Entry = quod_ledger:entry(Slot, Block,
+        quod_ct:protocol_certificate(Block, #{identity => Target, signer => Signer})),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {Control, Entry, Ref}.
 
 dtx_test_ref({Ns, Anchor}, Slot, RecordDigest) ->
     {ok, Ref} = quod_dtx:certified_ref(
                   Ns, Anchor, Slot, digest(225), RecordDigest,
-                  term_to_binary({qc, Slot}, [deterministic])),
+                  quod_ct:fixture_finality(Slot - 1, digest(225))),
     Ref.
 
 applied_certificate(

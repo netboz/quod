@@ -163,11 +163,11 @@ with_source(Fun) ->
     Record = maps:get(vote, Base),
     {ok, Blob} = quod_atomic:encode_record(Record),
     Digest = quod_atomic:record_digest(Record),
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 7, <<77:256>>, Digest, <<"qc">>),
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 7, <<77:256>>, Digest, quod_ct:fixture_finality(6, <<77:256>>)),
     {ok, Refused} = quod_atomic:new_vote(maps:get(group, Base), Target,
         lists:keyfind(Target, 1, maps:get(bundles, Base)), {refused, [vote_deadline]}),
     {ok, RefusedRef} = quod_dtx:certified_ref(Ns, Anchor, 7, <<78:256>>,
-        quod_atomic:record_digest(Refused), <<"qc">>),
+        quod_atomic:record_digest(Refused), quod_ct:fixture_finality(6, <<78:256>>)),
     OwnerNs = <<"quod:fanout-owner-", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
     {Transport, TM} = spawn_monitor(fun() ->
         true = quod_reg:reg({transport, node}),
@@ -188,9 +188,10 @@ with_source(Fun) ->
 
 init({Observer, Ns}) ->
     put(observer, Observer),
-    Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
+    Anchor = <<0:256>>,
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
     {ok, running, quod_simplex:test_state(#{ns => Ns,
-        consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [], 0)})}.
+        consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [], {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})})}.
 callback_mode() -> handle_event_function.
 handle_event({call, From}, counts, running, S) ->
     {keep_state, S, [{reply, From, quod_simplex:test_dtx_endpoint_counts(S)}]};

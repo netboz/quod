@@ -24,9 +24,9 @@ public_exact_deadline_includes_owner_mailbox_test() ->
     Parent = self(),
     Count = atomics:new(1, []),
     BaseFetch = fixture_fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         atomics:add_get(Count, 1, 1),
-        BaseFetch(P, E, Ns, From, To)
+        BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     with_owner(Fetch, fun(Owner) ->
         Ref = maps:get(ref, Fixture),
@@ -196,7 +196,7 @@ expired_caller_does_not_cancel_shared_exact_job_test() ->
     Parent = self(),
     Attempts = atomics:new(1, []),
     BaseFetch = fixture_fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         case put(Token, held) of
             undefined ->
                 atomics:add_get(Attempts, 1, 1),
@@ -204,7 +204,7 @@ expired_caller_does_not_cancel_shared_exact_job_test() ->
                 receive {release_exact_fetch, Token} -> ok end;
             held -> ok
         end,
-        BaseFetch(P, E, Ns, From, To)
+        BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     with_owner(Fetch, fun(Owner) ->
         Request = exact_request(Fixture, 60),
@@ -234,19 +234,19 @@ callerless_acquisition_keeps_fifo_while_covered_readers_proceed_test() ->
     Token = make_ref(),
     Gate = atomics:new(1, []),
     BaseFetch = fixture_fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
-        case {From, atomics:get(Gate, 1)} of
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
+        case {Query, atomics:get(Gate, 1)} of
             {_, 0} ->
                 atomics:put(Gate, 1, 1),
                 Parent ! {fifo_active, Token, self()},
                 receive {release_fifo_active, Token} -> ok end;
-            {3, 1} ->
+            {{range, 3, _}, 1} ->
                 atomics:put(Gate, 1, 2),
                 Parent ! {fifo_callerless, Token, self()},
                 receive {release_fifo_callerless, Token} -> ok end;
             _ -> ok
         end,
-        BaseFetch(P, E, Ns, From, To)
+        BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     with_owner(Fetch, fun(Owner) ->
         Identity = identity(Fixture),
@@ -365,7 +365,7 @@ late_sampled_caller_links_surviving_job_after_original_expiry_test() ->
         Parent = self(),
         Gate = make_ref(),
         Base = fixture_fetch(Fixture),
-        Fetch = fun(P, E, Ns, From, To) ->
+        Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
             Parent ! {sdk_fetch_context, Gate,
                       otel_ctx:get_value(lifecycle_private_sentinel)},
             case put(Gate, held) of
@@ -374,7 +374,7 @@ late_sampled_caller_links_surviving_job_after_original_expiry_test() ->
                     receive {release_sdk_worker, Gate} -> ok end;
                 held -> ok
             end,
-            Base(P, E, Ns, From, To)
+            Base(P, E, Ns, Query, Deadline, Consume)
         end,
         with_owner(Fetch, fun(Owner) ->
             {FirstCtx, FirstSpan} = sdk_parent(<<"test.lifecycle.original">>),
@@ -446,7 +446,7 @@ buffered_attempts_share_job_identity_and_close_owner_stage_inventory_test() ->
         Gate = make_ref(),
         Attempts = atomics:new(1, []),
         Base = fixture_fetch(Fixture),
-        Fetch = fun(P, E, Ns, From, To) ->
+        Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
             case get(Gate) of
                 undefined ->
                     Number = atomics:add_get(Attempts, 1, 1),
@@ -455,9 +455,9 @@ buffered_attempts_share_job_identity_and_close_owner_stage_inventory_test() ->
                     receive {release_sdk_attempt, Gate} -> ok end,
                     case Number of
                         N when N =< 2 -> {error, unavailable};
-                        3 -> Base(P, E, Ns, From, To)
+                        3 -> Base(P, E, Ns, Query, Deadline, Consume)
                     end;
-                _ -> Base(P, E, Ns, From, To)
+                _ -> Base(P, E, Ns, Query, Deadline, Consume)
             end
         end,
         with_owner(Fetch, fun(Owner) ->
@@ -618,7 +618,7 @@ parked_sharing_ignores_trace_context_test_() ->
 parked_sharing(A, B) ->
     Fixture = fixture(exact),
     Count = atomics:new(1, []),
-    Fetch = fun(_, _, _, _, _) -> atomics:add_get(Count, 1, 1), {error, unavailable} end,
+    Fetch = fun(_, _, _, _, _, _) -> atomics:add_get(Count, 1, 1), {error, unavailable} end,
     with_owner(Fetch, fun(Owner) ->
         trace_owner(Owner),
         First = send_request(Owner, current_request(Fixture, 3000), trace_context(A)),
@@ -635,7 +635,7 @@ parked_sharing(A, B) ->
 different_supplied_routes_do_not_merge_parked_work_test() ->
     Fixture = fixture(exact),
     Count = atomics:new(1, []),
-    Fetch = fun(_, _, _, _, _) -> atomics:add_get(Count, 1, 1), {error, unavailable} end,
+    Fetch = fun(_, _, _, _, _, _) -> atomics:add_get(Count, 1, 1), {error, unavailable} end,
     with_owner(Fetch, fun(Owner) ->
         trace_owner(Owner),
         _ = send_request(Owner, current_request(Fixture, 3000), trace_context(sampled)),
@@ -656,14 +656,14 @@ exact_phase_entry_hint_and_contact_remain_nonshareable_test() ->
     Parent = self(),
     Token = make_ref(),
     BaseFetch = fixture_fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         case put(Token, held) of
             undefined ->
                 Parent ! {binding_fetch_held, Token, self()},
                 receive {release_binding_fetch, Token} -> ok end;
             held -> ok
         end,
-        BaseFetch(P, E, Ns, From, To)
+        BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     with_owner(Fetch, fun(Owner) ->
         Ref = maps:get(ref, Fixture),
@@ -706,7 +706,7 @@ wake_schedule(Mode) ->
     Token = make_ref(),
     Attempts = atomics:new(1, []),
     BaseFetch = fixture_fetch(Fixture),
-    Fetch = fun(P, E, Ns, From, To) ->
+    Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         case get(Token) of
             undefined ->
                 Attempt = atomics:add_get(Attempts, 1, 1),
@@ -714,9 +714,9 @@ wake_schedule(Mode) ->
                 Parent ! {wake_attempt, Token, Attempt, self()},
                 receive
                     {finish_wake_attempt, Token, unavailable} -> {error, unavailable};
-                    {finish_wake_attempt, Token, valid} -> BaseFetch(P, E, Ns, From, To)
+                    {finish_wake_attempt, Token, valid} -> BaseFetch(P, E, Ns, Query, Deadline, Consume)
                 end;
-            _ -> BaseFetch(P, E, Ns, From, To)
+            _ -> BaseFetch(P, E, Ns, Query, Deadline, Consume)
         end
     end,
     with_owner(Fetch, fun(Owner) ->
@@ -812,7 +812,7 @@ async_follow_installs_reference_before_first_notice_test() ->
     Parent = self(),
     {Pid, Monitor} = spawn_monitor(fun() ->
         Result = try
-            with_owner(fun(_, _, _, _, _) -> {error, unavailable} end, fun(_Owner) ->
+            with_owner(fun(_, _, _, _, _, _) -> {error, unavailable} end, fun(_Owner) ->
                 Target = {<<"quod:async-follow-order">>, <<173:256>>},
                 {ok, RequestId} = quod_foreign_log:follow_request(Target, progress),
                 %% Receive in arrival order. A selective wait for just the
@@ -873,7 +873,7 @@ with_local_source(Fun) ->
         _ = file:del_dir_r(Dir)
     end.
 
-no_network() -> fun(_, _, _, _, _) -> error(unexpected_network_fetch) end.
+no_network() -> fun(_, _, _, _, _, _) -> error(unexpected_network_fetch) end.
 unique_ns() -> <<"foreign:lifecycle:", (binary:encode_hex(crypto:strong_rand_bytes(12), lowercase))/binary>>.
 temp_dir() -> filename:join("/tmp", "quod_foreign_lifecycle_" ++
     binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12), lowercase))).

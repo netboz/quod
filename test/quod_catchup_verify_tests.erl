@@ -6,13 +6,13 @@
 %% Counted suffix-only control: real signed entries and retained writer index,
 %% NOT a live consensus-admitted multiwrite campaign. The unchanged-source
 %% baseline and its original probe are frozen separately in the handoff.
--export([history_replay_baseline_probe/0]).
+-export([history_suffix_work_probe/0]).
 
 -define(NS, <<"ns">>).
 -define(GENESIS_NONCE, <<16#5c:256>>).
 
 %%%===================================================================
-%%% quod_catchup:verify_forward/5 — the trustless catch-up trust core. A joiner replays a pulled chain by
+%%% The shared proof-group verifier checks a pulled material chain by
 %%% INDUCTION from the pinned genesis committee, verifying each entry's finalizing cert against the
 %%% namespace/genesis domain and committee AS-OF-that-slot (folded forward from peer_admitted facts).
 %%%===================================================================
@@ -46,8 +46,8 @@ genesis(Pubs) ->
             external_predicate_modules => []},
           ?NS, Self, ?GENESIS_NONCE),
     {ok, Block} = quod_ledger:new_block(
-                    1, 0, {batch, [Transaction]}, 0),
-    quod_ledger:entry(Block, none).
+                    {genesis, 0}, none, {batch, [Transaction]}, 0),
+    quod_ledger:entry(1, Block, none).
 
 %% Build an over-cap record without teaching the canonical founding helper how
 %% to create invalid state.  The verifier must reject this wire/history input.
@@ -62,74 +62,56 @@ oversized_genesis(Pubs) ->
     entry_with_data(Entry0, {batch, [Tx1]}).
 
 entry_with_data(Entry, Data) ->
-    #entry{index = Index, timestamp = Timestamp, cert = Cert} =
-        quod_ledger:entry_view(Entry),
-    {ok, Block} = quod_ledger:new_block(
-                    Index, Index - 1, Data, Timestamp),
-    quod_ledger:entry(Block, Cert).
+    {ok, Changed} = quod_ledger:decode_entry(entry_bytes_with_data(Entry, Data)),
+    Changed.
 
-genesis_hash(C) ->
-    gen_hash(genesis(pubs(C))).
+entry_bytes_with_data(Entry, Data) ->
+    {ok, #block{era = Era, slot = View, parent = Parent, timestamp = Ts}} =
+        quod_ledger:block_from_entry(Entry),
+    {ok, Block} = quod_ledger:new_block({Era, View}, Parent, Data, Ts),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    Wire = binary_to_term(Bytes, [safe]),
+    term_to_binary(setelement(4, Wire, quod_ledger:block_bytes(Block)), [deterministic]).
 
-domain(C) ->
-    quod_simplex:consensus_domain(?NS, genesis_hash(C)).
+genesis_hash(C) -> gen_hash(genesis(pubs(C))).
+domain(C) -> quod_simplex:consensus_domain(?NS, genesis_hash(C)).
 
-verify_chain(GenesisCommittee, Committee0, From, Entries) ->
-    Projection0 =
-        case Committee0 of
-            [] -> quod_simplex:history_projection();
-            _  -> projection_after_genesis(GenesisCommittee)
-        end,
-    case quod_catchup:verify_forward(
-           ?NS, genesis_hash(GenesisCommittee), Projection0, From, Entries) of
-        {ok, Verified, Projection1} ->
-            {ok, Verified, quod_simplex:history_committee(Projection1)};
-        Error ->
-            Error
+verify_chain(C, Entries) -> verify_entries({?NS, genesis_hash(C)}, Entries).
+
+verify_entries(Identity, Entries) ->
+    #{ledger_root := Root} = catchup_options(),
+    {ok, Index} = quod_dtx_phase_index:open(Root, ?NS),
+    try verify_groups(Identity, Entries, quod_simplex:history_projection(Identity), Index)
+    after quod_dtx_phase_index:close(Index), file:del_dir_r(Root) end.
+
+verify_groups(_Identity, [], Projection, _Index) -> {ok, Projection};
+verify_groups(Identity, [Entry | Rest], Projection, Index) ->
+    case quod_ct:history_advance(Identity, Entry, Projection, Index) of
+        {ok, Next, _} -> verify_groups(Identity, Rest, Next, Index);
+        {error, _} = Error -> Error
     end.
 
-projection_after_genesis(GenesisCommittee) ->
-    quod_simplex:history_advance(
-      ?NS, genesis(pubs(GenesisCommittee)), quod_simplex:history_projection()).
+projection_after_genesis(C) ->
+    quod_simplex:history_advance(?NS, genesis(pubs(C)),
+                                quod_simplex:history_projection({?NS, genesis_hash(C)})).
 
-%% a committed block at slot I with data D, its COMMIT cert (bound to the block) signed by the first K of C.
-committed(I, D, C, K) ->
-    committed_in(domain(C), I, D, C, K).
+%% The explicit parent projection fixes the protocol era/view independently
+%% of material height. Signers may deliberately differ in negative controls.
+committed(I, Tx, Projection, C, K) ->
+    committed_in(domain(C), I, Tx, Projection, C, K).
 
-committed_in(Domain, I, D, C, K) ->
-    committed_batch_in(Domain, I, [D], C, K).
+committed_in(Domain, I, Tx, Projection, C, K) ->
+    committed_batch(Domain, I, [Tx], Projection, 0, C, K).
 
-committed_batch(I, Transactions, C, K) ->
-    committed_batch_in(domain(C), I, Transactions, C, K).
-
-committed_batch_in(Domain, I, Transactions, C, K) ->
-    Data = {batch, Transactions},
-    {ok, Block} = quod_ledger:new_block(I, I - 1, Data, 0),
-    BH = quod_simplex:block_hash(Block),
-    Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
+committed_batch(Domain, I, Transactions, Projection, Ts, C, K) ->
+    Parent = {Era, View, _} = maps:get(protocol_root, Projection),
+    Position = {Era, View + 1},
+    {ok, Block} = quod_ledger:new_block(Position, Parent, {batch, Transactions}, Ts),
+    Hash = quod_simplex:block_hash(Block),
+    Shares = [quod_simplex:make_share(Domain, commit, Position, Hash, signer(M))
               || M <- lists:sublist(C, K)],
-    {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
-    quod_ledger:entry(Block, Cert).
-
-%% like committed/4 but with an explicit (nonzero) block time on BOTH the hashed block and the entry —
-%% exercises the timestamp threading that committed/4 leaves at the 0 default.
-committed_at(I, D, Ts, C, K) ->
-    Domain = domain(C),
-    {ok, Block} = quod_ledger:new_block(
-                    I, I - 1, {batch, [D]}, Ts),
-    BH = quod_simplex:block_hash(Block),
-    Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
-              || M <- lists:sublist(C, K)],
-    {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
-    quod_ledger:entry(Block, Cert).
-
-%% a complaint-SKIPPED slot I with a COMPLAINT cert (block_hash=none) signed by the first K of C.
-skipped(I, C, K) ->
-    Domain = domain(C),
-    Shares = [quod_simplex:make_share(Domain, complaint, I, none, signer(M))
-              || M <- lists:sublist(C, K)],
-    {ok, Cert} = quod_simplex:form_cert(Domain, complaint, I, none, Shares, pubs(C)),
-    quod_ledger:noop_entry(I, Cert).
+    {ok, Cert} = quod_simplex:form_cert(Domain, commit, Position, Hash, Shares, pubs(C)),
+    quod_ledger:entry(I, Block, Cert).
 
 tx(I, GC)    ->
     {Author, _} = author(),
@@ -161,367 +143,145 @@ durable_result() ->
     {ok, Blob} = quod_durable_term:encode_result(#{}),
     Blob.
 
-%%%--- tests ---
+%%%--- proof and historical membership controls ---
 
-%% A valid genesis + committed blocks verifies, and the folded committee is the founding set.
 happy_test() ->
-    C = committee(4), P = pubs(C),
-    Chain = [genesis(P), committed(2, tx(2, C), C, 3), committed(3, tx(3, C), C, 4)],
-    {ok, Chain, Final} = verify_chain(C, [], 1, Chain),
-    ?assertEqual(P, Final).
+    C = committee(4), G = genesis(pubs(C)), P = projection_after_genesis(C),
+    B2 = committed(2, tx(2, C), P, C, 3),
+    P2 = quod_simplex:history_advance(?NS, B2, P),
+    B3 = committed(3, tx(3, C), P2, C, 4),
+    {ok, Final} = verify_chain(C, [G, B2, B3]),
+    ?assertEqual(pubs(C), quod_simplex:history_committee(Final)).
 
 canonical_page_artifacts_survive_verify_and_forward_test() ->
-    C = committee(4), P = pubs(C),
-    Chain = [genesis(P), committed(2, tx(2, C), C, 3)],
-    Blobs = [begin {ok, Bytes} = quod_ledger:encode_entry(E), Bytes end || E <- Chain],
-    {ok, Chain, P} = verify_chain(C, [], 1, Chain),
-    %% The verifier returns precisely its input artifacts. Sizing and feed
-    %% forwarding consume those same objects, not rebuilt semantic records.
-    ?assertEqual({ok, 2, lists:sum([byte_size(B) || B <- Blobs])},
-                 quod_catchup:page_stats(Chain)),
-    lists:foreach(fun({Entry, Bytes}) ->
+    C = committee(4), G = genesis(pubs(C)),
+    B = committed(2, tx(2, C), projection_after_genesis(C), C, 3),
+    {ok, _} = verify_chain(C, [G, B]),
+    lists:foreach(fun(Entry) ->
+        {ok, Bytes} = quod_ledger:encode_entry(Entry),
         Frame = quod_feed:encode(?NS, {block, Entry}),
         {feed, ?NS, Inner} = binary_to_term(Frame, [safe]),
         ?assertEqual({block_bytes, Bytes}, binary_to_term(Inner, [safe])),
-        ?assertEqual({block, Entry}, quod_feed:decode(Frame, ?NS))
-    end, lists:zip(Chain, Blobs)),
-    ?assertEqual({ok, Chain}, quod_catchup:decode_entries(Blobs, materialized)).
+        ?assertEqual({block, Entry}, quod_feed:decode(Frame, ?NS)),
+        ?assertEqual({ok, Entry}, quod_ledger:decode_entry(Bytes))
+    end, [G, B]).
 
-%% The same checked history fold serves catch-up and restart. A committee at
-%% the shared limit verifies; an oversized founding set and an otherwise-valid,
-%% old-committee-certified 64 -> 65 admission are both refused.
 validator_cap_history_boundary_test() ->
-    N = ?MAX_VALIDATORS,
-    Capped = committee(N),
-    CappedPubs = pubs(Capped),
-    ?assertMatch(
-       {ok, [_], CappedPubs},
-       verify_chain(Capped, [], 1, [genesis(CappedPubs)])),
-    Oversized = committee(N + 1),
-    OversizedGenesis = oversized_genesis(pubs(Oversized)),
-    ?assertEqual(
-       {error, {invalid_transaction, 1}},
-       quod_catchup:verify_forward(
-         ?NS, gen_hash(OversizedGenesis), quod_simplex:history_projection(),
-         1, [OversizedGenesis])),
-    {ExtraPub, _} = quod_identity:generate(),
-    CertifiedAdmission = committed(
-                           2, admit_tx(ExtraPub, Capped), Capped,
-                           quod_simplex:quorum(N)),
-    ?assertEqual(
-       {error, {invalid_transaction, 2}},
-       verify_chain(
-         Capped, [], 1, [genesis(CappedPubs), CertifiedAdmission])).
+    N = ?MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
+    {ok, P} = verify_chain(C, [G]),
+    ?assertEqual(pubs(C), quod_simplex:history_committee(P)),
+    Oversized = oversized_genesis(pubs(committee(N + 1))),
+    ?assertEqual({error, {invalid_transaction, 1}},
+        verify_entries({?NS, gen_hash(Oversized)}, [Oversized])),
+    {Extra, _} = quod_identity:generate(),
+    Admission = committed(2, admit_tx(Extra, C), P, C, quod_simplex:quorum(N)),
+    ?assertEqual({error, {invalid_transaction, 2}}, verify_chain(C, [G, Admission])).
 
 batch_hash_is_verified_test() ->
-    C = committee(4), P = pubs(C),
-    Batch = committed_batch(2, [tx(20, C), tx(21, C)], C, 3),
-    ?assertMatch({ok, [_, _], _},
-                 verify_chain(C, [], 1, [genesis(P), Batch])),
-    %% Reordering transactions changes the certified block hash.
-    ?assertEqual({error, {cert_mismatch, 2}},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(P),
-                    entry_with_data(
-                      Batch, {batch, [tx(21, C), tx(20, C)]})])).
+    C = committee(4), G = genesis(pubs(C)),
+    Batch = committed_batch(domain(C), 2, [tx(20, C), tx(21, C)],
+                            projection_after_genesis(C), 0, C, 3),
+    ?assertMatch({ok, _}, verify_chain(C, [G, Batch])),
+    Changed = entry_bytes_with_data(Batch, {batch, [tx(21, C), tx(20, C)]}),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(Changed)).
 
-implicit_parent_commit_test() ->
-    C = committee(4), P = pubs(C),
-    Domain = domain(C),
-    ParentData = {batch, [tx(2, C)]},
-    {ok, ParentBlock} = quod_ledger:new_block(2, 1, ParentData, 0),
-    ParentBH = quod_simplex:block_hash(ParentBlock),
-    SupportShares = [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
-                     || M <- lists:sublist(C, 3)],
-    {ok, Support} =
-        quod_simplex:form_cert(Domain, support, 2, ParentBH, SupportShares, P),
-    ChildData = {batch, [tx(3, C)]},
-    {ok, Child} = quod_ledger:new_block(3, 2, ChildData, 0),
-    ChildBH = quod_simplex:block_hash(Child),
-    CommitShares = [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
-                    || M <- lists:sublist(C, 3)],
-    {ok, Commit} =
-        quod_simplex:form_cert(Domain, commit, 3, ChildBH, CommitShares, P),
-    E2 = quod_ledger:entry(
-           ParentBlock,
-           #implicit_cert{support = Support, child = Child, commit = Commit}),
-    E3 = quod_ledger:entry(Child, Commit),
-    ?assertMatch({ok, [_, _, _], _},
-                 verify_chain(C, [], 1, [genesis(P), E2, E3])),
-    ?assertEqual({error, {bad_implicit_cert, 2}},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(P),
-                    entry_with_data(E2, {batch, [tx(99, C)]}), E3])).
-
-%% A DTX control is an explicit-finality barrier even though it carries no
-%% committee diff. It cannot be smuggled in as the child proof that implicitly
-%% finalizes an ordinary parent.
-implicit_dtx_child_is_rejected_test() ->
-    C = committee(4),
-    P = pubs(C),
-    Domain = domain(C),
-    ParentData = {batch, [tx(2, C)]},
-    {ok, Parent} = quod_ledger:new_block(2, 1, ParentData, 0),
-    ParentBH = quod_simplex:block_hash(Parent),
-    SupportShares =
-        [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
-         || M <- lists:sublist(C, 3)],
-    {ok, Support} = quod_simplex:form_cert(
-                      Domain, support, 2, ParentBH, SupportShares, P),
-    DtxData = quod_ct:atomic_resolve_payload(),
-    {ok, Child} = quod_ledger:new_block(3, 2, DtxData, 0),
-    ChildBH = quod_simplex:block_hash(Child),
-    CommitShares =
-        [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
-         || M <- lists:sublist(C, 3)],
-    {ok, Commit} = quod_simplex:form_cert(
-                     Domain, commit, 3, ChildBH, CommitShares, P),
-    E2 = quod_ledger:entry(
-           Parent,
-           #implicit_cert{support = Support, child = Child,
-                          commit = Commit}),
-    ?assertEqual(
-       {error, {cert_mismatch, 2}},
-       verify_chain(C, [], 1, [genesis(P), E2])).
-
-%% A complaint-skipped slot (noop + complaint cert) is accepted between committed blocks.
-skip_test() ->
-    C = committee(4), P = pubs(C),
-    ?assertMatch({ok, [_, _, _], _},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(P), skipped(2, C, 3),
-                    committed(3, tx(3, C), C, 3)])).
-
-%% Nonzero block timestamps ride inside the cert-bound hash: a chain with real timestamps verifies, and an
-%% entry whose stored timestamp differs from the one its cert signed is rejected on block_hash reconstruction.
 timestamped_test() ->
-    C = committee(4), P = pubs(C),
-    Good = [genesis(P), committed_at(2, tx(2, C), 1750000000000, C, 3),
-                        committed_at(3, tx(3, C), 1750000000500, C, 4)],
-    ?assertMatch({ok, [_, _, _], _}, verify_chain(C, [], 1, Good)),
-    %% tamper the stored timestamp while keeping the cert (signed over the original Ts) ⇒ block_hash mismatch
-    [_, E2, _] = Good,
-    View = quod_ledger:entry_view(E2),
+    C = committee(4), G = genesis(pubs(C)), P = projection_after_genesis(C),
+    B2 = committed_batch(domain(C), 2, [tx(2, C)], P, 1750000000000, C, 3),
+    P2 = quod_simplex:history_advance(?NS, B2, P),
+    B3 = committed_batch(domain(C), 3, [tx(3, C)], P2, 1750000000500, C, 4),
+    ?assertMatch({ok, _}, verify_chain(C, [G, B2, B3])),
+    View = quod_ledger:entry_view(B2),
     ?assertEqual({error, bad_entry},
-                 quod_ledger:from_entry_view(
-                   View#entry{timestamp = 1750000009999})).
+        quod_ledger:from_entry_view(View#entry{timestamp = 1750000009999})).
 
-%% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
-complaint_over_tx_rejected_test() ->
-    C = committee(4), {X, _} = quod_identity:generate(),
-    Skipped = skipped(2, C, 3),
-    Forged = entry_with_data(Skipped, {batch, [admit_tx(X, C)]}),
-    ?assertEqual({error, {cert_mismatch, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)), Forged])).
-
-%% A cert signed by NON-committee members fails the ⅔ check.
 bad_cert_test() ->
     C = committee(4), Outsiders = committee(4),
-    Bad = committed_in(domain(C), 2, tx(2, C), Outsiders, 3),
-    ?assertEqual({error, {bad_cert, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)), Bad])).
+    Bad = committed_in(domain(C), 2, tx(2, C), projection_after_genesis(C), Outsiders, 3),
+    ?assertEqual({error, {bad_cert, 2}}, verify_chain(C, [genesis(pubs(C)), Bad])).
 
-%% A non-genesis entry with no cert is rejected (a committed slot MUST carry its proof).
-missing_cert_test() ->
-    C = committee(4), B2 = committed(2, tx(2, C), C, 3),
-    {ok, Block} = quod_ledger:block_from_entry(B2),
-    ?assertEqual({error, {missing_cert, 2}},
-                 verify_chain(
-                   C, [], 1, [genesis(pubs(C)), quod_ledger:entry(Block, none)])).
-
-%% A cert that does not BIND the block (the entry's data was swapped) is rejected on block_hash.
-cert_mismatch_test() ->
-    C = committee(4), B2 = committed(2, tx(2, C), C, 3),
-    ?assertEqual({error, {cert_mismatch, 2}},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(pubs(C)),
-                    entry_with_data(B2, {batch, [tx(99, C)]})])).
-
-%% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
-malformed_cert_rejected_test() ->
-    C = committee(4), B2 = committed(2, tx(2, C), C, 3),
-    View = quod_ledger:entry_view(B2),
-    Cert = View#entry.cert,
+missing_and_malformed_certificates_are_not_artifacts_test() ->
+    C = committee(4),
+    B = committed(2, tx(2, C), projection_after_genesis(C), C, 3),
+    View = #entry{cert = Cert} = quod_ledger:entry_view(B),
     [First | _] = Cert#cert.sigs,
-    lists:foreach(fun(Sigs) ->
-        Bad = View#entry{cert = Cert#cert{sigs = Sigs}},
-        %% Canonical envelope construction grants no finality. A malformed
-        %% certificate must still be refused by the existing forward verifier.
-        {ok, Artifact} = quod_ledger:from_entry_view(Bad),
-        ?assertEqual({error, {bad_cert, 2}},
-                     verify_chain(C, [], 1, [genesis(pubs(C)), Artifact]))
-    end, [not_a_list, [First | bad_tail]]).
+    lists:foreach(fun(Bad) ->
+        ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view(View#entry{cert = Bad}))
+    end, [none, Cert#cert{kind = complaint}, Cert#cert{sigs = not_a_list},
+          Cert#cert{sigs = [First | bad_tail]}]).
 
-%% A GAP (a dropped intermediate entry) is rejected — the fold must be complete + contiguous, so a server
-%% cannot omit a committee-changing block to shift verification onto a stale committee.
+cert_mismatch_test() ->
+    C = committee(4), B = committed(2, tx(2, C), projection_after_genesis(C), C, 3),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(
+        entry_bytes_with_data(B, {batch, [tx(99, C)]}))).
+
 noncontiguous_rejected_test() ->
-    C = committee(4), P = pubs(C),
-    ?assertMatch({error, {noncontiguous, 2, 3}},
-                 verify_chain(
-                   C, [], 1, [genesis(P), committed(3, tx(3, C), C, 3)])),   %% dropped 2
-    %% a window that doesn't start at the requested From is likewise rejected
-    ?assertMatch({error, {noncontiguous, 5, 2}},
-                 verify_chain(C, P, 5, [committed(2, tx(2, C), C, 3)])).
+    C = committee(4), P = projection_after_genesis(C),
+    B2 = committed(2, tx(2, C), P, C, 3),
+    B3 = committed(3, tx(3, C), quod_simplex:history_advance(?NS, B2, P), C, 3),
+    ?assertEqual({error, {cert_mismatch, 3}}, verify_chain(C, [genesis(pubs(C)), B3])).
 
-%% A non-artifact element is refused; corrupted views fail at checked import.
 malformed_entry_rejected_test() ->
-    C = committee(4),
-    ?assertMatch({error, {malformed_entry, 2}},
-                 verify_chain(
-                   C, [], 1, [genesis(pubs(C)), {not_an_entry, 2}])),
-    B2 = committed(2, tx(2, C), C, 3),
-    View = quod_ledger:entry_view(B2),
-    ?assertEqual({error, bad_entry},
-                 quod_ledger:from_entry_view(
-                   View#entry{data = {batch, [tx(2, C) | bad_tail]}})),
+    C = committee(4), B = committed(2, tx(2, C), projection_after_genesis(C), C, 3),
+    View = quod_ledger:entry_view(B),
+    ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view({not_an_entry, 2})),
+    ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view(
+        View#entry{data = {batch, [tx(2, C) | bad_tail]}})),
     BadTx = (tx(2, C))#transaction{diff = [not_an_operation]},
-    ?assertEqual({error, bad_entry},
-                 quod_ledger:from_entry_view(
-                   View#entry{data = {batch, [BadTx]}})),
-    ?assertEqual({error, {malformed_entry, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)) | bad_tail])).
+    ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view(View#entry{data = {batch, [BadTx]}})).
 
-%% Complaint skips have no block timestamp. Letting a certified `noop` carry an arbitrary
-%% value would raise the restart timestamp floor and could freeze future proposals.
-skip_timestamp_must_be_zero_test() ->
-    C = committee(4),
-    View = quod_ledger:entry_view(skipped(2, C, 3)),
-    Bad = View#entry{timestamp = 9999999999999},
-    ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view(Bad)).
+membership_chain(C, NextC, Membership) ->
+    G = genesis(pubs(C)), P = projection_after_genesis(C),
+    B2 = committed(2, Membership, P, C, quod_simplex:quorum(length(C))),
+    P2 = quod_simplex:history_advance(?NS, B2, P),
+    B3 = committed_in(domain(C), 3, tx(3, C), P2, NextC, quod_simplex:quorum(length(NextC))),
+    [G, B2, B3].
 
-%% A mid-chain window: the caller threads Committee0 (as of From>1); no genesis in the window.
-midchain_window_test() ->
-    C = committee(4), P = pubs(C),
-    ?assertMatch({ok, [_, _], P},
-                 verify_chain(
-                   C, P, 5,
-                   [committed(5, tx(5, C), C, 3),
-                    committed(6, tx(6, C), C, 4)])).
-
-%% A committee-changing block is verified under the OLD set; the NEXT block must meet the GROWN set's quorum.
 committee_grows_test() ->
-    C4 = committee(4), P4 = pubs(C4),
-    {P5, _} = New = quod_identity:generate(),
-    C5 = C4 ++ [New],
-    Domain = domain(C4),
-    Chain = [genesis(P4),
-             committed(2, admit_tx(P5, C4), C4, 3),
-             committed_in(Domain, 3, tx(3, C4), C5, 4)],
-    {ok, _, Final} = verify_chain(C4, [], 1, Chain),
-    ?assertEqual(lists:usort([P5 | P4]), Final).
+    C = committee(4), {Pub, _} = New = quod_identity:generate(),
+    {ok, P} = verify_chain(C, membership_chain(C, C ++ [New], admit_tx(Pub, C))),
+    ?assertEqual(lists:usort([Pub | pubs(C)]), quod_simplex:history_committee(P)).
 
-%% The SAME chain but the post-change block is signed only by the OLD set (3 sigs) is REJECTED — it must meet
-%% the GROWN committee's quorum (5-set, quorum 4). This is exactly the stale-committee cert a lagging node
-%% might persist (S1 finding #2): a trustless joiner refuses it.
 committee_grows_rejects_stale_test() ->
-    C4 = committee(4), P4 = pubs(C4),
-    {P5, _} = quod_identity:generate(),
-    Chain = [genesis(P4), committed(2, admit_tx(P5, C4), C4, 3), committed(3, tx(3, C4), C4, 3)],
-    ?assertEqual({error, {bad_cert, 3}}, verify_chain(C4, [], 1, Chain)).
+    C = committee(4), {Pub, _} = quod_identity:generate(),
+    ?assertEqual({error, {bad_cert, 3}},
+        verify_chain(C, membership_chain(C, C, admit_tx(Pub, C)))).
 
-%% A committee SHRINK (retract peer_admitted): the removed member is dropped, and the next block is verified
-%% against the smaller set.
 committee_shrinks_test() ->
-    C5 = committee(5), P5 = pubs(C5),
-    {Author, _} = author(),
-    Gone = hd(P5 -- [Author]),
-    C4 = [M || {Pk, _} = M <- C5, Pk =/= Gone],
-    Domain = domain(C5),
-    Chain = [genesis(P5),
-             committed(2, remove_tx(Gone, C5), C5, 4),
-             committed_in(Domain, 3, tx(3, C5), C4, 3)],
-    {ok, _, Final} = verify_chain(C5, [], 1, Chain),
-    ?assertEqual(lists:usort(P5 -- [Gone]), Final).
+    C = committee(5), {Author, _} = author(), Gone = hd(pubs(C) -- [Author]),
+    Next = [M || {Pub, _} = M <- C, Pub =/= Gone],
+    {ok, P} = verify_chain(C, membership_chain(C, Next, remove_tx(Gone, C))),
+    ?assertEqual(pubs(Next), quod_simplex:history_committee(P)).
 
-%% A cert is valid only in the exact namespace/genesis domain that produced it.
-%% Keeping committee, kind, slot and block hash identical proves this is domain
-%% rejection rather than a quorum or content mismatch.
 explicit_cross_domain_rejected_test() ->
-    C = committee(4),
-    P = pubs(C),
-    G = genesis(P),
-    GH = genesis_hash(C),
-    OtherNsDomain =
-        quod_simplex:consensus_domain(<<"other:ontology">>, GH),
-    OtherGenesisDomain =
-        quod_simplex:consensus_domain(?NS, crypto:hash(sha256, <<"other genesis">>)),
-    [begin
-         Entry = committed_in(WrongDomain, 2, tx(2, C), C, 3),
-         ?assertEqual(
-            {error, {bad_cert, 2}},
-            quod_catchup:verify_forward(
-              ?NS, GH, quod_simplex:history_projection(), 1, [G, Entry]))
-     end
-     || WrongDomain <- [OtherNsDomain, OtherGenesisDomain]],
-    ok.
+    C = committee(4), G = genesis(pubs(C)), GH = genesis_hash(C), P = projection_after_genesis(C),
+    Domains = [quod_simplex:consensus_domain(<<"other:ontology">>, GH),
+               quod_simplex:consensus_domain(?NS, crypto:hash(sha256, <<"other genesis">>))],
+    lists:foreach(fun(Domain) ->
+        Entry = committed_in(Domain, 2, tx(2, C), P, C, 3),
+        ?assertEqual({error, {bad_cert, 2}}, verify_chain(C, [G, Entry]))
+    end, Domains).
 
 empty_namespace_is_rejected_test() ->
-    C = committee(4),
-    ?assertEqual(
-       {error, bad_anchor},
-       quod_catchup:verify_forward(
-         <<>>, genesis_hash(C), quod_simplex:history_projection(),
-         1, [genesis(pubs(C))])).
-
-%% The same domain rule applies to both certificates inside an implicit proof:
-%% the parent's support cert and its child's commit cert.
-implicit_cross_domain_rejected_test() ->
-    C = committee(4),
-    P = pubs(C),
-    G = genesis(P),
-    GH = genesis_hash(C),
-    OtherNsDomain =
-        quod_simplex:consensus_domain(<<"other:ontology">>, GH),
-    OtherGenesisDomain =
-        quod_simplex:consensus_domain(?NS, crypto:hash(sha256, <<"other genesis">>)),
-    [begin
-         {E2, E3} = implicit_entries(WrongDomain, C),
-         ?assertEqual(
-            {error, {bad_implicit_cert, 2}},
-            quod_catchup:verify_forward(
-              ?NS, GH, quod_simplex:history_projection(), 1, [G, E2, E3]))
-     end
-     || WrongDomain <- [OtherNsDomain, OtherGenesisDomain]],
-    ok.
-
-implicit_entries(Domain, C) ->
-    P = pubs(C),
-    ParentTx = tx(2, C),
-    {ok, Parent} = quod_ledger:new_block(
-                     2, 1, {batch, [ParentTx]}, 0),
-    ParentBH = quod_simplex:block_hash(Parent),
-    SupportShares =
-        [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
-         || M <- lists:sublist(C, 3)],
-    {ok, Support} =
-        quod_simplex:form_cert(
-          Domain, support, 2, ParentBH, SupportShares, P),
-    ChildTx = tx(3, C),
-    {ok, Child} = quod_ledger:new_block(
-                    3, 2, {batch, [ChildTx]}, 0),
-    ChildBH = quod_simplex:block_hash(Child),
-    CommitShares =
-        [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
-         || M <- lists:sublist(C, 3)],
-    {ok, Commit} =
-        quod_simplex:form_cert(
-          Domain, commit, 3, ChildBH, CommitShares, P),
-    {quod_ledger:entry(
-       Parent,
-       #implicit_cert{support = Support, child = Child, commit = Commit}),
-     quod_ledger:entry(Child, Commit)}.
+    ?assertEqual({error, bad_catchup_options}, quod_catchup:catch_up(
+        <<>>, <<1:256>>, fun(_, _, _) -> error(unreachable) end,
+        fun(_) -> error(unreachable) end, 1, #{}, #{})).
 
 %%%--- catch_up/7 driver (mocked transport, real writer snapshots) ---
 
 %% a Fetch serving a pre-built Chain (entries 1..H) in windows of W; From > H ⇒ empty.
 mock_fetch(Chain, W) ->
-    H = length(Chain),
-    fun(From) when From > H -> {ok, [], H};
-       (From)               -> {ok, lists:sublist(Chain, From, W), H}
+    Base = quod_foreign_log_tests:chain_fetch(?NS, Chain),
+    fun(Query, Deadline, Consume) ->
+        Bounded = case Query of
+            {range, From, To} -> {range, From, min(To, From + W - 1)};
+            _ -> Query
+        end,
+        case Base(none, none, ?NS, Bounded, Deadline, Consume) of
+            {ok, {ok, Next}, Height, Continuation} -> {ok, Next, Height, Continuation};
+            {ok, {error, _} = Error, _, _} -> Error;
+            {error, _} = Error -> Error
+        end
     end.
 
 sink() ->
@@ -558,30 +318,26 @@ with_disk_sink(GenesisHash, Prefix, Sink, Fun) ->
     {ok, Index} = quod_dtx_phase_index:open(LedgerRoot, ?NS),
     put(Key, Empty),
     try
-        {ok, Store} = quod_ledger_store:append(Empty, Prefix),
+        {ok, Store} = quod_ct:append_direct_history(Empty, Prefix),
         put(Key, Store),
         Identity = {?NS, GenesisHash},
         Projection0 = quod_simplex:history_projection(Identity),
-        Projection = case Prefix of
-            [] -> Projection0;
-            _ ->
-                {ok, Prefix, VerifiedProjection, Delta} = quod_catchup:verify_forward(
-                    ?NS, GenesisHash, Projection0, 1, Prefix, Index),
-                ok = quod_dtx_phase_index:commit_delta(Index, Delta),
-                VerifiedProjection
-        end,
+        Projection = lists:foldl(fun(Entry, P) ->
+            {ok, Next, _} = quod_ct:history_advance(Identity, Entry, P, Index), Next
+        end, Projection0, Prefix),
         View = sink_view(Store, Identity, Projection, Index),
-        DurableSink = fun(Entries, Projection1, Delta1) ->
+        DurableSink = fun(#{entries := Entries, projection := Projection1,
+                            delta := Delta1, proof := Proof}) ->
             case Sink(Entries, Projection1) of
                 ok ->
-                    {ok, Next} = quod_ledger_store:append(get(Key), Entries),
+                    {ok, Next} = quod_ledger_store:append(get(Key), {Proof, Entries}),
                     put(Key, Next),
                     ok = quod_dtx_phase_index:commit_delta(Index, Delta1),
                     {ok, sink_view(Next, Identity, Projection1, Index)};
                 {error, _} = Error -> Error
             end
         end,
-        Fun(DurableSink, View, Options)
+        Fun(DurableSink, View, Options#{stage_path => quod_ledger_store:staging_path(Store)})
     after
         quod_dtx_phase_index:close(Index),
         quod_ledger_store:close(erase(Key)),
@@ -598,9 +354,9 @@ sink_view(Store, Identity, Projection, Index) ->
       snapshot => quod_ledger_store:snapshot(Store), projection => Bounded}.
 
 phase_window_uses_retained_owner_index_test() ->
-    C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
-    Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
-    Resolve = direct_abort_entry(258, C),
+    F = quod_foreign_log_tests:long_identity_fixture(?NS, 257),
+    Prefix = maps:get(chain, F), GH = maps:get(anchor, F),
+    Resolve = direct_abort_entry(258, F),
     Chain = Prefix ++ [Resolve],
     %% The first DTX control arrives after successful content-only sink turns;
     %% it uses the read-only index returned with the preceding sink.
@@ -608,9 +364,9 @@ phase_window_uses_retained_owner_index_test() ->
     ?assertEqual(Chain, sunk()).
 
 resumed_phase_window_uses_initial_owner_capture_test() ->
-    C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
-    Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
-    Resolve = direct_abort_entry(258, C),
+    F = quod_foreign_log_tests:long_identity_fixture(?NS, 257),
+    Prefix = maps:get(chain, F), GH = maps:get(anchor, F),
+    Resolve = direct_abort_entry(258, F),
     with_disk_sink(GH, Prefix, sink(),
       fun(Sink, View = #{projection := Projection}, Options) ->
           ?assertEqual({ok, 258}, quod_catchup:catch_up(
@@ -618,7 +374,7 @@ resumed_phase_window_uses_initial_owner_capture_test() ->
               258, Projection, Options#{history_view => View})),
           ?assertEqual([Resolve], sunk()),
           ?assertEqual({error, bad_catchup_options}, quod_catchup:catch_up(
-              ?NS, GH, fun(_) -> error(mismatched_view_fetched) end, Sink,
+              ?NS, GH, fun(_, _, _) -> error(mismatched_view_fetched) end, Sink,
               258, Projection, Options#{history_view => View#{slot => 256}}))
       end).
 
@@ -627,20 +383,21 @@ history_suffix_only_work_is_counted_test() ->
         ?assertEqual(0, maps:get(prefix_entries_read, Counts)),
         ?assertEqual(0, maps:get(prefix_entries_reverified, Counts)),
         ?assertEqual(1, maps:get(suffix_entries_verified, Counts))
-    end, history_replay_baseline_probe()).
+    end, history_suffix_work_probe()).
 
-history_replay_baseline_probe() ->
+history_suffix_work_probe() ->
     [{module, M} = code:ensure_loaded(M)
      || M <- [quod_catchup, quod_ledger_store]],
-    MFAs = [{{quod_catchup, verify_forward, 5}, [local]},
-            {{quod_catchup, verify_forward, 6}, [local]},
+    MFAs = [{{quod_catchup, preview_group, 5}, [local]},
+            {{quod_ledger_store, read_at, 3}, []},
+            {{quod_ledger_store, fold_groups, 3}, []},
             {{quod_ledger_store, read_range, 4}, []}],
     lists:foreach(fun({MFA, Flags}) ->
         1 = erlang:trace_pattern(MFA, true, Flags)
     end, MFAs),
     try
         [history_replay_baseline_case(Height, Kind)
-         || Height <- [8, 64, 257], Kind <- [noop, dtx]]
+         || Height <- [8, 64, 257], Kind <- [content, dtx]]
     after
         lists:foreach(fun({MFA, Flags}) ->
             erlang:trace_pattern(MFA, false, Flags)
@@ -651,11 +408,12 @@ history_replay_baseline_case(Height, Kind) ->
     Parent = self(),
     {Worker, Monitor} = spawn_monitor(fun() ->
         try
-            C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
-            Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, Height)]],
+            F = quod_foreign_log_tests:long_identity_fixture(?NS, Height + 1),
+            GH = maps:get(anchor, F),
+            Prefix = lists:sublist(maps:get(chain, F), Height),
             Last = case Kind of
-                noop -> skipped(Height + 1, C, 3);
-                dtx -> direct_abort_entry(Height + 1, C)
+                content -> lists:last(maps:get(chain, F));
+                dtx -> direct_abort_entry(Height + 1, F#{chain := Prefix})
             end,
             with_disk_sink(GH, Prefix, sink(),
               fun(Sink, View = #{projection := Projection}, Options) ->
@@ -713,34 +471,38 @@ history_probe_trace(Worker, Barrier, Height, Counts) ->
             N = max(0, min(To, Height) - From + 1),
             history_probe_trace(Worker, Barrier, Height,
                 maps:update_with(prefix_entries_read, fun(V) -> V + N end, Counts));
-        {trace, Worker, call, {quod_catchup, verify_forward,
-                              [_Ns, _GH, _Projection, From, Entries | _Rest]}} ->
-            N = max(0, min(length(Entries), Height - From + 1)),
+        {trace, Worker, call, {quod_ledger_store, read_at, [_Store, At, _]}} ->
+            N = case At =< Height of true -> 1; false -> 0 end,
+            history_probe_trace(Worker, Barrier, Height,
+                maps:update_with(prefix_entries_read, fun(V) -> V + N end, Counts));
+        {trace, Worker, call, {quod_ledger_store, fold_groups, _}} ->
+            history_probe_trace(Worker, Barrier, Height,
+                maps:update_with(prefix_entries_read, fun(V) -> V + Height end, Counts));
+        {trace, Worker, call, {quod_catchup, preview_group,
+                              [_Identity, [Entry | _], _P, _Index, _Delta]}} ->
+            N = case quod_ledger:entry_index(Entry) =< Height of true -> 1; false -> 0 end,
             C1 = maps:update_with(prefix_entries_reverified, fun(V) -> V + N end, Counts),
             C2 = maps:update_with(suffix_entries_verified,
-                                 fun(V) -> V + length(Entries) - N end, C1),
+                                 fun(V) -> V + 1 - N end, C1),
             history_probe_trace(Worker, Barrier, Height, C2);
         {trace_delivered, Worker, Barrier} -> Counts
     after 10000 -> error(history_probe_trace_barrier_stalled)
     end.
 
-direct_abort_entry(Slot, C) ->
-    Target = {?NS, genesis_hash(C)},
-    {Pub, _} = author(),
-    {ok, {?NS, _, Admission}} = quod_simplex:history_binding(
-                                  Target, Pub, projection_after_genesis(C)),
+direct_abort_entry(Slot, F = #{anchor := Anchor, signer := Signer, admission := Admission}) ->
+    Target = {?NS, Anchor},
     {ok, VoteRef} = quod_dtx:certified_ref(
-        <<"foreign-origin">>, <<60:256>>, 7, <<61:256>>, <<62:256>>, <<"qc">>),
+        <<"foreign-origin">>, <<60:256>>, 7, <<61:256>>, <<62:256>>,
+        quod_ct:fixture_finality(6, <<61:256>>)),
     Record = quod_ct:atomic_abort_record(Target, <<63:256>>, VoteRef),
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1,
-                                         signer(author())),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, 0),
-    Hash = quod_simplex:block_hash(Block),
-    Shares = [quod_simplex:make_share(domain(C), commit, Slot, Hash, signer(M))
-              || M <- lists:sublist(C, 3)],
-    {ok, Cert} = quod_simplex:form_cert(domain(C), commit, Slot, Hash, Shares, pubs(C)),
-    quod_ledger:entry(Block, Cert).
+                                         Signer),
+    {ok, ParentBlock} = quod_ledger:block_from_entry(lists:last(maps:get(chain, F))),
+    Parent = {Era, View, _} = quod_ledger:block_ref(ParentBlock),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [{dtx, Control}]}, 0),
+    Cert = quod_ct:protocol_certificate(Block, F#{identity => Target}),
+    quod_ledger:entry(Slot, Block, Cert).
 
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
 gen_hash(Entry) ->
@@ -752,7 +514,10 @@ gen_hash(Entry) ->
 %% caught-up height.
 catch_up_happy_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
-    Chain = [G, committed(2, tx(2, C), C, 3), committed(3, tx(3, C), C, 4)],
+    P0 = projection_after_genesis(C),
+    B2 = committed(2, tx(2, C), P0, C, 3),
+    B3 = committed(3, tx(3, C), quod_simplex:history_advance(?NS, B2, P0), C, 4),
+    Chain = [G, B2, B3],
     Sink = sink(),
     ?assertEqual({ok, 3}, run_catch_up(gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
     ?assertEqual(Chain, sunk()).                                                             %% all, in order
@@ -761,29 +526,30 @@ catch_up_happy_test() ->
 catch_up_bad_anchor_test() ->
     C = committee(4), Fake = committee(4),
     Chain = [genesis(pubs(Fake))],
-    ?assertEqual({error, bad_anchor},
+    ?assertEqual({error, {cert_mismatch, 1}},
                  run_catch_up(
                    gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10),
                    fun(_, _) -> ok end)).
 
-%% A window that fails verification aborts catch-up, and NOTHING is persisted (the whole window is atomic).
+%% Each complete proof group commits independently of transport page boundaries.
+%% A later invalid group cannot remove an already-committed earlier group.
 catch_up_forged_test() ->
     C = committee(4), Outsiders = committee(4), G = genesis(pubs(C)),
-    Chain = [G, committed_in(domain(C), 2, tx(2, C), Outsiders, 3)],
+    Chain = [G, committed_in(domain(C), 2, tx(2, C), projection_after_genesis(C), Outsiders, 3)],
     Sink = sink(),
-    ?assertMatch({error, {verify, {bad_cert, 2}}},
+    ?assertMatch({error, {bad_cert, 2}},
                  run_catch_up(gen_hash(G), mock_fetch(Chain, 10), Sink)),
-    ?assertEqual([], sunk()).   %% the bad window is never sunk
+    ?assertEqual([G], sunk()).
 
 %% A committee change in window 1 is threaded so window 2 verifies against the GROWN set.
 catch_up_committee_change_across_windows_test() ->
     C4 = committee(4), P4 = pubs(C4), G = genesis(P4),
     {P5, _} = New = quod_identity:generate(), C5 = C4 ++ [New],
     Domain = domain(C4),
-    B2 = committed(2, admit_tx(P5, C4), C4, 3),   %% grows the committee, in window 1
-    B3 = committed_in(Domain, 3, tx(3, C4), C5, 4), %% window 2, needs the 5-set quorum
+    B2 = committed(2, admit_tx(P5, C4), projection_after_genesis(C4), C4, 3),   %% grows the committee, in window 1
+    B3 = committed_in(Domain, 3, tx(3, C4), quod_simplex:history_advance(?NS, B2, projection_after_genesis(C4)), C5, 4), %% window 2, needs the 5-set quorum
     Sink  = sink(),
-    Fetch = fun(1) -> {ok, [G, B2], 3}; (3) -> {ok, [B3], 3}; (_) -> {ok, [], 3} end,
+    Fetch = mock_fetch([G, B2, B3], 2),
     ?assertEqual({ok, 3}, run_catch_up(gen_hash(G), Fetch, Sink)),
     ?assertEqual([G, B2, B3], sunk()).
 
@@ -791,8 +557,8 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     C4 = committee(4), G = genesis(pubs(C4)), GH = gen_hash(G),
     {P5, _} = New = quod_identity:generate(), C5 = C4 ++ [New],
-    B2 = committed(2, admit_tx(P5, C4), C4, 3),
-    B3 = committed_in(domain(C4), 3, tx(3, C4), C5, 4),
+    B2 = committed(2, admit_tx(P5, C4), projection_after_genesis(C4), C4, 3),
+    B3 = committed_in(domain(C4), 3, tx(3, C4), quod_simplex:history_advance(?NS, B2, projection_after_genesis(C4)), C5, 4),
     Options = #{ledger_root := Scratch} = catchup_options(),
     LedgerRoot = Scratch ++ "-writer",
     StateKey = make_ref(), ViewsKey = make_ref(),
@@ -802,18 +568,20 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
         try
             %% Use the actual sink callback and its actual same-turn capture,
             %% not the disk fixture's handwritten echo of the input projection.
+            Root = {quod_ledger:initial_era({?NS, GH}), 0, GH},
             State0 = quod_simplex:test_state(
                        #{ns => ?NS, genesis_hash => GH,
                          consensus_domain => domain(C4), store => Store, phase_index => Index,
-                         eng => quod_simplex:eng_with_certs(0, []),
+                         eng => quod_simplex:eng_new(domain(C4), [], {Root, 0}),
+                         archive_tip => {Root, 0},
                          sync => {pulling, self()}}),
             put(StateKey, State0),
             put(ViewsKey, []),
-            Sink = fun(Entries, VerifiedProjection, Delta) ->
+            Sink = fun(Group = #{projection := VerifiedProjection}) ->
                 From = {self(), make_ref()},
                 {keep_state, State1, Actions} = quod_simplex:running(
                     {call, From},
-                    {sink_catchup, {recovery, self()}, Entries, VerifiedProjection, Delta},
+                    {sink_catchup, {recovery, self()}, Group},
                     get(StateKey)),
                 put(StateKey, State1),
                 [{reply, From, {ok, View}}] =
@@ -821,22 +589,20 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
                 put(ViewsKey, [{VerifiedProjection, View} | get(ViewsKey)]),
                 {ok, View}
             end,
-            Fetch = fun(1) -> {ok, [G, B2], 3};
-                       (3) -> {ok, [B3], 3}
-                    end,
+            Fetch = mock_fetch([G, B2, B3], 2),
             InitialView = #{projection := InitialProjection} = sink_view(
                 Store, {?NS, GH}, quod_simplex:history_projection({?NS, GH}), Index),
             ?assertEqual({ok, 3}, quod_catchup:catch_up(
                 ?NS, GH, Fetch, Sink, 1, InitialProjection,
-                Options#{history_view => InitialView})),
-            [{Verified2, View2}, {Verified3, View3}] = lists:reverse(get(ViewsKey)),
+                Options#{history_view => InitialView, stage_path => quod_ledger_store:staging_path(Store)})),
+            [{_, #{slot := 1}}, {Verified2, View2}, {Verified3, View3}] = lists:reverse(get(ViewsKey)),
             ?assertEqual(2, length(maps:get(committee_views, Verified2))),
             ?assertEqual(1, length(maps:get(committee_views, Verified3))),
             lists:foreach(
               fun({Verified, #{owner := Owner, projection := Published}}) ->
                   ?assertEqual(self(), Owner),
                   ?assertEqual(1, length(maps:get(committee_views, Published))),
-                  ?assertNotEqual(Verified, Published),
+                  ?assert(maps:is_key(history_index, Published)),
                   ?assertEqual(maps:get(history_head, Verified),
                                maps:get(history_head, Published)),
                   ?assertEqual(pubs(C5), quod_simplex:history_committee(Published)),
@@ -872,19 +638,18 @@ catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test() ->
         Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
         [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
-        {ok, [Resolve], NextProjection, Delta} = quod_catchup:verify_forward(
-            Ns, Anchor, Projection, 3, [Resolve], Capture),
+        {ok, Group} = quod_ct:history_group({Ns, Anchor}, Resolve, Projection, Capture),
         %% Another owner-applied window overtakes the verified borrow. The
         %% actual sink advances; the earlier view still hides this same-group
         %% Resolve. This is the production applier seam, not consensus admission.
-        {ok, _} = Sink([Resolve], NextProjection, Delta),
+        {ok, _} = Sink(Group),
         {ok, OldHistory} = quod_dtx_phase_index:history(Capture, maps:get(group_id, F)),
         ?assertEqual(not_found, quod_atomic:history_phase(resolve, OldHistory)),
         {ok, NewHistory} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
         ?assertEqual({ok, maps:get(resolve_ref, F)}, quod_atomic:history_phase(resolve, NewHistory)),
         Installed = get(StateKey),
         IndexStats = quod_dtx_phase_index:stats(Index),
-        ?assertEqual({error, stale_window}, Sink([Resolve], NextProjection, Delta)),
+        ?assertEqual({error, stale_window}, Sink(Group)),
         ?assertEqual(Installed, get(StateKey)),
         ?assertEqual(IndexStats, quod_dtx_phase_index:stats(Index)),
         {3, Store} = quod_simplex:test_committed_store(Installed),
@@ -895,13 +660,13 @@ catch_up_failed_append_leaves_retained_index_unchanged_test() ->
     with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
         [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
-        {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
-            maps:get(ns, F), maps:get(anchor, F), Projection, 3, [Resolve], Capture),
+        {ok, Group} = quod_ct:history_group(
+            {maps:get(ns, F), maps:get(anchor, F)}, Resolve, Projection, Capture),
         Installed = get(StateKey),
         Before = quod_dtx_phase_index:stats(Index),
         {2, Store} = quod_simplex:test_committed_store(Installed),
         ok = quod_ledger_store:close(Store),
-        ?assertMatch({error, _}, Sink([Resolve], NextProjection, Delta)),
+        ?assertMatch({error, _}, Sink(Group)),
         ?assertEqual(Installed, get(StateKey)),
         ?assertEqual(Before, quod_dtx_phase_index:stats(Index)),
         {ok, History} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
@@ -913,8 +678,8 @@ catch_up_index_install_failure_is_loud_before_any_publication_test() ->
         Ns = maps:get(ns, F),
         [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
-        {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
-            Ns, maps:get(anchor, F), Projection, 3, [Resolve], Capture),
+        {ok, Group} = quod_ct:history_group(
+            {Ns, maps:get(anchor, F)}, Resolve, Projection, Capture),
         true = quod_reg:reg({quod_prolog, Ns}),
         true = quod_reg:subscribe({committed, Ns}),
         try
@@ -923,7 +688,7 @@ catch_up_index_install_failure_is_loud_before_any_publication_test() ->
             %% or converting the failure to a recoverable sink reply may not.
             ok = quod_dtx_phase_index:close(Index),
             ?assertException(error, {badmatch, {error, {phase_index_io, _}}},
-                             Sink([Resolve], NextProjection, Delta)),
+                             Sink(Group)),
             ?assertEqual([], writer_publications([])),
             {2, OldStore} = quod_simplex:test_committed_store(get(StateKey)),
             ok = quod_ledger_store:close(OldStore),
@@ -991,23 +756,27 @@ with_phase_writer_owned(Fun) ->
     {ok, Store} = quod_ledger_store:open(Ns, Root),
     {ok, Index} = quod_dtx_phase_index:open(Root, Ns),
     StateKey = make_ref(),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    ProtocolRoot = {quod_ledger:initial_era({Ns, Anchor}), 0, Anchor},
     put(StateKey, quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
-        consensus_domain => quod_simplex:consensus_domain(Ns, Anchor),
-        store => Store, phase_index => Index, eng => quod_simplex:eng_with_certs(0, []),
+        consensus_domain => Domain, archive_tip => {ProtocolRoot, 0},
+        store => Store, phase_index => Index,
+        eng => quod_simplex:eng_new(Domain, [], {ProtocolRoot, 0}),
         sync => {pulling, self()}})),
-    Sink = fun(Entries, P, Delta) ->
+    Sink = fun(Group) ->
         From = {self(), make_ref()},
         {keep_state, State, Actions} = quod_simplex:running({call, From},
-            {sink_catchup, {recovery, self()}, Entries, P, Delta}, get(StateKey)),
+            {sink_catchup, {recovery, self()}, Group}, get(StateKey)),
         put(StateKey, State),
         [Reply] = [R || {reply, Who, R} <- Actions, Who =:= From],
         Reply
     end,
     try
         Prefix = lists:sublist(maps:get(chain, F), 2),
-        {ok, Prefix, P, Delta} = quod_catchup:verify_forward(
-            Ns, Anchor, quod_simplex:history_projection({Ns, Anchor}), 1, Prefix, Index),
-        {ok, View} = Sink(Prefix, P, Delta),
+        View = lists:foldl(fun(Entry, #{projection := P}) ->
+            {ok, Group} = quod_ct:history_group({Ns, Anchor}, Entry, P, Index),
+            {ok, Next} = Sink(Group), Next
+        end, #{projection => quod_simplex:history_projection({Ns, Anchor})}, Prefix),
         Fun(F#{root => Root}, Index, Sink, View, StateKey)
     after
         erase(StateKey),
@@ -1021,10 +790,10 @@ catch_up_owner_death_during_empty_fetch_is_not_completion_test() ->
     with_disk_sink(gen_hash(G), [G], fun(_, _) -> error(unexpected_sink) end,
       fun(Sink, View = #{projection := Projection}, Options) ->
           {Owner, Monitor} = spawn_monitor(fun() -> receive stop -> ok end end),
-          Fetch = fun(2) ->
+          Fetch = fun({range, 2, _}, _Deadline, Consume) ->
               Owner ! stop,
               receive {'DOWN', Monitor, process, Owner, normal} -> ok end,
-              {ok, [], 1}
+              Consume([], 1, done)
           end,
           %% Only the identity/lifetime subject is replaced for this control;
           %% the retained index and prefix are the ordinary real disk fixture.
@@ -1056,7 +825,8 @@ recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
                 true = quod_reg:reg({quod_simplex, Ns}),
                 State0 = quod_simplex:test_state(
                            #{ns => Ns, genesis_hash => Anchor, store => Store, phase_index => Index,
-                             eng => quod_simplex:eng_with_certs(0, []),
+                             eng => quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [],
+                                      {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0}),
                              sync => unconfirmed}),
                 %% The production tick arms the real monitored recovery worker.
                 {keep_state, State1, _Actions} =
@@ -1074,7 +844,7 @@ recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
             WorkerRef = monitor(process, Worker),
             try
                 %% The fake transport boundary withholds the reply. This is
-                %% the worker's real pull/4 call, not a test-owned parked loop.
+                %% the worker's real pull/5 call, not a test-owned parked loop.
                 receive {recovery_pull_blocked, Worker, 1} -> ok
                 after 1000 -> error(recovery_worker_not_in_pull)
                 end,
@@ -1102,7 +872,7 @@ blocked_recovery_endpoint(Parent) ->
         {'$gen_call', From, contact} ->
             gen:reply(From, {"127.0.0.1", 19000}),
             blocked_recovery_endpoint(Parent);
-        {'$gen_call', {Worker, _}, {pull, From, _To, _Contact, _Started}} ->
+        {'$gen_call', {Worker, _}, {pull, {range, From, _}, _Contact, _Started, _Deadline}} ->
             Parent ! {recovery_pull_blocked, Worker, From},
             blocked_recovery_endpoint(Parent)
     end.
@@ -1118,30 +888,37 @@ recovery_capture_owner(State) ->
 %% A contact that REGRESSES its claimed height below what it already served is treated as stalled (the target
 %% is the MAX height seen), not falsely "caught up" — so the joiner fails over instead of truncating.
 catch_up_height_regression_test() ->
-    C = committee(4), P = pubs(C), G = genesis(P), B2 = committed(2, tx(2, C), C, 3),
-    Fetch = fun(1) -> {ok, [G, B2], 100};   %% claims height 100
-               (_) -> {ok, [], 5}           %% then regresses to 5, mid-catch-up
-            end,
+    C = committee(4), P = pubs(C), G = genesis(P), B2 = committed(2, tx(2, C), projection_after_genesis(C), C, 3),
+    Base = mock_fetch([G, B2], 2),
+    Fetch = fun(Query = {range, From, _}, Deadline, Consume) ->
+        case From of
+            1 ->
+                {ok, Next, _, More} = Base(Query, Deadline,
+                    fun(Parts, _, Continuation) -> Consume(Parts, 100, Continuation) end),
+                {ok, Next, 100, More};
+            _ -> {ok, Next} = Consume([], 5, done), {ok, Next, 5, done}
+        end
+    end,
     ?assertEqual({error, no_progress}, run_catch_up(gen_hash(G), Fetch, sink())).
 
 %% A fetch failure surfaces so the caller can try another contact.
 catch_up_fetch_error_test() ->
-    ?assertEqual({error, {fetch, timeout}},
+    ?assertEqual({error, timeout},
                  run_catch_up(
-                   <<0:256>>, fun(_) -> {error, timeout} end,
+                   <<0:256>>, fun(_, _, _) -> {error, timeout} end,
                    fun(_, _) -> ok end)).
 
 catch_up_malformed_height_test() ->
-    ?assertEqual({error, {fetch, bad_response}},
+    ?assertEqual({error, changed_transfer_height},
                  run_catch_up(
-                   <<0:256>>, fun(_) -> {ok, [], not_a_height} end,
+                   <<0:256>>, fun(_, _, Consume) -> Consume([], not_a_height, done) end,
                    fun(_, _) -> ok end)).
 
 %% A sink failure aborts catch-up cleanly (recoverable), not a badmatch crash.
 catch_up_sink_error_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
-    Chain = [G, committed(2, tx(2, C), C, 3)],
-    ?assertEqual({error, {sink, disk_full}},
+    Chain = [G, committed(2, tx(2, C), projection_after_genesis(C), C, 3)],
+    ?assertEqual({error, disk_full},
                  run_catch_up(
                    gen_hash(G), mock_fetch(Chain, 10),
                    fun(_, _) -> {error, disk_full} end)).
@@ -1150,5 +927,7 @@ catch_up_sink_error_test() ->
 catch_up_no_progress_test() ->
     ?assertEqual({error, no_progress},
                  run_catch_up(
-                   <<0:256>>, fun(_) -> {ok, [], 5} end,
+                   <<0:256>>, fun(_, _, Consume) ->
+                       {ok, Range} = Consume([], 5, done), {ok, Range, 5, done}
+                   end,
                    fun(_, _) -> ok end)).

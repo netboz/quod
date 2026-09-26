@@ -198,27 +198,30 @@ t_unsigned_history_rejected(Cfg) ->
     {ok, Source} = quod_ledger_store:open(Ns, Dir),
     {ok, Genesis} = quod_ledger_store:read_at(Source, 1),
     {ok, E2} = quod_ledger_store:read_at(Source, 2),
-    #entry{data = {batch, [Signed]}, timestamp = T2, cert = Cert2} =
+    #entry{data = {batch, [Signed]}, timestamp = T2} =
         quod_ledger:entry_view(E2),
     ok = quod_ledger_store:close(Source),
     ok = file:del_dir_r(quod_ledger_store:ns_dir(Dir, Ns)),
     {ok, Rewritten0} = quod_ledger_store:open(Ns, Dir),
     Unsigned = Signed#transaction{sig = none},
-    ?assertEqual({error, bad_entry}, quod_ledger:new_entry(
-                                      2, {batch, [Unsigned]}, T2, Cert2)),
+    {ok, StoredBlock} = quod_ledger:block_from_entry(E2),
+    #block{era = Era, slot = View, parent = Parent} = StoredBlock,
+    Position = {Era, View},
+    ?assertEqual({error, bad_block}, quod_ledger:new_block(
+                                      Position, Parent, {batch, [Unsigned]}, T2)),
     #entry{data = {batch, [GenesisTx]}} = quod_ledger:entry_view(Genesis),
-    {ok, UnsignedBlock} = quod_ledger:new_block(2, 1, {batch, [GenesisTx]}, T2),
+    {ok, UnsignedBlock} = quod_ledger:new_block(Position, Parent, {batch, [GenesisTx]}, T2),
     {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
     GenesisHash = quod_simplex:block_hash(GenesisBlock),
     Domain = quod_simplex:consensus_domain(Ns, GenesisHash),
     UnsignedHash = quod_simplex:block_hash(UnsignedBlock),
     Share = quod_simplex:make_share(
-              Domain, commit, 2, UnsignedHash,
+              Domain, commit, Position, UnsignedHash,
               maps:get(identity, ?config(base_cfg, Cfg))),
     {ok, UnsignedCert} = quod_simplex:form_cert(
-                           Domain, commit, 2, UnsignedHash, [Share], [Self]),
-    UnsignedEntry = quod_ledger:entry(UnsignedBlock, UnsignedCert),
-    {ok, Rewritten1} = quod_ledger_store:append(
+                           Domain, commit, Position, UnsignedHash, [Share], [Self]),
+    UnsignedEntry = quod_ledger:entry(2, UnsignedBlock, UnsignedCert),
+    {ok, Rewritten1} = quod_ct:append_direct_history(
                          Rewritten0,
                          [Genesis, UnsignedEntry]),
     ok = quod_ledger_store:close(Rewritten1),
@@ -229,7 +232,7 @@ t_unsigned_history_rejected(Cfg) ->
                       Domain,
                       Dir),
     ok = quod_signing_journal:close(Journal),
-    ?assertEqual({error, {invalid_transaction_history, 2}},
+    ?assertEqual({error, {invalid_transaction, 2}},
                  quod_simplex:start_link(Ns, ?config(base_cfg, Cfg))).
 
 t_status_stats(Cfg) ->
@@ -243,10 +246,9 @@ t_status_stats(Cfg) ->
     ?assertEqual(2, maps:get(slot, S)),
     ?assertEqual(2, maps:get(committed, S)).
 
-%% Each committed block carries the quorum certificate that finalized it, persisted on the `#entry` — so a
-%% catch-up joiner can trustlessly verify it (Simplex 4 / mode=join). At N=1 the commit cert is the founder's
-%% own single commit share (quorum(1)=1) and verifies against the committee; the self-signed genesis (slot 1)
-%% carries no cert (it is the out-of-band trust anchor).
+%% At N=1 the first material proposal commits directly in protocol view 1,
+%% at material height 2. Its founder's commit share verifies under the era's
+%% committee; the pinned genesis at height 1 carries no certificate.
 t_commit_carries_cert(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
@@ -259,10 +261,9 @@ t_commit_carries_cert(Cfg) ->
         {ok, E2} = quod_ledger_store:read_at(Store, 2),
         #entry{data = {batch, [#transaction{}]}, timestamp = Ts, cert = Cert} =
             quod_ledger:entry_view(E2),
-        ?assertMatch(#cert{kind = commit, slot = 2}, Cert),
+        ?assertMatch(#cert{kind = commit, slot = 1}, Cert),
         ?assert(Ts > 0),                              %% leader stamped a real wall-clock block time (not the 0 default)
-        %% the cert BINDS this specific block: block_from_entry/1 rebuilds the exact #block{} (timestamp
-        %% mirrored in the entry) so a joiner recomputes the same hash to check the cert names THIS block.
+        %% This direct witness names the exact retained block bytes.
         {ok, PersistedBlock} = quod_simplex:block_from_entry(E2),
         ?assertEqual(quod_simplex:block_hash(PersistedBlock), Cert#cert.block_hash),
         GenesisHash = quod_simplex:genesis_hash(Ns),

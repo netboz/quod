@@ -183,9 +183,9 @@ complete_requires_exact_source_application_ack_live_but_not_on_replay_test() ->
                  quod_atomic:preview_batch([{CompleteControl, Origin, 3, <<3:256>>}],
                    #{quod_atomic:group_id(maps:get(group, F)) => H2}, P2)),
     Id = quod_atomic:group_id(maps:get(group, F)),
-    ?assertEqual({error, stale_resolve_ack}, quod_atomic:acknowledge_resolve(Id, 2, 0, P2)),
-    ?assertEqual({error, stale_resolve_ack}, quod_atomic:acknowledge_resolve(Id, 3, 2, P2)),
-    {ok, P3} = quod_atomic:acknowledge_resolve(Id, 2, 2, P2),
+    ?assertEqual({error, stale_resolve_ack}, quod_atomic:acknowledge_resolve(Id, 3, 0, P2)),
+    ?assertEqual({error, stale_resolve_ack}, quod_atomic:acknowledge_resolve(Id, 4, 2, P2)),
+    {ok, P3} = quod_atomic:acknowledge_resolve(Id, 3, 2, P2),
     ?assertEqual(ready, readiness(Complete, P3)),
     ?assert(quod_atomic:valid_projection(P3)),
     %% Certified replay consumes the exact fence represented in Complete.
@@ -197,11 +197,11 @@ verified_suffix_does_not_resurrect_an_acknowledged_prefix_fence_test() ->
     {H1, P1} = fold(maps:get(Target, Votes), fresh(Target)),
     {_H2, P2} = fold(resolve(F, Target, commit, Votes, 2), {H1, P1}),
     Id = quod_atomic:group_id(maps:get(group, F)),
-    {ok, P3} = quod_atomic:acknowledge_resolve(Id, 2, 2, P2),
+    {ok, P3} = quod_atomic:acknowledge_resolve(Id, 3, 2, P2),
     ?assertEqual(#{}, maps:get(apply_fences, P3)),
-    ?assertEqual(P3, quod_atomic:install_projection(P2, P3, 2)),
-    ?assertEqual(P2, quod_atomic:install_projection(P2, P3, 1)),
-    ?assertEqual(P3, quod_atomic:install_projection(P3, P2, 2)).
+    ?assertEqual(P3, quod_atomic:install_projection(P2, P3, 3)),
+    ?assertEqual(P2, quod_atomic:install_projection(P2, P3, 2)),
+    ?assertEqual(P3, quod_atomic:install_projection(P3, P2, 3)).
 
 resolve_must_bind_the_exact_local_vote_and_generation_test() ->
     F = fixture(), Target = foreign(F), Votes = votes(F),
@@ -283,7 +283,7 @@ resolve_application_certificate_uses_the_published_floor_not_a_staged_row_test()
     quod_ct:with_network_identity(<<8:256>>, fun() ->
         lists:foreach(fun(AppliedRow) ->
             Snapshot = #{applied => AppliedRow, applied_floor => 2, generation => 999},
-            S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+            S = state(#{ns => Ns, genesis_hash => Anchor,
                   self => Self, id => Signer, validators => Committee, slot => 2,
                   sync => ready, prolog_ready => true, store => memory,
                   dtx_projection => quod_atomic:initial_projection(T, 999)}),
@@ -308,7 +308,7 @@ resolve_application_certificate_rejects_every_mismatched_binding_test() ->
           committee => [Self], committee_id => <<9:256>>},
     R = {applied, <<53:128>>, Id, Ref, 2, commit},
     Snapshot = #{applied => none, applied_floor => 2, generation => 0},
-    S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => Self,
+    S = state(#{ns => Ns, genesis_hash => Anchor, self => Self,
           id => Signer, validators => [Self], slot => 2, sync => ready,
           prolog_ready => true, store => memory}),
     Cases = [{setelement(3, R, <<99:256>>), E},
@@ -340,10 +340,10 @@ submission_correlation_does_not_substitute_for_the_certified_vote_test() ->
     ?assert(quod_dtx_endpoint:correlates(Request, Response)),
     ?assertNot(quod_dtx_endpoint:correlates(Request, setelement(2, Response, <<68:128>>))),
     ?assertNot(quod_dtx_endpoint:correlates(Request, setelement(3, Response, <<99:256>>))),
-    S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor}),
+    S = state(#{ns => Ns, genesis_hash => Anchor}),
     ?assertEqual(Response, quod_simplex:test_dtx_endpoint_result(
                              Request, {submit_result, Digest, {ok, Ref, []}}, S)),
-    ?assert(quod_dtx:certified_entry_ref_matches(T, Entry, Negative, Ref, Committee)),
+    ?assert(quod_dtx:certified_entry_claim_matches(T, Entry, Negative, Ref)),
     Evidence = #{identity => T, phase => vote, ref => Ref, control => Negative, entry => Entry,
                   generation => 0, committee => Committee, committee_id => <<9:256>>, routes => #{}},
     ?assertMatch({ok, Negative, _, _, _},
@@ -359,16 +359,19 @@ certified_resolve(Row, Signers) ->
 
 certified_control(#{control := Control} = Row, Signers, Slot) ->
     {Ns, Anchor} = Target = quod_atomic:control_target(Control),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, 1),
+    Era = quod_ledger:initial_era(Target), Position = {Era, Slot - 1},
+    {ok, Block} = quod_ledger:new_block(Position, {Era, Slot - 2, Anchor},
+                                      {batch, [{dtx, Control}]}, 1),
     Hash = quod_simplex:block_hash(Block), Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = lists:sort([begin
-        #share{sig = Sig} = quod_simplex:make_share(Domain, commit, Slot, Hash, S),
+        #share{sig = Sig} = quod_simplex:make_share(Domain, commit, Position, Hash, S),
         {maps:get(pubkey, S), Sig}
     end || S <- lists:sublist(Signers, 3)]),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = Slot, block_hash = Hash, sigs = Shares}),
+    Cert = #cert{kind = commit, era = Era, slot = Slot - 1, block_hash = Hash, sigs = Shares},
+    ?assert(quod_simplex:verify_cert(Domain, Cert, lists:sort([maps:get(pubkey, S) || S <- Signers]))),
+    Entry = quod_ledger:entry(Slot, Block, Cert),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
-    ?assert(quod_dtx:certified_entry_ref_matches(Target, Entry, Control, Ref,
-                                               lists:sort([maps:get(pubkey, S) || S <- Signers]))),
+    ?assert(quod_dtx:certified_entry_claim_matches(Target, Entry, Control, Ref)),
     Row#{ref := Ref, entry => Entry}.
 
 same_request_conflict_waits_in_both_group_orders_test() ->
@@ -413,7 +416,7 @@ phase_index_captures_hide_later_records_of_the_same_group_test() ->
         R = #{control := RC, ref := RR} = resolve(F, Target, commit, Votes, 2),
         {_, Initial} = fresh(Target),
         {ok, P1, _} = quod_dtx_phase_index:apply_batch(Index, [{VC, VR}], Initial),
-        {ok, Capture} = quod_dtx_phase_index:capture(Index, 1),
+        {ok, Capture} = quod_dtx_phase_index:capture(Index, 2),
         {ok, P2, _} = quod_dtx_phase_index:apply_batch(Index, [{RC, RR}], P1),
         {H1, P1} = fold(V, fresh(Target)),
         {H2, P2} = fold(R, {H1, P1}),
@@ -462,12 +465,26 @@ restored_projection_rejects_missing_or_substituted_source_fence_test() ->
                   #{Id => #{slot => 99, generation => 2, blocking => true}}})),
     ?assertNot(quod_atomic:valid_projection(P#{conflicts => #{}})).
 
-preview_and_replay_share_the_same_positive_transition_test() ->
-    F = fixture(), Target = foreign(F), #{control := C} = vote(F, Target, own(F, Target), prepared),
-    {_, P} = fresh(Target),
-    {ok, Histories, Next, [Item]} = quod_atomic:preview_batch([{C, Target, 1, <<1:256>>}], #{}, P),
-    ?assertEqual({ok, Histories, Next, [Item]},
-                 quod_atomic:reduce_batch([{C, maps:get(ref, Item)}], #{}, P)).
+era_preview_uses_the_shared_transition_without_a_fake_certificate_test() ->
+    F = quod_ct:atomic_role_fixture(), Target = maps:get(origin, F),
+    Control = maps:get(source_control, F), Certified = maps:get(source_ref, F),
+    Id = quod_atomic:group_id(Control), Empty = quod_atomic:initial_group_history(),
+    Projection = quod_atomic:initial_projection(Target, 0),
+    {ok, Histories, Preview, [#{ref := Provisional, effects := []}]} =
+        quod_atomic:preview_batch([{Control, Target, 2, <<106:256>>}], #{}, Projection),
+    ?assertEqual(error, quod_dtx:certified_ref_binding(Provisional)),
+    ?assertNot(quod_atomic:valid_group_history(maps:get(Id, Histories))),
+    ?assertNot(quod_atomic:valid_projection(Preview)),
+    ?assertEqual({error, {invalid_transition, bad_binding}},
+                 quod_atomic:reduce(Control, Provisional, Empty, Projection)),
+    %% Certified application performs the same transition, with the actual
+    %% reference replacing the provisional location. No preview result can
+    %% be mistaken for durable evidence at the public reducer boundary.
+    {ok, History, Committed, []} = quod_atomic:reduce(Control, Certified, Empty, Projection),
+    PH = maps:get(Id, Histories), Vote = maps:get(vote, maps:get(records, PH)),
+    ?assertEqual(PH#{records := #{vote => Vote#{ref := Certified}}}, History),
+    Rows = maps:get(groups, Preview), Role = maps:get(Id, Rows),
+    ?assertEqual(Preview#{groups := Rows#{Id => Role#{ref := Certified}}}, Committed).
 
 planner_queries_before_any_exact_submission_test() ->
     F = fixture(), Origin = maps:get(origin, F),
@@ -646,7 +663,7 @@ planner_terminal_uses_source_resolve_and_waits_for_exact_application_test() ->
     #{record := {quod_dtx_complete, 4, _, _, _, _, _, [{T, Certificate}]}} = complete(F, commit, Resolves),
     ?assertEqual({error, invalid_applied_evidence}, quod_dtx_recovery:applied(Own, Origin, Certificate, S)),
     {ok, Ready} = quod_dtx_recovery:applied(Own, T, Certificate, S),
-    ?assertMatch({ok, #{verdict := commit, source_slot := 2, participant_slots := [{_, 2, 2}, {_, 2, 2}]}},
+    ?assertMatch({ok, #{verdict := commit, source_slot := 3, participant_slots := [{_, 3, 2}, {_, 3, 2}]}},
                  quod_dtx_recovery:terminal(Own, Ready)),
     ?assertMatch({ok, {ordered, complete, [_]}}, quod_dtx_recovery:next(Own, Ready)),
     PendingComplete = quod_dtx_recovery:attempted(Origin, complete, Ready),
@@ -1022,7 +1039,7 @@ timed_out_selection_wakes_from_real_parent_apply() ->
     try quod_ct:with_network_identity(maps:get(network, F), fun() ->
         %% The fixture owner has dispatched parent 1; the real Prolog engine
         %% has not consumed it. These are production callbacks, not consensus.
-        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
+        S0 = state(#{ns => Ns, genesis_hash => element(2, O),
             self => Member, id => Node, validators => [Member],
             author_admissions => #{Member => maps:get(admission, F)},
             signing_journal => J, slot => 1, history_head => Parent,
@@ -1095,7 +1112,7 @@ presentation_receipt_retains_work_without_an_rpc_worker_or_readiness_test() ->
     Id = quod_atomic:group_id(G), RequestId = <<7:128>>,
     Request = {present, RequestId, Id, quod_atomic:encode_group(G)},
     Node = maps:get(node_identity, F), Member = maps:get(pubkey, Node),
-    S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => Member,
+    S = state(#{ns => Ns, genesis_hash => Anchor, self => Member,
           id => Node, validators => [Member], author_admissions => #{Member => maps:get(admission, F)},
           sync => unconfirmed, prolog_ready => false}),
     ?assert(quod_simplex:test_dtx_endpoint_ready(Request, S)),
@@ -1118,7 +1135,7 @@ presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
         {ok, _} = application:ensure_all_started(gproc),
         F = fixture(), {Ns, Anchor} = maps:get(origin, F),
         Node = maps:get(node_identity, F), Member = maps:get(pubkey, Node),
-        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+        S0 = state(#{ns => Ns, genesis_hash => Anchor,
             self => Member, id => Node, validators => [Member],
             author_admissions => #{Member => maps:get(admission, F)},
             sync => unconfirmed, prolog_ready => false}),
@@ -1184,9 +1201,8 @@ committed_vote_answers_its_exact_group_intent_without_resigning_test() ->
     OtherF = fixture(), #{control := Other} = vote(OtherF, O, own(OtherF, O), prepared),
     ?assertEqual(stale, quod_dtx_owner:admission(quod_atomic:control_material(Other), H, P)),
     ?assertMatch({quod_dtx_vote, 4, _, O, none, {refused, _}}, quod_atomic:control_body(NegativeControl)),
-    ?assert(quod_dtx:certified_entry_ref_matches(O, maps:get(entry, Negative),
-                                               NegativeControl, Ref,
-                                               [maps:get(pubkey, hd(Signers))])).
+    ?assert(quod_dtx:certified_entry_claim_matches(O, maps:get(entry, Negative),
+                                                 NegativeControl, Ref)).
 
 committed_negative_answers_waiting_positive_with_exact_certificate_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -1196,7 +1212,7 @@ committed_negative_answers_waiting_positive_with_exact_certificate_test() ->
     #{ref := Ref, entry := Entry} = certified_control(
         vote(F, O, own(F, O), {refused, [vote_deadline]}), Signers, 2),
     S = quod_simplex:test_seed_dtx_submission(Proposed, [{dtx_endpoint, self()}],
-          quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor})),
+          state(#{ns => Ns, genesis_hash => Anchor})),
     #entry{data = Payload} = quod_ledger:entry_view(Entry),
     Done = quod_simplex:test_resolve_committed_dtx(Entry, Payload, S),
     ?assertMatch(#{rows := Empty} when map_size(Empty) =:= 0,
@@ -1218,7 +1234,7 @@ source_reservation_during_recovery_checks_binding_and_caller_deadline_test() ->
     {ok, J} = quod_signing_journal:initialize(Ns, <<99:256>>, Dir),
     true = quod_reg:reg({quod_prolog, Ns}),
     try
-        S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+        S = state(#{ns => Ns, genesis_hash => Anchor,
               self => Member, id => Node, validators => [Member],
               author_admissions => #{Member => maps:get(admission, F)},
               signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
@@ -1271,7 +1287,7 @@ source_enrollment_edge(Edge) ->
     {ok, J} = quod_signing_journal:initialize(Ns, <<99:256>>, Dir),
     true = quod_reg:reg({quod_prolog, Ns}),
     try
-        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+        S0 = state(#{ns => Ns, genesis_hash => Anchor,
               self => Member, id => Node, validators => [Member],
               author_admissions => #{Member => maps:get(admission, F)},
               signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
@@ -1372,7 +1388,7 @@ source_owner_parent_selection(Scenario) ->
         Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
         ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)), live),
         ?assertEqual(1, quod_prolog:applied(Ns)),
-        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
+        S0 = state(#{ns => Ns, genesis_hash => element(2, O),
               self => Member, id => Node, validators => Validators,
               author_admissions => Admissions,
               signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
@@ -1418,7 +1434,7 @@ source_owner_parent_selection(Scenario) ->
         after 0 -> ok end,
         %% A new committed parent with no relevant changes reuses both the
         %% selection and exact durable envelope (zero re-proof/signing/fsync).
-        ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 2, noop), live),
+        ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 2, {batch, [quod_ct:change(Ns, [], #{})]}), live),
         ?assertEqual(2, quod_prolog:applied(Ns)),
         Advanced = quod_simplex:test_state_set(history_head, {2, <<8:256>>},
                      quod_simplex:test_state_set(slot, 2, Signed)),
@@ -1445,14 +1461,17 @@ source_owner_parent_selection(Scenario) ->
         %% that consensus certified a future wall-clock timestamp.
         {_, _, #{group := #{vote_deadline_ms := Deadline}}} = M,
         ?assertMatch([_], quod_simplex:test_eligible_dtx_wave(Reused)),
-        LateCandidate = quod_simplex:test_state_set(last_ts, Deadline + 1, Reused),
+        Era = quod_ledger:initial_era(O), Root = {Era, 1, <<8:256>>},
+        LateCandidate = quod_simplex:test_state_set(eng,
+            quod_simplex:eng_new(<<0:256>>, [Member], {Root, Deadline + 1}), Reused),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(LateCandidate)),
         %% The approved parent can also be ahead of the committed floor. Both
         %% selection and consumption must use that same prospective time, not
         %% disagree because one still reads the committed parent's timestamp.
-        {ok, AheadParent} = quod_ledger:new_block(3, 2, {batch, [{dtx, SignedControl}]}, Deadline + 1),
+        {ok, AheadParent} = quod_ledger:new_block({Era, 2}, Root,
+                                                {batch, [{dtx, SignedControl}]}, Deadline + 1),
         AheadOwner = quod_simplex:test_blocked_dtx_owner(AheadParent,
-            quod_simplex:test_state_set(eng, quod_simplex:eng_new(<<0:256>>, [Member], 2), Reused)),
+            quod_simplex:test_state_set(eng, quod_simplex:eng_new(<<0:256>>, [Member], {Root, 0}), Reused)),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(AheadOwner)),
         Expired = quod_simplex:test_refresh_retained_readiness(AheadOwner),
         {ok, Negative} = quod_atomic:select_vote(M, {refused, [vote_deadline]}),
@@ -1481,7 +1500,7 @@ source_owner_parent_selection(Scenario) ->
         #{Id := #{envelope := Saved}} = quod_signing_journal:pending_dtx(Reopened),
         ?assertEqual(ExpectedEnvelope, Saved),
         Rebuilt = quod_simplex:test_restore_pending_dtx(
-                    quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
+                    state(#{ns => Ns, genesis_hash => element(2, O),
                                              signing_journal => Reopened}), Reopened),
         ?assertMatch(#{active := 1}, quod_simplex:test_dtx_admission_state(Rebuilt)),
         ?assertMatch(#{rows := Empty} when map_size(Empty) =:= 0,
@@ -1510,7 +1529,7 @@ source_owner_relay_selection(Scenario, F, Peer, Engine, OwnControl, Signed, Awai
         quod_simplex:test_state_set(inbound_conns, #{PeerKey => {self(), make_ref()}},
         quod_simplex:test_state_set(eng, quod_simplex:eng_new(
             quod_simplex:consensus_domain(Ns, element(2, Target)),
-            lists:sort([Member, PeerKey]), 2),
+            lists:sort([Member, PeerKey]), {{quod_ledger:initial_era(Target), 1, <<8:256>>}, 0}),
         quod_simplex:test_seed_running_dtx_coordinator(Id, self(), AwaitingApply)))),
     Journal = quod_simplex:test_signing_journal(Signed),
     OwnFloor = quod_signing_journal:dtx_floor(Journal, {Admission, Member}),
@@ -1596,7 +1615,7 @@ installed_admission_loss_keeps_source_custody_until_certified_history_test() ->
     {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control),
     {ok, Phase} = quod_dtx_phase_index:open(Dir, Ns),
     try
-        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+        S0 = state(#{ns => Ns, genesis_hash => Anchor,
                self => Member, id => Node, validators => [Member],
                author_admissions => #{Member => Admission},
                signing_journal => J1, phase_index => Phase, slot => 1,
@@ -1725,21 +1744,21 @@ outcome_stores_source_resolve_height_but_waits_for_complete_publication_test() -
     F = fixture(), O = maps:get(origin, F), Votes = votes(F),
     Resolves = maps:from_list([{T, resolve(F, T, commit, Votes, 2)}
                               || T <- maps:get(participant_targets, F)]),
-    I0 = memory_outcome(O),
+    I0 = publish_outcome(memory_outcome(O), 1),
     {I1, [none]} = outcome_wave(I0, [maps:get(O, Votes)]),
-    {I2, [{resolve_applied, Id, 2, 2}]} =
-        outcome_wave(publish_outcome(I1, 1), [maps:get(O, Resolves)]),
+    {I2, [{resolve_applied, Id, 3, 2}]} =
+        outcome_wave(publish_outcome(I1, 2), [maps:get(O, Resolves)]),
     ?assertEqual(quod_atomic:group_id(maps:get(group, F)), Id),
     ?assertMatch(#{Id := #{blocking := true}}, outcome_fences(I2)),
-    I3 = publish_outcome(I2, 2),
+    I3 = publish_outcome(I2, 3),
     ?assertMatch(#{Id := #{blocking := false}}, outcome_fences(I3)),
     {I4, [none]} = outcome_wave(I3, [complete(F, commit, Resolves)]),
     ?assertMatch({ok, #{status := pending, phase := publication}}, public_group(F, I4)),
-    {ok, I5} = quod_outcome:advance_applied(I4, 3),
+    {ok, I5} = quod_outcome:advance_applied(I4, 4),
     ?assertMatch({ok, #{status := pending, phase := publication}}, public_group(F, I5)),
     {ok, I6} = quod_outcome:flush(I5),
-    ?assertMatch({ok, #{status := committed, height := 2,
-                       participant_slots := [{_, 2, 2}, {_, 2, 2}]}}, public_group(F, I6)),
+    ?assertMatch({ok, #{status := committed, height := 3,
+                       participant_slots := [{_, 3, 2}, {_, 3, 2}]}}, public_group(F, I6)),
     {I7, [none]} = outcome_wave(I6, [maps:get(O, Resolves)]),
     ?assertEqual(public_group(F, I6), public_group(F, I7)),
     ?assertEqual(#{}, outcome_fences(I7)),
@@ -1750,11 +1769,11 @@ negative_only_outcome_keeps_reasons_without_a_decision_or_foreign_bundle_test() 
     Votes = #{O => vote(F, O, none, {refused, [vote_deadline]})},
     Resolves = maps:from_list([{T, resolve(F, T, abort, Votes, 0)}
                               || T <- maps:get(participant_targets, F)]),
-    {I1, [none]} = outcome_wave(memory_outcome(O), [maps:get(O, Votes)]),
-    {I2, [_]} = outcome_wave(publish_outcome(I1, 1), [maps:get(O, Resolves)]),
-    {I3, [none]} = outcome_wave(publish_outcome(I2, 2), [complete(F, abort, Resolves)]),
-    I4 = publish_outcome(I3, 3),
-    ?assertMatch({ok, #{status := aborted, height := 2, reasons := [vote_deadline]}},
+    {I1, [none]} = outcome_wave(publish_outcome(memory_outcome(O), 1), [maps:get(O, Votes)]),
+    {I2, [_]} = outcome_wave(publish_outcome(I1, 2), [maps:get(O, Resolves)]),
+    {I3, [none]} = outcome_wave(publish_outcome(I2, 3), [complete(F, abort, Resolves)]),
+    I4 = publish_outcome(I3, 4),
+    ?assertMatch({ok, #{status := aborted, height := 3, reasons := [vote_deadline]}},
                  public_group(F, I4)),
     Id = quod_atomic:group_id(maps:get(group, F)),
     {{ok, #{history := #{records := Records}}}, _} = quod_outcome:lookup_group(I4, Id),
@@ -1766,12 +1785,12 @@ negative_only_outcome_keeps_reasons_without_a_decision_or_foreign_bundle_test() 
 whole_outcome_wave_acknowledges_every_resolve_at_one_applied_boundary_test() ->
     F1 = fixture(), F2 = fixture(#{goal_text => <<"assertz(other(ok)).">>}),
     O = maps:get(origin, F1), V1 = votes(F1), V2 = votes(F2),
-    {I1, [none, none]} = outcome_wave(memory_outcome(O), [maps:get(O, V1), maps:get(O, V2)]),
-    {I2, Acks} = outcome_wave(publish_outcome(I1, 1),
+    {I1, [none, none]} = outcome_wave(publish_outcome(memory_outcome(O), 1), [maps:get(O, V1), maps:get(O, V2)]),
+    {I2, Acks} = outcome_wave(publish_outcome(I1, 2),
         [resolve(F1, O, commit, V1, 2), resolve(F2, O, commit, V2, 2)]),
     ?assertEqual(2, length(Acks)),
     ?assertEqual([true, true], [maps:get(blocking, R) || R <- maps:values(outcome_fences(I2))]),
-    I3 = publish_outcome(I2, 2),
+    I3 = publish_outcome(I2, 3),
     ?assertEqual([false, false], [maps:get(blocking, R) || R <- maps:values(outcome_fences(I3))]),
     ?assert(quod_atomic:valid_projection(maps:get(projection, quod_outcome:dtx_state(I3)))),
     ok = quod_outcome:close(I3).
@@ -1786,8 +1805,8 @@ outcome_disk_replay_rebuilds_own_projection_and_retains_tombstones_test() ->
     Config = #{data_dir => Dir, outcome_backend => disk},
     try
         {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
-        {I1, [{resolve_applied, Id, 2, 0}]} = outcome_wave(publish_outcome(I0, 1), [R]),
-        I2 = publish_outcome(I1, 2),
+        {I1, [{resolve_applied, Id, 3, 0}]} = outcome_wave(publish_outcome(publish_outcome(I0, 1), 2), [R]),
+        I2 = publish_outcome(I1, 3),
         %% I0 has no cached row: this lookup checks the actual disk decoder.
         {{ok, Row}, _} = quod_outcome:lookup_group(I0, Id),
         ?assertMatch(#{applied := #{verdict := abort, resolve_ref := _, reasons := [vote_deadline]}}, Row),
@@ -1797,8 +1816,8 @@ outcome_disk_replay_rebuilds_own_projection_and_retains_tombstones_test() ->
         {not_found, _} = quod_outcome:lookup_group(Reopened, Id),
         %% Reopening intentionally resets the derived projection. The ledger
         %% replay reinstalls its tombstone; no new network evidence is fetched.
-        {R1, [_]} = outcome_wave(publish_outcome(Reopened, 1), [R]),
-        R2 = publish_outcome(R1, 2),
+        {R1, [_]} = outcome_wave(publish_outcome(publish_outcome(Reopened, 1), 2), [R]),
+        R2 = publish_outcome(R1, 3),
         {{ok, Row}, _} = quod_outcome:lookup_group(R2, Id),
         {H, _} = quod_outcome:group_history(R2, Id),
         P = maps:get(projection, quod_outcome:dtx_state(R2)),
@@ -1846,6 +1865,17 @@ public_group(F, Index) ->
                                           quod_atomic:group_id(maps:get(group, F))),
     {{ok, Row}, _} = quod_outcome:lookup_ref(Index, Ref), quod_outcome:public(Row).
 
+state(Overrides) ->
+    Ns = maps:get(ns, Overrides, <<"t">>),
+    Anchor = maps:get(genesis_hash, Overrides, <<0:256>>),
+    Height = maps:get(slot, Overrides, 0),
+    {_, Hash} = maps:get(history_head, Overrides, {Height, Anchor}),
+    Root = {quod_ledger:initial_era({Ns, Anchor}), max(0, Height - 1), Hash},
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Eng = quod_simplex:eng_new(Domain, maps:get(validators, Overrides, []),
+                              {Root, maps:get(last_ts, Overrides, 0)}),
+    quod_simplex:test_state(maps:merge(#{eng => Eng, consensus_domain => Domain}, Overrides)).
+
 fixture() -> fixture(#{}).
 fixture(Overrides) ->
     Origin = {<<"atomic:origin">>, <<1:256>>},
@@ -1880,8 +1910,8 @@ envelope(F, {Ns, Anchor} = T, Record, Slot) ->
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, C} = quod_atomic:sign_control(T, Material, maps:get(admission, F), Slot, 0,
                                       maps:get(node_identity, F)),
-    {ok, R} = quod_dtx:certified_ref(Ns, Anchor, Slot, <<Slot:256>>,
-                                    quod_atomic:record_digest(C), <<"shape-only-not-certified">>),
+    {ok, R} = quod_dtx:certified_ref(Ns, Anchor, Slot + 1, <<Slot:256>>,
+                                    quod_atomic:record_digest(C), quod_ct:fixture_finality(Slot, <<Slot:256>>)),
     #{control => C, record => Record, ref => R}.
 resolve(F, T, Outcome, Votes, Generation) ->
     ORef = maps:get(ref, maps:get(maps:get(origin, F), Votes)),

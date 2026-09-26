@@ -105,7 +105,7 @@ and the group carries a compact manifest, not another ontology's database.
          decode_attestation/1,
          certified_ref/6,
          certified_entry_ref/3,
-         certified_entry_ref_matches/5,
+         certified_entry_claim_matches/4,
          certified_ref_claim/1,
          same_certified_ref/2,
          validate_certified_ref/1,
@@ -120,7 +120,7 @@ and the group carries a compact manifest, not another ontology's database.
 
 -define(MANIFEST_VERSION, 4).
 -define(ATTESTATION_VERSION, 2).
--define(REF_VERSION, 2).
+-define(REF_VERSION, 3).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MANIFEST_DOMAIN, <<"quod.dtx.manifest">>).
 -define(ATTESTATION_DOMAIN, <<"quod.dtx.attestation">>).
@@ -144,7 +144,7 @@ and the group carries a compact manifest, not another ontology's database.
          2, identity(), <<_:256>>, <<_:256>>,
          <<_:256>>, <<_:512>>}.
 -type certified_ref() ::
-        {quod_dtx_ref, 2, binary(), <<_:256>>, pos_integer(),
+        {quod_dtx_ref, 3, binary(), <<_:256>>, pos_integer(),
          <<_:256>>, <<_:256>>, binary()}.
 -doc """
 Seal the calling worker's proof session into a signed local plan.
@@ -962,9 +962,12 @@ certified_ref(Ns, <<_:256>> = Anchor, Slot, <<_:256>> = BlockHash,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_binary(FinalityProof), byte_size(FinalityProof) > 0,
        byte_size(FinalityProof) =< ?QUOD_MAX_DTX_BODY_BYTES ->
-    {ok,
-     {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
-      RecordDigest, FinalityProof}};
+    Ref = {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
+           RecordDigest, FinalityProof},
+    case validate_certified_ref(Ref) of
+        true -> {ok, Ref};
+        false -> {error, invalid_certified_ref}
+    end;
 certified_ref(_, _, _, _, _, _) ->
     {error, invalid_certified_ref}.
 
@@ -997,16 +1000,14 @@ certified_entry_ref_view(
                   ?GENESIS_FINALITY_PROOF);
 certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  {ok, Slot, BlockHash, #cert{kind = commit, slot = Slot,
-                             block_hash = BlockHash} = Cert, _Count},
+  {ok, Slot, BlockHash, #cert{kind = commit} = Cert, _Count},
   Record)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(BlockHash), byte_size(BlockHash) =:= 32 ->
     case certified_record_digest({Ns, Anchor}, Record) of
         <<_:256>> = Digest ->
-            case certified_ref(Ns, Anchor, Slot, BlockHash, Digest,
-                               term_to_binary(Cert, [deterministic])) of
-                {ok, Ref} -> {ok, Ref};
+            case quod_ledger:encode_finality_head(Cert) of
+                {ok, HeadBytes} -> certified_ref(Ns, Anchor, Slot, BlockHash, Digest, HeadBytes);
                 {error, _} -> {error, invalid_certified_entry}
             end;
         error -> {error, invalid_certified_entry}
@@ -1023,36 +1024,22 @@ certified_record_digest(Target, Control) ->
     end.
 
 -doc """
-Verify that one certified reference names this exact committed record.
+Match one exact claim against an independently certified entry selection.
 
-Commit certificates are quorum proofs, not canonical byte strings: two honest
-replicas may retain different valid quorum subsets for the same block.  The
-reference therefore binds the immutable block and record fields exactly, then
-verifies its own supplied finality proof against the committee for that slot;
-it never requires that proof to equal the certificate bytes retained locally.
+The existing history owner must first establish the selected entry's complete
+quorum/era/ancestry proof. This function checks anchored identity, material
+height, full block hash and exact record digest; it grants no finality by
+itself. The carried head is a preferred witness, so an unused but well-shaped
+hint need not name the witness retained by that owner.
 """.
--spec certified_entry_ref_matches(
+-spec certified_entry_claim_matches(
         identity(), quod_ledger:entry_artifact() | quod_ledger:selected_entry(),
-        quod_atomic:control() | #transaction{},
-        certified_ref(), [<<_:256>>]) -> boolean().
-certified_entry_ref_matches(
-  Identity = {Ns, <<_:256>> = Anchor}, Entry, Record, Ref, Committee)
-  when is_binary(Ns), byte_size(Ns) > 0, is_list(Committee) ->
+        quod_atomic:control() | #transaction{}, certified_ref()) -> boolean().
+certified_entry_claim_matches(Identity, Entry, Record, Ref) ->
     case certified_entry_ref(Identity, Entry, Record) of
-        {ok, ExpectedRef} ->
-            case {certified_ref_claim(ExpectedRef),
-                  certified_ref_claim(Ref)} of
-                {Core, Core} ->
-                    valid_certified_ref_finality(
-                      Ns, Anchor, Ref, Committee);
-                _ ->
-                    false
-            end;
-        {error, _} ->
-            false
-    end;
-certified_entry_ref_matches(_Identity, _Entry, _Record, _Ref, _Committee) ->
-    false.
+        {ok, ExpectedRef} -> same_certified_ref(ExpectedRef, Ref);
+        {error, _} -> false
+    end.
 
 -doc "Return the immutable claim without treating its finality-proof bytes as identity.".
 -spec certified_ref_claim(certified_ref()) ->
@@ -1076,29 +1063,6 @@ same_certified_ref(Left, Right) ->
         _ -> false
     end.
 
-valid_certified_ref_finality(
-  _Ns, _Anchor,
-  {quod_dtx_ref, ?REF_VERSION, _RefNs, _RefAnchor, 1,
-   _BlockHash, _RecordDigest, ?GENESIS_FINALITY_PROOF}, _Committee) ->
-    true;
-valid_certified_ref_finality(
-  Ns, Anchor,
-  {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
-   _RecordDigest, FinalityProof}, Committee)
-  when is_integer(Slot), Slot > 1, is_binary(FinalityProof) ->
-    try binary_to_term(FinalityProof, [safe]) of
-        #cert{kind = commit, slot = Slot, block_hash = BlockHash} = Cert ->
-            quod_simplex:verify_cert(
-              quod_simplex:consensus_domain(Ns, Anchor), Cert, Committee);
-        _ ->
-            false
-    catch _:_ ->
-        false
-    end;
-valid_certified_ref_finality(
-  _Ns, _Anchor, _Malformed, _Committee) ->
-    false.
-
 -doc "Shape-check a certified reference without interpreting its proof.".
 -spec validate_certified_ref(term()) -> boolean().
 validate_certified_ref(
@@ -1108,9 +1072,17 @@ validate_certified_ref(
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_binary(FinalityProof), byte_size(FinalityProof) > 0,
        byte_size(FinalityProof) =< ?QUOD_MAX_DTX_BODY_BYTES ->
-    true;
+    valid_finality_hint(Slot, FinalityProof);
 validate_certified_ref(_) ->
     false.
+
+valid_finality_hint(1, ?GENESIS_FINALITY_PROOF) -> true;
+valid_finality_hint(Slot, Bytes) when Slot > 1 ->
+    case quod_ledger:decode_finality_head(Bytes) of
+        {ok, #cert{}} -> true;
+        {error, _} -> false
+    end;
+valid_finality_hint(_, _) -> false.
 
 -doc "Return the exact target, slot, and semantic digest bound by a valid ref.".
 -spec certified_ref_binding(certified_ref()) ->

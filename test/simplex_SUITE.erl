@@ -6,14 +6,14 @@ with its own `quod_quic` listener on a distinct port and its own Ed25519 identit
 proposal / share / cert / complaint traffic between them is genuine loopback QUIC, exactly the
 deployment shape.
 
-The lexicographically first validator is the sole `mode=create` genesis writer. Its slot-1 block asserts
+The lexicographically first validator is the sole `mode=create` genesis writer. Its height-1 genesis asserts
 all four founding validators' `peer_admitted` facts; the other three start as `mode=join`, pin that exact
-block hash, and derive the already-four-member committee from it. The leader for a slot **rotates**
+block hash, and derive the already-four-member committee from it. The leader for a protocol view **rotates**
 round-robin over the sorted set, so tests
-target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
+target the correct proposer per view. `commits_across_committee` proves a write commits everywhere;
 `follower_relays` proves a non-leader transparently relays a write to its exact target proposer;
 `leader_failover` kills the next slot's leader
-**before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
+**before it proposes**, so the view can only advance by a `⅔` **complaint cert → next view** — after which
 each origin internally retargets its retained signed submission to the rotated proposer.
 `consensus_commits_with_ingress_down` closes every currently tracked ingress
 stream and proves the live `{log,Ns}` committee still finalizes a leader-local
@@ -31,23 +31,24 @@ The Byzantine safety assumption remains at most `f` faulty validators.
 -import(quod_ct, [eventually/2, match_ok/1, ordinary_write_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([recovery_diagnostics/2]).
 -export([commits_across_committee/1, follower_relays/1,
          consensus_commits_with_ingress_down/1,
          burst_commits_without_busy/1,
          byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1,
-         over_fault_restart_recovers/1]).
+         over_fault_restart_recovers/1, membership_survives_leader_loss/1]).
 
 -define(NS, <<"simplex:2c">>).
 -define(PORTS, [15820, 15821, 15822, 15823]).   %% N=4 ⇒ quorum 3, tolerates 1 down (failover)
 -define(DELTA_MS, 4000).   %% Δ_timeout on each peer: comfortably above even the FIRST commit round over cold
-                           %% pairwise QUIC links (so a healthy slot never spuriously skips), well below the
-                           %% `eventually` budgets (so a genuinely stuck slot still skips fast)
+                           %% pairwise QUIC links (so a healthy view does not time out), well below the
+                           %% `eventually` budgets (so a genuinely stuck view advances within the test budget)
 
 all() -> [commits_across_committee, follower_relays,
           consensus_commits_with_ingress_down,
           burst_commits_without_busy,
           byzantine_retract_rejected, byzantine_admit_rejected, leader_failover,
-          over_fault_restart_recovers].
+          over_fault_restart_recovers, membership_survives_leader_loss].
 
 %%%===================================================================
 %%% suite setup: one 4-node committee, shared across the (ordered) tests
@@ -209,10 +210,10 @@ commits_across_committee(Config) ->
        lists:usort(
          [maps:get(committee_id, status(Peer))
           || {Peer, _} <- Nodes])),
-    %% ONE write on the correct rotating leader for slot 2 commits across the committee. Retried because
+    %% ONE write on the current view leader commits at material height 2. Retried because
     %% quod_prolog answers {error,rebuilding} until its async post-boot replay marks ready; {error,rebuilding}
     %% never reaches consensus, so retrying still yields exactly one committed write (no over-shoot).
-    {L2, _} = leader_peer(2, Config),
+    {L2, _} = leader_peer(protocol_view(peer1(Nodes)), Config),
     ?assert(eventually(
               fun() ->
                       ordinary_write_ok(
@@ -238,7 +239,7 @@ follower_relays(Config) ->
     %% `first_seat` is either Floor or Floor+1. Choose an author that leads
     %% neither so this case cannot accidentally collect locally if the floor's
     %% proposal becomes visible between height sampling and append routing.
-    {FollowerPeer, _} = relay_only_origin(H + 1, Nodes),
+    {FollowerPeer, _} = relay_only_origin(protocol_view(peer1(Nodes)), Nodes),
     ?assertMatch({ok, _, _},
                  prove(FollowerPeer,
                        {assertz, {relayed, from_follower}})),
@@ -261,7 +262,7 @@ consensus_commits_with_ingress_down(Config) ->
     %% a legitimate ingress stream established by the preceding case.
     WarmHeight = synced_height(Nodes),
     {WarmLeaderPeer, _WarmLeaderPub} =
-        leader_peer(WarmHeight + 1, Config),
+        leader_peer(protocol_view(peer1(Nodes)), Config),
     WarmFact = {ingress_isolation_warmup, WarmHeight + 1},
     ?assert(
        eventually(
@@ -280,7 +281,7 @@ consensus_commits_with_ingress_down(Config) ->
     H0 = synced_height(Nodes),
     %% As in `follower_relays`, exclude both slots `first_seat` can choose.
     {RelayOriginPeer, _RelayOriginPub} =
-        relay_only_origin(H0 + 1, Nodes),
+        relay_only_origin(protocol_view(peer1(Nodes)), Nodes),
     RelayFact = {ingress_stream_probe, H0 + 1},
     ?assertMatch(
        {ok, _, _},
@@ -311,7 +312,7 @@ consensus_commits_with_ingress_down(Config) ->
          fun() -> relay_transport_total(Nodes) =:= 0 end,
          5000)),
     H = synced_height(Nodes),
-    {LeaderPeer, _LeaderPub} = leader_peer(H + 1, Config),
+    {LeaderPeer, _LeaderPub} = leader_peer(protocol_view(peer1(Nodes)), Config),
     Fact = {consensus_without_ingress, H + 1},
     ?assertMatch({ok, _, _}, prove(LeaderPeer, {assertz, Fact})),
     [begin
@@ -331,8 +332,8 @@ burst_commits_without_busy(Config) ->
     Nodes = ?config(nodes, Config),
     %% settle first (standalone-safe): one committed warmup write, readable on every
     %% node, absorbs {error, rebuilding} so the burst measures ingress, not boot.
-    H = synced_height(Nodes),
-    {WarmLeader, _} = leader_peer(H + 1, Config),
+    _ = synced_height(Nodes),
+    {WarmLeader, _} = leader_peer(protocol_view(peer1(Nodes)), Config),
     ?assert(eventually(
               fun() ->
                       ordinary_write_ok(
@@ -418,13 +419,13 @@ writer_retry(Peer, Goal, N) ->
 %% run_proof never gated — the multi-validator membership defense (Slice C). The proposal passes the pure
 %% shape gate (one well-formed peer_admitted op, committee stays non-empty) so it REACHES the KB verdict,
 %% but each honest follower re-judges it against its own kb and REFUSES support, so it can never reach a
-%% notarizing quorum. The slot is complaint-skipped, the committee is unchanged, and the namespace still
+%% notarizing quorum. The view advances by complaint quorum, the committee is unchanged, and the namespace still
 %% commits honest writes.
 %%
 %% Case 1 — a fabricated-address RETRACT of a founding validator (the retract-ejection the Slice A review flagged):
 %% the crafted op carries the victim's pubkey but a wrong Host/Port, so it would drop the victim from the
 %% validator-set projection while MISSING in the KB. The verdict's exact-clause check (`has_clause`) rejects
-%% it — no honest support, the slot skips, the committee keeps all four.
+%% it — no honest support, the view advances, the committee keeps all four.
 byzantine_retract_rejected(Config) ->
     Nodes  = ?config(nodes, Config),
     Victim = element(2, hd(Nodes)),   %% a real validator's pubkey, retracted with a WRONG address
@@ -433,7 +434,7 @@ byzantine_retract_rejected(Config) ->
 
 %% Case 2 — an unauthorized ADMIT of a newcomer the join policy does not allow. This committee's genesis
 %% has no `can_join` clause (no genesis ontology), so admission is fail-closed: the verdict re-proves
-%% `can_join` and it fails, rejecting the admit. No honest support, the slot skips, the committee keeps four.
+%% `can_join` and it fails, rejecting the admit. No honest support, the view advances, the committee keeps four.
 byzantine_admit_rejected(Config) ->
     {NewPub, _} = quod_identity:generate(),
     Evil = tx([{assert, {{peer_admitted, NewPub, "10.9.9.9", 9000, NewPub}, true}}]),
@@ -446,11 +447,10 @@ byzantine_admit_rejected(Config) ->
 leader_failover(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
-    V = H + 1,
+    V = protocol_view(peer1(Nodes)),
     {DeadPeer, DeadPub} = leader_peer(V, Config),
     ok   = peer:stop(DeadPeer),
     Live = [N || {_, P} = N <- Nodes, P =/= DeadPub],
-    Skips0 = total_skips(Live),
     %% Submit on every live validator so all three arm demand for slot V. None
     %% can commit there because its proposer is dead; all must survive the skip.
     W = {assertz, {failover, done, yes}},
@@ -461,9 +461,9 @@ leader_failover(Config) ->
              _ = spawn(fun() -> Parent ! {Tag, prove(P, W)} end),
              Tag
          end || {P, _} <- Live],
-    %% slot V can ONLY be reached by a skip — its leader is dead, so no block for V can ever commit.
-    [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || {P, _} <- Live ],
-    ?assert(eventually(fun() -> total_skips(Live) > Skips0 end, 10000)),
+    %% The dead leader cannot notarize V. A complaint quorum advances the
+    %% protocol without manufacturing a material ledger row.
+    [ ?assert(eventually(fun() -> protocol_view(P) > V end, 20000)) || {P, _} <- Live ],
     Results =
         [receive {Tag, Result} -> Result
          after 15000 ->
@@ -476,13 +476,15 @@ leader_failover(Config) ->
                       match_ok(
                         prove(ProbePeer, {failover, done, {'X'}}))
               end, 10000)),
-    {NextLeader, _} = leader_peer(V + 1, Config),
+    H1 = synced_height(Live),
+    ?assert(H1 > H),
+    {NextLeader, _} = hd(Live),
     After = {assertz, {failover, after_rotation, yes}},
     ?assert(eventually(
               fun() -> ordinary_write_ok(prove(NextLeader, After)) end,
               20000)),
     [ begin
-          ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)),
+          ?assert(eventually(fun() -> slot(P) >= H1 + 1 end, 15000)),
           ?assert(eventually(
                     fun() ->
                             match_ok(
@@ -498,16 +500,9 @@ leader_failover(Config) ->
               fun() -> length(lists:usort([slot(P) || {P, _} <- Live])) =:= 1 end,
               10000)).
 
-total_skips(Nodes) ->
-    lists:sum(
-      [maps:get(skips, peer:call(Peer, quod_simplex, stats, [?NS]), 0)
-       || {Peer, _} <- Nodes]).
-
-%% Exceed the formal liveness bound (`N=4`, `f=1`) while a real proposal is in flight. The two survivors
-%% must not accumulate irreversible complaints while they can see fewer than a quorum. Restart both absent
-%% validators from their existing logs; the head watchdog then gets a fresh Δ, re-drives the full proposal
-%% and finality evidence, and the committee commits both the interrupted write and a later probe without a
-%% coordinated namespace restart.
+%% With two of four validators absent, neither support nor complaint can form
+%% a quorum. Real timeout votes remain durable; restoring the missing members
+%% must recover the retained write without changing those votes or resubmitting.
 over_fault_restart_recovers(Config) ->
     Ns = <<"simplex:over-f-recovery">>,
     Ports = [15830, 15831, 15832, 15833],
@@ -530,7 +525,7 @@ over_fault_restart_recovers(Config) ->
         %% reopen and extend their existing ledgers, not accidentally pass as fresh empty/catch-up boots.
         HBase = synced_height(Nodes0, Ns),
         {BaselineLeader, _} =
-            lists:keyfind(leader_for(HBase + 1, Nodes0), 2, Nodes0),
+            lists:keyfind(leader_for(protocol_view(peer1(Nodes0), Ns), Nodes0), 2, Nodes0),
         ?assert(eventually(
                   fun() ->
                           ordinary_write_ok(
@@ -544,17 +539,17 @@ over_fault_restart_recovers(Config) ->
         H0 = synced_height(Nodes0, Ns),
         ?assert(H0 >= 2),
 
-        LeaderPub = leader_for(H0 + 1, Nodes0),
+        LeaderPub = leader_for(protocol_view(peer1(Nodes0), Ns), Nodes0),
         {LeaderPeer, LeaderPub} = lists:keyfind(LeaderPub, 2, Nodes0),
         {SurvivorPeer, _} = Survivor =
             hd([N || N <- Nodes0, N =/= {LeaderPeer, LeaderPub}]),
         Down = [N || N <- Nodes0,
                      N =/= {LeaderPeer, LeaderPub}, N =/= Survivor],
-        LeaderPauses0 = maps:get(
-                          quorum_pauses,
+        LeaderTimeouts0 = maps:get(
+                          progress_timeouts,
                           peer:call(LeaderPeer, quod_simplex, stats, [Ns]), 0),
-        SurvivorPauses0 = maps:get(
-                            quorum_pauses,
+        SurvivorTimeouts0 = maps:get(
+                            progress_timeouts,
                             peer:call(SurvivorPeer, quod_simplex, stats, [Ns]), 0),
         [ok = peer:stop(P) || {P, _} <- Down],
 
@@ -576,11 +571,11 @@ over_fault_restart_recovers(Config) ->
                                           LeaderPeer, quod_simplex, stats, [Ns]),
                           SurvivorStats = peer:call(
                                             SurvivorPeer, quod_simplex, stats, [Ns]),
-                          maps:get(quorum_pauses, LeaderStats, 0) > LeaderPauses0
-                              andalso maps:get(quorum_pauses, SurvivorStats, 0)
-                                      > SurvivorPauses0
-                              andalso maps:get(head_complaint_signed, LeaderStats, 1) =:= 0
-                              andalso maps:get(head_complaint_signed, SurvivorStats, 1) =:= 0
+                          maps:get(progress_timeouts, LeaderStats, 0) > LeaderTimeouts0
+                              andalso maps:get(progress_timeouts, SurvivorStats, 0)
+                                      > SurvivorTimeouts0
+                              andalso maps:get(head_complaint_signed, LeaderStats, 0) =:= 1
+                              andalso maps:get(head_complaint_signed, SurvivorStats, 0) =:= 1
                               andalso slot(LeaderPeer, Ns) =:= H0
                               andalso slot(SurvivorPeer, Ns) =:= H0
                   end, ?DELTA_MS * 3)),
@@ -619,20 +614,76 @@ over_fault_restart_recovers(Config) ->
         end,
 
         H1 = synced_height(Nodes1, Ns),
-        {NextLeader, _} = lists:keyfind(leader_for(H1 + 1, Nodes1), 2, Nodes1),
-        ?assert(eventually(
-                  fun() ->
-                          ordinary_write_ok(
-                            prove(NextLeader, Ns,
-                                  {assertz, {after_over_f, live}}))
-                  end,
-                  20000)),
+        {NextLeader, _} = lists:keyfind(leader_for(protocol_view(peer1(Nodes1), Ns), Nodes1), 2, Nodes1),
+        NextResult = prove(NextLeader, Ns, {assertz, {after_over_f, live}}),
+        case NextResult of
+            {ok, [_ | _], _} -> ok;
+            _ ->
+                ct:pal("post-recovery write ~p; current owners ~p", [NextResult,
+                    [{Pub, catch peer:call(P, ?MODULE, recovery_diagnostics,
+                                          [Ns, NextResult])}
+                     || {P, Pub} <- Nodes1]]),
+                ct:fail({post_recovery_write, NextResult})
+        end,
         ?assert(eventually(
                   fun() -> lists:all(fun({P, _}) -> slot(P, Ns) >= H1 + 1 end, Nodes1) end,
                   20000))
+    catch
+        Class:Reason:Stack ->
+            ct:pal("over-f failure ~p:~p; owners ~p", [Class, Reason,
+                [{Pub, catch peer:call(P, ?MODULE, recovery_diagnostics, [Ns, none])}
+                 || {P, Pub} <- get(over_f_nodes), is_process_alive(P)]]),
+            erlang:raise(Class, Reason, Stack)
     after
         %% Every successfully-started peer is registered immediately, so setup/restart failures cannot leak
         %% earlier OS nodes. Duplicate/stopped entries are harmless under catch.
+        Tracked = case erase(over_f_nodes) of undefined -> []; L -> L end,
+        _ = [catch peer:stop(P) || {P, _} <- Tracked]
+    end.
+
+recovery_diagnostics(Ns, Result) ->
+    Pid = quod_reg:where({quod_simplex, Ns}),
+    {_, State} = sys:get_state(Pid),
+    #{stats => quod_simplex:stats(Ns),
+      position => quod_simplex:test_protocol_position(State),
+      pools => quod_simplex:test_engine_pool_sizes(State),
+      progress => quod_simplex:test_progress(State),
+      custody => quod_simplex:test_custody(State),
+      author_custody => quod_simplex:test_custody_authors(State),
+      process => process_info(Pid, [current_stacktrace, message_queue_len]),
+      outcome => case Result of
+          {error, {outcome_unknown, Tx}} -> quod_prolog:local_outcome(Ns, Tx);
+          _ -> none
+      end}.
+
+%% One valid removal sent while its current proposer is down. The caller is
+%% invoked once; a view change must preserve the exact signed transaction.
+membership_survives_leader_loss(Config) ->
+    Ns = <<"simplex:membership-leader-loss">>,
+    Ports = [15834, 15835, 15836, 15837],
+    Keys = [quod_identity:generate() || _ <- Ports],
+    Addrs = [{Pub, {"127.0.0.1", Port}} || {{Pub, _}, Port} <- lists:zip(Keys, Ports)],
+    put(over_f_nodes, []),
+    try
+        {Nodes, _, _} = start_founding_committee(
+            Ns, "sxm_", Ports, Keys, Addrs, Config, tracked),
+        [ ?assert(eventually(fun() -> match_ok(prove(P, Ns, true)) end, 10000))
+          || {P, _} <- Nodes ],
+        View = protocol_view(peer1(Nodes), Ns),
+        {Dead, DeadPub} = lists:keyfind(leader_for(View, Nodes), 2, Nodes),
+        Live = [N || N <- Nodes, N =/= {Dead, DeadPub}],
+        ok = peer:stop(Dead),
+        {Origin, _} = hd(Live),
+        Result = prove(Origin, Ns, {remove, DeadPub}),
+        ct:pal("membership leader-loss result ~p, survivor progress ~p", [Result,
+            [{Pub, peer:call(P, quod_simplex, stats, [Ns])} || {P, Pub} <- Live]]),
+        ?assertMatch({ok, _, _}, Result),
+        [ ?assert(eventually(fun() ->
+            S = status(P, Ns),
+            maps:get(committee, S, []) =:= lists:sort(pubs(Live))
+              andalso maps:get(committed, S, 0) =:= 2
+        end, 15000)) || {P, _} <- Live ]
+    after
         Tracked = case erase(over_f_nodes) of undefined -> []; L -> L end,
         _ = [catch peer:stop(P) || {P, _} <- Tracked]
     end.
@@ -642,11 +693,11 @@ over_fault_restart_recovers(Config) ->
 %%%===================================================================
 
 %% Inject `Evil` (a #transaction) as a crafted proposal for the next slot, from the REAL slot leader's
-%% node, and assert every node skips the slot with the committee unchanged and the namespace still live.
+%% node, and assert every node advances past the view with the committee unchanged and the namespace still live.
 assert_membership_proposal_skipped(Config, Evil) ->
     Nodes  = ?config(nodes, Config),
     H      = synced_height(Nodes),
-    V      = H + 1,
+    V      = protocol_view(peer1(Nodes)),
     {LeaderPeer, LeaderPub} = leader_peer(V, Config),
     Before  = committee(peer1(Nodes)),
     RejBefore = rejects_total(Nodes),   %% cumulative — assert it GROWS for THIS proposal (not a stale count)
@@ -667,13 +718,16 @@ assert_membership_proposal_skipped(Config, Evil) ->
     {ok, SignedEvil} = quod_transaction:sign(Binding, Unsigned, Identity),
     %% Adversarial semantics, but a valid canonical envelope: the proposal must
     %% reach validator rejection rather than fail locally before transmission.
-    {ok, Block} = quod_ledger:new_block(V, H, {batch, [SignedEvil]}, Ts),
+    #{era := Era, view := V, parent := ParentRef} =
+        quod_ct:peer_protocol_position(LeaderPeer, ?NS),
+    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, {batch, [SignedEvil]}, Ts),
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
     Frame = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])
          || {_, Fpub} <- Nodes, Fpub =/= LeaderPub],
-    %% the crafted slot can ONLY be skipped (no honest support) — every node advances past it via a noop
-    [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || {P, _} <- Nodes ],
+    %% Rejection advances the protocol only; no fabricated ledger row.
+    [ ?assert(eventually(fun() -> protocol_view(P) > V end, 20000)) || {P, _} <- Nodes ],
+    ?assertEqual([H], lists:usort([slot(P) || {P, _} <- Nodes])),
     %% the committee is unchanged (the change never committed) and the fleet's reject counter GREW for THIS
     %% proposal — a delta, not a stale cumulative count from an earlier ordered test (false-green guard)
     ?assertEqual(Before, committee(peer1(Nodes))),
@@ -685,7 +739,7 @@ assert_membership_proposal_skipped(Config, Evil) ->
                       ordinary_write_ok(
                         prove(L, {assertz, {after_byzantine, V}}))
               end, 20000)),
-    [ ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)) || {P, _} <- Nodes ].
+    [ ?assert(eventually(fun() -> slot(P) =:= H + 1 end, 15000)) || {P, _} <- Nodes ].
 
 %% a raw #transaction carrying an arbitrary diff (the Byzantine submitter path — no admit/remove predicate)
 tx(Diff) ->
@@ -718,8 +772,7 @@ synced_height(Nodes, Ns) ->
 
 %% The round-robin leader for a slot — MUST match quod_simplex:leader/2 (sorted set, (Slot-1) rem N).
 leader_for(Slot, Nodes) ->
-    Sorted = lists:sort(pubs(Nodes)),
-    lists:nth(((Slot - 1) rem length(Sorted)) + 1, Sorted).
+    quod_simplex:leader(Slot, pubs(Nodes)).
 
 relay_only_origin(Floor, Nodes) ->
     PossibleLeaders =
@@ -730,6 +783,9 @@ relay_only_origin(Floor, Nodes) ->
 leader_peer(Slot, Config) ->
     Nodes = ?config(nodes, Config),
     lists:keyfind(leader_for(Slot, Nodes), 2, Nodes).
+
+protocol_view(Peer) -> protocol_view(Peer, ?NS).
+protocol_view(Peer, Ns) -> maps:get(protocol_view, status(Peer, Ns), -1).
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
 status(Peer, Ns) -> peer:call(Peer, quod_simplex, status, [Ns]).

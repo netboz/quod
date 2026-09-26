@@ -114,7 +114,7 @@ retained index; point I/O and exact verification run in the existing caller.
          verify/5, verify_reference/3, verify_local/4,
          verify_reference/4, verify_reference/5,
          resolve_reference/6, verify_local_deadline/4,
-         verify_local_entry_deadline/5,
+         read_local_application_deadline/4,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/2, refresh/1, ack/2, projection_clauses/3, unfollow/1,
@@ -127,7 +127,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(WORKER_RESULT_GATE(Ref), test_worker_result_gate(Ref)).
 -export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2,
          consume_reference_reply/3,
-         open_verified_cache/6,
+         open_verified_cache/6, test_replay_cache/4,
          test_install_worker_meta/3, test_install_verified_progress/3,
          test_fail_persist_after/1,
          test_install_feed_registration/5,
@@ -148,7 +148,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(MANIFEST, "identity.term").
 -define(CHECKPOINT, "checkpoint.term").
 -define(LOG, "log.0001").
--define(CACHE_VERSION, 5). %% own-role Vote/Resolve/Complete projection; no local pending custody
+-define(CACHE_VERSION, 6). %% separate material history and era-local protocol roots
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
@@ -236,6 +236,7 @@ retained index; point I/O and exact verification run in the existing caller.
           follow_dirty = false :: boolean(),
           follow_start_height = 0 :: non_neg_integer(),
           progress_signals_open = false :: boolean(),
+          local_ready = 0 :: non_neg_integer(),
           current_watch = none :: none | remote,
           materializer = none :: none | #materializer{},
           last_probe_ms = 0 :: integer(),
@@ -267,6 +268,7 @@ retained index; point I/O and exact verification run in the existing caller.
           progress_edge = false :: boolean(),
           custody = acquiring :: acquiring | held,
           phase_hold = none :: none | quod_dtx_phase_index:index(),
+          proof_stages = #{} :: #{file:filename_all() => pid()},
           retiring = false :: boolean(),
           trace_ctx = undefined :: term(),
           fetch_fun = undefined :: undefined | function(),
@@ -281,7 +283,7 @@ retained index; point I/O and exact verification run in the existing caller.
           caller :: pid(),
           request_ref :: reference(),
           binding :: reference(),
-          range :: {pos_integer(), pos_integer()},
+          query :: term(),
           deadline :: integer(),
           turn = queued :: queued | {sent, pid(), reference(), binary()} |
                            {decoding, pid(), reference(), binary(), binary()},
@@ -357,7 +359,7 @@ retained index; point I/O and exact verification run in the existing caller.
           page_contacts = #{} :: #{term() => reference()},
           page_openings = #{} :: #{reference() => reference()},
           progress_channels = #{} ::
-              #{binary() => {binary(), pos_integer()}},
+              #{binary() => {binary(), pos_integer(), boolean()}},
           feed_registrations = #{} ::
               #{{{binary(), <<_:256>>}, <<_:256>>} =>
                     #feed_registration{}},
@@ -602,28 +604,43 @@ verify_local_deadline(
 verify_local_deadline(_View, _Ref, _ExpectedPhase, _Deadline) ->
     {error, bad_foreign_reference}.
 
--doc "Verify one already-read entry against its captured local history view.".
--spec verify_local_entry_deadline(quod_simplex:history_view(),
-                                  quod_dtx:certified_ref(),
-                                  entry | transaction | vote | resolve | complete,
-                                  quod_ledger:entry_artifact() | quod_ledger:selected_entry(), integer() | infinity) ->
-          {ok, map()} | {error, term()}.
-verify_local_entry_deadline(
-  View,
-  Ref, ExpectedPhase, Entry, Deadline)
-  when is_integer(Deadline) orelse Deadline =:= infinity ->
-    verify_captured_local(
-      View, Ref, ExpectedPhase, Deadline,
-      fun(Height, Projection) ->
-          case reference_projection(ref_slot(Ref), Height, Projection) of
-              {ok, EvidenceProjection} ->
-                  verify_exact_reference_entry(
-                    Ref, ExpectedPhase, Entry, EvidenceProjection);
-              error -> {error, retry}
-          end
-      end);
-verify_local_entry_deadline(_View, _Ref, _ExpectedPhase, _Entry, _Deadline) ->
-    {error, bad_foreign_reference}.
+-doc "Read and certify one local application once through its owner's captured archive.".
+-spec read_local_application_deadline(quod_simplex:history_view(), pos_integer(),
+                                       <<_:256>>, integer() | infinity) ->
+          {ok, quod_dtx:certified_ref(), quod_ledger:selected_entry(), map()} | {error, term()}.
+read_local_application_deadline(
+  #{identity := {Ns, _} = Identity, snapshot := Snapshot} = View,
+  Slot, <<_:256>> = TxId, Deadline)
+  when is_integer(Slot), Slot > 0, is_integer(Deadline) orelse Deadline =:= infinity ->
+    case caller_live(Deadline) of
+        false -> {error, retry};
+        true -> with_local_view_owner(View, fun() ->
+            with_snapshot_store(Snapshot, Ns, fun(Store) ->
+                case quod_ledger_store:read_at(Store, Slot, {application, TxId}) of
+                    {ok, Selected} ->
+                        Record = quod_ledger:selected_record(Selected),
+                        case quod_dtx:certified_entry_ref(Identity, Selected, Record) of
+                            {ok, Ref} ->
+                                Verified = verify_captured_local(View, Ref, transaction, Deadline,
+                                  fun(Height, Projection) ->
+                                      case reference_projection(Slot, Height, Projection) of
+                                          {ok, EvidenceProjection} ->
+                                              verify_exact_reference_entry(Ref, transaction, Selected, EvidenceProjection);
+                                          error -> {error, retry}
+                                      end
+                                  end),
+                                case Verified of
+                                    {ok, Evidence} -> {ok, Ref, Selected, Evidence};
+                                    {error, _} = Error -> Error
+                                end;
+                            {error, _} -> {error, invalid_foreign_reference}
+                        end;
+                    not_found -> {error, retry}
+                end
+            end)
+        end)
+    end;
+read_local_application_deadline(_, _, _, _) -> {error, bad_foreign_reference}.
 
 verify_captured_local(
   #{owner := Owner, identity := Identity, slot := Height,
@@ -746,41 +763,47 @@ with_local_view_owner(View, Fun) ->
         false -> {error, retry}
     end.
 
-local_view_fetch(#{identity := {Ns, _Anchor}, snapshot := Snapshot} = View,
-                 Ns, From, To) ->
-    with_local_view_owner(View, fun() ->
-        case quod_catchup:serve_blocks(Ns, Snapshot, From, To) of
-            {ok, Blobs, Height} ->
-                case quod_catchup:decode_entries(Blobs, wrapped) of
-                    {ok, Entries} -> {ok, Entries, Height};
+local_view_fetch(View, Store, Query, Deadline, Consume) ->
+    case quod_simplex:history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+            false -> {error, retry};
+            true ->
+                Sender = case Query of
+                             {range, From, To} -> quod_catchup:transfer_open(Store, From, To);
+                             {continue, {local, Retained}, 1} -> Retained
+                         end,
+                case quod_catchup:transfer_page(Store, Sender) of
+                    {ok, Parts, Next} ->
+                        Continuation = case Next of done -> done; _ -> {{local, Next}, 1} end,
+                        Height = quod_ledger_store:last(Store),
+                        Consumed = Consume(Parts, Height, Continuation),
+                        case quod_simplex:history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+                            true -> {ok, Consumed, Height, Continuation};
+                            false -> {error, retry, Consumed}
+                        end;
                     {error, _} = Error -> Error
-                end;
-            {error, _} = Error -> Error
-        end
-    end);
-local_view_fetch(_View, _Ns, _From, _To) ->
-    {error, wrong_namespace}.
+                end
+    end.
 
 %% validate_local_request already checked the identity/reference/projection
-%% binding. Read the captured era directly; certificate verification remains
-%% per caller, and this read acquires no writer or registry-server custody.
+%% binding. Read the exact claim from that certified immutable prefix; a
+%% caller's preferred witness cannot force a different archive or prefix replay.
+%% This read acquires no writer or registry-server custody.
 verify_resident_snapshot(
   Snapshot, Slot, Ns, Ref, ExpectedPhase, Projection) ->
+    with_snapshot_store(Snapshot, Ns, fun(Store) ->
+        verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection)
+    end).
+
+with_snapshot_store(Snapshot, Ns, Fun) ->
     case quod_ledger_store:open_ro_snapshot(Snapshot) of
         {ok, Store} ->
             try
                 case quod_ledger_store:namespace(Store) of
-                    Ns ->
-                        verify_resident_store(
-                          Store, Slot, Ref, ExpectedPhase, Projection);
-                    _OtherNamespace ->
-                        {error, bad_foreign_reference}
+                    Ns -> Fun(Store);
+                    _OtherNamespace -> {error, bad_foreign_reference}
                 end
-            after
-                quod_ledger_store:close(Store)
-            end;
-        {error, _Unavailable} ->
-            {error, retry}
+            after quod_ledger_store:close(Store) end;
+        {error, _Unavailable} -> {error, retry}
     end.
 
 verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
@@ -1051,7 +1074,7 @@ init(Opts) ->
 
 valid_options(Root, FetchFun, PageTimeout) ->
     (is_list(Root) orelse is_binary(Root)) andalso
-        (FetchFun =:= undefined orelse is_function(FetchFun, 5)) andalso
+        (FetchFun =:= undefined orelse is_function(FetchFun, 6)) andalso
         is_integer(PageTimeout) andalso PageTimeout > 0 andalso
         PageTimeout =< ?MAX_TIMER_MS - 1000.
 
@@ -1189,14 +1212,23 @@ handle_call({route_hints, Identity, Supplied}, _From, S0) ->
             {reply, {error, invalid_request}, S0}
     end;
 handle_call(
-  {pull_page, RequestRef, Peer, Endpoint, Ns, FromIndex, ToIndex, Deadline, TraceCtx}, From,
+  {pull_page, RequestRef, Peer, Endpoint, Ns, Query, Deadline, TraceCtx}, From,
   S = #s{fetch_fun = undefined}) ->
     case maps:get(RequestRef, S#s.pending, undefined) of
         #request{identity = {Ns, _Anchor} = Identity, work = Work} ->
             admit_pull(RequestRef, Identity, Work, Peer, Endpoint,
-                       FromIndex, ToIndex, Deadline, TraceCtx, From, S);
+                       Query, Deadline, TraceCtx, From, S);
         _ ->
             {reply, {error, retry}, S}
+    end;
+handle_call({proof_stage, RequestRef}, {Caller, _}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{identity = Identity, custody = held, retiring = false,
+                 proof_stages = Stages} = R ->
+            Path = quod_ledger_store:staging_path_in(cache_dir(S#s.root, cache_namespace(Identity))),
+            {reply, {ok, Path}, S#s{pending = (S#s.pending)#{
+                RequestRef => R#request{proof_stages = Stages#{Path => Caller}}}}};
+        _ -> {reply, {error, retry}, S}
     end;
 handle_call({complete_page_decode, Key, Verdict}, {Caller, _}, S0) ->
     {Reply, S1} = complete_page_decode(Key, Verdict, Caller, S0),
@@ -2093,6 +2125,14 @@ shareable_routed_kind(Kind, Kind, _Identity) ->
 shareable_routed_kind(_Kind1, _Kind2, _Identity) ->
     false.
 
+handle_cast({release_proof_stage, RequestRef, Path, Caller}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{proof_stages = Stages} = R when map_get(Path, Stages) =:= Caller ->
+            _ = file:delete(Path),
+            {noreply, S#s{pending = (S#s.pending)#{RequestRef =>
+                R#request{proof_stages = maps:remove(Path, Stages)}}}};
+        _ -> {noreply, S}
+    end;
 handle_cast({observe_candidate, Identity, PeerKey, Endpoint}, S0) ->
     {noreply, remember_bootstrap_candidate(
                 Identity, PeerKey, Endpoint, S0)};
@@ -2139,6 +2179,8 @@ handle_info({committed, Ns, Slot, _Entry}, S) ->
     {noreply, wake_namespace_progress(Ns, Slot, S)};
 handle_info({certified_head, Ns, Slot}, S) ->
     {noreply, wake_namespace_progress(Ns, Slot, S)};
+handle_info({proof_ready, Identity, Owner, Prolog, Generation}, S) ->
+    {noreply, local_source_ready(Identity, Owner, Prolog, Generation, S)};
 %% A materializer can discover its Root dependency immediately before or
 %% after Root publishes this edge.  The waiting handler below covers the
 %% crossed order; this edge resumes every worker already parked on it.
@@ -2262,6 +2304,7 @@ terminate(_Reason, #s{page_bindings = Bindings,
                       transport_monitor = TransportMonitor, pending = Pending}) ->
     maps:foreach(fun(_Ref, R) ->
         release_phase_hold(R#request.phase_hold),
+        cleanup_proof_stages(R#request.proof_stages),
         maps:foreach(fun(_From, C) -> end_caller_residence(C, owner_down) end,
                      R#request.callers)
     end, Pending),
@@ -2282,7 +2325,9 @@ terminate(_Reason, #s{page_bindings = Bindings,
     _ = [catch quod_reg:unsubscribe({channel, Chan})
          || Chan <- maps:keys(ProgressChannels)],
     _ = [catch quod_reg:unsubscribe({committed, Ns})
-         || {_Chan, {Ns, _Count}} <- maps:to_list(ProgressChannels)],
+         || {_Chan, {Ns, _Count, _}} <- maps:to_list(ProgressChannels)],
+    _ = [catch quod_reg:unsubscribe({runtime, Ns})
+         || {_Chan, {Ns, _Count, true}} <- maps:to_list(ProgressChannels)],
     _ = [catch quod_reg:unsubscribe({directory_route, Identity})
          || {Identity, #history{progress_signals_open = true}} <-
                 maps:to_list(Histories)],
@@ -2323,7 +2368,7 @@ normalize_entry_hint(Entry) ->
 
 validate_route_request(
   <<_:256>>, Endpoint,
-  {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
+  {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
    <<_:256>>, <<_:256>>, Proof} = Ref,
   Phase, TimeoutMs)
   when is_binary(Ns), byte_size(Ns) > 0,
@@ -2343,7 +2388,7 @@ validate_route_request(_Peer, _Endpoint, _Ref, _Phase, _TimeoutMs) ->
 validate_local_request(
   #{owner := Owner, identity := {Ns, Anchor}, slot := Height,
     applied := Applied, snapshot := _Snapshot, projection := Projection},
-  {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
+  {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
    <<_:256>>, <<_:256>>, Proof} = Ref,
   Phase, TimeoutMs)
   when is_pid(Owner), is_integer(Height), Height >= 0,
@@ -2402,7 +2447,7 @@ valid_identity(_) ->
 
 validate_reference(Ref) ->
     case Ref of
-        {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
+        {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
          <<_:256>>, <<_:256>>, Proof}
           when is_binary(Ns), byte_size(Ns) > 0,
                byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
@@ -2805,6 +2850,7 @@ park_failed_routed_request(RequestRef, S0) ->
                   mref = MRef, timer = Timer, progress_edge = Edge,
                   attempt = Attempt}, Pending1} ->
             release_phase_hold(Job#request.phase_hold),
+            cleanup_proof_stages(Job#request.proof_stages),
             Callers = live_request_callers(Callers0),
             annotate_caller_stages(Callers, #{'quod.owner.progress_edge_consumed' => Edge}),
             cancel_optional_timer(Timer),
@@ -2869,7 +2915,7 @@ park_cache_custody(RequestRef, Worker, S0) ->
 %% no running transport/span handle survives into a queued attempt.
 park_job(Job, Callers, Parked) ->
     Job#request{callers = Callers, parked = Parked,
-                phase_hold = none,
+                phase_hold = none, proof_stages = #{},
                 worker = none, mref = none, timer = none,
                 progress_edge = false, custody = acquiring, retiring = false,
                 trace_ctx = undefined, enqueued_native = erlang:monotonic_time()}.
@@ -2913,8 +2959,10 @@ finish_request(RequestRef, Reply, Cause, S0) ->
     case maps:take(RequestRef, S0#s.pending) of
         {#request{from = From, callers = Callers,
                   identity = Identity, source = Source,
-                  mref = MRef, timer = Timer, phase_hold = PhaseHold}, Pending1} ->
+                  mref = MRef, timer = Timer, phase_hold = PhaseHold,
+                  proof_stages = Stages}, Pending1} ->
             release_phase_hold(PhaseHold),
+            cleanup_proof_stages(Stages),
             cancel_optional_timer(Timer),
             cancel_caller_timers(Callers),
             release_source_monitor(Source),
@@ -4231,24 +4279,31 @@ add_namespace_progress_signals(Ns, S0) ->
         undefined ->
             true = quod_reg:subscribe({channel, Chan}),
             true = quod_reg:subscribe({committed, Ns}),
+            %% Root's runtime subscription also owns network-identity recovery.
+            %% Retire only subscriptions acquired by this namespace interest.
+            Runtime = try gproc:get_value(quod_reg:prop({runtime, Ns})) of
+                _ -> false
+            catch error:badarg -> quod_reg:subscribe({runtime, Ns})
+            end,
             S0#s{progress_channels =
-                     (S0#s.progress_channels)#{Chan => {Ns, 1}}};
-        {Ns, Count} ->
+                     (S0#s.progress_channels)#{Chan => {Ns, 1, Runtime}}};
+        {Ns, Count, Runtime} ->
             S0#s{progress_channels =
-                     (S0#s.progress_channels)#{Chan => {Ns, Count + 1}}}
+                     (S0#s.progress_channels)#{Chan => {Ns, Count + 1, Runtime}}}
     end.
 
 remove_namespace_progress_signals(Ns, S0) ->
     Chan = quod_feed:channel(Ns),
     case maps:get(Chan, S0#s.progress_channels, undefined) of
-        {Ns, 1} ->
+        {Ns, 1, Runtime} ->
             _ = catch quod_reg:unsubscribe({channel, Chan}),
             _ = catch quod_reg:unsubscribe({committed, Ns}),
+            _ = case Runtime of true -> catch quod_reg:unsubscribe({runtime, Ns}); false -> ok end,
             S0#s{progress_channels =
                      maps:remove(Chan, S0#s.progress_channels)};
-        {Ns, Count} when Count > 1 ->
+        {Ns, Count, Runtime} when Count > 1 ->
             S0#s{progress_channels =
-                     (S0#s.progress_channels)#{Chan => {Ns, Count - 1}}};
+                     (S0#s.progress_channels)#{Chan => {Ns, Count - 1, Runtime}}};
         _ ->
             S0
     end.
@@ -4553,7 +4608,7 @@ close_feed_registration(#feed_registration{}) ->
 
 handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
     case maps:get(Chan, S0#s.progress_channels, undefined) of
-        {Ns, _Count} ->
+        {Ns, _Count, _Runtime} ->
             case quod_feed:decode_recipient(Payload, Ns) of
                 {registered, RegistrationId, Anchor, Height} ->
                     accept_feed_recipient_signal(
@@ -4577,6 +4632,24 @@ handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
         undefined ->
             S0
     end.
+
+%% A restarted co-hosted source can be ready at the same material height.
+%% Reconfirm through the existing follower once for each installed ready edge; an empty
+%% protocol view is not a material entry and must not be needed to wake it.
+%% The notice is only availability: the ordinary capture/verifier remains
+%% authoritative. Stale owners, wrong anchors and duplicates do no work.
+local_source_ready({Ns, Anchor} = Identity, Owner, Prolog, Generation, S)
+  when is_binary(Ns), is_pid(Owner), is_pid(Prolog), is_integer(Generation) ->
+    case {maps:get(Identity, S#s.histories, undefined),
+          quod_reg:where({quod_simplex, Ns}), quod_reg:where({quod_prolog, Ns}),
+          quod_simplex:genesis_hash(Ns)} of
+        {#history{progress_signals_open = true, local_ready = Previous} = H,
+         Owner, Prolog, Anchor} when Generation > Previous ->
+            S1 = put_history(Identity, H#history{local_ready = Generation}, S),
+            wake_follow(Identity, release_route_waiters(Identity, local_ready, S1));
+        _ -> S
+    end;
+local_source_ready(_, _, _, _, S) -> S.
 
 wake_namespace_progress(Ns, Height, S0) ->
     Identities =
@@ -4653,7 +4726,7 @@ note_feed_progress(Identity, unknown, S) ->
     end, S#s.feed_registrations)}.
 
 admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
-           FromIndex, ToIndex, Deadline0, TraceCtx, From = {Caller, _}, S0) ->
+           Query, Deadline0, TraceCtx, From = {Caller, _}, S0) ->
     Deadline = case Work of
                    {follow, _, _, WorkDeadline} -> min(Deadline0, WorkDeadline);
                    _ -> Deadline0
@@ -4668,7 +4741,7 @@ admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
             MRef = erlang:monitor(process, Caller, [{tag, {catchup_page_owner_down, ReqId}}]),
             Pull = #pull{from = From, caller = Caller, trace_ctx = TraceCtx,
                          request_ref = RequestRef, binding = BindingRef,
-                         range = {FromIndex, ToIndex}, deadline = Deadline,
+                         query = Query, deadline = Deadline,
                          mref = MRef, timer = Timer},
             B = maps:get(BindingRef, S1#s.page_bindings),
             S2 = put_page_binding(B#page_binding{waiting = queue:in(ReqId, B#page_binding.waiting)},
@@ -4772,8 +4845,7 @@ drive_page_binding(Ref, S0) ->
                         false -> drive_page_binding(Ref,
                                    complete_pull(ReqId, {error, retry}, page_expired, S0));
                         true ->
-                            {From, To} = Pull#pull.range,
-                            quod_link:request_page(Link, Ref, Grant, ReqId, From, To),
+                            quod_link:request_page(Link, Ref, Grant, ReqId, Pull#pull.query),
                             put_page_binding(B#page_binding{credit = none, active = ReqId, waiting = Rest},
                               S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{turn = {sent, Link, Ref, Grant}}}})
                     end
@@ -4792,7 +4864,7 @@ accept_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
         _ -> S0
     end.
 
-accept_live_page_result(Link, Ref, Grant, ReqId, {ok, Blobs, Height}, NextGrant, S0) ->
+accept_live_page_result(Link, Ref, Grant, ReqId, {ok, Parts, Height, Continuation}, NextGrant, S0) ->
     Pull = maps:get(ReqId, S0#s.pulls),
     %% Raw delivery consumes the call alias, not page custody. The original
     %% monitor/deadline and active binding survive until this worker completes
@@ -4802,7 +4874,7 @@ accept_live_page_result(Link, Ref, Grant, ReqId, {ok, Blobs, Height}, NextGrant,
     traced_page_owner(Pull#pull.trace_ctx, page_delivery,
       fun() ->
           gen_server:reply(Pull#pull.from,
-                           {decode_page, Key, Blobs, Height, Pull#pull.deadline, Gate}),
+                           {decode_page, Key, Parts, Height, Continuation, Pull#pull.deadline, Gate}),
           S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{
                     from = none, turn = {decoding, Link, Ref, Grant, NextGrant}}}}
       end);
@@ -4811,19 +4883,20 @@ accept_live_page_result(_Link, Ref, _Grant, ReqId, {error, _} = Error, NextGrant
     finish_page_turn(ReqId, Ref, Error, NextGrant, S0).
 
 complete_page_decode({Owner, ReqId, Ref, Link, Grant}, Verdict, Caller, S0)
-  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed) ->
+  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed orelse Verdict =:= abandoned) ->
     case {maps:get(ReqId, S0#s.pulls, undefined),
           maps:get(Ref, S0#s.page_bindings, undefined)} of
         {#pull{from = none, caller = Caller, binding = Ref, deadline = Deadline,
                turn = {decoding, Link, Ref, Grant, NextGrant}},
          #page_binding{ref = Ref, link = Link, active = ReqId,
                        credit = none, retiring = false}} ->
-            case Verdict =:= decoded andalso Deadline > quod_time:mono_ms() of
-                true -> {ok, finish_page_turn(ReqId, Ref, ok, NextGrant, S0)};
-                false ->
+            case {Verdict, Deadline > quod_time:mono_ms()} of
+                {abandoned, true} -> {ok, cancel_pull(ReqId, probe_complete, S0)};
+                {decoded, true} -> {ok, finish_page_turn(ReqId, Ref, ok, NextGrant, S0)};
+                _ ->
                     Cause = case Verdict of
                         malformed -> malformed_page;
-                        decoded -> page_expired
+                        _ -> page_expired
                     end,
                     {{error, retry}, cancel_pull(ReqId, Cause, S0)}
             end;
@@ -5248,8 +5321,14 @@ foreign_stage_result(_) -> failed.
 %% mean completion at their named stage, not successful verification: an all-
 %% probe collection can contain refusals, and a suspended session stays opaque
 %% to this layer. Other stages and unknown shapes keep the failing catch-all.
-foreign_stage_observation(page_wait, {decode_page, {_, _, _, _, _}, Blobs, Height, Deadline, _})
-  when is_list(Blobs), is_integer(Height), Height >= 0, is_integer(Deadline) -> ok;
+foreign_stage_observation(page_wait, {decode_page, {_, _, _, _, _}, Parts, Height, _Continuation, Deadline, _})
+  when is_list(Parts), is_integer(Height), Height >= 0, is_integer(Deadline) -> ok;
+foreign_stage_observation(Stage, {error, Reason, _Retained})
+  when Stage =:= page_fetch; Stage =:= page_consume -> {error, Reason};
+foreign_stage_observation(page_fetch, {ok, {error, Reason, _Retained}, _Height, _Continuation}) ->
+    {error, Reason};
+foreign_stage_observation(page_consume, {nomination, Height})
+  when is_integer(Height), Height >= 0 -> ok;
 foreign_stage_observation(probe_collection, Results) when is_list(Results) -> ok;
 foreign_stage_observation(ledger_suspend, #{cache_session := _} = Meta)
   when not is_map_key(cache_store, Meta) -> ok;
@@ -5430,22 +5509,23 @@ follow_identity(Owner, RequestRef, Identity, Sources, Root,
             end
     end.
 
-follow_borrowed_local_view(Owner, RequestRef, Identity, Tip, SourceView, Root,
+follow_borrowed_local_view(Owner, RequestRef, Identity = {Ns, _}, Tip, SourceView, Root,
                            PageTimeout, Deadline, Cursor) ->
-    LocalFetch =
-        fun(_Peer, _Endpoint, RequestedNs, FromIndex, ToIndex) ->
-            case quod_time:mono_ms() < Deadline of
-                true -> local_view_fetch(SourceView, RequestedNs, FromIndex, ToIndex);
-                false -> {error, retry}
-            end
-        end,
-    {Result, Next} = follow_local_snapshot(
-                       Owner, RequestRef, {local, Identity}, Tip, Identity,
-                       Root, LocalFetch, PageTimeout, Cursor),
-    case quod_simplex:history_view_live(SourceView) andalso
-         quod_time:mono_ms() < Deadline of
-        true -> {Result, Next};
-        false -> {{error, {unreachable, unavailable}}, Next}
+    case quod_ledger_store:open_ro_snapshot(maps:get(snapshot, SourceView)) of
+        {ok, Store} ->
+            try
+                LocalFetch = fun(_Peer, _Endpoint, RequestedNs, Query, PullDeadline, Consume)
+                                  when RequestedNs =:= Ns ->
+                    local_view_fetch(SourceView, Store, Query, min(Deadline, PullDeadline), Consume)
+                end,
+                {Result, Next} = follow_local_snapshot(
+                  Owner, RequestRef, {local, Identity}, Tip, Identity, Root, LocalFetch, PageTimeout, Cursor),
+                case quod_simplex:history_view_live(SourceView) andalso quod_time:mono_ms() < Deadline of
+                    true -> {Result, Next};
+                    false -> {{error, {unreachable, unavailable}}, Next}
+                end
+            after quod_ledger_store:close(Store) end;
+        {error, _} -> {{error, retry}, Cursor}
     end.
 
 follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
@@ -5576,7 +5656,7 @@ open_cache(Owner, RequestRef, Identity, Root, Resident) ->
                    open_cache_raw(
                      Owner, RequestRef, Identity, Root, Resident)
                end),
-    observe_foreign_stage(cache_open, cache_result(Result), StartedNative),
+    observe_foreign_stage(cache_open, foreign_stage_result(Result), StartedNative),
     Result.
 
 %% The running owner retains the ledger session, projection and phase index
@@ -5744,117 +5824,58 @@ release_cache(Store, PhaseIndex, Result) ->
           Result
       end).
 
+-ifdef(TEST).
+test_replay_cache(Store, {Ns, Anchor}, Projection, Index) ->
+    replay_cache(Store, Ns, Anchor, quod_ledger_store:last(Store), Projection, Index).
+-endif.
+
 replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex) ->
-    replay_cache(Store, Ns, Anchor, 1, Height, Projection0, PhaseIndex).
-
-replay_cache(_Store, Ns, Anchor, From, Height, Projection, _PhaseIndex)
-  when From > Height ->
-    case valid_projection(Projection, {Ns, Anchor}) of
-        true -> {ok, Projection};
-        false -> {error, cache_corrupt}
-    end;
-replay_cache(Store, Ns, Anchor, From, Height, Projection0, PhaseIndex) ->
-    To = min(Height, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
-    %% The network owner originally persisted this history in pages bounded by
-    %% both entry count and encoded bytes. Reuse the initialization writer's
-    %% already-open handle with the same bounded reader: no page rescans the
-    %% index, and large valid entries still advance by the actual safe prefix.
-    try quod_catchup:read_blocks(Store, From, To) of
-        {ok, Entries, Height} ->
-            case quod_catchup:page_stats(Entries) of
-                {ok, Count, _Bytes}
-                  when Count > 0, Count =< To - From + 1 ->
-                    PageTo = From + Count - 1,
-                    case quod_catchup:verify_forward(
-                           Ns, Anchor, Projection0, From, Entries,
-                           PhaseIndex) of
-                        {ok, _Verified, Projection1, Delta} ->
-                            case valid_projection(Projection1, {Ns, Anchor})
-                                 andalso quod_dtx_phase_index:commit_delta(
-                                           PhaseIndex, Delta) =:= ok of
-                                true ->
-                                    trace_count(replayed_entries, Count),
-                                    replay_cache(
-                                      Store, Ns, Anchor, PageTo + 1,
-                                      Height, current_era_projection(Projection1), PhaseIndex);
-                                false -> {error, cache_corrupt}
-                            end;
-                        {error, {unavailable, network_identity, _Reason}} ->
-                            {error, network_identity};
-                        {error, _} -> {error, cache_corrupt}
-                    end;
-                _ -> {error, cache_corrupt}
-            end
-    catch _:_ ->
-        {error, cache_corrupt}
+    %% Startup consumes each archive group's selected ancestry once. Material
+    %% page boundaries are not proof boundaries: one witness may span many
+    %% network pages and certify several entries. Exact foreign claims need
+    %% no authority to restart a validator beyond the stored material prefix.
+    try
+        Height = quod_ledger_store:last(Store),
+        Projection = quod_ledger_store:fold_groups(Store,
+          fun(Entries, Proof, P0) ->
+              Source = {fun(C) -> quod_ledger_store:proof_next(Store, C) end, Proof},
+              case quod_catchup:verify_forward_group({Ns, Anchor}, Entries, P0, PhaseIndex, Source) of
+                  {ok, P1, Delta, _Custody} ->
+                      case valid_projection(P1, {Ns, Anchor}) of
+                          true -> ok;
+                          false -> throw({cache_replay, cache_corrupt})
+                      end,
+                      ok = quod_dtx_phase_index:commit_delta(PhaseIndex, Delta),
+                      trace_count(replayed_entries, length(Entries)),
+                      current_era_projection(P1);
+                  {error, {unavailable, network_identity, _}} ->
+                      throw({cache_replay, network_identity});
+                  {error, _} -> throw({cache_replay, cache_corrupt})
+              end
+          end, Projection0),
+        case valid_projection(Projection, {Ns, Anchor}) of
+            true -> {ok, Projection};
+            false -> {error, cache_corrupt}
+        end
+    catch
+        throw:{cache_replay, Reason} -> {error, Reason};
+        _:_ -> {error, cache_corrupt}
     end.
 
-fetch_exact_reference(
-  Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-  Cursor = #verified_cursor{height = Height}, Root, FetchFun, PageTimeout, EntryHint) ->
-    Slot = ref_slot(Ref),
-    case entry_index(EntryHint) of
-        Slot when Height < Slot ->
-            case fetch_hint_parent(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
-                                   Cursor, Root, FetchFun, PageTimeout) of
-                {ok, Parent} ->
-                    case import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
-                                                 Parent, Root, EntryHint) of
-                        {ok, _, {ok, _}} = Ok -> Ok;
-                        fallback ->
-                            fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
-                                                   Identity, Parent, Root, FetchFun, PageTimeout);
-                        {error, _, _} = Error -> Error
-                    end;
-                {error, _, _} = Error -> Error
-            end;
-        _ ->
-            fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
-                                   Identity, Cursor, Root, FetchFun, PageTimeout)
-    end.
+fetch_exact_reference(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
+                      Cursor, Root, FetchFun, PageTimeout, _EntryHint) ->
+    %% A reference fixes the material claim, not this source's selected witness.
+    %% Acquire missing ancestry through the same group reader as every follow.
+    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
+                    Cursor, Root, FetchFun, PageTimeout).
 
-fetch_hint_parent(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
-                  Cursor, Root, FetchFun, PageTimeout) ->
-    advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
-      Cursor, Root, Slot - 1, FetchFun, PageTimeout).
-
-import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
-                        Cursor = #verified_cursor{height = Height}, Root, Entry) ->
-    Slot = Height + 1,
-    case {entry_index(Entry), quod_ledger:materialize_hint(Entry)} of
-        {Slot, {ok, FullEntry}} ->
-            import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
-                                   Cursor, Root, FullEntry, Slot);
-        _ -> fallback
-    end.
-
-import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity = {Ns, Anchor},
-                      Cursor = #verified_cursor{projection = Projection, phase_index = PhaseIndex},
-                      Root, Entry, Slot) ->
-    case prepare_verified_page(Ns, Anchor, Identity, Projection, PhaseIndex,
-                               Slot, Slot, [Entry], Slot) of
-        {ok, #{verified := [VerifiedEntry], projection := NextProjection} = Prepared} ->
-            case verify_exact_reference_entry(Ref, Phase, VerifiedEntry, NextProjection) of
-                {ok, Evidence} ->
-                    trace_count(hint_entries, 1),
-                    case persist_verified_page(Owner, RequestRef, Identity, Cursor, Root, Prepared) of
-                        {ok, Next} -> {ok, Next, {ok, Evidence}};
-                        {error, _, _} = Error -> Error
-                    end;
-                {error, _} -> fallback
-            end;
-        {error, _} -> fallback
-    end.
-
-fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity = {Ns, Anchor},
+fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                 Cursor = #verified_cursor{store = Store, height = Height, projection = Projection,
                                           phase_index = PhaseIndex},
                 Root, FetchFun, PageTimeout) ->
     Slot = ref_slot(Ref),
     case Height >= Slot of
         true ->
-            %% Only the exact read borrows this ephemeral view. It is never
-            %% retained across writer custody or written into a checkpoint.
             case quod_dtx_phase_index:capture(PhaseIndex, Height) of
                 {ok, IndexView} ->
                     {ok, Cursor, verify_resident_store(Store, Slot, Ref, Phase,
@@ -5862,80 +5883,105 @@ fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity = {Ns, A
                 {error, _} -> {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
             end;
         false ->
-            From = Height + 1,
-            To = min(Slot, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
-            case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun, PageTimeout) of
-                {ok, Entries, RemoteHeight} when is_integer(RemoteHeight), RemoteHeight >= 0 ->
-                    case prepare_verified_page(Ns, Anchor, Identity, Projection, PhaseIndex,
-                                               From, To, Entries, RemoteHeight) of
-                        {ok, #{verified := Verified, projection := EntryProjection} = Prepared} ->
-                            trace_verified_page(Peer, maps:get(count, Prepared)),
-                            case persist_verified_page(Owner, RequestRef, Identity, Cursor, Root, Prepared) of
-                                {ok, Next = #verified_cursor{height = Slot}} ->
-                                    %% The final bounded page already owns this exact artifact
-                                    %% and its historical committee. Use it only after append,
-                                    %% index installation and checkpoint all succeed; never
-                                    %% re-read/decode it or retain a second history cache.
-                                    {ok, Next, verify_projected_entry({ok, lists:last(Verified)},
-                                                 Slot, Ref, Phase, EntryProjection)};
-                                {ok, Next = #verified_cursor{height = NextHeight}}
-                                  when NextHeight > Height ->
-                                    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-                                      Next, Root, FetchFun, PageTimeout);
-                                {ok, Next} -> {error, invalid_history, Next};
-                                {error, _, _} = Error -> Error
-                            end;
-                        {error, Reason} -> {error, Reason, Cursor}
-                    end;
-                _ -> {error, retry, Cursor}
+            To = min(Slot, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+            case fetch_verified_range(Owner, RequestRef, Peer, [Endpoint], Identity,
+                                      Cursor, Root, To, FetchFun, PageTimeout, {Ref, Phase}) of
+                {ok, Next, {selected, Result}} -> {ok, Next, Result};
+                {ok, Next = #verified_cursor{height = NextHeight}, none}
+                  when NextHeight > Height, NextHeight < Slot ->
+                    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
+                                    Next, Root, FetchFun, PageTimeout);
+                {ok, Next, none} -> {error, invalid_history, Next};
+                {error, _, _} = Error -> Error
             end
     end.
 
-prepare_verified_page(
-  Ns, Anchor, Identity, Projection0, PhaseIndex,
-  From, To, Entries, RemoteHeight) ->
-    measure_foreign_stage(page_verify,
-      fun() -> prepare_verified_page_raw(Ns, Anchor, Identity, Projection0, PhaseIndex,
-                                         From, To, Entries, RemoteHeight) end).
-
-prepare_verified_page_raw(
-  Ns, Anchor, Identity, Projection0, PhaseIndex,
-  From, To, Entries, RemoteHeight) ->
-    case validate_page(Entries, From, To, RemoteHeight) of
-        {ok, Count, EntryBytes} ->
-            case quod_catchup:verify_forward(Ns, Anchor, Projection0, From, Entries, PhaseIndex) of
-                {ok, Verified, Projection1, Delta} when length(Verified) =:= Count ->
-                    case valid_projection(Projection1, Identity) of
-                        true ->
-                            {ok, #{verified => Verified, projection => Projection1,
-                                   phase_delta => Delta, count => Count,
-                                   stored_bytes => EntryBytes + 12 * Count}};
-                        false -> {error, invalid_history}
-                    end;
-                {error, {unavailable, network_identity, _Reason}} = Global -> Global;
-                {error, _Reason} -> {error, invalid_history}
-            end;
-        {error, _} -> {error, invalid_history}
+fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
+                     Cursor = #verified_cursor{height = Height, projection = P, phase_index = Index},
+                     Root, To, FetchFun, PageTimeout, Claim) ->
+    Deadline = quod_time:mono_ms() + PageTimeout,
+    Result = with_request_proof_stage(Owner, RequestRef, fun(Stage) ->
+        Range = quod_catchup:range_begin(Identity, To, wrapped, Stage, {Cursor, none}, P, Index),
+        Install = fun(Group, {Current, Selected}) ->
+            case persist_verified_group(Owner, RequestRef, Identity, Current, Root, Group) of
+                {ok, Next} ->
+                    trace_verified_page(Peer, length(maps:get(entries, Group))),
+                    Result = select_committed_claim(Claim, Group, Selected),
+                    {ok, {Next, Result}, Next#verified_cursor.projection, Next#verified_cursor.phase_index};
+                {error, Why, Failed} -> {error, Why, {Failed, none}}
+            end
+        end,
+        fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, {range, Height + 1, To},
+                    Deadline, FetchFun, Range, Install)
+    end),
+    case Result of
+        {ok, Final} ->
+            {Next, Selected} = quod_catchup:range_context(Final),
+            {ok, Next, Selected};
+        {error, Why, Final} ->
+            {Next, _Selected} = quod_catchup:range_context(Final),
+            {error, Why, Next};
+        {error, Why} -> {error, Why, Cursor}
     end.
 
-persist_verified_page(
+%% Retain only this request's result from the verified group, after durable
+%% append/index/checkpoint. A witness may end beyond the requested claim;
+%% its historical committee comes from that group's checked projection.
+select_committed_claim(none, _Group, Selected) -> Selected;
+select_committed_claim({Ref, Phase}, #{entries := Entries, projection := Projection}, Selected) ->
+    Slot = ref_slot(Ref),
+    case lists:search(fun(E) -> quod_ledger:entry_index(E) =:= Slot end, Entries) of
+        {value, Entry} -> {selected, verify_projected_entry({ok, Entry}, Slot, Ref, Phase, Projection)};
+        false -> Selected
+    end.
+
+fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, Query, Deadline, FetchFun, Range, Install) ->
+    Consume = fun(Parts, H, Continuation) ->
+        quod_catchup:range_accept(Range, Parts, H, Continuation, Install)
+    end,
+    %% Only a failure before consumption selects another address of this peer.
+    %% A received page fixes the source and its original deadline for every
+    %% continuation; invalid or insufficient history is for the peer walk.
+    Result = quod_peer_route:walk(Endpoints, Deadline,
+      fun(Endpoint, Timeout) ->
+          AttemptDeadline = min(Deadline, quod_time:mono_ms() + Timeout),
+          {Endpoint, AttemptDeadline,
+           fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, FetchFun, AttemptDeadline, Consume)}
+      end,
+      fun({_, _, {error, _} = Error}, _) -> {next, Error};
+         (Reply, _) -> {done, Reply}
+      end, {error, retry}),
+    case Result of
+        {_, _, {ok, {ok, Next}, _, done}} -> {ok, Next};
+        {Endpoint, SelectedDeadline, {ok, {ok, Next}, _, {Token, Sequence}}} ->
+            fetch_range(Owner, RequestRef, Peer, [Endpoint], Ns, {continue, Token, Sequence},
+                        SelectedDeadline, FetchFun, Next, Install);
+        {_, _, {ok, {error, Why, Retained}, _, _}} -> {error, Why, Retained};
+        {_, _, {error, Why, {ok, Retained}}} -> {error, Why, Retained};
+        {_, _, {error, _, {error, Why, Retained}}} -> {error, Why, Retained};
+        {error, Why} -> {error, Why, Range}
+    end.
+
+persist_verified_group(
   Owner, RequestRef, Identity,
-  Cursor = #verified_cursor{store = Store, height = Height, phase_index = PhaseIndex},
-  Root, #{verified := Verified, projection := Projection,
-          phase_delta := Delta, count := Count, stored_bytes := StoredBytes}) ->
-    %% Reservation refusal precedes mutation and preserves the old prefix.
-    %% Once append is attempted, ANY failure invalidates this cursor. The old
-    %% cursor must never flow into another source after a partially durable page.
+  Cursor = #verified_cursor{store = Store, phase_index = PhaseIndex},
+  Root, #{entries := Entries, proof := Proof, projection := Projection,
+          delta := Delta, finality := Finality})
+  when Finality =:= genesis; map_get(complete_group, Finality) =:= true ->
+    %% No mutation precedes reservation. After append is attempted, any
+    %% failure invalidates the cursor, including failures after durable I/O.
+    StoredBytes = quod_ledger_store:group_size(Proof, Entries),
     Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
-    case persistence_reservation(measure_foreign_stage(cache_accounting,
+    case valid_projection(Projection, Identity) andalso
+         persistence_reservation(measure_foreign_stage(cache_accounting,
            fun() -> gen_server:call(Owner, {reserve_page, RequestRef, Reservation}) end)) of
         ok ->
             try
                 {ok, NextStore} = persistence_stage(ledger_append,
-                                   fun() -> quod_ledger_store:append(Store, Verified) end),
+                                   fun() -> quod_ledger_store:append(Store, {Proof, Entries}) end),
                 ok = persistence_stage(phase_commit,
                        fun() -> quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) end),
-                NextHeight = Height + Count,
+                {NextHeight, _} = maps:get(history_head, Projection),
                 ok = persistence_stage(checkpoint_write,
                        fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
                                                  NextHeight, Projection) end),
@@ -5947,9 +5993,11 @@ persist_verified_page(
             catch _:_ ->
                 {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
             end;
-        {error, _} ->
-            {error, cache_unavailable, Cursor}
-    end.
+        false -> {error, invalid_history, Cursor};
+        {error, _} -> {error, cache_unavailable, Cursor}
+    end;
+persist_verified_group(_Owner, _RequestRef, _Identity, Cursor, _Root, _Partial) ->
+    {error, incomplete_finality_group, Cursor}.
 
 persistence_stage(Stage, Fun) ->
     Result = measure_foreign_stage(Stage, Fun),
@@ -6103,18 +6151,12 @@ sequential_snapshot_source(
   {Peer, Endpoint}, Owner, RequestRef, Identity = {Ns, _Anchor},
   Cursor = #verified_cursor{height = Height}, Root, FetchFun,
   BootstrapTimeout, PageTimeout, AdvanceMode) ->
-    ProbeTo = Height + 1,
-    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Height + 1, ProbeTo,
+    case probe_page(Owner, RequestRef, Peer, Endpoint, Ns, Height + 1, Height + 1,
                     FetchFun, BootstrapTimeout) of
-        {ok, Entries, RemoteHeight} when is_integer(RemoteHeight), RemoteHeight > Height ->
-            case validate_page(Entries, Height + 1, ProbeTo, RemoteHeight) of
-                {ok, _Count, _Bytes} ->
-                    advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
-                      Cursor, Root, snapshot_target(AdvanceMode, Height, RemoteHeight),
-                      FetchFun, PageTimeout);
-                {error, Reason} -> {error, {bootstrap_page, Reason}, Cursor}
-            end;
-        {ok, _Entries, _RemoteHeight} -> {error, no_new_page, Cursor};
+        {ok, RemoteHeight} when RemoteHeight > Height ->
+            advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
+              Cursor, Root, snapshot_target(AdvanceMode, Height, RemoteHeight), FetchFun, PageTimeout);
+        {ok, _} -> {error, no_new_page, Cursor};
         {error, Reason} -> {error, {bootstrap_fetch, Reason}, Cursor}
     end.
 
@@ -6141,10 +6183,10 @@ fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
     quod_peer_route:walk(
       Endpoints, Deadline,
       fun(Endpoint, AttemptTimeout) ->
-          fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
+          probe_page(Owner, RequestRef, Peer, Endpoint, Ns,
                      From, To, FetchFun, AttemptTimeout)
       end,
-      fun({ok, _Entries, _RemoteHeight} = Ok, _Last) -> {done, Ok};
+      fun({ok, _RemoteHeight} = Ok, _Last) -> {done, Ok};
          ({error, _}, Last) -> {next, Last}
       end,
       {error, retry}).
@@ -6278,12 +6320,9 @@ stop_current_probes(Pending) ->
 advance_snapshot(Owner, RequestRef, Identity,
                  Cursor = #verified_cursor{height = Height}, Root, Results,
                  FetchFun, PageTimeout, AdvanceMode) ->
-    ProbeTo = Height + 1,
     Candidates = [{RemoteHeight, Source}
-                  || {Source, {ok, Entries, RemoteHeight}} <- Results,
-                     is_integer(RemoteHeight), RemoteHeight > Height,
-                     validate_page(Entries, Height + 1, ProbeTo, RemoteHeight)
-                       =/= {error, bad_page}],
+                  || {Source, {ok, RemoteHeight}} <- Results,
+                     is_integer(RemoteHeight), RemoteHeight > Height],
     case Candidates of
         [] -> {ok, Cursor};
         _ ->
@@ -6321,27 +6360,19 @@ advance_snapshot_sources([], _Owner, _RequestRef, _Identity, Cursor,
                          _Root, _Target, _FetchFun, _PageTimeout) ->
     {error, invalid_history, Cursor};
 advance_snapshot_sources([{Peer, Endpoints} | Rest], Owner, RequestRef,
-                         Identity = {Ns, Anchor},
-                         Cursor = #verified_cursor{height = Height, projection = Projection,
-                                                   phase_index = PhaseIndex},
+                         Identity, Cursor = #verified_cursor{height = Height},
                          Root, Target, FetchFun, PageTimeout) ->
-    case fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
-                         Height + 1, Target, FetchFun, PageTimeout) of
-        {ok, Entries, RemoteHeight}
-          when is_list(Entries), is_integer(RemoteHeight), RemoteHeight >= 0 ->
-            case prepare_verified_page(Ns, Anchor, Identity, Projection, PhaseIndex,
-                                       Height + 1, Target, Entries, RemoteHeight) of
-                {ok, Prepared} ->
-                    trace_verified_page(Peer, maps:get(count, Prepared)),
-                    persist_verified_page(Owner, RequestRef, Identity, Cursor, Root, Prepared);
-                {error, invalid_history} ->
-                    advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Cursor,
-                                             Root, Target, FetchFun, PageTimeout);
-                {error, {unavailable, network_identity, _} = Reason} ->
-                    {error, Reason, Cursor}
-            end;
-        _ ->
-            advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Cursor,
+    case fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity, Cursor,
+                              Root, Target, FetchFun, PageTimeout, none) of
+        {ok, Next = #verified_cursor{height = NextHeight}, none} when NextHeight > Height ->
+            {ok, Next};
+        {ok, Next, none} ->
+            advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
+                                     Root, Target, FetchFun, PageTimeout);
+        {error, _, #verified_cursor{state = invalid}} = Invalid -> Invalid;
+        {error, {unavailable, network_identity, _}, _} = Global -> Global;
+        {error, _, Next} ->
+            advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
                                      Root, Target, FetchFun, PageTimeout)
     end.
 
@@ -6419,44 +6450,23 @@ confirmation_collected(Result) ->
 confirmation_collected(Result) -> Result.
 -endif.
 
-probe_confirmed_endpoint(
-  Endpoints, Owner, RequestRef, Peer, Ns, Height,
-  Anchor, Identity, Projection, PhaseIndex, FetchFun, PageTimeout) ->
-    To = Height + 1,
+probe_confirmed_endpoint(Endpoints, Owner, RequestRef, Peer, Ns, Height,
+                         _Anchor, Identity, Projection, PhaseIndex, FetchFun, PageTimeout) ->
     Deadline = quod_time:mono_ms() + PageTimeout,
-    quod_peer_route:walk(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptTimeout) ->
-          fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
-                     Height + 1, To, FetchFun, AttemptTimeout)
-      end,
-      fun(Result, Last) ->
-          case tip_response_at_least(
-                 Result, Ns, Anchor, Identity, Height,
-                 Projection, PhaseIndex) of
-              true -> {done, true};
-              false -> {next, Last}
-          end
-      end,
-      false).
-
-tip_response_at_least(
-  {ok, [], RemoteHeight}, _Ns, _Anchor, _Identity,
-  Height, _Projection, _PhaseIndex) ->
-    is_integer(RemoteHeight) andalso RemoteHeight >= Height;
-tip_response_at_least(
-  {ok, Entries, RemoteHeight}, Ns, Anchor, Identity,
-  Height, Projection, PhaseIndex) when is_list(Entries) ->
-    To = Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
-    case prepare_verified_page(
-           Ns, Anchor, Identity, Projection, PhaseIndex,
-           Height + 1, To, Entries, RemoteHeight) of
-        {ok, _Prepared} -> RemoteHeight >= Height;
-        {error, _} -> false
-    end;
-tip_response_at_least(
-  _Result, _Ns, _Anchor, _Identity, _Height, _Projection, _PhaseIndex) ->
-    false.
+    with_request_proof_stage(Owner, RequestRef, fun(Stage) ->
+        Range = quod_catchup:range_begin(Identity, Height + 1, wrapped,
+                                         Stage, Height, Projection, PhaseIndex),
+        Install = fun(#{entries := Entries, projection := P,
+                        finality := #{complete_group := true}}, _) ->
+                          {ok, quod_ledger:entry_index(lists:last(Entries)), P, PhaseIndex};
+                     (_, _) -> {error, incomplete_finality_group}
+                  end,
+        case fetch_range(Owner, RequestRef, Peer, Endpoints, Ns,
+                         {range, Height + 1, Height + 1}, Deadline, FetchFun, Range, Install) of
+            {ok, Final} -> quod_catchup:range_context(Final) >= Height;
+            _ -> false
+        end
+    end).
 
 current_view_evidence(Identity, Height, Projection, Routes) ->
     Dtx = maps:get(dtx, Projection),
@@ -6467,83 +6477,82 @@ current_view_evidence(Identity, Height, Projection, Routes) ->
       committee_id => maps:get(committee_id, Projection),
       route_candidates => Routes}.
 
-fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
-           PageTimeout) ->
+fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, FetchFun, Deadline, Consume) ->
     StartedNative = erlang:monotonic_time(),
     Source = case Peer of {local, _} -> <<"local">>; _ -> <<"network">> end,
     Result = trace_foreign_stage(page_fetch,
-               #{'quod.foreign.page_source' => Source,
-                 'quod.foreign.page_from' => From,
-                 'quod.foreign.page_to' => To},
+               #{'quod.foreign.page_source' => Source},
                fun() ->
-                   Page = fetch_page_raw(
-                            Owner, RequestRef, Peer, Endpoint, Ns, From, To,
-                            FetchFun, PageTimeout),
-                   trace_page_result(Page),
-                   Page
+                   ObservedConsume = fun(Parts, Height, Continuation) ->
+                       trace_foreign_stage(page_consume,
+                         fun() -> Consume(Parts, Height, Continuation) end)
+                   end,
+                   fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, Query,
+                                  FetchFun, Deadline, ObservedConsume)
                end),
-    observe_foreign_stage(page_fetch, cache_result(Result), StartedNative),
+    observe_foreign_stage(page_fetch,
+      foreign_stage_result(foreign_stage_observation(page_fetch, Result)), StartedNative),
     Result.
 
-trace_page_result({ok, Entries, Height}) when is_list(Entries), is_integer(Height) ->
-    case get(?TRACE_STAGE_ACTIVE) of
-        true ->
-            _ = quod_trace:set_attributes(
-                  otel_tracer:current_span_ctx(quod_trace:context()),
-                  #{'quod.foreign.page_entries' => length(Entries),
-                    'quod.foreign.remote_height' => Height}),
-            ok;
-        _ -> ok
-    end;
-trace_page_result(_) -> ok.
-
-fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, From, To, undefined,
-               PageTimeout) ->
-    Deadline = quod_time:mono_ms() + PageTimeout,
+fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, Query, undefined, Deadline, Consume) ->
     TraceCtx = page_trace_context(),
-    Raw = trace_foreign_stage(page_wait,
-            fun() ->
-                page_owner_call(Owner,
-                  {pull_page, RequestRef, Peer, Endpoint, Ns, From, To, Deadline,
-                   TraceCtx}, Deadline)
-            end),
+    Raw = trace_foreign_stage(page_wait, fun() ->
+        page_owner_call(Owner, {pull_page, RequestRef, Peer, Endpoint, Ns, Query,
+                                Deadline, TraceCtx}, Deadline)
+    end),
     case Raw of
-        {decode_page, Key, Blobs, Height, PullDeadline, Gate} ->
-            decode_pulled_page(Owner, Key, Blobs, Height,
-                               min(Deadline, PullDeadline), Gate);
+        {decode_page, Key, Parts, Height, Continuation, PullDeadline, Gate} ->
+            consume_pulled_page(Owner, Key, Parts, Height, Continuation,
+                                min(Deadline, PullDeadline), Gate, Consume);
         {error, _} = Error -> Error
     end;
-fetch_page_raw(_Owner, _RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
-               _PageTimeout) ->
-    try FetchFun(Peer, Endpoint, Ns, From, To)
-    catch exit:_ -> {error, retry}
-    end.
+fetch_page_raw(_Owner, _RequestRef, Peer, Endpoint, Ns, Query, FetchFun, Deadline, Consume) ->
+    %% The adapter owns only byte delivery. Consumer faults must escape to
+    %% monitored worker cleanup, never become a retry with a stale cursor.
+    FetchFun(Peer, Endpoint, Ns, Query, Deadline, Consume).
 
-%% This is the requesting verifier/probe, never the node-wide owner. Local
-%% snapshot fetchers above already return decoded entries and do not use a
-%% remote page grant. The decoder's own faults must escape to worker-DOWN
-%% cleanup; only the owner call's transport exit is normalized to retry.
-decode_pulled_page(Owner, Key, Blobs, Height, Deadline, Gate) ->
+consume_pulled_page(Owner, Key, Parts, Height, Continuation, Deadline, Gate, Consume) ->
     page_decode_gate(before_decode, Gate, Key),
     case Deadline > quod_time:mono_ms() of
         false -> page_wait_failure(page_expired);
         true ->
-            Decoded = trace_foreign_stage(page_decode,
-                        fun() -> quod_catchup:decode_entries(Blobs, wrapped) end),
-            Verdict = case Decoded of {ok, _} -> decoded; {error, _} -> malformed end,
+            Consumed = Consume(Parts, Height, Continuation),
+            Verdict = case Consumed of
+                          {error, _, _} -> malformed;
+                          {error, _} -> malformed;
+                          {nomination, _} when Continuation =/= done -> abandoned;
+                          _ -> decoded
+                      end,
             page_decode_gate(before_completion, Gate, Key),
-            Completion = trace_foreign_stage(page_completion,
-                           fun() -> page_owner_call(Owner,
-                             {complete_page_decode, Key, Verdict}, Deadline) end),
-            case {Completion, Decoded} of
-                {ok, {ok, Entries}} ->
+            Completion = trace_foreign_stage(page_completion, fun() ->
+                page_owner_call(Owner, {complete_page_decode, Key, Verdict}, Deadline)
+            end),
+            case Completion of
+                ok ->
                     page_decode_gate(after_accept, Gate, Key),
                     case Deadline > quod_time:mono_ms() of
-                        true -> {ok, Entries, Height};
-                        false -> page_wait_failure(page_expired)
+                        true -> {ok, Consumed, Height, Continuation};
+                        false -> {error, retry, Consumed}
                     end;
-                _ -> {error, retry}
+                {error, Why} ->
+                    %% Consumption may have committed earlier groups on this
+                    %% page. Retain that result even if credit handoff failed.
+                    {error, Why, Consumed}
             end
+    end.
+
+%% Discovery only nominates a source. It never imports a partial proof, and
+%% releases an unfinished source cursor instead of leaving it until expiry.
+probe_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun, Timeout) ->
+    Consume = fun([], H, done) -> {nomination, H};
+                 ([{group, From0, Last} | _], H, _) when From0 =:= From, Last =< H ->
+                      {nomination, H};
+                 (_, _, _) -> {error, invalid_history}
+              end,
+    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, {range, From, To}, FetchFun,
+                    quod_time:mono_ms() + Timeout, Consume) of
+        {ok, {nomination, H}, H, _} -> {ok, H};
+        _ -> {error, retry}
     end.
 
 page_trace_context() ->
@@ -6605,34 +6614,7 @@ take_page_decode_gate() -> undefined.
 page_decode_gate(_Stage, _Gate, _Key) -> ok.
 -endif.
 
-cache_result({ok, _}) -> ok;
-cache_result({ok, _, _}) -> ok;
-cache_result({ok, _, _, _, _}) -> ok;
-cache_result({error, retry}) -> uncertain;
-cache_result({error, _}) -> failed;
-cache_result(_) -> failed.
 
-validate_page(Entries, From, To, RemoteHeight) ->
-    case quod_catchup:page_stats(Entries) of
-        {ok, Count, Bytes} when Count > 0, Count =< To - From + 1 ->
-            case page_indices(Entries, From, To) andalso
-                 RemoteHeight >= From + Count - 1 of
-                true -> {ok, Count, Bytes};
-                false -> {error, bad_page}
-            end;
-        _ ->
-            {error, bad_page}
-    end.
-
-page_indices([], _Next, _To) -> true;
-page_indices([Entry | Rest], Next, To) when Next =< To ->
-    entry_index(Entry) =:= Next andalso page_indices(Rest, Next + 1, To);
-page_indices(_, _Next, _To) -> false.
-
-entry_index(Entry) ->
-    try quod_ledger:entry_index(Entry)
-    catch error:_ -> error
-    end.
 
 verify_exact_reference_entry(
   Ref, ExpectedPhase, Entry, Projection) ->
@@ -6661,11 +6643,13 @@ verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
 verify_exact_record(Ref, Entry, Record, Phase, Field, Projection) ->
     Identity = ref_identity(Ref),
     case quod_simplex:history_certifying_committee_view(ref_slot(Ref), Projection) of
-        {ok, Certifiers, _, _} ->
-            case quod_dtx:certified_entry_ref_matches(Identity, Entry, Record, Ref, Certifiers) of
+        {ok, _Certifiers, _, _} ->
+            case quod_dtx:certified_entry_claim_matches(Identity, Entry, Record, Ref) of
                 true ->
-                    %% Certifiers authorize the block; its resulting committee
-                    %% authorizes attestations about the post-slot state.
+                    %% Entry came from the owner's certified prefix or this
+                    %% job's fully verified page. The carried witness is only a
+                    %% preference; the selected proof has already established
+                    %% authority. The resulting committee certifies AM3 results.
                     #{generation := Generation} = maps:get(dtx, Projection),
                     {ok, #{identity => Identity, slot => ref_slot(Ref),
                            block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
@@ -6912,6 +6896,17 @@ load_history_dir(Root, Dir) ->
         _ -> error
     end.
 
+cleanup_proof_stages(Stages) ->
+    maps:foreach(fun(Path, _) -> _ = file:delete(Path) end, Stages).
+
+with_request_proof_stage(Owner, RequestRef, Fun) ->
+    case gen_server:call(Owner, {proof_stage, RequestRef}) of
+        {ok, Path} ->
+            try quod_ledger_store:with_proof_stage(Path, Fun)
+            after gen_server:cast(Owner, {release_proof_stage, RequestRef, Path, self()}) end;
+        {error, _} = Error -> Error
+    end.
+
 cleanup_cache_temps(Dir) ->
     case file:list_dir(Dir) of
         {ok, Names} ->
@@ -6923,7 +6918,8 @@ cleanup_cache_temps(Dir) ->
 
 is_cache_temp(Name) when is_list(Name) ->
     lists:prefix(?MANIFEST ++ ".new.", Name) orelse
-        lists:prefix(?CHECKPOINT ++ ".new.", Name).
+        lists:prefix(?CHECKPOINT ++ ".new.", Name) orelse
+        lists:prefix(".proof-", Name).
 
 %%%===================================================================
 %%% Shared bounded-shape checks and ref accessors
@@ -6933,7 +6929,8 @@ valid_projection(
   #{committee := Committee, validator_routes := Routes,
     committee_id := CommitteeId,
     admissions := Admissions, sequences := Sequences,
-    timestamp := _Timestamp, history_head := _Head,
+    timestamp := _Timestamp, history_head := Head,
+    identity := ExpectedIdentity, protocol_root := ProtocolRoot,
     dtx := Dtx, dtx_lanes := DtxLanes} = Projection,
   ExpectedIdentity)
   when is_map(Routes), is_map(Admissions), is_map(Sequences),
@@ -6947,8 +6944,14 @@ valid_projection(
         (CommitteeId =:= undefined orelse
          (is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32)) andalso
         valid_dtx_target(Dtx, ExpectedIdentity) andalso
+        valid_protocol_root(ProtocolRoot, Head) andalso
         valid_committee_views(Projection, ExpectedIdentity);
 valid_projection(_, _) -> false.
+
+valid_protocol_root(none, none) -> true;
+valid_protocol_root({<<_:256>>, View, <<_:256>>}, {Height, <<_:256>>})
+  when is_integer(View), View >= 0, is_integer(Height), Height > 0 -> true;
+valid_protocol_root(_, _) -> false.
 
 %% Committee eras are retained only by the running certified-history owner.
 %% The durable checkpoint stays at the fixed current-projection shape; after a
@@ -6960,18 +6963,18 @@ checkpoint_projection(Projection) ->
 
 valid_committee_views(#{committee_views := Views, history_index := Index,
                         history_head := {Height, _}} = Projection, _ExpectedIdentity)
-  when is_list(Views), map_size(Projection) =:= 11 ->
+  when is_list(Views), map_size(Projection) =:= 13 ->
     quod_dtx_phase_index:is_capture(Index, Height) andalso
         valid_committee_view_rows(Views);
 valid_committee_views(#{committee_views := Views} = Projection,
                       _ExpectedIdentity)
-  when is_list(Views), map_size(Projection) =:= 10 ->
+  when is_list(Views), map_size(Projection) =:= 12 ->
     valid_committee_view_rows(Views);
 valid_committee_views(Projection, _ExpectedIdentity) ->
     %% Compact persisted checkpoints deliberately omit the resident-only era
-    %% index and retain the exact nine-field committed-only shape. Local
+    %% index and retain the exact eleven-field committed-only shape. Local
     %% pending Vote custody belongs to the signing journal, never history.
-    map_size(Projection) =:= 9.
+    map_size(Projection) =:= 11.
 
 valid_committee_view_rows([]) -> true;
 valid_committee_view_rows(
@@ -7028,17 +7031,17 @@ valid_dtx_target(
 valid_dtx_target(_, _) -> false.
 
 ref_identity(
-  {quod_dtx_ref, 2, Ns, Anchor, _Slot, _BlockHash, _Digest, _Proof}) ->
+  {quod_dtx_ref, 3, Ns, Anchor, _Slot, _BlockHash, _Digest, _Proof}) ->
     {Ns, Anchor};
 ref_identity(_) -> invalid.
 
-ref_slot({quod_dtx_ref, 2, _Ns, _Anchor, Slot, _BlockHash, _Digest, _Proof}) ->
+ref_slot({quod_dtx_ref, 3, _Ns, _Anchor, Slot, _BlockHash, _Digest, _Proof}) ->
     Slot.
 
 ref_block_hash(
-  {quod_dtx_ref, 2, _Ns, _Anchor, _Slot, BlockHash, _Digest, _Proof}) ->
+  {quod_dtx_ref, 3, _Ns, _Anchor, _Slot, BlockHash, _Digest, _Proof}) ->
     BlockHash.
 
 ref_record_digest(
-  {quod_dtx_ref, 2, _Ns, _Anchor, _Slot, _BlockHash, Digest, _Proof}) ->
+  {quod_dtx_ref, 3, _Ns, _Anchor, _Slot, _BlockHash, Digest, _Proof}) ->
     Digest.

@@ -844,8 +844,8 @@ prepared_source_is_used_exactly_once(#{dir := Dir}) ->
     ?assertMatch({fail, _},
                  quod_prolog:prove_ro(Ns, {prepared_value, changed})).
 
-%% Frozen using the pre-Cut2 codec, with an already-chosen incarnation. This
-%% fixture binds the native journal shape independently of artifact internals.
+%% Fixed incarnation and current genesis block grammar. The local prepared
+%% journal still excludes runtime caches from its stable native entry schema.
 prepared_genesis_native_format_golden_test() ->
     Ns = <<"quod:cut2-prepared">>,
     Executor = <<17:256>>,
@@ -854,21 +854,21 @@ prepared_genesis_native_format_golden_test() ->
     %% generation input; the legacy serialized descriptor remains Config0.
     Genesis = quod_simplex:test_genesis_tx(
                 Config0#{node_addr => undefined}, Ns, Executor, <<34:256>>),
-    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Genesis]}, 0, none),
-    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [Genesis]}, 0),
+    Entry = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     ?assertEqual(
-       <<36,83,239,105,93,33,234,105,204,127,87,236,1,107,203,145,
-         145,230,115,192,144,212,83,158,68,253,33,143,5,232,123,254>>,
+       <<97,190,26,50,211,215,138,171,175,126,156,42,2,17,83,146,
+         232,185,189,113,140,18,248,251,187,131,54,174,68,225,52,244>>,
        Anchor),
     Native = quod_ledger:entry_view(Entry),
     Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
     Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
     {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
-    ?assertEqual(1777, byte_size(Bytes)),
+    ?assertEqual(1790, byte_size(Bytes)),
     ?assertEqual(
-       <<193,64,158,152,140,33,222,168,22,44,67,68,184,241,97,190,
-         68,213,145,224,40,105,56,46,160,46,56,15,160,231,197,214>>,
+       <<99,215,146,218,208,156,140,167,187,176,177,58,9,184,78,191,
+         102,148,61,22,134,29,10,166,204,166,181,152,199,225,211,194>>,
        crypto:hash(sha256, Bytes)),
     ?assertEqual({ok, Prepared}, quod_ontology:decode_prepared(Bytes)),
     %% The private journal owns one fixed native schema, not the runtime
@@ -904,8 +904,8 @@ prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     {ok, Executor} = application:get_env(quod, node_pubkey),
     Incarnation = <<68:256>>,
     Genesis = quod_simplex:test_genesis_tx(Config0, Ns, Executor, Incarnation),
-    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Genesis]}, 0, none),
-    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [Genesis]}, 0),
+    Entry = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Native = quod_ledger:entry_view(Entry),
     Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},

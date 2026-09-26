@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+/* Keep generated utilities independent of checkout layout and build artifacts. */
+@source "./";
 
 /* BBSVX Design Palette (doc/BBSVX Palette.pdf) — the five house hexes plus the
    extended light/dark variants used by the reference frontends. */

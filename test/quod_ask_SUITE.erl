@@ -1747,8 +1747,11 @@ remote_signed_gateway_group_with_root_effect(Config) ->
            Signature, Peer], 60000),
     ?assertEqual(2, length(Slots)),
     assert_fact_once(Asker, ?ASKER_NS, signed_pets_mark, Tag),
-    wait_ready(Target, CreatedNs, {remote_effect_created, ok}),
+    %% Group application records the effect obligation; the existing effect
+    %% owner starts the ontology asynchronously. Observe its completion before
+    %% asking the new ontology to prove a goal.
     wait_remote_effect_state(Target, CreatedNs, GroupRef, applied, 300),
+    wait_ready(Target, CreatedNs, {remote_effect_created, ok}),
     ok.
 
 root_effect_goal(Tag, CreatedNs) ->

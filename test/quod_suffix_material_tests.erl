@@ -2,6 +2,25 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+signature_counts_exclude_other_owners_test() ->
+    {Pub, _} = Pair = quod_identity:generate(),
+    Bytes = <<"signature counter isolation">>,
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(Pair)),
+    Other = spawn(fun() ->
+        receive {verify, ReplyTo} ->
+            ReplyTo ! {verified, self(), quod_identity:verify(Signature, Bytes, Pub)}
+        end
+    end),
+    try
+        {true, Counts} = counted(fun() ->
+            Other ! {verify, self()},
+            receive {verified, Other, true} -> ok
+            after 1000 -> error(other_verifier_did_not_finish) end,
+            quod_identity:verify(Signature, Bytes, Pub)
+        end),
+        ?assertEqual(#{crypto => 1, request => 0}, Counts)
+    after exit(Other, kill) end.
+
 %% Real signed content and founding-derived projections, not a witness of
 %% consensus admission. The production suffix path must retain all semantic
 %% checks while paying the already-checked transaction signatures only once.
@@ -14,15 +33,16 @@ suffix_checks_finality_without_reauthenticating_content_test_() ->
             {ok, After} = quod_simplex:history_validate_advance(Origin, ClaimEntry, Before),
             lists:foreach(fun({Target, Entry, Projection}) ->
                 {ok, Bytes} = quod_ledger:encode_entry(Entry),
-                {ok, [Decoded]} = quod_catchup:decode_entries([Bytes], wrapped),
-                {{ok, [Decoded], _}, Counts} = counted(fun() ->
-                    {Ns, Anchor} = Target,
-                    quod_catchup:verify_forward(Ns, Anchor, Projection,
-                                              quod_ledger:entry_index(Entry), [Decoded])
+                {{ok, Decoded}, DecodeCounts} = counted(fun() ->
+                    quod_ledger:decode_entry(Bytes, wrapped)
                 end),
-                ?assertEqual(1, maps:get(crypto, Counts)),
-                ?assertEqual(0, maps:get(request, Counts)),
-                ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Decoded))
+                {{ok, Received}, Counts} = receive_group(Target, Projection, Bytes, Entry),
+                ?assertEqual(Decoded, Received),
+                %% Entry and proof share the same exact-envelope context.
+                %% Beyond one payload decode, only the head QC is authenticated.
+                ?assertEqual(maps:get(crypto, DecodeCounts) + 1, maps:get(crypto, Counts)),
+                ?assertEqual(maps:get(request, DecodeCounts), maps:get(request, Counts)),
+                ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Received))
             end, [{Origin, ClaimEntry, Before},
                   {Origin, maps:get(source_entry, F), After},
                   {maps:get(target, F), maps:get(entry, F), maps:get(projection, F)}])
@@ -84,20 +104,21 @@ request_context_is_rechecked_without_reverifying_signature_test() ->
 
 history_still_rejects_wrong_admission_and_invalid_finality_test() ->
     quod_operation_fixture:with(2, fun(F) ->
-        Target = {Ns, Anchor} = maps:get(target, F),
+        Target = maps:get(target, F),
         {ok, Bytes} = quod_ledger:encode_entry(maps:get(entry, F)),
-        {ok, [Entry]} = quod_catchup:decode_entries([Bytes], wrapped),
+        {ok, Entry} = quod_ledger:decode_entry(Bytes, wrapped),
         Projection = maps:get(projection, F),
         Author = (maps:get(application, F))#transaction.author,
         BadProjection = Projection#{admissions := #{Author => <<0:256>>}},
         ?assertEqual({error, {invalid_transaction, 2}},
             quod_simplex:history_validate_advance(Target, Entry, BadProjection)),
-        {quod_entry, 1, I, Block, Cert} = binary_to_term(Bytes, [safe]),
-        BadCert = Cert#cert{sigs = [{Author, <<0:512>>}]},
-        {ok, [Bad]} = quod_catchup:decode_entries(
-            [term_to_binary({quod_entry, 1, I, Block, BadCert}, [deterministic])], wrapped),
+        {quod_entry, 2, I, Block, Cert} = binary_to_term(Bytes, [safe]),
+        {quod_finality, 1, Era, View, Hash, _} = Cert,
+        BadCert = {quod_finality, 1, Era, View, Hash, [{Author, <<0:512>>}]},
+        {ok, Bad} = quod_ledger:decode_entry(
+            term_to_binary({quod_entry, 2, I, Block, BadCert}, [deterministic]), wrapped),
         ?assertEqual({error, {bad_cert, 2}},
-            quod_catchup:verify_forward(Ns, Anchor, Projection, 2, [Bad]))
+            quod_ct:verify_finality(Target, Bad, Projection))
     end).
 
 wire_never_carries_or_accepts_authentication_receipts_test() ->
@@ -170,7 +191,8 @@ with_custody(Kind, Fun) ->
         effect ->
             ClaimRef = {transaction, OriginNs, OriginAnchor, Claim#transaction.tx_id},
             {ok, Certified} = quod_dtx:certified_ref(OriginNs, OriginAnchor,
-                2, <<213:256>>, Claim#transaction.tx_id, <<"claim-qc">>),
+                2, <<213:256>>, Claim#transaction.tx_id,
+                quod_ct:fixture_finality(1, <<213:256>>)),
             Target0 = maps:get(target, F),
             {Target0, maps:get(target_identity, F),
              quod_transaction:attach_evidence(
@@ -190,7 +212,9 @@ with_custody(Kind, Fun) ->
             consensus_domain => Domain, self => Author, id => Identity,
             validators => [Author], author_admissions => #{Author => Admission},
             committee_id => <<215:256>>, sync => ready, prolog_ready => true,
-            eng => quod_simplex:eng_new(Domain, [Author], 0),
+            slot => 1, history_head => {1, Anchor},
+            eng => quod_simplex:eng_new(Domain, [Author],
+                {{quod_ledger:initial_era(Target), 0, Anchor}, 0}),
             store => memory, signing_journal => Journal}),
         Fun(Change, Admission, S0)
     after
@@ -198,9 +222,36 @@ with_custody(Kind, Fun) ->
         file:del_dir_r(Dir)
     end.
 
+receive_group(Target = {Ns, _}, Projection, Bytes, Entry) ->
+    Dir = filename:join("/tmp", "quod-suffix-receiver-" ++
+        binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+    try
+        quod_ledger_store:with_proof_stage(filename:join(Dir, "proof"), fun(Stage) ->
+            Height = quod_ledger:entry_index(Entry),
+            {ok, Block} = quod_ledger:block_from_entry(Entry),
+            Parts = [{group, Height, Height}, {entry, Bytes},
+                     {proof, quod_ledger:block_bytes(Block)}, end_group],
+            Range = quod_catchup:range_begin(Target, Height, wrapped, Stage,
+                                            none, Projection, Index),
+            Install = fun(#{entries := [Installed], projection := P}, none) ->
+                {ok, Installed, P, Index}
+            end,
+            counted(fun() ->
+                case quod_catchup:range_accept(Range, Parts, Height, done, Install) of
+                    {ok, Received} -> {ok, quod_catchup:range_context(Received)};
+                    Error -> Error
+                end
+            end)
+        end)
+    after
+        quod_dtx_phase_index:close(Index),
+        file:del_dir_r(Dir)
+    end.
+
 without_resigning(Fun) ->
-    {Result, {call_count, Rows}} = tprof:profile(Fun, #{type => call_count,
-        report => return, pattern => {quod_identity, sign, 2}}),
+    {Result, {call_time, Rows}} = tprof:profile(Fun, #{type => call_time,
+        set_on_spawn => false, report => return, pattern => {quod_identity, sign, 2}}),
     ?assertEqual(0, count(quod_identity, Rows)),
     Result.
 
@@ -208,8 +259,10 @@ flip(<<B, Rest/binary>>) -> <<(B bxor 1), Rest/binary>>.
 
 counted(Fun) ->
     [{module, M} = code:ensure_loaded(M) || M <- [crypto, quod_client_goal]],
-    {Result, {call_count, Rows}} = tprof:profile(Fun, #{type => call_count,
-        report => return, timeout => 30000,
+    %% call_count is VM-wide. call_time supplies per-process call counts;
+    %% count only this verification, even while other owners authenticate.
+    {Result, {call_time, Rows}} = tprof:profile(Fun, #{type => call_time,
+        set_on_spawn => false, report => return, timeout => 30000,
         pattern => [{crypto, verify, 5}, {quod_client_goal, verify, 2}]}),
     {Result, #{crypto => count(crypto, Rows), request => count(quod_client_goal, Rows)}}.
 count(Module, Rows) ->

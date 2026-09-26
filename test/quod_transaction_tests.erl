@@ -47,7 +47,7 @@ read_certificate(ProofId, N) ->
     {Signer, Identity} = identity(),
     {ok, AnchorRef} = quod_dtx:certified_ref(
                         Ns, Anchor, 3, <<(N + 100):256>>, <<(N + 200):256>>,
-                        <<"read-qc">>),
+                        quod_ct:fixture_finality(3, <<(N + 100):256>>)),
     PlanDigest = <<(N + 300):256>>,
     CommitteeId = <<(N + 400):256>>,
     {ok, Vote} = quod_read_certificate:sign(
@@ -485,7 +485,8 @@ remote_operation_ids_are_acyclic_and_evidence_independent_test() ->
     {OriginNs, OriginAnchor} = Origin,
     {ok, OtherCertifiedClaimRef} = quod_dtx:certified_ref(
                                       OriginNs, OriginAnchor, 9, <<215:256>>,
-                                      Claim#transaction.tx_id, <<"other-qc">>),
+                                      Claim#transaction.tx_id,
+                                      quod_ct:fixture_finality(9, <<215:256>>)),
     OtherEvidence = quod_transaction:attach_evidence(
                       quod_transaction:remote_application(ClaimRef, Claim, Target),
                       OtherCertifiedClaimRef, Claim),
@@ -661,56 +662,55 @@ relay_attempt_identity_test() ->
     {Tx, _Identity} = signed(),
     {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
     SubmissionId = quod_transaction:submission_id(Submission),
-    CommitteeId = <<6:256>>,
+    Era = <<6:256>>,
     Target = <<7:256>>,
     AttemptId =
         quod_transaction:relay_attempt_id(
-          ?NS, SubmissionId, CommitteeId, 17, Target),
+          ?NS, SubmissionId, Era, 17, Target),
     ?assertEqual(16, byte_size(AttemptId)),
     ?assertEqual(
        AttemptId,
        quod_transaction:relay_attempt_id(
-         ?NS, SubmissionId, CommitteeId, 17, Target)),
+         ?NS, SubmissionId, Era, 17, Target)),
     ?assertEqual(
        16,
        byte_size(
          quod_transaction:relay_attempt_id(
-           ?NS, SubmissionId, CommitteeId,
+           ?NS, SubmissionId, Era,
            16#FFFFFFFFFFFFFFFF, Target))),
     Mutations =
         [quod_transaction:relay_attempt_id(
-           <<"other:ontology">>, SubmissionId, CommitteeId, 17, Target),
+           <<"other:ontology">>, SubmissionId, Era, 17, Target),
          quod_transaction:relay_attempt_id(
-           ?NS, flip_first(SubmissionId), CommitteeId, 17, Target),
+           ?NS, flip_first(SubmissionId), Era, 17, Target),
          quod_transaction:relay_attempt_id(
            ?NS, SubmissionId, <<9:256>>, 17, Target),
          quod_transaction:relay_attempt_id(
-           ?NS, SubmissionId, CommitteeId, 18, Target),
+           ?NS, SubmissionId, Era, 18, Target),
          quod_transaction:relay_attempt_id(
-           ?NS, SubmissionId, CommitteeId, 17, <<8:256>>)],
+           ?NS, SubmissionId, Era, 17, <<8:256>>)],
     [?assertNotEqual(AttemptId, Mutated) || Mutated <- Mutations].
 
 relay_attempt_identity_golden_vector_test() ->
     ?assertEqual(
-       <<16#00, 16#0d, 16#3c, 16#41, 16#6f, 16#b2, 16#78, 16#63,
-         16#7c, 16#96, 16#d7, 16#08, 16#79, 16#75, 16#fe, 16#e9>>,
+       <<142, 118, 162, 96, 149, 209, 150, 58, 106, 63, 138, 220, 25, 96, 103, 18>>,
        quod_transaction:relay_attempt_id(
          <<"relay:test">>, <<1:128>>, <<3:256>>, 17, <<2:256>>)).
 
 relay_attempt_identity_rejects_malformed_test() ->
     Sid = <<1:128>>,
-    CommitteeId = <<3:256>>,
+    Era = <<3:256>>,
     Target = <<2:256>>,
     BadInputs =
-        [{not_binary, Sid, CommitteeId, 1, Target},
-         {?NS, <<1:120>>, CommitteeId, 1, Target},
+        [{not_binary, Sid, Era, 1, Target},
+         {?NS, <<1:120>>, Era, 1, Target},
          {?NS, Sid, <<3:248>>, 1, Target},
          {?NS, Sid, not_binary, 1, Target},
-         {?NS, Sid, CommitteeId, 0, Target},
-         {?NS, Sid, CommitteeId, 16#10000000000000000, Target},
-         {?NS, Sid, CommitteeId, <<"1">>, Target},
-         {?NS, Sid, CommitteeId, 1, <<2:248>>},
-         {?NS, Sid, CommitteeId, 1, not_binary}],
+         {?NS, Sid, Era, 0, Target},
+         {?NS, Sid, Era, 16#10000000000000000, Target},
+         {?NS, Sid, Era, <<"1">>, Target},
+         {?NS, Sid, Era, 1, <<2:248>>},
+         {?NS, Sid, Era, 1, not_binary}],
     [?assertEqual(
        error,
        quod_transaction:relay_attempt_id(

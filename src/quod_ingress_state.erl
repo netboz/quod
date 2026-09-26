@@ -72,16 +72,18 @@ can change.  A new source with identical canonical facts updates
 -record(view, {
     self :: node_id(),
     capability :: ingress_capability(),
-    committee_id :: term(),
+    era :: term(),
     validator_source = [] :: [node_id()],
     validators = {} :: tuple(),
     validator_set = #{} :: map(),
     durable_head :: slot(),
-    approved :: slot(),
+    view :: slot(),
+    membership_open :: boolean(),
     proposal_visible :: boolean(),
     proposal_slot :: blocked | {ok, slot()},
     consensus_barrier :: boolean(),
     approved_author_seqs :: inactive | error | {ok, map()},
+    durable_author_seqs :: map(),
     collecting :: none | {slot(), non_neg_integer(), non_neg_integer()},
     custody_lane :: empty | {node_id(), slot(), term()},
     custody_ready = 0 :: non_neg_integer(),
@@ -199,8 +201,8 @@ route(_Pass, _Origin, _Request, _Validate, _State) ->
 
 -spec relay_target_open({term(), slot()}, state()) -> boolean().
 relay_target_open(
-  {CommitteeId, TargetSlot}, #state{view = View}) ->
-    relay_target_open_view(CommitteeId, TargetSlot, View);
+  {Era, TargetSlot}, #state{view = View}) ->
+    relay_target_open_view(Era, TargetSlot, View);
 relay_target_open(_Target, _State) ->
     false.
 
@@ -338,12 +340,10 @@ item(#item{context = Context, waiter = Waiter,
 %% ------------------------------------------------------------------
 
 route_request(Pass, local, Request, Validate, View, QueueCount) ->
-    case ingress_capability(Pass, local, View) of
+    case View#view.capability of
         reject ->
             {redirect, Request};
-        hold ->
-            {{park, awaiting_turn}, Request};
-        accept ->
+        Capability ->
             case Validate() of
                 invalid ->
                     {{reject, bad_change}, Request};
@@ -352,9 +352,11 @@ route_request(Pass, local, Request, Validate, View, QueueCount) ->
                         {too_large, Prepared} ->
                             {{reject, too_large}, Prepared};
                         {ok, Prepared} ->
-                            {place(Pass, local, Prepared,
-                                   View, QueueCount),
-                             Prepared}
+                            Decision = case Capability of
+                                hold -> {park, awaiting_turn};
+                                accept -> place(Pass, local, Prepared, View, QueueCount)
+                            end,
+                            {Decision, Prepared}
                     end
             end
     end;
@@ -362,7 +364,7 @@ route_request(Pass, custody,
               Request, Validate, View, QueueCount) ->
     %% Once signed custody exists, neither demotion nor a transient view can
     %% prove exclusion.  Those states hold the exact bytes to their deadline.
-    case ingress_capability(Pass, custody, View) of
+    case View#view.capability of
         reject ->
             {{park, awaiting_turn}, Request};
         hold ->
@@ -390,7 +392,7 @@ route_request(Pass, custody,
                     end
             end
     end;
-route_request(Pass, Origin = {relayed, CommitteeId, TargetSlot},
+route_request(Pass, Origin = {relayed, Era, TargetSlot},
               Request, Validate, View, QueueCount) ->
     case Validate() of
         invalid ->
@@ -401,11 +403,11 @@ route_request(Pass, Origin = {relayed, CommitteeId, TargetSlot},
                     {{reject, too_large}, Prepared};
                 {ok, Prepared} ->
                     case relay_target_open_view(
-                           CommitteeId, TargetSlot, View) of
+                           Era, TargetSlot, View) of
                         false ->
                             {redirect, Prepared};
                         true ->
-                            case ingress_capability(Pass, Origin, View) of
+                            case View#view.capability of
                                 reject -> {redirect, Prepared};
                                 hold ->
                                     {{park, awaiting_turn}, Prepared};
@@ -425,20 +427,11 @@ prepare_for_route(Request, Membership) ->
         false -> {ok, Prepared}
     end.
 
--spec ingress_capability(pass(), route_origin(), #view{}) ->
-          ingress_capability().
-ingress_capability(entry, local, #view{capability = accept}) ->
-    accept;
-ingress_capability(entry, local, #view{}) ->
-    reject;
-ingress_capability(_Pass, _Origin, #view{capability = Capability}) ->
-    Capability.
-
 place(_Pass, _Origin, _Request,
       #view{consensus_barrier = true}, _QueueCount) ->
     {park, barrier};
 place(Pass, Origin, Request, View, QueueCount) ->
-    Floor = View#view.approved + 1,
+    Floor = View#view.view,
     case Origin of
         local ->
             place_local(Pass, Origin, Request, Floor,
@@ -446,7 +439,7 @@ place(Pass, Origin, Request, View, QueueCount) ->
         custody ->
             place_local(Pass, Origin, Request, Floor,
                         View, QueueCount);
-        {relayed, _CommitteeId, TargetSlot} ->
+        {relayed, _Era, TargetSlot} ->
             place_relayed(Pass, TargetSlot, Request, Floor,
                           View, QueueCount)
     end.
@@ -513,8 +506,8 @@ origin_lane(Floor, _Origin,
 origin_lane(Floor, _Origin,
             View = #view{custody_lane =
                               {Target, TargetSlot,
-                               PlacementCommitteeId}}) ->
-    case PlacementCommitteeId =:= View#view.committee_id of
+                               PlacementEra}}) ->
+    case PlacementEra =:= View#view.era of
         false ->
             placement_conflict;
         true ->
@@ -550,10 +543,9 @@ admissible_for(drain, Request, View, _QueueCount) ->
 
 admissible_without_queue(
   #request{membership = Membership, item_bytes = ItemBytes},
-  #view{approved = Approved, durable_head = Durable,
-        collecting = Collecting}) ->
+  #view{membership_open = MembershipOpen, collecting = Collecting}) ->
     SignedBytes = ItemBytes - ?BATCH_ENVELOPE_BYTES,
-    (not Membership orelse Approved =:= Durable)
+    (not Membership orelse MembershipOpen)
         andalso
           case Collecting of
               none ->
@@ -569,11 +561,12 @@ oversized(#request{item_bytes = Bytes}) ->
 
 custody_sequence_status(
   #request{change = #transaction{author = Author, author_seq = Seq}},
-  #view{approved_author_seqs = {ok, Floor}})
+  #view{approved_author_seqs = {ok, Floor}, durable_author_seqs = Durable})
   when is_integer(Seq), Seq > 0 ->
-    case Seq > maps:get(Author, Floor, 0) of
-        true -> current;
-        false -> stale
+    case {Seq > maps:get(Author, Durable, 0), Seq > maps:get(Author, Floor, 0)} of
+        {false, _} -> stale;
+        {true, false} -> hold;
+        {true, true} -> current
     end;
 custody_sequence_status(
   #request{}, #view{approved_author_seqs = error}) ->
@@ -585,17 +578,17 @@ custody_sequence_status(#request{}, #view{}) ->
     stale.
 
 relay_target_open_view(
-  CommitteeId, TargetSlot,
-  View = #view{committee_id = CommitteeId})
+  Era, TargetSlot,
+  View = #view{era = Era})
   when is_integer(TargetSlot), TargetSlot > 0 ->
-    Floor = View#view.approved + 1,
+    Floor = View#view.view,
     leader(TargetSlot, View) =:= View#view.self
         andalso
           (TargetSlot > Floor
            orelse
              (TargetSlot =:= Floor
               andalso not View#view.proposal_visible));
-relay_target_open_view(_CommitteeId, _TargetSlot, _View) ->
+relay_target_open_view(_Era, _TargetSlot, _View) ->
     false.
 
 leader(_Slot, #view{validators = Validators})
@@ -646,23 +639,23 @@ take_expired(Cutoff, State = #state{queue = Queue}, Acc) ->
 
 ingress_projection(
   #view{self = Self, capability = Capability,
-        committee_id = CommitteeId,
+        era = Era,
         validators = Validators, durable_head = Durable,
-        approved = Approved, proposal_visible = ProposalVisible,
+        view = View, membership_open = MembershipOpen, proposal_visible = ProposalVisible,
         proposal_slot = ProposalSlot,
         consensus_barrier = ConsensusBarrier,
         collecting = Collecting, custody_lane = CustodyLane,
         custody_ready = CustodyReady, relay_lane = RelayLane}) ->
-    {Self, Capability, CommitteeId, Validators,
-     Durable, Approved, ProposalVisible, ProposalSlot,
+    {Self, Capability, Era, Validators,
+     Durable, View, MembershipOpen, ProposalVisible, ProposalSlot,
      ConsensusBarrier, Collecting, CustodyLane,
      CustodyReady > 0, RelayLane}.
 
 custody_projection(
-  #view{approved_author_seqs = ApprovedAuthorSeqs,
+  #view{approved_author_seqs = ApprovedAuthorSeqs, durable_author_seqs = DurableAuthorSeqs,
         relay_pending_count = RelayPendingCount},
   IngressKey) ->
-    {IngressKey, ApprovedAuthorSeqs, RelayPendingCount}.
+    {IngressKey, ApprovedAuthorSeqs, DurableAuthorSeqs, RelayPendingCount}.
 
 view_from_facts(Facts, Previous) ->
     %% Preserve the ordering-layer contract: proposer rotation is over the
@@ -674,16 +667,18 @@ view_from_facts(Facts, Previous) ->
     #view{
        self = maps:get(self, Facts),
        capability = maps:get(capability, Facts),
-       committee_id = maps:get(committee_id, Facts),
+       era = maps:get(era, Facts),
        validator_source = ValidatorSource,
        validators = Validators,
        validator_set = ValidatorSet,
        durable_head = maps:get(durable_head, Facts),
-       approved = maps:get(approved, Facts),
+       view = maps:get(view, Facts),
+       membership_open = maps:get(membership_open, Facts),
        proposal_visible = maps:get(proposal_visible, Facts),
        proposal_slot = maps:get(proposal_slot, Facts),
        consensus_barrier = maps:get(consensus_barrier, Facts),
        approved_author_seqs = maps:get(approved_author_seqs, Facts),
+       durable_author_seqs = maps:get(durable_author_seqs, Facts),
        collecting = maps:get(collecting, Facts),
        custody_lane = maps:get(custody_lane, Facts),
        custody_ready = maps:get(custody_ready, Facts),

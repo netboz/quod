@@ -174,13 +174,12 @@ recovery_preserves_owner_apply_progress_test_() ->
             _ -> View3
         end,
         #{projection := Capture} = View,
-        Noop = skipped_entry(4, F),
-        {ok, [Noop], P4, Delta} = quod_catchup:verify_forward(element(1, Target), element(2, Target),
-            Capture, 4, [Noop], maps:get(history_index, Capture)),
+        Neutral = neutral_entry(4, F),
+        Verified = verified_group(Target, Neutral, Capture, maps:get(history_index, Capture)),
         %% Real callback order: capture/verify, then exact local acknowledgement,
         %% then the real sink. No fabricated cross-recipient message ordering.
         BeforeSink = case Ack of during_verify -> acknowledge(F, BeforeCapture); _ -> BeforeCapture end,
-        {S4, {ok, _}} = recovery_sink([Noop], P4, Delta, BeforeSink),
+        {S4, {ok, _}} = recovery_sink(Verified, BeforeSink),
         Installed = case Ack of after_install -> acknowledge(F, S4); _ -> S4 end,
         case {Role, Ack} of
             {_, none} -> ?assertMatch(#{Group := #{blocking := true}}, apply_fences(Installed));
@@ -202,9 +201,9 @@ recovery_new_resolve_is_not_acknowledged_by_an_earlier_notification_test() ->
             %% that new application must still close its proof fence.
             S2 = acknowledge(F, S2),
             [_, _, Resolve] = maps:get(chain, F),
-            {ok, [Resolve], P3, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
-                Capture, 3, [Resolve], maps:get(history_index, Capture)),
-            {S3, {ok, _}} = recovery_sink([Resolve], P3, Delta, S2),
+            Verified = verified_group({maps:get(ns, F), maps:get(anchor, F)},
+                Resolve, Capture, maps:get(history_index, Capture)),
+            {S3, {ok, _}} = recovery_sink(Verified, S2),
             Group = maps:get(group_id, F),
             ?assertMatch(#{Group := #{slot := 3, generation := 2, blocking := true}}, apply_fences(S3))
         end)
@@ -214,10 +213,11 @@ recovery_complete_does_not_restore_an_acknowledged_source_marker_test() ->
     isolated(fun() -> with_recovery_target(source, fun(F, _Index, S3, #{projection := Capture}) ->
         SApplied = acknowledge(F, S3),
         {Complete, _, _} = phase_entry({maps:get(ns, F), maps:get(anchor, F)},
-            quod_atomic:control_body(maps:get(complete_control, F)), 4, F),
-        {ok, [Complete], P4, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
-            Capture, 4, [Complete], maps:get(history_index, Capture)),
-        {S4, {ok, _}} = recovery_sink([Complete], P4, Delta, SApplied),
+            quod_atomic:control_body(maps:get(complete_control, F)), 4,
+            maps:get(protocol_root, Capture), F),
+        Verified = verified_group({maps:get(ns, F), maps:get(anchor, F)},
+            Complete, Capture, maps:get(history_index, Capture)),
+        {S4, {ok, _}} = recovery_sink(Verified, SApplied),
         ?assertEqual(#{}, apply_fences(S4)),
         ?assertEqual(#{}, maps:get(groups, maps:get(dtx, quod_simplex:test_state_projection(S4))))
     end) end).
@@ -230,11 +230,12 @@ assert_complete_verdict(F, Index, S, Ack) ->
     Parent = maps:get(history_head, quod_simplex:test_state_projection(S)),
     %% Exercise the actual final local check, with its two upstream valid
     %% verdicts as inputs. This is not a full foreign-admission fixture.
+    View = Block#block.slot,
     Checked = quod_simplex:apply_dtx_verdict({valid, #{Group => History}},
-        Block#block.payload, Block, 5, Hash, Parent, S),
+        Block#block.payload, Block, View, Hash, Parent, S),
     case Ack of
-        none -> ?assertEqual({Hash, {invalid_transition, apply}}, quod_simplex:test_proposal_rejection(5, Checked));
-        _ -> ?assertEqual({none, none}, quod_simplex:test_proposal_rejection(5, Checked))
+        none -> ?assertEqual({Hash, {invalid_transition, apply}}, quod_simplex:test_proposal_rejection(View, Checked));
+        _ -> ?assertEqual({none, none}, quod_simplex:test_proposal_rejection(View, Checked))
     end.
 
 with_recovery_target(Role, Fun) -> with_recovery_target(Role, 3, Fun).
@@ -250,11 +251,15 @@ with_recovery_target(Role, Height, Fun) ->
         S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
             consensus_domain => quod_simplex:consensus_domain(Ns, Anchor),
             store => Store, phase_index => Index, sync => {pulling, self()},
-            eng => quod_simplex:eng_with_certs(0, [])}),
+            eng => quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [],
+                {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
         Prefix = lists:sublist(maps:get(chain, F), Height),
-        {ok, Prefix, P, Delta} = quod_catchup:verify_forward(Ns, Anchor,
-            quod_simplex:history_projection({Ns, Anchor}), 1, Prefix, Index),
-        {S, {ok, View}} = recovery_sink(Prefix, P, Delta, S0),
+        {S, View} = lists:foldl(fun(Entry, {Previous, _}) ->
+            Capture = quod_simplex:test_state_projection(Previous),
+            Verified = verified_group({Ns, Anchor}, Entry, Capture, Index),
+            {Next, {ok, Captured}} = recovery_sink(Verified, Previous),
+            {Next, Captured}
+        end, {S0, none}, Prefix),
         Fun(F, Index, S, View)
     end)
     after
@@ -270,14 +275,14 @@ source_commit_fixture(Base) ->
     Bundles = maps:get(bundles, Signed),
     [Remote] = [T || {T, _, _, _} <- Bundles, T =/= Target],
     {ok, Vote} = quod_atomic:new_vote(Group, Target, lists:keyfind(Target, 1, Bundles), prepared),
-    {VoteEntry, _, VoteRef} = phase_entry(Target, Vote, 2, Base),
+    {VoteEntry, _, VoteRef} = phase_entry(Target, Vote, 2, initial_root(Target), Base),
     {ok, RemoteVote} = quod_atomic:new_vote(Group, Remote, lists:keyfind(Remote, 1, Bundles), prepared),
-    {_, _, RemoteRef} = phase_entry(Remote, RemoteVote, 2, Base),
+    {RemoteEntry, _, RemoteRef} = phase_entry(Remote, RemoteVote, 2, initial_root(Remote), Base),
     Evidence = {all_prepared, lists:sort([{Target, VoteRef}, {Remote, RemoteRef}])},
     {ok, Resolve} = quod_atomic:new_resolve(Group, VoteRef, Target, commit, Evidence, VoteRef, 2),
-    {ResolveEntry, _, ResolveRef} = phase_entry(Target, Resolve, 3, Base),
+    {ResolveEntry, _, ResolveRef} = phase_entry(Target, Resolve, 3, protocol_ref(VoteEntry), Base),
     {ok, RemoteResolve} = quod_atomic:new_resolve(Group, VoteRef, Remote, commit, Evidence, RemoteRef, 2),
-    {_, _, RemoteResolveRef} = phase_entry(Remote, RemoteResolve, 3, Base),
+    {_, _, RemoteResolveRef} = phase_entry(Remote, RemoteResolve, 3, protocol_ref(RemoteEntry), Base),
     Network = maps:get(network, Signed), Committee = <<71:256>>,
     {ok, AppliedVote} = quod_applied_certificate:sign_applied_vote(
         Network, Remote, Committee, Id, RemoteResolveRef, 2, commit, maps:get(signer, Base)),
@@ -285,15 +290,18 @@ source_commit_fixture(Base) ->
         {Network, Remote, Committee, Id, RemoteResolveRef, 2, commit}, [AppliedVote]),
     {ok, Complete} = quod_atomic:new_complete(Group, commit,
         lists:sort([{Target, ResolveRef, 2}, {Remote, RemoteResolveRef, 2}]), [{Remote, Certificate}]),
-    {CompleteEntry, CompleteControl, CompleteRef} = phase_entry(Target, Complete, 5, Base),
-    Base#{chain := [hd(maps:get(chain, Base)), VoteEntry, ResolveEntry],
+    Prefix = Base#{chain := [hd(maps:get(chain, Base)), VoteEntry, ResolveEntry]},
+    Neutral = neutral_entry(4, Prefix),
+    {CompleteEntry, CompleteControl, CompleteRef} = phase_entry(
+        Target, Complete, 5, protocol_ref(Neutral), Base),
+    Prefix#{
         group_id := Id, complete_control => CompleteControl, complete_entry => CompleteEntry,
         complete_ref => CompleteRef, network => Network}.
 
-recovery_sink(Entries, Projection, Delta, S) ->
+recovery_sink(Group, S) ->
     From = {self(), make_ref()},
     {keep_state, Next, Actions} = quod_simplex:running({call, From},
-        {sink_catchup, {recovery, self()}, Entries, Projection, Delta}, S),
+        {sink_catchup, {recovery, self()}, Group}, S),
     [Reply] = [R || {reply, Who, R} <- Actions, Who =:= From], {Next, Reply}.
 
 acknowledge(F, S) ->
@@ -304,12 +312,44 @@ acknowledge(F, S) ->
 
 apply_fences(S) -> maps:get(apply_fences, maps:get(dtx, quod_simplex:test_state_projection(S))).
 
-skipped_entry(Slot, F) ->
-    #share{sig = Sig} = quod_simplex:make_share(
-        quod_simplex:consensus_domain(maps:get(ns, F), maps:get(anchor, F)),
-        complaint, Slot, none, maps:get(signer, F)),
-    quod_ledger:noop_entry(Slot, #cert{kind = complaint, slot = Slot, block_hash = none,
-        sigs = [{maps:get(pub, F), Sig}]}).
+%% A harmless ordinary action advances material history while an earlier
+%% application acknowledgement is in flight. A complaint cannot do that.
+neutral_entry(Height, F) ->
+    Target = {Ns, Anchor} = {maps:get(ns, F), maps:get(anchor, F)},
+    {ok, Goal} = quod_durable_term:encode_goal(true),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    Tx0 = quod_transaction:bind_id(Target, #transaction{origin = Target,
+        proof_id = <<53:256>>, plan_digest = <<54:256>>, goal = Goal, result = Result,
+        diff = [], read_check = #{}, author = maps:get(pub, F), author_seq = Height - 1,
+        submitted_at = 0}),
+    {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Tx0, maps:get(signer, F)),
+    Parent = {Era, View, _} = protocol_ref(lists:last(maps:get(chain, F))),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Tx]}, 0),
+    quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block,
+        #{identity => Target, signer => maps:get(signer, F)})).
+
+initial_root(Identity = {_, Anchor}) -> {quod_ledger:initial_era(Identity), 0, Anchor}.
+
+protocol_ref(Entry) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry), quod_ledger:block_ref(Block).
+
+proof_source(Entry) ->
+    case quod_ledger:entry_index(Entry) of
+        1 -> none;
+        _ ->
+            {ok, Block} = quod_ledger:block_from_entry(Entry),
+            Bytes = quod_ledger:block_bytes(Block),
+            {quod_ledger_store:proof_frame_size(Bytes),
+             fun([]) -> done; ([B]) -> {B, []} end, [Bytes]}
+    end.
+
+verified_group(Target, Entry, Projection, Index) ->
+    Proof = proof_source(Entry),
+    Bytes = case Proof of none -> []; {_, _, Bs} -> Bs end,
+    Read = {fun([]) -> done; ([B]) -> {ok, B, []} end, Bytes},
+    {ok, Next, Delta, Summary} = quod_catchup:verify_forward_group(
+        Target, [Entry], Projection, Index, Read),
+    #{entries => [Entry], proof => Proof, projection => Next, delta => Delta, finality => Summary}.
 
 target(Kind, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -324,19 +364,25 @@ target(Kind, Fun) ->
     try
         P = quod_ct:with_network_identity(maps:get(network, F, <<202:256>>), fun() ->
             lists:foldl(fun(Entry, Acc) ->
-                {ok, Next, _} = quod_simplex:history_advance(Target, Entry, Acc, Index), Next
+                {ok, Next, _} = quod_ct:history_advance(Target, Entry, Acc, Index), Next
             end, quod_simplex:history_projection(Target), maps:get(chain, F))
         end),
         ?assertEqual(#{}, maps:get(groups, maps:get(dtx, P))),
         Height = length(maps:get(chain, F)),
-        {ok, Written} = quod_ledger_store:append(Store, maps:get(chain, F)),
-        {ok, Reconciled} = quod_dtx_owner:reconcile_journal(Height, P, Index, Journal),
+        Written = lists:foldl(fun(Entry, Previous) ->
+            {ok, Next} = quod_ledger_store:append(Previous, {proof_source(Entry), [Entry]}), Next
+        end, Store, maps:get(chain, F)),
+        {Era, ArchivedView, _} = maps:get(protocol_root, P),
+        {ok, Reconciled} = quod_dtx_owner:reconcile_journal(
+            #{Era => ArchivedView}, P, Index, Journal),
         Pub = maps:get(pub, F),
         S = quod_simplex:test_install_projection(P, quod_simplex:test_state(
               #{ns => Ns, genesis_hash => Anchor, self => Pub, id => maps:get(signer, F),
                 slot => Height, last_applied => Height, sync => ready, prolog_ready => true,
                 phase_index => Index, signing_journal => Reconciled, store => Written,
-                consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [Pub], Height)})),
+                archive_tip => {maps:get(protocol_root, P), maps:get(timestamp, P)},
+                consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [Pub],
+                    {maps:get(protocol_root, P), maps:get(timestamp, P)})})),
         quod_ct:with_network_identity(maps:get(network, F), fun() -> Fun(F, S) end)
     after
         _ = catch quod_signing_journal:close(Journal),
@@ -359,19 +405,16 @@ phase_fixture(complete, Ns) ->
     %% Same source reducer as recovery; the foreign certificate is signed but
     %% its committee is a fixture, not a full foreign-admission witness.
     F = source_commit_fixture(quod_foreign_log_tests:prepared_then_committed_fixture(Ns)),
-    F#{chain := maps:get(chain, F) ++ [skipped_entry(4, F), maps:get(complete_entry, F)],
+    F#{chain := maps:get(chain, F) ++ [neutral_entry(4, F), maps:get(complete_entry, F)],
        control := maps:get(complete_control, F), ref := maps:get(complete_ref, F)}.
 
-phase_entry({Ns, Anchor} = Target, Record, Slot, F) ->
+phase_entry(Target, Record, Height, {Era, View, _} = Parent, F) ->
     Signer = maps:get(signer, F),
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F),
-                                         Slot - 1, Slot - 1, Signer),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, 0),
-    Hash = quod_simplex:block_hash(Block),
-    #share{sig = Sig} = quod_simplex:make_share(
-        quod_simplex:consensus_domain(Ns, Anchor), commit, Slot, Hash, Signer),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = Slot,
-                            block_hash = Hash, sigs = [{maps:get(pub, F), Sig}]}),
+                                         Height - 1, Height - 1, Signer),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [{dtx, Control}]}, 0),
+    Entry = quod_ledger:entry(Height, Block,
+        quod_ct:protocol_certificate(Block, #{identity => Target, signer => Signer})),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {Entry, Control, Ref}.

@@ -148,10 +148,8 @@ summary() ->
 ns_summary(Ns) ->
     St = quod_simplex:status(Ns),
     Committee = quod_simplex:committee(Ns),
-    Slot = maps:get(slot, St, 0),
-    Approved = maps:get(approved, St, Slot),
-    FinalitySlot = maps:get(finality_slot, St, Slot + 1),
-    ProposalSlot = maps:get(proposal_slot, St, Approved + 1),
+    View = maps:get(protocol_view, St, 0),
+    ProposalSlot = maps:get(proposal_slot, St, View),
     maps:merge(
       #{ns        => Ns,
         height    => maps:get(committed, St, 0),
@@ -159,14 +157,14 @@ ns_summary(Ns) ->
         role      => maps:get(role, St, observer),
         syncing   => maps:get(syncing, St, false),
         committee => [id_json(M) || M <- Committee],
-        approved  => Approved,
-        finality_slot => FinalitySlot,
-        finality_leader => leader_json(FinalitySlot, Committee),
+        protocol_view => View,
+        protocol_era => digest_json(maps:get(protocol_era, St, undefined)),
+        notarized_view => maps:get(notarized_view, St, 0),
+        view_leader => leader_json(View, Committee),
         proposal_slot => ProposalSlot,
         next_proposer => leader_json(ProposalSlot, Committee),
         proposal_open => maps:get(proposal_open, St, false),
         progress_phase => maps:get(progress_phase, St, idle),
-        progress_quorum_ready => maps:get(progress_quorum_ready, St, false),
         genesis   => case quod_simplex:genesis_hash(Ns) of
                          H when is_binary(H) -> binary:encode_hex(H, lowercase);
                          _ -> null
@@ -409,7 +407,6 @@ entry_txs(Entry) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> Txs;
         {controls, _Controls} -> [];
-        noop -> [];
         invalid -> []
     end.
 
@@ -424,7 +421,6 @@ entry_rows(Ns, E) ->
         {controls, Controls} ->
             [control_row(Ns, Phase, Control, E)
              || {Phase, Control} <- Controls];
-        noop -> [];
         invalid -> []
     end.
 
@@ -649,7 +645,6 @@ block_json(Ns, E) ->
         {controls, Controls} ->
             (block_meta(dtx_batch, E))#{
               txs => [], controls => [control_json(C) || {_, C} <- Controls]};
-        noop -> (block_meta(noop, E))#{txs => []};
         invalid -> (block_meta(invalid, E))#{txs => []}
     end.
 
@@ -791,17 +786,14 @@ entry_kind(Entry) ->
     case quod_ledger:classify(Data) of
         {content, _Txs} -> content;
         {controls, _Controls} -> dtx_batch;
-        noop -> noop;
+        empty -> invalid;
         invalid -> invalid
     end.
 
 cert_json(none) -> null;
-cert_json(#cert{kind = K, sigs = Sigs}) ->
-    #{kind => K, signers => [id_json(P) || {P, _Sig} <- Sigs]};
-cert_json(#implicit_cert{child = Child, commit = Commit}) ->
-    %% committed implicitly by its child (depth-1 pipelining) — show the child's commit quorum
-    #{kind => implicit, child_slot => Child#block.slot,
-      signers => [id_json(P) || {P, _Sig} <- Commit#cert.sigs]}.
+cert_json(#cert{kind = Kind, era = Era, slot = View, sigs = Sigs}) ->
+    #{kind => Kind, era => digest_json(Era), head_view => View,
+      signers => [id_json(P) || {P, _Sig} <- Sigs]}.
 
 %% Durable goal/result blobs decode through the same atom-safe canonical
 %% persistence codec on every node; only the unsigned genesis has none.

@@ -504,8 +504,8 @@ evidence_rows(Material, Records) ->
          {Kind, Required, M}
      end || {Kind, Required} <- quod_atomic:reference_requirements(Material)].
 ref({Ns, Anchor}, Digest) ->
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 1, <<44:256>>, Digest,
-                                      <<"shape-only-not-certified">>), Ref.
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<44:256>>, Digest,
+                                      quod_ct:fixture_finality(1, <<44:256>>)), Ref.
 flipped(<<Byte, Rest/binary>>) -> <<(Byte bxor 1), Rest/binary>>.
 signature_count(Fun) ->
     {module, quod_identity} = code:ensure_loaded(quod_identity),

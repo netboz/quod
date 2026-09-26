@@ -1188,8 +1188,7 @@ remote_read_certificate_fixture() ->
     {TargetNs, TargetAnchor} = TargetIdentity,
     {ok, AnchorRef} = quod_dtx:certified_ref(
                         TargetNs, TargetAnchor, 4, key(207), key(208),
-                        term_to_binary({qc, read_certificate},
-                                       [deterministic])),
+                        quod_ct:fixture_finality(1, key(207))),
     CommitteeId = key(209),
     {ok, SignedRow} = quod_read_certificate:sign(
                         TargetIdentity, ProofId, quod_dtx:digest(Plan),

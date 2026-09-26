@@ -116,7 +116,7 @@ catchup_bootstrap_and_opaque_page_test() ->
           Link ! {data, frame(<<>>), false},
           receive {link_up, Channel, _, Link, out} -> ?assert(false)
           after 20 -> ok end,
-          Credit = frame(quod_catchup:encode_frame(Ns, {blocks_credit, Grant})),
+          Credit = frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})),
           <<Prefix:5/binary, Rest/binary>> = Credit,
           Link ! {data, Prefix, false},
           Link ! {data, Rest, false},
@@ -127,16 +127,16 @@ catchup_bootstrap_and_opaque_page_test() ->
           receive {catchup_credit, Link, Binding, Grant} -> ok
           after 1000 -> error(no_initial_credit) end,
           ok = quod_link:bind_catchup(Link, Binding),
-          ok = quod_link:request_page(Link, Binding, Grant, ReqId, 1, 1),
+          ok = quod_link:request_page(Link, Binding, Grant, ReqId, {range, 1, 1}),
           {[Request], <<>>} = parse(credit_wire(Tag)),
-          ?assertMatch({ok, {blocks_req, Grant, ReqId, 1, 1}, _},
+          ?assertMatch({ok, {history_request3, Grant, ReqId, {range, 1, 1}}, _},
                        quod_catchup:decode_frame(Ns, Request)),
           %% Transport must not decode entry bytes or mint atoms from them.
           Opaque = <<"entry decoding belongs to the reader">>,
-          Response = {blocks_resp_bytes, Grant, ReqId, [Opaque], 1, Next},
+          Response = {history_page3, Grant, ReqId, [{entry, Opaque}], 1, done, Next},
           Link ! {data, frame(quod_catchup:encode_frame(Ns, Response)), false},
           receive
-              {catchup_page, Link, Binding, Grant, ReqId, {ok, [Opaque], 1}, Next} -> ok
+              {catchup_page, Link, Binding, Grant, ReqId, {ok, [{entry, Opaque}], 1, done}, Next} -> ok
           after 1000 -> error(no_page_result) end,
           receive {catchup_credit, Link, Binding, _} -> ?assert(false)
           after 20 -> ok end,
@@ -170,7 +170,7 @@ catchup_bootstrap_atomic_ordered_send_test() ->
       fun(Link, _Conn, Tag, Ns, _Channel) ->
           First = credit_wire(Tag),
           {[<<>>, Payload], <<>>} = parse(First),
-          ?assertMatch({ok, {blocks_credit, _}, _},
+          ?assertMatch({ok, {history_credit3, _}, _},
                        quod_catchup:decode_frame(Ns, Payload)),
           {ok, _} = quod_link:test_transport(Link),
           receive {credit_wire, Tag, _} -> ?assert(false)
@@ -188,26 +188,26 @@ catchup_server_send_acceptance_precedes_next_admission_test() ->
               Grant = initial_server_grant(Tag, Ns), ReqId = <<11:128>>,
               Link ! {data, credit_request(Ns, Grant, ReqId), false},
               Operation = receive
-                              {catchup_request, Link, Op, 1, 1, StartedMs}
+                              {catchup_request, Link, Op, {range, 1, 1}, StartedMs}
                                 when is_integer(StartedMs) -> Op
                           after 1000 -> error(no_admitted_page) end,
               ok = quod_link:test_fail_next_ordered(Link, send_queue_full),
-              ok = quod_link:complete_page(Link, Operation, {ok, [], 0}),
+              ok = quod_link:complete_page(Link, Operation, {ok, [], 0, done}),
               {ok, _} = quod_link:test_transport(Link),
               receive {catchup_page_sent, Link, Operation} -> ?assert(false)
               after 20 -> ok end,
               Link ! {send_ready, 0},
               {[Response], <<>>} = parse(credit_wire(Tag)),
-              {ok, {blocks_resp_bytes, Grant, ReqId, [], 0, Next}, _} =
+              {ok, {history_page3, Grant, ReqId, [], 0, done, Next}, _} =
                   quod_catchup:decode_frame(Ns, Response),
               ?assertNotEqual(Grant, Next),
               Link ! {data, credit_request(Ns, Next, <<12:128>>), false},
               %% Both callbacks have this exact link sender: cleanup wins.
               receive
                   {catchup_page_sent, Link, Operation} -> ok;
-                  {catchup_request, Link, _, _, _, _} -> error(admission_overtook_cleanup)
+                  {catchup_request, Link, _, _, _} -> error(admission_overtook_cleanup)
               after 1000 -> error(no_send_acceptance) end,
-              receive {catchup_request, Link, NextOp, 1, 1, _} ->
+              receive {catchup_request, Link, NextOp, {range, 1, 1}, _} ->
                   ?assertNotEqual(Operation, NextOp)
               after 1000 -> error(no_successor_admission) end
           after gproc:unreg(quod_reg:name({quod_catchup, Ns})) end
@@ -224,12 +224,12 @@ catchup_batch_violation_stops_publication_test() ->
               Request = credit_request(Ns, Grant, <<20:128>>),
               MRef = monitor(process, Link),
               Link ! {data, <<Request/binary, Request/binary, Request/binary>>, false},
-              receive {catchup_request, Link, _, 1, 1, _} -> ok
+              receive {catchup_request, Link, _, {range, 1, 1}, _} -> ok
               after 1000 -> error(no_first_admission) end,
               receive {'DOWN', MRef, process, Link, catchup_credit_violation} -> ok
               after 1000 -> error(overlap_not_reset) end,
               receive
-                  {catchup_request, Link, _, _, _, _} -> ?assert(false);
+                  {catchup_request, Link, _, _, _} -> ?assert(false);
                   {quod_message, _, Channel, _} -> ?assert(false)
               after 20 -> ok end,
               ?assert(is_process_alive(Conn))
@@ -246,7 +246,7 @@ catchup_missing_owner_returns_credit_test() ->
           Grant = initial_server_grant(Tag, Ns), ReqId = <<30:128>>,
           Link ! {data, credit_request(Ns, Grant, ReqId), false},
           {[Response], <<>>} = parse(credit_wire(Tag)),
-          {ok, {blocks_err, Grant, ReqId, not_ready, Next}, _} =
+          {ok, {history_error3, Grant, ReqId, not_ready, Next}, _} =
               quod_catchup:decode_frame(Ns, Response),
           ?assertNotEqual(Grant, Next)
       end).
@@ -266,7 +266,7 @@ catchup_source_owner_death_resets_exact_link_test() ->
               receive {credit_owner_ready, Owner} -> ok end,
               Grant = initial_server_grant(Tag, Ns),
               Link ! {data, credit_request(Ns, Grant, <<40:128>>), false},
-              receive {owner_request, {catchup_request, Link, _, 1, 1, _}} -> ok
+              receive {owner_request, {catchup_request, Link, _, {range, 1, 1}, _}} -> ok
               after 1000 -> error(no_owner_request) end,
               MRef = monitor(process, Link),
               exit(Owner, kill),
@@ -281,7 +281,7 @@ catchup_changed_binding_retires_link_test() ->
       fun(Link, _Conn, _Tag, Ns, Channel) ->
           Grant = <<50:128>>,
           Link ! {data, <<(frame(<<>>))/binary,
-                          (frame(quod_catchup:encode_frame(Ns, {blocks_credit, Grant})))/binary>>,
+                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
                   false},
           receive {link_up, Channel, _, Link, out} -> ok
           after 1000 -> error(no_link_up) end,
@@ -300,7 +300,7 @@ catchup_producer_death_retires_link_test() ->
       fun(Link, Conn, _Tag, Ns, Channel) ->
           Grant = <<51:128>>,
           Link ! {data, <<(frame(<<>>))/binary,
-                          (frame(quod_catchup:encode_frame(Ns, {blocks_credit, Grant})))/binary>>,
+                          (frame(quod_catchup:encode_frame(Ns, {history_credit3, Grant})))/binary>>,
                   false},
           receive {link_up, Channel, _, Link, out} -> ok
           after 1000 -> error(no_link_up) end,
@@ -329,7 +329,7 @@ catchup_failed_terminal_send_never_returns_credit_test() ->
           try
               Grant = initial_server_grant(Tag, Ns),
               Link ! {data, credit_request(Ns, Grant, <<52:128>>), false},
-              Operation = receive {catchup_request, Link, Op, 1, 1, _} -> Op
+              Operation = receive {catchup_request, Link, Op, {range, 1, 1}, _} -> Op
                           after 1000 -> error(no_request) end,
               ok = quod_link:test_fail_next_ordered(Link, backpressure_timeout),
               MRef = monitor(process, Link),
@@ -405,11 +405,11 @@ credit_wire(Tag) ->
 
 initial_server_grant(Tag, Ns) ->
     {[<<>>, Payload], <<>>} = parse(credit_wire(Tag)),
-    {ok, {blocks_credit, Grant}, _} = quod_catchup:decode_frame(Ns, Payload),
+    {ok, {history_credit3, Grant}, _} = quod_catchup:decode_frame(Ns, Payload),
     Grant.
 
 credit_request(Ns, Grant, ReqId) ->
-    frame(quod_catchup:encode_frame(Ns, {blocks_req, Grant, ReqId, 1, 1})).
+    frame(quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, {range, 1, 1}})).
 
 stop_credit_link(Link) ->
     MRef = monitor(process, Link),

@@ -4,8 +4,70 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--define(MAGIC, 16#51534A35). %% "QSJ5"
+-define(MAGIC, 16#51534A36). %% "QSJ6"
+-define(ERA, <<201:256>>).
 -define(HDR_BYTES, 12).
+
+era_latches_and_exact_bodies_survive_recovery_test() ->
+    with_dir(fun(Ns, Dir) ->
+        E1 = hash(201), E2 = hash(202),
+        {ok, B1} = quod_ledger:new_block({E1, 1}, {E1, 0, hash(203)}, empty, 1),
+        {ok, B2} = quod_ledger:new_block({E2, 1}, {E2, 0, hash(204)}, empty, 1),
+        {_, _, H2} = quod_ledger:block_ref(B2),
+        {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+        {ok, J1} = quod_signing_journal:record_support(J0, B1),
+        {ok, J2} = quod_signing_journal:record_vote(J1, complaint, {E1, 1}, none),
+        {ok, J3} = quod_signing_journal:record_support(J2, B2),
+        {ok, J4} = quod_signing_journal:record_vote(J3, commit, {E2, 1}, H2),
+        Rounds = quod_signing_journal:rounds(J4),
+        ok = quod_signing_journal:close(J4),
+        {ok, J5} = quod_signing_journal:recover(Ns, domain(1), Dir),
+        ?assertEqual(Rounds, quod_signing_journal:rounds(J5)),
+        ?assertEqual(#{{E1, 1} => B1, {E2, 1} => B2},
+                     quod_signing_journal:supported_blocks(J5)),
+        ?assertException(error, {vote_conflict, {E1, 1}, _, _},
+          quod_signing_journal:record_vote(J5, commit, {E1, 1}, H2)),
+        ok = quod_signing_journal:close(J5)
+    end).
+
+archived_protocol_custody_is_not_material_height_test() ->
+    with_dir(fun(Ns, Dir) ->
+        E1 = hash(201), E2 = hash(202), Unknown = hash(203),
+        Positions = [{E1, 19}, {E2, 1}, {E2, 2}, {Unknown, 1}],
+        {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+        J1 = lists:foldl(fun(Pos, J) ->
+            {ok, Next} = quod_signing_journal:record_vote(J, complaint, Pos, none), Next
+        end, J0, Positions),
+        Summary = #{archived_protocol => #{E1 => sealed, E2 => 1},
+                    live_dtx_lanes => #{}, current_admissions => #{}, pending_dtx => #{}},
+        ?assertException(error, invalid_signing_journal_reconciliation,
+          quod_signing_journal:reconcile(J1, (maps:remove(archived_protocol, Summary))#{committed_slot => 100})),
+        {ok, J2} = quod_signing_journal:reconcile(J1, Summary),
+        Kept = [{E2, 2}, {Unknown, 1}],
+        ?assertEqual(lists:sort(Kept), lists:sort(maps:keys(quod_signing_journal:rounds(J2)))),
+        J3 = quod_signing_journal:compact(J2),
+        ok = quod_signing_journal:close(J3),
+        {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
+        ?assertEqual(lists:sort(Kept), lists:sort(maps:keys(quod_signing_journal:rounds(J4)))),
+        ok = quod_signing_journal:close(J4)
+    end).
+
+era_competing_support_is_refused_before_append_test() ->
+    with_dir(fun(Ns, Dir) ->
+        Era = hash(201),
+        {ok, B1} = quod_ledger:new_block({Era, 9}, {Era, 0, hash(202)}, empty, 1),
+        {ok, B2} = quod_ledger:new_block({Era, 9}, {Era, 0, hash(203)}, empty, 1),
+        {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+        {ok, J1} = quod_signing_journal:record_support(J0, B1),
+        Size = filelib:file_size(journal_path(Ns, Dir)),
+        ?assertException(error, {vote_conflict, {Era, 9}, _, _},
+                         quod_signing_journal:record_support(J1, B2)),
+        ?assertEqual(Size, filelib:file_size(journal_path(Ns, Dir))),
+        ok = quod_signing_journal:close(J1),
+        {ok, J2} = quod_signing_journal:recover(Ns, domain(1), Dir),
+        ?assertEqual(#{{Era, 9} => B1}, quod_signing_journal:supported_blocks(J2)),
+        ok = quod_signing_journal:close(J2)
+    end).
 
 persists_votes_and_dtx_floor_test() ->
     with_dir(
@@ -20,9 +82,9 @@ persists_votes_and_dtx_floor_test() ->
           ?assertEqual(SizeAfterSupport,
                        filelib:file_size(journal_path(Ns, Dir))),
           %% Support and final votes are independent protocol decisions.
-          {ok, J1a} = quod_signing_journal:record_vote(J1, commit, 6, H2),
+          {ok, J1a} = quod_signing_journal:record_vote(J1, commit, {?ERA, 6}, H2),
           {ok, J1b} = quod_signing_journal:record_vote(
-                        J1a, complaint, 7, none),
+                        J1a, complaint, {?ERA, 7}, none),
           {Signer, Admission, Control} = resolve_control(1, 7),
           Lane = {Admission, maps:get(pubkey, Signer)},
           {ok, J2, Envelope} = quod_signing_journal:record_dtx(J1b, Control),
@@ -31,17 +93,17 @@ persists_votes_and_dtx_floor_test() ->
           ok = quod_signing_journal:close(J2),
 
           {ok, J3} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertEqual(#{6 => #{support => H1, final => {commit, H2}},
-                         7 => #{support => none, final => complaint}},
+          ?assertEqual(#{{?ERA, 6} => #{support => H1, final => {commit, H2}},
+                         {?ERA, 7} => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J3)),
-          ?assertEqual(#{6 => Block},
+          ?assertEqual(#{{?ERA, 6} => Block},
                        quod_signing_journal:supported_blocks(J3)),
           ?assertEqual(7, quod_signing_journal:dtx_floor(J3, Lane)),
           ?assertEqual(#{}, quod_signing_journal:pending_dtx(J3)),
           J4 = quod_signing_journal:compact(J3),
           ok = quod_signing_journal:close(J4),
           {ok, J5} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertEqual(#{6 => Block},
+          ?assertEqual(#{{?ERA, 6} => Block},
                        quod_signing_journal:supported_blocks(J5)),
           ok = quod_signing_journal:close(J5)
       end).
@@ -56,7 +118,7 @@ malformed_supported_block_is_rejected_without_mutation_test() ->
           Block = supported_block(6, 1),
           Bytes = quod_ledger:block_bytes(Block),
           Payload = term_to_binary(
-                      {quod_signing_support, 5, 7, Bytes},
+                      {quod_signing_support, 6, {?ERA, 7}, Bytes},
                       [deterministic]),
           ok = file:write_file(
                  Path, quod_signing_journal:test_frame(Payload), [append]),
@@ -68,26 +130,33 @@ malformed_supported_block_is_rejected_without_mutation_test() ->
       end).
 
 conflicting_votes_fail_stop_test() ->
-    with_dir(
-      fun(Ns, Dir) ->
-          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          Block1 = supported_block(6, 1),
-          Block2 = supported_block(6, 2),
-          H1 = quod_simplex:block_hash(Block1),
-          H2 = quod_simplex:block_hash(Block2),
-          {ok, J1} = quod_signing_journal:record_support(J0, Block1),
-          ?assertError(
-             {vote_conflict, 6, {support, H1}, {support, H2}},
-             quod_signing_journal:record_support(J1, Block2)),
-          {ok, J2} = quod_signing_journal:record_vote(
-                       J1, complaint, 6, none),
-          ok = quod_signing_journal:close(J2),
-          {ok, J3} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertError(
-             {vote_conflict, 6, complaint, {commit, H1}},
-             quod_signing_journal:record_vote(J3, commit, 6, H1)),
-          ok = quod_signing_journal:close(J3)
-      end).
+    lists:foreach(fun(FirstKind) ->
+        with_dir(fun(Ns, Dir) ->
+            Era = hash(201), Position = {Era, 6}, Parent = {Era, 5, hash(202)},
+            {ok, Block1} = quod_ledger:new_block(Position, Parent, empty, 0),
+            {ok, Block2} = quod_ledger:new_block(Position, Parent, empty, 1),
+            H1 = quod_simplex:block_hash(Block1), H2 = quod_simplex:block_hash(Block2),
+            {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+            {ok, J1} = quod_signing_journal:record_support(J0, Block1),
+            ?assertError({vote_conflict, Position, {support, H1}, {support, H2}},
+                quod_signing_journal:record_support(J1, Block2)),
+            {FirstHash, First, OtherKind, OtherHash, Other} = case FirstKind of
+                complaint -> {none, complaint, commit, H1, {commit, H1}};
+                commit -> {H1, {commit, H1}, complaint, none, complaint}
+            end,
+            {ok, J2} = quod_signing_journal:record_vote(J1, FirstKind, Position, FirstHash),
+            ok = quod_signing_journal:close(J2),
+            {ok, J3} = quod_signing_journal:recover(Ns, domain(1), Dir),
+            ?assertError({vote_conflict, Position, First, Other},
+                quod_signing_journal:record_vote(J3, OtherKind, Position, OtherHash)),
+            %% An identical recovery redrive is allowed. Neither a different
+            %% view nor a new era inherits this position's final-vote choice.
+            {ok, J4} = quod_signing_journal:record_vote(J3, FirstKind, Position, FirstHash),
+            {ok, J5} = quod_signing_journal:record_vote(J4, OtherKind, {Era, 7}, OtherHash),
+            {ok, J6} = quod_signing_journal:record_vote(J5, OtherKind, {hash(203), 6}, OtherHash),
+            ok = quod_signing_journal:close(J6)
+        end)
+    end, [commit, complaint]).
 
 unused_header_is_replaceable_but_used_compacted_header_is_not_test() ->
     with_dir(
@@ -152,7 +221,7 @@ superseded_signing_magic_fails_explicitly_without_mutation_test() ->
                    quod_signing_journal:recover(Ns, domain(1), Dir)),
                 ?assertEqual({ok, Bytes}, file:read_file(Path))
             end,
-            [{1, 16#51534A31}, {2, 16#51534A32}, {3, 16#51534A33}, {4, 16#51534A34}])
+            [{1, 16#51534A31}, {2, 16#51534A32}, {3, 16#51534A33}, {4, 16#51534A34}, {5, 16#51534A35}])
       end).
 
 legacy_magic_in_tail_is_not_trimmed_test() ->
@@ -203,12 +272,12 @@ torn_final_frame_is_trimmed_after_domain_validation_test() ->
           {ok, J2} = quod_signing_journal:recover(Ns, domain(1), Dir),
           ?assertEqual({ok, Complete}, file:read_file(Path)),
           {ok, J3} = quod_signing_journal:record_vote(
-                       J2, complaint, 7, none),
+                       J2, complaint, {?ERA, 7}, none),
           ok = quod_signing_journal:close(J3),
           {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertEqual(#{6 => #{support => quod_simplex:block_hash(Block),
+          ?assertEqual(#{{?ERA, 6} => #{support => quod_simplex:block_hash(Block),
                                 final => none},
-                         7 => #{support => none, final => complaint}},
+                         {?ERA, 7} => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J4)),
           ok = quod_signing_journal:close(J4)
       end).
@@ -257,7 +326,7 @@ reconcile_uses_only_the_validated_summary_test() ->
           {ok, J1} = quod_signing_journal:record_support(
                        J0, supported_block(5, 5)),
           {ok, J2} = quod_signing_journal:record_vote(
-                       J1, complaint, 6, none),
+                       J1, complaint, {?ERA, 6}, none),
           {Signer1, Admission1, Control1} = resolve_control(11, 4),
           Lane1 = {Admission1, maps:get(pubkey, Signer1)},
           {ok, J3, _} = quod_signing_journal:record_dtx(J2, Control1),
@@ -266,7 +335,7 @@ reconcile_uses_only_the_validated_summary_test() ->
           {ok, J4, _} = quod_signing_journal:record_dtx(J3, Control2),
           {ok, J5} = quod_signing_journal:reconcile(
                        J4, summary(5, #{Lane2 => 7}, #{})),
-          ?assertEqual(#{6 => #{support => none, final => complaint}},
+          ?assertEqual(#{{?ERA, 6} => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J5)),
           ?assertEqual(#{}, quod_signing_journal:supported_blocks(J5)),
           ?assertEqual(0, quod_signing_journal:dtx_floor(J5, Lane1)),
@@ -399,7 +468,7 @@ malformed_current_admissions_rejects_reconciliation_test() ->
           ?assertError(
              invalid_signing_journal_reconciliation,
              quod_signing_journal:reconcile(
-               J0, #{committed_slot => 0, live_dtx_lanes => #{},
+               J0, #{archived_protocol => #{}, live_dtx_lanes => #{},
                      pending_dtx => #{}})),
           ok = quod_signing_journal:close(J0)
       end).
@@ -722,7 +791,7 @@ negative_only_manifest_custody_survives_compaction_test() ->
         ok = quod_signing_journal:close(J3)
     end).
 
-real_qsj4_is_refused_by_name_and_empty_qsj5_opens_test() ->
+real_qsj4_is_refused_by_name_and_empty_qsj6_opens_test() ->
     with_dir(fun(_Ns, Dir) ->
         Ns = <<"quod:signed-fixture">>, Domain = <<41:256>>,
         Fixture = filename:join([filename:dirname(?FILE), "fixtures", "two-phase",
@@ -1014,7 +1083,7 @@ dormant_transaction_activation_record_is_rejected_on_recovery_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Payload = term_to_binary(
-                      {quod_signing_transaction_activated, 5, TxId},
+                      {quod_signing_transaction_activated, 6, TxId},
                       [deterministic]),
           ok = file:write_file(
                  Path, quod_signing_journal:test_frame(Payload), [append]),
@@ -1050,8 +1119,8 @@ unknown_atom_record_is_rejected_without_atom_creation_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Canonical = term_to_binary(
-                        {quod_signing_final_vote, 5,
-                         complaint, 8, none},
+                        {quod_signing_final_vote, 6,
+                         complaint, {?ERA, 8}, none},
                         [deterministic]),
           Unknown = binary:replace(
                       Canonical, <<"complaint">>, <<"qzxqvjklm">>),
@@ -1070,7 +1139,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Body = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
     Envelope = binary:copy(<<0>>, ?QUOD_MAX_DTX_CONTROL_BYTES),
     AtLimit = term_to_binary(
-                {quod_signing_pending_dtx, 5, Fixed, Fixed,
+                {quod_signing_pending_dtx, 6, Fixed, Fixed,
                  16#FFFFFFFFFFFFFFFF, Fixed, Body, Envelope},
                 [deterministic]),
     ?assertEqual(quod_signing_journal:test_max_frame_payload_bytes(),
@@ -1078,7 +1147,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Frame = quod_signing_journal:test_frame(AtLimit),
     ?assertEqual(byte_size(AtLimit) + ?HDR_BYTES, byte_size(Frame)),
     Over = term_to_binary(
-             {quod_signing_pending_dtx, 5, Fixed, Fixed,
+             {quod_signing_pending_dtx, 6, Fixed, Fixed,
               16#FFFFFFFFFFFFFFFF, Fixed, Body,
              <<Envelope/binary, 0>>},
              [deterministic]),
@@ -1101,14 +1170,14 @@ with_dir(Fun) ->
         _ = file:del_dir_r(Dir)
     end.
 
-summary(Slot, Live, PendingDtx) ->
+summary(View, Live, PendingDtx) ->
     Admissions = maps:from_list(
                    [{Author, Admission}
                     || {{Admission, Author}, _Floor} <- maps:to_list(Live)]),
-    summary(Slot, Live, Admissions, PendingDtx).
+    summary(View, Live, Admissions, PendingDtx).
 
-summary(Slot, Live, Admissions, PendingDtx) ->
-    #{committed_slot => Slot, live_dtx_lanes => Live,
+summary(View, Live, Admissions, PendingDtx) ->
+    #{archived_protocol => #{?ERA => View}, live_dtx_lanes => Live,
       current_admissions => Admissions,
       pending_dtx => PendingDtx}.
 
@@ -1149,8 +1218,8 @@ same_lane_resolve(#{origin := {Ns, Anchor} = Target,
                     admission := Admission, signer := Signer}, Sequence) ->
     %% Reference-shape fixture: only outer signing custody is tested here.
     {ok, VoteRef} = quod_dtx:certified_ref(
-                     Ns, Anchor, 1, hash(7100), hash(7101),
-                     <<"shape-only-not-certified">>),
+                     Ns, Anchor, 2, hash(7100), hash(7101),
+                     quod_ct:fixture_finality(1, hash(7100))),
     ManifestDigest = hash(7102),
     GroupId = crypto:hash(sha256, term_to_binary(
                 {<<"quod.dtx.group">>, 4, ManifestDigest}, [deterministic])),
@@ -1234,13 +1303,13 @@ pending_term(Fixture) ->
     #{lane := {Admission, Author}, sequence := Sequence,
       group_id := GroupId, body := Body, envelope := Envelope} =
         pending_fixture(Fixture),
-    {quod_signing_pending_dtx, 5, Admission, Author, Sequence,
+    {quod_signing_pending_dtx, 6, Admission, Author, Sequence,
      GroupId, Body, Envelope}.
 
 supported_block(Slot, Variant) ->
     {_Signer, _Admission, Control} = resolve_control(10000 + Variant, 1),
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Slot - 1, {batch, [{dtx, Control}]}, 0),
+                    {?ERA, Slot}, {?ERA, Slot - 1, hash(7000)}, {batch, [{dtx, Control}]}, 0),
     Block.
 
 frame_count(Bytes) -> frame_count(Bytes, 0).

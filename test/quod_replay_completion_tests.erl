@@ -50,17 +50,17 @@ run_case(Case) ->
 
 exercise(member_idle, F) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     assert_open(F, 1),
     complete_member(F, 3),
     assert_closed(F, 3),
     assert_dispatch_order(F, [2, 3], 1);
 exercise(member_multi_window, F) ->
     begin_member(F),
-    window(F, recovery, 2, 2, noop),
+    window(F, recovery, 2, 2, neutral),
     progress(F),
     assert_open(F, 1),
-    window(F, recovery, 3, 3, noop),
+    window(F, recovery, 3, 3, neutral),
     progress(F),
     assert_open(F, 1),
     complete_member(F, 3),
@@ -68,10 +68,10 @@ exercise(member_multi_window, F) ->
     assert_dispatch_order(F, [2, 3], 1);
 exercise(observer_multi_window, F) ->
     make_observer(F),
-    window(F, feed, 2, 2, noop),
+    window(F, feed, 2, 2, neutral),
     progress(F),
     assert_open(F, 1),
-    window(F, feed, 3, 3, noop),
+    window(F, feed, 3, 3, neutral),
     progress(F),
     assert_open(F, 1),
     complete_feed(F),
@@ -93,7 +93,7 @@ exercise(initial_unconfirmed, F) ->
         true -> error(premature_prolog_readiness)
     end,
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     assert_no_ready(),
     ?assertMatch({error, {ontology_rebuilding, _}}, proof_access(F)),
     complete_member(F, 3),
@@ -106,7 +106,7 @@ exercise(network_dependency, F) ->
     blocked_projection(F, apply_dependency, {network_identity, make_ref()});
 exercise(stale_worker, F = #{owner := Owner}) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     gen_statem:cast(Owner, {sync_done, self(), {ready, 3}}),
     barrier(F),
     assert_open(F, 1),
@@ -137,7 +137,7 @@ exercise(prefix_not_dispatched, F) ->
     ?assertEqual([], lifecycle());
 exercise(overtaken_by_live, F) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     %% Drive the production live dispatch through the real verified feed sink
     %% after arranging its existing observer capability; then restore member
     %% completion ownership. This pins the overtaken interval, not a quorum run.
@@ -160,10 +160,10 @@ exercise(successor_interval, F) ->
     ok = sys:suspend(Kb),
     try
         begin_member(F),
-        window(F, recovery, 2, 2, noop),
+        window(F, recovery, 2, 2, neutral),
         complete_member_queued(F, 2),
         begin_member(F),
-        window(F, recovery, 3, 3, noop),
+        window(F, recovery, 3, 3, neutral),
         complete_member_queued(F, 3)
     after ok = sys:resume(Kb)
     end,
@@ -176,16 +176,15 @@ exercise(successor_interval, F) ->
                   {apply, 3, replay}, mark_ready], compact_trace(F));
 exercise(empty_and_duplicate, F) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     complete_member(F, 3),
     assert_closed(F, 3),
     _ = trace_calls(F),
     begin_member(F),
-    P = projection(F),
-    ?assertMatch({ok, _}, sink(F, recovery, [], P)),
-    %% Already-durable entries are rejected as a stale window, never replayed.
-    E = skipped(F, 3),
-    ?assertEqual({error, stale_window}, sink(F, recovery, [E], P)),
+    %% An empty recovery closes without manufacturing a material group.
+    %% A previously verified group is stale once already durable.
+    Group = get(last_verified_group),
+    ?assertEqual({error, stale_window}, sink(F, recovery, Group)),
     complete_member(F, 3),
     barrier(F),
     ?assertEqual([], lifecycle()),
@@ -193,7 +192,7 @@ exercise(empty_and_duplicate, F) ->
     ?assertEqual([owner(F)], markers(trace_calls(F)));
 exercise(ordinary_progress_no_ack_loop, F = #{owner := Owner}) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     complete_member(F, 3),
     assert_closed(F, 3),
     _ = trace_calls(F),
@@ -205,7 +204,7 @@ exercise(ordinary_progress_no_ack_loop, F = #{owner := Owner}) ->
     ?assertEqual(2, maps:get(reconciles, stats(F)));
 exercise(prolog_restart, F) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     Old = prolog_pid(F),
     stop_runtime(F),
     ok = gen_server:stop(Old),
@@ -236,7 +235,7 @@ exercise(snapshot_reader_reaped, F) ->
     1 = erlang:trace(Worker, true, [procs, strict_monotonic_timestamp, {tracer, self()}]),
     try
         begin_member(F),
-        window(F, recovery, 2, 3, noop),
+        window(F, recovery, 2, 3, neutral),
         assert_open(F, 1),
         receive {'DOWN', Mon, process, Worker, _} -> ok
         after 2000 -> error(old_snapshot_reader_survived_replay)
@@ -274,7 +273,7 @@ reader_trace(Ref, Rt, Worker, Times) ->
 
 blocked_projection(F, Field, Value) ->
     begin_member(F),
-    window(F, recovery, 2, 3, noop),
+    window(F, recovery, 2, 3, neutral),
     assert_open(F, 1),
     sys:replace_state(prolog_pid(F), fun(S) ->
         record_set(quod_prolog, Field, Value,
@@ -366,41 +365,47 @@ complete_feed(F) ->
 progress(F) ->
     ok = gen_statem:call(owner(F), fixture_tick),
     barrier(F).
-projection(F) ->
-    fixture(F, fun(S) -> {quod_simplex:test_state_projection(S), S} end).
 
 window(F, Source, First, Last, Kind) ->
-    P0 = projection(F),
-    Es = [entry(F, H, Kind, P0) || H <- lists:seq(First, Last)],
-    P1 = lists:foldl(fun(E, P) ->
-        ?assertEqual(ok, quod_catchup:verify_entry(target(F), E, P)),
-        quod_simplex:history_advance(namespace(F), E, P)
-    end, P0, Es),
-    ?assertMatch({ok, _}, sink(F, Source, Es, P1)).
-sink(F = #{worker := W}, Source, Es, P) ->
+    {ok, #{projection := P0}} = quod_simplex:history_view(
+        target(F), committed, quod_time:mono_ms() + 1000),
+    Root = maps:get(protocol_root, P0),
+    {Blocks, _} = lists:mapfoldl(fun(H, Parent) ->
+        B = material_block(F, H, Kind, P0, Parent),
+        {B, quod_ledger:block_ref(B)}
+    end, Root, lists:seq(First, Last)),
+    #{identity := Signer = #{pubkey := Pub}} = F,
+    {Era, View, Hash} = quod_ledger:block_ref(lists:last(Blocks)),
+    Share = quod_simplex:make_share(domain(F), commit, {Era, View}, Hash, Signer),
+    {ok, Cert} = quod_simplex:form_cert(domain(F), commit, {Era, View}, Hash, [Share], [Pub]),
+    Es = [quod_ledger:entry(H, B, Cert) || {H, B} <- lists:zip(lists:seq(First, Last), Blocks)],
+    Bodies = [quod_ledger:block_bytes(B) || B <- lists:reverse(Blocks)],
+    {ok, P1, Delta, Summary} = quod_catchup:verify_forward_group(
+        target(F), Es, P0, maps:get(history_index, P0),
+        {fun([]) -> done; ([B | Bs]) -> {ok, B, Bs} end, Bodies}),
+    Group = #{entries => Es, projection => P1, delta => Delta, finality => Summary,
+              proof => {lists:sum([quod_ledger_store:proof_frame_size(B) || B <- Bodies]),
+                        fun([]) -> done; ([B | Bs]) -> {B, Bs} end, Bodies}},
+    put(last_verified_group, Group),
+    ?assertMatch({ok, _}, sink(F, Source, Group)).
+sink(F = #{worker := W}, Source, Group = #{entries := Es}) ->
     Capability = case Source of recovery -> {recovery, W};
                                feed -> {feed, replay};
-                               live_feed -> {feed, live}
+                               live_feed -> {feed, {live, quod_ledger:entry_index(hd(Es)),
+                                                   quod_ledger:entry_index(lists:last(Es))}}
                  end,
-    gen_statem:call(owner(F), {sink_catchup, Capability, Es, P,
-                              quod_dtx_phase_index:new_delta()}, 5000).
+    gen_statem:call(owner(F), {sink_catchup, Capability, Group}, 5000).
 target(F) -> {namespace(F), quod_simplex:genesis_hash(namespace(F))}.
 domain(F) -> quod_simplex:consensus_domain(namespace(F), element(2, target(F))).
-entry(F, H, noop, _P) -> skipped(F, H);
-entry(F = #{identity := Id = #{pubkey := Pub}}, H, content, P) ->
-    Tx0 = quod_ct:change(namespace(F), quod_ct:diff_for({live_marker, H})),
+material_block(F = #{identity := Id = #{pubkey := Pub}}, H, Kind, P,
+               Parent = {Era, View, _}) ->
+    Diff = case Kind of neutral -> []; content -> quod_ct:diff_for({live_marker, H}) end,
+    Tx0 = quod_ct:change(namespace(F), Diff),
     Tx = Tx0#transaction{author = Pub, author_seq = H},
     {ok, Binding} = quod_simplex:history_binding(target(F), Pub, P),
     {ok, Signed} = quod_transaction:sign(Binding, Tx, Id),
-    {ok, Block} = quod_ledger:new_block(H, H - 1, {batch, [Signed]}, 0),
-    Hash = quod_simplex:block_hash(Block),
-    Share = quod_simplex:make_share(domain(F), commit, H, Hash, Id),
-    {ok, Cert} = quod_simplex:form_cert(domain(F), commit, H, Hash, [Share], [Pub]),
-    quod_ledger:entry(Block, Cert).
-skipped(F = #{identity := Id = #{pubkey := Pub}}, H) ->
-    Share = quod_simplex:make_share(domain(F), complaint, H, none, Id),
-    {ok, Cert} = quod_simplex:form_cert(domain(F), complaint, H, none, [Share], [Pub]),
-    quod_ledger:noop_entry(H, Cert).
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Signed]}, 0),
+    Block.
 
 wait_live(F, H) ->
     ok = quod_ct:wait_until(fun() ->

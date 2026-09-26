@@ -262,7 +262,7 @@ await_validator_target_loop(
                                 {directory_route_available, Identity} ->
                                     await_validator_target_loop(
                                       Identity, LocalStatus, Deadline);
-                                {proof_ready, {Ns, _}, _} ->
+                                {proof_ready, Identity, _, _, _} ->
                                     await_validator_target_loop(
                                       Identity, LocalStatus, Deadline)
                             after Remaining ->

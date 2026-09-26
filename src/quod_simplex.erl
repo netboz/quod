@@ -7,50 +7,39 @@ replacing the earlier hand-rolled Raft ledger. One consensus instance per
 namespace; the committee (validator set) is the set of **`peer_admitted` FACTS**,
 derived from the committed log — asserted in the genesis block at bootstrap, then
 changed by committed transactions whose diff asserts/retracts `peer_admitted`
-(adopted live, in-process, at the slot boundary). The KB (`quod_prolog`) is the
-other projection of the same log; the two never drift. Slot 1 also carries a
+(adopted at the certified terminal material boundary). The KB (`quod_prolog`)
+is the ordered application projection of the same material log. Slot 1 also carries a
 fresh queryable `consensus_incarnation/1` fact, making every re-founding a new
 consensus signature domain. See the approved plan and
 `doc/simplex_extended.pdf` (§2 = the spec).
 
-## The protocol (per slot `v`)
+## Protocol views and material history
 
-The leader for slot `v` proposes a `#block{}`. Each validator, in order:
+Votes bind the namespace/genesis domain, committee era, protocol view and
+value. A support quorum notarizes a block after its exact parent and every
+skipped-view complaint certificate are complete. Entering the next view by
+notarization requests a commit vote; entering it by complaint does not.
+Commit and complaint decisions exclude one another in the SAME view. Each
+validator durably supports at most one value per era/view.
 
-- broadcasts a **support** share → a `⅔` **support certificate** *notarizes* the block; move to `v+1`;
-- broadcasts a **commit** share → a `⅔` **commit certificate** *commits* the block — final, permanent.
+A complete descendant commit certificate finalizes its material ancestors.
+Protocol views therefore differ from ledger heights. Empty recovery carriers
+inherit their parent's timestamp and produce no ledger entry, Prolog apply,
+reaction or application outcome. The selected streamed ancestry proof and its
+contiguous material entries become durable together before publication or
+journal retirement. The engine retains only the unfinished protocol suffix.
 
-If slot `v` does not finish before a `Δ_timeout`, a validator broadcasts a **complaint** share → a
-`⅔` **complaint certificate** *skips* `v` and everyone moves on. That is the entire view-change.
-
-**Safety** rests on one guard: a validator issues a *commit* share for `v` only if it has issued NO
-*complaint* share for `v` **nor for its parent `v-1`** (and, symmetrically, complains `v` only if it has
-committed neither `v` nor its child `v+1`). Because a commit **implicitly finalizes the approved parent**
-(the depth-1 pipeline, below), this one-slot-wider guard is what keeps a slot from carrying both a commit
-cert (its own OR its child's) and a complaint cert: any two `⅔`-quorums overlap on ≥1 honest party, who
-would then have both complained `v` and committed `v` or `v+1` — impossible. Hence a committed block is
-unique and irreversible. Everything is plain **Ed25519**: a certificate is a bag of `⅔` signatures,
-verified against both the validator set and a locally derived namespace/genesis domain — which is exactly
-the P2 relayed-commit proof a subscriber checks without accepting cross-ontology evidence.
-
-The runtime keeps two frontiers: **approved** (support-certified, safe to extend) and
-**committed** (durable and externally visible). Leaders micro-batch ordered transactions
-into one block and may build one child over an uncommitted approved parent. A child commit also
-finalizes its approved parent; catch-up persists and verifies that implicit proof. Committee
-transactions remain singleton barriers. Compatible DTX controls of one phase
-form a canonical wave in one block; exact read/write/custody intersections,
-rather than the mere presence of a group, decide whether ordinary content must
-wait. A prepared role's Resolve installs a proof fence until ordered Prolog
-apply/discard is published. Origin Complete publishes the terminal group
-outcome and releases its origin role independently for each group in the wave.
+A membership transaction is the old era's last material block. Its old-era
+descendants must be empty. The new era begins at a virtual root derived from
+that material block, independently of which valid descendant proves finality.
+Prolog still owns membership policy and all application transitions.
 
 Ingress names the first slot a request can still enter and sends that slot with the signed
 submission to its deterministic proposer. The receiver may collect or park the request only
 for that exact slot; it never reinterprets the author's intent from a different local
-frontier. The origin retains each ordinary signed submission until its own durable log
-proves inclusion or exclusion. Exclusion places the same signed bytes at the next earliest
-usable proposer without a public retry; membership changes retain their terminal re-proof
-contract. While an exact-slot lane remains open, later local changes share it, preserving
+frontier. The origin retains every signed submission, including membership, until
+its own durable log resolves it or the original deadline reports uncertainty. View
+changes re-place the exact bytes without a public retry or a new author sequence. While an exact-slot lane remains open, later local changes share it, preserving
 author-sequence order.
 Temporarily blocked changes wait in a bounded queue whose drain may pass one blocked author
 to keep others moving. Membership changes remain a global barrier so sustained writes
@@ -61,45 +50,23 @@ one exact attempt on its reliable stream, reconstructing the retained ordered
 prefix only when a replacement link opens. Only the origin's durable log
 resolves inclusion or exclusion.
 
-One explicit `head_progress` state watches the oldest non-final slot (`committed+1`) through
-`awaiting_proposal`, `awaiting_notarization`, and `awaiting_commit`. Notarization changes phase; it
-does not cancel the watchdog. Complaint signing pauses while fewer than a certificate quorum have
-authenticated inbound consensus streams carrying fresh, height-compatible readiness reports. The first
-three quorum restorations for one unchanged phase start a fresh full Delta; later flaps cannot extend its
-deadline. A member that accepted a proposal while recovering runs that held proposal through the normal
-support or membership-verdict path once ready.
+One era/view watchdog follows the engine's current protocol position. An
+unchanged view keeps its deadline through duplicate evidence, proposal receipt,
+validation and peer readiness changes. Timeout complaints use the ordinary
+same-view final-vote latch, without complaint amplification or quorum grace.
+A complaint certificate advances the view without creating a ledger entry.
+Empty descendants can carry finality evidence for unfinished material history.
 
-A verified complaint from another current committee member also creates demand for this oldest-head
-watchdog, allowing a single honest origin to move past a silent leader. Duplicate complaints do not
-renew its deadline; readiness checks, durable vote guards and certificate thresholds still apply.
-A faulty member can therefore keep an otherwise idle namespace advancing through timeout-paced,
-certified `noop` skips while enough honest members remain ready. This consumes ledger space and
-signing-journal/network I/O without changing application facts. For `N=4`, a skip still needs three
-distinct signatures; two peer complaints permit amplification, not a two-signature certificate.
+Every first support or final-vote decision is synced through
+`m:quod_signing_journal` before its signature can leave the node. Restart
+restores those decisions. Only complete durable archive custody authorizes
+retiring them; a certificate or material height alone is insufficient.
+Missing certified bodies use the existing point-to-point recovery path.
 
-Every first support or final-vote decision is appended and synced through `m:quod_signing_journal`
-before its signature can leave the node. Restart therefore reloads the same one-support and
-commit-versus-complaint decisions instead of creating a second vote. One decision table owns every
-first final vote in both live pipeline slots: `f+1` visible peer complaints select the skip camp;
-otherwise a notarized block selects commit, while only the watchdog or an invalid-membership verdict may
-create a complaint without amplified evidence. A member that has a support certificate but lacks the
-corresponding block rotates point-to-point requests through certificate signers and then other committee
-members, and accepts a response only after checking the certificate, block hash, parent, timestamp, payload,
-and local final-vote compatibility.
-
-These rules recover the observed mixed-camp and proposer-loss outages without copying the KB. A
-support decision atomically retains that exact canonical block until its slot commits; this bounded
-live-window custody lets any restarting supporter serve the body again. The Byzantine safety model remains `<=f`; durable latches additionally
-preserve honest voting behavior across any number of process restarts. Recovery after a temporary
-`>f` crash outage is a liveness extension, not an unconditional theorem: a final-vote split formed
-before either side's `f+1` evidence becomes visible still needs a future view-change protocol.
-
-The same engine handles N=1 and multi-validator namespaces, complaint-certified skips,
-trustless catch-up, observer promotion, live member recovery, and deterministic Prolog apply.
 Every non-genesis transaction is namespace-bound and Ed25519-signed by its author,
 and every wire transaction is checked before an honest validator votes for it.
-Remaining security work, notably author-aware authorization, epoch-frozen validator sets, and the
-residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
+Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
+`doc/finality-round-recovery-plan.md`.
 """.
 
 -include("quod_ledger.hrl").
@@ -108,16 +75,11 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -include("quod_transport_limits.hrl").
 
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/4 signs slots as unsigned 64-bit integers
--define(PIPELINE_DEPTH, 1).               %% at most one approved parent may remain uncommitted
-%% v2: the V3 ledger break. A vote is bound to the format of the history it
-%% attests, so a share signed under the old entry/transaction formats can never
-%% verify against a V3 chain — no old share, cert or journal entry is decodable
-%% into a valid vote here.
--define(SHARE_DOMAIN_VERSION, 2).
+-define(MATERIAL_PIPELINE_DEPTH, 1).      %% existing material overlap; never bounds empty protocol rounds
+%% Signature version3 binds the era/view and canonical block2 format.
+-define(SHARE_DOMAIN_VERSION, 3).
 -define(SHARE_DOMAIN_TAG, <<"quod/simplex/domain">>).
 -define(SHARE_MESSAGE_TAG, <<"quod/simplex/share">>).
--define(SKIPPED_SLOT_TAG, <<"quod/simplex/skipped-slot">>).
--define(SKIPPED_SLOT_VERSION, 1).
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
@@ -128,16 +90,15 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          block_hash/1, block_from_entry/1, consensus_domain/2, share_bytes/4,
          make_share/5, verify_share/2,
          verify_cert/3,
-         may_commit/2, may_complain/2, well_formed_block/1,
+         well_formed_block/1,
          valid_genesis_transaction/2, genesis_predicate_manifest/1,
          valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
          history_committee/1, history_committee_view/2,
          history_certifying_committee_view/2,
          history_validator_routes/1,
-         history_advance/3, history_advance/4,
-         history_validate_advance/3, history_validate_advance/4,
-         history_preview_advance/5,
+         history_advance/3, history_validate_advance/3,
+         history_preview_verified/5,
          committee_delta/1, apply_committee_delta/2,
          membership_diff_acceptable/2]).   %% committee = projection of peer_admitted facts
 
@@ -178,23 +139,23 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export([append/2, history_binding/3,
          form_cert/6,
          eng_new/3, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
-         prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
-         admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
-         ahead_cert_ceiling/1, eng_with_certs/2, eng_buffered_commit/4,
+         prune_dials/2, membership_change_ok/2, change_acceptable/2,
+         admitted_endpoints/1, persisted_cert/4,
+         ahead_cert_ceiling/1,
          eng_pool_sizes/1, eng_retained_block/2,
                                                      %% Slice 1: the gap detector's pure core
          is_participant/1, may_vote/1, caught_up/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, pace_tick/1, arm_ready/1, backoff/1,
-         recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
+         recovery_failed/1, may_sink/2, reset_pace/0, finalize_protocol/2, commit_finality/2, engine_step/2,
          catchup_origin/1,
          test_state/1, test_arm/1, test_sync/1,
          restore_signing_state/1, restore_signing_engine/1,
-         proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
+         proposal_slot/1, reconcile_custody_lane/1, drive_empty_proposal/2, acceptable_payload/2, needs_hint_warm/2,
          reconcile_head_progress/1, resume_ready_rounds/1,
          on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
          settle_readiness/2, prune_consensus_links/1,
          dispatch/3, reconcile_block_requests/1,
-         test_progress/1, test_progress_rearms/1, test_support_grace/1,
+         test_progress/1,
          test_round/2, test_dtx_round/2, test_dtx_round_hints/2,
          test_proposal_rejection/2, test_collected_payload/2,
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
@@ -203,19 +164,19 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_local_history_view/3, test_local_history_view/4,
          test_consensus_barrier/1, test_dtx_consensus_barrier/1,
          test_requested/1,
-         test_progress_counts/1, test_engine_pool_sizes/1,
+         test_progress_counts/1, test_engine_pool_sizes/1, test_protocol_position/1,
          test_committed_store/1, test_link_peers/1,
          test_retired_inbound/1,
          test_relay_link_peers/1, test_relay_chan/1,
          test_prune_relay_links/1,
          test_reconcile_relays/1,
-         test_invalidate_relay_generation/2,
+         test_invalidate_relay_generation/1,
          test_close_relay_transport/1,
          test_relay_transport_counts/1,
          test_redrive_head/3, test_block_requests/1, test_signing_journal/1,
          test_append/3, test_relayed_append/3, test_relayed_append/4,
          test_relay_origin/4,
-         test_ingress/1, test_ingress_view_source/1,
+         test_ingress/1, test_ingress_view_source/1, protocol_parent_material/1, approved_author_seqs/1, vote_timestamp/1, eng_archive_group/4,
          test_batch/1, test_drain/1,
          test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
          test_relay_pending_detail/1, test_relay_result/4,
@@ -235,7 +196,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_custody_owner/2,
          test_place_transaction_custody/3,
          test_mark_custody_lane_ready/1,
-         test_settle_recovery_custody/3,
+         test_settle_recovery_submissions/2,
          test_resolve_committed_submissions/3,
          test_drain_custody/1,
          test_keep_progress_transition/2,
@@ -243,9 +204,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_outbox/1,
          test_ingress_needs_drain/2,
          test_round_probe/1, test_route/4,
-         test_trace_block/5, test_trace_block_event/5, test_start_content_validation/5,
+         test_trace_block/5, test_trace_block_event/5, test_start_content_validation/5, request_dtx_validation/5,
          on_content_foreign_verdict/6,
-         proposal_visible/2, reseat_engine/2,
+         proposal_visible/2, reseat_engine/1,
          committee_view_id/4, test_committee_id/1,
          test_author_admissions/1,
          test_author_admission/1,
@@ -315,8 +276,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_endpoint_terminal_result/1,
          test_dtx_worker_terminal_result/2,
          test_dtx_retirement_result/1,
-         test_log_projection/3,
-         test_apply_catchup_window/3, test_apply_catchup_window/4,
+         test_log_projection/3, test_restore_storage/3,
+         test_apply_catchup_window/3,
          test_genesis_tx/4, test_valid_genesis_source/1,
          test_valid_config/1,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
@@ -376,17 +337,17 @@ consensus_domain(Ns, GenesisHash)
 
 -doc """
 The canonical bytes a share signs: a versioned protocol tag, the 32-byte
-namespace/genesis consensus domain, a one-byte vote-kind tag (so a `support`
-signature cannot be replayed as a `commit` or `complaint`), the slot, and the
-bound block hash (empty for a slot-only `complaint`).
+namespace/genesis consensus domain, committee era, one-byte vote-kind tag
+(so `support` cannot be replayed as `commit` or `complaint`), protocol view,
+and bound block hash (empty for a view-only `complaint`).
 """.
--spec share_bytes(<<_:256>>, support | commit | complaint, slot(), binary() | none) -> binary().
-share_bytes(Domain, Kind, Slot, BlockHash)
-  when is_binary(Domain), byte_size(Domain) =:= 32,
-       is_integer(Slot), Slot >= 0, Slot =< ?MAX_SLOT ->
+-spec share_bytes(<<_:256>>, support | commit | complaint,
+                  {<<_:256>>, pos_integer()}, binary() | none) -> binary().
+share_bytes(<<_:256>> = Domain, Kind, {<<_:256>> = Era, Slot}, BlockHash)
+  when is_integer(Slot), Slot > 0, Slot =< ?MAX_SLOT ->
     BH = case BlockHash of none -> <<>>; H when is_binary(H) -> H end,
     <<?SHARE_MESSAGE_TAG/binary, 0, ?SHARE_DOMAIN_VERSION:8,
-      Domain/binary, (tag(Kind)):8, Slot:64, BH/binary>>.
+      Domain/binary, Era/binary, (tag(Kind)):8, Slot:64, BH/binary>>.
 
 tag(support)   -> $S;
 tag(commit)    -> $C;
@@ -397,11 +358,11 @@ tag(complaint) -> $X.
 %%%===================================================================
 
 -doc "Build and Ed25519-sign one domain-bound share of `Kind` for `Slot`/`BlockHash`.".
--spec make_share(<<_:256>>, support | commit | complaint, slot(),
-                 binary() | none, signer()) -> #share{}.
-make_share(Domain, Kind, Slot, BlockHash, #{pubkey := Pub, key := Key}) ->
-    Sig = quod_identity:sign(share_bytes(Domain, Kind, Slot, BlockHash), Key),
-    #share{kind = Kind, slot = Slot, block_hash = BlockHash, signer = Pub, sig = Sig}.
+-spec make_share(<<_:256>>, support | commit | complaint,
+                 {<<_:256>>, pos_integer()}, binary() | none, signer()) -> #share{}.
+make_share(Domain, Kind, {Era, Slot} = Position, BlockHash, #{pubkey := Pub, key := Key}) ->
+    Sig = quod_identity:sign(share_bytes(Domain, Kind, Position, BlockHash), Key),
+    #share{kind = Kind, era = Era, slot = Slot, block_hash = BlockHash, signer = Pub, sig = Sig}.
 
 -doc """
 Is a share well-formed AND its Ed25519 signature valid for its own signer? Well-formed = the right
@@ -410,13 +371,13 @@ malformed share (e.g. a complaint carrying a hash, or a support with a bogus-len
 before it can be aggregated. (Set-membership is checked separately, in the cert functions.)
 """.
 -spec verify_share(<<_:256>>, #share{}) -> boolean().
-verify_share(Domain, #share{kind = K, slot = Sl, block_hash = BH,
+verify_share(Domain, #share{kind = K, era = Era, slot = Sl, block_hash = BH,
                             signer = Signer, sig = Sig}) ->
-    is_slot(Sl)
+    is_binary(Era) andalso byte_size(Era) =:= 32 andalso Sl > 0 andalso is_slot(Sl)
         andalso valid_signer_signature(Signer, Sig)
         andalso valid_shape(K, BH)
         andalso quod_identity:verify(
-                  Sig, share_bytes(Domain, K, Sl, BH), Signer).
+                  Sig, share_bytes(Domain, K, {Era, Sl}, BH), Signer).
 
 %% A share/cert is well-formed iff its block_hash matches its kind: a 32-byte block hash binds a
 %% support/commit; a complaint is slot-only (`none`). Guards the trustless path against malformed input.
@@ -436,22 +397,24 @@ are from **distinct validators in the set** and whose signatures verify; if that
 return `{ok, #cert{}}`, else `{error, insufficient}`. A Byzantine node's duplicate/extra shares can't
 inflate the count — signers are deduplicated.
 """.
--spec form_cert(<<_:256>>, support | commit | complaint, slot(),
+-spec form_cert(<<_:256>>, support | commit | complaint, {<<_:256>>, pos_integer()},
                 binary() | none, [#share{}], [node_id()]) ->
           {ok, #cert{}} | {error, insufficient}.
-form_cert(Domain, Kind, Slot, BlockHash, Shares, Validators) ->
+form_cert(Domain, Kind, {Era, Slot} = Position, BlockHash, Shares, Validators) ->
     case {bounded_validator_count(Validators),
-          is_slot(Slot) andalso valid_shape(Kind, BlockHash)} of
+          is_binary(Era) andalso byte_size(Era) =:= 32 andalso Slot > 0
+          andalso is_slot(Slot) andalso valid_shape(Kind, BlockHash)} of
         {{ok, N}, true} when N > 0 ->
-            Msg  = share_bytes(Domain, Kind, Slot, BlockHash),
+            Msg  = share_bytes(Domain, Kind, Position, BlockHash),
             Sigs = distinct_valid([{S#share.signer, S#share.sig}
                                     || S <- Shares,
                                        S#share.kind =:= Kind,
+                                       S#share.era =:= Era,
                                        S#share.slot =:= Slot,
                                        S#share.block_hash =:= BlockHash],
                                    Msg, Validators),
             case length(Sigs) >= quorum(N) of
-                true  -> {ok, #cert{kind = Kind, slot = Slot, block_hash = BlockHash, sigs = Sigs}};
+                true  -> {ok, #cert{kind = Kind, era = Era, slot = Slot, block_hash = BlockHash, sigs = Sigs}};
                 false -> {error, insufficient}
             end;
         _ ->
@@ -493,43 +456,6 @@ distinct_valid(Sigs, Msg, Validators) ->
     end.
 
 %%%===================================================================
-%%% the commit guard (the load-bearing safety rule)
-%%%===================================================================
-
--doc """
-May this validator issue a **commit** share for `Slot`? Only if it has issued NO **complaint** share for
-`Slot` **and none for its parent `Slot-1`**. Together with `may_complain/2` this is the whole safety
-argument, extended by one slot to cover the depth-1 pipeline: a committed block **implicitly finalizes
-its approved parent** (`detect_commits`), so committing `Slot` finalizes `Slot-1` too. Blocks are always
-contiguous (`proposal_slot` sets `parent = Approved = slot-1`), so the parent is exactly `Slot-1`.
-
-The guarantee: an honest validator is on at most ONE of {commit-or-implicit-commit of `v`, complaint of
-`v`}, for every `v`. Hence a commit cert on the child `v+1` PROVES `⅔` did not complain `v`, so no
-complaint cert on `v` can also form (any two `⅔`-quorums overlap on ≥1 honest party, who would then have
-both complained `v` and committed its child — impossible) — a slot can never be both committed (its own
-or its child's cert) and skipped. That inductive proof is exactly what `quod_catchup:verify_implicit`
-relies on, so the catch-up side needs no extra check. `ComplainedSlots` is any plain list.
-""".
--spec may_commit(slot(), [slot()]) -> boolean().
-may_commit(Slot, ComplainedSlots) ->
-    not lists:member(Slot, ComplainedSlots)
-        andalso not lists:member(Slot - 1, ComplainedSlots).
-
--doc """
-May this validator issue a **complaint** (skip) share for `Slot`? Only if it has issued NO **commit**
-share for `Slot` **and none for its child `Slot+1`** — the symmetric half of `may_commit/2`. Committing
-the child `Slot+1` implicitly finalizes `Slot`, so complaining `Slot` afterward would put this validator
-on both certs for `Slot`. (The child clause is belt-and-braces: the Δ timer only arms for `Approved+1`,
-which no longer names `Slot` once `Slot+1` is notarized — but keeping the guard local makes the
-mutual-exclusion invariant self-contained rather than depending on the arming logic.) `CommittedSlots`
-is any plain list.
-""".
--spec may_complain(slot(), [slot()]) -> boolean().
-may_complain(Slot, CommittedSlots) ->
-    not lists:member(Slot, CommittedSlots)
-        andalso not lists:member(Slot + 1, CommittedSlots).
-
-%%%===================================================================
 %%% consensus engine — certificate pool + complete block tree (§2.3)
 %%%===================================================================
 %%
@@ -544,7 +470,21 @@ may_complain(Slot, CommittedSlots) ->
 %% Events: `{broadcast, Cert}` (a cert we just formed or first learned — re-disseminate),
 %% `{notarized, Block}` (a block joined the tree), `{committed, Slot, Block}` (a block is final → apply).
 
+%% Derived once when an exact block joins the complete tree. Counts are
+%% relative to this engine's initial root; pruning preserves that coordinate,
+%% so material admission never walks an accumulated empty-carrier chain.
+-record(ancestry, {terminal = false, material_count = 0, material_ref}).
+
 -record(eng, {domain       :: <<_:256>>,
+              era          :: <<_:256>>,
+              root         :: protocol_ref(),
+              root_timestamp = 0 :: non_neg_integer(),
+              root_ancestry :: #ancestry{},
+              view = 1     :: pos_integer(),
+              last_parent  :: protocol_ref(),
+              ancestry = #{} :: #{slot() => #ancestry{}},
+              finality = #{} :: #{slot() => #cert{}},
+              waiting = #{} :: #{term() => #{{slot(), binary()} => pos_integer()}},
               validators   :: [node_id()],
               base     = 0   :: slot(),                                %% durable committed floor: slots =<
                                                                        %% base are final (in the store) and
@@ -560,14 +500,13 @@ may_complain(Slot, CommittedSlots) ->
               tree     = #{} :: #{slot() => #block{}},                 %% notarized blocks (in-flight window)
               tree_hashes = #{} :: #{slot() => binary()},              %% slot => verified key in `blocks`
               committed = #{} :: #{slot() => #block{}},                %% committed (final) in-flight blocks
-              skipped  = #{} :: #{slot() => true},                     %% slots a complaint cert has skipped
-              ahead_finalizer = 0 :: slot()}).                          %% highest verified commit/complaint
-                                                                        %% beyond the retained depth-one window;
-                                                                        %% O(1) recovery evidence, never a pool item
+              ahead_finalizer = 0 :: slot()}). %% highest verified commit view; O(1) recovery evidence
 
 -type share_key() :: {support | commit | complaint, slot(), binary() | none}.
 -type eng_event() :: {broadcast, #cert{}} | {notarized, #block{}}
-                   | {committed, slot(), #block{}} | {skipped, slot()}.
+                   | {committed, slot(), #block{}}
+                   | {view_advanced, slot(), complaint | {notarized, #block{}}}
+                   | {ahead, #cert{}}.
 
 -doc """
 A fresh engine for one namespace/genesis signature `Domain` and validator set
@@ -576,73 +515,67 @@ current committee), with `Base` = the durable committed floor. Blocks `=< Base`
 are treated as committed history so a new proposal's parent resolves without
 the engine holding the whole chain.
 """.
--spec eng_new(<<_:256>>, [node_id()], slot()) -> #eng{}.
-eng_new(Domain, Validators, Base)
-  when is_binary(Domain), byte_size(Domain) =:= 32 ->
-    #eng{domain = Domain, validators = Validators, base = Base}.
+-spec eng_new(<<_:256>>, [node_id()], {protocol_ref(), non_neg_integer()}) -> #eng{}.
+eng_new(<<_:256>> = Domain, Validators,
+        {{<<_:256>> = Era, View, <<_:256>>} = Root, Timestamp})
+  when is_integer(View), View >= 0, is_integer(Timestamp), Timestamp >= 0 ->
+    #eng{domain = Domain, validators = Validators, era = Era, base = View,
+         root = Root, root_timestamp = Timestamp, root_ancestry = #ancestry{material_ref = Root},
+         view = View + 1, last_parent = Root}.
 
-%% Swap the engine's voting set to the ACTIVE validator set (`active_validators/1`) when `adopt_projection/3`
-%% crosses a boundary. Today (epoch length 1) the active set IS the committee facts, so this fires on every
-%% committee-changing commit; under real epochs it fires only at an epoch boundary, and a mid-epoch facts
-%% change leaves the engine's set untouched. Retained share buckets are projected onto the new set when
-%% forming a certificate, and existing certificates must pass `persisted_cert/4` against it before durable
-%% use. The signature-free far-finalizer hint cannot be revalidated, so it is cleared here.
-eng_set_validators(Validators, Eng) ->
-    %% A far-finalizer hint was verified only against the former set and carries
-    %% no retained signatures with which to revalidate it. A committee boundary
-    %% therefore invalidates that hint; fresh traffic can establish a new one.
-    Eng#eng{validators = Validators, ahead_finalizer = Eng#eng.base}.
+%% Pool insertion already verified and canonicalized this era's certificate.
+%% Its immutable committee cannot make a once-valid quorum become sub-quorum.
+persisted_cert(Kind, Slot, BH, #eng{certs = Certs}) ->
+    maps:get({Kind, Slot, BH}, Certs, none).
 
-%% The certificate to PERSIST on a finalized `#entry`, captured before `finalize`→`eng_prune` drops it from
-%% the pool. NOT the raw pool cert: we re-minimise it to the distinct VALID signatures of the committee
-%% AS-OF-this-slot (`eng.validators`, already swapped to the post-slot-N-1 set) — so (a) a peer's padded /
-%% relayed junk signatures can never bake into the append-only log (only ≤ N genuine committee sigs remain),
-%% and (b) the persisted cert verifies against the committee a catch-up joiner reconstructs for this slot.
-%% `none` only if the pool cert lacks a quorum under the current set — a lagging node that finalized under a
-%% STALE committee (the mid-flight committee-change hazard; see doc/deferred.md §3).
-persisted_cert(Kind, Slot, BH, #eng{certs = Certs, validators = Vs}) ->
-    case {Vs, maps:get({Kind, Slot, BH}, Certs, none)} of
-        {[], _} ->
-            none;
-        {_, none} ->
-            none;
-        {_, #cert{sigs = S}} ->
-            %% Every cert is sanitized on engine ingress, so signatures are already cryptographically
-            %% verified and unique. A committee transition only requires re-filtering signer membership.
-            Min = [{Signer, Sig} || {Signer, Sig} <- S, lists:member(Signer, Vs)],
-            case length(Min) >= quorum(length(Vs)) of
-                true  -> #cert{kind = Kind, slot = Slot, block_hash = BH, sigs = Min};
-                false -> none
-            end
-    end.
-
-persisted_finality(Slot, BH, Eng) ->
-    case persisted_cert(commit, Slot, BH, Eng) of
-        #cert{} = Cert -> Cert;
-        none -> implicit_finality(Slot, BH, Eng)
-    end.
-
-implicit_finality(Slot, BH, Eng = #eng{tree = Tree, tree_hashes = Hashes}) ->
-    case {maps:get(Slot, Tree, undefined), persisted_cert(support, Slot, BH, Eng)} of
-        {#block{payload = Payload}, #cert{} = Support} ->
-            case payload_is_consensus_barrier(Payload) of
-                true -> none;   %% committee and DTX transitions require explicit finality
-                false ->
-                    Children = lists:sort(
-                      [{ChildSl, Child, maps:get(ChildSl, Hashes)}
-                       || {ChildSl, #block{parent = Parent} = Child} <- maps:to_list(Tree),
-                          Parent =:= Slot, ChildSl =:= Slot + 1]),
-                    first_implicit_child(Children, Support, Eng)
-            end;
+persisted_finality(Slot, BH, #eng{tree_hashes = Hashes, finality = Finality}) ->
+    case maps:get(Slot, Hashes, none) of
+        BH -> maps:get(Slot, Finality, none);
         _ -> none
     end.
 
-first_implicit_child([], _Support, _Eng) -> none;
-first_implicit_child([{ChildSl, Child, ChildBH} | Rest], Support, Eng) ->
-    case persisted_cert(commit, ChildSl, ChildBH, Eng) of
-        #cert{} = Commit -> #implicit_cert{support = Support, child = Child, commit = Commit};
-        none -> first_implicit_child(Rest, Support, Eng)
+%% Select one complete archive group directly from the verified live tree.
+%% Material entries get consecutive ledger heights; the proof iterator walks
+%% the already-owned blocks backwards without building another byte blob.
+eng_archive_group(Cert = #cert{era = Era, slot = View, block_hash = Hash},
+                  Height, MaterialRoot, Eng = #eng{era = Era, root = Root}) ->
+    Cert = persisted_cert(commit, View, Hash, Eng),
+    Hash = maps:get(View, Eng#eng.tree_hashes),
+    Head = {Era, View, Hash},
+    {Material, Size} = archive_path(Head, Eng, [], 0),
+    case Material of
+        [] -> none;
+        _ ->
+            {Entries, _} = lists:mapfoldl(fun(Block, Index) ->
+                {quod_ledger:entry(Index, Block, Cert), Index + 1}
+            end, Height + 1, Material),
+            Source0 = {Size, fun(Ref) -> archive_next(Ref, Eng) end, Head},
+            Source = case Root =:= MaterialRoot of
+                true -> Source0;
+                false -> {extend, Source0, Height}
+            end,
+            Summary = #{head => Head,
+                        head_timestamp => (maps:get(View, Eng#eng.tree))#block.timestamp,
+                        material_tip => quod_ledger:block_ref(lists:last(Material)),
+                        complete_group => true},
+            {Source, Entries, Summary}
     end.
+
+archive_path(Root, #eng{root = Root}, Material, Size) -> {Material, Size};
+archive_path(Ref, Eng, Material, Size) ->
+    Block = archive_block(Ref, Eng),
+    Material1 = case Block#block.payload of empty -> Material; _ -> [Block | Material] end,
+    archive_path(Block#block.parent, Eng, Material1,
+                 Size + quod_ledger_store:proof_frame_size(quod_ledger:block_bytes(Block))).
+
+archive_next(Root, #eng{root = Root}) -> done;
+archive_next(Ref, Eng) ->
+    Block = archive_block(Ref, Eng),
+    {quod_ledger:block_bytes(Block), Block#block.parent}.
+
+archive_block({Era, View, Hash}, #eng{era = Era, tree = Tree, tree_hashes = Hashes}) ->
+    Hash = maps:get(View, Hashes),
+    maps:get(View, Tree).
 
 -doc """
 Offer one protocol object to the engine; returns the updated engine + the events it produced. This is
@@ -651,45 +584,41 @@ the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a
 """.
 -spec eng_offer({block, #block{}} | {share, #share{}} | {cert, #cert{}}, #eng{}) ->
           {#eng{}, [eng_event()]}.
-%% Anything for an already-final slot (`=< base`) is stale — a replay or a peer relaying an old cert —
-%% and must be dropped: it is pruned from the maps, so re-admitting it would re-notarize/re-commit a
-%% committed slot (and drive a non-contiguous store append).
-eng_offer({block, #block{slot = Sl}}, #eng{base = Base} = Eng)
-  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
-eng_offer({share, #share{slot = Sl}}, #eng{base = Base} = Eng)
-  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+%% The live window advances with protocol views, not material height. An
+%% authenticated far commit requests history; it does not allocate every
+%% intervening candidate or turn a complaint into evidence of material height.
+eng_offer({block, #block{era = Era}}, #eng{era = Expected} = Eng)
+  when Era =/= Expected -> {Eng, []};
+eng_offer({share, #share{era = Era}}, #eng{era = Expected} = Eng)
+  when Era =/= Expected -> {Eng, []};
+eng_offer({cert, #cert{era = Era}}, #eng{era = Expected} = Eng)
+  when Era =/= Expected -> {Eng, []};
+eng_offer({block, #block{slot = Sl}}, #eng{base = Base, view = View} = Eng)
+  when Sl =< Base; Sl > View + 1 -> {Eng, []};
+eng_offer({share, #share{slot = Sl}}, #eng{base = Base, view = View} = Eng)
+  when Sl =< Base; Sl > View + 1 -> {Eng, []};
 eng_offer({cert, #cert{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base ->
     {Eng, []};
-%% A finalizer beyond the volatile depth-one window is useful only as proof that
-%% this node is behind. Verify it once when it raises the ceiling, retain only
-%% that scalar, and let recovery fetch the contiguous history. Blocks, shares,
-%% and support certs beyond the window carry no such finality signal and are
-%% dropped by the adjacent clauses without allocating engine state.
-eng_offer({cert, #cert{kind = Kind, slot = Sl} = Cert},
-          Eng = #eng{base = Base, ahead_finalizer = Ahead})
-  when Sl > Base + ?PIPELINE_DEPTH + 1,
-       (Kind =:= commit orelse Kind =:= complaint) ->
-    case Sl =< Ahead of
-        true ->
-            {Eng, []};
-        false ->
-            case sanitize_cert(Eng#eng.domain, Cert, Eng#eng.validators) of
-                {ok, _Clean} -> {Eng#eng{ahead_finalizer = Sl}, []};
-                error        -> {Eng, []}
-            end
+eng_offer({cert, #cert{kind = commit, slot = Sl} = Cert},
+          #eng{view = View, ahead_finalizer = Ahead} = Eng) when Sl > View + 1 ->
+    case Sl > Ahead andalso sanitize_cert(Eng#eng.domain, Cert, Eng#eng.validators) of
+        {ok, Clean} -> {Eng#eng{ahead_finalizer = Sl}, [{ahead, Clean}]};
+        _ -> {Eng, []}
     end;
-eng_offer({cert, #cert{slot = Sl}}, #eng{base = Base} = Eng)
-  when Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+eng_offer({cert, #cert{slot = Sl}}, #eng{view = View} = Eng) when Sl > View + 1 ->
+    {Eng, []};
 eng_offer({block, #block{} = B}, Eng) ->
-    eng_offer_hashed(block_hash(B), B, Eng);
+    case quod_ledger:valid_block_view(B) of
+        true -> eng_offer_hashed(block_hash(B), B, Eng);
+        false -> {Eng, []}
+    end;
 eng_offer({share, #share{kind = K, slot = Sl, block_hash = BH,
                          signer = Signer} = Sh},
           Eng = #eng{domain = Domain}) ->
     Key = {K, Sl, BH},
     Bucket = maps:get(Key, Eng#eng.shares, #{}),
     VoteKey = {K, Sl, Signer},
-    %% Reject outsiders before Ed25519 work. A duplicate is already trusted in the bucket, so do not verify
-    %% it again; it can still trigger re-formation after `weak_cert_wait` evicted a stale old-committee cert.
+    %% Reject outsiders before Ed25519 work. A duplicate is already trusted in the bucket.
     %% The first verified hash per signer/kind/slot wins. Without that O(N)-bounded latch, one Byzantine
     %% validator could sign arbitrarily many hashes and create an unbounded number of live share buckets.
     case lists:member(Signer, Eng#eng.validators) of
@@ -713,26 +642,28 @@ eng_offer({cert, #cert{} = C}, Eng = #eng{domain = Domain}) ->
         true -> {Eng, []};
         false ->
             case sanitize_cert(Domain, C, Eng#eng.validators) of
-                error -> settle(Eng);
+                error -> {Eng, []};
                 {ok, Clean} ->
-                    {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => Clean}}),
+                    {Eng1, Evs} = settle(Key, Eng#eng{certs = (Eng#eng.certs)#{Key => Clean}}),
                     {Eng1, [{broadcast, Clean} | Evs]}   %% relay a newly-learned cert once (§2.3.1)
             end
     end.
 
 %% The state-machine driver already computed the proposal hash for signing. Keep that trusted fast path
 %% private; external users of the pure engine enter through `eng_offer({block,B}, ...)`, which derives it.
-eng_offer_hashed(_BH, #block{slot = Sl}, #eng{base = Base} = Eng)
-  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+eng_offer_hashed(_BH, #block{era = Era}, #eng{era = Expected} = Eng)
+  when Era =/= Expected -> {Eng, []};
+eng_offer_hashed(_BH, #block{slot = Sl}, #eng{base = Base, view = View} = Eng)
+  when Sl =< Base; Sl > View + 1 -> {Eng, []};
 eng_offer_hashed(BH, #block{slot = Sl} = B,
                  Eng = #eng{blocks = Blocks, block_slots = Slots,
                             tree = Tree}) ->
     case maps:get(Sl, Slots, undefined) of
         undefined ->
-            settle(Eng#eng{blocks = Blocks#{BH => B},
+            settle({support, Sl, BH}, Eng#eng{blocks = Blocks#{BH => B},
                            block_slots = Slots#{Sl => BH}});
         BH ->
-            settle(Eng);
+            {Eng, []};
         OldBH ->
             %% Ordinary leader traffic is first-block-wins, bounding equivocation
             %% state to one block per live slot. A later quorum-certified block may
@@ -743,10 +674,9 @@ eng_offer_hashed(BH, #block{slot = Sl} = B,
             %% failed, so keep the existing notarized value.
             case not maps:is_key(Sl, Tree)
                  andalso not maps:is_key(Sl, Eng#eng.committed)
-                 andalso not maps:is_key(Sl, Eng#eng.skipped)
                  andalso persisted_cert(support, Sl, BH, Eng) =/= none of
                 true ->
-                    settle(Eng#eng{blocks = (maps:remove(OldBH, Blocks))#{BH => B},
+                    settle({support, Sl, BH}, Eng#eng{blocks = (maps:remove(OldBH, Blocks))#{BH => B},
                                    block_slots = Slots#{Sl => BH}});
                 false ->
                     {Eng, []}
@@ -765,41 +695,41 @@ ingest_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh,
 
 maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
     Key = {K, Sl, BH},
-    %% Crypto trust survives a committee transition; voting eligibility does not. Project the trusted
-    %% bucket onto the CURRENT set so shares cached before a removal cannot satisfy the new quorum.
-    Current = [{P, X} || {P, X} <- maps:to_list(Bucket),
-                         lists:member(P, Eng#eng.validators)],
-    Enough = length(Current) >= quorum(length(Eng#eng.validators)),
+    %% This bucket contains only verified distinct members of the engine's
+    %% immutable era. Re-filtering every accumulated share on every insertion
+    %% would repeat work without changing authority.
+    Enough = map_size(Bucket) >= quorum(length(Eng#eng.validators)),
     case {maps:is_key(Key, Eng#eng.certs), Enough} of
-        {true, _} -> settle(Eng);
+        {true, _} -> {Eng, []};
         {false, false} -> {Eng, []};
         {false, true} ->
             %% Bucket insertion is the trust boundary: every value was verified once and the map key makes
-            %% signers unique. Cert formation is therefore a membership projection, not another crypto pass.
-            Sigs = lists:sort([{P, X#share.sig} || {P, X} <- Current]),
-            Cert = #cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs},
-            {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => Cert}}),
+            %% signers unique. Forming their certificate requires no second crypto pass.
+            Sigs = lists:sort([{P, X#share.sig} || {P, X} <- maps:to_list(Bucket)]),
+            Cert = #cert{kind = K, era = Eng#eng.era, slot = Sl, block_hash = BH, sigs = Sigs},
+            {Eng1, Evs} = settle(Key, Eng#eng{certs = (Eng#eng.certs)#{Key => Cert}}),
             {Eng1, [{broadcast, Cert} | Evs]}
     end.
 
 sanitize_cert(Domain,
-              #cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C,
+              #cert{kind = K, era = Era, slot = Sl, block_hash = BH, sigs = Sigs} = C,
               Validators) ->
     case bounded_validator_count(Validators) of
         {ok, N} when N > 0 ->
             sanitize_cert_bounded(
-              Domain, C, K, Sl, BH, Sigs, Validators, N);
+              Domain, C, K, {Era, Sl}, BH, Sigs, Validators, N);
         _ ->
             error
     end.
 
-sanitize_cert_bounded(Domain, C, K, Sl, BH, Sigs, Validators, N) ->
-    case is_slot(Sl) andalso valid_shape(K, BH)
+sanitize_cert_bounded(Domain, C, K, {Era, Sl} = Position, BH, Sigs, Validators, N) ->
+    case is_binary(Era) andalso byte_size(Era) =:= 32 andalso Sl > 0
+         andalso is_slot(Sl) andalso valid_shape(K, BH)
          andalso bounded_signatures(Sigs, N) of
         false -> error;
         true ->
             Valid = distinct_valid(
-                      Sigs, share_bytes(Domain, K, Sl, BH), Validators),
+                      Sigs, share_bytes(Domain, K, Position, BH), Validators),
             case length(Valid) >= quorum(N) of
                 true  -> {ok, C#cert{sigs = Valid}};
                 false -> error
@@ -814,107 +744,185 @@ bounded_validator_count(Validators) ->
 
 cert_key(#cert{kind = K, slot = Sl, block_hash = BH}) -> {K, Sl, BH}.
 
-%% Recompute the tree then the commits to a fixpoint — a newly-notarized block can enable its child's
-%% notarization — returning the newly-notarized + newly-committed events in order.
-settle(Eng) -> settle(Eng, []).
-settle(Eng, AccRev) ->
-    case grow_tree(Eng) of
-        {Eng1, [_ | _] = New} -> settle(Eng1, lists:reverse(New, AccRev));
-        {Eng1, []}            -> {Eng2, Commits} = detect_commits(Eng1),
-                                 {Eng3, Skips}   = detect_complaints(Eng2),
-                                 {Eng3, lists:reverse(AccRev, Commits ++ Skips)}
+%% Each newly available object wakes only its own dependency. A waiting block
+%% retains the first unchecked gap position: learning complaints one by one
+%% never rewalks its already-verified prefix. No ordinary arrival scans the pool.
+settle({complaint, View, none}, Eng) ->
+    {Tasks, Eng1} = take_waiters({complaint, View}, Eng),
+    settle_tasks(Tasks, Eng1, []);
+settle({support, View, Hash}, Eng) ->
+    settle_tasks([{candidate, View, Hash, parent}], Eng, []);
+settle({commit, View, Hash}, Eng) ->
+    Known = Eng#eng{ahead_finalizer = max(View, Eng#eng.ahead_finalizer)},
+    {Eng1, Events} = finalize_head(View, Hash, Known),
+    {Eng2, Progress} = advance_view(Eng1),
+    {Eng2, Events ++ Progress}.
+
+settle_tasks([], Eng, AccRev) ->
+    {Eng1, Progress} = advance_view(Eng),
+    {Eng1, lists:reverse(AccRev, Progress)};
+settle_tasks([{candidate, View, Hash, From} | Rest], Eng, AccRev) ->
+    case maps:get(View, Eng#eng.block_slots, none) =:= Hash andalso
+         not maps:is_key(View, Eng#eng.tree) andalso
+         maps:is_key({support, View, Hash}, Eng#eng.certs) of
+        false -> settle_tasks(Rest, Eng, AccRev);
+        true ->
+            B = maps:get(Hash, Eng#eng.blocks),
+            {Era, ParentView, _ParentHash} = Parent = B#block.parent,
+            Complete = complete_protocol_parent(Parent, Eng),
+            case Complete andalso Era =:= Eng#eng.era of
+                false ->
+                    Waiting = wait_for({parent, Parent}, View, Hash, ParentView + 1, Eng),
+                    settle_tasks(Rest, Waiting, AccRev);
+                true ->
+                    GapFrom = case From of parent -> ParentView + 1; _ -> From end,
+                    case first_missing_complaint(GapFrom, View, Eng#eng.certs) of
+                        Missing when is_integer(Missing) ->
+                            Waiting = wait_for({complaint, Missing}, View, Hash, Missing + 1, Eng),
+                            settle_tasks(Rest, Waiting, AccRev);
+                        none ->
+                            case valid_parent_transition(B, ParentView, Eng) of
+                                false -> settle_tasks(Rest, Eng, AccRev);
+                                true ->
+                                    Eng1 = Eng#eng{tree = (Eng#eng.tree)#{View => B},
+                                      tree_hashes = (Eng#eng.tree_hashes)#{View => Hash},
+                                      ancestry = (Eng#eng.ancestry)#{View => block_ancestry(B, Eng)}},
+                                    {Eng2, Committed} = finalize_head(View, Hash, Eng1),
+                                    {Children, Eng3} = take_waiters({parent, {Era, View, Hash}}, Eng2),
+                                    Events = lists:reverse(Committed, [{notarized, B} | AccRev]),
+                                    settle_tasks(Children ++ Rest, Eng3, Events)
+                            end
+                    end
+            end
     end.
 
-%% Add every block that now has a support cert AND whose parent is in the tree (or is genesis) AND
-%% whose payload we hold — one pass (settle/2 loops it to a fixpoint).
-grow_tree(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes}) ->
-    Ready = lists:filtermap(
-              fun({{support, Sl, BH}, _Cert}) ->
-                      case (not maps:is_key(Sl, Tree)) andalso block_for(BH, Eng) of
-                          #block{} = B -> case parent_ok(B, Eng) of
-                                             true -> {true, {Sl, BH, B}};
-                                             false -> false
-                                         end;
-                          _            -> false
-                      end;
-                 (_) -> false
-              end, maps:to_list(Certs)),
-    case lists:keysort(1, Ready) of   %% slot-ascending, so parents are handed over before children
-        [] -> {Eng, []};
-        Sorted ->
-            Tree1 = lists:foldl(fun({Sl, _BH, B}, T) -> T#{Sl => B} end, Tree, Sorted),
-            Hashes1 = lists:foldl(fun({Sl, BH, _B}, Hs) -> Hs#{Sl => BH} end, Hashes, Sorted),
-            {Eng#eng{tree = Tree1, tree_hashes = Hashes1},
-             [{notarized, B} || {_Sl, _BH, B} <- Sorted]}
+complete_protocol_parent(Parent, #eng{root = Parent}) -> true;
+complete_protocol_parent({Era, View, Hash}, #eng{era = Era, tree_hashes = Hashes}) ->
+    maps:get(View, Hashes, none) =:= Hash;
+complete_protocol_parent(_Parent, _Eng) -> false.
+
+%% Admission and tree completion use the same exact parent and gap evidence.
+%% A local preferred parent is a proposal choice, not authority to reject a
+%% different complete parent selected by the current leader.
+proposal_parent_ready(#block{era = Era, slot = View,
+                              parent = {Era, ParentView, _} = Parent} = Block,
+                       Eng = #eng{era = Era}) when ParentView < View ->
+    complete_protocol_parent(Parent, Eng)
+        andalso first_missing_complaint(ParentView + 1, View, Eng#eng.certs) =:= none
+        andalso valid_parent_transition(Block, ParentView, Eng);
+proposal_parent_ready(_Block, _Eng) -> false.
+
+valid_parent_transition(#block{timestamp = Ts, payload = Payload}, ParentView, Eng) ->
+    ParentTs = case ParentView =:= Eng#eng.base of
+        true -> Eng#eng.root_timestamp;
+        false -> (maps:get(ParentView, Eng#eng.tree))#block.timestamp
+    end,
+    case Payload of
+        empty -> Ts =:= ParentTs;
+        _ -> Ts >= ParentTs andalso not parent_terminal(ParentView, Eng)
     end.
 
-%% An explicit commit also commits its immediate approved parent. Runtime pipelining
-%% is bounded to one uncommitted parent, so this single predecessor step is the full
-%% implicit-commit closure. Events remain slot-ordered for the durable drain.
-detect_commits(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes,
-                          committed = Committed}) ->
-    Explicit = lists:filtermap(
-            fun({{commit, Sl, BH}, _Cert}) ->
-                    case (not maps:is_key(Sl, Committed)) andalso maps:get(Sl, Tree, undefined) of
-                        #block{} = B -> case maps:get(Sl, Hashes, undefined) =:= BH of
-                                           true -> {true, {Sl, B}};
-                                           false -> false
-                                       end;
-                        _            -> false
-                    end;
-               (_) -> false
-            end, maps:to_list(Certs)),
-    Implicit = lists:filtermap(
-                 fun({_ChildSl, #block{parent = Parent}}) when Parent > Eng#eng.base ->
-                         case (not maps:is_key(Parent, Committed))
-                              andalso maps:get(Parent, Tree, undefined) of
-                             #block{} = B -> {true, {Parent, B}};
-                             _ -> false
-                         end;
-                    (_) -> false
-                 end, Explicit),
-    New = lists:sort(maps:to_list(maps:from_list(Explicit ++ Implicit))),
-    Committed1 = lists:foldl(fun({Sl, B}, C) -> C#{Sl => B} end, Committed, New),
-    {Eng#eng{committed = Committed1}, [{committed, Sl, B} || {Sl, B} <- New]}.
+first_missing_complaint(View, View, _Certs) -> none;
+first_missing_complaint(From, View, Certs) when From < View ->
+    case maps:is_key({complaint, From, none}, Certs) of
+        true -> first_missing_complaint(From + 1, View, Certs);
+        false -> From
+    end.
 
-%% A slot is skipped once the pool holds a `⅔` COMPLAINT cert for it (block-free — a complaint binds
-%% only the slot). Emitted once per slot (the `skipped` set dedups); a peer-relayed complaint cert flows
-%% through the same path, so a node that never complained still learns the skip and stays in lockstep.
-%% Safety keeps a slot from being BOTH committed and skipped: an honest party issues at most one of
-%% {commit, complaint} for a slot (the may_commit/may_complain guards), so only one cert can reach `⅔`.
-detect_complaints(Eng = #eng{certs = Certs, skipped = Sk}) ->
-    New = lists:sort([V || {{complaint, V, none}, _} <- maps:to_list(Certs), not maps:is_key(V, Sk)]),
-    Sk1 = lists:foldl(fun(V, M) -> M#{V => true} end, Sk, New),
-    {Eng#eng{skipped = Sk1}, [{skipped, V} || V <- New]}.
+wait_for(Dependency, View, Hash, From, #eng{waiting = Waiting} = Eng) ->
+    Bucket = maps:get(Dependency, Waiting, #{}),
+    Eng#eng{waiting = Waiting#{Dependency => Bucket#{{View, Hash} => From}}}.
 
-block_for(BH, #eng{blocks = Blocks}) -> maps:get(BH, Blocks, undefined).
+take_waiters(Dependency, #eng{waiting = Waiting} = Eng) ->
+    case maps:take(Dependency, Waiting) of
+        error -> {[], Eng};
+        {Bucket, Remaining} ->
+            {[{candidate, V, H, From} || {{V, H}, From} <- lists:sort(maps:to_list(Bucket))],
+             Eng#eng{waiting = Remaining}}
+    end.
 
-%% A block may join the tree once its parent is already committed history (`=< base`, includes genesis
-%% at 0) or is itself notarized in the in-flight tree.
-parent_ok(#block{parent = P}, #eng{base = Base, tree = Tree}) ->
-    P =< Base orelse maps:is_key(P, Tree).
+%% A complete notarized head plus its commit QC finalizes exactly its ancestor
+%% path. Each ancestor is emitted once; later certificates stop at that latch.
+finalize_head(View, Hash, Eng) ->
+    case {maps:get(View, Eng#eng.tree_hashes, none),
+          maps:get({commit, View, Hash}, Eng#eng.certs, none)} of
+        {Hash, #cert{} = Cert} ->
+            Path = finality_path(View, Eng, []),
+            Committed = lists:foldl(fun(B, M) -> M#{B#block.slot => B} end,
+                                   Eng#eng.committed, Path),
+            Finality = lists:foldl(fun(B, M) -> M#{B#block.slot => Cert} end,
+                                  Eng#eng.finality, Path),
+            {Eng#eng{committed = Committed, finality = Finality},
+             [{committed, B#block.slot, B} || B <- Path]};
+        _ -> {Eng, []}
+    end.
 
--doc """
-Advance the engine past a durably-committed slot: raise `base` and DROP every block/share/cert/tree/
-committed entry at or below `Committed` — those slots are now final history in the store, so keeping
-them would grow the maps without bound (and a later proposal's parent resolves via `base`, not the
-pruned tree). Called by the driver right after it persists a committed block.
-""".
-%% Slice E — back out the engine's premature finalize-marking of a slot whose cert is SUB-QUORUM under the
-%% current committee (the weak-cert guard, see `weak_cert_wait/4`): drop the stale cert (the key must be
-%% ABSENT for `ingest_share` to re-form it under the current set) and un-mark it committed/skipped (so
-%% `detect_commits`/`detect_complaints` re-fire once a genuine cert forms). The SHARES stay — the re-form
-%% draws on them. Pure: the engine owns its cert/committed/skipped maps.
--spec eng_evict_final(commit | complaint, slot(), binary() | none, #eng{}) -> #eng{}.
-eng_evict_final(commit, Slot, BH, Eng = #eng{certs = C, committed = Cm}) ->
-    Eng#eng{certs = maps:remove({commit, Slot, BH}, C), committed = maps:remove(Slot, Cm)};
-eng_evict_final(complaint, Slot, none, Eng = #eng{certs = C, skipped = Sk}) ->
-    Eng#eng{certs = maps:remove({complaint, Slot, none}, C), skipped = maps:remove(Slot, Sk)}.
+finality_path(View, #eng{base = Base}, Acc) when View =< Base -> Acc;
+finality_path(View, #eng{committed = Committed, tree = Tree} = Eng, Acc) ->
+    case maps:is_key(View, Committed) of
+        true -> Acc;
+        false ->
+            B = maps:get(View, Tree),
+            {_Era, ParentView, _Hash} = B#block.parent,
+            finality_path(ParentView, Eng, [B | Acc])
+    end.
 
--spec eng_prune(slot(), #eng{}) -> #eng{}.
-eng_prune(Committed, Eng = #eng{base = Base}) ->
+%% Follow the paper's clause order: a complaint certificate advances without
+%% a new commit vote; notarization otherwise advances and lets the owner issue
+%% its once-only commit vote. A late notarization is still complete-tree data.
+advance_view(Eng = #eng{view = View, certs = Certs, tree = Tree}) ->
+    case {maps:is_key({complaint, View, none}, Certs), maps:find(View, Tree)} of
+        {true, _} ->
+            {Next, Events} = advance_view(Eng#eng{view = View + 1}),
+            {Next, [{view_advanced, View, complaint} | Events]};
+        {false, {ok, Block}} ->
+            Parent = quod_ledger:block_ref(Block),
+            {Next, Events} = advance_view(Eng#eng{view = View + 1, last_parent = Parent}),
+            {Next, [{view_advanced, View, {notarized, Block}} | Events]};
+        _ -> {Eng, []}
+    end.
+
+block_for(Hash, #eng{blocks = Blocks}) -> maps:get(Hash, Blocks, undefined).
+
+parent_ancestry(Root, #eng{root = Root, root_ancestry = Ancestry}) -> Ancestry;
+parent_ancestry({Era, View, Hash}, Eng = #eng{era = Era, tree_hashes = Hashes}) ->
+    Hash = maps:get(View, Hashes),
+    parent_ancestry(View, Eng);
+parent_ancestry(View, #eng{base = View, root_ancestry = Ancestry}) -> Ancestry;
+parent_ancestry(View, #eng{ancestry = Ancestry}) -> maps:get(View, Ancestry).
+
+parent_terminal(View, Eng) -> (parent_ancestry(View, Eng))#ancestry.terminal.
+
+block_ancestry(#block{parent = {_, ParentView, _}, payload = Payload} = Block, Eng) ->
+    Parent = parent_ancestry(ParentView, Eng),
+    case Payload of
+        empty -> Parent;
+        _ ->
+            Membership = case quod_ledger:classify(Payload) of
+                {content, Transactions} -> transactions_touch_committee(Transactions);
+                _ -> false
+            end,
+            Parent#ancestry{terminal = Parent#ancestry.terminal orelse Membership,
+                           material_count = Parent#ancestry.material_count + 1,
+                           material_ref = quod_ledger:block_ref(Block)}
+    end.
+
+
+%% Drop the fully archived protocol prefix after its selected proof is durable.
+-spec eng_prune(protocol_ref(), #eng{}) -> #eng{}.
+eng_prune({Era, Committed, Hash} = Root, #eng{era = Era, base = Base} = Eng) ->
+    true = maps:get(Committed, Eng#eng.tree_hashes, none) =:= Hash,
+    RootAncestry = parent_ancestry(Committed, Eng),
+    RootTimestamp = (maps:get(Committed, Eng#eng.tree))#block.timestamp,
     Above = fun(Sl) -> Sl > Committed end,
-    Eng#eng{base      = max(Committed, Base),
+    Eng#eng{base      = max(Committed, Base), root = Root, root_ancestry = RootAncestry,
+            root_timestamp = RootTimestamp,
+            waiting = maps:filtermap(fun(_, Bucket) ->
+                Remaining = maps:filter(fun({Sl, _}, _) -> Above(Sl) end, Bucket),
+                case map_size(Remaining) of 0 -> false; _ -> {true, Remaining} end
+            end, Eng#eng.waiting),
+            ancestry = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.ancestry),
+            finality = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.finality),
             blocks    = maps:filter(fun(_BH, #block{slot = Sl}) -> Above(Sl) end, Eng#eng.blocks),
             block_slots = maps:filter(fun(Sl, _BH) -> Above(Sl) end, Eng#eng.block_slots),
             shares    = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.shares),
@@ -924,7 +932,6 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
             tree      = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree),
             tree_hashes = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree_hashes),
             committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed),
-            skipped   = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.skipped),
             ahead_finalizer =
                 case Eng#eng.ahead_finalizer > Committed of
                     true  -> Eng#eng.ahead_finalizer;
@@ -958,21 +965,6 @@ eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
         undefined -> undefined;
         BH -> block_for(BH, Eng)
     end.
-%% Build a minimal test engine with selected cert keys planted without
-%% verification. Pure gate/state fixtures use it when certificate presence,
-%% rather than cryptographic formation, is the condition under test.
-eng_with_certs(Base, KindSlots) ->
-    Certs = maps:from_list([{{K, Sl, <<>>}, #cert{kind = K, slot = Sl, block_hash = <<>>, sigs = []}}
-                            || {K, Sl} <- KindSlots]),
-    #eng{domain = <<0:256>>, validators = [], base = Base, certs = Certs}.
-
-%% Reconstruct the exact engine half of an out-of-order commit already emitted to the FSM: the valid
-%% certificate and committed latch exist, while the FSM separately holds the block in commit_buf.
-eng_buffered_commit(Slot, Block, #cert{} = Cert,
-                    Eng = #eng{certs = Certs, committed = Committed}) ->
-    BH = block_hash(Block),
-    Eng#eng{certs = Certs#{{commit, Slot, BH} => Cert},
-            committed = Committed#{Slot => Block}}.
 -endif.
 
 %%%===================================================================
@@ -1008,17 +1000,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                   %% then sweep its marker so the tick re-dials (guards a conn that dies
                                   %% mid-handshake); safely exceeds the worst-case legit dial (connect ~5s +
                                   %% link-ack ~5s, quod_conn), so an in-flight dial is never swept early
--define(DELTA_MS,   1000).   %% oldest-head progress timeout: redrive or complain while waiting for proposal,
-                             %% notarization, or commit; must exceed real commit latency.
-                             %% Tested at 500ms after the local-disk migration (2026-07-24): it TRIPLED
-                             %% skips (4.4->12.4/node) and blew up the tail (p90/p99 -> 10s), because
-                             %% under a 40-tx burst the single-statem mailbox backs up and a healthy
-                             %% round transiently exceeds 500ms, so Δ=500 spuriously skips it and the
-                             %% skip->retry feeds the storm. A LOWER fixed Δ is the wrong lever; the tail
-                             %% needs the burst-amplification fixes (deferred.md §3, "Latency tail").
-                             %% Adaptive Δ (track live round p99) is the real follow-up.
+-define(DELTA_MS,   1000).   %% protocol-view progress timeout; must exceed healthy round latency.
                              %% Override via app-env `simplex_delta_ms`.
--define(SYNC_WINDOW,  256).  %% entries requested per catch-up / gap-fill fetch (matches the server's block cap)
 -define(SINK_MS,     30000). %% budget for one sink window (store append + KB replay) — generous
 -define(TIP_PROBE_MS, 9500). %% one parallel tip round; exceeds quod_catchup's 9s public pull budget
 -define(RECOVERY_FETCHES, 2). %% bound source changes inside one recovery worker (retries resume durably)
@@ -1028,25 +1011,19 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
--define(INGRESS_TTL_MS, 7000).                    %% parked-item cutoff. One eligible slot may burn a full
-                                                  %% quorum-flap complaint cycle
-                                                  %% (Δ×(1+?MAX_QUORUM_REARMS) = 4s) before the skip lands;
-                                                  %% flight time is negligible. 7s covers that worst legit
-                                                  %% wait yet stays under the caller's 8s append timeout,
-                                                  %% so a REAL stall still fails visibly (busy) while the
-                                                  %% caller can still hear it — the queue never hides a wedge
+-define(INGRESS_TTL_MS, 7000).                    %% existing ingress deadline, below caller timeout
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
 -define(DTX_FOREIGN_VERIFY_MS, 6000).             %% cache-fill workers may outlive one Delta;
                                                   %% proposal redrive reuses the verified cache
--define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
 -define(READINESS_MS, 1000).                      %% readiness refresh; at or below the default Delta
 -define(READINESS_FRESH_MS, 3000).                %% tolerate two missed refreshes, then fail closed
 -define(BLOCK_REQUEST_RETRY_MS, 500).              %% rotate a missing certified block request to another holder
 
 -type final_vote() :: none | {commit, binary()} | complaint.
--type final_vote_trigger() :: notarized | complaint_evidence | timeout | rejected.
+-type final_vote_trigger() :: notarized | timeout.
 -record(round, {supporting = none :: none | binary(),
                 final = none :: final_vote(),
+                commit_requested = none :: none | binary(),
                 invalid = none :: none | binary(),
                 invalid_reason = none :: none | term(),
                 validating = none :: none | binary(),
@@ -1066,7 +1043,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                      quod_atomic:projection()}}).
 
 -record(batch, {slot :: slot(),
-                parent :: slot(),
+                parent :: protocol_ref(),
                 items_rev = [] :: [{term(), #transaction{}}],
                 count = 0 :: non_neg_integer(),
                 bytes = 0 :: non_neg_integer(),
@@ -1169,17 +1146,13 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     waiters = #{} :: #{reference() => {gen_statem:from(), reference(), integer()}}
 }).
 
--type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
--record(head_progress, {slot :: slot(),
-                        phase :: progress_phase(),
-                        quorum_ready = false :: boolean(),
-                        quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS,
-                        support_grace_used = false :: boolean()}).
+-type progress_phase() :: awaiting_proposal | awaiting_notarization.
+-record(head_progress, {era :: binary(), slot :: slot(), phase :: progress_phase()}).
 
 -record(relay_ref, {peer :: node_id(),
                     submission_id :: binary(),
                     attempt_id :: binary(),
-                    committee_id :: binary(),
+                    era :: binary(),
                     target_slot :: slot()}).
 
 -record(relay_pending, {from :: term(),
@@ -1188,7 +1161,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                         author_seq :: pos_integer(),
                         submission_id :: binary(),
                         attempt_id :: binary(),
-                        committee_id :: binary(),
+                        era :: binary(),
                         frame :: binary(),
                         deadline :: integer(),
                         accepted = false :: boolean()}).
@@ -1248,17 +1221,13 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                      %% history or relabelling old slots with today's committee
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
-            approved     = 0  :: slot(),             %% latest notarized/activated slot; proposals extend this
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
             collecting = none :: none | #batch{},    %% leader's not-yet-sealed micro-batch
             local_proposals = #{} :: #{slot() => #local_proposal{}}, %% sealed local blocks + parked callers
             rounds = #{} :: #{slot() => #round{}},   %% all local vote/validation latches for an in-flight slot
             requested_slot = none :: none | slot(),  %% earliest client-demanded slot not yet proposed/finalized
             head_progress = idle :: idle | #head_progress{},
-                                                     %% explicit state of the oldest non-final slot; unlike the
-                                                     %% old approval-frontier latch, notarization advances this
-                                                     %% to awaiting_commit instead of cancelling its watchdog
-            commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
+                                                     %% current era/view timeout demand
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             inbound_conns = #{} :: #{node_id() => {pid(), reference()}}, %% authenticated inbound consensus links
             peer_readiness = #{} :: #{node_id() => {pid(), slot(), boolean(), integer()}},
@@ -1321,6 +1290,12 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             operation_recoveries = #{} ::
               #{term() => #operation_recovery_owner{}},
             history_head = none :: none | {slot(), <<_:256>>},
+            protocol_root = none :: none | protocol_ref(),
+            archive_tip = none :: none | {protocol_ref(), non_neg_integer()},
+            %% Compact verified result retained at archive installation. Late
+            %% body requests hand off to certified history without owner I/O.
+            archive_certificate = none :: none | #cert{},
+            archived_protocol = #{} :: #{binary() => non_neg_integer() | sealed},
             phase_index = undefined :: undefined | quod_dtx_phase_index:index(),
             next_author_seq = 1 :: pos_integer(),
             prolog_ready = false :: boolean(),
@@ -1330,6 +1305,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             %% represent the unsafe combinations the
             %% former `sync` latch + `confirmed` boolean allowed after a partial or failed pull.
             sync         = unconfirmed :: unconfirmed | {pulling, pid()} | ready,
+            sync_stage = none :: none | file:filename_all(),
             sync_arm     = {0, 0} :: {non_neg_integer(), non_neg_integer()},
                                         %% {failure cooldown ticks, backoff interval ticks}
             genesis_hash = undefined :: binary() | undefined,  %% pinned slot-1 block hash for every mode
@@ -1339,7 +1315,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             batched_txs = 0 :: non_neg_integer(),
             commits = 0  :: non_neg_integer(),
             submitted  = 0 :: non_neg_integer(),   %% every append attempt (metrics: submit rate)
-            skips      = 0 :: non_neg_integer(),   %% complaint-skipped (noop) slots
             r_busy     = 0 :: non_neg_integer(),   %% appends REFUSED busy. Since the park queue landed this
                                                    %% counts only ingress overflow + TTL expiry — an
                                                    %% ALERTABLE overload/stall signal, no longer routine
@@ -1360,20 +1335,40 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                     %% approved_at|none}, mono-ms on THIS node — feeds the
                                                     %% round-phase histograms that localize where a
                                                     %% consensus round spends its time; bounded by the
-                                                    %% pipeline depth, pruned in finalize/2
+                                                    %% pipeline depth, pruned in finalize_protocol/2
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
-            quorum_pauses = 0 :: non_neg_integer(), %% timeouts that withheld a complaint while < quorum ready
-            weak_cert_waits = 0 :: non_neg_integer(), %% sub-quorum finalizations refused
             validation_ttl_ms = ?QUOD_VALIDATION_TTL_MS :: non_neg_integer()}).
+
+%% The engine owns the protocol parent. The owner supplies only its material
+%% base height; an empty suffix inherits its material parent without consuming
+%% an admission position or inventing a ledger height.
+protocol_parent_material(S = #s{eng = #eng{last_parent = Parent}}) ->
+    protocol_parent_material(Parent, S).
+
+protocol_parent_material(Ref, #s{eng = Eng, slot = Height, history_head = Installed}) ->
+    Parent = parent_ancestry(Ref, Eng),
+    Base = Eng#eng.root_ancestry,
+    case Parent#ancestry.material_count - Base#ancestry.material_count of
+        0 -> Installed;
+        Ahead when Ahead > 0 ->
+            {_, _, Hash} = Parent#ancestry.material_ref,
+            {Height + Ahead, Hash}
+    end.
+
+%% A configured anchor permits recovery, but is not an installed genesis.
+%% Until history establishes a material head, no payload or membership action
+%% can claim that its parent is already certified locally.
+material_parent_installed(_Ref, #s{history_head = none}) -> false;
+material_parent_installed(Ref, S) ->
+    protocol_parent_material(Ref, S) =:= S#s.history_head.
 
 -ifdef(TEST).
 %% Build a minimal #s{} for the Slice-4 gate-predicate eunit (the record is otherwise private). Only the
 %% fields the pure predicates read carry meaning; every other field takes its record default.
 test_state(Overrides) ->
-    S0 = maps:fold(fun(approved, _V, Acc) -> Acc;
-                     (ingress, _V, Acc) -> Acc;
+    S0 = maps:fold(fun(ingress, _V, Acc) -> Acc;
                      (validators, _V, Acc) -> Acc;
                      (author_admissions, _V, Acc) -> Acc;
                      (local_proposal, _V, Acc) -> Acc;
@@ -1402,21 +1397,17 @@ test_state(Overrides) ->
             error ->
                 S1
         end,
-    S3 = case maps:find(approved, Overrides) of
-             {ok, Approved} -> S2#s{approved = Approved};
-             error -> S2
-        end,
     %% Production installs the initial DTX projection before the namespace is
     %% exposed. Keep the generic fixture faithful to that invariant; tests of
     %% the fail-closed pre-install state can still request `undefined`
     %% explicitly.
     S4 =
         case maps:is_key(dtx_projection, Overrides) of
-            true -> S3;
+            true -> S2;
             false ->
-                S3#s{dtx_projection =
+                S2#s{dtx_projection =
                          quod_atomic:initial_projection(
-                           target_identity(S3), 0)}
+                           target_identity(S2), 0)}
         end,
     %% Proposal bodies depend on the completed engine override, not map order.
     S5 = case maps:find(local_proposal, Overrides) of
@@ -1439,6 +1430,21 @@ test_install_projection(Projection, S) ->
     install_projection(Projection, S).
 test_state_projection(S) ->
     state_projection(S).
+test_restore_storage(Ns, Cfg, Self) ->
+    {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
+    try restore_storage(#s{ns = Ns, self = Self, store = Store}, Cfg) of
+        {S, Anchor, Journal} ->
+            try
+                #{projection => state_projection(S#s{genesis_hash = Anchor}),
+                  archive_tip => S#s.archive_tip,
+                  archive_certificate => S#s.archive_certificate,
+                  rounds => quod_signing_journal:rounds(Journal),
+                  height => S#s.slot}
+            after
+                quod_signing_journal:close(Journal),
+                quod_dtx_phase_index:close(S#s.phase_index)
+            end
+    after quod_ledger_store:close(Store) end.
 test_enqueue_dtx_intent(From, EnginePid, IntentId, Material, GroupRef,
                         DeadlineMs, S) ->
     enqueue_dtx_intent(
@@ -1466,8 +1472,7 @@ test_state_set(validators, V, S) ->
     S#s{validators = V,
         author_admissions =
             maps:from_list([{Pk, test_author_admission(Pk)} || Pk <- V])};
-test_state_set(slot, V, S)       -> S#s{slot = V, approved = V};
-test_state_set(approved, V, S)   -> S#s{approved = V};
+test_state_set(slot, V, S)       -> S#s{slot = V};
 test_state_set(eng, V, S)        -> S#s{eng = V};
 test_state_set(sync, V, S)       -> S#s{sync = V};
 test_state_set(last_applied, V, S) -> S#s{last_applied = V};
@@ -1477,24 +1482,16 @@ test_state_set(author_admissions, V, S) -> S#s{author_admissions = V};
 test_state_set(dtx_projection, V, S) -> S#s{dtx_projection = V};
 test_state_set(dtx_lanes, V, S) -> S#s{dtx_lanes = V};
 test_state_set(history_head, V, S) -> S#s{history_head = V};
+test_state_set(archive_tip, V, S) -> S#s{archive_tip = V};
+test_state_set(archive_certificate, V, S) -> S#s{archive_certificate = V};
+test_state_set(protocol_root, V, S) -> S#s{protocol_root = V};
 test_state_set(last_ts, V, S) -> S#s{last_ts = V};
 test_state_set(phase_index, V, S) -> S#s{phase_index = V};
 test_state_set(store, V, S)       -> S#s{store = V};
 test_state_set(signing_journal, V, S) -> S#s{signing_journal = V};
-test_state_set(commit_buf, V, S)  -> S#s{commit_buf = V};
 test_state_set(head_progress, idle, S) -> S#s{head_progress = idle};
-test_state_set(head_progress, {Slot, Phase, Ready}, S) ->
-    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_ready = Ready}};
-test_state_set(head_progress, {Slot, Phase, Ready, Rearms}, S) ->
-    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_ready = Ready,
-                                       quorum_rearms = Rearms}};
-test_state_set(head_progress, {Slot, Phase, Ready, Rearms, SupportGrace}, S) ->
-    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_ready = Ready,
-                                       quorum_rearms = Rearms,
-                                       support_grace_used = SupportGrace}};
+test_state_set(head_progress, {Era, Slot, Phase}, S) ->
+    S#s{head_progress = #head_progress{era = Era, slot = Slot, phase = Phase}};
 test_state_set(requested_slot, V, S) -> S#s{requested_slot = V};
 test_state_set(conns, V, S)      -> S#s{conns = V};
 test_state_set(inbound_conns, V, S) -> S#s{inbound_conns = V};
@@ -1564,17 +1561,14 @@ test_state_set(sync_arm, V, S)   -> S#s{sync_arm = V}.
 test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a state (record is private)
 test_sync(#s{sync = Sy})         -> Sy.
 test_progress(#s{head_progress = idle}) -> idle;
-test_progress(#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                                quorum_ready = Ready}}) ->
-    {Slot, Phase, Ready}.
-test_progress_rearms(#s{head_progress = idle}) -> 0;
-test_progress_rearms(#s{head_progress = #head_progress{quorum_rearms = Rearms}}) -> Rearms.
-test_support_grace(#s{head_progress = idle}) -> false;
-test_support_grace(#s{head_progress = #head_progress{support_grace_used = Used}}) -> Used.
+test_progress(#s{head_progress = #head_progress{era = Era, slot = Slot, phase = Phase}}) ->
+    {Era, Slot, Phase}.
 test_engine_pool_sizes(#s{eng = Eng}) -> eng_pool_sizes(Eng).
+test_protocol_position(#s{eng = #eng{era = Era, view = View, root = Root, last_parent = Parent}}) ->
+    #{era => Era, view => View, root => Root, parent => Parent}.
 test_round(Slot, S) ->
     R = round_state(Slot, S),
-    {R#round.supporting, round_committed(R), round_complained(R)}.
+    {R#round.supporting, is_tuple(R#round.final), R#round.final =:= complaint}.
 test_dtx_round(Slot, S) ->
     R = round_state(Slot, S),
     {R#round.validating, R#round.validation,
@@ -1792,13 +1786,16 @@ test_blocked_dtx_owner(Parent, S) ->
     Owners = maps:map(fun(G, _OwnRow) ->
         #dtx_coordinator_owner{group_id = G, pid = self(), monitor = make_ref()}
     end, dtx_coordinator_desired(S)),
-    S#s{slot = H - 1, approved = H, eng = Eng#eng{tree = #{H => Parent}},
+    Ref = {_, _, Hash} = quod_ledger:block_ref(Parent),
+    S#s{eng = Eng#eng{tree = #{H => Parent}, tree_hashes = #{H => Hash},
+                      ancestry = #{H => block_ancestry(Parent, Eng)},
+                      view = H + 1, last_parent = Ref},
         dtx_coordinators = Owners}.
 test_dtx_drive_scheduled(#s{dtx_drive_scheduled = Scheduled}) -> Scheduled.
 test_propose_dtx_wave(Slot, Envelopes, Hints, S) ->
-    Parent = S#s.approved,
+    #eng{era = Era, last_parent = Parent} = S#s.eng,
     {ok, Payload} = decode_dtx_wave(Envelopes),
-    {ok, Block} = quod_ledger:new_block(Slot, Parent, Payload,
+    {ok, Block} = quod_ledger:new_block({Era, Slot}, Parent, Payload,
                       max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     propose_dtx_wave(Block, Hints, S).
 test_resolve_committed_dtx(Entry, Payload, S) ->
@@ -1971,7 +1968,7 @@ test_dtx_worker_terminal_result(Result, Response) ->
     dtx_worker_terminal_result(Result, Response).
 test_dtx_retirement_result(Reason) -> dtx_retirement_result(Reason).
 test_requested(#s{requested_slot = V}) -> V.
-test_progress_counts(#s{progress_timeouts = T, quorum_pauses = P}) -> {T, P}.
+test_progress_counts(#s{progress_timeouts = T}) -> T.
 test_committed_store(#s{slot = Slot, store = Store}) -> {Slot, Store}.
 test_link_peers(#s{conns = Conns, inbound_conns = Inbound,
                    outbox = Outbox, dialing = Dialing}) ->
@@ -1987,8 +1984,8 @@ test_relay_link_peers(
 test_relay_chan(#s{relay_chan = Chan}) -> Chan.
 test_prune_relay_links(S) -> prune_relay_links(S).
 test_reconcile_relays(S) -> reconcile_relays(S).
-test_invalidate_relay_generation(NewHead, S) ->
-    invalidate_relay_generation(NewHead, S).
+test_invalidate_relay_generation(S) ->
+    invalidate_relay_generation(S).
 test_close_relay_transport(Ns) ->
     case quod_reg:where({quod_simplex, Ns}) of
         Pid when is_pid(Pid) ->
@@ -2029,7 +2026,7 @@ test_signing_journal(#s{signing_journal = Journal}) -> Journal.
 test_append(From, Change, S) ->
     handle_append(new_waiter(From, otel_ctx:new(), Change, S, false), Change, S).
 test_relayed_append(Peer, Change, S) ->
-    TargetSlot = S#s.approved + 1,
+    TargetSlot = (S#s.eng)#eng.view,
     test_relayed_append(Peer, TargetSlot, Change, S).
 test_relayed_append(Peer, TargetSlot, Change, S) ->
     Ref = test_relay_ref(Peer, Change, TargetSlot, S),
@@ -2037,19 +2034,15 @@ test_relayed_append(Peer, TargetSlot, Change, S) ->
       new_waiter({relay, Ref}, otel_ctx:new(), Change, S, true),
       Ref, Change, S).
 test_relay_ref(Peer, Change, TargetSlot,
-               #s{ns = Ns, self = Self, committee_id = CommitteeId0} = S) ->
-    {ok, Submission} = transaction_submission(S, Change),
+               #s{ns = Ns, self = Self, eng = #eng{era = Era}} = S) ->
+    {ok, TargetBinding} = binding(S, Change#transaction.author),
+    {ok, Submission} = quod_transaction:submission(TargetBinding, Change),
     SubmissionId = quod_transaction:submission_id(Submission),
-    CommitteeId =
-        case CommitteeId0 of
-            undefined -> <<0:256>>;
-            Cid -> Cid
-        end,
     AttemptId =
         quod_transaction:relay_attempt_id(
-          Ns, SubmissionId, CommitteeId, TargetSlot, Self),
+          Ns, SubmissionId, Era, TargetSlot, Self),
     #relay_ref{peer = Peer, submission_id = SubmissionId,
-               attempt_id = AttemptId, committee_id = CommitteeId,
+               attempt_id = AttemptId, era = Era,
                target_slot = TargetSlot}.
 test_relay_origin(Peer, TargetSlot, Change, S) ->
     {relayed,
@@ -2100,7 +2093,7 @@ test_relay_result(Peer, AttemptId, Result,
                   S = #s{relay_pending = Pending}) ->
     case maps:get(AttemptId, Pending, undefined) of
         #relay_pending{submission_id = SubmissionId,
-                       committee_id = CommitteeId,
+                       era = CommitteeId,
                        target_slot = TargetSlot} ->
             handle_relay_result(
               Peer, SubmissionId, AttemptId, CommitteeId,
@@ -2112,7 +2105,7 @@ test_relay_accepted(Peer, AttemptId,
                     S = #s{relay_pending = Pending}) ->
     case maps:get(AttemptId, Pending, undefined) of
         #relay_pending{submission_id = SubmissionId,
-                       committee_id = CommitteeId,
+                       era = CommitteeId,
                        target_slot = TargetSlot} ->
             handle_relay_accepted(
               Peer, SubmissionId, AttemptId, CommitteeId,
@@ -2126,20 +2119,16 @@ test_put_pending_relay(Target, TargetSlot,
                        S = #s{ns = Ns, relay_pending = Pending}) ->
     <<SubmissionId:16/binary, _/binary>> =
         crypto:hash(sha256, term_to_binary(make_ref())),
-    CommitteeId =
-        case S#s.committee_id of
-            undefined -> <<0:256>>;
-            Cid -> Cid
-        end,
+    Era = (S#s.eng)#eng.era,
     AttemptId =
         quod_transaction:relay_attempt_id(
-          Ns, SubmissionId, CommitteeId, TargetSlot, Target),
+          Ns, SubmissionId, Era, TargetSlot, Target),
     Relay = #relay_pending{from = test, target = Target,
                            target_slot = TargetSlot,
                            author_seq = map_size(Pending) + 1,
                            submission_id = SubmissionId,
                            attempt_id = AttemptId,
-                           committee_id = CommitteeId,
+                           era = Era,
                            frame = <<>>,
                            deadline = 0},
     case put_pending_relay(AttemptId, Relay, Pending) of
@@ -2150,12 +2139,12 @@ test_copy_relay_pending(#s{relay_pending = Pending}, S) ->
     S#s{relay_pending = Pending}.
 test_relay_custody(SubmissionId, Target, TargetSlot,
                    S = #s{custody = Custody}) ->
-    Record = #custody{change = Change, original_arrival = Anchor} =
+    Record = #custody{change = Change} =
         maps:get(SubmissionId, Custody),
     ReadyKey = {Change#transaction.author_seq, SubmissionId},
     relay_custody(
       {custody, SubmissionId}, custody_marker(SubmissionId, Record),
-      Target, TargetSlot, Change, Anchor,
+      Target, TargetSlot,
       drop_custody_ready(ReadyKey, S)).
 test_remove_pending_relay(AttemptId, S) ->
     remove_pending_relay(AttemptId, S).
@@ -2180,7 +2169,7 @@ test_reply_relay(
     reply_relay(
       #relay_ref{peer = Peer, submission_id = SubmissionId,
                  attempt_id = AttemptId,
-                 committee_id = CommitteeId, target_slot = TargetSlot},
+                 era = CommitteeId, target_slot = TargetSlot},
       Reply, S).
 test_custody(#s{custody = Custody}) ->
     lists:sort(
@@ -2230,8 +2219,8 @@ test_place_transaction_custody(TxId, Placement,
       SubmissionId, Placement, drop_custody_ready(ReadyKey, S)).
 test_mark_custody_lane_ready(S) ->
     mark_custody_lane_ready(S).
-test_settle_recovery_custody(NewHead, Included, S) ->
-    settle_recovery_custody(NewHead, Included, S).
+test_settle_recovery_submissions(Entries, S) ->
+    settle_recovery_submissions(Entries, S).
 test_resolve_committed_submissions(Payload, Slot, S) ->
     resolve_committed_submissions(Payload, Slot, S).
 test_custody_placement({local, Slot, _CommitteeId}) ->
@@ -2277,11 +2266,9 @@ test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
 test_author_admissions(#s{author_admissions = Admissions}) -> Admissions.
 test_log_projection(Ns, Entries, Seed) ->
     log_projection(Ns, Entries, Seed).
-test_apply_catchup_window(Source, Entries, S) ->
-    Projection = log_projection(S#s.ns, Entries, state_projection(S)),
-    apply_catchup_window(Source, Entries, Projection, quod_dtx_phase_index:new_delta(), S).
-test_apply_catchup_window(Source, Entries, Projection, S) ->
-    apply_catchup_window(Source, Entries, Projection, quod_dtx_phase_index:new_delta(), S).
+test_apply_catchup_window(Source, Group, S) ->
+    apply_catchup_window(Source, Group, S).
+
 -endif.
 
 callback_mode() -> [state_functions].
@@ -2379,9 +2366,9 @@ own events, so the error arms of the stable consensus-append contract `quod_prol
 `busy` (queue OVERFLOW, or a parked change cut by the ingress TTL during a genuine stall — an overload
 signal, no longer routine backpressure), `stale_seq` (newer approved history superseded this signed
 sequence — retry), `not_in_charge` (this process cannot currently accept local work, with `unavailable`
-when it cannot be reached), and `skipped` for the terminal membership re-proof path. Ordinary
-signed content remains in origin custody across slot exclusion and proposer removal. At N=1
-only the sole-validator commit path runs, so an append just returns `{ok, Slot}`.
+when it cannot be reached). Once signed, membership and ordinary content share
+origin custody across view changes and proposer removal. A local membership
+refusal cannot authorize re-proving an uncertain request.
 The call timeout sits above the ingress TTL so a parked direct append cannot race its own expiry reply.
 If that deadline is nevertheless reached after consensus accepted the call, the result is
 `{error, {outcome_unknown, OutcomeRef}}`: the transaction may still finalize,
@@ -3043,7 +3030,9 @@ acquire_attestation_gate(Ns, {Owner, CommitteeId} = Binding, Deadline, Monitors)
 publish_proof_gate_changes(Before, {proof_gate, Ready, _, Fences, _, _, CommitteeId, _},
                            {Ns, _Anchor} = Identity) ->
     case Ready andalso not Before#s.prolog_ready of
-        true -> quod_reg:publish({runtime, Ns}, {proof_ready, Identity, self()});
+        true -> quod_reg:publish({runtime, Ns},
+                    {proof_ready, Identity, self(), quod_reg:where({quod_prolog, Ns}),
+                     erlang:unique_integer([monotonic, positive])});
         false -> ok
     end,
     case proof_gate_row_for_state(Before) of
@@ -3211,7 +3200,6 @@ init_store(Ns, Cfg, Id) ->
     try restore_storage(S0, Cfg) of
         {S1, GenesisHash, Journal} ->
             Domain = consensus_domain(Ns, GenesisHash),
-            Committed = S1#s.slot,
             %% One table per operator-created namespace. `genesis_hash/1` uses
             %% binary_to_existing_atom/2, so readers never mint table-name atoms.
             %% The proof gate starts closed and opens only after the ordered
@@ -3224,26 +3212,26 @@ init_store(Ns, Cfg, Id) ->
                      GenesisTable,
                      [{anchor, GenesisHash},
                       proof_gate_tuple(false, S1)]),
+            Eng = eng_new(Domain, active_validators(S1), S1#s.archive_tip),
             S2 = restore_signing_state(
                    S1#s{signing_journal = Journal,
                         genesis_hash = GenesisHash,
-                        consensus_domain = Domain}),
-            Eng = eng_new(Domain, active_validators(S2), Committed),
+                        consensus_domain = Domain, eng = Eng}),
             %% The common owner reconciliation arms boot/gap recovery once its
             %% catch-up sibling is up. The tick handles redials and failed-pull
             %% backoff, and notices sibling startup even without peer traffic.
             {ok, running,
-             S2#s{last_applied = 0, approved = Committed, eng = Eng},
+             S2#s{last_applied = 0},
              [{next_event, internal, restore_signing_engine},
               tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
 
-restore_signing_state(S = #s{signing_journal = Journal}) ->
+restore_signing_state(S = #s{signing_journal = Journal, eng = #eng{era = Era}}) ->
     restore_pending_transactions(
       restore_pending_dtx(
-        S#s{rounds = signing_rounds(Journal)}, Journal), Journal).
+        S#s{rounds = signing_rounds(Journal, Era)}, Journal), Journal).
 
 %% Rebuild the volatile engine from the exact block and vote decisions owned by
 %% the signing journal.  Feed them through the ordinary engine ingestion path:
@@ -3258,22 +3246,19 @@ restore_signing_engine(S = #s{signing_journal = Journal}) ->
 restore_signing_engine(S = #s{signing_journal = Journal}) ->
     restore_signing_engine_from_journal(Journal, S).
 -endif.
-restore_signing_engine_from_journal(Journal, S = #s{slot = Committed}) ->
-    Blocks = [{Slot, Block}
-              || {Slot, Block} <- maps:to_list(
-                                    quod_signing_journal:supported_blocks(
-                                      Journal)),
-                 Slot > Committed],
-    S1 = engine_step(
-           [{block, block_hash(Block), Block}
-            || {_Slot, Block} <- lists:sort(Blocks)], S),
-    Shares = lists:flatmap(
-               fun({Slot, #round{supporting = Support,
-                                 final = Final}}) ->
-                       restored_own_shares(Slot, Support, Final, S1)
-               end,
-               lists:sort(maps:to_list(S1#s.rounds))),
-    engine_step([{share, Share} || Share <- Shares], S1).
+restore_signing_engine_from_journal(Journal, S = #s{eng = #eng{era = Era, view = View}}) ->
+    %% Only the current view and the engine's one-view lookahead are eligible.
+    %% Later durable rows stay in their existing journal until a view-progress
+    %% edge invokes this same restoration; feeding them early would drop them.
+    Items = lists:flatmap(fun(V) ->
+        Block = case quod_signing_journal:supported_block(Journal, {Era, V}) of
+            #block{} = B -> [{block, block_hash(B), B}];
+            none -> []
+        end,
+        #round{supporting = Support, final = Final} = round_state(V, S),
+        Block ++ [{share, Share} || Share <- restored_own_shares(V, Support, Final, S)]
+    end, [View, View + 1]),
+    engine_step(Items, S).
 
 restored_own_shares(Slot, Support, Final, S) ->
     SupportShares =
@@ -3382,16 +3367,16 @@ restore_transaction_custody(State, _Ns, false, Record)
     Record#custody{placement = ready}.
 
 -ifdef(TEST).
-signing_rounds(memory) -> #{};
-signing_rounds(Journal) -> signing_rounds_journal(Journal).
+signing_rounds(memory, _Era) -> #{};
+signing_rounds(Journal, Era) -> signing_rounds_journal(Journal, Era).
 -else.
-signing_rounds(Journal) -> signing_rounds_journal(Journal).
+signing_rounds(Journal, Era) -> signing_rounds_journal(Journal, Era).
 -endif.
-signing_rounds_journal(Journal) ->
-    maps:map(
-      fun(_Slot, #{support := Support, final := Final}) ->
-              #round{supporting = Support, final = Final}
-      end, quod_signing_journal:rounds(Journal)).
+signing_rounds_journal(Journal, Era) ->
+    maps:from_list([{View, #round{supporting = Support, final = Final}}
+                   || {{RecordedEra, View}, #{support := Support, final := Final}} <-
+                          maps:to_list(quod_signing_journal:rounds(Journal)),
+                      RecordedEra =:= Era]).
 
 -ifdef(TEST).
 restore_pending_dtx(S, memory) ->
@@ -3483,7 +3468,54 @@ restore_storage(S0 = #s{store = Store}, Cfg) ->
         erlang:raise(Class, Reason, Stack)
     end.
 
-recover_existing_storage(S0 = #s{ns = Ns, store = Store, phase_index = PhaseIndex}, Cfg, Last) ->
+%% The material projection names the last ontology change. Engine restart uses
+%% the highest completely archived protocol head, which can be an empty carrier
+%% much later. Terminal M alone creates a new era root; its old-era witness head
+%% must never become that root. Floors are retained only for local journal eras.
+advance_archive_custody(genesis, Projection, Previous, Floors) ->
+    Tip = {maps:get(protocol_root, Projection), maps:get(timestamp, Projection)},
+    %% A cold joiner starts with its configured anchor as a protocol root;
+    %% the first verified material group establishes that same root's custody.
+    %% Startup folds begin without a previous tip. Neither path may replace a
+    %% different root or already-advanced protocol history with genesis.
+    true = Previous =:= none orelse Previous =:= Tip,
+    {Tip, Floors};
+advance_archive_custody(#{head := {Era, View, _} = Head, head_timestamp := Ts,
+                         complete_group := true},
+                       #{protocol_root := Root, timestamp := MaterialTs}, Tip, Floors) ->
+    case Root of
+        {Era, _, _} ->
+            Tip1 = later_archive_tip({Head, Ts}, Tip),
+            {Tip1, advance_tracked_floor(Era, element(2, element(1, Tip1)), Floors)};
+        {_, 0, _} ->
+            %% A semantically validated terminal membership entry has sealed
+            %% this era; no hypothetical future journal era is retired here.
+            true = element(1, element(1, Tip)) =:= Era,
+            true = View >= element(2, element(1, Tip)),
+            {{Root, MaterialTs}, advance_tracked_floor(Era, sealed, Floors)}
+    end.
+
+later_archive_tip({{Era, View, _}, _} = New, {{Era, Previous, _}, _})
+  when View > Previous -> New;
+later_archive_tip({{Era, View, _}, _}, {{Era, Previous, _}, _} = Old)
+  when View < Previous -> Old;
+later_archive_tip(Tip, Tip) -> Tip;
+later_archive_tip(_New, _Old) -> error(conflicting_archived_protocol_heads).
+
+%% This is a verified immutable result of a completed archive group, not an
+%% additional vote latch or body cache. Never replace a newer same-era witness
+%% with an older equivalent selection received from a different archive.
+retained_archive_certificate(Entries, Previous) ->
+    #entry{cert = Current} = quod_ledger:entry_view(lists:last(Entries)),
+    case {Current, Previous} of
+        {#cert{era = Era, slot = View}, #cert{era = Era, slot = Prior}} when Prior > View -> Previous;
+        _ -> Current
+    end.
+
+advance_tracked_floor(Era, Floor, Floors) ->
+    case maps:is_key(Era, Floors) of true -> Floors#{Era := Floor}; false -> Floors end.
+
+recover_existing_storage(S0 = #s{ns = Ns}, Cfg, Last) ->
     Anchor =
         case local_genesis_hash(S0) of
             <<_:256>> = Hash -> Hash;
@@ -3494,27 +3526,53 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store, phase_index = PhaseInde
     {ok, Journal0} = quod_signing_journal:recover(
                        Ns, Domain, data_dir(Cfg)),
     Binding = {Ns, Anchor},
+    try recover_archived_storage(S0, Last, Binding, Journal0)
+    catch Class:Reason:Stack ->
+        _ = quod_signing_journal:close(Journal0),
+        erlang:raise(Class, Reason, Stack)
+    end.
+
+recover_archived_storage(S0 = #s{store = Store, phase_index = PhaseIndex}, Last,
+                         Binding = {_Ns, Anchor}, Journal0) ->
     Projection0 = history_projection(Binding),
     PendingTransactions0 =
         quod_signing_journal:pending_transactions(Journal0),
-    {Projection, UncommittedTransactions} =
-            quod_ledger_store:fold(
-              Store, 1, Last,
-              fun(E, {Acc, PendingEffects}) ->
-                      #entry{data = Data} = quod_ledger:entry_view(E),
-                      P = checked_log_projection_step(Binding, E, Acc, PhaseIndex),
-                      {retain_owner_projection(P, quod_dtx_phase_index:new_delta(), S0),
-                       remove_committed_effect_ids(Data, PendingEffects)}
+    %% Only eras whose local latches still exist need retirement facts. Unknown
+    %% journal eras remain untouched; a lagging archive cannot seal them.
+    TrackedEras = maps:from_list([{Era, 0} || {Era, _} <-
+                       maps:keys(quod_signing_journal:rounds(Journal0))]),
+    {Projection, UncommittedTransactions, ArchiveTip, Archived, ArchiveCertificate} =
+        quod_ledger_store:fold_groups(Store,
+          fun(Entries, Proof, {Acc, PendingEffects, Tip, Floors, Certificate}) ->
+              {Projected, Delta, Summary} = case quod_catchup:verify_forward_group(
+                  Binding, Entries, Acc, PhaseIndex,
+                  {fun(C) -> quod_ledger_store:proof_next(Store, C) end, Proof}) of
+                  {ok, P1, D1, Finality} -> {P1, D1, Finality};
+                  {error, Reason} -> error(Reason)
               end,
-              {Projection0, PendingTransactions0}),
-    S1 = install_projection(Projection, S0#s{slot = Last}),
+              ok = require_complete_archive_group(Summary, hd(Entries)),
+              {Tip1, Floors1} = advance_archive_custody(Summary, Projected, Tip, Floors),
+              P = retain_owner_projection(Projected, Delta, S0),
+              Pending = lists:foldl(fun(E, Pending0) ->
+                  #entry{data = Data} = quod_ledger:entry_view(E),
+                  remove_committed_effect_ids(Data, Pending0)
+              end, PendingEffects, Entries),
+              {P, Pending, Tip1, Floors1, retained_archive_certificate(Entries, Certificate)}
+          end, {Projection0, PendingTransactions0, none, TrackedEras, none}),
+    S1 = install_projection(Projection, S0#s{slot = Last, archive_tip = ArchiveTip,
+                                            archive_certificate = ArchiveCertificate}),
     {ok, Journal1} = quod_dtx_owner:reconcile_journal(
-                       Last, Projection, PhaseIndex, Journal0),
+                       Archived, Projection, PhaseIndex, Journal0),
     Journal2 = retire_recovered_transactions(
                  PendingTransactions0, UncommittedTransactions, Journal1),
     S2 = reconcile_transaction_signing_custody(
            S1#s{signing_journal = Journal2}),
     finalize_restored_storage(S2, Anchor, S2#s.signing_journal).
+
+require_complete_archive_group(genesis, _Entry) -> ok;
+require_complete_archive_group(#{complete_group := true}, _Entry) -> ok;
+require_complete_archive_group(#{complete_group := false}, Entry) ->
+    error({incomplete_material_group, quod_ledger:entry_index(Entry)}).
 
 remove_committed_effect_ids(Data, Pending) ->
     case quod_ledger:classify(Data) of
@@ -3547,7 +3605,7 @@ initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := join} = Cfg) ->
                        Ns, Domain, data_dir(Cfg)),
     Projection = history_projection({Ns, Anchor}),
     {ok, Journal1} = quod_dtx_owner:reconcile_journal(
-                       0, Projection, S0#s.phase_index, Journal0),
+                       #{}, Projection, S0#s.phase_index, Journal0),
     finalize_restored_storage(
       install_projection(Projection, S0), Anchor, Journal1);
 initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
@@ -3563,13 +3621,19 @@ initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
                    {Ns, Anchor}, Entry,
                    history_projection({Ns, Anchor})),
     Projection = retain_owner_projection(Projection0, quod_dtx_phase_index:new_delta(), SAppended),
-    S1 = install_projection(Projection, SAppended#s{slot = 1}),
+    S1 = install_projection(Projection, SAppended#s{slot = 1,
+                           archive_tip = {maps:get(protocol_root, Projection), 0}}),
     {ok, Journal1} = quod_dtx_owner:reconcile_journal(
-                       1, Projection, S1#s.phase_index, Journal0),
+                       #{}, Projection, S1#s.phase_index, Journal0),
     finalize_restored_storage(S1, Anchor, Journal1).
 
 finalize_restored_storage(S0, Anchor, Journal) ->
+    Tip = case S0#s.archive_tip of
+        none -> {{quod_ledger:initial_era({S0#s.ns, Anchor}), 0, Anchor}, 0};
+        Existing -> Existing
+    end,
     S1 = S0#s{sync = initial_sync(S0),
+              archive_tip = Tip,
               next_author_seq =
                   maps:get(S0#s.self, S0#s.author_seqs, 0) + 1},
     {S1, Anchor, Journal}.
@@ -3628,10 +3692,10 @@ prepare_genesis(Cfg, Ns, <<_:256>> = Self)
     try
         Incarnation = crypto:strong_rand_bytes(32),
         {ok, Block} = quod_ledger:new_block(
-                        1, 0,
+                        {genesis, 0}, none,
                         {batch, [genesis_tx(Cfg, Ns, Self, Incarnation)]},
                         0),
-        Entry = quod_ledger:entry(Block, none),
+        Entry = quod_ledger:entry(1, Block, none),
         {ok, Entry, entry_block_hash(Entry)}
     catch
         throw:{genesis_failed, Reason} -> {error, Reason};
@@ -3654,7 +3718,7 @@ entry_block_hash(Entry) ->
     block_hash(Block).
 
 append_genesis(Entry, S = #s{store = Store}) ->
-    {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
+    {ok, Store1} = quod_ledger_store:append(Store, {none, [Entry]}),
     S#s{store = Store1}.
 
 %% The genesis transaction compiles caller-provided file/term content exactly once. Runtime creation
@@ -3808,7 +3872,7 @@ running(EventType, Content, S = #s{trace_owner_turns = true}) ->
       #{'quod.namespace' => S#s.ns,
         'quod.owner.event' => atom_to_binary(event_class(EventType, Content)),
         'quod.owner.committed_height_at_entry' => S#s.slot,
-        'quod.owner.approved_height_at_entry' => S#s.approved},
+        'quod.owner.protocol_view_at_entry' => (S#s.eng)#eng.view},
       fun() -> running_measured(EventType, Content, S) end);
 running(EventType, Content, S) ->
     running_measured(EventType, Content, S).
@@ -4367,11 +4431,14 @@ running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
 running_impl({timeout, batch}, {flush_batch, V}, S0) ->
     S1 = flush_batch(V, S0),
     keep_progress(S0, S1, []);
-%% The oldest non-final slot owns one Δ watchdog through all three phases. A timeout may redrive a
-%% proposal/finality bundle or issue a complaint, but it never silently disappears at notarization.
-running_impl({timeout, progress}, {progress_timeout, V}, S0) ->
-    S1 = on_progress_timeout(V, S0),
+%% One era/view watchdog issues a complaint or re-emits retained evidence.
+running_impl({timeout, progress}, {progress_timeout, {Era, V}},
+             S0 = #s{eng = #eng{era = Era, view = V},
+                     head_progress = #head_progress{era = Era, slot = V}}) ->
+    S1 = on_progress_timeout({Era, V}, S0),
     keep_progress(S0, S1, [], rearm);
+running_impl({timeout, progress}, {progress_timeout, _Stale}, S) ->
+    {keep_state, S};
 %% Consensus recovery: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
 %% re-dial every peer whose link never came up (its frames are still buffered), expire final caller
 %% deadlines, and spend failure backoff. The common owner reconciliation arms
@@ -4385,13 +4452,13 @@ running_impl({timeout, tick}, tick, S0) ->
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
 %% worker pid. We accept the result when the durable head is AT OR PAST the corroborated `H` (`Slot >= H`),
 %% not only exactly `H`: a member ingesting the live `{log}` stream during the pull can only advance its
-%% head via `commit_block`/`skip_block`, each of which finalizes on a QUORUM cert (`persisted_finality`) —
+%% head via `commit_finality`, each of which finalizes on a QUORUM cert (`persisted_finality`) —
 %% so any slot past `H` is itself cert-corroborated, never a blind advance. Requiring `Slot =:= H` instead
 %% would reject a member that stayed caught up under load (its head moved while the probe was in flight),
 %% bouncing it back to `unconfirmed` forever — the load stall this guard must not cause.
 running_impl(cast, {sync_done, Pid, {ready, H}},
         S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
-    S1 = S0#s{sync = ready, sync_arm = reset_pace()},
+    S1 = (cleanup_sync_stage(S0))#s{sync = ready, sync_arm = reset_pace()},
     S2 = apply_committed(S1),
     %% The owner requests closure on the same FIFO cast channel as every
     %% preceding replay apply, even when Prolog was already acknowledged.
@@ -4410,12 +4477,12 @@ running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
 %% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
-running_impl({call, From}, {sink_catchup, Source, Es, Projection, Delta}, S0) ->
+running_impl({call, From}, {sink_catchup, Source, Group}, S0) ->
     case may_sink(Source, S0) of
         %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
         %% transition helper cancels the named timer before the recovered member can vote again.
         true  -> {S1, Reply} = apply_catchup_window(
-                                Source, Es, Projection, Delta, S0),
+                                Source, Group, S0),
                  %% Return the same writer-turn view with the sink acknowledgement.
                  %% The next window borrows this installed index, without
                  %% recapturing or reopening the ledger path.
@@ -4447,6 +4514,7 @@ terminate(
   _Reason, _State,
   #s{ns = Ns, chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
      store = Store, signing_journal = Journal, phase_index = PhaseIndex,
+     sync_stage = StagePath, sync = Sync,
      dtx_correlations = DtxCorrelations,
      dtx_out_channels = DtxOutChannels,
      dtx_workers = DtxWorkers,
@@ -4461,6 +4529,8 @@ terminate(
     %% to reconnect and replay their retained prefixes in author order.
     close_link_maps(
       Conns, Inbound, RelayConns, RelayInbound, RetiredInbound),
+    case Sync of {pulling, Worker} -> exit(Worker, kill); _ -> ok end,
+    _ = case StagePath of none -> ok; _ -> file:delete(StagePath) end,
     _ = catch quod_reg:unsubscribe({quod_prolog, Ns}),
     _ = case Chan of undefined -> ok; _ -> catch quod_reg:unsubscribe({channel, Chan}) end,
     _ = case RelayChan of
@@ -6472,15 +6542,7 @@ claimed_application_evidence(Ns, Slot, TxId, Result, Deadline) ->
 application_result_evidence(Ns, Slot, <<_:256>> = TxId, Deadline) ->
     case history_view(Ns, any, Deadline) of
         {ok, View} ->
-            case read_evidence_at(View, Slot, {application, TxId}) of
-                {ok, Ref, _Transaction, Entry} ->
-                    case quod_foreign_log:verify_local_entry_deadline(
-                           View, Ref, transaction, Entry, Deadline) of
-                        {ok, Evidence} -> {ok, Ref, Entry, Evidence};
-                        {error, _} = Error -> Error
-                    end;
-                {error, _} = Error -> Error
-            end;
+            quod_foreign_log:read_local_application_deadline(View, Slot, TxId, Deadline);
         {error, _} = Error -> Error
     end;
 application_result_evidence(_Ns, _Slot, _TxId, _Deadline) ->
@@ -6937,10 +6999,8 @@ read_attest_endpoint_response(
   RequestId, _Plan, _Applied, _Attestation, _S) ->
     {error, RequestId, read_certificate_unavailable}.
 
-%% Complaint skips carry no state change, so the nearest preceding committed
-%% payload is the exact state anchor.  A non-noop row that cannot itself form a
-%% portable certified reference is never skipped: doing so would attest newer
-%% state under an older committee.
+%% Every ledger row is material. Its exact indexed entry is the state anchor;
+%% proof-only protocol blocks never require a backwards search here.
 read_certificate_anchor(_Store, _Target, Slot) when Slot < 1 ->
     {error, unavailable};
 read_certificate_anchor(Store, Target, Slot) ->
@@ -6948,7 +7008,7 @@ read_certificate_anchor(Store, Target, Slot) ->
         {ok, Entry} ->
             #entry{data = Data} = quod_ledger:entry_view(Entry),
             case quod_ledger:classify(Data) of
-                noop -> read_certificate_anchor(Store, Target, Slot - 1);
+                empty -> {error, unavailable};
                 {content, [Transaction | _]} ->
                     quod_dtx:certified_entry_ref(Target, Entry, Transaction);
                 {controls, [{_Kind, Control} | _]} ->
@@ -7610,7 +7670,7 @@ ingress_route_origin(local) ->
 ingress_route_origin({custody, _SubmissionId}) ->
     custody;
 ingress_route_origin(
-  {relayed, #relay_ref{committee_id = CommitteeId,
+  {relayed, #relay_ref{era = CommitteeId,
                        target_slot = TargetSlot}}) ->
     {relayed, CommitteeId, TargetSlot}.
 
@@ -7631,15 +7691,15 @@ refresh_ingress_view(S = #s{ingress = Ingress}) ->
 %% route view. Any fact consumed by ingress_view_facts/1 must have a source here.
 ingress_view_source(
   S = #s{self = Self, slot = Durable,
-         approved = Approved, committee_id = CommitteeId,
+         committee_id = CommitteeId,
          validators = Validators, sync = Sync,
-         eng = #eng{base = EngineBase, ahead_finalizer = AheadFinalizer,
+         eng = #eng{era = Era, view = View, base = EngineBase, ahead_finalizer = AheadFinalizer,
                     certs = Certs, tree = Tree},
-         local_proposals = Local, commit_buf = CommitBuf,
+         local_proposals = Local,
          custody_lane = CustodyLane, custody_ready = CustodyReady,
          relay_pending = Pending, author_seqs = AuthorSeqs,
          dtx_projection = DtxProjection}) ->
-    Floor = Approved + 1,
+    Floor = View,
     CustodyReadyCount = gb_sets:size(CustodyReady),
     CustodyPendingCount =
         custody_pending_count(CustodyReady, Pending),
@@ -7648,11 +7708,10 @@ ingress_view_source(
             0 -> inactive;
             _ -> AuthorSeqs
     end,
-    {Self, Durable, Approved, CommitteeId, Validators, Sync,
+    {Self, Durable, CommitteeId, Era, View, Validators, Sync,
      EngineBase, AheadFinalizer, Certs, Tree,
      proposal_visible(Floor, S),
      maps:is_key(Floor, Local),
-     maps:is_key(Floor, CommitBuf),
      collecting_gate(S#s.collecting),
      CustodyLane, CustodyReadyCount,
      pending_relay_lane(Pending),
@@ -7660,23 +7719,25 @@ ingress_view_source(
 
 ingress_view_facts(
   S = #s{self = Self, slot = Durable,
-         approved = Approved, committee_id = CommitteeId,
+         eng = #eng{era = Era, view = View, last_parent = Parent},
          custody_lane = CustodyLane, custody_ready = CustodyReady,
          relay_pending = Pending}) ->
-    Floor = Approved + 1,
+    Floor = View,
     Validators = active_validators(S),
     Barrier = consensus_barrier(S),
     #{self => Self,
       capability => ingress_capability(S),
-      committee_id => CommitteeId,
+      era => Era,
       validators => Validators,
       durable_head => Durable,
-      approved => Approved,
+      view => View,
+      membership_open => material_parent_installed(Parent, S),
       proposal_visible => proposal_visible(Floor, S),
       proposal_slot => proposal_slot(S, Barrier),
       consensus_barrier => Barrier,
       approved_author_seqs =>
           custody_author_sequence_floor(CustodyReady, S),
+      durable_author_seqs => S#s.author_seqs,
       collecting => collecting_gate(S#s.collecting),
       custody_lane => CustodyLane,
       custody_ready => gb_sets:size(CustodyReady),
@@ -7744,48 +7805,33 @@ execute_ready(Pass, Origin, From, Request, Anchor, Decision,
             collect_custody(
               Origin, From, Change, Membership, Slot, S);
         {collect, Slot} ->
-            sign_then(From, Change, Membership, Anchor, S,
+            sign_then(From, Change, Anchor, S,
                       fun(OwnedOrigin, F, Signed, S1) ->
-                          case OwnedOrigin of
-                              local ->
-                                  collect_append(
-                                    F, Signed, Membership, Slot, S1);
-                              {custody, _} ->
-                                  collect_custody(
-                                    OwnedOrigin, F, Signed,
-                                    Membership, Slot, S1)
-                          end
+                          collect_custody(
+                            OwnedOrigin, F, Signed, Membership, Slot, S1)
                       end);
         {relay, Leader, WatchSlot} when element(1, Origin) =:= custody ->
             relay_custody(
-              Origin, From, Leader, WatchSlot, Change, Anchor,
+              Origin, From, Leader, WatchSlot,
               watch_requested(WatchSlot, count_forwarded(Pass, S)));
         {relay, Leader, WatchSlot} ->   %% fresh LOCAL origin only
-            sign_then(From, Change, Membership, Anchor, S,
-                      fun(OwnedOrigin, F, Signed, S1) ->
+            sign_then(From, Change, Anchor, S,
+                      fun(OwnedOrigin, F, _Signed, S1) ->
                           S2 = watch_requested(
                                  WatchSlot, count_forwarded(Pass, S1)),
-                          case OwnedOrigin of
-                              local ->
-                                  relay_append(
-                                    F, Leader, WatchSlot, Signed, Anchor, S2);
-                              {custody, _} ->
-                                  relay_custody(
-                                    OwnedOrigin, F, Leader, WatchSlot,
-                                    Signed, Anchor, S2)
-                          end
+                          relay_custody(
+                            OwnedOrigin, F, Leader, WatchSlot, S2)
                       end)
     end.
 
-%% Sign exactly once, on the pass that leaves the unsigned queue. Ordinary
-%% content immediately enters origin custody; membership changes deliberately
-%% keep their terminal skip/re-proof contract.
-sign_then(From, Change, Membership, Anchor, S, Then)
-  when is_boolean(Membership) ->
+%% Every signed transaction enters the same origin custody before placement.
+%% Membership keeps its singleton/parent-verdict gate, not a second delivery
+%% lifecycle: a view change never authorizes re-proving an uncertain request.
+sign_then(From, Change, Anchor, S, Then) ->
     case claimed_application_custody(Change, S#s.custody) of
         retained -> reply_now(From, {ok, pending}, S);
         conflict -> reject_append(From, bad_change, S);
-        absent -> sign_and_place(From, Change, Membership, Anchor, S, Then)
+        absent -> sign_and_place(From, Change, Anchor, S, Then)
     end.
 
 %% The committed source claim is immutable; the local author envelope is not
@@ -7812,7 +7858,7 @@ claimed_application_custody(
     end;
 claimed_application_custody(_Change, _Custody) -> absent.
 
-sign_and_place(From, Change, Membership, Anchor, S, Then) ->
+sign_and_place(From, Change, Anchor, S, Then) ->
     case sign_local_change(Change, S) of
         {error, _} ->
             reject_append(From, bad_change, S);
@@ -7820,21 +7866,12 @@ sign_and_place(From, Change, Membership, Anchor, S, Then) ->
             SubmissionId = quod_transaction:submission_id(Submission),
             Bytes = byte_size(term_to_binary(Submission, [deterministic])),
             Bound = bind_waiter_submission_id(From, SubmissionId),
-            %% Signing changes only author identity, sequence, and
-            %% signature. Reuse the diff classification already
-            %% established by the routing validation pass.
-            case Membership of
-                true ->
-                    Then(local, Bound, Signed, S1);
-                false ->
-                    case retain_custody(
-                           Bound, Signed, Submission,
-                           SubmissionId, Bytes, Anchor, S1) of
-                        {ok, Origin, Marker, S2} ->
-                            Then(Origin, Marker, Signed, S2);
-                        {error, bad_change, S2} ->
-                            reject_append(Bound, bad_change, S2)
-                    end
+            case retain_custody(
+                   Bound, Signed, Submission, SubmissionId, Bytes, Anchor, S1) of
+                {ok, Origin, Marker, S2} ->
+                    Then(Origin, Marker, Signed, S2);
+                {error, bad_change, S2} ->
+                    reject_append(Bound, bad_change, S2)
             end
     end.
 
@@ -7865,7 +7902,7 @@ collect_custody(
   {custody, SubmissionId}, Marker, Change, Membership, Slot, S) ->
     case place_custody(
            SubmissionId,
-           {local, Slot, S#s.committee_id}, S) of
+           {local, Slot, (S#s.eng)#eng.era}, S) of
         {ok, S1} ->
             collect_append(
               Marker, Change, Membership, Slot, S1);
@@ -7878,10 +7915,13 @@ collect_custody(
             {S1, []}
     end.
 
-relay_custody(
-  {custody, SubmissionId}, Marker, Leader, TargetSlot, Change, Anchor, S) ->
-    relay_append(
-      Marker, Leader, TargetSlot, Change, Anchor, S, SubmissionId).
+relay_custody({custody, SubmissionId}, Marker, Leader, TargetSlot,
+               S = #s{custody = Custody}) ->
+    case maps:get(SubmissionId, Custody, undefined) of
+        #custody{} = Record ->
+            relay_append(Marker, Leader, TargetSlot, SubmissionId, Record, S);
+        undefined -> {S, []}
+    end.
 
 place_custody(SubmissionId, Placement,
               S = #s{custody = Custody,
@@ -8445,7 +8485,7 @@ park_ingress(Origin, Cause, Waiter, Request, Anchor,
             %% Parked demand arms the head watchdog constructively: every park is a
             %% claim that the pipeline floor must move, so register it as demand
             %% instead of relying on the park cause to coincide with head evidence.
-            {watch_requested(S1#s.approved + 1, S1), []}
+            {watch_requested((S1#s.eng)#eng.view, S1), []}
     end.
 
 %% Retained signed work drains before unsigned ingress. The ordered ready set
@@ -8708,11 +8748,10 @@ custody_drain_decision(
             end
     end.
 
-%% A committed committee transition invalidates every still-active placement
-%% created under the prior view, even when the same target remains a member.
-%% Likewise, a lane at or below the durable head is authoritatively excluded.
-%% Only mark here; `keep_progress/3` drains after all commit/recovery projection
-%% updates for the event have settled.
+%% A view change retires placement, not the signed request or its unknown
+%% outcome (finality plan §4.5). Re-place identical bytes under the original
+%% deadline. Only committed material resolves custody; an already-notarized
+%% occurrence parks behind its parent sequence floor until that resolution.
 reconcile_custody_lane(
   S = #s{custody_lane = empty}) ->
     %% Lane retirement atomically rebuilds the sole ready index. Do no custody
@@ -8720,12 +8759,11 @@ reconcile_custody_lane(
     S;
 reconcile_custody_lane(
   S = #s{custody_lane =
-             {Target, TargetSlot, PlacementCommitteeId},
-         committee_id = CurrentCommitteeId,
-         slot = DurableHead}) ->
+             {Target, TargetSlot, PlacementEra},
+         eng = #eng{era = CurrentEra, view = CurrentView}}) ->
     Obsolete =
-        PlacementCommitteeId =/= CurrentCommitteeId
-        orelse TargetSlot =< DurableHead
+        PlacementEra =/= CurrentEra
+        orelse TargetSlot < CurrentView
         orelse not lists:member(Target, active_validators(S)),
     case Obsolete of
         false ->
@@ -8873,167 +8911,57 @@ reply_now(Waiter = #waiter{reply_to = From}, Reply, S) ->
 reply_now({relay, RelayRef = #relay_ref{}}, Reply, S) ->
     {reply_relay(RelayRef, Reply, S), []}.
 
-%% `Anchor` = the submission's ORIGINAL arrival time (mono ms): a drained item's park
-%% wait counts against the relay cleanup deadline. The caller may stop waiting first
-%% and receive `outcome_unknown`; pending state then remains briefly so a racing
-%% local finality event can still classify the attempt before bounded cleanup.
-relay_append(From, Leader, TargetSlot, Change, Anchor,
-             S) ->
-    relay_append(From, Leader, TargetSlot, Change, Anchor, S, undefined).
-
-relay_append(From, Leader, TargetSlot, Change, Anchor,
-             S = #s{ns = Ns, relay_pending = Pending,
-                    relay_timeout_ms = RelayTimeout,
-                    committee_id = CommitteeId}, CustodyId) ->
-    case relay_submission(CustodyId, Ns, Change, S) of
-        {error, _} when is_binary(CustodyId) ->
-            %% A stale internal custody marker has no client-owned operation
-            %% left to classify and must not mint a malformed-workload reject.
-            {S, []};
-        {error, _} ->
-            reject_append(From, bad_change, S);
-        {ok, Submission} ->
-            SubmissionId = quod_transaction:submission_id(Submission),
-            TraceCtx = waiter_trace_ctx(From),
-            case outbound_relay(
-                   Ns, SubmissionId, CommitteeId, TargetSlot,
-                   Leader, Submission, quod_trace:inject(TraceCtx)) of
-                error ->
-                    %% A missing/malformed committee view cannot create a
-                    %% placement whose identity would be ambiguous. Retained
-                    %% content waits for a valid route view; membership keeps
-                    %% its terminal contract.
-                    case CustodyId of
-                        undefined ->
-                            reply_now(
-                              From,
-                              {error, not_in_charge, unavailable}, S);
-                        _ ->
-                            {defer_custody_placement(CustodyId, S), []}
-                    end;
-                {ok, AttemptId, Frame} ->
-                    case maps:is_key(AttemptId, Pending) of
-                        true when is_binary(CustodyId) ->
-                            %% A stale/idempotent attempt collision cannot
-                            %% release retained content or classify it as bad.
-                            {defer_custody_placement(CustodyId, S), []};
-                        true ->
-                            reject_append(From, bad_change, S);
-                        false ->
-                            Relay = #relay_pending{
-                                       from = From, target = Leader,
-                                       target_slot = TargetSlot,
-                                       author_seq =
-                                           Change#transaction.author_seq,
-                                       submission_id = SubmissionId,
-                                       attempt_id = AttemptId,
-                                       committee_id = CommitteeId,
-                                       frame = Frame,
-                                       deadline =
-                                           custody_deadline(
-                                             CustodyId,
-                                             Anchor + RelayTimeout, S)},
-                            case put_pending_relay(
-                                   AttemptId, Relay, Pending) of
-                                {error, Conflict} ->
-                                    logger:error(
-                                      "quod[~s]: refusing divergent relay lane: ~0p",
-                                      [Ns, Conflict]),
-                                    case CustodyId of
-                                        undefined ->
-                                            %% Membership changes deliberately
-                                            %% retain their terminal re-proof
-                                            %% contract.
-                                            reply_now(
-                                              From, {error, skipped}, S);
-                                        _ ->
-                                            %% A divergent pending lane is
-                                            %% placement state, never durable
-                                            %% exclusion of retained content.
-                                            {defer_custody_placement(
-                                               CustodyId, S),
-                                             []}
-                                    end;
-                                {ok, Pending1} ->
-                                    SWithPending =
-                                        S#s{relay_pending = Pending1},
-                                    case place_relay_custody(
-                                           CustodyId, AttemptId, Leader,
-                                           TargetSlot, CommitteeId,
-                                           SWithPending) of
-                                        {conflict, SConflict} ->
-                                            {defer_custody_placement(
-                                               CustodyId,
-                                               remove_pending_relay(
-                                                 AttemptId, SConflict)),
-                                             []};
-                                        {error, SBad}
-                                          when is_binary(CustodyId) ->
-                                            %% Missing internal custody cannot
-                                            %% be a client bad_change. Remove
-                                            %% only the provisional attempt.
-                                            {remove_pending_relay(
-                                               AttemptId, SBad),
-                                             []};
-                                        {error, SBad} ->
-                                            reject_append(
-                                              From, bad_change,
-                                              remove_pending_relay(
-                                                AttemptId, SBad));
-                                        {ok, SPlaced} ->
-                                            _ = quod_trace:add_event(
-                                                  TraceCtx,
-                                                  <<"consensus.relayed">>,
-                                                  #{'quod.relay.target' =>
-                                                        trace_node_id(Leader)}),
-                                            S1 = send_relay_submission(
-                                                   Leader, Frame, SPlaced),
-                                            {S1, []}
-                                    end
+%% Relay placement reads the retained envelope and original deadline from its
+%% single custody owner. Missing or conflicting placement cannot classify the
+%% request as failed, release its bytes or allocate a new author sequence.
+relay_append(From, Leader, TargetSlot, SubmissionId,
+             #custody{submission = Submission, change = Change, deadline = Deadline},
+             S = #s{ns = Ns, relay_pending = Pending, eng = #eng{era = Era}}) ->
+    TraceCtx = waiter_trace_ctx(From),
+    case outbound_relay(Ns, SubmissionId, Era, TargetSlot,
+                        Leader, Submission, quod_trace:inject(TraceCtx)) of
+        error -> {defer_custody_placement(SubmissionId, S), []};
+        {ok, AttemptId, Frame} ->
+            case maps:is_key(AttemptId, Pending) of
+                true -> {defer_custody_placement(SubmissionId, S), []};
+                false ->
+                    Relay = #relay_pending{
+                        from = From, target = Leader, target_slot = TargetSlot,
+                        author_seq = Change#transaction.author_seq,
+                        submission_id = SubmissionId, attempt_id = AttemptId,
+                        era = Era, frame = Frame, deadline = Deadline},
+                    case put_pending_relay(AttemptId, Relay, Pending) of
+                        {error, Conflict} ->
+                            logger:error("quod[~s]: refusing divergent relay lane: ~0p",
+                                         [Ns, Conflict]),
+                            {defer_custody_placement(SubmissionId, S), []};
+                        {ok, Pending1} ->
+                            case place_custody(SubmissionId,
+                                   {relay, AttemptId, Leader, TargetSlot, Era},
+                                   S#s{relay_pending = Pending1}) of
+                                {conflict, Contended} ->
+                                    {defer_custody_placement(SubmissionId,
+                                        remove_pending_relay(AttemptId, Contended)), []};
+                                {error, Missing} ->
+                                    {remove_pending_relay(AttemptId, Missing), []};
+                                {ok, Placed} ->
+                                    _ = quod_trace:add_event(TraceCtx, <<"consensus.relayed">>,
+                                            #{'quod.relay.target' => trace_node_id(Leader)}),
+                                    {send_relay_submission(Leader, Frame, Placed), []}
                             end
                     end
             end
     end.
 
-relay_submission(undefined, _Ns, Change, S) ->
-    transaction_submission(S, Change);
-relay_submission(
-  SubmissionId, _Ns, _Change,
-  #s{custody = Custody}) when is_binary(SubmissionId) ->
-    case maps:get(SubmissionId, Custody, undefined) of
-        #custody{submission = Submission} ->
-            {ok, Submission};
-        undefined ->
-            {error, missing_custody}
-    end.
-
-custody_deadline(undefined, Default, _S) ->
-    Default;
-custody_deadline(
-  SubmissionId, Default, #s{custody = Custody}) ->
-    case maps:get(SubmissionId, Custody, undefined) of
-        #custody{deadline = Deadline} -> Deadline;
-        undefined -> Default
-    end.
-
-place_relay_custody(undefined, _AttemptId, _Target, _TargetSlot,
-                    _CommitteeId, S) ->
-    {ok, S};
-place_relay_custody(SubmissionId, AttemptId, Target, TargetSlot,
-                    CommitteeId, S) ->
-    place_custody(
-      SubmissionId,
-      {relay, AttemptId, Target, TargetSlot, CommitteeId}, S).
-
-outbound_relay(Ns, SubmissionId, CommitteeId, TargetSlot, Target,
+outbound_relay(Ns, SubmissionId, Era, TargetSlot, Target,
                Submission, TraceCarrier) ->
     case quod_transaction:relay_attempt_id(
-           Ns, SubmissionId, CommitteeId, TargetSlot, Target) of
+           Ns, SubmissionId, Era, TargetSlot, Target) of
         AttemptId when is_binary(AttemptId) ->
             Frame =
                 quod_relay:encode(
                   Ns, {relay_submit, SubmissionId, AttemptId,
-                       CommitteeId, TargetSlot, Submission, TraceCarrier}),
+                       Era, TargetSlot, Submission, TraceCarrier}),
             {ok, AttemptId, Frame};
         error ->
             error
@@ -9045,53 +8973,47 @@ outbound_relay(Ns, SubmissionId, CommitteeId, TargetSlot, Target,
 put_pending_relay(AttemptId,
                   Relay = #relay_pending{target = Target,
                                          target_slot = TargetSlot,
-                                         committee_id = CommitteeId},
+                                         era = Era},
                   Pending) ->
     case maps:next(maps:iterator(Pending)) of
         none ->
             {ok, Pending#{AttemptId => Relay}};
         {_ExistingAttemptId,
          #relay_pending{target = Target, target_slot = TargetSlot,
-                        committee_id = CommitteeId},
+                        era = Era},
          _Iter} ->
             {ok, Pending#{AttemptId => Relay}};
         {_ExistingAttemptId,
          #relay_pending{target = ExistingTarget,
                         target_slot = ExistingSlot,
-                        committee_id = ExistingCommitteeId},
+                        era = ExistingEra},
          _Iter} ->
             {error, {relay_lane_conflict,
-                     {ExistingTarget, ExistingSlot, ExistingCommitteeId},
-                     {Target, TargetSlot, CommitteeId}}}
+                     {ExistingTarget, ExistingSlot, ExistingEra},
+                     {Target, TargetSlot, Era}}}
     end.
 
-%% A depth-one pipeline permits proposing H+2 after H+1 is approved but before it
-%% commits. It stops there until commit catches up. Membership blocks are barriers,
-%% and a complaint-finalized slot waiting behind an earlier commit is not reopened.
-%% A durable support latch also keeps a restarted leader on its exact retained
-%% proposal; proposal construction may never compete with its own prior signature.
-proposal_slot(S = #s{}) ->
-    proposal_slot(S, consensus_barrier(S)).
+%% Material admission retains its existing overlap window. Protocol views
+%% and empty recovery descendants are independent of that material budget.
+proposal_slot(S = #s{}) -> proposal_slot(S, consensus_barrier(S)).
 
-proposal_slot(S = #s{slot = Committed, approved = Approved,
-                     collecting = Collecting,
-                     local_proposals = Local, commit_buf = Buf},
-              ConsensusBarrier) ->
-    Next = Approved + 1,
-    HasBatch = case Collecting of #batch{slot = Next} -> true; _ -> false end,
-    Open = live_pipeline_slot(Next, Committed)
+proposal_slot(S = #s{eng = #eng{view = Next, last_parent = Parent},
+                     collecting = Collecting, local_proposals = Local}, Barrier) ->
+    HasBatch = case Collecting of #batch{slot = Next, parent = Parent} -> true; _ -> false end,
+    Open = material_window_open(Parent, S)
            andalso (HasBatch orelse not maps:is_key(Next, Local))
-           andalso not maps:is_key(Next, Buf)
-           andalso not proposal_visible(Next, S)
-           andalso not ConsensusBarrier,
+           andalso not proposal_visible(Next, S) andalso not Barrier,
     case Open of true -> {ok, Next}; false -> blocked end.
 
-%% One definition owns the complete volatile consensus window: the durable head's successor plus the
-%% configured number of approved descendants. Proposal admission, final-vote selection, block recovery,
-%% and its metrics must never drift onto different slot ranges.
--spec live_pipeline_slot(slot(), slot()) -> boolean().
-live_pipeline_slot(Slot, Committed) ->
-    Slot > Committed andalso Slot =< Committed + ?PIPELINE_DEPTH + 1.
+material_window_open(_Parent, #s{history_head = none}) -> false;
+material_window_open(Parent, S) ->
+    {Height, _} = protocol_parent_material(Parent, S),
+    Height < S#s.slot + ?MATERIAL_PIPELINE_DEPTH + 1.
+
+%% Receipt lookahead matches the engine. It does not limit unfinished history
+%% or the number of empty views needed to recover finality.
+live_protocol_view(View, #eng{base = Base, view = Current}) ->
+    View > Base andalso View =< Current + 1.
 
 %% Capacity and membership gating live in `quod_ingress_state` — inadmissible
 %% work parks rather than rejecting. Only CONTENT verdicts remain here: a sequence below
@@ -9103,8 +9025,6 @@ collect_append(
   when is_boolean(Membership) ->
     Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
     case {approved_author_seqs(S), operation_claim(Change)} of
-        {error, _} ->
-            reject_append(From, stale_seq, S);
         {_, error} ->
             reject_append(From, bad_change, S);
         {{ok, SequenceFloor}, Claim} ->
@@ -9118,7 +9038,7 @@ collect_append(
                           #{'quod.consensus.slot' => Slot}),
                     TxId = Change#transaction.tx_id,
                     Batch = #batch{
-                               slot = Slot, parent = S#s.approved,
+                               slot = Slot, parent = (S#s.eng)#eng.last_parent,
                                items_rev = [{From, Change}], count = 1,
                                bytes = Bytes, tx_ids = #{TxId => true},
                                operation_claims = add_operation_claim(
@@ -9273,10 +9193,11 @@ flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
     end;
 flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 
-propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
+propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs,
+              S = #s{eng = #eng{era = Era}}) ->
     Waiters = [From || {From, _Change} <- Items],
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Parent, {batch, Transactions},
+                    {Era, Slot}, Parent, {batch, Transactions},
                     max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     BH = block_hash(Block),
     lists:foreach(
@@ -9290,21 +9211,45 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
     quod_metrics:observe_batch(S#s.ns, Count, WaitMs),
     Local = #local_proposal{hash = BH, block = Block, waiters = Waiters,
                             trace_ctxs = [waiter_trace_ctx(W) || W <- Waiters]},
-    S1 = S#s{collecting = none,
-             local_proposals = (S#s.local_proposals)#{Slot => Local},
+    publish_local_proposal(Local,
+      #{'quod.proposal.kind' => <<"content">>,
+        'quod.batch.transactions' => Count, 'quod.batch.wait_ms' => WaitMs},
+      S#s{collecting = none, batched_txs = S#s.batched_txs + Count}).
+
+%% One proposal owner retains bytes, tracing and caller custody for every
+%% payload kind. DTX still enters the engine only after its Prolog verdict.
+publish_local_proposal(Local = #local_proposal{hash = Hash,
+        block = #block{slot = View, parent = Parent} = Block,
+        validation_sidecar = Sidecar}, Attributes, S) ->
+    S1 = S#s{local_proposals = (S#s.local_proposals)#{View => Local},
              proposals = S#s.proposals + 1,
-             batched_txs = S#s.batched_txs + Count,
-             round_probe = (S#s.round_probe)#{Slot => {quod_time:mono_ms(), none}}},
-    trace_block_event(
-      Slot, BH, <<"consensus.proposal_created">>,
-      #{'quod.consensus.parent' => Parent, 'quod.proposal.kind' => <<"content">>,
-        'quod.batch.transactions' => Count, 'quod.batch.wait_ms' => WaitMs}, S1),
-    S2 = broadcast({propose, Block, []}, S1),
-    S3 = engine_step([{block, BH, Block}], S2),
-    case block_for(BH, S3#s.eng) of
-        #block{} -> watch_proposal(Slot, support_or_validate(Block, BH, S3));
-        undefined -> S3
+             round_probe = (S#s.round_probe)#{View => {quod_time:mono_ms(), none}}},
+    trace_block_event(View, Hash, <<"consensus.proposal_created">>,
+        Attributes#{'quod.consensus.parent' => element(2, Parent)}, S1),
+    on_propose(Hash, Block, Sidecar, true, broadcast({propose, Block, Sidecar}, S1)).
+
+%% Called after the existing material queues have drained on an entering-view
+%% or restored-readiness edge. A collected material batch always wins. A
+%% finalized/idle ontology has no material ancestor to recover and emits none.
+drive_empty_proposal(Before, S = #s{eng = #eng{era = Era, view = View,
+                                              last_parent = Parent}, self = Self}) ->
+    Changed = protocol_wakeup(Before) =/= protocol_wakeup(S),
+    Free = S#s.collecting =:= none
+           andalso not maps:is_key(View, S#s.local_proposals)
+           andalso not proposal_visible(View, S)
+           andalso (round_state(View, S))#round.candidate =:= none,
+    case Changed andalso Free andalso may_vote(S)
+         andalso leader(View, active_validators(S)) =:= Self
+         andalso protocol_parent_material(S) =/= S#s.history_head of
+        false -> S;
+        true ->
+            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, empty, parent_timestamp(Parent, S)),
+            publish_local_proposal(#local_proposal{hash = block_hash(Block), block = Block},
+              #{'quod.proposal.kind' => <<"empty">>, 'quod.batch.transactions' => 0}, S)
     end.
+
+protocol_wakeup(S = #s{eng = #eng{era = Era, view = View}}) ->
+    {Era, View, may_vote(S)}.
 
 drive_retained_dtx(S = #s{dtx_drive_scheduled = true}) ->
     S;
@@ -9398,7 +9343,8 @@ select_dtx_wave(
 %% every previously selected prefix repeats both authentication and reduction.
 %% The installed owner state is never changed by this call-local preview.
 dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = Row,
-                   Wave, Payload, S = #s{approved = Parent, ns = Ns}, Projection) ->
+                   Wave, Payload, S = #s{eng = #eng{era = Era, view = View,
+                                                last_parent = Parent}, ns = Ns}, Projection) ->
     Timestamp = vote_timestamp(S),
     Engine = case quod_reg:where({quod_prolog, Ns}) of undefined -> none; P -> P end,
     SelectionCurrent = not local_owned_vote(Row, S) orelse
@@ -9413,7 +9359,7 @@ dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = R
     Preview = case SelectionCurrent andalso quod_atomic:control_kind(Control) of
         false -> {error, stale_selection};
         vote ->
-            Candidate = {Control, target_identity(S), S#s.approved + 1, <<0:256>>},
+            Candidate = {Control, target_identity(S), S#s.slot + 1, <<0:256>>},
             case quod_atomic:preview_batch([Candidate], #{}, Projection) of
                 {ok, _, Next, _} -> {ok, Next};
                 {error, _} = Error -> Error
@@ -9422,7 +9368,7 @@ dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = R
     end,
     case Preview of
         {ok, NextProjection} ->
-            {ok, Block} = quod_ledger:new_block(Parent + 1, Parent, Payload, Timestamp),
+            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, Payload, Timestamp),
             Required = [Hint || Hint = {{applied, _, _}, _} <- dtx_wave_validation_sidecar(Wave)],
             byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES
                 andalso {ok, NextProjection, Block};
@@ -9469,7 +9415,7 @@ dtx_slot_route(Slot, S = #s{self = Self}) ->
             %% The readiness frame is also the event that re-drives a parked
             %% row through keep_progress/3; no relay retry path is needed.
             case peer_ready_at(
-                   Peer, Slot - 1,
+                   Peer, S#s.slot,
                    S#s.inbound_conns, S#s.peer_readiness) of
                 true -> {relay, Peer};
                 false -> blocked
@@ -9477,8 +9423,8 @@ dtx_slot_route(Slot, S = #s{self = Self}) ->
         none -> blocked
     end.
 
-propose_dtx_wave(Block = #block{slot = Slot, parent = Parent, payload = Payload},
-                  ValidationSidecar0, S = #s{approved = Parent}) ->
+propose_dtx_wave(Block = #block{parent = Parent, payload = Payload},
+                  ValidationSidecar0, S = #s{eng = #eng{last_parent = Parent}}) ->
     case acceptable_payload(Payload, S) of
         false -> S;
         true ->
@@ -9493,27 +9439,9 @@ propose_dtx_wave(Block = #block{slot = Slot, parent = Parent, payload = Payload}
             Local = #local_proposal{
                       hash = BH, block = Block, validation_sidecar = ValidationSidecar,
                       trace_ctxs = dtx_control_trace_contexts(Controls, S)},
-            S1 = S#s{
-                   local_proposals =
-                     (S#s.local_proposals)#{Slot => Local},
-                   proposals = S#s.proposals + 1,
-                   round_probe =
-                     (S#s.round_probe)#{Slot =>
-                                           {quod_time:mono_ms(), none}}},
-            %% An ended submitter cannot accept another event. Record the
-            %% actual proposal as its own boundary under the existing local
-            %% proposal's parent/links, before any broadcast or local verdict.
-            trace_block_event(
-              Slot, BH, <<"consensus.proposal_created">>,
-              #{'quod.consensus.parent' => Parent,
-                'quod.proposal.kind' => <<"dtx">>,
-                'quod.batch.transactions' => length(Controls)}, S1),
-            S2 = broadcast({propose, Block, ValidationSidecar}, S1),
-            %% Local and relayed leaders must enter through the same DTX
-            %% candidate/validation path as an inbound leader proposal.  A
-            %% DTX block is offered to the consensus engine only after that
-            %% exact candidate's deterministic verdict is accepted.
-            on_propose(BH, Block, ValidationSidecar, true, S2)
+            publish_local_proposal(Local,
+                #{'quod.proposal.kind' => <<"dtx">>,
+                  'quod.batch.transactions' => length(Controls)}, S)
     end.
 
 handle_dtx_submit(_Peer, Envelopes, _ValidationSidecar, S)
@@ -9580,32 +9508,33 @@ encoded_change_size(Change) ->
 consensus_barrier(S) ->
     consensus_barrier(S, include_retained_dtx).
 
-consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
+consensus_barrier(#s{eng = #eng{base = Base, tree = Tree},
                      rounds = Rounds,
                      retained_dtx = Registry}, RetainedMode) ->
     VolatileBlock =
         lists:any(fun({Sl, #block{payload = Payload}}) ->
-                          Sl > Committed
+                          Sl > Base
                               andalso payload_is_consensus_barrier(Payload)
                   end, maps:to_list(Tree)),
     PendingDtx =
         lists:any(
           fun({Sl, Round}) ->
-                  Sl > Committed andalso dtx_validation_active(Round)
+                  Sl > Base andalso dtx_validation_active(Round)
           end, maps:to_list(Rounds)),
     RetainedDtx = RetainedMode =:= include_retained_dtx
                   andalso quod_dtx_owner:ready_count(Registry) > 0,
     VolatileBlock orelse PendingDtx orelse RetainedDtx.
 
-%% Admission and proposal construction must classify the same prospective
-%% block time. An approved parent may lead normal commit; the committed
-%% frontier may lead the old engine during catch-up's journal reconciliation.
-vote_timestamp(S = #s{approved = Approved, slot = Committed}) ->
-    max(quod_time:now_ms(), parent_timestamp(max(Approved, Committed), S)).
+%% Material proposals advance wall-clock time; carriers inherit the exact
+%% protocol parent's time. A durable archive tip may be an empty descendant.
+vote_timestamp(S = #s{eng = #eng{last_parent = Parent}}) ->
+    max(quod_time:now_ms(), parent_timestamp(Parent, S)).
 
-parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
-parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
-    (maps:get(Parent, Tree))#block.timestamp.
+parent_timestamp(Root, #s{eng = #eng{root = Root, root_timestamp = Ts}}) -> Ts;
+parent_timestamp({Era, View, Hash}, #s{eng = #eng{era = Era, tree = Tree,
+                                                               tree_hashes = Hashes}}) ->
+    Hash = maps:get(View, Hashes),
+    (maps:get(View, Tree))#block.timestamp.
 
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
 %% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
@@ -9615,51 +9544,51 @@ engine_step(Items, S) ->
                                             {E1, Es} = offer_engine_item(It, E),
                                             {E1, lists:reverse(Es, Acc)}
                                         end, {S#s.eng, []}, Items),
-        apply_events(lists:reverse(EventsRev), S#s{eng = Eng1})
+        Updated = apply_events(Eng1#eng.era, lists:reverse(EventsRev), S#s{eng = Eng1}),
+        Before = S#s.eng, After = Updated#s.eng,
+        case {Before#eng.era, Before#eng.view} =:= {After#eng.era, After#eng.view} of
+            true -> Updated;
+            false -> restore_signing_engine(Updated)
+        end
     end).
 
 offer_engine_item({block, BH, #block{} = B}, Eng) -> eng_offer_hashed(BH, B, Eng);
 offer_engine_item(Item, Eng) -> eng_offer(Item, Eng).
 
-apply_events([], S)             -> S;
-apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
+apply_events(_Era, [], S) -> S;
+apply_events(Era, _Events, S = #s{eng = #eng{era = Current}}) when Era =/= Current -> S;
+apply_events(Era, [Event | Rest], S) -> apply_events(Era, Rest, apply_event(Event, S)).
 
 %% A newly-formed (or first-learned) cert: disseminate it to the committee (§2.3.1).
 apply_event({broadcast, Cert}, S) ->
     broadcast({cert, Cert}, S);
-%% A block was notarized: sign + emit our commit share — UNLESS we already complaint-signed this slot
-%% (`may_commit` guard) OR we judged this exact membership block INVALID (`#round.invalid`). Recording
-%% the round's `commit` latch makes the symmetric `may_complain` guard hold, so an honest node contributes to at
-%% most one of {commit cert, complaint cert} per slot — the safety rule. The hash-scoped `invalid` guard is
-%% belt-and-braces: a node that evaluated a membership proposal and rejected that block never endorses it at
-%% ANY phase. It cannot poison a different quorum-certified block after leader equivocation.
-apply_event({notarized, #block{slot = Slot} = Block}, S0) ->
-    trace_block_event(Slot, engine_block_hash(Slot, S0),
-                      <<"consensus.notarized">>, #{}, S0),
-    choose_final_vote(Block#block.slot, notarized, approve_block(Block, S0));
-%% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
-apply_event({committed, Slot, Block}, S) ->
-    trace_block_event(Slot, engine_block_hash(Slot, S),
-                      <<"consensus.finality_received">>, #{}, S),
-    commit_contiguous(Slot, Block, S);
-%% A slot was complaint-skipped: finalize it as an empty (`noop`) slot, in order — advancing the height
-%% so the rotated leader for the next slot proposes.
-apply_event({skipped, Slot}, S) ->
-    skip_contiguous(Slot, S).
-
-approve_block(#block{slot = Sl}, S = #s{approved = Approved}) ->
-    %% A competing/equivocating proposal can notarize while this leader is still collecting its own batch
-    %% for the same slot. Advancing `approved` without dropping that stale batch made the next append hit no
-    %% `collect_append` clause and crash the statem. The slot is now decided at
-    %% the approval layer, so discard the obsolete collection before advancing;
-    %% retained content waits for durable exclusion, while membership keeps its
-    %% terminal retry contract.
-    S1 = nack_collecting_le(Sl, S),
-    watch_notarized(Sl, probe_approved(Sl, S1#s{approved = max(Approved, Sl)})).
+%% Tree installation is not permission to cast a late commit vote. Only the
+%% engine's notarization-driven view edge records that intent; complaint-driven
+%% advancement records none. Recovery readiness can resume the same intent.
+apply_event({notarized, #block{slot = View}}, S = #s{eng = #eng{base = Base}})
+  when View > Base ->
+    trace_block_event(View, engine_block_hash(View, S), <<"consensus.notarized">>, #{}, S),
+    probe_approved(View, S);
+apply_event({notarized, _}, S) -> S;
+apply_event({view_advanced, View, {notarized, Block}}, S = #s{eng = #eng{base = Base}})
+  when View > Base ->
+    Hash = element(3, quod_ledger:block_ref(Block)),
+    Round = round_state(View, S),
+    choose_final_vote(View, notarized,
+      put_round(View, Round#round{commit_requested = Hash}, nack_collecting_le(View, S)));
+apply_event({view_advanced, View, _}, S) -> nack_collecting_le(View, S);
+apply_event({ahead, _Cert}, S) -> S;
+%% The first ancestor event archives the whole head-selected group. Later
+%% events from that same engine turn are below the durable protocol root.
+apply_event({committed, View, #block{era = Era}}, S = #s{eng = #eng{era = Era, base = Base} = Eng})
+  when View > Base ->
+    Hash = maps:get(View, Eng#eng.tree_hashes),
+    commit_finality(persisted_finality(View, Hash, Eng), S);
+apply_event({committed, _View, _Block}, S) -> S.
 
 %% ---- Round-phase probe: where does a consensus round spend its time? -------
 %% Stamped in propose_batch, marked here at support-quorum approval, observed at
-%% commit, pruned in finalize/2 (which both the commit and skip paths run). Own
+%% commit, pruned at the complete archive-group boundary. Own
 %% proposals only, single monotonic clock on this node — the same discipline as
 %% the tx-latency histogram: never a cross-node timestamp difference.
 probe_approved(Sl, S = #s{round_probe = Probe}) ->
@@ -9687,47 +9616,41 @@ probe_prune(Sl, S = #s{round_probe = Probe}) when map_size(Probe) > 0 ->
 probe_prune(_Sl, S) ->
     S.
 
-%% Persist the committed tagged payload byte-for-byte (durable before we ack), apply it into
-%% quod_prolog, and advance the height. Content commits additionally resolve their batch callers;
-%% DTX control records use their own durable coordinator path.
-commit_block(Slot, #block{payload = Payload} = Block,
-             S = #s{store = Store, eng = Eng}) ->
-    BH = engine_block_hash(Slot, S),
-    case persisted_finality(Slot, BH, Eng) of
-        none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
-        Cert ->
-            E = quod_ledger:entry(Block, Cert),
-            {ok, Store1} = timed_step(S, persist,
-                                      fun() -> persist_entry(Store, E, Slot, S) end),
-            trace_block_event(Slot, BH, <<"consensus.durable">>, #{}, S),
-            {Projected, IndexDelta} = committed_projection(E, BH, round_state(Slot, S), S),
-            Projection1 = retain_owner_projection(Projected, IndexDelta, S),
-            timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
-            SCommitted = timed_step(S, resolve, fun() ->
-                             resolve_committed_submissions(
-                               Payload, Slot,
-                               S#s{store = Store1,
-                                   commits = S#s.commits + 1})
-                         end),
-            SResolved = resolve_committed_dtx(E, Payload, SCommitted),
-            S0 = ack_local(Slot, probe_committed(Slot, SResolved)),
-            {S1, PendingTransition} = reconcile_signing_state(
-                                        adopt_projection(
-                                          E, Projection1,
-                                          finalize(Slot, S0))),
-            S2 = timed_step(
-                   S, apply, fun() -> apply_live(E, confirm_live(S1)) end),
-            finish_pending_votes_reconciliation(PendingTransition, S2)
+%% The engine has already authenticated the complete ancestry and head QC.
+%% Save its selected proof and every new material ancestor in one atomic group
+%% before publishing any entry, replying, or releasing a signing latch.
+commit_finality(Cert, S = #s{slot = Height, protocol_root = MaterialRoot, eng = Eng}) ->
+    case eng_archive_group(Cert, Height, MaterialRoot, Eng) of
+        none -> S;
+        {Source, Entries, Summary} ->
+            {ok, Store} = timed_step(S, persist,
+                fun() -> quod_ledger_store:append(S#s.store, {Source, Entries}) end),
+            Projected = lists:foldl(fun install_live_entry/2, S#s{store = Store}, Entries),
+            {Tip, Floors} = advance_archive_custody(
+                Summary, state_projection(Projected), S#s.archive_tip, #{Cert#cert.era => 0}),
+            Retired = finalize_protocol(maps:get(head, Summary),
+                         Projected#s{archive_tip = Tip, archived_protocol = Floors,
+                                     archive_certificate = retained_archive_certificate(
+                                         Entries, S#s.archive_certificate)}),
+            {Reconciled, Pending} = reconcile_signing_state(Retired),
+            Applied = lists:foldl(fun apply_live/2, confirm_live(Reconciled), Entries),
+            finish_pending_votes_reconciliation(Pending, Applied)
     end.
 
-persist_entry(Store, Entry, Slot, S) ->
-    Hash = case quod_ledger:block_from_entry(Entry) of
-               {ok, _Block} -> engine_block_hash(Slot, S);
-               error -> none
-           end,
-    trace_block_work(
-      Slot, Hash, <<"quod.ledger.sync">>, #{}, S,
-      fun() -> quod_ledger_store:append(Store, [Entry]) end).
+install_live_entry(Entry, S) ->
+    #entry{index = Height, data = Payload} = quod_ledger:entry_view(Entry),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    {_, View, Hash} = quod_ledger:block_ref(Block),
+    {Projected, Delta} = committed_projection(Entry, Hash, round_state(View, S), S),
+    Projection = retain_owner_projection(Projected, Delta, S),
+    trace_block_event(View, Hash, <<"consensus.durable">>,
+                      #{'quod.ledger.height' => Height}, S),
+    publish_feed(Height, Entry, S),
+    Resolved = resolve_committed_dtx(Entry, Payload,
+                 resolve_committed_submissions(Payload, Height,
+                   S#s{slot = Height, commits = S#s.commits + 1})),
+    Replied = reply_local(View, {ok, Height}, probe_committed(View, Resolved)),
+    adopt_projection(Entry, Projection, Replied).
 
 resolve_committed_submissions(Payload, Slot, S) ->
     Included = payload_submission_ids(Payload),
@@ -9863,7 +9786,7 @@ payload_submission_ids(Data) ->
                   is_binary(Signature)],
               true);
         {controls, _Controls} -> #{};
-        noop -> #{};
+        empty -> #{};
         invalid -> #{}
     end.
 
@@ -9904,17 +9827,10 @@ signed_submission_id(#transaction{author = Author, sig = Signature}) ->
 engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
     maps:get(Slot, Hashes).
 
-%% A committed transaction advances the committee FACTS (`#s.validators`) at the slot boundary, IN-PROCESS —
-%% by reading the `peer_admitted` asserts/retracts out of the block we just committed. This ALWAYS updates
-%% the facts. The engine's VOTING set is then fed SEPARATELY through the epoch seam (`active_validators/1`):
-%% today (epoch length 1) that is the identity. Committee blocks are explicit-finality pipeline barriers,
-%% so their certs are formed and pruned under the OLD set before any next-slot proposal can open; slot+1
-%% is the first slot voted under the NEW set. Never update this from an outside message: it could arrive
-%% after the next round had started. The facts are a pure function of the committed prefix and every node
-%% crosses the boundary at the same logical point. The delta folds via the SAME
-%% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
+%% Install the material projection and refresh committee contacts. The complete
+%% archive-group retirement owns era replacement after all its entries settle.
 adopt_projection(Entry, Projection1,
-                 S = #s{validators = V, self = Self, eng = Eng}) ->
+                 S = #s{validators = V, self = Self}) ->
     #entry{data = Change} = quod_ledger:entry_view(Entry),
     V1 = history_committee(Projection1),
     SProjected = install_projection(Projection1, S),
@@ -9923,7 +9839,7 @@ adopt_projection(Entry, Projection1,
         false -> %% learn the fresh admit-fact address (OVERWRITE): the change just passed quorum-many
               %% peer_ready verdicts, so this address is live NOW — this is the dial hint a member that
               %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
-              %% next slot. Fires on every member at the live finality point (commit_block).
+              %% next era. This runs at the live material-finality boundary.
               _ = [quod_quic:learn(Pk, Ep) || {Pk, Ep} <- admitted_endpoints(Change), Pk =/= Self],
               %% DEMOTION log-event (pairs with catchup_membership_transition's promotion notice): a member
               %% commit-signs its
@@ -9935,15 +9851,7 @@ adopt_projection(Entry, Projection1,
                   end,
               S1 = prune_consensus_links(
                      SProjected),
-              %% Receipt authority belonged to the old committee. Discard
-              %% only unadmitted bodies; all vote/validation latches survive.
-              Rounds = maps:map(
-                         fun(_Slot, R = #round{candidate = {offered, _, _}}) ->
-                                 R#round{candidate = none, validation_sidecar = []};
-                            (_Slot, R) -> R
-                         end, S1#s.rounds),
-              S1#s{eng = eng_set_validators(active_validators(S1), Eng),
-                    rounds = Rounds}
+              S1
     end.
 
 committed_projection(
@@ -9958,9 +9866,7 @@ committed_projection(
             live_dtx_projection(
               [Control || {_Kind, Control} <- Classified],
               Entry, BH, Round, S);
-        noop ->
-            {history_advance_known(Ns, Entry, entry_history_hash(Entry),
-                                   state_projection(S)), quod_dtx_phase_index:new_delta()};
+        empty -> error({empty_material_entry, Slot});
         invalid ->
             error({invalid_committed_history, Slot})
     end.
@@ -9980,9 +9886,8 @@ live_dtx_projection(
                 {ok, Histories1, _Dtx1, Items} ->
                     {ok, Delta} = quod_dtx_phase_index:preview_histories(
                         quod_dtx_phase_index:new_delta(), Histories1),
-                    {(project_dtx_batch_items(
-                       Items, LaneSequences, Entry, Projection0))#{
-                      history_head := {Slot, BH}}, Delta};
+                    {history_record_head(Ns, Entry, BH,
+                       project_dtx_batch_items(Items, LaneSequences, Entry, Projection0)), Delta};
                 {error, Reason} ->
                     error({invalid_committed_dtx, Slot, Reason})
             end;
@@ -10023,67 +9928,32 @@ project_dtx_batch_items(Items, LaneSequences, Entry, Projection0) ->
                 Entry, DtxAfterItem, Lane, Sequence, Projection)
       end, Projection0, lists:zip(Items, LaneSequences)).
 
-%% A complaint cert skipped this slot: persist an empty `noop` entry so the
-%% store height advances contiguously. Ordinary custody ignores the provisional
-%% nack and is marked ready by durable finalization; non-custodied membership
-%% callers retain their terminal re-proof response. `quod_prolog` applies a
-%% `noop` as a pure cursor advance.
-skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
-    case persisted_cert(complaint, Slot, none, Eng) of   %% minimal complaint cert that skipped this slot
-        none -> weak_cert_wait(complaint, Slot, none, S);   %% Slice E: don't skip-finalize on a sub-quorum cert
-        Cert ->
-            E = quod_ledger:noop_entry(Slot, Cert),
-            {ok, Store1} = persist_entry(Store, E, Slot, S),
-            Projection1 = retain_owner_projection(
-                history_advance(S#s.ns, E, state_projection(S)),
-                quod_dtx_phase_index:new_delta(), S),
-            publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
-            S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
-            {S1, PendingTransition} = reconcile_signing_state(
-                                        adopt_projection(
-                                          E, Projection1, finalize(Slot, S0))),
-            S2 = S1#s{approved = max(S1#s.approved, Slot)},
-            S3 = apply_live(E, confirm_live(S2)),
-            finish_pending_votes_reconciliation(PendingTransition, S3)
-    end.
-
-%% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
-%% lacks a quorum of signatures from the committee AS-OF-this-slot. This is the mid-flight committee-change /
-%% stale-cert hazard (`doc/deferred.md` §3): a node lagging across a committee change can form a cert under
-%% the OLD (smaller) quorum for a later slot, and finalizing it would locally commit a slot the honest
-%% network (using the NEW, larger quorum) may never commit — forking this node from a catch-up joiner that
-%% reconstructs the committee as-of the slot. So REFUSE to finalize and:
-%%   - EVICT the stale cert from the pool. Load-bearing: `ingest_share` re-forms a cert only when the key is
-%%     ABSENT (`maps:is_key` guard), so without eviction the wait is forever; a re-relayed copy can't
-%%     re-enter because `verify_cert` rejects it under the current quorum.
-%%   - UN-MARK the slot committed/skipped, so `detect_commits`/`detect_complaints` re-fire once a genuine
-%%     cert forms under the current set (the SHARES are kept — the re-form draws on them).
-%% The height does NOT advance and nothing is appended: the node waits at `Slot-1` until either enough
-%% shares under the current set arrive (re-form → re-drive → finalize with a valid cert) or the trustless
-%% catch-up / feed path delivers the properly-committed block. A laggard waiting is correct; a laggard
-%% forking is not. The `commit_buf` entry was already taken by `drain_commits`, so this returns without a
-%% height advance and the drain loop stops — no busy loop.
-weak_cert_wait(Kind, Slot, BH, S) ->
-    S#s{eng = eng_evict_final(Kind, Slot, BH, S#s.eng), weak_cert_waits = S#s.weak_cert_waits + 1}.
-
-%% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
-%% local proposal, support/commit/complaint latches, and membership validation
-%% latches (all bounded to the in-flight window).
-finalize(Slot, S0) ->
-    _ = release_validation_monitor(round_state(Slot, S0)),
-    SCollected = nack_collecting_le(Slot, S0),
-    SExcluded = mark_custody_excluded_le(Slot, SCollected),
-    S = probe_prune(Slot, nack_relays_le(Slot, SExcluded)),
-    clear_requested_le(
-      Slot,
-      S#s{slot = Slot,
-          eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
-          block_requests = prune_block_requests(Slot, S#s.block_requests),
-          rounds = maps:remove(Slot, S#s.rounds),
-          local_proposals = maps:remove(Slot, S#s.local_proposals)}).
-
-ack_local(Slot, S) -> reply_local(Slot, {ok, Slot}, S).
-nack_local(Slot, S) -> reply_local(Slot, {error, skipped}, S).
+%% Retire only the protocol prefix owned by the completed archive group.
+%% Membership closes the old era completely; the new virtual root is derived
+%% from its last material block, never from the selected empty witness head.
+finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root, _} = Tip}) ->
+    NewEra = element(1, Root) =/= Era,
+    Cutoff = case NewEra of true -> infinity; false -> View end,
+    SCollected = nack_collecting_le(Cutoff, S0),
+    SExcluded = mark_custody_excluded_le(Cutoff, SCollected),
+    S1 = nack_relays_le(Cutoff, SExcluded),
+    S2 = lists:foldl(fun(V, Acc) -> reply_local(V, {error, skipped}, Acc) end,
+                     S1, [V || V <- maps:keys(S1#s.local_proposals), V =< Cutoff]),
+    maps:foreach(fun(V, Round) ->
+        case V =< Cutoff of true -> release_validation_monitor(Round); false -> ok end
+    end, S2#s.rounds),
+    Engine = case NewEra of
+        true -> eng_new(S2#s.consensus_domain, active_validators(S2), Tip);
+        false -> eng_prune(Head, Eng)
+    end,
+    Rounds = case NewEra of
+        true -> signing_rounds(S2#s.signing_journal, Engine#eng.era);
+        false -> maps:filter(fun(V, _) -> V > Cutoff end, S2#s.rounds)
+    end,
+    clear_requested_le(Cutoff,
+      probe_prune(Cutoff, S2#s{eng = Engine,
+          block_requests = prune_block_requests(Cutoff, S2#s.block_requests),
+          rounds = Rounds})).
 
 reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
     case maps:take(Slot, Local) of
@@ -10095,15 +9965,14 @@ reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
 %% A batch still being collected (not yet sealed into a proposal) parks its
 %% callers with no reply. If its slot finalizes first, the batch is discarded.
 %% Custody markers ignore this provisional `skipped`; durable finalization marks
-%% their exact submissions ready. Membership callers retain the terminal reply.
-%% Recovery reuses the same cleanup through `nack_inflight/3`.
+%% their exact submissions ready; displacement is never a public retry.
+%% Recovery reuses the same cleanup through `nack_inflight/2`.
 nack_collecting_le(Slot, S = #s{collecting = #batch{slot = Sl}}) when Sl =< Slot -> nack_collecting(S);
 nack_collecting_le(_Slot, S) -> S.
 
 %% Exact-slot relay ownership ends with that slot. Inclusion was already
-%% resolved by SubmissionId. Ordinary custody was marked ready above, so
-%% removing its attempt emits no public reply; non-custodied membership retains
-%% the terminal `skipped` result.
+%% resolved by SubmissionId. Custody was marked ready above, so removing the
+%% obsolete attempt emits no public reply.
 nack_relays_le(Slot, S = #s{relay_pending = Pending}) ->
     maps:fold(
       fun(AttemptId, #relay_pending{from = From, target_slot = TargetSlot}, Acc)
@@ -10158,9 +10027,8 @@ reply_waiters(Waiters, Reply, S) ->
 reply_waiter(
   #waiter{reply_to = {custody, _SubmissionId}},
   {error, skipped}, S) ->
-    %% Slot displacement/notarization is not authoritative exclusion. The
-    %% durable finalization path marks custody ready after the whole committed
-    %% prefix and committee transition settle.
+    %% Displacement does not resolve this request. The common view/era
+    %% reconciliation retires placement after the owner transition settles.
     S;
 reply_waiter(
   #waiter{reply_to = {custody, SubmissionId}},
@@ -10414,18 +10282,6 @@ round_state(Slot, #s{rounds = Rounds}) ->
 put_round(Slot, Round, S = #s{rounds = Rounds}) ->
     S#s{rounds = Rounds#{Slot => Round}}.
 
-complained_slots(#s{rounds = Rounds}) ->
-    [Sl || {Sl, Round} <- maps:to_list(Rounds), round_complained(Round)].
-
-committed_slots(#s{rounds = Rounds}) ->
-    [Sl || {Sl, Round} <- maps:to_list(Rounds), round_committed(Round)].
-
-round_committed(#round{final = {commit, _}}) -> true;
-round_committed(#round{}) -> false.
-
-round_complained(#round{final = complaint}) -> true;
-round_complained(#round{}) -> false.
-
 -ifdef(TEST).
 reconcile_signing_state(S = #s{signing_journal = memory}) -> {S, none};
 reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
@@ -10433,10 +10289,10 @@ reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
 reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
 -endif.
 reconcile_signing_state_journal(
-  S = #s{slot = Slot, signing_journal = Journal, ns = Ns}) ->
+  S = #s{archived_protocol = Archived, signing_journal = Journal, ns = Ns}) ->
     Pending0 = pending_votes_snapshot(Journal),
     {ok, Journal1} = quod_dtx_owner:reconcile_journal(
-                       Slot, state_projection(S), S#s.phase_index, Journal),
+                       Archived, state_projection(S), S#s.phase_index, Journal),
     Pending1 = pending_votes_snapshot(Journal1),
     Transition = pending_votes_reconciliation(Pending0, Pending1, S),
     %% This cast precedes the ordered ledger apply.  The matching resolution
@@ -10450,7 +10306,7 @@ reconcile_signing_state_journal(
     %% to the caller's existing post-apply boundary.
     {Classified, Retired} = refresh_retained_readiness(
                              reconcile_transaction_signing_custody(
-                               S#s{signing_journal = Journal1})),
+                               S#s{signing_journal = Journal1, archived_protocol = #{}})),
     {Renewed, SignatureRetired} = refresh_retained_dtx_signatures(Classified),
     {Renewed, merge_pending_votes_reconciliation(
                 Transition,
@@ -10616,16 +10472,21 @@ support_block(Block, BH, S) ->
         false -> S
     end.
 
-support_block_ready(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;
-support_block_ready(#block{slot = Sl} = Block, BH, S) ->
+support_block_ready(#block{slot = Sl}, _BH, S = #s{eng = #eng{base = Base}}) when Sl =< Base -> S;
+support_block_ready(#block{era = Era, slot = Sl} = Block, BH,
+                    S = #s{eng = #eng{era = CurrentEra, view = Current}}) ->
     Round = round_state(Sl, S),
     case Round#round.supporting of
-        none -> case record_share(support, Sl, BH, Block, S) of
+        none when Era =:= CurrentEra, Sl =:= Current ->
+            case proposal_parent_ready(Block, S#s.eng) andalso
+                 record_share(support, Sl, BH, Block, S) of
+                    false -> S;
                     blocked -> S;
                     {ok, Share, S1} ->
                         engine_step([{share, Share}],
                                     broadcast({share, Share}, S1))
                 end;
+        none -> S;
         SupportedBH ->
             case BH of
                 %% The SAME block again = the leader is REDRIVING the stuck slot — which means it is
@@ -10642,21 +10503,6 @@ support_block_ready(#block{slot = Sl} = Block, BH, S) ->
                       lists:foldl(fun broadcast/2, S, Own);
                 _  -> S   %% a DIFFERENT block for a slot we already signed — equivocation; never double-sign
             end
-    end.
-
-%% Commit/complaint certs can arrive out of slot order over the async transport; buffer each
-%% finalization (a committed block, or a skip) and apply strictly in ascending slot order, so the
-%% durable store (which enforces contiguity) never sees a gap.
-commit_contiguous(Slot, Block, S) ->
-    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => {commit, Block}}}).
-skip_contiguous(Slot, S) ->
-    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => skip}}).
-
-drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
-    case maps:take(H + 1, Buf) of
-        {{commit, Block}, Buf1} -> drain_commits(commit_block(H + 1, Block, S#s{commit_buf = Buf1}));
-        {skip, Buf1}            -> drain_commits(skip_block(H + 1, S#s{commit_buf = Buf1}));
-        error                   -> S
     end.
 
 %%%===================================================================
@@ -10690,7 +10536,7 @@ dispatch(_Peer, {share, #share{} = Sh}, S) ->
                         end;
                     _ -> ok
                 end,
-            maybe_join_complaint(Sh, engine_step([{share, Sh}], S));
+            engine_step([{share, Sh}], S);
         false -> S
     end;
 dispatch(_Peer, {cert, #cert{} = C}, S) ->
@@ -10707,17 +10553,12 @@ dispatch(Peer, {dtx_submit, Envelopes, ValidationSidecar}, S) ->
     handle_dtx_submit(Peer, Envelopes, ValidationSidecar, S);
 dispatch(_Peer, _Other, S)                 -> S.
 
-well_formed_block(#block{slot = Sl, parent = P, payload = Pl,
-                         timestamp = Ts} = Block) ->
-    well_formed_block_header(Sl, P, Ts)
-        andalso quod_ledger:valid_block_view(Block)
-        andalso well_formed_block_payload(Pl);
+well_formed_block(#block{payload = Payload} = Block) ->
+    quod_ledger:valid_block_view(Block) andalso well_formed_block_payload(Payload);
 well_formed_block(_) -> false.
 
-well_formed_block_header(Slot, Parent, Timestamp) ->
-    is_slot(Slot) andalso is_slot(Parent) andalso is_slot(Timestamp).
-
 %% valid_block_view/1 already checked canonical byte binding and payload size.
+well_formed_block_payload(empty) -> true;
 well_formed_block_payload(Pl) ->
     case quod_ledger:classify(Pl) of
         {content, Transactions} ->
@@ -10725,7 +10566,7 @@ well_formed_block_payload(Pl) ->
                 andalso lists:all(fun well_formed_transaction/1, Transactions)
                 andalso unique_tx_ids(Transactions);
         {controls, _Controls} -> true;
-        noop -> false;
+        empty -> false;
         invalid -> false
     end.
 
@@ -10739,37 +10580,31 @@ well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig 
 well_formed_share(_) -> false.
 is_slot(X) -> is_integer(X) andalso X >= 0 andalso X =< ?MAX_SLOT.
 
-%% The requester's verified support certificate authorizes this exact hash.
-%% Serving bytes must survive the handoff from the live engine to the ledger;
-%% pruning consensus memory never makes an already-durable block unavailable.
-serve_certified_block(Peer, Slot, BH, S) ->
-    case lists:member(Peer, active_validators(S)) andalso available_block(Slot, BH, S) of
-        {ok, Block} ->
-            case block_hash(Block) =:= BH of
-                true -> send_frame(Peer, encode(S#s.ns, {certified_block, Block, BH}), S);
-                false -> S
-            end;
-        _ -> S
+%% Live notarized bodies come from the engine. Once finality is archived,
+%% answer with the retained CommitQC instead: the peer then uses its existing
+%% certified-history recovery owner. Protocol views are never ledger offsets,
+%% and an unavailable preferred body does not force a particular witness.
+serve_certified_block(Peer, View, Hash, S = #s{eng = Eng, archive_certificate = Archived}) ->
+    case lists:member(Peer, active_validators(S)) of
+        false -> S;
+        true ->
+            Evidence = case block_for(Hash, Eng) of
+                #block{slot = View} = Block -> {certified_block, Block, Hash};
+                _ when is_record(Archived, cert) -> {cert, Archived};
+                _ -> none
+            end,
+            case Evidence of none -> S; _ -> send_frame(Peer, encode(S#s.ns, Evidence), S) end
     end.
-
-available_block(Slot, _BH, #s{slot = Committed, store = Store}) when Slot =< Committed ->
-    case quod_ledger_store:read_at(Store, Slot) of
-        {ok, Entry} -> quod_ledger:block_from_entry(Entry);
-        not_found -> error
-    end;
-available_block(Slot, BH, #s{eng = Eng}) ->
-    case block_for(BH, Eng) of #block{slot = Slot} = Block -> {ok, Block}; _ -> error end.
 
 %% Only an outstanding exact request backed by our authenticated certificate
 %% admits a reply. Cheap sender/header gates precede hashing and content checks.
 ingest_certified_block(
-  Peer, Block = #block{slot = Slot, parent = Parent, timestamp = Timestamp},
+  Peer, Block = #block{slot = Slot},
   ExpectedBH, S = #s{block_requests = Requests, eng = Eng})
   when is_binary(ExpectedBH), byte_size(ExpectedBH) =:= 32 ->
     Preflight =
         maps:is_key({Slot, ExpectedBH}, Requests)
         andalso lists:member(Peer, active_validators(S))
-        andalso well_formed_block_header(Slot, Parent, Timestamp)
         andalso is_record(persisted_cert(support, Slot, ExpectedBH, Eng), cert),
     case Preflight andalso well_formed_block(Block)
          andalso block_hash(Block) =:= ExpectedBH
@@ -10789,28 +10624,10 @@ ingest_certified_block(
 ingest_certified_block(_Peer, _Block, _Hash, S) ->
     S.
 
-certified_block_context(
-  #block{slot = Slot, parent = Parent, timestamp = Timestamp},
-  BH,
-  S = #s{slot = Committed}) ->
-    ContextValid = live_pipeline_slot(Slot, Committed)
-                   andalso Parent =:= Slot - 1
-                   andalso compatible_local_final_vote(Slot, BH, S),
-    case ContextValid andalso recoverable_parent_timestamp(Parent, S) of
-        false ->
-            false;
-        unavailable ->
-            false;
-        ParentTs ->
-            ts_acceptable(Timestamp, ParentTs, quod_time:now_ms())
-    end.
-
-recoverable_parent_timestamp(Parent, #s{slot = Parent, last_ts = LastTs}) -> LastTs;
-recoverable_parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
-    case maps:get(Parent, Tree, undefined) of
-        #block{timestamp = Ts} -> Ts;
-        undefined -> unavailable
-    end.
+certified_block_context(#block{slot = View} = Block, Hash, S) ->
+    live_protocol_view(View, S#s.eng)
+        andalso compatible_local_final_vote(View, Hash, S)
+        andalso proposal_parent_ready(Block, S#s.eng).
 
 %% A support latch names only the proposal this validator supported; it does not prevent committing the
 %% unique block another support quorum notarized. Only an existing commit for another hash conflicts.
@@ -10825,43 +10642,29 @@ compatible_local_final_vote(Slot, BH, S) ->
 %% body here grants no signature, engine insertion or parent-verdict authority.
 %% Exact retained redrives reuse admission; certified replies retain their
 %% separate certificate authority for replacing an unadmitted first offer.
-preflight_proposal(
-  Peer, #block{slot = Sl, timestamp = Timestamp} = Block, ValidationSidecar,
-  S = #s{slot = Committed,
-         eng = #eng{block_slots = BlockSlots}}) ->
-    PotentiallyLive =
-        maps:is_key(Sl, BlockSlots)
-        orelse live_pipeline_slot(Sl, Committed),
-    FromLeader =
-        PotentiallyLive
-        andalso is_slot(Sl) andalso Sl >= 1
-        andalso leader(Sl, active_validators(S)) =:= Peer,
-    %% Network ingress already decodes only canonical block bytes. Keep this
-    %% internal boundary total as well: test hooks and future in-VM callers
-    %% must not reach block_hash/1 with a fabricated materialized view.
-    case FromLeader andalso well_formed_block(Block)
-         andalso Block#block.parent =:= Sl - 1
-         andalso ts_acceptable(Timestamp, S#s.last_ts, quod_time:now_ms()) of
-        false ->
-            S;
+preflight_proposal(Peer, #block{era = Era, slot = V} = Block, Sidecar,
+                   S = #s{eng = #eng{era = Era, block_slots = Slots} = Eng}) ->
+    FromLeader = live_protocol_view(V, Eng) andalso is_slot(V)
+                 andalso leader(V, active_validators(S)) =:= Peer,
+    case FromLeader andalso well_formed_block(Block) of
+        false -> S;
         true ->
-            BH = block_hash(Block),
-            case maps:get(Sl, BlockSlots, undefined) of
-                undefined ->
-                    on_propose(BH, Block, ValidationSidecar, false, S);
-                BH ->
-                    on_propose(BH, Block, ValidationSidecar, true, S);
-                _OtherBH ->
-                    S
+            Hash = block_hash(Block),
+            case maps:get(V, Slots, undefined) of
+                undefined -> on_propose(Hash, Block, Sidecar, false, S);
+                Hash -> on_propose(Hash, Block, Sidecar, true, S);
+                _ -> S
             end
-    end.
+    end;
+preflight_proposal(_Peer, _Block, _Sidecar, S) -> S.
 
 %% Known means admission was already paid by the local proposer or live engine.
 %% A received body instead advances through the same round's offered state.
-on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
+on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known,
+           S = #s{eng = #eng{base = Base}}) ->
     Round = round_state(Sl, S),
     case {Known, Round#round.candidate} of
-        _ when Sl =< S#s.slot; Round#round.invalid =:= BH ->
+        _ when Sl =< Base; Round#round.invalid =:= BH ->
             S;
         {_, {OtherBH, _}} when OtherBH =/= BH ->
             S;
@@ -10890,31 +10693,21 @@ offer_proposal(BH, Block = #block{slot = Sl}, ValidationSidecar, S) ->
 %% Read the current row at every step: an earlier candidate may have committed
 %% and pruned this slot. DTX input waits for its actual durable parent, not an
 %% approval or another candidate's unverified parent assumptions.
-advance_proposal(Sl, S = #s{slot = Committed, approved = Approved,
-                           history_head = ParentToken}) ->
-    Round = round_state(Sl, S),
+advance_proposal(V, S = #s{eng = #eng{view = Current, base = Base}}) ->
+    Round = round_state(V, S),
     case Round#round.candidate of
-        {offered, BH, Block} ->
-            case {Sl =:= Approved + 1, live_pipeline_slot(Sl, Committed),
-                  quod_ledger:classify(Block#block.payload), ParentToken} of
-                {true, true, {controls, _}, {Approved, <<_:256>>}} ->
-                    admit_offered_proposal(BH, Block, Round, S);
-                {true, true, {controls, _}, _} -> S;
-                {true, true, _, _} ->
-                    admit_offered_proposal(BH, Block, Round, S);
-                {false, true, _, _} when Sl > Approved -> S;
-                %% At/below Approved the body is durable or already engine-
-                %% owned. Certificates alone never advance that frontier.
-                _ -> put_round(Sl, Round#round{candidate = none,
-                                               validation_sidecar = []}, S)
+        {offered, Hash, Block} when V > Base, V =< Current ->
+            case proposal_parent_ready(Block, S#s.eng) of
+                true -> admit_offered_proposal(Hash, Block, Round, S);
+                false -> S
             end;
-        {BH, Block} when Sl > Committed -> support_or_validate(Block, BH, S);
+        {Hash, Block} when V > Base -> support_or_validate(Block, Hash, S);
         _ -> S
     end.
 
-admit_offered_proposal(BH, Block = #block{slot = Sl}, Round, S) ->
+admit_offered_proposal(BH, Block, Round, S) ->
     case Round#round.invalid =/= BH
-         andalso payload_admission_open(Sl, Block#block.payload, S) of
+         andalso payload_admission_open(Block, S) of
         false -> S;
         true -> authenticate_offered_proposal(BH, Block, Round, S)
     end.
@@ -10951,7 +10744,7 @@ admit_proposed_block(BH, #block{slot = Sl} = Block, ValidationSidecar, S) ->
                     %% Quorum needs no fresh support, but an existing share
                     %% still re-echoes to heal a leader's lost vote delivery.
                     Supported = (round_state(Sl, S1))#round.supporting =:= BH,
-                    case may_vote(S1) andalso (Sl > S1#s.approved orelse Supported) of
+                    case may_vote(S1) andalso (Sl =:= (S1#s.eng)#eng.view orelse Supported) of
                         true -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
                         false -> S1
                     end;
@@ -10999,7 +10792,7 @@ dtx_block_validation_sidecar(#block{payload = Payload}, ValidationSidecar) ->
 %% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
-support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
+support_or_validate(#block{slot = Sl}, _BH, S = #s{eng = #eng{base = Base}}) when Sl =< Base -> S;
 %% This exact block was already judged INVALID: never endorse or re-prove it. The hash scope matters:
 %% an equivocated block for the same slot may later arrive with a valid quorum support certificate.
 support_or_validate(#block{slot = Sl}, BH, S) ->
@@ -11033,7 +10826,7 @@ support_or_validate_candidate(#block{payload = Payload} = Block, Sl, BH, S) ->
             support_or_validate_dtx(
               [Control || {_Kind, Control} <- Controls],
               Block, Sl, BH, S);
-        noop -> S;
+        empty -> support_block(Block, BH, S);
         invalid -> S
     end.
 
@@ -11084,9 +10877,11 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
     end.
 
 request_content_validation(Transactions, BlockTimestamp, Sl, BH, S) ->
+    #block{parent = ParentRef} = block_for(BH, S#s.eng),
+    {ParentHeight, _} = protocol_parent_material(ParentRef, S),
     _ = with_block_context(Sl, BH, S,
           fun() -> quod_prolog:request_content_verdict(
-                     S#s.ns, Transactions, BlockTimestamp, Sl, self(), {Sl, BH}) end),
+                     S#s.ns, Transactions, BlockTimestamp, ParentHeight + 1, self(), {Sl, BH}) end),
     Round = round_state(Sl, S),
     put_round(Sl, Round#round{validating = BH, validation = content}, S).
 
@@ -11099,8 +10894,7 @@ with_block_context(Sl, BH, S, Fun) ->
     quod_trace:with_context(Ctx, Fun).
 
 on_content_foreign_verdict(Sl, BH, WorkerPid, Deadline, Verdict0,
-                           S = #s{approved = Approved})
-  when Sl =:= Approved + 1 ->
+                           S = #s{eng = #eng{view = Sl}}) ->
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation,
           block_for(BH, S#s.eng)} of
@@ -11131,7 +10925,7 @@ reject_content_candidate(Sl, BH, _Reason, S) ->
     S1 = put_round(
            Sl, Round#round{validating = none, validation = none,
                            invalid = BH}, S),
-    choose_final_vote(Sl, rejected, S1).
+    S1.
 
 content_reference_plan(Transactions) when is_list(Transactions) ->
     %% Keep each requirement bound to the immutable candidate item.  The
@@ -11251,17 +11045,16 @@ support_or_validate_dtx(Controls, Block, Sl, BH, S)
             end
     end.
 
-request_dtx_validation(Controls, #block{timestamp = BlockTimestamp}, Sl, BH,
+request_dtx_validation(Controls, #block{parent = ParentRef, timestamp = BlockTimestamp}, Sl, BH,
                        S = #s{ns = Ns, history_head = ParentToken}) ->
-    case {ParentToken, quod_reg:where({quod_prolog, Ns})} of
-        {{Parent, <<_:256>>} = Token, Pid}
-          when Parent =:= Sl - 1, is_pid(Pid) ->
+    case {protocol_parent_material(ParentRef, S), ParentToken, quod_reg:where({quod_prolog, Ns})} of
+        {Token, {ParentHeight, <<_:256>>} = Token, Pid} when is_pid(Pid) ->
             Monitor = erlang:monitor(process, Pid),
             Tag = {Sl, BH, Token},
             DeadlineMs = quod_time:mono_ms() + S#s.validation_ttl_ms,
             ok = with_block_context(Sl, BH, S, fun() ->
                 quod_prolog:request_dtx_verdict(
-                  Ns, {wave, Controls}, BlockTimestamp, Sl, self(), Tag) end),
+                  Ns, {wave, Controls}, BlockTimestamp, ParentHeight + 1, self(), Tag) end),
             Round = round_state(Sl, S),
             put_round(
               Sl,
@@ -11280,8 +11073,8 @@ support_validated_dtx(Block = #block{slot = Sl}, BH, S) ->
     end.
 
 on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
-               S = #s{approved = Approved, history_head = ParentToken})
-  when Sl =:= Approved + 1, AppliedFloor >= Sl - 1 ->
+               S = #s{eng = #eng{base = Base}, history_head = ParentToken})
+  when Sl > Base, AppliedFloor >= element(1, ParentToken) ->
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
@@ -11372,8 +11165,7 @@ spawn_foreign_validation({Sl, BH}, {Event, Tag}, Deadline, Attributes, S, Verify
 
 on_dtx_foreign_verdict(
   Sl, BH, ParentToken, WorkerPid, Deadline, Verdict0,
-  S = #s{approved = Approved, history_head = ParentToken})
-  when Sl =:= Approved + 1 ->
+  S = #s{eng = #eng{base = Base}, history_head = ParentToken}) when Sl > Base ->
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
@@ -11677,7 +11469,7 @@ apply_dtx_verdict({valid, Histories}, Payload, Block, Sl, BH, ParentToken,
                   S = #s{dtx_projection = ParentProjection}) ->
     case quod_ledger:classify(Payload) of
         {controls, Classified} ->
-            case preview_dtx_controls(Classified, {target_identity(S), Sl, BH},
+            case preview_dtx_controls(Classified, {target_identity(S), element(1, ParentToken) + 1, BH},
                                       Histories, ParentProjection, []) of
                 {ok, _PreviewHistories, _PreviewProjection, _Items} ->
                     Round = round_state(Sl, S),
@@ -11739,7 +11531,7 @@ reject_dtx_candidate(Sl, BH, Reason, S) ->
                        validating = none, validation = none,
                        candidate = none, validation_sidecar = [],
                        dtx_parent = none}, S),
-    choose_final_vote(Sl, rejected, S1).
+    S1.
 
 retire_invalid_dtx_submission(Payload, _Reasons, S) ->
     case quod_ledger:classify(Payload) of
@@ -11842,8 +11634,7 @@ dtx_validation_monitor(#round{}) ->
 %% notarize; if enough nodes abstain the slot Δ-skips). A verdict is acted on ONLY if `{Sl, BH}` still matches
 %% what we are validating AND `Sl` is still head+1 — so a stale verdict (slot finalized, or a DIFFERENT block
 %% now validating under leader equivocation) is dropped, never applied to the wrong block.
-on_content_verdict(Sl, BH, Verdict, S = #s{approved = Approved})
-  when Sl =:= Approved + 1 ->
+on_content_verdict(Sl, BH, Verdict, S = #s{eng = #eng{view = Sl}}) ->
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation} of
         {BH, content} ->
@@ -11861,88 +11652,40 @@ on_content_verdict(Sl, BH, Verdict, S = #s{approved = Approved})
                 {invalid, _} ->
                     S2 = put_round(Sl, (round_state(Sl, S1))#round{invalid = BH},
                                    S1#s{membership_rejects = S1#s.membership_rejects + 1}),
-                    choose_final_vote(Sl, rejected, S2);
+                    S2;
                 abstain      -> S1
             end;
         _ -> S
     end;
 on_content_verdict(_Sl, _BH, _Verdict, S) -> S.
 
-%% The oldest non-final slot is an explicit local protocol state. The former `active_slot` latch followed
-%% `approved+1`; consequently a support certificate cleared its timer even though the slot was not durable.
-%% Under an over-f outage, returning validators could then miss the one-shot notarization event and no node
-%% remained responsible for moving the finality frontier. These transitions instead follow `committed+1`
-%% until commit/skip and expose the actual phase for diagnostics.
-%% A selected complaint can complete a skip synchronously inside `choose_final_vote/3`; callers that then
-%% try to retain demand for that same slot must not resurrect already-finalized state.
-watch_requested(V, S = #s{slot = Committed}) when V =< Committed ->
-    clear_requested_le(Committed, S);
+%% The watchdog follows the engine's era/view, independently of material
+%% height. Entering a new view starts its Delta; duplicate evidence, readiness
+%% changes and proposal validation never renew an unchanged view's deadline.
+watch_requested(V, S = #s{eng = #eng{base = Base}}) when V =< Base ->
+    clear_requested_le(Base, S);
 watch_requested(V, S = #s{requested_slot = Requested}) ->
     Earliest = case Requested of none -> V; _ -> min(V, Requested) end,
     watch_head(V, awaiting_proposal, S#s{requested_slot = Earliest}).
-watch_proposal(V, S)  -> watch_head(V, awaiting_notarization, clear_requested_le(V, S)).
-watch_notarized(V, S) -> watch_head(V, awaiting_commit, S).
+watch_proposal(V, S) -> watch_head(V, awaiting_notarization, clear_requested_le(V, S)).
 
-watch_head(V, Phase, S = #s{slot = Committed}) when V =:= Committed + 1 ->
-    Current = case S#s.head_progress of
-                  #head_progress{slot = V, phase = P} -> later_phase(P, Phase);
-                  _                                   -> Phase
-              end,
-    Ready = quorum_ready(S),
-    S#s{head_progress = next_head_progress(
-                           V, Current, Ready, S#s.head_progress)};
-watch_head(_V, _Phase, S) ->
-    S.
+watch_head(V, Phase, S = #s{eng = #eng{era = Era, view = V}}) ->
+    S#s{head_progress = #head_progress{era = Era, slot = V, phase = Phase}};
+watch_head(_V, _Phase, S) -> S.
 
-later_phase(awaiting_commit, _Phase) -> awaiting_commit;
-later_phase(_Phase, awaiting_commit) -> awaiting_commit;
-later_phase(awaiting_notarization, _Phase) -> awaiting_notarization;
-later_phase(_Phase, awaiting_notarization) -> awaiting_notarization;
-later_phase(awaiting_proposal, awaiting_proposal) -> awaiting_proposal.
-
-%% Re-derive the oldest-head state after every transition. `awaiting_proposal` is demand evidence and has
-%% no engine object yet, so it is retained for the same head. Every later phase derives from concrete
-%% consensus state and therefore self-heals after event reordering.
-reconcile_head_progress(S = #s{slot = Committed, approved = Approved}) ->
-    V = Committed + 1,
-    Phase = case Approved >= V of
-                true  -> awaiting_commit;
-                false -> case may_vote(S) andalso head_has_evidence(V, S) of
-                             true  -> awaiting_notarization;
-                             false -> retained_request(V, S)
-                         end
-            end,
-    case Phase of
-        idle ->
-            S#s{head_progress = idle};
-        _ ->
-            Ready = quorum_ready(S),
-            S#s{head_progress = next_head_progress(
-                                   V, Phase, Ready, S#s.head_progress)}
+reconcile_head_progress(S = #s{eng = #eng{era = Era, view = V, base = Base},
+                               requested_slot = Requested, local_proposals = Local}) ->
+    Evidence = head_has_evidence(V, S),
+    Demand = Evidence
+             orelse (is_integer(Requested) andalso Requested =< V)
+             orelse lists:any(fun(Slot) -> Slot > Base end, maps:keys(Local))
+             orelse protocol_parent_material(S) =/= S#s.history_head,
+    case Demand of
+        false -> S#s{head_progress = idle};
+        true ->
+            Phase = case Evidence of true -> awaiting_notarization; false -> awaiting_proposal end,
+            S#s{head_progress = #head_progress{era = Era, slot = V, phase = Phase}}
     end.
-
-next_head_progress(V, Phase, Ready,
-                   #head_progress{slot = V, phase = Phase,
-                                  quorum_ready = WasReady,
-                                  quorum_rearms = Rearms,
-                                  support_grace_used = GraceUsed}) ->
-    {Rearms1, GraceUsed1} =
-        case {WasReady, Ready, Rearms < ?MAX_QUORUM_REARMS} of
-            %% A bounded quorum restoration starts a fresh Delta and a fresh support-redrive grace.
-            %% Once the rearm cap is exhausted, neither deadline nor grace can be renewed by flapping.
-            {false, true, true} -> {Rearms + 1, false};
-            _                   -> {Rearms, GraceUsed}
-        end,
-    #head_progress{slot = V, phase = Phase, quorum_ready = Ready,
-                   quorum_rearms = Rearms1, support_grace_used = GraceUsed1};
-next_head_progress(V, Phase, Ready, _Previous) ->
-    #head_progress{slot = V, phase = Phase, quorum_ready = Ready}.
-
-retained_request(V, #s{requested_slot = V}) -> awaiting_proposal;
-retained_request(V, #s{head_progress = #head_progress{slot = V,
-                                                       phase = awaiting_proposal}}) ->
-    awaiting_proposal;
-retained_request(_V, _S) -> idle.
 
 clear_requested_le(V, S = #s{requested_slot = Requested})
   when is_integer(Requested), Requested =< V ->
@@ -11952,32 +11695,17 @@ clear_requested_le(_V, S) ->
 
 head_has_evidence(V, #s{eng = #eng{blocks = Blocks, shares = Shares}, self = Self,
                         rounds = Rounds,
-                        local_proposals = Local, collecting = Collecting,
-                        commit_buf = CommitBuf} = S) ->
+                        local_proposals = Local, collecting = Collecting} = S) ->
     Complaints = maps:get({complaint, V, none}, Shares, #{}),
     maps:is_key(V, Rounds)
         orelse maps:is_key(V, Local)
-        orelse maps:is_key(V, CommitBuf)
         orelse lists:any(fun(#block{slot = Sl}) -> Sl =:= V end, maps:values(Blocks))
         orelse case Collecting of #batch{slot = V} -> true; _ -> false end
         %% Only the engine's verified current-peer evidence creates demand.
         %% It arms the existing head watchdog; choosing a final vote still
-        %% requires the ordinary timeout/readiness or f+1 amplification path.
+        %% requires this view's ordinary timeout and local signing readiness.
         orelse lists:any(fun(Peer) -> Peer =/= Self andalso maps:is_key(Peer, Complaints) end,
-                         active_validators(S));
-head_has_evidence(_V, _S) ->
-    false.
-
-quorum_ready(#s{self = Self, slot = Height,
-                inbound_conns = Inbound, peer_readiness = Readiness} = S) ->
-    Validators = active_validators(S),
-    case may_vote(S) andalso length(Validators) > 0 of
-        false -> false;
-        true ->
-            ReadyPeers = [P || P <- Validators, P =/= Self,
-                               peer_ready_at(P, Height, Inbound, Readiness)],
-            1 + length(ReadyPeers) >= quorum(length(Validators))
-    end.
+                         active_validators(S)).
 
 %% A readiness claim is useful only on the exact authenticated inbound consensus link that carried it.
 %% Replacing or losing that link removes the claim, so a restarted process cannot inherit its predecessor's
@@ -12010,9 +11738,8 @@ live_link(Peer, Links) ->
         _                            -> false
     end.
 
-%% All normal state transitions pass through here. A phase change resets the full Delta. Quorum restoration
-%% may reset it only within the bounded per-phase budget; losing quorum leaves the existing timer running,
-%% whose expiry only probes/re-drives.
+%% Normal state transitions share this owner turn. Only a new era/view arms
+%% a fresh protocol deadline; phase and connectivity changes never renew it.
 keep_progress(S0, S1, Actions) ->
     keep_progress(S0, S1, Actions, normal).
 
@@ -12048,9 +11775,8 @@ keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
           SDtx, custody_reconcile,
           fun() -> reconcile_custody_lane(SDtx) end),
     SCustodyView = refresh_ingress_view(SCustodyReady),
-    %% Durable exclusion becomes a new placement only here: the complete
-    %% contiguous commit prefix, committee adoption, author floor, and recovery
-    %% state have all settled. Retained signed work drains before unsigned
+    %% View/era placement and complete material publication have settled here.
+    %% Re-placement preserves the original signed request and unknown outcome. Retained signed work drains before unsigned
     %% ingress so a later author sequence cannot overtake it.
     {SCustody, ActionsRev1} =
         timed_step(
@@ -12084,8 +11810,9 @@ keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
                           {SIngressView, ActionsRev1}
                   end
           end),
-    SAdvertised = timed_step(SDrained, advertise,
-                             fun() -> refresh_readiness(SDrained) end),
+    SProposed = drive_empty_proposal(S0, SDrained),
+    SAdvertised = timed_step(SProposed, advertise,
+                             fun() -> refresh_readiness(SProposed) end),
     S2 = track_owner_peaks(
            timed_step(SAdvertised, head_reconcile,
                       fun() -> reconcile_head_progress(SAdvertised) end)),
@@ -12123,7 +11850,7 @@ advertise_readiness(Height, Ready, Now, S = #s{self = Self}) ->
     S1#s{readiness_advertised = {Height, Ready, Now}}.
 
 %% One capability edge owns recovery reconciliation. This catches explicit sync completion, periodic
-%% readiness, and live commit/skip self-corroboration without each caller remembering a special hook.
+%% readiness, and live certified finality without each caller remembering a special hook.
 %% A pause retains custody but cannot renew its signature. The original owner
 %% readiness edge resumes the same classified rows before their next drive.
 settle_retained_dtx(S0, S1) ->
@@ -12145,43 +11872,21 @@ settle_readiness(S0, S1) ->
 progress_timer_actions(#s{head_progress = P}, #s{head_progress = P}) -> [];
 progress_timer_actions(_S0, #s{head_progress = idle}) ->
     [{{timeout, progress}, cancel}];
-%% Losing visible quorum suppresses complaint signing but does not reset the existing timeout. A later
-%% false->true transition may replace it with one fresh full Delta, up to the per-phase cap below.
 progress_timer_actions(
-  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_ready = true}},
-  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_ready = false}}) ->
-    [];
-%% A restoration grants a fresh Delta only a bounded number of times for one unchanged slot/phase.
-%% Once exhausted, the existing named timer keeps its original deadline, so a flapping link cannot
-%% postpone complaint progress forever. Advancing slot or phase creates a fresh budget.
-progress_timer_actions(
-  #s{head_progress = #head_progress{slot = V, phase = Phase,
-                                   quorum_ready = false,
-                                   quorum_rearms = Rearms}},
-  #s{head_progress = #head_progress{slot = V, phase = Phase,
-                                   quorum_ready = true}})
-  when Rearms >= ?MAX_QUORUM_REARMS ->
-    [];
-progress_timer_actions(_S0, #s{head_progress = #head_progress{slot = V}}) ->
-    [progress_timeout(V)].
+  #s{head_progress = #head_progress{era = Era, slot = V}},
+  #s{head_progress = #head_progress{era = Era, slot = V}}) -> [];
+progress_timer_actions(_S0, S) -> rearm_progress_timer(S).
 
 rearm_progress_timer(#s{head_progress = idle}) ->
     [{{timeout, progress}, cancel}];
-rearm_progress_timer(#s{head_progress = #head_progress{slot = V}}) ->
-    [progress_timeout(V)].
-
-progress_timeout(V) ->
-    {{timeout, progress}, delta_ms(), {progress_timeout, V}}.
+rearm_progress_timer(#s{head_progress = #head_progress{era = Era, slot = V}}) ->
+    [{{timeout, progress}, delta_ms(), {progress_timeout, {Era, V}}}].
 
 log_progress_transition(P, P, _S) -> ok;
-log_progress_transition(_Old, idle, #s{ns = Ns, slot = Slot}) ->
-    logger:debug("quod[~s]: head progress idle at committed slot ~b", [Ns, Slot]);
-log_progress_transition(_Old,
-                        #head_progress{slot = V, phase = Phase,
-                                       quorum_ready = Ready},
-                        #s{ns = Ns}) ->
-    logger:debug("quod[~s]: head ~b phase=~p quorum_ready=~p",
-                 [Ns, V, Phase, Ready]).
+log_progress_transition(_Old, idle, #s{ns = Ns, slot = Height}) ->
+    logger:debug("quod[~s]: protocol idle at material height ~b", [Ns, Height]);
+log_progress_transition(_Old, #head_progress{slot = V, phase = Phase}, #s{ns = Ns}) ->
+    logger:debug("quod[~s]: view ~b phase=~p", [Ns, V, Phase]).
 
 delta_ms() ->
     case application:get_env(quod, simplex_delta_ms, ?DELTA_MS) of
@@ -12189,143 +11894,24 @@ delta_ms() ->
         _                           -> ?DELTA_MS   %% a mistyped override must not crash the timer action
     end.
 
-%% Δ fired for the oldest non-final slot. Finality always re-drives; before notarization, a complaint is
-%% emitted only while a certificate quorum has authenticated inbound streams carrying fresh readiness at
-%% this node's durable height. During a known over-f outage we retain and re-send the proposal but
-%% deliberately do not accumulate complaint votes. An already-supporting follower re-echoes once after a
-%% bounded quorum restoration
-%% before it may complain, giving the leader's redrive one final Delta to reach recovered validators. The
-%% bounded rearm budget keeps repeated link flaps from postponing complaint progress forever.
-on_progress_timeout(V,
-        S0 = #s{head_progress = #head_progress{slot = V, phase = Phase}}) ->
-    trace_slot_event(
-      V, <<"consensus.watchdog_fired">>,
+%% A timeout can complain only in its exact current era/view. Neither peer
+%% readiness estimates nor an outstanding Prolog verdict changes Simplex's
+%% final-vote rule. Re-emitting retained evidence never creates a new decision.
+on_progress_timeout({Era, V},
+        S0 = #s{eng = #eng{era = Era, view = V},
+                head_progress = #head_progress{era = Era, slot = V, phase = Phase}}) ->
+    trace_slot_event(V, <<"consensus.watchdog_fired">>,
       #{'quod.consensus.phase' => atom_to_binary(Phase, utf8),
         'quod.validation.kind' => trace_validation_kind(round_state(V, S0)),
         'quod.kb.last_dispatched_height' => S0#s.last_applied}, S0),
     S1 = S0#s{progress_timeouts = S0#s.progress_timeouts + 1},
-    case may_vote(S1) of
-        false ->
-            probe_committee(S1);
-        true when Phase =:= awaiting_commit ->
-            probe_committee(redrive_head(V, S1));
-        true ->
-            case quorum_ready(S1) of
-                false ->
-                    S2 = case leads_inflight(V, S1) of
-                             true  -> redrive_head(V, S1);
-                             false -> S1
-                         end,
-                    probe_committee(S2#s{quorum_pauses = S2#s.quorum_pauses + 1});
-                true ->
-                    on_pre_notarization_timeout(V, S1)
-            end
-    end;
-on_progress_timeout(_V, S) ->
-    S.
-
-on_pre_notarization_timeout(V, S) ->
-    case leads_inflight(V, S) of
-        false ->
-            case held_unsupported_proposal(V, S) of
-                {resume, Block, BH} -> support_or_validate(Block, BH, S);
-                validating         -> S;
-                none ->
-                    case retry_supported_proposal(V, S) of
-                        {retried, S1} -> S1;
-                        none          -> choose_final_vote(V, timeout, S)
-                    end
-            end;
-        true  ->
-            %% Camp decision first (amplified evidence may pick the skip), then ALWAYS
-            %% redrive: a leader latched into either camp still owns the only
-            %% authenticated resend of its in-flight proposal, and the lossy
-            %% fire-and-forget link makes the Δ re-fire THE retransmit. Suppressing it
-            %% for a latched leader wedged a burst live: the lost proposal was never
-            %% re-sent, so no follower could ever support it.
-            redrive_head(V, choose_final_vote(V, notarized, S))
-    end.
-
-%% A recovering voter can ingest a valid leader proposal while signing is disabled. The engine retains the
-%% block, but no support latch exists and the original proposal event will not repeat. On the first ready
-%% timeout, run that held proposal through the normal support/membership-verdict path before considering a
-%% complaint. Blocks enter `eng.blocks` only through authenticated leader + full proposal validation.
-held_unsupported_proposal(V, S = #s{eng = #eng{blocks = Blocks}}) ->
-    Round = round_state(V, S),
-    case {Round#round.supporting, Round#round.validating, Round#round.invalid} of
-        {none, BH, Invalid} when is_binary(BH), Invalid =/= BH ->
-            validating;
-        {none, none, Invalid} ->
-            Candidates = lists:sort(
-                           [{BH, Block}
-                            || {BH, #block{slot = Sl} = Block} <- maps:to_list(Blocks),
-                               Sl =:= V, BH =/= Invalid, valid_proposal(Block, S)]),
-            case Candidates of
-                [{BH, Block} | _] -> {resume, Block, BH};
-                []                -> none
-            end;
-        _ ->
-            none
-    end.
-
-%% A quorum can return after a long outage while the surviving followers already hold support latches.
-%% Complaining immediately races the leader's proposal redrive and can skip a valid retained slot before a
-%% recovered validator sees it. Re-echo our support once and grant one final Delta; the next timeout may
-%% complain normally. The grace resets only on a phase change or one of the bounded quorum restorations.
-retry_supported_proposal(
-  V, S = #s{head_progress = P = #head_progress{slot = V,
-                                               phase = awaiting_notarization,
-                                               support_grace_used = false}}) ->
-    case round_state(V, S) of
-        #round{supporting = BH, final = Final, invalid = Invalid}
-          when is_binary(BH), Final =/= complaint, Invalid =/= BH ->
-            case block_for(BH, S#s.eng) of
-                #block{} = Block ->
-                    S1 = S#s{head_progress = P#head_progress{support_grace_used = true}},
-                    {retried, support_block(Block, BH, S1)};
-                _ ->
-                    none
-            end;
-        _ ->
-            none
-    end;
-retry_supported_proposal(_V, _S) ->
-    none.
-
-%% Complaint ingestion re-runs the same final-vote decision as notarization and recovery. Both live
-%% pipeline slots are eligible: resolving a certified child need not wait for the durable head to finish.
-%% Only a newly selected complaint at the head creates watchdog demand; a child finalizer is buffered by
-%% the normal contiguous-finalization path.
-maybe_join_complaint(#share{kind = complaint, slot = V}, S0 = #s{slot = Committed}) ->
-    Before = (round_state(V, S0))#round.final,
-    S1 = choose_final_vote(V, complaint_evidence, S0),
-    case {V =:= Committed + 1, Before, (round_state(V, S1))#round.final} of
-        {true, none, complaint} -> watch_requested(V, S1);
-        _                       -> S1
-    end;
-maybe_join_complaint(_Share, S) -> S.
-
-%% Are we the leader of V with our own proposal still in flight?
-leads_inflight(V, S = #s{self = Self, local_proposals = Local}) ->
-    maps:is_key(V, Local) andalso leader(V, active_validators(S)) =:= Self.
-
-%% `f+1` distinct PEER complaint shares for V in the pool — proof at least one HONEST member wants the
-%% skip (at most `f` Byzantine members exist, and complaint shares are signature-verified + set-checked
-%% at ingest, so an outsider can't manufacture evidence).
-complaint_evidence(V, S = #s{self = Self, eng = #eng{shares = Shares}}) ->
-    Bucket = maps:get({complaint, V, none}, Shares, #{}),
-    complaint_amplified(Self, active_validators(S), Bucket).
-
-%% Pure threshold: at least `f+1` DISTINCT CURRENT peer signers (self excluded — our own share isn't
-%% independent evidence). Projecting onto `Validators` is load-bearing across a committed membership change:
-%% an authenticated share cached from a removed validator is no longer evidence in the new committee. `f` is
-%% derived from the quorum rule (`quorum = N - f`), never restated, and the bucket map gives distinctness.
-complaint_amplified(Self, Validators, Bucket) ->
-    N = length(Validators),
-    CurrentPeers = [Signer || Signer <- maps:keys(Bucket),
-                              Signer =/= Self,
-                              lists:member(Signer, Validators)],
-    length(CurrentPeers) >= (N - quorum(N)) + 1.
+    S2 = choose_final_vote(V, timeout, S1),
+    S3 = case (S2#s.eng)#eng.era =:= Era andalso may_vote(S2) of
+             true -> redrive_head(V, S2);
+             false -> S2
+         end,
+    probe_committee(S3);
+on_progress_timeout(_Position, S) -> S.
 
 %% One evidence-redrive path owns the in-flight window. The 300 ms tick re-emits only this
 %% validator's tiny, durably latched shares. The durable-head watchdog additionally re-emits a
@@ -12338,7 +11924,7 @@ redrive_inflight(S) ->
         false -> S;
         true  -> lists:foldl(
                    fun(Slot, Acc) -> emit_slot_evidence(Slot, votes, Acc) end,
-                   S, lists:sort([Slot || Slot <- maps:keys(S#s.rounds), Slot > S#s.slot]))
+                   S, lists:sort([Slot || Slot <- maps:keys(S#s.rounds), Slot > (S#s.eng)#eng.base]))
     end.
 
 emit_slot_evidence(_Slot, _Scope, S) when S#s.sync =/= ready -> S;
@@ -12363,7 +11949,7 @@ local_proposal_evidence(Slot, S0 = #s{local_proposals = Local}) ->
             %% proposer retains its exact immutable body until slot retirement.
             %% Reuse admission's verdict path; outstanding work stays idempotent.
             S1 = on_propose(BH, Block, ValidationSidecar, true, S0),
-            case Slot > S1#s.slot of
+            case Slot > (S1#s.eng)#eng.base of
                 true ->
                     trace_block_event(
                       Slot, BH, <<"consensus.proposal_redriven">>,
@@ -12402,19 +11988,14 @@ certificate_evidence(Slot, #s{eng = #eng{certs = Certs}}) ->
     [{cert, Cert} || {{_Kind, CertSlot, _BH}, Cert} <- maps:to_list(Certs),
                      CertSlot =:= Slot].
 
-%% One recovery selection: finality belongs to the certified-history worker;
-%% only not-yet-finalized proposals need the support-certificate block walk.
-%% Finality is authenticated engine state, never a peer height or readiness hint.
+%% History recovery installs material entries and their selected proof. A newer
+%% empty finalizer need not appear in that archive, so a commit certificate
+%% cannot suppress the live engine's exact-body request. Both paths retain their
+%% existing verification and owner; a body reply never grants voting readiness.
 reconcile_block_requests(S = #s{eng = undefined}) -> S;
-reconcile_block_requests(S0 = #s{slot = Committed, eng = Eng, block_requests = Requests0}) ->
+reconcile_block_requests(S0 = #s{eng = Eng, block_requests = Requests0}) ->
     Recovering = maybe_arm_sync(S0),
-    FinalizedThrough = ahead_cert_ceiling(Eng),
-    Missing = lists:sort(
-                [{Slot, BH, Cert}
-                 || {{support, Slot, BH}, #cert{} = Cert} <- maps:to_list(Eng#eng.certs),
-                    live_pipeline_slot(Slot, Committed),
-                    Slot > FinalizedThrough,
-                    block_for(BH, Eng) =:= undefined]),
+    Missing = lists:sort(missing_certified_blocks(Eng)),
     LiveKeys = [{Slot, BH} || {Slot, BH, _Cert} <- Missing],
     Requests1 = maps:filter(fun(Key, _Value) -> lists:member(Key, LiveKeys) end, Requests0),
     S1 = Recovering#s{block_requests = Requests1},
@@ -12424,12 +12005,7 @@ reconcile_block_requests(S0 = #s{slot = Committed, eng = Eng, block_requests = R
     end.
 
 first_requestable_block([], _S) -> none;
-first_requestable_block([{Slot, _BH, _Cert} = Missing | Rest],
-                        S = #s{slot = Committed, eng = #eng{tree = Tree}}) ->
-    case Slot =:= Committed + 1 orelse maps:is_key(Slot - 1, Tree) of
-        true  -> Missing;
-        false -> first_requestable_block(Rest, S)
-    end.
+first_requestable_block([Missing | _], _S) -> Missing.
 
 maybe_request_block(Slot, BH, #cert{sigs = Sigs},
                     S = #s{self = Self, block_requests = Requests}) ->
@@ -12462,41 +12038,23 @@ ordered_unique(Candidates, Excluded) ->
                  end, {#{}, []}, Candidates),
     lists:reverse(Rev).
 
-%% Reconcile a member's bounded live rounds on parent/capability progress.
-%% Certified tree entries restore final-vote latches through the existing
-%% signing gate. Pending DTX candidates request their exact-parent verdict;
-%% a later finalizer must not make that validation depend on voting readiness.
-%% Neither action invents a support vote or bypasses the Prolog verdict.
+%% Resume only final-vote intents recorded on this owner's notarization edge.
+%% A tree row alone cannot create one. Pending proposals still need their
+%% exact-parent verdict, independently of whether this node may currently vote.
 resume_ready_rounds(S) ->
     case is_participant(S) of
         false -> S;
         true ->
-            %% Snapshot only slot numbers. A vote in an earlier iteration can finalize and prune later
-            %% entries via commit_buf; resume_ready_slot/2 re-reads the current tree on every step.
-            Slots = lists:sort([Sl || Sl <- maps:keys((S#s.eng)#eng.tree),
-                                     Sl > S#s.slot]),
-            S1 = lists:foldl(
-                   fun resume_ready_slot/2,
-                   S, Slots),
-            resume_proposals(S1)
+            Slots = lists:sort([V || {V, #round{commit_requested = Hash}} <- maps:to_list(S#s.rounds),
+                                    is_binary(Hash)]),
+            Ready = lists:foldl(fun(V, Acc) -> choose_final_vote(V, notarized, Acc) end, S, Slots),
+            resume_proposals(Ready)
     end.
 
 resume_proposals(S = #s{rounds = Rounds}) ->
     lists:foldl(fun advance_proposal/2, S, lists:sort(maps:keys(Rounds))).
 
-resume_ready_slot(Sl, S = #s{slot = Committed}) when Sl =< Committed ->
-    S;
-resume_ready_slot(Sl, S = #s{eng = #eng{tree = Tree}}) ->
-    case maps:get(Sl, Tree, undefined) of
-        #block{} = Block ->
-            choose_final_vote(Sl, notarized, approve_block(Block, S));
-        undefined ->
-            S
-    end.
-
-%% A timeout observed with fewer than a certificate quorum ready must not sign an irreversible complaint.
-%% Open missing committee links without queuing duplicate protocol frames; a peer counts only after it
-%% reports readiness on its current authenticated inbound link.
+%% Open missing committee links without queuing duplicate protocol frames.
 probe_committee(S = #s{self = Self, conns = Conns, dialing = Dialing, chan = Chan}) ->
     Missing = [P || P <- active_validators(S), P =/= Self,
                     not live_link(P, Conns), not maps:is_key(P, Dialing)],
@@ -12506,55 +12064,22 @@ probe_committee(S = #s{self = Self, conns = Conns, dialing = Dialing, chan = Cha
               Acc#s{dialing = (Acc#s.dialing)#{P => dial_deadline()}}
       end, S, Missing).
 
-%% One owner chooses every first final vote in the live pipeline. Amplified complaint evidence has priority.
-%% A notarization edge (including ready recovery) may otherwise select commit; complaint-share ingestion may
-%% only join amplified evidence; a watchdog may fall back to skip; and an invalid-membership verdict may only
-%% skip. These trigger policies feed one decision table and one durable emission path.
+%% Same-view exclusivity lives in the durable journal. A fresh commit needs
+%% a recorded notarization edge; a fresh complaint needs this view's timeout.
+%% Neither a peer complaint nor an unrelated view's vote changes that choice.
 -spec choose_final_vote(slot(), final_vote_trigger(), #s{}) -> #s{}.
-choose_final_vote(V, Trigger, S = #s{slot = Committed}) ->
-    case live_pipeline_slot(V, Committed) of
-        false ->
-            S;
+choose_final_vote(V, Trigger, S = #s{eng = #eng{base = Base, view = Current}}) ->
+    Round = round_state(V, S),
+    case V > Base andalso may_vote(S) andalso Round#round.final =:= none of
+        false -> S;
         true ->
-            Round = round_state(V, S),
-            case {may_vote(S), Round#round.final} of
-                {false, _}    -> S;
-                {true, none}  -> choose_unlatched_final_vote(
-                                   V, final_vote_policy(Trigger), Round, S);
-                {true, _Vote} -> S
+            case {Trigger, Round#round.commit_requested} of
+                {notarized, Hash} when is_binary(Hash), Round#round.invalid =/= Hash ->
+                    emit_final_vote(commit, V, Hash, S);
+                {timeout, _} when V =:= Current -> emit_final_vote(complaint, V, none, S);
+                _ -> S
             end
     end.
-
-final_vote_policy(notarized)          -> {commit, wait};
-final_vote_policy(complaint_evidence) -> {hold, wait};
-final_vote_policy(timeout)            -> {commit, complaint};
-final_vote_policy(rejected)           -> {hold, complaint}.
-
-choose_unlatched_final_vote(V, {CommitPolicy, Fallback}, Round, S) ->
-    CanComplain = may_complain(V, committed_slots(S)),
-    case CanComplain andalso complaint_evidence(V, S) of
-        true ->
-            emit_final_vote(complaint, V, none, S);
-        false ->
-            case {notarized_hash(V, S),
-                  may_commit(V, complained_slots(S))} of
-                {{ok, BH}, true}
-                  when CommitPolicy =:= commit, Round#round.invalid =/= BH ->
-                    emit_final_vote(commit, V, BH, S);
-                _ when Fallback =:= complaint, CanComplain =:= true ->
-                    emit_final_vote(complaint, V, none, S);
-                _ ->
-                    S
-            end
-    end.
-
-notarized_hash(V, #s{eng = #eng{tree_hashes = Hashes}}) ->
-    case maps:get(V, Hashes, undefined) of
-        BH when is_binary(BH) -> {ok, BH};
-        undefined             -> none
-    end;
-notarized_hash(_V, _S) ->
-    none.
 
 emit_final_vote(Kind, V, BH, S) ->
     case record_share(Kind, V, BH, none, S) of
@@ -12569,7 +12094,7 @@ emit_final_vote(Kind, V, BH, S) ->
 %% signature can become network-visible; an I/O failure fail-stops this validator before it can
 %% equivocate. Redrive reconstructs an identical Ed25519 share only from the resulting latch.
 record_share(Kind, Slot, BlockHash, Block,
-             S = #s{signing_journal = Journal}) ->
+             S = #s{signing_journal = Journal, eng = #eng{era = Era}}) ->
     case may_vote(S) of
         false ->
             blocked;
@@ -12579,7 +12104,7 @@ record_share(Kind, Slot, BlockHash, Block,
                                #{'quod.vote.kind' => atom_to_binary(Kind, utf8)}, S,
                                fun() ->
                                    record_signing_decision(
-                                     S#s.ns, Journal, Kind, Slot,
+                                     S#s.ns, Journal, Kind, {Era, Slot},
                                      BlockHash, Block)
                                end),
             Round = round_state(Slot, S),
@@ -12592,7 +12117,7 @@ record_share(Kind, Slot, BlockHash, Block,
             trace_block_event(
               Slot, BlockHash, <<"consensus.vote_durable">>,
               #{'quod.vote.kind' => atom_to_binary(Kind, utf8)}, S1),
-            {ok, make_share(S#s.consensus_domain, Kind, Slot, BlockHash, S#s.id), S1}
+            {ok, make_share(S#s.consensus_domain, Kind, {Era, Slot}, BlockHash, S#s.id), S1}
     end.
 
 -ifdef(TEST).
@@ -12610,8 +12135,8 @@ record_signing_decision_journal(
   _Ns, undefined, Kind, Slot, BlockHash, _Block) ->
     error({signing_journal_unavailable, Kind, Slot, BlockHash});
 record_signing_decision_journal(
-  Ns, Journal, support, Slot, BlockHash,
-  #block{slot = Slot} = Block) ->
+  Ns, Journal, support, {Era, Slot}, BlockHash,
+  #block{era = Era, slot = Slot} = Block) ->
     true = block_hash(Block) =:= BlockHash,
     Started = erlang:monotonic_time(),
     Result = quod_signing_journal:record_support(Journal, Block),
@@ -12643,9 +12168,9 @@ own_share(Kind, Slot, BlockHash, S = #s{}) ->
 %% still the sole authority. The share enters the ordinary engine locally;
 %% normal readiness gates continue to own outbound evidence and fresh votes.
 latched_share(Kind, Slot, BlockHash,
-              #s{id = Id, consensus_domain = Domain} = S) ->
+              #s{id = Id, consensus_domain = Domain, eng = #eng{era = Era}} = S) ->
     case vote_is_latched(Kind, BlockHash, round_state(Slot, S)) of
-        true -> {ok, make_share(Domain, Kind, Slot, BlockHash, Id)};
+        true -> {ok, make_share(Domain, Kind, {Era, Slot}, BlockHash, Id)};
         false -> blocked
     end.
 
@@ -12654,53 +12179,27 @@ vote_is_latched(commit, BH, #round{final = {commit, BH}}) -> true;
 vote_is_latched(complaint, none, #round{final = complaint}) -> true;
 vote_is_latched(_Kind, _BH, #round{}) -> false.
 
-valid_proposal(#block{slot = Sl, parent = P, payload = Payload} = Block,
-               #s{slot = Committed, approved = Approved} = S) ->
-    Sl =:= Approved + 1
-        andalso P =:= Approved
-        andalso live_pipeline_slot(Sl, Committed)
-        andalso payload_admission_open(Sl, Payload, S)
-        andalso block_material_admissible(Block, parent_timestamp(P, S), S).
-
-%% Both receipt authorities use this one material check after eligibility.
-%% The existing held-proposal timeout check shares its consensus-sensitive tail.
-block_material_admissible(#block{payload = Payload, timestamp = Ts}, ParentTs, S) ->
+%% Empty carriers obey the same parent transition as the engine, but do
+%% not require a Prolog verdict or compete with the material admission window.
+block_material_admissible(#block{payload = empty, timestamp = Ts}, ParentTs, _S) ->
+    Ts =:= ParentTs;
+block_material_admissible(#block{payload = Payload, parent = Parent, timestamp = Ts}, ParentTs, S) ->
     ts_acceptable(Ts, ParentTs, quod_time:now_ms())
-        andalso acceptable_payload(Payload, S).
+        andalso acceptable_payload(Payload, Parent, S).
 
-payload_admission_open(Slot, Payload, S) ->
+payload_admission_open(#block{parent = Parent, payload = Payload}, S) ->
     case quod_ledger:classify(Payload) of
+        empty -> true;
         {content, Transactions} ->
-            not consensus_barrier(S)
-                andalso membership_admission_open(Transactions, S)
-                andalso lists:all(
-                          fun(Transaction) ->
-                                  quod_atomic:content_readiness(
-                                    Transaction, S#s.dtx_projection) =:= ready
-                          end, Transactions);
-        {controls, _Controls} ->
-            dtx_payload_admission_open(Slot, S);
-        noop ->
-            false;
-        invalid ->
-            false
+            material_window_open(Parent, S)
+                andalso not consensus_barrier(S)
+                andalso membership_admission_open(Transactions, Parent, S)
+                andalso lists:all(fun(Tx) ->
+                    quod_atomic:content_readiness(Tx, S#s.dtx_projection) =:= ready
+                end, Transactions);
+        {controls, _} -> material_parent_installed(Parent, S);
+        invalid -> false
     end.
-
-dtx_payload_admission_open(
-  Slot, #s{slot = Committed, eng = #eng{tree = Tree}, rounds = Rounds}) ->
-    EarlierBarrier =
-        lists:any(
-          fun({Sl, #block{payload = Payload}}) ->
-                  Sl > Committed andalso Sl < Slot
-                      andalso payload_is_consensus_barrier(Payload)
-          end, maps:to_list(Tree)),
-    EarlierValidation =
-        lists:any(
-          fun({Sl, Round}) ->
-                  Sl > Committed andalso Sl < Slot
-                      andalso dtx_validation_active(Round)
-          end, maps:to_list(Rounds)),
-    not EarlierBarrier andalso not EarlierValidation.
 
 %% A proposed block's `timestamp` is acceptable iff it is a non-negative integer. The check lives here
 %% so ordinary proposal admission is total without a duplicate structural pass, while certified recovery
@@ -12733,8 +12232,11 @@ ts_acceptable(Ts, Last, Now) ->
 %% assert/retract over an Erlog clause. This makes apply/restart a total operation over every block an
 %% honest validator can endorse. The recursive diff check also rejects an improper list such as
 %% `[Op | junk]`, which a shallow cons-cell match would otherwise admit from the untrusted wire.
-acceptable_payload({batch, [#transaction{} | _] = Transactions}, S) ->
-    acceptable_payload_content(Transactions, S, verify_id)
+acceptable_payload(Payload, S = #s{eng = #eng{last_parent = Parent}}) ->
+    acceptable_payload(Payload, Parent, S).
+
+acceptable_payload({batch, [#transaction{} | _] = Transactions}, Parent, S) ->
+    acceptable_payload_content(Transactions, Parent, S, verify_id)
         andalso verify_transaction_signatures(
                   target_identity(S), S#s.author_admissions,
                   Transactions, live);
@@ -12742,10 +12244,10 @@ acceptable_payload({batch, [#transaction{} | _] = Transactions}, S) ->
 %% envelope, signature, admission-generation and sequence checks; exact group
 %% history and (for Vote) parent-KB policy are validated asynchronously
 %% before the block enters the consensus engine.
-acceptable_payload({batch, [{dtx, _} | _]} = Payload, S) ->
+acceptable_payload({batch, [{dtx, _} | _]} = Payload, _Parent, S) ->
     encoded_block_payload_fits(Payload)
         andalso dtx_payload_acceptable(quod_ledger:classify(Payload), S);
-acceptable_payload(_Payload, _S) -> false.
+acceptable_payload(_Payload, _Parent, _S) -> false.
 
 dtx_payload_acceptable({controls, Controls},
                        S = #s{author_admissions = Admissions,
@@ -12778,11 +12280,11 @@ dtx_control_acceptable(Control, Admissions, Lanes, S) ->
 %% the complete proposed batch in acceptable_payload/2 before voting.
 acceptable_collected_payload([#transaction{} | _] = Payload, S) ->
     membership_admission_open(Payload, S)
-        andalso acceptable_payload_content(Payload, S, prevalidated);
+        andalso acceptable_payload_content(Payload, (S#s.eng)#eng.last_parent, S, prevalidated);
 acceptable_collected_payload(_Payload, _S) ->
     false.
 
-acceptable_payload_content(Payload, S, Validation) ->
+acceptable_payload_content(Payload, Parent, S, Validation) ->
     bounded_transaction_list(Payload)
         andalso encoded_block_payload_fits({batch, Payload})
         andalso lists:all(
@@ -12790,7 +12292,7 @@ acceptable_payload_content(Payload, S, Validation) ->
                       collected_change_acceptable(Validation, Change, S)
                   end, Payload)
         andalso unique_tx_ids(Payload)
-        andalso sequence_payload_ok(Payload, S)
+        andalso sequence_payload_ok(Payload, Parent, S)
         andalso membership_batch_shape_ok(Payload).
 
 collected_change_acceptable(verify_id, Change, S) ->
@@ -12849,13 +12351,11 @@ unique_tx_ids(_Payload, _Seen) ->
 
 %% Exact committed replay protection. A signed sequence may skip values, but it
 %% must be newer than that author's approved history and unique within the block.
-%% Including the approved parent is load-bearing for the depth-one pipeline:
-%% H+2 cannot reuse a sequence notarized in H+1 while H+1 is not durable yet.
-sequence_payload_ok(Payload, S) ->
-    case approved_author_seqs(S) of
-        {ok, Floor} -> transaction_sequences_ok(Payload, Floor, #{});
-        error       -> false
-    end.
+%% Fold the approved ancestry, including unfinalized material parents: a
+%% descendant cannot reuse an author's sequence while its ancestor awaits finality.
+sequence_payload_ok(Payload, Parent, S) ->
+    {ok, Floor} = approved_author_seqs(Parent, S),
+    transaction_sequences_ok(Payload, Floor, #{}).
 
 transaction_sequences_ok([], _Floor, _Seen) ->
     true;
@@ -12870,26 +12370,22 @@ transaction_sequences_ok(
 transaction_sequences_ok(_Payload, _Floor, _Seen) ->
     false.
 
-approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
-                        slot = Committed})
-  when Approved =:= Committed ->
-    {ok, Seqs};
-approved_author_seqs(
-  #s{approved = Approved,
-     collecting =
-         #batch{parent = Approved, sequence_floor = Floor}}) ->
-    %% The batch opened from this exact approved parent. Reuse the immutable
-    %% floor it already validated instead of folding the parent payload again
-    %% after every collecting count/byte change.
+approved_author_seqs(S = #s{eng = #eng{last_parent = Parent}}) ->
+    approved_author_seqs(Parent, S).
+
+approved_author_seqs(Parent, #s{collecting = #batch{parent = Parent, sequence_floor = Floor}}) ->
     {ok, Floor};
-approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
-                        eng = #eng{tree = Tree}}) ->
-    case maps:get(Approved, Tree, undefined) of
-        #block{payload = Payload} ->
-            {ok, advance_author_seqs(Payload, Seqs)};
-        undefined ->
-            error
-    end.
+approved_author_seqs(Parent, #s{author_seqs = Seqs, eng = Eng}) ->
+    {ok, material_author_seqs(parent_ancestry(Parent, Eng), Eng, Seqs)}.
+
+%% Skip empty suffixes through the engine's installed ancestry summary. Fold
+%% only uncommitted material blocks, oldest first; never scan the ledger.
+material_author_seqs(#ancestry{material_count = Count},
+                     #eng{root_ancestry = #ancestry{material_count = Count}}, Seqs) -> Seqs;
+material_author_seqs(#ancestry{material_ref = {_, View, _}}, Eng, Seqs) ->
+    #block{parent = {_, ParentView, _}, payload = Payload} = maps:get(View, Eng#eng.tree),
+    advance_author_seqs(Payload,
+        material_author_seqs(parent_ancestry(ParentView, Eng), Eng, Seqs)).
 
 %% Advance the ordinary-content sequence projection from one exact tagged
 %% block/entry payload. DTX owns a separate admission-scoped lane; its five
@@ -12898,7 +12394,7 @@ advance_author_seqs(Data, Seqs) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} -> advance_content_author_seqs(Transactions, Seqs);
         {controls, _Controls} -> Seqs;
-        noop -> Seqs;
+        empty -> Seqs;
         invalid -> Seqs
     end.
 
@@ -12913,9 +12409,12 @@ advance_content_author_seqs(Transactions, Seqs) ->
 
 %% Durable-parent readiness is eligibility, not permanent material invalidity.
 %% Invalid batch shapes still reach the shared material gate, never wait here.
-membership_admission_open(Payload, #s{approved = Approved, slot = Committed}) ->
+membership_admission_open(Payload, S = #s{eng = #eng{last_parent = Parent}}) ->
+    membership_admission_open(Payload, Parent, S).
+
+membership_admission_open(Payload, Parent, S) ->
     case membership_payload_shape(Payload) of
-        singleton -> Approved =:= Committed;
+        singleton -> material_parent_installed(Parent, S);
         _ -> true
     end.
 
@@ -12947,7 +12446,7 @@ payload_is_consensus_barrier(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} -> transactions_touch_committee(Transactions);
         {controls, _Controls} -> true;
-        noop -> false;
+        empty -> false;
         invalid -> true
     end.
 
@@ -13052,9 +12551,6 @@ valid_history_entry({Ns, _Anchor}, 1,
                     _Timestamp, #{committee := []}, _IdMode)
   when is_binary(Ns) ->
     valid_genesis_transaction(Ns, Genesis);
-valid_history_entry(_Binding, I, noop, _Timestamp, _Projection, _IdMode)
-  when is_integer(I), I > 1 ->
-    true;
 valid_history_entry({Ns, Anchor} = Target, I, Data,
                     Timestamp,
                     #{committee := Committee, admissions := Admissions},
@@ -13068,7 +12564,7 @@ valid_history_entry({Ns, Anchor} = Target, I, Data,
               Committee, Admissions, IdMode) =:= valid;
         %% Control history is valid only through the phase-index reducer.
         {controls, _Controls} -> false;
-        noop -> false;
+        empty -> false;
         invalid -> false
     end;
 valid_history_entry(_Binding, _I, _Data, _Timestamp, _Committee, _IdMode) ->
@@ -13506,13 +13002,13 @@ dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 %%%===================================================================
 
 dispatch_relay(
-  Peer, {relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+  Peer, {relay_submit, SubmissionId, AttemptId, Era, TargetSlot,
          {submit, Author, _Signature, _Canonical} = Submission, TraceCarrier},
   S0 = #s{ns = Ns, self = Self}) ->
     DerivedSubmissionId = quod_transaction:submission_id(Submission),
     DerivedAttemptId =
         quod_transaction:relay_attempt_id(
-          Ns, DerivedSubmissionId, CommitteeId, TargetSlot, Self),
+          Ns, DerivedSubmissionId, Era, TargetSlot, Self),
     case Peer =:= Author
          andalso SubmissionId =:= DerivedSubmissionId
          andalso AttemptId =:= DerivedAttemptId of
@@ -13521,7 +13017,7 @@ dispatch_relay(
         true ->
             Ref = #relay_ref{peer = Peer, submission_id = SubmissionId,
                              attempt_id = AttemptId,
-                             committee_id = CommitteeId,
+                             era = Era,
                              target_slot = TargetSlot},
             case verify_relay_submission(Ns, Submission) of
                 false ->
@@ -13535,15 +13031,15 @@ dispatch_relay(
             end
     end;
 dispatch_relay(
-  Peer, {relay_result, SubmissionId, AttemptId, CommitteeId,
+  Peer, {relay_result, SubmissionId, AttemptId, Era,
          TargetSlot, Result}, S) ->
     {handle_relay_result(
-       Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result, S), []};
+       Peer, SubmissionId, AttemptId, Era, TargetSlot, Result, S), []};
 dispatch_relay(
-  Peer, {relay_accepted, SubmissionId, AttemptId, CommitteeId,
+  Peer, {relay_accepted, SubmissionId, AttemptId, Era,
          TargetSlot}, S) ->
     {handle_relay_accepted(
-       Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, S), []};
+       Peer, SubmissionId, AttemptId, Era, TargetSlot, S), []};
 dispatch_relay(_Peer, _Unsupported, S) ->
     {S, []}.
 
@@ -13576,76 +13072,29 @@ dispatch_relay_submit(
                 #relay_ref{} ->
                     {S, []};
                 undefined ->
-                    case durable_relay_result(
-                           Ref#relay_ref.submission_id,
-                           Ref#relay_ref.target_slot, S) of
-                        {final, Reply} ->
-                            {reply_relay(Ref, Reply, S), []};
-                        pending ->
-                            first_admit_relay(
-                              Ref, Author, Submission, TraceCarrier, S);
-                        unknown ->
-                            %% A durable slot that cannot be read or decoded is
-                            %% ambiguous. Silence is safer than fabricating an
-                            %% exclusion that could retry a committed write.
-                            {S, []}
-                    end
+                    %% Destination replies are placement hints. The origin's
+                    %% own certified history alone decides inclusion/exclusion;
+                    %% do not reinterpret a protocol view as a ledger address.
+                    first_admit_relay(Ref, Author, Submission, TraceCarrier, S)
             end
     end.
 
-durable_relay_result(
-  SubmissionId, TargetSlot,
-  #s{store = Store, slot = DurableHead})
-  when TargetSlot =< DurableHead ->
-    case catch quod_ledger_store:read_at(Store, TargetSlot) of
-        {ok, Entry} ->
-            #entry{data = Data} = quod_ledger:entry_view(Entry),
-            case quod_ledger:classify(Data) of
-                {content, Transactions} ->
-                    case payload_has_submission(SubmissionId, Transactions) of
-                        true ->
-                            {final, {ok, TargetSlot}};
-                        false ->
-                            {final, {error, not_in_charge, none}}
-                    end;
-                {controls, _Controls} ->
-                    {final, {error, not_in_charge, none}};
-                noop ->
-                    {final, {error, not_in_charge, none}};
-                invalid ->
-                    unknown
-            end;
-        _ ->
-            unknown
-    end;
-durable_relay_result(_SubmissionId, _TargetSlot, _S) ->
-    pending.
-
-payload_has_submission(SubmissionId, Payload) ->
-    lists:any(
-      fun(#transaction{sig = Signature} = Transaction)
-            when is_binary(Signature) ->
-              signed_submission_id(Transaction) =:= SubmissionId;
-         (_) ->
-              false
-      end, Payload).
-
 first_admit_relay(
-  Ref = #relay_ref{peer = Peer, committee_id = CommitteeId,
+  Ref = #relay_ref{peer = Peer, era = Era,
                    target_slot = TargetSlot},
   Author, Submission, TraceCarrier,
-  S = #s{committee_id = CurrentCommitteeId}) ->
+  S = #s{eng = #eng{era = CurrentEra}}) ->
     case Peer =:= Author andalso
          lists:member(Peer, active_validators(S)) of
         false ->
             reply_now(relay_reply_to(Ref), {error, bad_change}, S);
-        true when CommitteeId =/= CurrentCommitteeId ->
+        true when Era =/= CurrentEra ->
             reply_now(
               relay_reply_to(Ref), {error, not_in_charge, none}, S);
         true ->
             SView = refresh_ingress_view(S),
             case quod_ingress_state:relay_target_open(
-                   {CommitteeId, TargetSlot},
+                   {Era, TargetSlot},
                    SView#s.ingress) of
                 false ->
                     reply_now(
@@ -13685,34 +13134,24 @@ decode_and_accept_verified_relay(
     end.
 
 handle_relay_result(
-  Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result,
+  Peer, SubmissionId, AttemptId, Era, TargetSlot, _Result,
   S = #s{relay_pending = Pending}) ->
     Key = AttemptId,
     case maps:get(Key, Pending, undefined) of
         #relay_pending{target = Peer,
                        submission_id = SubmissionId,
                        attempt_id = AttemptId,
-                       committee_id = CommitteeId,
+                       era = Era,
                        target_slot = TargetSlot} = Relay ->
-            case valid_relay_result(Result, TargetSlot) of
-                false ->
-                    S;
-                true ->
-                    %% A destination result is an authenticated hint, not
-                    %% finality evidence. Keep source ownership until the
-                    %% origin's durable log includes SubmissionId or finalizes
-                    %% TargetSlot without it. This prevents a Byzantine target
-                    %% from fabricating either success or a safe retry.
-                    accept_pending_relay(Key, Relay, S)
-            end;
+            %% Even a claimed success is only a hint. Keep the original
+            %% signed request until local certified history resolves it.
+            accept_pending_relay(Key, Relay, S);
         _ ->
             %% Delayed or foreign replies are never compared with the current
             %% committee view; they simply fail the stored attempt match.
             S
     end.
 
-valid_relay_result({ok, Slot}, TargetSlot) -> Slot =:= TargetSlot;
-valid_relay_result(_Result, _TargetSlot) -> true.
 
 finish_relay(Key, From, Result, S) ->
     reply_waiter(From, Result, remove_pending_relay(Key, S)).
@@ -13721,14 +13160,14 @@ remove_pending_relay(Key, S = #s{relay_pending = Pending}) ->
     S#s{relay_pending = maps:remove(Key, Pending)}.
 
 handle_relay_accepted(
-  Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+  Peer, SubmissionId, AttemptId, Era, TargetSlot,
   S = #s{relay_pending = Pending}) ->
     Key = AttemptId,
     case maps:get(Key, Pending, undefined) of
         #relay_pending{target = Peer,
                        submission_id = SubmissionId,
                        attempt_id = AttemptId,
-                       committee_id = CommitteeId,
+                       era = Era,
                        target_slot = TargetSlot} = Relay ->
             accept_pending_relay(Key, Relay, S);
         _ ->
@@ -13778,23 +13217,23 @@ reply_relay(Ref, Reply, S) ->
 send_relay_result(
   #relay_ref{peer = Peer, submission_id = SubmissionId,
              attempt_id = AttemptId,
-             committee_id = CommitteeId, target_slot = TargetSlot},
+             era = Era, target_slot = TargetSlot},
   Reply, S = #s{ns = Ns}) ->
     send_relay_control(
       Peer,
       quod_relay:encode(
-        Ns, {relay_result, SubmissionId, AttemptId, CommitteeId,
+        Ns, {relay_result, SubmissionId, AttemptId, Era,
              TargetSlot, Reply}), S).
 
 send_relay_accepted(
   #relay_ref{peer = Peer, submission_id = SubmissionId,
              attempt_id = AttemptId,
-             committee_id = CommitteeId, target_slot = TargetSlot},
+             era = Era, target_slot = TargetSlot},
   S = #s{ns = Ns}) ->
     send_relay_control(
       Peer,
       quod_relay:encode(
-        Ns, {relay_accepted, SubmissionId, AttemptId, CommitteeId,
+        Ns, {relay_accepted, SubmissionId, AttemptId, Era,
              TargetSlot}), S).
 
 relay_reply_to(Ref = #relay_ref{}) ->
@@ -13803,56 +13242,17 @@ relay_reply_to(Ref = #relay_ref{}) ->
 prune_relay_results(S = #s{relay_results = Results}) ->
     S#s{relay_results = quod_relay:prune_results(Results)}.
 
-%% Reconcile ownership and final deadlines without re-sending live work. A
-%% disconnected stream is re-opened, and its exact link-up event reconstructs
-%% the retained ordered prefix once.
+%% Custody alone owns placement retirement and original-deadline expiry.
+%% This transport pass only opens the current lane's disconnected stream;
+%% its link-up event reconstructs retained bytes once, in author order.
 reconcile_relays(S = #s{relay_pending = Pending, relay_results = Results}) ->
-    Now = quod_time:mono_ms(),
     S1 = S#s{relay_results = quod_relay:prune_results(Results)},
-    Validators = active_validators(S1),
-    Ordered0 = ordered_relays(Pending),
-    S2 =
-        lists:foldl(
-          fun({_AuthorSeq, Key,
-               #relay_pending{from = From, target = Target,
-                              deadline = Deadline}}, Acc) ->
-                  case {maps:is_key(Key, Acc#s.relay_pending),
-                        lists:member(Target, Validators)} of
-                      {false, _} ->
-                          Acc;
-                      {true, false} ->
-                          case custody_submission_id(From) of
-                              {ok, SubmissionId} ->
-                                  mark_custody_ready(
-                                    SubmissionId, Acc);
-                              error ->
-                                  finish_relay(
-                                    Key, From,
-                                    {error, skipped}, Acc)
-                          end;
-                      {true, true} when Now >= Deadline ->
-                          reply_waiter(
-                            From,
-                            {error, not_in_charge, unavailable},
-                            remove_pending_relay(Key, Acc));
-                      {true, true} ->
-                          Acc
-                  end
-          end, S1, Ordered0),
-    Pending2 = S2#s.relay_pending,
-    Ordered =
-        [Entry
-         || Entry = {_AuthorSeq, AttemptId, _Relay} <- Ordered0,
-            maps:is_key(AttemptId, Pending2)],
-    S3 =
-        case Ordered of
-            [] ->
-                S2;
-            [{_Seq, _AttemptId,
-              #relay_pending{target = Target}} | _] ->
-                ensure_relay_dial(Target, S2)
-        end,
-    prune_relay_links(S3).
+    Connected = case ordered_relays(Pending) of
+        [] -> S1;
+        [{_Seq, _AttemptId, #relay_pending{target = Target}} | _] ->
+            ensure_relay_dial(Target, S1)
+    end,
+    prune_relay_links(Connected).
 
 ordered_relays(Pending) ->
     lists:sort(
@@ -13861,12 +13261,6 @@ ordered_relays(Pending) ->
            Relay = #relay_pending{author_seq = AuthorSeq}} <-
               maps:to_list(Pending)]).
 
-custody_submission_id(
-  #waiter{reply_to = {custody, SubmissionId}})
-  when is_binary(SubmissionId) ->
-    {ok, SubmissionId};
-custody_submission_id(_) ->
-    error.
 
 encode(Ns, Msg) ->
     quod_relay:encode_consensus_frame(Ns, Msg).
@@ -14328,34 +13722,19 @@ close_link_maps(
     ok.
 
 %% Recovery discards volatile inbound attempt state. Reset only the source
-%% streams whose inflight attempt or future-slot terminal cache is invalidated;
+%% streams whose inflight attempt or cached delivery hint is invalidated;
 %% the source then reconnects and reconstructs its complete retained prefix.
 invalidate_relay_generation(
-  NewHead,
-  S = #s{relay_inflight = Inflight,
-         relay_results = Results,
-         relay_inbound_conns = Inbound}) ->
-    {Results1, CachedPeers} =
-        maps:fold(
-          fun(_Key,
-              {#relay_ref{peer = Peer,
-                          target_slot = TargetSlot},
-               _Reply, _Expires},
-              {Keep, Peers}) when TargetSlot > NewHead ->
-                  {Keep, [Peer | Peers]};
-             (Key, Value, {Keep, Peers}) ->
-                  {Keep#{Key => Value}, Peers}
-          end, {#{}, []}, Results),
-    InflightPeers =
-        [Peer
-         || #relay_ref{peer = Peer} <- maps:values(Inflight)],
+  S = #s{relay_inflight = Inflight, relay_results = Results,
+                    relay_inbound_conns = Inbound}) ->
+    %% These are volatile delivery hints, not committed operation outcomes.
+    %% Recovery replaces their owner generation without a view/height test.
+    CachedPeers = [Peer || {#relay_ref{peer = Peer}, _, _} <- maps:values(Results)],
+    InflightPeers = [Peer || #relay_ref{peer = Peer} <- maps:values(Inflight)],
     ResetPeers = lists:usort(InflightPeers ++ CachedPeers),
     ResetLinks = maps:with(ResetPeers, Inbound),
-    S1 =
-        S#s{relay_results = Results1,
-            relay_inbound_conns =
-                maps:without(ResetPeers, Inbound)},
-    retire_inbound_links(ResetLinks, S1).
+    retire_inbound_links(ResetLinks,
+      S#s{relay_results = #{}, relay_inbound_conns = maps:without(ResetPeers, Inbound)}).
 
 %% Post-commit hook for LIVE-entry consumers (the dissemination feed,
 %% metrics, and Explorer): announce `{committed, Ns, Slot, Entry}` on the
@@ -14413,7 +13792,8 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Ori
             try
                 _ = quod_ledger_store:fold(Store, LA + 1, C,
                                            fun(Entry, N) ->
-                                               ok = quod_prolog:apply_entry(Ns, Entry, Origin),
+                                               ok = quod_prolog:apply_entry(Ns, Entry,
+                                                      apply_origin(Origin, quod_ledger:entry_index(Entry))),
                                                N rem ?APPLY_SYNC_EVERY =:= 0
                                                    andalso (ok = quod_prolog:sync(Ns)),
                                                N + 1
@@ -14448,28 +13828,14 @@ maybe_mark_ready(S) -> S.   %% recovery has not reached `ready` yet
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
 %%%===================================================================
 
-%% The highest slot proved by a FINALIZER cert (commit | complaint — a bare support cert only notarizes).
-%% Near finalizers remain in the bounded live pool; a valid far finalizer is reduced to the O(1)
-%% `ahead_finalizer` recovery hint. A single Byzantine node cannot forge either signal. Seeded with `base`
-%% so an empty pool/latch yields `base` (no `lists:max([])` crash). See `behind/1`.
+%% Every verified commit certificate advances this scalar at ingestion.
+%% Complaint certificates prove protocol progress only, never missing material.
+%% No vote/readiness check needs to rescan a growing unfinished carrier chain.
 -spec ahead_cert_ceiling(#eng{}) -> slot().
-ahead_cert_ceiling(#eng{certs = Certs, base = Base,
-                        ahead_finalizer = Ahead}) ->
-    lists:max([Base, Ahead |
-               [Sl || {K, Sl, _BH} <- maps:keys(Certs),
-                      Sl > Base,
-                      (K =:= commit orelse K =:= complaint)]]).
+ahead_cert_ceiling(#eng{base = Base, ahead_finalizer = Ahead}) -> max(Base, Ahead).
 
-%% True iff a finalizer cert proves the committed head is beyond our approved frontier. If the cert names
-%% the very next slot but its block is absent, this node is already behind: it must recover the durable entry
-%% rather than remain vote-capable at a stale frontier. The near-pool part is recomputed on demand; the far
-%% O(1) latch is cleared when the durable base reaches it, on engine reseat, or when its verifying committee
-%% changes. Thus recovery evidence cannot retain unbounded peer objects or survive beyond its authority.
-%% Deliberately compare with `approved`, not mere raw block presence: a block held without its support path is
-%% not a parent this validator may extend. A cert-before-block reorder can therefore revoke voting briefly;
-%% synchronous engine settlement restores it as soon as the authenticated block reaches the tree.
 -spec behind(#s{}) -> boolean().
-behind(#s{eng = Eng, approved = Approved}) -> ahead_cert_ceiling(Eng) > Approved.
+behind(#s{eng = #eng{view = View} = Eng}) -> ahead_cert_ceiling(Eng) >= View.
 
 %% Facts-only participation: a member of the ACTIVE voting set. A recovering member still ingests verified
 %% traffic so its gap detector can learn, but participation alone grants no signing capability.
@@ -14483,7 +13849,7 @@ caught_up(_S) -> false.
 %% Load-robust corroboration. The tip probe (recover_tip) confirms readiness by catching a QUORUM at an
 %% EXACT quiet height — which a busy namespace almost never offers, so under sustained load a restarted
 %% member could chase the moving head indefinitely and never resume voting. But a LIVE finalization —
-%% commit_block/skip_block reached only from an ingested QUORUM cert on the `{log}` stream (never a
+%% commit_finality reached only from an ingested QUORUM cert on the `{log}` stream (never a
 %% catch-up pull, which persists via apply_catchup_window) — already proves two things: this node is
 %% connected to the CURRENT committee, and its just-finalized head is quorum-cert-verified. That is
 %% exactly what `ready` asserts, so an `unconfirmed` member self-corroborates here, complementing (not
@@ -14511,13 +13877,13 @@ may_vote(S) ->
 %% Verdict or DOWN releases ownership. The original allowance bounds only this
 %% preference; existing ticks handle expiry without granting voting readiness.
 should_sync(#s{sync = unconfirmed}) -> true;
-should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = Eng} = S) ->
+should_sync(#s{sync = ready, history_head = Token, eng = #eng{view = Current} = Eng} = S) ->
     case ahead_cert_ceiling(Eng) of
-        Ahead when Ahead =< Approved -> false;
-        Next when Next =:= Approved + 1 ->
+        Ahead when Ahead < Current -> false;
+        Next when Next =:= Current ->
             Round = round_state(Next, S),
             case {Round#round.candidate, Round#round.validating, dtx_validation_owner(Round)} of
-                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, _Owner, DeadlineMs}} ->
+                {{Hash, #block{slot = Next}}, Hash, {Token, _Owner, DeadlineMs}} ->
                     not (quod_time:mono_ms() < DeadlineMs andalso
                          persisted_cert(support, Next, Hash, Eng) =/= none andalso
                          persisted_cert(commit, Next, Hash, Eng) =/= none);
@@ -14533,7 +13899,9 @@ syncing(#s{sync = Sy}) -> Sy =/= ready.
 %% Catch-up ingestion is capability-based: one monitored recovery worker, or the feed while this node is a
 %% ready observer. There is no state in which both sources are authorized.
 may_sink({recovery, Pid}, #s{sync = {pulling, Pid}}) -> true;
-may_sink({feed, Mode}, #s{sync = ready} = S) when Mode =:= live; Mode =:= replay ->
+may_sink({feed, replay}, #s{sync = ready} = S) -> not is_participant(S);
+may_sink({feed, {live, First, Last}}, #s{sync = ready} = S)
+  when is_integer(First), First > 0, is_integer(Last), Last >= First ->
     not is_participant(S);
 may_sink(_Source, _S) -> false.
 
@@ -14543,21 +13911,22 @@ may_sink(_Source, _S) -> false.
 %% progress, never authority to vote.
 start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH}) ->
     Statem = self(),
+    StagePath = quod_ledger_store:staging_path(S#s.store),
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             _ = quod_process:kill_when_owner_dies(Statem, self()),
             Owner = self(),
-            Sink = fun(Es, Projection1, Delta) ->
+            Sink = fun(Group) ->
                        gen_statem:call(
                          Statem,
-                         {sink_catchup, {recovery, Owner}, Es, Projection1, Delta},
+                         {sink_catchup, {recovery, Owner}, Group},
                          ?SINK_MS)
                    end,
             Result = run_recovery(
-                       Ns, GH, Statem, Self, Sink),
+                       Ns, GH, Statem, Self, #{install => Sink, stage_path => StagePath}),
             gen_statem:cast(Statem, {sync_done, Owner, Result})
         end),
-    S#s{sync = {pulling, Pid}}.
+    S#s{sync = {pulling, Pid}, sync_stage = StagePath}.
 
 %% Fellow current members minus self, shuffled before each probe round. A behind member normally holds
 %% their authenticated endpoints from live traffic; a fresh observer with no committee instead reaches
@@ -14631,7 +14000,7 @@ warm_contact_hints(Ns, Height) ->
     Parent = self(),
     Ref = make_ref(),
     _ = [spawn(fun() ->
-                   _ = catch quod_catchup:pull(Ns, Height + 1, Height + 1, Contact),
+                   _ = catch probe_history_tip(Ns, Height, Contact),
                    Parent ! {recovery_hint_warm, Ref}
                end) || Contact <- Contacts],
     wait_hint_warms(Ref, length(Contacts), quod_time:mono_ms() + ?TIP_PROBE_MS).
@@ -14713,8 +14082,7 @@ probe_tips(Ns, Height, Peers, Needed) ->
     Parent = self(),
     Ref = make_ref(),
     _ = [spawn(fun() ->
-                   Result = try quod_catchup:pull(Ns, Height + 1,
-                                                  Height + ?SYNC_WINDOW, Peer)
+                   Result = try probe_history_tip(Ns, Height, Peer)
                             catch C:R -> {error, {C, R}}
                             end,
                    Parent ! {tip_probe, Ref, Peer, Result}
@@ -14753,11 +14121,25 @@ tip_quorum(Committee, Self, Peers) ->
     length(Confirmed) >= quorum(length(Committee)).
 
 catch_up_from(Ns, GH, View = #{slot := Height, projection := Projection},
-              Contact, Sink) ->
-    Fetch = fun(F) -> quod_catchup:pull(Ns, F, F + ?SYNC_WINDOW - 1, Contact) end,
-    quod_catchup:catch_up(
-      Ns, GH, Fetch, Sink, Height + 1, Projection,
-      #{history_view => View}).
+              Contact, #{install := Sink, stage_path := Path}) ->
+    Fetch = fun(Query, Deadline, Consume) ->
+        quod_catchup:pull(Ns, Query, Contact, Deadline, Consume)
+    end,
+    quod_catchup:catch_up(Ns, GH, Fetch, Sink, Height + 1, Projection,
+                          #{history_view => View, stage_path => Path}).
+
+%% A tip observation nominates a source; only the full verified group path can
+%% import its contents. The short-lived probe borrower closes any unfinished
+%% remote range on exit, rather than retaining a proof it never consumes.
+probe_history_tip(Ns, Height, Contact) ->
+    Deadline = quod_time:mono_ms() + ?TIP_PROBE_MS,
+    Observe = fun(Parts, _H, _Continuation) ->
+        {ok, case Parts of [] -> []; _ -> [ahead] end}
+    end,
+    case quod_catchup:pull(Ns, {range, Height + 1, Height + 1}, Contact, Deadline, Observe) of
+        {ok, Hint, H, _} -> {ok, Hint, H};
+        {error, _} = Error -> Error
+    end.
 
 %% The single recovery armer runs at the owner reconciliation boundary. A
 %% verified finalizer already proves a gap; no timer needs to confirm it again.
@@ -14779,7 +14161,12 @@ pace_tick(S = #s{sync_arm = {Cool, Int}}) ->
 arm_ready(#s{sync_arm = {Cool, _Int}}) -> Cool =:= 0.
 
 recovery_failed(S) ->
-    S#s{sync = unconfirmed, sync_arm = backoff(S#s.sync_arm)}.
+    (cleanup_sync_stage(S))#s{sync = unconfirmed, sync_arm = backoff(S#s.sync_arm)}.
+
+cleanup_sync_stage(S = #s{sync_stage = none}) -> S;
+cleanup_sync_stage(S = #s{sync_stage = Path}) ->
+    _ = file:delete(Path),
+    S#s{sync_stage = none}.
 
 %% Grow the failure backoff: double the interval (floored at ?SYNC_BACKOFF_MIN, capped at ?SYNC_BACKOFF_MAX
 %% ticks) and set the cooldown to a ±20%-jittered copy after a failed attempt.
@@ -14804,10 +14191,12 @@ sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 %% live bytes — so a post-append failure (a store read-back error in the replay) crashes the statem
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
-apply_catchup_window(_Source, [], _Projection, _Delta, S) -> {S, ok};
 apply_catchup_window(
-  Source, Es, Projection, Delta,
-  S = #s{store = Store}) ->
+  _Source, #{finality := #{complete_group := false}}, S) ->
+    {S, {error, incomplete_material_group}};
+apply_catchup_window(
+  Source, #{entries := [_ | _] = Es, projection := Projection, delta := Delta,
+            proof := Proof, finality := Summary}, S = #s{store = Store}) ->
     %% The verifier's projection is bound to its exact starting snapshot. If
     %% live consensus advanced while it fetched, reject the whole stale window
     %% instead of detaching that projection by trimming an already-durable
@@ -14818,7 +14207,12 @@ apply_catchup_window(
         false ->
             {S, {error, stale_window}};
         true ->
-    case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
+    Floors0 = case Summary of
+        genesis -> #{};
+        #{head := {Era, _, _}} -> #{Era => 0}
+    end,
+    {ArchiveTip, Floors} = advance_archive_custody(Summary, Projection, S#s.archive_tip, Floors0),
+    case try quod_ledger_store:append(Store, {Proof, Es}) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
             %% Install before routes, owner reconciliation, Prolog application,
@@ -14836,21 +14230,16 @@ apply_catchup_window(
             %% cancels its named watchdog before voting resumes.
             Recovered0 =
                 install_projection(
-                  Projection1, S#s{store = Store1, slot = Slot}),
-            Recovered1 = settle_recovery_dtx(Es, Recovered0),
-            Recovered2 =
-                settle_recovery_custody(Slot, Included, Recovered1),
-            %% Live commit and catch-up retire effect signing custody through
-            %% the same semantic-TxId path.  Otherwise a later restart can
-            %% restore and re-drive an effect transaction already present in
-            %% this certified window.
-            Recovered3 = retire_committed_transaction_custody(
-                           entry_effect_transaction_ids(Es), Recovered2),
-            Recovered =
-                settle_recovery_relays(Slot, Included, Recovered3),
+                  Projection1, S#s{store = Store1, slot = Slot,
+                                   archive_tip = ArchiveTip, archived_protocol = Floors,
+                                   archive_certificate = retained_archive_certificate(
+                                       Es, S#s.archive_certificate)}),
+            %% Live commit and catch-up share exact operation/transaction
+            %% resolution. Protocol placement is never compared with height.
+            Recovered = settle_recovery_submissions(Es, Recovered0),
             {Reconciled, PendingTransition} =
                 reconcile_signing_state(Recovered),
-            S1 = reseat_engine(Slot, Reconciled, Included),
+            S1 = reseat_engine(Reconciled, Included),
             S2 = catchup_membership_transition(S, S1),
             S3 = apply_committed(S2, catchup_origin(Source)),
             S4 = finish_pending_votes_reconciliation(
@@ -14860,8 +14249,12 @@ apply_catchup_window(
     end
     end.
 
-catchup_origin({feed, live}) -> live;
-catchup_origin(_)            -> replay.
+catchup_origin({feed, {live, First, Last}}) -> {live, First, Last};
+catchup_origin(_) -> replay.
+
+apply_origin({live, First, Last}, Height) when Height >= First, Height =< Last -> live;
+apply_origin({live, _, _}, _) -> replay;
+apply_origin(Origin, _) -> Origin.
 
 committed_submission_slots(Entries) ->
     lists:foldl(
@@ -14877,84 +14270,18 @@ committed_submission_slots(Entries) ->
                                 Acc
                         end, Acc0, Transactions);
                   {controls, _Controls} -> Acc0;
-                  noop -> Acc0;
+                  empty -> Acc0;
                   invalid -> Acc0
               end
       end, #{}, Entries).
 
-entry_effect_transaction_ids(Entries) ->
+settle_recovery_submissions(Entries, S) ->
     lists:foldl(
       fun(Entry, Acc) ->
-              #entry{data = Data} = quod_ledger:entry_view(Entry),
-              maps:merge(Acc, payload_transaction_ids(Data))
-      end, #{}, Entries).
-
-settle_recovery_dtx(Entries, S) ->
-    lists:foldl(
-      fun(Entry, Acc) ->
-              #entry{data = Payload} = quod_ledger:entry_view(Entry),
-              resolve_committed_dtx(Entry, Payload, Acc)
+              #entry{index = Height, data = Payload} = quod_ledger:entry_view(Entry),
+              resolve_committed_dtx(Entry, Payload,
+                resolve_committed_submissions(Payload, Height, Acc))
       end, S, Entries).
-
-settle_recovery_relays(
-  NewHead, Included, S = #s{relay_pending = Pending}) ->
-    maps:fold(
-      fun(Key,
-          #relay_pending{from = From, submission_id = SubmissionId,
-                         target_slot = TargetSlot},
-          Acc) ->
-              case maps:find(SubmissionId, Included) of
-                  {ok, CommitSlot} ->
-                      finish_relay(Key, From, {ok, CommitSlot}, Acc);
-                  error when TargetSlot =< NewHead ->
-                      finish_relay(Key, From, {error, skipped}, Acc);
-                  error ->
-                      Acc
-              end
-      end, S, Pending).
-
-settle_recovery_custody(
-  _NewHead, _Included, S = #s{custody = Custody})
-  when map_size(Custody) =:= 0 ->
-    S;
-settle_recovery_custody(NewHead, Included, S) ->
-    maps:fold(
-      fun(SubmissionId, #custody{placement = Placement}, Acc) ->
-              case maps:find(SubmissionId, Included) of
-                  {ok, CommitSlot} ->
-                      complete_custody(
-                        SubmissionId, {ok, CommitSlot}, Acc);
-                  error ->
-                      case Placement of
-                          ready ->
-                              Acc;
-                          {relay, _AttemptId, _Target,
-                           TargetSlot, _CommitteeId}
-                            when TargetSlot =< NewHead ->
-                              mark_custody_ready(
-                                SubmissionId, Acc);
-                          {relay, _AttemptId, _Target,
-                           _TargetSlot, _CommitteeId} ->
-                              %% The recovered prefix has not classified this
-                              %% remote attempt. Keep it active and ambiguous.
-                              Acc;
-                          {local, TargetSlot, _CommitteeId}
-                            when TargetSlot =< NewHead ->
-                              mark_custody_ready(
-                                SubmissionId, Acc);
-                          {local, _TargetSlot, _CommitteeId} ->
-                              %% `nack_inflight/3` still owns the distinction
-                              %% between an unpublished collection (safe to
-                              %% place again) and a published local proposal
-                              %% above the recovered head (ambiguous).
-                              Acc;
-                          dormant ->
-                              Acc;
-                          {cancelling, _Pid, _Monitor} ->
-                              Acc
-                      end
-              end
-      end, S, S#s.custody).
 
 %% The verified post-window projection already owns the bounded current
 %% committee routes.  Fill resolver voids from that authority after every
@@ -14984,48 +14311,42 @@ catchup_membership_transition(S0, S1) ->
         _ -> S1
     end.
 
-%% Re-seat the engine to `NewHead` after a catch-up window (or a promotion) advanced the committed height: a
-%% fresh engine over the committee AS-OF the new head, PLUS a reset of every volatile consensus window.
-%% Those slots are now decided history, so a lingering local proposal/timer would wedge the leader or
-%% redrive a `=< base` slot; parked appends for discarded slots are nacked so the caller
-%% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), replacing the former
-%% separate catch-up and promotion re-arms with one `eng_new/3` path. At
-%% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
-%% member gap-filling — the caller (`sink_catchup`) passes this through `keep_progress/3` to cancel a stale
-%% head watchdog when `head_progress` is cleared here (a no-op where it is already idle).
+%% Recovery replaces the volatile window from the installed archive's protocol
+%% root and historical committee. Resolve included requests first, retain
+%% ordinary signed custody, and restore durable vote latches before resuming.
+%% The caller cancels the discarded watchdog through keep_progress/3.
 -ifdef(TEST).
-reseat_engine(NewHead, S) ->
-    reseat_engine(NewHead, S, #{}).
+reseat_engine(S) ->
+    reseat_engine(S, #{}).
 -endif.
 
-reseat_engine(NewHead, S, Included) ->
-    S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
+reseat_engine(S, Included) ->
+    S1 = prune_consensus_links(nack_inflight(S, Included)),
     maps:foreach(fun(_, Round) -> release_validation_monitor(Round) end, S1#s.rounds),
     restore_signing_engine(
       S1#s{eng             = eng_new(S1#s.consensus_domain,
-                                      active_validators(S1), NewHead),
-            approved        = NewHead,
-            commit_buf      = #{},
+                                      active_validators(S1), S1#s.archive_tip),
             block_requests  = #{},
             requested_slot  = none,
             head_progress   = idle,
-            rounds          = signing_rounds(S1#s.signing_journal)}).
+            rounds          = signing_rounds(S1#s.signing_journal,
+                                element(1, element(1, S1#s.archive_tip)))}).
 
 %% A recovery re-seat intentionally discards the whole volatile consensus window.
 %% Its fresh engine cannot safely retain proposals or votes from the old base.
-nack_inflight(S0 = #s{local_proposals = Local}, NewHead, Included) ->
+nack_inflight(S0 = #s{local_proposals = Local}, Included) ->
     S1 =
         maps:fold(
           fun(Slot, #local_proposal{waiters = Waiters}, Acc) ->
                   reply_recovery_waiters(
-                    Waiters, {proposal, Slot}, NewHead, Included, Acc)
+                    Waiters, {proposal, (S0#s.eng)#eng.era, Slot}, Included, Acc)
           end, S0, Local),
     S2 =
         case S1#s.collecting of
             #batch{items_rev = Items} ->
                 reply_recovery_waiters(
                   [Waiter || {Waiter, _Change} <- Items],
-                  unpublished, NewHead, Included, S1);
+                  unpublished, Included, S1);
             none ->
                 S1
         end,
@@ -15034,67 +14355,70 @@ nack_inflight(S0 = #s{local_proposals = Local}, NewHead, Included) ->
     S3 =
         lists:foldl(
           fun(Item, Acc) ->
-                  {_Context, Waiter, _Request, _Anchor} =
-                      quod_ingress_state:item(Item),
-                  reply_recovery_waiter(
-                    Waiter, unpublished, NewHead, Included, Acc)
+                  case quod_ingress_state:item(Item) of
+                      {local, Waiter, Request, Anchor} ->
+                          %% No signature or placement exists yet. Preserve the
+                          %% same proof and arrival deadline; drain revalidates
+                          %% it against the installed state before signing.
+                          {ok, _, Ingress} = quod_ingress_state:enqueue(
+                              local, Waiter, Request, Anchor, Acc#s.ingress),
+                          Acc#s{ingress = Ingress};
+                      {_Origin, Waiter, _Request, _Anchor} ->
+                          reply_recovery_waiter(
+                            Waiter, unpublished, Included, Acc)
+                  end
           end, S2#s{ingress = ClearedIngress}, IngressItems),
-    %% Recovery discards accepted inbound relay state and future-slot terminal
-    %% cache entries. Reset each affected source stream at the same boundary,
+    %% Recovery discards accepted inbound relay state and all cached delivery
+    %% hints. Reset each affected source stream at the same boundary,
     %% so it reconnects and replays its full retained author prefix before a
     %% later submission can enter this fresh incarnation alone.
-    S4 = invalidate_relay_generation(NewHead, S3),
+    S4 = invalidate_relay_generation(S3),
     S4#s{local_proposals = #{}, collecting = none,
          relay_inflight = #{}}.
 
-reply_recovery_waiters(Waiters, Context, NewHead, Included, S) ->
+reply_recovery_waiters(Waiters, Context, Included, S) ->
     lists:foldl(
       fun(Waiter, Acc) ->
               reply_recovery_waiter(
-                Waiter, Context, NewHead, Included, Acc)
+                Waiter, Context, Included, Acc)
       end, S, Waiters).
 
 reply_recovery_waiter(
   Waiter = #waiter{submission_id = SubmissionId},
-  Context, NewHead, Included, S)
+  Context, Included, S)
   when is_binary(SubmissionId) ->
     case maps:find(SubmissionId, Included) of
         {ok, CommitSlot} ->
             reply_waiter(Waiter, {ok, CommitSlot}, S);
         error ->
             reply_recovery_exclusion(
-              Waiter, Context, NewHead, S)
+              Waiter, Context, S)
     end;
-reply_recovery_waiter(Waiter, Context, NewHead, _Included, S) ->
-    reply_recovery_exclusion(Waiter, Context, NewHead, S).
+reply_recovery_waiter(Waiter, Context, _Included, S) ->
+    reply_recovery_exclusion(Waiter, Context, S).
 
 reply_recovery_exclusion(
-  Waiter = #waiter{
-             reply_to =
-                 {relay, #relay_ref{target_slot = TargetSlot}}},
-  _Context, NewHead, S) when TargetSlot > NewHead ->
-    %% This attempt may still finalize in the live network. Forget volatile
-    %% ownership and let the immutable source redrive reconstruct it; emitting
-    %% a retryable result here could duplicate a write after this node restarts
-    %% and loses that non-durable answer.
-    finish_waiter_trace(
-      Waiter, {error, not_in_charge, unavailable}),
-    S;
-reply_recovery_exclusion(
-  #waiter{reply_to = {custody, SubmissionId}},
-  unpublished, _NewHead, S) ->
-    %% Collection never published a block or left this process, so reseating
-    %% proves there is no surviving placement to duplicate.
+  #waiter{reply_to = {custody, SubmissionId}}, _Context, S) ->
+    %% Recovery discards the old placement, not the signed request or its
+    %% caller. The existing lane reconciler owns its next eligible placement.
     mark_custody_ready(SubmissionId, S);
-reply_recovery_exclusion(
-  Waiter = #waiter{}, {proposal, Slot}, NewHead, S)
-  when Slot > NewHead ->
-    %% A sealed local proposal beyond the recovered durable head may still win.
-    %% Surface ambiguity, never a retry instruction.
-    reply_waiter(
-      Waiter, {error, not_in_charge, unavailable}, S);
-reply_recovery_exclusion(Waiter, _Context, _NewHead, S) ->
+reply_recovery_exclusion(Waiter = #waiter{reply_to = {relay, Ref}}, _Context, S) ->
+    reply_recovery_position(Waiter, Ref#relay_ref.era, Ref#relay_ref.target_slot, S);
+reply_recovery_exclusion(Waiter, {proposal, Era, View}, S) ->
+    reply_recovery_position(Waiter, Era, View, S);
+reply_recovery_exclusion(Waiter, unpublished, S) ->
     reply_waiter(Waiter, {error, skipped}, S).
+
+reply_recovery_position(Waiter, Era, View, S = #s{archive_tip = {Root, _}, eng = Eng}) ->
+    Excluded = case Root of
+        {Era, ArchivedView, _} -> View =< ArchivedView;
+        {NextEra, 0, _} -> Era =:= Eng#eng.era andalso NextEra =/= Era;
+        _ -> false
+    end,
+    %% Only the fully archived protocol prefix (or its terminal-M seal) can
+    %% exclude a placement. Material height is never used for this decision.
+    Reply = case Excluded of true -> {error, skipped}; false -> {error, not_in_charge, unavailable} end,
+    reply_waiter(Waiter, Reply, S).
 
 %% The target identity every ordinary transaction signature binds. The
 %% admission id changes only when this exact author leaves and later rejoins;
@@ -15107,14 +14431,6 @@ binding(#s{author_admissions = Admissions} = S, Author) ->
     case maps:get(Author, Admissions, undefined) of
         <<_:256>> = Admission -> {ok, {Ns, Anchor, Admission}};
         undefined -> error
-    end.
-
-transaction_submission(S, #transaction{author = Author} = Change) ->
-    case binding(S, Author) of
-        {ok, TargetBinding} ->
-            quod_transaction:submission(TargetBinding, Change);
-        error ->
-            {error, unknown_author}
     end.
 
 decode_verified_submission(S, Author, Submission) ->
@@ -15159,7 +14475,9 @@ block_from_entry(Entry) -> quod_ledger:block_from_entry(Entry).
           timestamp := non_neg_integer(),
           dtx := undefined | quod_atomic:projection(),
           dtx_lanes := #{{binary(), node_id()} => non_neg_integer()},
-          history_head := none | {slot(), <<_:256>>},
+          history_head := none | {log_index(), <<_:256>>},
+          identity := none | {binary(), <<_:256>>},
+          protocol_root := none | protocol_ref(),
           %% Ephemeral owner capture only; never persisted as projection data.
           history_index => quod_dtx_phase_index:index()}.
 
@@ -15171,7 +14489,7 @@ history_projection() ->
 -doc "Bind an empty history projection to one exact ontology founding.".
 -spec history_projection({binary(), <<_:256>>}) -> history_projection().
 history_projection({Ns, <<_:256>>} = Target) when is_binary(Ns) ->
-    (history_projection())#{dtx := quod_atomic:initial_projection(Target, 0)}.
+    (history_projection())#{identity := Target, dtx := quod_atomic:initial_projection(Target, 0)}.
 
 -doc "Build an explicit authoritative history projection from persisted ordering facts.".
 -spec history_projection([node_id()], binary() | undefined,
@@ -15184,10 +14502,10 @@ history_projection(Committee, CommitteeId, Admissions, Sequences, Timestamp) ->
       committee_views => [],
       admissions => Admissions, sequences => Sequences,
       timestamp => Timestamp, dtx => undefined, dtx_lanes => #{},
-      history_head => none}.
+      history_head => none, identity => none, protocol_root => none}.
 
 state_projection(
-  #s{validators = Committee, validator_routes = ValidatorRoutes,
+  #s{ns = Ns, genesis_hash = Anchor, protocol_root = ProtocolRoot, validators = Committee, validator_routes = ValidatorRoutes,
      committee_id = CommitteeId,
      committee_start = CommitteeStart,
      author_admissions = Admissions, author_seqs = Sequences,
@@ -15197,7 +14515,7 @@ state_projection(
        Committee, CommitteeId, Admissions, Sequences, Timestamp))#{
       validator_routes := ValidatorRoutes,
       dtx := Dtx, dtx_lanes := DtxLanes,
-      history_head := HistoryHead},
+      history_head := HistoryHead, identity := {Ns, Anchor}, protocol_root := ProtocolRoot},
     seed_current_committee_view(Projection, CommitteeStart).
 
 install_projection(
@@ -15206,7 +14524,7 @@ install_projection(
     committee_views := CommitteeViews,
     admissions := Admissions, sequences := Sequences,
     timestamp := Timestamp, dtx := Dtx, dtx_lanes := DtxLanes,
-    history_head := HistoryHead},
+    history_head := HistoryHead, protocol_root := ProtocolRoot},
   S = #s{self = Self, author_admissions = OldAdmissions,
          next_author_seq = Next}) ->
     %% A worker captures ledger state, not ownership of local apply progress.
@@ -15231,7 +14549,7 @@ install_projection(
              author_admissions = Admissions, author_seqs = Sequences,
              last_ts = Timestamp, dtx_projection = InstalledDtx,
              dtx_lanes = DtxLanes,
-             history_head = HistoryHead,
+             history_head = HistoryHead, protocol_root = ProtocolRoot,
              next_author_seq = Next1},
     S2 = retire_changed_admissions(OldAdmissions, Admissions, S1),
     refresh_proof_gate(S, S2).
@@ -15360,7 +14678,7 @@ log_projection(Ns, Entries, Seed) ->
                 Seed, Entries).
 -endif.
 
--doc "Advance the content/noop projection by one already-verified committed entry.".
+-doc "Advance the material content projection by one already-verified committed entry.".
 %% Content-only blocks touch no
 %% admission map and perform only the bounded sequence fold; membership blocks
 %% additionally retain the intersection, mint IDs for newly admitted keys and
@@ -15373,53 +14691,42 @@ history_advance(
 
 history_advance_known(
   Ns, Entry, HeadHash, Projection) ->
-    #entry{index = Slot} = quod_ledger:entry_view(Entry),
-    Projection1 = history_advance_payload(Ns, Entry, Projection),
-    Projection1#{history_head => {Slot, HeadHash}}.
+    history_record_head(Ns, Entry, HeadHash, history_advance_payload(Ns, Entry, Projection)).
+
+%% The same material reducer derives the next protocol root for live apply,
+%% replay and captured history. A membership transaction ends its era by shape,
+%% even when it reasserts the same committee; admission/key rotation still
+%% follows the existing membership reducer's actual set change.
+history_record_head(Ns, Entry, HeadHash, Projection) ->
+    #entry{index = Height, data = Data} = quod_ledger:entry_view(Entry),
+    {ok, B} = block_from_entry(Entry),
+    {Identity, Root} = case B#block.era of
+        genesis ->
+            Founding = {Ns, HeadHash},
+            {Founding, {quod_ledger:initial_era(Founding), 0, HeadHash}};
+        Era ->
+            Bound = maps:get(identity, Projection),
+            Ref = case committee_delta(Data) of
+                {[], []} -> quod_ledger:block_ref(B);
+                _ -> {quod_ledger:next_era(Bound, Era, HeadHash), 0, HeadHash}
+            end,
+            {Bound, Ref}
+    end,
+    Projection#{history_head := {Height, HeadHash}, identity := Identity, protocol_root := Root}.
 
 history_advance_payload(
   Ns, Entry, Projection) ->
-    #entry{data = Data, timestamp = T} = quod_ledger:entry_view(Entry),
+    #entry{data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
-        {content, _Transactions} ->
-            history_advance_content(Ns, Entry, Projection);
-        %% Control history must pass through the phase-aware /4 or /5 APIs;
-        %% this content-only seam fails loudly if a caller bypasses them.
+        {content, _Transactions} -> history_advance_content(Ns, Entry, Projection);
+        %% Control replay belongs to the phase-aware verified group preview.
         {controls, _Controls} -> error(dtx_phase_history_required);
-        noop ->
-            Projection#{timestamp => max(T, maps:get(timestamp, Projection))};
         invalid ->
             error(invalid_committed_history)
     end.
 
--doc "Return the canonical identity of an installed parent, including certified skips.".
-entry_history_hash(Entry) ->
-    entry_history_hash_view(Entry, quod_ledger:entry_view(Entry)).
-
-entry_history_hash_view(_Entry, #entry{index = Slot, data = noop, block_bytes = none}) ->
-    %% A complaint skip's identity is the statement every validator signed,
-    %% not the incidental quorum subset a replica first retained.  The target
-    %% ontology identity accompanies every use of history_head, just as it
-    %% accompanies an ordinary block hash; within that chain the slot uniquely
-    %% identifies this certified no-op transition.
-    crypto:hash(
-      sha256,
-      <<?SKIPPED_SLOT_TAG/binary, 0, ?SKIPPED_SLOT_VERSION:8,
-        Slot:64/unsigned-big>>);
-entry_history_hash_view(Entry, #entry{}) ->
-    case block_from_entry(Entry) of
-        {ok, Block} -> block_hash(Block);
-        error -> error(uncanonical_entry)
-    end.
-
--doc "Validate and reduce one certified committed entry with exact DTX history.".
--spec history_advance({binary(), <<_:256>>}, quod_ledger:entry_artifact(), history_projection(),
-                      quod_dtx_phase_index:index()) ->
-          {ok, history_projection(), list()} |
-          {error, {invalid_transaction, pos_integer()} |
-                  {unavailable, network_identity, term()}}.
-history_advance(Binding, Entry, Projection, PhaseIndex) ->
-    history_validate_advance(Binding, Entry, Projection, PhaseIndex).
+-doc "Return the exact canonical block identity of an installed material entry.".
+entry_history_hash(Entry) -> entry_block_hash(Entry).
 
 history_advance_content(
   Ns, Entry,
@@ -15560,16 +14867,6 @@ checked_log_projection_step(
         {error, _} -> error({invalid_transaction_history, I})
     end.
 
-checked_log_projection_step(
-  Binding, Entry, Projection, PhaseIndex) ->
-    #entry{index = I} = quod_ledger:entry_view(Entry),
-    case history_validate_advance(Binding, Entry, Projection, PhaseIndex) of
-        {ok, Projection1, _Effects} -> Projection1;
-        {error, {unavailable, network_identity, Reason}} ->
-            error({history_dependency_unavailable, network_identity, Reason});
-        {error, _} -> error({invalid_transaction_history, I})
-    end.
-
 -doc "Validate one historical entry and advance the projection atomically on success.".
 -spec history_validate_advance({binary(), binary()}, quod_ledger:entry_artifact(),
                                history_projection()) ->
@@ -15614,8 +14911,7 @@ history_entry_verdict(
             history_content_verdict(
               Target, I, Payload, Timestamp,
               Committee, Admissions, IdMode);
-        noop ->
-            valid;
+        empty -> invalid;
         {controls, _Controls} ->
             invalid;
         invalid ->
@@ -15628,29 +14924,6 @@ history_entry_verdict(Binding, I, Data, Timestamp, Projection, IdMode) ->
         false -> invalid
     end.
 
--doc "Verify local finality, then advance content or exact DTX history.".
--spec history_validate_advance({binary(), binary()}, quod_ledger:entry_artifact(),
-                               history_projection(),
-                               quod_dtx_phase_index:index()) ->
-        {ok, history_projection(), list()} |
-        {error, {invalid_transaction, pos_integer()} |
-                {unavailable, network_identity, term()}}.
-history_validate_advance(
-  Binding, Entry, Projection, PhaseIndex) ->
-    #entry{index = I} = quod_ledger:entry_view(Entry),
-    case history_projection_before_entry(I, Projection) of
-        {ok, Projection1} ->
-            case quod_catchup:verify_entry(Binding, Entry, Projection1) of
-                ok ->
-                    history_advance_verified(
-                      Binding, Entry, Projection1, PhaseIndex);
-                {error, _} ->
-                    {error, {invalid_transaction, I}}
-            end;
-        error ->
-            {error, {invalid_transaction, I}}
-    end.
-
 %% Replay never infers an apply acknowledgement from a later slot.  The
 %% committed reducer owns exact per-group acknowledgements after effects apply;
 %% this history seam only validates the projection it was given.
@@ -15658,63 +14931,6 @@ history_projection_before_entry(_NextSlot, #{dtx := _Dtx} = Projection) ->
     {ok, Projection};
 history_projection_before_entry(_NextSlot, _Projection) ->
     error.
-
-%% Live finality already supplies a sanitized local commit certificate. Keeping
-%% the semantic reducer separate avoids repeating quorum cryptography on the
-%% commit hot path; startup/catch-up enter only through the public checked API.
-history_advance_verified(
-  Binding, Entry, Projection, PhaseIndex) ->
-    #entry{index = I, data = Data} = quod_ledger:entry_view(Entry),
-    case quod_ledger:classify(Data) of
-        {content, _Transactions} ->
-            case history_validate_content(Binding, Entry, Projection) of
-                {ok, Projection1} -> {ok, Projection1, []};
-                {error, _} = Error -> Error
-            end;
-        {controls, Classified} ->
-            history_advance_dtx_batch(
-              Binding, Entry,
-              [Control || {_Kind, Control} <- Classified],
-              Projection, PhaseIndex);
-        noop ->
-            case history_validate_content(Binding, Entry, Projection) of
-                {ok, Projection1} -> {ok, Projection1, []};
-                {error, _} = Error -> Error
-            end;
-        invalid ->
-            {error, {invalid_transaction, I}}
-    end.
-
-history_advance_dtx_batch(
-  Binding, Entry, Controls,
-  #{dtx := Dtx0} = Projection, PhaseIndex) ->
-    #entry{index = I} = quod_ledger:entry_view(Entry),
-    case valid_dtx_history_requests(Binding, Entry, Controls) of
-        valid ->
-            case validated_dtx_entries(
-                   Binding, Entry, Controls, Projection) of
-                {ok, ControlRefs, LaneSequences} ->
-                    case quod_dtx_phase_index:apply_batch(
-                           PhaseIndex, ControlRefs, Dtx0) of
-                        {ok, _Dtx1, Items} ->
-                            Projection1 = project_dtx_batch_items(
-                                            Items, LaneSequences,
-                                            Entry, Projection),
-                            {ok,
-                             Projection1#{history_head :=
-                                 {I, entry_history_hash(Entry)}},
-                             dtx_batch_effects(Items)};
-                        {error, _} ->
-                            {error, {invalid_transaction, I}}
-                    end;
-                error ->
-                    {error, {invalid_transaction, I}}
-            end;
-        {unavailable, network_identity, _Reason} = Unavailable ->
-            {error, Unavailable};
-        invalid ->
-            {error, {invalid_transaction, I}}
-    end.
 
 valid_dtx_history_requests(_Binding, _Entry, []) -> valid;
 valid_dtx_history_requests(Binding, Entry, [Control | Rest]) ->
@@ -15768,42 +14984,20 @@ project_dtx_transition(
                 dtx_lanes := Lanes0#{Lane => Sequence},
                 timestamp := max(Timestamp, Timestamp0)}.
 
--doc "Preview one catch-up entry against an uncommitted phase-index delta.".
--spec history_preview_advance(
+-doc "Preview semantic changes after the history verifier authenticated this entry's finality.".
+-spec history_preview_verified(
         {binary(), binary()}, quod_ledger:entry_artifact(), history_projection(),
         quod_dtx_phase_index:index(), quod_dtx_phase_index:delta()) ->
           {ok, history_projection(), list(), quod_dtx_phase_index:delta()} |
-          {error, {invalid_transaction, pos_integer()} |
-                  {unavailable, network_identity, term()}}.
-history_preview_advance(
-  Binding, Entry,
-  Projection, PhaseIndex, Delta0) ->
+          {error, term()}.
+history_preview_verified(Binding, Entry, Projection, PhaseIndex, Delta) ->
     #entry{index = I, data = Data} = quod_ledger:entry_view(Entry),
-    case history_projection_before_entry(I, Projection) of
-        {ok, Projection1} ->
-            case quod_catchup:verify_entry(Binding, Entry, Projection1) of
-                ok ->
-                    case quod_ledger:classify(Data) of
-                        {content, _} ->
-                            preview_content(
-                              Binding, Entry, Projection1, Delta0);
-                        noop ->
-                            preview_content(
-                              Binding, Entry, Projection1, Delta0);
-                        {controls, Classified} ->
-                            preview_dtx_batch(
-                              Binding, Entry,
-                              [Control || {_Kind, Control} <- Classified],
-                              Projection1,
-                              PhaseIndex, Delta0);
-                        invalid ->
-                            {error, {invalid_transaction, I}}
-                    end;
-                {error, _} = Error ->
-                    Error
-            end;
-        error ->
-            {error, {invalid_transaction, I}}
+    case quod_ledger:classify(Data) of
+        {content, _} -> preview_content(Binding, Entry, Projection, Delta);
+        {controls, Classified} ->
+            preview_dtx_batch(Binding, Entry, [Control || {_Kind, Control} <- Classified],
+                              Projection, PhaseIndex, Delta);
+        invalid -> {error, {invalid_transaction, I}}
     end.
 
 preview_content(Binding, Entry, Projection, Delta) ->
@@ -15834,8 +15028,8 @@ preview_dtx_batch(Binding, Entry, Controls,
                                             Items, LaneSequences,
                                             Entry, Projection),
                             {ok,
-                             Projection1#{history_head :=
-                                 {I, entry_history_hash(Entry)}},
+                             history_record_head(element(1, Binding), Entry,
+                                                 entry_history_hash(Entry), Projection1),
                              dtx_batch_effects(Items), Delta1};
                         {error, _Reason} ->
                             {error, {invalid_transaction, I}}
@@ -15870,13 +15064,13 @@ historical_sequences_ok(I, Data, Seqs) ->
         %% the shared history reducer. Until that projection is installed, a
         %% control record is not valid history.
         {controls, _Controls} -> false;
-        noop -> true;
+        empty -> false;
         invalid -> false
     end.
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). Each transaction folds its diff (the validator id is the 4th arg / 5th element
-%% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or malformed payload changes nothing. This ONE
+%% of `peer_admitted(NodeId, Host, Port, Pubkey)`); an empty or malformed payload changes nothing. This ONE
 %% function feeds both the live history projection and the boot/restart re-fold
 %% (`log_projection/3`), so the running set can never drift from a fresh re-fold.
 committee_delta(#transaction{} = Transaction) ->
@@ -15886,7 +15080,7 @@ committee_delta(Data) ->
         {content, Transactions} ->
             lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
         {controls, _Controls} -> {[], []};
-        noop -> {[], []};
+        empty -> {[], []};
         invalid -> {[], []}
     end.
 
@@ -15915,13 +15109,13 @@ addq(M, L) ->
 %% Kept separate from the pure pubkey-set fold consumed by catch-up induction and live membership.
 %% Retracts yield nothing: a removal is a membership change, not a reachability change (no unlearn — a
 %% removed member stays a gossiped-with observer). The non-content kinds yield nothing by design, not
-%% defensively: a catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
+%% defensively: callers may supply a payload outside ordinary content.
 admitted_endpoints(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             lists:flatmap(fun transaction_endpoints/1, Transactions);
         {controls, _Controls} -> [];
-        noop -> [];
+        empty -> [];
         invalid -> []
     end.
 
@@ -15941,7 +15135,7 @@ advance_validator_routes(Data, Routes) ->
             lists:foldl(fun transaction_validator_routes/2,
                         Routes, Transactions);
         {controls, _Controls} -> Routes;
-        noop -> Routes;
+        empty -> Routes;
         invalid -> Routes
     end.
 
@@ -16140,19 +15334,19 @@ validate_compiled_genesis_diff(Diff) ->
 status_map(S) ->
     {DtxWaiting, DtxDormant} = dtx_admission_counts(S#s.dtx_admission),
     Role = case is_participant(S) of true -> validator; false -> observer end,
-    {_ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
-    ProposalSlot = S#s.approved + 1,
+    {_ProgressSlot, ProgressPhase} = progress_status(S#s.head_progress),
+    #eng{era = Era, view = ProposalSlot, last_parent = {_, NotarizedView, _}} = S#s.eng,
     #{role => Role, committee => S#s.validators,
       committee_id => S#s.committee_id,
       history_projection => state_projection(S),
       slot => S#s.slot,
-      committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
+      committed => S#s.slot, protocol_era => Era, protocol_view => ProposalSlot,
+      notarized_view => NotarizedView, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
       prolog_ready => S#s.prolog_ready,
-      finality_slot => S#s.slot + 1,
       dtx_coordinators => dtx_coordinator_status(S#s.dtx_coordinators),
       dtx_admission_waiting => DtxWaiting, dtx_admission_dormant => DtxDormant,
-      progress_phase => ProgressPhase, progress_quorum_ready => ProgressQuorum,
+      progress_phase => ProgressPhase,
       proposal_slot => ProposalSlot,
       proposal_open => case proposal_slot(S) of {ok, ProposalSlot} -> true; _ -> false end}.
 
@@ -16163,31 +15357,32 @@ dtx_coordinator_status(Coordinators) when is_map(Coordinators) ->
               #{group_id => GroupId}
       end, Coordinators).
 
-progress_status(idle) -> {0, idle, false};
-progress_status(#head_progress{slot = Slot, phase = Phase,
-                               quorum_ready = Ready}) ->
-    {Slot, Phase, Ready}.
+progress_status(idle) -> {0, idle};
+progress_status(#head_progress{slot = Slot, phase = Phase}) -> {Slot, Phase}.
 
 progress_phase_number(idle) -> 0;
 progress_phase_number(awaiting_proposal) -> 1;
-progress_phase_number(awaiting_notarization) -> 2;
-progress_phase_number(awaiting_commit) -> 3.
+progress_phase_number(awaiting_notarization) -> 2.
 
 recovery_phase({pulling, _}) -> pulling;
 recovery_phase(Phase) -> Phase.
 
 stats_map(S) ->
-    {ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
+    {ProgressSlot, ProgressPhase} = progress_status(S#s.head_progress),
     IngressQueued = quod_ingress_state:count(S#s.ingress),
     {DtxWaiting, DtxDormant} = dtx_admission_counts(S#s.dtx_admission),
     {OwnerCurrent, OwnerBytesCurrent} = simplex_owner_current(S),
-    #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
-      pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
+    MaterialGap = case protocol_parent_material(S) of
+        none -> 0;
+        {ParentHeight, _} -> ParentHeight - S#s.slot
+    end,
+    #{slot => S#s.slot, committed => S#s.slot, protocol_view => (S#s.eng)#eng.view,
+      pipeline_gap => MaterialGap, last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
       proposals => S#s.proposals, batched_txs => S#s.batched_txs,
       batch_window_ms => S#s.batch_window_ms,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
-      submitted => S#s.submitted, skips => S#s.skips, pending => pending_count(S),
+      submitted => S#s.submitted, pending => pending_count(S),
       requested_slot => case S#s.requested_slot of none -> 0; Requested -> Requested end,
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       r_stale => S#s.r_stale,
@@ -16210,15 +15405,13 @@ stats_map(S) ->
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       progress_slot => ProgressSlot,
       progress_phase_code => progress_phase_number(ProgressPhase),
-      progress_quorum_ready => case ProgressQuorum of true -> 1; false -> 0 end,
-      progress_timeouts => S#s.progress_timeouts, quorum_pauses => S#s.quorum_pauses,
+      progress_timeouts => S#s.progress_timeouts,
       head_complaint_signed => head_complaint_signed(S),
       head_support_votes => head_vote_count(support, S),
       head_commit_votes => head_vote_count(commit, S),
       head_complaint_votes => head_vote_count(complaint, S),
       missing_certified_blocks => missing_certified_block_count(S),
-      weak_cert_waits => S#s.weak_cert_waits,
-      ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
+      ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - (S#s.eng)#eng.view + 1),
       syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
 
@@ -16311,16 +15504,13 @@ dtx_admission_counts(none) -> {0, 0};
 dtx_admission_counts(#dtx_admission{waiting = Waiting}) ->
     quod_atomic_admission:counts(Waiting).
 
-head_complaint_signed(#s{slot = Committed} = S) ->
-    case round_complained(round_state(Committed + 1, S)) of
+head_complaint_signed(#s{eng = #eng{view = View}} = S) ->
+    case (round_state(View, S))#round.final =:= complaint of
         true -> 1;
         false -> 0
     end.
 
-head_vote_count(_Kind, #s{eng = undefined}) -> 0;
-head_vote_count(Kind, #s{slot = Committed,
-                         eng = #eng{shares = Shares, certs = Certs}}) ->
-    Head = Committed + 1,
+head_vote_count(Kind, #s{eng = #eng{view = Head, shares = Shares, certs = Certs}}) ->
     ShareCounts = [map_size(Bucket)
                    || {{VoteKind, Slot, _BH}, Bucket} <- maps:to_list(Shares),
                       VoteKind =:= Kind, Slot =:= Head],
@@ -16329,12 +15519,13 @@ head_vote_count(Kind, #s{slot = Committed,
                      VoteKind =:= Kind, Slot =:= Head],
     lists:max(ShareCounts ++ CertCounts ++ [0]).
 
-missing_certified_block_count(#s{eng = undefined}) -> 0;
-missing_certified_block_count(#s{slot = Committed, eng = Eng}) ->
-    length([ok
-            || {{support, Slot, BH}, #cert{}} <- maps:to_list(Eng#eng.certs),
-               live_pipeline_slot(Slot, Committed),
-               block_for(BH, Eng) =:= undefined]).
+missing_certified_block_count(#s{eng = Eng}) ->
+    length(missing_certified_blocks(Eng)).
+
+missing_certified_blocks(Eng) ->
+    [{Slot, Hash, Cert}
+     || {{support, Slot, Hash}, #cert{} = Cert} <- maps:to_list(Eng#eng.certs),
+        live_protocol_view(Slot, Eng), block_for(Hash, Eng) =:= undefined].
 
 pending_count(#s{collecting = Collecting, local_proposals = Local}) ->
     CollectingN = case Collecting of #batch{count = Count} -> Count; none -> 0 end,

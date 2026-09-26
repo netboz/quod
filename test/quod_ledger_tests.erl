@@ -2,6 +2,101 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+%% Codec boundaries only: certificates here have well-shaped fixture
+%% signatures, not finality authority. The shared history verifier must still
+%% check committee signatures, ancestry and contiguous material projection.
+era_genesis_is_fixed_before_its_derived_domain_test() ->
+    {Identity, Genesis, Era, _Tx} = era_fixture(),
+    ?assertMatch(#block{era = genesis, slot = 0, parent = none}, Genesis),
+    Entry = quod_ledger:entry(1, Genesis, none),
+    ?assertEqual(1, quod_ledger:entry_index(Entry)),
+    ?assertEqual(Era, quod_ledger:initial_era(Identity)),
+    ?assertNotEqual(Era, quod_ledger:initial_era({<<"other">>, element(2, Identity)})),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, empty, 0)),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({Era, 0}, none, empty, 0)).
+
+gapped_protocol_view_keeps_material_height_and_exact_bytes_test() ->
+    {Identity, _Genesis, Era, Tx} = era_fixture(),
+    {ok, Block} = quod_ledger:new_block(
+                    {Era, 19}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 40),
+    Entry = quod_ledger:entry(2, Block, era_codec_cert(Block)),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    {ok, Decoded} = quod_ledger:decode_entry(Bytes, wrapped),
+    ?assertEqual(2, quod_ledger:entry_index(Decoded)),
+    {ok, Restored} = quod_ledger:block_from_entry(Decoded),
+    ?assertEqual(19, Restored#block.slot),
+    ?assertEqual(Block#block.block_bytes, Restored#block.block_bytes),
+    {ok, Selected} = quod_ledger:select_entry(Bytes, {application, Tx#transaction.tx_id}, wrapped),
+    ?assertMatch({ok, 2, _, _, 1},
+                 quod_ledger:record_commitment(Selected, quod_ledger:selected_record(Selected))),
+    {ok, Reimported} = quod_ledger:from_entry_view(quod_ledger:entry_view(Entry)),
+    ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Reimported)).
+
+empty_carrier_cannot_become_a_material_entry_test() ->
+    {Identity, _Genesis, Era, Tx} = era_fixture(),
+    Parent = {Era, 0, element(2, Identity)},
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Parent, {batch, [Tx]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), empty, 1),
+    ?assertEqual(empty, quod_ledger:classify(empty)),
+    ?assertEqual(invalid, quod_ledger:classify(noop)),
+    ?assertException(error, {badmatch, false},
+                     quod_ledger:entry(3, Carrier, era_codec_cert(Carrier))),
+    %% A real empty-diff application still occupies a material position.
+    ?assertEqual([], Tx#transaction.diff),
+    ?assertEqual(2, quod_ledger:entry_index(
+                      quod_ledger:entry(2, Material, era_codec_cert(Material)))).
+
+ancestor_head_has_one_compact_descriptor_test() ->
+    {Identity, _Genesis, Era, Tx} = era_fixture(),
+    {ok, Material} = quod_ledger:new_block(
+                      {Era, 2}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 9}, quod_ledger:block_ref(Material), empty, 1),
+    Head = era_codec_cert(Carrier),
+    Entry = quod_ledger:entry(2, Material, Head),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    {ok, Decoded} = quod_ledger:decode_entry(Bytes),
+    ?assertEqual(Head, (quod_ledger:entry_view(Decoded))#entry.cert),
+    ?assertEqual(nomatch, binary:match(Bytes, Carrier#block.block_bytes)),
+    ?assertException(error, {badmatch, false},
+                     quod_ledger:entry(2, Material, Head#cert{era = <<99:256>>})).
+
+era_roots_do_not_depend_on_finality_witnesses_test() ->
+    {Identity, Genesis, Era, Tx} = era_fixture(),
+    {ok, Material} = quod_ledger:new_block(
+                      {Era, 3}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 1),
+    {Era, 3, Hash} = quod_ledger:block_ref(Material),
+    Next = quod_ledger:next_era(Identity, Era, Hash),
+    ?assertNotEqual(Era, Next),
+    ?assertNotEqual(Next, quod_ledger:next_era(Identity, <<99:256>>, Hash)),
+    ?assertNotEqual(Next, quod_ledger:next_era(Identity, Era, element(2, Identity))),
+    {ok, Child} = quod_ledger:new_block({Next, 1}, {Next, 0, Hash}, {batch, [Tx]}, 2),
+    ?assertEqual({Next, 0, Hash}, Child#block.parent),
+    ?assertEqual({Era, 3, Hash}, quod_ledger:block_ref(Material)),
+    ?assertEqual(genesis, Genesis#block.era).
+
+legacy_and_malformed_protocol_positions_are_rejected_test() ->
+    {Identity, _Genesis, Era, _Tx} = era_fixture(),
+    Hash = element(2, Identity),
+    lists:foreach(fun({Position, Parent}) ->
+        ?assertEqual({error, bad_block}, quod_ledger:new_block(Position, Parent, empty, 1))
+    end, [{1, 0}, {{Era, 1}, 0}, {{Era, 1}, {Era, 1, Hash}},
+          {{Era, 1}, {<<99:256>>, 0, Hash}}, {{Era, -1}, {Era, 0, Hash}},
+          {{Era, 1 bsl 64}, {Era, 0, Hash}}]),
+    ?assertEqual({error, bad_block}, quod_ledger:decode_block(
+                   term_to_binary({quod_block, 1, 1, 0, empty, 0}, [deterministic]))),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(
+                   term_to_binary({quod_entry, 1, 1, none, none}, [deterministic]))).
+
+era_fixture() ->
+    #{identity := Identity, genesis := Genesis, era := Era, transaction := Tx} =
+        quod_ct:protocol_fixture(<<"quod:era-codec">>),
+    {Identity, Genesis, Era, Tx}.
+
+era_codec_cert(Block) ->
+    {Era, View, Hash} = quod_ledger:block_ref(Block),
+    #cert{kind = commit, era = Era, slot = View, block_hash = Hash,
+          sigs = [{<<1:256>>, <<1:512>>}]}.
+
 %%%===================================================================
 %%% classify/1 — the single enumeration of committed entry-data variants
 %%%===================================================================
@@ -20,10 +115,10 @@ content_classification_test() ->
     ?assertEqual({content, Txs}, quod_ledger:classify(Data)),
     ?assertEqual({ok, Txs}, quod_ledger:payload(Data)).
 
-%% A complaint-certified skip carries nothing to fold and is NOT content — the
-%% distinction every per-variant consumer dispatches on.
-noop_is_its_own_kind_test() ->
-    ?assertEqual(noop, quod_ledger:classify(noop)),
+%% Complaint certificates advance protocol views; the retired material skip
+%% representation is invalid.
+legacy_noop_is_invalid_test() ->
+    ?assertEqual(invalid, quod_ledger:classify(noop)),
     ?assertEqual(error, quod_ledger:payload(noop)).
 
 %% DTX controls use the same batch family as content.  The superseded top-level
@@ -77,11 +172,11 @@ native_control_roundtrip_preserves_wire_bytes_and_checks_ingress_test() ->
     F = quod_ct:signed_atomic_fixture(#{}), C = maps:get(vote_control, F),
     {ok, Blob} = quod_atomic:encode_control(C),
     Bytes = wire_block({batch, [{dtx, Blob}]}),
-    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, C}]}, 2),
+    {ok, Block} = quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, {batch, [{dtx, C}]}, 2),
     ?assertEqual(Bytes, quod_ledger:block_bytes(Block)),
     ?assertEqual({ok, Block}, quod_ledger:decode_block(Bytes)),
     ?assertEqual(invalid, quod_ledger:classify({batch, [{dtx, Blob}]})),
-    ?assertEqual({error, bad_block}, quod_ledger:new_block(2, 1, {batch, [{dtx, Blob}]}, 2)),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, {batch, [{dtx, Blob}]}, 2)),
     %% An attacker can supply perfectly canonical bytes but cannot inject
     %% trusted native metadata or skip the own-plan signature check.
     Wire = binary_to_term(Blob, [safe]),
@@ -141,7 +236,7 @@ malformed_is_invalid_test() ->
 
 %% The contract the later distributed-control-record work depends on: a variant
 %% this release does not know is `invalid` — never silently folded as content or
-%% mistaken for the inert skip. Adding it means extending classify/1 here, which
+%% mistaken for an empty carrier. Adding it means extending classify/1 here, which
 %% makes every consumer's exhaustive dispatch fail loudly until it decides what
 %% the new kind means.
 unknown_variant_is_invalid_test() ->
@@ -156,7 +251,7 @@ unknown_variant_is_invalid_test() ->
           Kind = quod_ledger:classify(Data),
           ?assertEqual(invalid, Kind),
           ?assertNotMatch({content, _}, Kind),
-          ?assertNotEqual(noop, Kind)
+          ?assertNotEqual(empty, Kind)
       end, Unknown).
 
 %% Structural references, not a consensus-admission witness.
@@ -164,7 +259,7 @@ direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
     {ok, VoteRef} =
         quod_dtx:certified_ref(
           <<"quod:ledger-origin">>, key(40), 7, key(41), VoteDigest,
-          <<"vote-qc">>),
+          fixture_head(key(41))),
     Record = quod_ct:atomic_abort_record(Target, ManifestDigest, VoteRef),
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} =
@@ -174,7 +269,7 @@ direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
     {ok, Ref} =
         quod_dtx:certified_ref(
           TargetNs, TargetAnchor, 10 + Sequence, key(50 + Sequence),
-          quod_atomic:record_digest(Control), <<"resolve-qc">>),
+          quod_atomic:record_digest(Control), fixture_head(key(50 + Sequence))),
     {Control, Ref}.
 
 direct_vote(Target, ProofId, Sequence, Signer) ->
@@ -187,7 +282,7 @@ direct_vote(Target, ProofId, Sequence, Signer) ->
     Control.
 
 wire_block(Payload) ->
-    term_to_binary({quod_block, 1, 2, 1, Payload, 2}, [deterministic]).
+    term_to_binary({quod_block, 2, key(70), 2, {key(70), 1, key(71)}, Payload, 2}, [deterministic]).
 
 signer() ->
     {Pubkey, Seed} = quod_identity:generate(),
@@ -195,3 +290,7 @@ signer() ->
       key => quod_identity:key_term({Pubkey, Seed})}.
 
 key(N) -> <<N:256>>.
+
+fixture_head(Hash) ->
+    {ok, Bytes} = quod_ledger:encode_finality_head(#cert{kind = commit,
+        era = key(70), slot = 20, block_hash = Hash, sigs = [{key(72), <<0:512>>}]}), Bytes.

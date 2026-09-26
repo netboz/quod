@@ -935,14 +935,22 @@ lookup to rebuild state. Installed projections are trusted owner state; restored
 projections enter valid_projection/1 once, not once per candidate or progress edge.
 Effects use the existing ordered facts/effects application path.
 """.
+%% Provisional location for the shared reducer, never a certified reference.
+%% Public replay/codec boundaries reject it; proposal builders discard preview
+%% projections and run the reducer again with the actual committed reference.
+-record(preview_ref, {target, slot, hash, digest}).
+
 -spec reduce(control(), certified_reference(), group_history(), projection()) ->
           {ok, group_history(), projection(), list()} | {error, term()}.
+reduce(Control, Ref, History, Projection) ->
+    reduce(Control, Ref, History, Projection, certified).
+
 reduce(Control, Ref, #{group_id := Prior, records := Records} = History,
-       #{target := Target} = Projection) ->
+       #{target := Target} = Projection, Mode) ->
     {Record, Digest, _} = Material = control_material(Control),
     Id = group_id(Record), Kind = record_kind(Record),
     case record_target(Record) =:= Target andalso (Prior =:= none orelse Prior =:= Id)
-         andalso valid_group_history(History) andalso exact_record_ref(Ref, Target, Digest) of
+         andalso valid_group_history(History) andalso reducer_ref(Mode, Ref, Target, Digest) of
         false -> transition_error(bad_binding);
         true ->
             case maps:find(Kind, Records) of
@@ -957,7 +965,7 @@ reduce(Control, Ref, #{group_id := Prior, records := Records} = History,
                     end
             end
     end;
-reduce(_, _, _, _) -> transition_error(malformed_state).
+reduce(_, _, _, _, _) -> transition_error(malformed_state).
 
 -doc "Reduce a canonical phase wave atomically; no partial result escapes a rejected member.".
 -spec reduce_batch([{control(), certified_reference()}], map(), projection()) ->
@@ -972,11 +980,11 @@ reduce_batch(Controls, Histories, Projection) ->
 -spec preview_batch([{control(), identity(), pos_integer(), <<_:256>>}], map(), projection()) ->
           {ok, map(), projection(), list()} | {error, term()}.
 preview_batch(Candidates, Histories, Projection) ->
-    Controls = [begin
-        {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, Slot, Hash,
-                      record_digest(Control), <<"quod.atomic.preview">>),
-        {Control, Ref}
-    end || {Control, {Ns, Anchor}, Slot, Hash} <- Candidates],
+    Controls = [{Control, #preview_ref{target = Target, slot = Slot,
+                                         hash = Hash, digest = record_digest(Control)}}
+        || {Control, {Ns, <<_:256>>} = Target, Slot, <<_:256>> = Hash} <- Candidates,
+           is_binary(Ns), byte_size(Ns) > 0, is_integer(Slot), Slot > 1,
+           Slot =< 16#FFFFFFFFFFFFFFFF],
     case length(Controls) =:= length(Candidates) andalso
          canonical_control_wave([C || {C, _} <- Controls]) of
         true -> reduce_wave(Controls, Histories, Projection, [], preview);
@@ -989,7 +997,7 @@ reduce_wave([{Control, Ref} | Rest], Histories, Projection, Items, Mode) ->
     Id = group_id(Control),
     Result = case Mode =:= certified orelse proposal_readiness(control_material(Control), Projection) of
         Eligible when Eligible =:= true; Eligible =:= ready ->
-            reduce(Control, Ref, maps:get(Id, Histories, initial_group_history()), Projection);
+            reduce(Control, Ref, maps:get(Id, Histories, initial_group_history()), Projection, Mode);
         {blocked, Reason} -> transition_error(Reason);
         {refused, Reason} -> transition_error(Reason);
         stale -> transition_error(stale)
@@ -1137,8 +1145,13 @@ install_projection(#{target := Target, apply_fences := Incoming} = Projection,
            (_, Fence) -> {true, Fence}
         end, Incoming)}.
 
+reducer_ref(preview, #preview_ref{target = Target, digest = Digest}, Target, Digest) -> true;
+reducer_ref(certified, Ref, Target, Digest) -> exact_record_ref(Ref, Target, Digest);
+reducer_ref(_, _, _, _) -> false.
+
 exact_record_ref(Ref, Target, Digest) ->
     case quod_dtx:certified_ref_binding(Ref) of {ok, Target, _, Digest} -> true; _ -> false end.
+ref_slot(#preview_ref{slot = Slot}) -> Slot;
 ref_slot(Ref) -> {ok, _, Slot, _} = quod_dtx:certified_ref_binding(Ref), Slot.
 transition_error(Reason) -> {error, {invalid_transition, Reason}}.
 

@@ -18,7 +18,7 @@ dedicated transport channel's envelope.
 -spec encode(binary(), term()) -> binary().
 encode(Ns, Relay) ->
     Inner = term_to_binary(Relay, [deterministic]),
-    term_to_binary({sx_relay, Ns, Inner}, [deterministic]).
+    term_to_binary({sx_relay2, Ns, Inner}, [deterministic]).
 
 -spec decode_consensus_frame(binary(), binary()) ->
         {consensus, term()} | error.
@@ -36,7 +36,7 @@ decode_consensus_frame(Payload, Ns) ->
 -spec encode_consensus_frame(binary(), term()) -> binary().
 encode_consensus_frame(Ns, Message) ->
     Inner = term_to_binary(encode_consensus_message(Message), [deterministic]),
-    term_to_binary({sx2, Ns, Inner}, [deterministic]).
+    term_to_binary({sx3, Ns, Inner}, [deterministic]).
 
 encode_consensus_message({propose, Block, ValidationSidecar}) ->
     {ok, WireSidecar} =
@@ -91,7 +91,7 @@ required_block_bytes(Block) ->
 -doc """
 Decode only the bounded safe relay envelope.
 
-Observers use this path to recover attempts from durable history without ever
+Observers use this path to handle placement hints without ever
 decoding the unrestricted consensus inner term they are not permitted to act
 on.
 """.
@@ -104,8 +104,8 @@ decode_relay_frame(Payload, Ns) ->
 
 decode_outer(Payload, Ns) ->
     try binary_to_term(Payload, [safe]) of
-        {sx_relay, Ns, Inner} when is_binary(Inner) -> {relay, Inner};
-        {sx2, Ns, Inner} when is_binary(Inner) -> {consensus, Inner};
+        {sx_relay2, Ns, Inner} when is_binary(Inner) -> {relay, Inner};
+        {sx3, Ns, Inner} when is_binary(Inner) -> {consensus, Inner};
         _ -> error
     catch
         _:_ -> error
@@ -122,11 +122,11 @@ decode_relay_inner(Inner) ->
         _:_ -> error
     end.
 
-valid_wire({relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+valid_wire({relay_submit, SubmissionId, AttemptId, Era, TargetSlot,
             {submit, Author, Signature, Canonical}, TraceCarrier})
   when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
        is_binary(AttemptId), byte_size(AttemptId) =:= 16,
-       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_binary(Era), byte_size(Era) =:= 32,
        is_integer(TargetSlot), TargetSlot >= 1,
        TargetSlot =< 16#FFFFFFFFFFFFFFFF,
        is_binary(Author), byte_size(Author) =:= 32,
@@ -134,18 +134,18 @@ valid_wire({relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
        is_binary(Canonical),
        byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
     quod_trace:valid_carrier(TraceCarrier);
-valid_wire({relay_result, SubmissionId, AttemptId, CommitteeId,
+valid_wire({relay_result, SubmissionId, AttemptId, Era,
             TargetSlot, Result})
   when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
        is_binary(AttemptId), byte_size(AttemptId) =:= 16,
-       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_binary(Era), byte_size(Era) =:= 32,
        is_integer(TargetSlot), TargetSlot >= 1,
        TargetSlot =< 16#FFFFFFFFFFFFFFFF ->
     valid_result(Result);
-valid_wire({relay_accepted, SubmissionId, AttemptId, CommitteeId, TargetSlot})
+valid_wire({relay_accepted, SubmissionId, AttemptId, Era, TargetSlot})
   when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
        is_binary(AttemptId), byte_size(AttemptId) =:= 16,
-       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_binary(Era), byte_size(Era) =:= 32,
        is_integer(TargetSlot), TargetSlot >= 1,
        TargetSlot =< 16#FFFFFFFFFFFFFFFF ->
     true;

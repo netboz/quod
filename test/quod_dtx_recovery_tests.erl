@@ -71,7 +71,7 @@ equivalent_finality_subsets_preserve_first_fact_but_not_another_claim_test() ->
     F = fixture(2), [O, T] = maps:get(roles, F), Vs = votes(F), Own = own(maps:get(O, Vs)),
     {T, C, R} = V = maps:get(T, Vs),
     S = observe(Own, [V], quod_dtx_recovery:empty()),
-    Equivalent = setelement(8, R, <<"other-quorum-proof">>),
+    Equivalent = setelement(8, R, quod_ct:fixture_finality(99, element(6, R))),
     ?assertEqual({ok, S}, quod_dtx_recovery:observe(Own, {T, C, Equivalent}, S)),
     ?assertEqual({error, conflicting_phase_evidence},
         quod_dtx_recovery:observe(Own, {T, C, setelement(6, Equivalent, <<249:256>>)}, S)),
@@ -82,7 +82,7 @@ applied_certificate_binds_exact_resolve_generation_outcome_and_role_test() ->
     F = fixture(2), [O, T] = maps:get(roles, F),
     {Own, S, Resolves} = resolved(F, votes(F), []),
     {T, _, R} = lists:keyfind(T, 1, Resolves), Cert = applied(F, T, R, 2, commit),
-    Equivalent = setelement(7, Cert, setelement(8, R, <<"other-resolve-quorum">>)),
+    Equivalent = setelement(7, Cert, setelement(8, R, quod_ct:fixture_finality(99, element(6, R)))),
     ?assertMatch({ok, _}, quod_dtx_recovery:applied(Own, T, Equivalent, S)),
     lists:foreach(fun(Bad) ->
         ?assertEqual({error, invalid_applied_evidence}, quod_dtx_recovery:applied(Own, T, Bad, S))
@@ -127,7 +127,7 @@ evidence(F, T = {Ns, Anchor}, Record, Slot) ->
     {ok, C} = quod_atomic:sign_control(T, M, maps:get(admission, F), Slot, Slot,
                                       maps:get(node_identity, F)),
     {ok, R} = quod_dtx:certified_ref(Ns, Anchor, Slot, <<Slot:256>>,
-                                     quod_atomic:record_digest(C), <<"fixture-quorum">>),
+                                     quod_atomic:record_digest(C), quod_ct:fixture_finality(Slot - 1, <<Slot:256>>)),
     {T, C, R}.
 own({_, C, R}) -> #{material => quod_atomic:control_material(C), ref => R, resolution => none}.
 ref({_, _, R}) -> R.

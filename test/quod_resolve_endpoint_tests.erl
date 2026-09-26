@@ -31,15 +31,17 @@ foreign_validation_interval() ->
         {ok, Material} = quod_atomic:admission_material(Record),
         {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F),
                                                 1, 0, maps:get(signer, F)),
-        {ok, Block} = quod_ledger:new_block(1, 0, {batch, [{dtx, Control}]}, 0),
-        Hash = quod_simplex:block_hash(Block), Token = {0, <<0:256>>},
+        Era = quod_ledger:initial_era(Target),
+        Root = {Era, 0, Anchor},
+        {ok, Block} = quod_ledger:new_block({Era, 1}, Root, {batch, [{dtx, Control}]}, 0),
+        Hash = quod_simplex:block_hash(Block), Token = {1, Anchor},
         S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, store => Store,
-            history_head => Token, eng => quod_simplex:eng_new(<<95:256>>, [], 0),
+            history_head => Token, eng => quod_simplex:eng_new(<<95:256>>, [], {Root, 0}),
             dtx_projection => quod_atomic:initial_projection(Target, 0)}),
         S1 = quod_simplex:test_state_set(local_proposal, {1, Hash, [Ctx]}, S0),
         {_Monitor, Latched} = quod_simplex:test_latch_dtx_validation(1, Hash, Token, self(), Block, S1),
-        Pending = quod_simplex:test_on_dtx_verdict(1, Hash, Token, self(), 0, {valid, #{}}, Latched),
-        {Hash, {dtx_foreign, Token, Worker, WorkerMonitor, _, _}, _, none, _} =
+        Pending = quod_simplex:test_on_dtx_verdict(1, Hash, Token, self(), 1, {valid, #{}}, Latched),
+        {Hash, {dtx_foreign, Token, Worker, WorkerMonitor, _, _}, {Hash, Block}, _, _} =
             quod_simplex:test_dtx_round(1, Pending),
         HeldAt = receive {foreign_read_held, Source, At} -> At
                  after 1000 -> error(foreign_validation_not_running) end,
@@ -81,6 +83,8 @@ resolve_waiters(Delivery) ->
     #{pubkey := Self} = Signer = maps:get(signer, F),
     Admission = maps:get(admission, F),
     Domain = <<91:256>>,
+    Era = quod_ledger:initial_era(Target),
+    Root = {Era, 0, Anchor},
     Dir = filename:join("/tmp", "quod-resolve-endpoint-" ++
               binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     {ok, Journal} = quod_signing_journal:initialize(Ns, Domain, Dir),
@@ -89,7 +93,9 @@ resolve_waiters(Delivery) ->
     S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
         self => Self, id => Signer, validators => [Self], committee_id => <<93:256>>,
         author_admissions => #{Self => Admission}, consensus_domain => Domain,
-        sync => ready, prolog_ready => true, signing_journal => Journal}),
+        sync => ready, prolog_ready => true, signing_journal => Journal,
+        history_head => {1, Anchor}, archive_tip => {Root, 0},
+        eng => quod_simplex:eng_new(Domain, [Self], {Root, 0})}),
     {monitors, BeforeMonitors} = process_info(self(), monitors),
     try
         {S1, Calls} = lists:foldl(fun(I, {State, Acc}) ->
@@ -110,9 +116,11 @@ resolve_waiters(Delivery) ->
         {ok, Material} = quod_atomic:admission_material(Record),
         {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 2, 0, Signer),
         Payload = {batch, [{dtx, Control}]},
-        {ok, Block} = quod_ledger:new_block(1, 0, Payload, 0),
-        Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = 1,
-                              block_hash = quod_simplex:block_hash(Block), sigs = []}),
+        {ok, Block} = quod_ledger:new_block({Era, 1}, Root, Payload, 0),
+        Hash = quod_simplex:block_hash(Block),
+        #share{sig = Sig} = quod_simplex:make_share(Domain, commit, {Era, 1}, Hash, Signer),
+        Entry = quod_ledger:entry(2, Block, #cert{kind = commit, era = Era, slot = 1,
+                              block_hash = Hash, sigs = [{Self, Sig}]}),
         S2 = quod_simplex:test_resolve_committed_dtx(Entry, Payload, S1),
         case Delivery of
             suspended -> lists:foreach(fun erlang:resume_process/1, Pids);

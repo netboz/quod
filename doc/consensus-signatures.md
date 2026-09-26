@@ -10,7 +10,7 @@ state:
 
 ```text
 SHA-256(
-  "quod/simplex/domain" || 0x00 || 0x01 ||
+  "quod/simplex/domain" || 0x00 || 0x03 ||
   uint32_be(byte_size(Namespace)) || Namespace ||
   GenesisHash
 )
@@ -47,62 +47,76 @@ and no compatibility reader.
 A support, commit, or complaint share signs:
 
 ```text
-"quod/simplex/share" || 0x00 || 0x01 ||
-Domain ||
-KindTag ||
-uint64_be(Slot) ||
-BlockHash
+"quod/simplex/share" || 0x00 || 0x03 ||
+Domain || Era || KindTag || uint64_be(View) || BlockHash
 ```
 
-`KindTag` is `S`, `C`, or `X`. `BlockHash` is exactly 32 bytes for support and
-commit and empty for complaint. Certificates carry the existing set of
-`{Signer, Signature}` pairs; verification always supplies the locally derived
-domain and the committee valid for that slot.
+`Domain` and `Era` are each 32 bytes. `View` is a positive protocol position
+within that era; it is not a material ledger height. `KindTag` is `S`, `C`, or
+`X`. `BlockHash` is exactly 32 bytes for support and commit and empty for
+complaint. Certificates contain `{Signer, Signature}` pairs, checked against
+the locally derived domain and the committee authorized for the named era.
 
-The same domain is used by live consensus, vote redrive, certified-block
-recovery, forward catch-up (including implicit parent proofs), and feed
-verification.
+Support is exclusive per era/view. Commit and complaint exclude each other
+within the same era/view; a decision in an earlier view does not prohibit a
+later view's decision. Notarization authorizes advancement and a commit vote;
+a complaint certificate authorizes advancement without adding a ledger entry.
+A descendant's commit certificate finalizes an ancestor only through its full,
+verified parent chain. A certificate alone never authorizes an invented parent.
 
-## Live-state bounds
+The same domain and ancestry rules govern live consensus, journal restoration,
+forward catch-up and foreign-history verification. A received feed entry is a
+progress notice; installation obtains its complete proof through shared catch-up.
 
-For durable base `H`, the volatile engine accepts blocks and shares only for
-`H+1` and `H+2`. The second slot is required by the depth-one pipeline. Far
-support certificates are dropped. A valid far commit or complaint certificate
-is reduced to one highest-slot scalar recovery hint; its signatures and object
-are not retained. The hint is cleared when the base catches up, the engine is
-reseated, or the committee changes.
+## Material history and membership
 
-Within the two live slots, the engine retains at most:
+Genesis occupies material height 1 with protocol position `{genesis, 0}`, no
+parent and timestamp zero. Later canonical blocks bind their era, view and exact
+parent `{Era, View, Hash}`. Empty protocol carriers inherit the parent timestamp
+and produce no material entry, Prolog application, reaction or outcome. A real
+transaction with an empty diff remains material.
 
-- one block per slot; a later quorum-supported block may replace an
-  unnotarized first copy;
-- one verified block hash per `{kind, slot, signer}`, so a Byzantine signer
-  cannot create unbounded share buckets.
+A membership block M is the old era's last material block. Its old-era
+children and descendants must be empty carriers. Once M is certified, the new
+committee starts at a virtual root `{NewEra, 0, MHash}`. M's original bytes and
+hash remain unchanged; different valid old-era finality witnesses derive the
+same new root. Historical signatures are checked with their historical
+committee, including the old committee certifying M.
 
-Catch-up and durable replay do not use the live two-slot horizon. They verify
-arbitrarily long contiguous windows and then reseat the engine at the recovered
-head.
+The live engine retains the unfinished protocol suffix and the journal retains
+unretired signing decisions and supported bodies. There is no fixed two-view
+horizon or carrier-count cap. Complete proof-plus-material archive custody
+permits retirement; material height alone does not. This archive uses the
+existing ledger store and retained indexes, with no separate carrier database.
+Ordinary evidence requests use captured views and verified deltas, not history
+reconstruction. Portable snapshots and compaction remain deferred.
 
 ## Breaking format
 
-This contract has no compatibility path:
+The coherent finality cut uses one format throughout:
 
-- consensus frames use the `sx2` envelope; the old `sx` envelope is rejected;
-- ledger frames use the V3 magic and explicitly reject V1 and V2 — each as its
-  own identifiable format at its exact offset — instead of treating either as a
-  torn tail;
-- the consensus share domain is version 2, so no share, certificate or journal
-  entry signed under the V2-ledger domain verifies here;
-- committee-view identities are version 2;
-- vote journals use QVJ3 records
-  `{quod_vote, 2, Domain, Kind, Slot, BlockHash}` and reject QVJ1, QVJ2, or a
-  different domain — a journal binds the share domain, so an older one must
-  never be restored as equivocation history for a chain that no longer exists;
-- signed directory generations are version 1.
+- canonical block and material entry terms are version 2;
+- consensus frames use `sx3`; retained ingress uses `sx_relay2`;
+- ledger archive frames use V8 magic `0x915106B1`, storing streamed proof parts
+  and their material entries as complete durable groups;
+- consensus signature domains and shares are version 3;
+- signing journals use QSJ6 and bind decisions to era/view;
+- exact material references use `refs3`; retained foreign checkpoints use
+  version 6;
+- signed transaction envelopes remain version 15, committee-view identities
+  remain version 2 and signed directory generations remain version 1.
 
-Deployment is stop, wipe, and re-found—not a rolling upgrade. Both `ledger_dir`
-and `data_dir` must be wiped when they differ; the current Nomad layout
-co-locates them on the same host volume mounted inside each allocation at
-`/quod/data`. That mount point is not the host filesystem path: delete or wipe
-the corresponding Nomad host volume, including cloud allocation subdirectories
-when cloud satellites have run.
+Superseded formats are explicitly rejected; there is no migration or fallback
+reader. Incomplete archive tails and complete corrupt records retain their
+separate recovery rules. Journal records are synced before signatures can leave
+the node. Selected ancestry and its material group are synced before publication,
+outcomes or signing-state retirement.
+
+Deployment requires coordinated stop and re-founding under the release contract
+in [the finality plan](finality-round-recovery-plan.md). First validate the full
+candidate on an isolated new network and retain the old network's unresolved
+operations and evidence. Never submit an uncertain old operation on a new
+identity. Both `ledger_dir` and `data_dir` need replacement when they differ;
+the current Nomad layout co-locates them in the host volume mounted at
+`/quod/data`. That container mount is not the host filesystem path. Compute
+volumes and cloud allocation subdirectories belong to the same activation scope.

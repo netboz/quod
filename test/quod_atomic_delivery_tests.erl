@@ -163,7 +163,7 @@ assert_own_requests(F, Calls) ->
 
 reply({T = {Ns, Anchor}, From, {submit, Id, Blob}, _}, accepted) ->
     {ok, Digest} = quod_atomic:encoded_record_digest(Blob),
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<2:256>>, Digest, <<"protocol-fixture">>),
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<2:256>>, Digest, quod_ct:fixture_finality(1, <<2:256>>)),
     ?assertMatch({ok, T, 2, Digest}, quod_dtx:certified_ref_binding(Ref)),
     gen_statem:reply(From, {ok, {accepted, Id, Digest, Ref}, []});
 reply({_, From, {submit, Id, _}, _}, not_ready) ->

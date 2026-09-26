@@ -2482,13 +2482,13 @@ read_founding(Ns, Deadline) ->
     end.
 
 %% Slot 1 defines the ontology's founding truth and is necessarily one content
-%% batch. A DTX control, skip, or malformed value at genesis is corruption, not
+%% batch. A DTX control, carrier, or malformed value at genesis is corruption, not
 %% an empty set of declarations.
 founding_payload(Data) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> {ok, founding_runtime(Txs)};
         {controls, _Controls} -> {error, invalid_genesis_payload};
-        noop -> {error, invalid_genesis_payload};
+        empty -> {error, invalid_genesis_payload};
         invalid -> {error, invalid_genesis_payload}
     end.
 

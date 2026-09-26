@@ -248,7 +248,7 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     Ns = <<"quod:endpoint">>,
     Request = {phase, id(1), digest(2), vote},
     Ref = certified_ref(),
-    Entry = quod_ledger:noop_entry(7, none),
+    Entry = untrusted_entry(),
     Hints = [{Ref, Entry}],
     {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
     {quod_dtx_endpoint, 13, Ns, InnerBinary, []} =
@@ -261,10 +261,10 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
         quod_dtx_endpoint:decode_request(Ns, Frame),
     ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Selected)),
     ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Selected)),
-    %% The codec deliberately checks only bounded shape.  An uncertified
-    %% entry survives transport so the one foreign-log verifier, rather than
-    %% this framing module, remains responsible for rejecting or importing it.
-    ?assertEqual(none, (quod_ledger:entry_view(Entry))#entry.cert).
+    %% Canonical shape is not finality authority. This fixture's invalid
+    %% signature crosses the framing seam; the history verifier must refuse it.
+    #cert{sigs = [{_, Signature}]} = (quod_ledger:entry_view(Entry))#entry.cert,
+    ?assertEqual(<<0:512>>, Signature).
 
 application_result_sidecar_roundtrips_entry_and_member_vote_test() ->
     quod_operation_fixture:with(1, fun(F) ->
@@ -319,7 +319,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
          Ns, Request, [{Ref, WrongSlot}])),
-    Entry = quod_ledger:noop_entry(7, none),
+    Entry = untrusted_entry(),
     %% Even a genuine local artifact is not a wire capability: copying its
     %% private tuple into the fallback must not bypass the canonical decoder.
     ArtifactInner = term_to_binary({Request, [{Ref, Entry}]}, [deterministic]),
@@ -342,11 +342,14 @@ entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
                                 author = <<1:256>>, read_check = #{},
                                 diff = [{assert, {{Symbol, value}, true}}]},
     {ok, TxBytes} = quod_transaction:encode_ledger_transaction(Transaction),
+    Era = <<9:256>>,
     BlockBytes = term_to_binary(
-                   {quod_block, 1, 7, 6,
+                   {quod_block, 2, Era, 6, {Era, 5, <<0:256>>},
                     {batch, [{transaction, TxBytes}]}, 0}, [deterministic]),
+    Finality = {quod_finality, 1, Era, 6, crypto:hash(sha256, BlockBytes),
+                [{<<1:256>>, <<0:512>>}]},
     EntryBytes = term_to_binary(
-                   {quod_entry, 1, 7, BlockBytes, none}, [deterministic]),
+                   {quod_entry, 2, 7, BlockBytes, Finality}, [deterministic]),
     [{Ref, Entry}] = quod_dtx_endpoint:decode_validation_sidecar(
                       [{entry_bytes, Ref, EntryBytes}]),
     ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Entry)),
@@ -441,7 +444,7 @@ selected_negative_vote_correlates_without_becoming_an_uncommitted_refusal_test()
     {ok, Blob} = quod_atomic:encode_record(Positive),
     {Ns, Anchor} = T,
     {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 7, digest(2),
-                                      quod_atomic:record_digest(Negative), <<"qc">>),
+                                      quod_atomic:record_digest(Negative), quod_ct:fixture_finality(6, digest(2))),
     Request = {submit, id(2), Blob},
     Response = {accepted, id(2), quod_atomic:record_digest(Positive), Ref},
     ?assertNotEqual(quod_atomic:record_digest(Positive), quod_atomic:record_digest(Negative)),
@@ -596,22 +599,26 @@ record_blob_digest(Blob) ->
     {ok, Digest} = quod_atomic:encoded_record_digest(Blob),
     Digest.
 
+untrusted_entry() ->
+    F = quod_ct:protocol_fixture(<<"quod:target">>),
+    quod_ct:committed_entry(<<"quod:target">>, 7, {batch, [maps:get(transaction, F)]}).
+
 certified_ref() ->
     {ok, Ref} = quod_dtx:certified_ref(
                   <<"quod:target">>, digest(1), 7,
-                  digest(2), digest(3), <<"qc">>),
+                  digest(2), digest(3), quod_ct:fixture_finality(6, digest(2))),
     Ref.
 
 accepted_ref() ->
     {ok, Ref} = quod_dtx:certified_ref(
                   <<"quod:target">>, digest(1), 7,
-                  digest(2), record_blob_digest(), <<"qc">>),
+                  digest(2), record_blob_digest(), quod_ct:fixture_finality(6, digest(2))),
     Ref.
 
 read_anchor_ref() ->
     {Ns, Anchor} = target(),
     {ok, Ref} = quod_dtx:certified_ref(
-                  Ns, Anchor, 7, digest(2), digest(3), <<"qc">>),
+                  Ns, Anchor, 7, digest(2), digest(3), quod_ct:fixture_finality(6, digest(2))),
     Ref.
 
 read_plan_blob() ->

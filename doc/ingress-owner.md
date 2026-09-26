@@ -1,7 +1,9 @@
 # Ingress ownership and signed-submission retargeting
 
 Status: Stage 1 and the first Stage 2 pure-state extraction slice are committed
-Scope: transaction custody and relay; no change to Simplex ordering, voting, or proposer selection
+Scope: transaction custody and relay. The approved finality correction in
+`finality-round-recovery-plan.md` §4.5 replaces slot-based placement with the
+consensus era/view; implementation and deployment status remain in `WORK-IN-PROGRESS.md`.
 
 ## Why this change exists
 
@@ -28,44 +30,35 @@ Three identifiers have different jobs and must not be conflated:
 - `SubmissionId` identifies the exact signed submission. It is stable across
   every placement and is used to match a committed payload.
 - `AttemptId` identifies one placement of that submission. It is a
-  domain-separated digest of the namespace, `SubmissionId`, committee
-  view identity, exact target slot, and target public key. The committee view
-  identity includes the adoption revision/anchor as well as the validator set:
-  hashing only the members would collide if the same set recurs later.
-
-The authoritative committee identity is derived identically during live commit,
-boot replay, and catch-up:
-
-```erlang
-sha256(term_to_binary(
-  {quod_committee_view, 1, Ns, AdoptionSlot, AdoptionBlockHash,
-   lists:sort(NewValidators)}, [deterministic]))
-```
+  domain-separated digest of the namespace, `SubmissionId`, consensus era,
+  exact protocol view, and target public key. The era comes from the engine's
+  certified material root; equal validator sets in different eras do not share
+  placement identity. The current unsigned attempt hash grammar is version2.
 
 The definitive relay protocol binds every acknowledgement and result to both
 logical and placement identity:
 
 ```erlang
-{relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+{relay_submit, SubmissionId, AttemptId, Era, TargetView,
                Submission, TraceCarrier}
-{relay_accepted, SubmissionId, AttemptId, CommitteeId, TargetSlot}
-{relay_result, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result}
+{relay_accepted, SubmissionId, AttemptId, Era, TargetView}
+{relay_result, SubmissionId, AttemptId, Era, TargetView, Result}
 ```
 
 The receiver derives `SubmissionId` from the bounded opaque submission envelope
 and derives `AttemptId` from that ID plus the bounded outer placement fields. It
-validates the exact committee view, verifies the author signature over the
+validates the exact consensus era/view, verifies the author signature over the
 still-opaque canonical bytes, and only then decodes and namespace/author-binds
 the transaction. Attempt/result caches use `AttemptId`; commit matching uses
 `SubmissionId`. Each inflight/cache value also retains the complete
 peer/identity/view/slot reference and is write-once: a same-key,
 different-context collision fails closed.
 
-Current committee-view equality gates only the first admission of an attempt.
+Current consensus-era equality gates only the first admission of an attempt.
 An exact inflight duplicate or cached result admitted under an older view is
 still answered from its stored context after membership advances. Likewise, an
 origin matches a late response against the stored attempt, not its current
-committee view.
+consensus era.
 
 Relay transport capability is narrower than cache lifetime. A current
 committee peer or a peer named by an exact live pending/inflight attempt may
@@ -86,9 +79,13 @@ no fallback relay path on the consensus channel.
    signature, `TxId`, `author_seq`, `read_check`, or submission timestamp.
 2. **One active attempt.** An origin has at most one live placement for a
    `SubmissionId`. Destinations never forward or retarget it.
-3. **Authoritative exclusion.** The origin retargets only after its own
-   Simplex view finalizes the target slot without the `SubmissionId`. A peer
-   rejection is a wake-up/catch-up hint, not proof that the slot is closed.
+3. **Placement is not outcome.** A consensus view/era change retires obsolete
+   placement and permits re-placing the identical retained signed submission.
+   It does not prove exclusion, release custody or authorize a new operation.
+   Only finalized material history resolves inclusion/exclusion. An occurrence
+   already in the selected notarized ancestry parks behind its author sequence
+   floor; it cannot be rejected as stale until the durable history establishes
+   that floor. Peer replies remain hints.
 4. **Exact ownership.** Simplex remains authoritative for proposer identity,
    slot openness, committee state, sequence floors, consensus barriers
    (membership and DTX controls), and finality. It revalidates every ingress
@@ -124,10 +121,11 @@ Unsigned queue expiry may remain retryable `busy`, because no signed submission
 exists yet. Once custody is created, expiry is ambiguous and uses the original
 `outcome_unknown` identity.
 
-With an honest quorum, an attempted slot eventually either contains the
-submission or finalizes without it. The origin then advances the same signed
-submission to the earliest usable seat. A lying or silent target cannot wedge
-this loop because local finality, not its reply, drives progress.
+With an honest quorum, certified view changes move an unresolved signed
+submission past a silent proposer while preserving its bytes and deadline.
+Exact-parent sequence validation prevents a later block from including a
+submission already present in its material ancestry. Only the origin's verified
+material history and application path resolve the caller's outcome.
 
 ## Final ownership split
 
@@ -236,10 +234,14 @@ still commit.
 
 This removes public retry amplification while changing only one process's state
 model. It provides a testable semantic boundary before process extraction. The
-first behavioral slice retains ordinary content writes only;
-committee-changing transactions are deliberately non-custodied and retain a
-terminal skip/re-proof rule until membership-verdict skip loops have a
-separately reviewed rule.
+finality correction uses the same retained custody for content and membership.
+The former membership exception strands a valid removal at a dead proposer:
+complaints advance views without producing a ledger row that could return a
+terminal skip. Membership now re-places its exact signed submission through the
+shared owner. Its singleton selection, installed-parent requirement and Prolog
+verdict remain unchanged. A local verdict or view change grants no public retry;
+inclusion resolves normally and the original deadline reports uncertainty.
+This rule is part of the completed finality-cut review before commit.
 
 The in-process slice resets and waits for every tracked relay stream during a
 graceful Simplex termination, and reseat resets the affected inbound
@@ -300,7 +302,7 @@ Simplex publishes two ordered inputs to ingress:
 quod_ingress:route_view(
   Ns, Incarnation, Revision,
   #{capability := accept | hold | reject,
-    committee_id := CommitteeId,
+    committee_id := Era,
     validators := Validators,
     committed := Committed,
     approved := Approved,
@@ -309,7 +311,7 @@ quod_ingress:route_view(
     approved_author_seqs := error | {ok, map()}}).
 
 quod_ingress:finalized(
-  Ns, Incarnation, Slot, CommitteeId, IncludedSubmissionIds).
+  Ns, Incarnation, Slot, Era, IncludedSubmissionIds).
 ```
 
 The route view answers where work may go; the finalization stream is the only
@@ -321,7 +323,7 @@ Ingress sends Simplex one ordering command:
 
 ```erlang
 quod_simplex:offer_batch(
-  Ns, Incarnation, CommitteeId, ExactSlot, SignedSubmissions).
+  Ns, Incarnation, Era, ExactSlot, SignedSubmissions).
 ```
 
 The offer is sealed: Simplex either accepts that exact batch for that exact
@@ -355,7 +357,8 @@ Correctness tests must cover:
 - a real four-validator commit with every tracked ingress direction down;
 - future-slot result-cache invalidation and full-prefix replay after reseat;
 - original deadline and caller `outcome_unknown`;
-- both admit and remove membership changes bypassing retained custody;
+- both admit and remove preserving exact custody across view changes, committed
+  completion and ambiguous original-deadline expiry;
 - event-driven retained-custody wake-up for malformed committee view, exact
   duplicate attempt, and lane conflict, with no compiled custody or relay
   population threshold;

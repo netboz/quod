@@ -347,8 +347,8 @@ fresh_ledgers_single_target_uses_vector_receipt_test_() ->
                         quod_reg:where({quod_prolog, Ns})} || Ns <- Namespaces],
         lists:foreach(fun(Ns) ->
             NsDir = quod_ledger_store:ns_dir(Dir, Ns),
-            assert_file_magic(filename:join(NsDir, "log.0001"), 16#915106B0),
-            assert_file_magic(filename:join(NsDir, "signing.0001"), 16#51534A35)
+            assert_file_magic(filename:join(NsDir, "log.0001"), 16#915106B1),
+            assert_file_magic(filename:join(NsDir, "signing.0001"), 16#51534A36)
         end, Namespaces),
         {ok, Network} = quod_ontology:network_identity(),
         F = quod_ct:signed_goal_fixture(#{network => Network,

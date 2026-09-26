@@ -115,7 +115,7 @@ future_result(Reader) ->
     after 1500 -> error(future_view_stalled) end.
 
 append_owner(Owner, Expected) ->
-    Owner ! {append_noop, self()},
+    Owner ! {append_material, self()},
     receive {appended, Owner, Expected} -> ok
     after 1000 -> error(owner_did_not_append) end.
 
@@ -170,7 +170,7 @@ captured_view_is_bounded_and_cannot_recapture_from_replacement_test() ->
               quod_simplex:history_view(Identity, committed, Deadline),
           ?assertEqual((quod_ledger:entry_view(Entry))#entry.index, Height),
           ?assert(quod_simplex:history_view_live(View)),
-          Owner ! {append_noop, self()},
+          Owner ! {append_material, self()},
           receive {appended, Owner, Next} -> ?assertEqual(Height + 1, Next)
           after 1000 -> error(owner_did_not_append)
           end,
@@ -336,35 +336,41 @@ with_owner(Fun) ->
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Ns = <<"history-view:", Suffix/binary>>,
     Dir = filename:join("/tmp", "quod-history-view-" ++ binary_to_list(Suffix)),
-    Identity = {Ns, crypto:strong_rand_bytes(32)},
-    Fixture = quod_ct:remote_operation_fixture(#{target => Identity}),
-    Claim = maps:get(claim, Fixture),
-    {ok, #{operation_ref := OperationRef}} = quod_transaction:request_claim(Claim),
-    Signer = maps:get(node_identity, Fixture),
+    F = quod_ct:protocol_fixture(Ns),
+    Identity = maps:get(identity, F), Signer = maps:get(signer, F),
+    Fixture = quod_ct:remote_operation_fixture(#{target => Identity,
+        node_identity => Signer, admission => maps:get(admission, F)}),
     Height = 513, %% crosses two sparse-index checkpoints; not a production bound
-    {ok, Block} = quod_ledger:new_block(Height, Height - 1, {batch, [Claim]}, 0),
-    Hash = quod_simplex:block_hash(Block),
-    #share{sig = Sig} = quod_simplex:make_share(
-                         quod_simplex:consensus_domain(Ns, element(2, Identity)),
-                         commit, Height, Hash, Signer),
-    Pub = maps:get(pubkey, Signer),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = Height,
-                                         block_hash = Hash, sigs = [{Pub, Sig}]}),
+    Claim = signed_at(maps:get(claim, Fixture), Height, F),
+    {ok, #{operation_ref := OperationRef}} = quod_transaction:request_claim(Claim),
+    Era = maps:get(era, F), Root = maps:get(protocol_root, maps:get(projection, F)),
+    {BlocksRev, _} = lists:foldl(fun(I, {Blocks, Prev}) ->
+        Tx = case I of Height -> Claim; _ -> signed_at(maps:get(transaction, F), I, F) end,
+        {ok, Block} = quod_ledger:new_block({Era, I - 1}, Prev, {batch, [Tx]}, I),
+        {[Block | Blocks], quod_ledger:block_ref(Block)}
+    end, {[], Root}, lists:seq(2, Height)),
+    FinalBlock = hd(BlocksRev), Finality = quod_ct:protocol_certificate(FinalBlock, F),
+    Entries = [quod_ledger:entry(I, Block, Finality) ||
+        {I, Block} <- lists:zip(lists:seq(2, Height), lists:reverse(BlocksRev))],
+    Entry = lists:last(Entries), Pub = maps:get(pubkey, Signer),
     Parent = self(),
     {Owner, Monitor} = spawn_monitor(fun() ->
         {ok, Empty} = quod_ledger_store:open(Ns, Dir),
-        Prefix = [begin {ok, E} = quod_ledger:new_entry(I, noop, 0, none), E end
-                  || I <- lists:seq(1, Height - 1)],
-        {ok, Store} = quod_ledger_store:append(Empty, Prefix ++ [Entry]),
+        Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
+        {ok, S1} = quod_ledger_store:append(Empty, {none, [Genesis]}),
+        {ok, Store} = quod_ledger_store:append(S1, {proof_source(BlocksRev), Entries}),
         try
             true = quod_reg:reg({quod_simplex, Ns}),
-            State = quod_simplex:test_state(
+            Projection = (maps:get(projection, F))#{
+                history_head := {Height, quod_simplex:block_hash(FinalBlock)},
+                protocol_root := quod_ledger:block_ref(FinalBlock), timestamp := Height},
+            State = quod_simplex:test_install_projection(Projection, quod_simplex:test_state(
                       #{ns => Ns, genesis_hash => element(2, Identity),
                         store => Store, slot => Height, last_applied => Height - 1,
                         self => Pub, validators => [Pub], sync => ready,
-                        prolog_ready => true}),
+                        prolog_ready => true})),
             Parent ! {owner_ready, self()},
-            owner_loop(State, Store)
+            owner_loop(State, Store, F, none)
         after quod_ledger_store:close(Store)
         end
     end),
@@ -380,9 +386,7 @@ with_owner(Fun) ->
         _ = file:del_dir_r(Dir)
     end.
 
-owner_loop(State, Store) -> owner_loop(State, Store, none).
-
-owner_loop(State, Store, Observer) ->
+owner_loop(State, Store, Fixture, Observer) ->
     receive
         {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
             Reply = quod_simplex:test_local_history_view(
@@ -392,10 +396,10 @@ owner_loop(State, Store, Observer) ->
                 none -> ok;
                 _ -> Observer ! {history_observed, self(), Requirement, Deadline, Reply}
             end,
-            owner_loop(State, Store, Observer);
+            owner_loop(State, Store, Fixture, Observer);
         {observe_history, Caller} ->
             Caller ! {observing_history, self()},
-            owner_loop(State, Store, Caller);
+            owner_loop(State, Store, Fixture, Caller);
         {pause_capture, Caller} ->
             receive
                 {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
@@ -405,20 +409,35 @@ owner_loop(State, Store, Observer) ->
                                Identity, Requirement, Deadline, State),
                     Caller ! {owner_capture_result, self(), Result},
                     gen:reply(From, Result),
-                    owner_loop(State, Store, Observer)
+                    owner_loop(State, Store, Fixture, Observer)
             end;
-        {append_noop, Caller} ->
+        {append_material, Caller} ->
             Next = quod_ledger_store:last(Store) + 1,
-            {ok, Entry} = quod_ledger:new_entry(Next, noop, 0, none),
-            {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
-            State1 = quod_simplex:test_state_set(
-                       slot, Next, quod_simplex:test_state_set(store, Store1, State)),
+            Projection = quod_simplex:test_state_projection(State),
+            Root = maps:get(protocol_root, Projection), Era = maps:get(era, Fixture),
+            Tx = signed_at(maps:get(transaction, Fixture), Next, Fixture),
+            {ok, Block} = quod_ledger:new_block({Era, Next - 1}, Root, {batch, [Tx]}, Next),
+            Entry = quod_ledger:entry(Next, Block, quod_ct:protocol_certificate(Block, Fixture)),
+            {ok, Store1} = quod_ledger_store:append(Store, {proof_source([Block]), [Entry]}),
+            P1 = quod_simplex:history_advance(quod_ledger_store:namespace(Store), Entry, Projection),
+            State1 = quod_simplex:test_install_projection(P1, quod_simplex:test_state_set(
+                       slot, Next, quod_simplex:test_state_set(store, Store1, State))),
             Ns = quod_ledger_store:namespace(Store1),
             quod_reg:publish({committed, Ns}, {certified_head, Ns, Next}),
             Caller ! {appended, self(), Next},
-            owner_loop(State1, Store1, Observer);
+            owner_loop(State1, Store1, Fixture, Observer);
         stop -> ok
     end.
+
+signed_at(Tx, Height, #{identity := {Ns, Anchor} = Identity, admission := Admission, signer := Signer}) ->
+    Unsigned = quod_transaction:bind_id(Identity, Tx#transaction{
+        author_seq = Height - 1, sig = none, signed_bytes = none, authentication = none}),
+    {ok, Signed} = quod_transaction:sign({Ns, Anchor, Admission}, Unsigned, Signer), Signed.
+
+proof_source(Blocks) ->
+    Bytes = [quod_ledger:block_bytes(B) || B <- Blocks],
+    {lists:sum([quod_ledger_store:proof_frame_size(B) || B <- Bytes]),
+     fun([]) -> done; ([B | Rest]) -> {B, Rest} end, Bytes}.
 
 stop_owner(Pid) ->
     Ref = erlang:monitor(process, Pid),

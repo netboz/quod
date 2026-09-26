@@ -60,7 +60,10 @@ scenario(Mode) ->
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
     try
-        {ok, Store} = quod_ledger_store:append(Store0, [Genesis]),
+        {ok, Store} = quod_ledger_store:append(Store0, {none, [Genesis]}),
+        {ok, Projection0, _} = quod_ct:history_advance(
+            Identity, Genesis, quod_simplex:history_projection(Identity), Index),
+        Root = maps:get(protocol_root, Projection0),
         %% These are already parent-selected owner rows. The real journal
         %% records both controls; no history-side shadow inventory is seeded.
         {ok, C2} = quod_atomic:sign_control(Identity, M2, Admission, 1, 1, Signer),
@@ -71,18 +74,24 @@ scenario(Mode) ->
                #{ns => Ns, genesis_hash => element(2, Identity), self => Author, id => Signer,
                  consensus_domain => Domain, store => Store, signing_journal => J2,
                  phase_index => Index, slot => 1, last_applied => 1, sync => ready,
-                 prolog_ready => true, eng => quod_simplex:eng_new(Domain, Committee, 1)})),
+                 prolog_ready => true, archive_tip => {Root, 0},
+                 eng => quod_simplex:eng_new(Domain, Committee, {Root, 0})})),
         S1 = quod_simplex:test_seed_dtx_submission(C2, [{dtx_endpoint, self()}], S0),
         Both = quod_simplex:test_seed_dtx_submission(C1, [], S1),
         ?assertEqual(lists:sort([G1, G2]), lists:sort(maps:keys(
                          quod_signing_journal:pending_dtx(J2)))),
         Before = quod_simplex:test_state_projection(Both),
         {Block, Entry} = certified_entry(Identity, C1, Identities, Committee),
-        ?assertEqual(ok, quod_catchup:verify_entry(Identity, Entry, Before)),
-        {ok, AfterProjection, _} = quod_ct:with_network_identity(maps:get(network, First),
-          fun() -> quod_simplex:history_advance(Identity, Entry, Before, Index) end),
+        ?assertEqual(ok, quod_ct:verify_finality(Identity, Entry, Before)),
+        Bytes = quod_ledger:block_bytes(Block),
+        {ok, AfterProjection, Delta, Summary} = quod_ct:with_network_identity(maps:get(network, First),
+          fun() -> quod_catchup:verify_forward_group(Identity, [Entry], Before, Index,
+              {fun([]) -> done; ([B]) -> {ok, B, []} end, [Bytes]}) end),
+        Verified = #{entries => [Entry], projection => AfterProjection, delta => Delta, finality => Summary,
+                     proof => {quod_ledger_store:proof_frame_size(Bytes),
+                               fun([]) -> done; ([B]) -> {B, []} end, [Bytes]}},
         _ = receiver_messages(Receiver),
-        Dispatched = apply_scenario(Mode, Block, Entry, Before, AfterProjection,
+        Dispatched = apply_scenario(Mode, Block, Entry, Before, Verified,
                                OtherPeers, Identities, Domain, Both),
         Messages = receiver_messages(Receiver),
         assert_order(Mode, Entry, Ref1, G1, Messages),
@@ -131,15 +140,15 @@ apply_scenario(live, Block, _Entry, Before, _After, OtherPeers,
     Hash = quod_simplex:block_hash(Block),
     Parent = maps:get(history_head, Before),
     {Monitor, Pending} = quod_simplex:test_latch_dtx_validation(
-                           2, Hash, Parent, self(), Block, S0),
+                           Block#block.slot, Hash, Parent, self(), Block, S0),
     %% A fresh group's verified history is empty. The production verdict
     %% handler still previews this exact signed Vote against its parent.
     Supported = quod_simplex:test_on_dtx_verdict(
-                  2, Hash, Parent, self(), 1, {valid, #{}}, Pending),
+                  Block#block.slot, Hash, Parent, self(), 1, {valid, #{}}, Pending),
     ?assertNot(erlang:demonitor(Monitor, [info])),
     {_Validating, _Validation, _Candidate,
      {Hash, Parent, #{}, ParentDtx}, _RetainedBlock} =
-        quod_simplex:test_dtx_round(2, Supported),
+        quod_simplex:test_dtx_round(Block#block.slot, Supported),
     ?assertEqual(maps:get(dtx, Before), ParentDtx),
     %% The local share plus two authenticated peers reaches each real
     %% threshold. The final dispatch enters commit_block, not a test fold.
@@ -147,14 +156,14 @@ apply_scenario(live, Block, _Entry, Before, _After, OtherPeers,
     lists:foldl(
       fun({Kind, Peer}, S) ->
           Share = quod_simplex:make_share(
-                    Domain, Kind, 2, Hash, maps:get(Peer, Identities)),
+                    Domain, Kind, {Block#block.era, Block#block.slot}, Hash, maps:get(Peer, Identities)),
           quod_simplex:dispatch(Peer, {share, Share}, S)
       end, Supported,
       [{Kind, Peer} || Kind <- [support, commit], Peer <- Peers]);
-apply_scenario(catchup, _Block, Entry, _Before, After, _Peers,
+apply_scenario(catchup, _Block, _Entry, _Before, Verified, _Peers,
                _Identities, _Domain, S0) ->
     {S, ok} = quod_simplex:test_apply_catchup_window(
-                recovery, [Entry], After, S0),
+                {recovery, self()}, Verified, S0),
     S;
 apply_scenario(catchup_paused, Block, Entry, Before, After, Peers,
                Identities, Domain, S0) ->
@@ -198,16 +207,17 @@ genesis(Ns, Committee) ->
       Identity, Entry, quod_simplex:history_projection(Identity)),
     {Entry, Identity, Projection}.
 
-certified_entry({Ns, Anchor}, Control, Identities, Committee) ->
+certified_entry({Ns, Anchor} = Identity, Control, Identities, Committee) ->
+    Era = quod_ledger:initial_era(Identity),
     {ok, Block} = quod_ledger:new_block(
-                    2, 1, {batch, [{dtx, Control}]}, quod_time:now_ms()),
+                    {Era, 1}, {Era, 0, Anchor}, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = [quod_simplex:make_share(
-                Domain, commit, 2, Hash, maps:get(Key, Identities))
+                Domain, commit, {Era, 1}, Hash, maps:get(Key, Identities))
               || Key <- lists:sublist(Committee, 3)],
-    {ok, Cert} = quod_simplex:form_cert(Domain, commit, 2, Hash, Shares, Committee),
-    {Block, quod_ledger:entry(Block, Cert)}.
+    {ok, Cert} = quod_simplex:form_cert(Domain, commit, {Era, 1}, Hash, Shares, Committee),
+    {Block, quod_ledger:entry(2, Block, Cert)}.
 
 start_receiver(Ns) ->
     Parent = self(),

@@ -970,33 +970,34 @@ runtime_event_test_() ->
       fun t_replay_no_event/1,
       fun t_replay_reentry/1,
       fun t_no_boundary_without_advance/1,
-      fun t_projection_progress_includes_non_material_blocks/1]}.
+      fun t_projection_progress_includes_duplicate_material/1]}.
 
-t_projection_progress_includes_non_material_blocks({Ns, Engine}) ->
+t_projection_progress_includes_duplicate_material({Ns, Engine}) ->
     fun() ->
+        Data = with_host_policy(Ns, batch(change(Ns, [], #{}))),
+        ok = ae(Ns, 1, Data, replay),
+        ?assertEqual(1, quod_prolog:applied(Ns)),
         true = quod_reg:subscribe({runtime, Ns}),
         try
-            %% Neither block creates a material runtime event. Nevertheless
-            %% readers waiting for the exact applied floor must wake for both
-            %% live and replay, including the final quiet replay block.
-            ok = ae(Ns, 1, noop, live),
-            ?assertEqual(1, quod_prolog:applied(Ns)),
-            ?assertEqual({projection_advanced, Engine, 1},
-                         recv_rt(projection_advanced)),
-            ok = ae(Ns, 2, noop, replay),
+            %% Duplicates advance material height without applying their
+            %% consequences twice. Both live and final quiet replay wake
+            %% readers waiting on the published projection floor.
+            ok = ae(Ns, 2, Data, live),
             ?assertEqual(2, quod_prolog:applied(Ns)),
-            ?assertEqual({projection_advanced, Engine, 2},
-                         recv_rt(projection_advanced)),
+            ?assertEqual({projection_advanced, Engine, 2}, recv_rt(projection_advanced)),
+            ok = ae(Ns, 3, Data, replay),
+            ?assertEqual(3, quod_prolog:applied(Ns)),
+            ?assertEqual({projection_advanced, Engine, 3}, recv_rt(projection_advanced)),
             ok = refute_rt(applied_live),
-            %% Already-applied entries and gaps are not progress.
-            ok = ae(Ns, 2, noop, live),
-            ok = ae(Ns, 4, noop, live),
-            ?assertEqual(2, quod_prolog:applied(Ns)),
+            ok = ae(Ns, 3, Data, live),
+            ok = ae(Ns, 5, Data, live),
+            ?assertEqual(3, quod_prolog:applied(Ns)),
             ok = refute_rt(projection_advanced)
         after
             true = quod_reg:unsubscribe({runtime, Ns})
         end
     end.
+
 
 %%%===================================================================
 %%% helpers
@@ -1197,8 +1198,9 @@ t_batch_apply({Ns, _}) ->
         ?assertEqual(3, maps:get(applies, Stats)),
         %% An improper batch is rejected as a whole: no prefix transaction can leak into the KB.
         Partial = change(Ns, diff_for({must_not_apply, x}), #{}),
-        ?assertEqual({error, bad_entry},
-                     quod_ledger:new_entry(2, {batch, [Partial | bad_tail]}, 0, none)),
+        ?assertEqual({error, bad_block},
+                     quod_ledger:new_block({<<1:256>>, 1}, {<<1:256>>, 0, <<0:256>>},
+                                           {batch, [Partial | bad_tail]}, 0)),
         ?assertMatch({fail, [_ | _]},
                      quod_prolog:prove(Ns, {must_not_apply, x})),
         Stats2 = quod_prolog:stats(Ns),
@@ -1341,7 +1343,7 @@ t_verdict_side_effects({Ns, _}) ->
         ?assertEqual({invalid, can_join_side_effects}, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 2, se))
     end.
 
-%% park-until-parent-height (even when the parent lands on a noop), abstain-when-late, TTL reap.
+%% park-until-parent-height (even for an empty-diff parent), abstain-when-late, TTL reap.
 t_verdict_lifecycle({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
@@ -1350,8 +1352,8 @@ t_verdict_lifecycle({Ns, _}) ->
         ok = quod_prolog:request_content_verdict(
                Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 3, self(), park),
         ?assertEqual(ok, no_verdict(park)),
-        %% advancing to height 2 via a NOOP still resolves it (shared tail across every apply path)
-        ok = ab(Ns, 2, noop),
+        %% advancing to height 2 via an empty diff still resolves it (shared tail across every apply path)
+        ok = ab(Ns, 2, batch(change(Ns, [], #{}))),
         ?assertEqual(valid, recv_verdict(park)),
         %% applied == 2: a verdict for Slot 2 (parent 1, already passed) abstains
         ?assertEqual(abstain, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 2, late)),
@@ -1374,7 +1376,7 @@ t_verdict_tag_reuse({Ns, _}) ->
         ok = quod_prolog:request_content_verdict(
                Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 3, self(), t),
         ?assertEqual(ok, no_verdict(t)),                         %% neither has delivered yet
-        ok = ab(Ns, 2, noop),               %% reach parent 2 → the NEW request resolves
+        ok = ab(Ns, 2, batch(change(Ns, [], #{}))),               %% reach parent 2 → the NEW request resolves
         ?assertEqual(valid, recv_verdict(t)),
         %% the superseded far-slot timer was cancelled, so no stray abstain follows
         ?assertEqual(ok, no_verdict(t))
@@ -1395,7 +1397,7 @@ t_parent_validation_trace_lifecycle(Kind, {Ns, Engine}) ->
                   trace_verdict_request(Kind, Ns, 3, ParkTag),
                   ?assertEqual(1, quod_prolog:applied(Ns)),
                   assert_no_trace_verdict(ParkTag),
-                  ok = ab(Ns, 2, noop),
+                  ok = ab(Ns, 2, batch(change(Ns, [], #{}))),
                   assert_trace_verdict(Kind, ParkTag, Engine, 2,
                                        trace_ready_verdict(Kind)),
                   trace_verdict_request(Kind, Ns, 2, trace_stale),
@@ -1405,7 +1407,7 @@ t_parent_validation_trace_lifecycle(Kind, {Ns, Engine}) ->
                   trace_verdict_request(Kind, Ns, 4, trace_replaced),
                   ?assertEqual(2, quod_prolog:applied(Ns)),
                   assert_no_trace_verdict(trace_replaced),
-                  ok = ab(Ns, 3, noop),
+                  ok = ab(Ns, 3, batch(change(Ns, [], #{}))),
                   assert_trace_verdict(Kind, trace_replaced, Engine, 3,
                                        trace_ready_verdict(Kind)),
                   trace_verdict_request(Kind, Ns, 9, trace_expired),

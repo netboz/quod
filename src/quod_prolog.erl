@@ -6429,12 +6429,6 @@ append_result(Tx, {error, not_in_charge, unavailable}, S) ->
     request_completed(Tx, S);   %% ambiguous: ordered apply may still resolve it; the TTL reports unknown
 append_result(Tx, {error, not_in_charge, Hint}, S) ->
     reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
-%% Ordinary signed content is retained inside Simplex across exclusion. Only
-%% the deliberately non-custodied membership path reaches this terminal
-%% skip/re-proof response.
-append_result(Tx, {error, skipped}, S = #s{ns = Ns}) ->
-    quod_metrics:count_tx_retry(Ns, membership_skipped),
-    reject_parked(Tx, {error, retry}, request_completed(Tx, S));
 %% A locally confirmed author sequence was superseded. The content is fine:
 %% re-prove and sign with a fresh sequence, so surface it retryably.
 append_result(Tx, {error, stale_seq}, S = #s{ns = Ns}) ->
@@ -6475,8 +6469,8 @@ mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
 
 %% Apply one committed entry, then — in a shared tail across every
 %% applied-advancing path — resolve membership or Vote verdicts parked for
-%% the parent height just reached.  A content commit, DTX phase, or noop must
-%% all release the same bounded validation lifecycle.
+%% the parent height just reached. Content and DTX entries release the same
+%% bounded validation lifecycle.
 apply_committed(Entry, Origin, S) ->
     #entry{index = Index} = quod_ledger:entry_view(Entry),
     {Applied, Changes} = apply_step(Index, Entry, Origin, S),
@@ -6498,7 +6492,7 @@ apply_step(Index, _Entry, _Origin, S = #s{ns = Ns, applied = A}) when Index > A 
     {S, #{}};
 %% Index == applied+1. Every committed entry kind is enumerated here. A recognized
 %% kind without a deterministic apply implementation fails loudly; it is never
-%% confused with `noop`, the one kind that legitimately applies no data change.
+%% silently treated as an empty state transition.
 %%
 %% Caller completions and outcome events are buffered through the fold. The
 %% canonical reducer flushes the outcome index and publishes the MVCC version
@@ -6617,8 +6611,6 @@ finish_projection_result(
     %% been published and acknowledged.
     quod_effect_journal:reconcile(),
     S2;
-finish_projection_result(#{kind := noop}, _Index, _Origin, S) ->
-    S;
 finish_projection_result(
   #{kind := unexpected, payload := Payload}, Index, _Origin,
   S = #s{ns = Ns}) ->

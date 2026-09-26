@@ -479,7 +479,7 @@ missing_operation_effect_custody_is_silent_but_conflicts_warn_test() ->
           target := {Ns, _} = Target, claim := Claim} = Binding,
         {transaction, SourceNs, SourceAnchor, ClaimId} = ClaimRef,
         {ok, Ref} = quod_dtx:certified_ref(SourceNs, SourceAnchor, 2,
-                     hash(8350), ClaimId, <<"fixture-qc">>),
+                     hash(8350), ClaimId, quod_ct:fixture_finality(1, hash(8350))),
         App = quod_transaction:attach_evidence(
                 quod_transaction:remote_application(ClaimRef, Claim, Target), Ref, Claim),
         %% No private custody on this host is ordinary routing unavailability.

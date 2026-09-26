@@ -38,7 +38,7 @@ frame_dispatch_test() ->
 
     Consensus = {share, example},
     Inner = term_to_binary(Consensus, [deterministic]),
-    Frame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
+    Frame = term_to_binary({sx3, Ns, Inner}, [deterministic]),
     ?assertEqual({consensus, Consensus},
                  quod_relay:decode_consensus_frame(Frame, Ns)),
     ?assertEqual(error, quod_relay:decode_relay_frame(Frame, Ns)),
@@ -48,21 +48,24 @@ frame_dispatch_test() ->
        error,
        quod_relay:decode_consensus_frame(
          quod_relay:encode(Ns, Submit), Ns)),
-    OldFrame = term_to_binary({sx, Ns, Inner}, [deterministic]),
-    ?assertEqual(error, quod_relay:decode_consensus_frame(OldFrame, Ns)).
+    OldRelay = term_to_binary({sx_relay, Ns, term_to_binary(Submit, [deterministic])}),
+    ?assertEqual(error, quod_relay:decode_relay_frame(OldRelay, Ns)),
+    OldFrame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
+    ?assertEqual(error, quod_relay:decode_consensus_frame(OldFrame, Ns)),
+    ?assertEqual(error, quod_relay:decode_consensus_frame(term_to_binary({sx, Ns, Inner}), Ns)).
 
 canonical_block_and_sidecar_wire_test() ->
     Ns = <<"relay:canonical">>,
-    Payload = quod_ct:atomic_resolve_payload(),
-    {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
-    {ok, Ref} = quod_dtx:certified_ref(
-                  <<"quod:hint">>, <<1:256>>, 7,
-                  <<2:256>>, <<3:256>>, <<"qc">>),
-    Entry = quod_ledger:noop_entry(7, none),
+    F = quod_ct:protocol_fixture(Ns),
+    {_Ns, Anchor} = maps:get(identity, F), Era = maps:get(era, F),
+    Tx = maps:get(transaction, F),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [Tx]}, 7),
+    Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Block, F)),
+    {ok, Ref} = quod_dtx:certified_entry_ref(maps:get(identity, F), Entry, Tx),
     Hints = [{Ref, Entry}],
     Frame = quod_relay:encode_consensus_frame(
               Ns, {propose, Block, Hints}),
-    {sx2, Ns, Inner} = binary_to_term(Frame, [safe]),
+    {sx3, Ns, Inner} = binary_to_term(Frame, [safe]),
     {propose_bytes, BlockBytes,
      [{entry_bytes, Ref, EntryBytes}]} = binary_to_term(Inner, [safe]),
     ?assertEqual(quod_ledger:block_bytes(Block), BlockBytes),
@@ -74,7 +77,7 @@ canonical_block_and_sidecar_wire_test() ->
 
     SubmitFrame = quod_relay:encode_consensus_frame(
                     Ns, {dtx_submit, [<<"control">>], Hints}),
-    {sx2, Ns, SubmitInner} = binary_to_term(SubmitFrame, [safe]),
+    {sx3, Ns, SubmitInner} = binary_to_term(SubmitFrame, [safe]),
     {dtx_submit_bytes, [<<"control">>],
      [{entry_bytes, Ref, EntryBytes}]} =
         binary_to_term(SubmitInner, [safe]),
@@ -85,7 +88,7 @@ canonical_block_and_sidecar_wire_test() ->
 decoded_block_wire_shapes_are_hard_rejected_test() ->
     Ns = <<"relay:old-record-wire">>,
     Payload = quod_ct:atomic_resolve_payload(),
-    {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, Payload, 7),
     OldMessages =
         [{propose, Block, []},
          {certified_block, Block, none},
@@ -93,26 +96,26 @@ decoded_block_wire_shapes_are_hard_rejected_test() ->
     lists:foreach(
       fun(Message) ->
           Inner = term_to_binary(Message, [deterministic]),
-          Frame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
+          Frame = term_to_binary({sx3, Ns, Inner}, [deterministic]),
           ?assertEqual(error,
                        quod_relay:decode_consensus_frame(Frame, Ns))
       end, OldMessages).
 
 certified_reply_carries_hash_not_a_second_certificate_test() ->
     Ns = <<"relay:certified-by-requester">>,
-    {ok, Block} = quod_ledger:new_block(2, 1, quod_ct:atomic_resolve_payload(), 7),
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, empty, 7),
     Hash = quod_simplex:block_hash(Block),
     Frame = quod_relay:encode_consensus_frame(Ns, {certified_block, Block, Hash}),
     ?assertEqual({consensus, {certified_block, Block, Hash}},
                  quod_relay:decode_consensus_frame(Frame, Ns)),
-    {sx2, Ns, Inner} = binary_to_term(Frame, [safe]),
+    {sx3, Ns, Inner} = binary_to_term(Frame, [safe]),
     ?assertEqual({certified_block_bytes, quod_ledger:block_bytes(Block), Hash},
                  binary_to_term(Inner, [safe])),
     %% A transport-only clean break; no legacy certificate-bearing reply arm.
     lists:foreach(fun(OldOrMalformed) ->
         Bytes = term_to_binary({certified_block_bytes, quod_ledger:block_bytes(Block), OldOrMalformed}),
         ?assertEqual(error, quod_relay:decode_consensus_frame(
-                             term_to_binary({sx2, Ns, Bytes}), Ns))
+                             term_to_binary({sx3, Ns, Bytes}), Ns))
     end, [none, {cert, support, 2, Hash, []}, <<0:248>>, <<0:264>>]).
 
 bounded_result_cache_test() ->

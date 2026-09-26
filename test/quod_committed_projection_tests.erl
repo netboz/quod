@@ -6,7 +6,7 @@
 
 -import(quod_ct, [change/3, diff_for/1]).
 
-mixed_content_duplicate_rejection_and_noop_projection_test() ->
+mixed_content_duplicate_rejection_and_empty_diff_projection_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"projection:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
@@ -106,8 +106,10 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                               changed_heads := []}]}} =
             project(6, {batch, [EventTx]}, Projection5),
         ?assertEqual(false, proves({alarm, disk}, Projection6)),
-        {ok, Projection7, #{kind := noop}} =
-            project(7, noop, Projection6),
+        EmptyTx = signed_change({Ns, Anchor}, change(Ns, [], #{}), Signer),
+        {ok, Projection7, #{kind := content,
+            transactions := [#{status := applied, diff := [], applied_ops := []}]}} =
+            project(7, {batch, [EmptyTx]}, Projection6),
         ?assertEqual(7, quod_committed_projection:applied(Projection7)),
         ?assertEqual(7, quod_outcome:applied_floor(
                           quod_committed_projection:outcomes(Projection7)))
@@ -138,15 +140,15 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
                genesis_diff => HostDiff},
              Ns, Pubkey, <<90:256>>),
     {ok, OriginVoteRef} = quod_dtx:certified_ref(
-                          <<"projection-origin">>, <<93:256>>, 1,
-                          <<94:256>>, <<95:256>>, <<"vote-qc">>),
+                          <<"projection-origin">>, <<93:256>>, 2,
+                          <<94:256>>, <<95:256>>, quod_ct:fixture_finality(1, <<94:256>>)),
     Resolve = quod_ct:atomic_abort_record(Target, <<92:256>>, OriginVoteRef),
     GroupId = quod_atomic:group_id(Resolve),
     {ok, Material} = quod_atomic:admission_material(Resolve),
     {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1, Signer),
     {ok, OriginVoteRef2} = quod_dtx:certified_ref(
-                           <<"projection-origin-2">>, <<97:256>>, 1,
-                           <<98:256>>, <<99:256>>, <<"vote-qc-2">>),
+                           <<"projection-origin-2">>, <<97:256>>, 2,
+                           <<98:256>>, <<99:256>>, quod_ct:fixture_finality(1, <<98:256>>)),
     Resolve2 = quod_ct:atomic_abort_record(Target, <<96:256>>, OriginVoteRef2),
     GroupId2 = quod_atomic:group_id(Resolve2),
     {ok, Material2} = quod_atomic:admission_material(Resolve2),
@@ -283,8 +285,7 @@ wrong_genesis_module_digest_keeps_projection_unavailable_test() ->
     end.
 
 project(Index, Data, Projection) ->
-    Timestamp = case Data of noop -> 0; _ -> Index end,
-    {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, none),
+    Entry = quod_ct:committed_entry(<<"projection:codec-only">>, Index, Data),
     quod_committed_projection:apply_entry(
       Entry,
       Index, Projection).
@@ -307,11 +308,5 @@ signed_change({Ns, Anchor} = Target, Transaction0, Signer) ->
     Signed.
 
 dtx_entry(Index, Controls) ->
-    Items = [{dtx, Control} || Control <- Controls],
-    EmptyCert = #cert{kind = commit, slot = Index,
-                      block_hash = <<0:256>>, sigs = []},
-    {ok, Block} = quod_ledger:new_block(
-                    Index, Index - 1, {batch, Items}, Index),
-    Hash = quod_simplex:block_hash(Block),
-    quod_ledger:entry(
-      Block, EmptyCert#cert{block_hash = Hash}).
+    quod_ct:committed_entry(<<"projection:codec-only">>, Index,
+                            {batch, [{dtx, C} || C <- Controls]}).

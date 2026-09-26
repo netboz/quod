@@ -160,13 +160,13 @@ tagged_catchup_open_preserves_pools(Config) ->
         Grant = receive {catchup_credit, Ordinary, Binding, G} -> G
                 after 5000 -> ct:fail(no_loopback_credit) end,
         ReqId = <<60:128>>,
-        ok = quod_link:request_page(Ordinary, Binding, Grant, ReqId, 1, 1),
+        ok = quod_link:request_page(Ordinary, Binding, Grant, ReqId, {range, 1, 1}),
         {ServingLink, Operation} =
-            receive {catchup_request, InLink, Op, 1, 1, StartedMs}
+            receive {catchup_request, InLink, Op, {range, 1, 1}, StartedMs}
                       when is_integer(StartedMs) -> {InLink, Op}
             after 5000 -> ct:fail(no_direct_catchup_request) end,
         ok = quod_link:test_fail_next_ordered(ServingLink, send_queue_full),
-        ok = quod_link:complete_page(ServingLink, Operation, {ok, [], 0}),
+        ok = quod_link:complete_page(ServingLink, Operation, {ok, [], 0, done}),
         {ok, {Conn, Sid}} = quod_link:test_transport(ServingLink),
         receive
             {catchup_page_sent, ServingLink, Operation} -> ct:fail(premature_send_acceptance);
@@ -177,7 +177,7 @@ tagged_catchup_open_preserves_pools(Config) ->
         receive {catchup_page_sent, ServingLink, Operation} -> ok
         after 5000 -> ct:fail(no_page_send_acceptance) end,
         Next = receive
-                   {catchup_page, Ordinary, Binding, Grant, ReqId, {ok, [], 0}, N} -> N
+                   {catchup_page, Ordinary, Binding, Grant, ReqId, {ok, [], 0, done}, N} -> N
                after 5000 -> ct:fail(no_loopback_page) end,
         true = Next =/= Grant,
         receive {quod_message, _, Channel, _} -> ct:fail(catchup_fanout_survived)

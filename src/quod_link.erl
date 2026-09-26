@@ -37,7 +37,7 @@ and grant share one absolute bootstrap deadline; partial bytes cannot renew it.
 
 -export([start_outbound/7, start_inbound/3, peer_key/1,
          send/2, send_ordered/2, send_reliable/3, close/1,
-         bind_catchup/2, request_page/6, complete_page/3]).
+         bind_catchup/2, request_page/5, complete_page/3]).
 
 -ifdef(TEST).
 -export([header/3, parse_header/1, frame/1, parse/1,
@@ -154,7 +154,7 @@ bootstrap_frame(ConnProc, ack, Deadline, <<>>, S) ->
 bootstrap_frame(ConnProc, credit, _Deadline, Payload,
                 S = #s{catchup = C = #credit{ns = Ns}}) ->
     case quod_catchup:decode_frame(Ns, Payload) of
-        {ok, {blocks_credit, Grant}, _Bytes} ->
+        {ok, {history_credit3, Grant}, _Bytes} ->
             announce_outbound(ConnProc, S#s{catchup = C#credit{grant = Grant}});
         _ -> protocol_failed(invalid_initial_credit, S)
     end;
@@ -196,14 +196,13 @@ bind_catchup(Link, BindingRef) when is_pid(Link), is_reference(BindingRef) ->
     ok.
 
 -doc "Spend one catch-up grant; the producer retains all unsent request rows.".
--spec request_page(pid(), reference(), binary(), binary(), pos_integer(),
-                   pos_integer()) -> ok.
-request_page(Link, BindingRef, Grant, ReqId, From, To) ->
-    Link ! {request_page, self(), BindingRef, Grant, ReqId, From, To},
+-spec request_page(pid(), reference(), binary(), binary(), term()) -> ok.
+request_page(Link, BindingRef, Grant, ReqId, Query) ->
+    Link ! {request_page, self(), BindingRef, Grant, ReqId, Query},
     ok.
 
--doc "Finish an admitted server page after reader DOWN; acceptance is asynchronous.".
--spec complete_page(pid(), reference(), {ok, [binary()], non_neg_integer()} |
+-doc "Finish one admitted server page; acceptance and continuation are asynchronous.".
+-spec complete_page(pid(), reference(), {ok, [term()], non_neg_integer(), done | {binary(), non_neg_integer()}} |
                     {error, not_ready | server_error}) -> ok.
 complete_page(Link, OperationRef, Result) ->
     Link ! {complete_page, self(), OperationRef, Result},
@@ -309,7 +308,7 @@ await_header_auth(Conn, Sid, ConnProc, Ref, Peer, Channel, Rest) ->
                          S;
                      #credit{ns = Ns} ->
                          Grant = fresh_grant(none),
-                         Payload = quod_catchup:encode_frame(Ns, {blocks_credit, Grant}),
+                         Payload = quod_catchup:encode_frame(Ns, {history_credit3, Grant}),
                          Frames = <<(ack_frame())/binary, (frame(Payload))/binary>>,
                          enqueue_send({ordered, Frames, {initial_credit, Grant}}, S)
                  end,
@@ -327,8 +326,8 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
             loop(loop_msgs(Bin, S));
         {bind_catchup, Producer, BindingRef} ->
             loop(bind_producer(Producer, BindingRef, S));
-        {request_page, Producer, BindingRef, Grant, ReqId, From, To} ->
-            loop(submit_page(Producer, BindingRef, Grant, ReqId, From, To, S));
+        {request_page, Producer, BindingRef, Grant, ReqId, Query} ->
+            loop(submit_page(Producer, BindingRef, Grant, ReqId, Query, S));
         {complete_page, Owner, OperationRef, Result} ->
             loop(complete_server_page(Owner, OperationRef, Result, S));
         {'DOWN', MRef, process, Owner, _Reason}
@@ -606,20 +605,20 @@ bind_producer(_Producer, _BindingRef, S = #s{catchup = #credit{role = requester}
     protocol_failed(catchup_producer_replaced, S);
 bind_producer(_Producer, _BindingRef, S) -> S.
 
-submit_page(Producer, BindingRef, Grant, ReqId, From, To,
+submit_page(Producer, BindingRef, Grant, ReqId, Query,
             S = #s{catchup = C = #credit{role = requester, ns = Ns,
                                          owner = {Producer, _MRef},
                                          binding = BindingRef, grant = Grant,
                                          pending = none}})
   when is_binary(Grant), byte_size(Grant) =:= 16 ->
-    Payload = quod_catchup:encode_frame(Ns, {blocks_req, Grant, ReqId, From, To}),
+    Payload = quod_catchup:encode_frame(Ns, {history_request3, Grant, ReqId, Query}),
     S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
     enqueue_send({ordered, frame(Payload), request_accepted}, S1);
-submit_page(_Producer, _BindingRef, _Grant, _ReqId, _From, _To, S) ->
+submit_page(_Producer, _BindingRef, _Grant, _ReqId, _Query, S) ->
     %% Late controls belong to their original binding, never a replacement.
     S.
 
-catchup_control({blocks_req, Grant, ReqId, From, To},
+catchup_control({history_request3, Grant, ReqId, Query},
                 S = #s{catchup = C = #credit{role = server, ns = Ns,
                                              grant = Grant, pending = none}})
   when is_binary(Grant) ->
@@ -629,14 +628,14 @@ catchup_control({blocks_req, Grant, ReqId, From, To},
     case quod_reg:where({quod_catchup, Ns}) of
         Owner when is_pid(Owner) ->
             MRef = erlang:monitor(process, Owner),
-            Owner ! {catchup_request, self(), OperationRef, From, To, StartedMs},
+            Owner ! {catchup_request, self(), OperationRef, Query, StartedMs},
             S#s{catchup = C1#credit{owner = {Owner, MRef}}};
         undefined ->
             queue_page_response({error, not_ready}, S#s{catchup = C1})
     end;
-catchup_control({blocks_resp_bytes, Grant, ReqId, Blobs, Height, Next}, S) ->
-    accept_page(Grant, ReqId, {ok, Blobs, Height}, Next, S);
-catchup_control({blocks_err, Grant, ReqId, Reason, Next}, S) ->
+catchup_control({history_page3, Grant, ReqId, Parts, Height, Continuation, Next}, S) ->
+    accept_page(Grant, ReqId, {ok, Parts, Height, Continuation}, Next, S);
+catchup_control({history_error3, Grant, ReqId, Reason, Next}, S) ->
     accept_page(Grant, ReqId, {error, Reason}, Next, S);
 catchup_control(_Control, S) -> protocol_failed(catchup_credit_violation, S).
 
@@ -663,10 +662,10 @@ queue_page_response(Result,
                            pending = {OperationRef, Grant, ReqId, reading}}}) ->
     Next = fresh_grant(Grant),
     Control = case Result of
-                  {ok, Blobs, Height} ->
-                      {blocks_resp_bytes, Grant, ReqId, Blobs, Height, Next};
+                  {ok, Parts, Height, Continuation} ->
+                      {history_page3, Grant, ReqId, Parts, Height, Continuation, Next};
                   {error, Reason} when Reason =:= not_ready; Reason =:= server_error ->
-                      {blocks_err, Grant, ReqId, Reason, Next}
+                      {history_error3, Grant, ReqId, Reason, Next}
               end,
     Payload = quod_catchup:encode_frame(Ns, Control),
     S1 = S#s{catchup = C#credit{pending = {OperationRef, Grant, ReqId, sending}}},

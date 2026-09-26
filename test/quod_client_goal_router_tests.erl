@@ -46,8 +46,33 @@ result_is_correlated_and_fully_cleaned_test() ->
                   ?assertEqual(maps:get(evidence, Fixture), Evidence)
           after 1000 -> error(router_result_missing)
           end,
-          await_stats(Router, #{correlations => 0, routes => 0})
+          await_stats(Router, #{correlations => 0, routes => 0}),
+          assert_released_lease(Link, Router)
       end).
+
+failed_cursor_open_releases_lease_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#49:256>>,
+        Caller = submit_async(Router, Fixture, CursorId, 1000),
+        {Request, _} = sent_request(Link),
+        RequestId = quod_client_goal_endpoint:request_id(Request),
+        {ok, Blob} = quod_client_result:encode(fail),
+        respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+        receive {Caller, {ok, _, {normalized, fail}}} -> ok
+        after 1000 -> error(cursor_fail_result_missing) end,
+        await_stats(Router, #{correlations => 0, routes => 0}),
+        assert_released_lease(Link, Router)
+    end).
+
+assert_released_lease(Link, Router) ->
+    Ref = receive {transport_lease_owner, Link, Router, R} -> R
+          after 1000 -> error(transport_lease_owner_missing) end,
+    Channel = quod_client_goal_endpoint:channel(),
+    receive
+        {transport_lease_released, Link, Router, ?PEER, ?ENDPOINT,
+         Channel, Ref} -> ok
+    after 1000 -> error(transport_lease_release_missing)
+    end.
 
 local_process_uses_the_existing_wire_and_correlation_test() ->
     with_router(fun(Router, Link, Fixture) ->
@@ -238,6 +263,26 @@ cursor_route_reuses_one_link_and_drops_after_stop_test() ->
           after 1000 -> error(cursor_open_result_missing)
           end,
           await_stats(Router, #{correlations => 0, routes => 1}),
+          %% Transport releases a stream when its lease owner exits. The
+          %% request worker is already gone; the cursor route must own it.
+          Lease = receive
+              {transport_lease_owner, Link, LeaseOwner, Ref} ->
+                  ?assertEqual(Router, LeaseOwner), Ref
+          after 1000 -> error(transport_lease_owner_missing)
+          end,
+          NextCaller = cursor_async(Router, CursorId, next, 1000),
+          {{cursor, NextId, CursorId, next}, _} = sent_request(Link),
+          respond(Router, Link,
+                  {cursor_result, NextId, CursorId, SolutionBlob}),
+          receive
+              {NextCaller, {ok, _,
+                            {normalized, {solution, CursorId, 7, _}}}} -> ok
+          after 1000 -> error(cursor_next_result_missing)
+          end,
+          await_stats(Router, #{correlations => 0, routes => 1}),
+          receive {transport_lease_released, Link, _, _, _, _, _} ->
+              error(cursor_lease_released_early)
+          after 0 -> ok end,
           StopCaller = cursor_async(Router, CursorId, stop, 1000),
           {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
           {ok, StoppedBlob} = quod_client_result:encode(stopped),
@@ -247,7 +292,16 @@ cursor_route_reuses_one_link_and_drops_after_stop_test() ->
               {StopCaller, {ok, _, {normalized, stopped}}} -> ok
           after 1000 -> error(cursor_stop_result_missing)
           end,
-          await_stats(Router, #{correlations => 0, routes => 0})
+          await_stats(Router, #{correlations => 0, routes => 0}),
+          Channel = quod_client_goal_endpoint:channel(),
+          receive
+              {transport_lease_released, Link, Router, ?PEER, ?ENDPOINT,
+               Channel, Lease} -> ok
+          after 1000 -> error(cursor_lease_not_released)
+          end,
+          receive {transport_lease_released, Link, _, _, _, _, Lease} ->
+              error(cursor_lease_released_twice)
+          after 0 -> ok end
       end).
 
 cursor_target_link_death_drops_the_exact_route_test() ->
@@ -337,13 +391,19 @@ router_death_after_send_preserves_request_uncertainty_test() ->
 with_router(Fun) ->
     Parent = self(),
     Link = spawn(fun() -> link_loop(Parent) end),
-    {ok, Router} = quod_client_goal_router:test_start_link(open_fun(Link)),
+    Release = fun(Peer, Endpoint, Channel, Ref) ->
+                      Parent ! {transport_lease_released, Link, self(), Peer,
+                                Endpoint, Channel, Ref}, ok
+              end,
+    {ok, Router} = quod_client_goal_router:test_start_link(open_fun(Link), Release),
     try Fun(Router, Link, fixture())
     after stop_router(Router), Link ! stop end.
 
 open_fun(Link) ->
+    Parent = self(),
     fun(Peer, _Endpoint, Channel) ->
             Ref = make_ref(),
+            Parent ! {transport_lease_owner, Link, self(), Ref},
             self() ! {link_up, Ref, Peer, Channel, Link},
             Ref
     end.

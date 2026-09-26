@@ -35,12 +35,12 @@ Two collection paths:
 | `quod_consensus_ingress_retarget_hops{namespace}` | histogram | | internal retarget count per completed origin-owned submission; zero means its first placement resolved |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node may vote (it actually votes only when `syncing` is 0) |
 | `quod_consensus_syncing{namespace}` | gauge | | 1 while catching up / confirming the latest block, 0 once up to date |
-| `quod_consensus_progress_slot/progress_phase/progress_quorum_ready{namespace}` | gauge | | oldest unfinished slot, its phase (0 idle, 1 proposal, 2 notarization, 3 commit), and whether enough connected validators have freshly reported they are caught up |
-| `quod_consensus_progress_timeouts/quorum_pauses{namespace}` | gauge | | watchdog expirations and complaints deliberately withheld while fewer than a quorum were ready |
+| `quod_consensus_progress_slot/progress_phase{namespace}` | gauge | | current protocol view, its phase (0 idle, 1 proposal, 2 notarization) |
+| `quod_consensus_progress_timeouts{namespace}` | gauge | | protocol watchdog expirations |
 | `quod_consensus_head_*_votes/head_complaint_signed{namespace}` | gauge | | verified finality evidence for the oldest unfinished block and this node's own skip decision |
 | `quod_consensus_missing_certified_blocks{namespace}` | gauge | | quorum-approved in-flight blocks whose content this node is retrieving from another validator |
 | `quod_consensus_signing_journal_vote_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
-| `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
+| `quod_consensus_redrives{namespace}` | gauge | | proposals re-sent while waiting |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
 | `quod_runtime_healthy/handlers_active/subscriptions_active/reactions_active/source_targets_active/source_interests_active/source_views_active/source_views_ready/source_views_building/source_views_unreachable/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, local subscription/reaction catalogue and certified source-view states, rebuilt-through height, effect-release frontier, queued events |
 | `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused executable declarations, and malformed subscription clauses |
@@ -255,8 +255,8 @@ declare(NodeId) ->
     %% Consensus: how the nodes agree on one shared, ordered history of changes.
     _ = G(quod_consensus_slot,            "The number of the newest block this node has. Higher means more history; all healthy nodes should track close together."),
     _ = G(quod_consensus_committed,       "The number of the newest block that is final and can never change."),
-    _ = G(quod_consensus_approved,        "The number of the newest block that has enough votes for the next block to be built on top of it (usually one ahead of the final block)."),
-    _ = G(quod_consensus_pipeline_gap,    "How many blocks have enough votes but are not final yet. By design this stays at 0, 1, or 2; a value stuck at 2 means finishing blocks is lagging."),
+    _ = G(quod_consensus_protocol_view,        "Current consensus view within the installed committee era; independent of material ledger height."),
+    _ = G(quod_consensus_pipeline_gap,    "Notarized material blocks beyond the durable ledger head; excludes empty recovery carriers."),
     _ = G(quod_consensus_last_applied,    "The number of the newest block whose changes this node has written into its own copy of the data."),
     _ = G(quod_consensus_committee_size,  "How many nodes are currently allowed to vote on changes."),
     _ = G(quod_consensus_appends,         "Total change requests this node accepted (while it was the leader) to put into blocks (only ever goes up)."),
@@ -265,7 +265,6 @@ declare(NodeId) ->
     _ = G(quod_consensus_batch_window_ms, "How many milliseconds this ontology's proposer is configured to wait after the first transaction before sealing a block. A larger value usually packs more transactions together but adds up to that much delay to a quiet write."),
     _ = G(quod_consensus_commits,         "Total blocks that have been made final and applied (only ever goes up)."),
     _ = G(quod_consensus_submitted,       "Total change requests handed to this node (only ever goes up)."),
-    _ = G(quod_consensus_skips,           "Total times a turn was skipped because that turn's leader did not produce a block in time (only ever goes up)."),
     _ = G(quod_consensus_pending,         "Change requests waiting to be made final right now."),
     _ = G(quod_consensus_append_busy,     "Total change requests turned away as overloaded: the bounded waiting line was full, or a request waited past its cutoff during a stall. Requests that merely arrive at a busy moment now wait in line instead of being turned away, so any sustained increase here is an overload or a stalled cluster and deserves an alert (only ever goes up)."),
     _ = G(quod_consensus_ingress_queued,  "Change requests this node is holding right now. Relayed requests wait only for their explicitly named target slot; local requests may wait behind an unresolved author lane. Membership changes also wait for the current pipeline to become final. A value that stays high means consensus is not making room as fast as requests arrive."),
@@ -283,19 +282,16 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_stale,    "Total otherwise-valid requests whose author sequence had already been superseded by newer approved history. This is a locally confirmed rejection, so the caller can safely re-prove with a fresh sequence (only ever goes up)."),
     _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
     _ = G(quod_consensus_redrives,        "Total times this node re-sent a proposal it was still waiting on instead of giving up. Climbing steadily means one of the voting nodes is not responding."),
-    _ = G(quod_consensus_progress_slot,   "The oldest unfinished block slot watched by this node; 0 means no block is currently waiting for progress."),
-    _ = G(quod_consensus_progress_phase,  "What the oldest unfinished block is waiting for: 0 idle, 1 a proposal, 2 a notarization certificate, 3 enough final votes to commit."),
-    _ = G(quod_consensus_progress_quorum_ready, "1 when this node has live consensus links to enough validators that freshly reported being caught up to this node's current block, 0 otherwise. Complaint voting pauses while this is 0."),
-    _ = G(quod_consensus_progress_timeouts, "Total oldest-block watchdog expirations. Occasional increases recover packet loss; sustained increases mean consensus is not advancing."),
-    _ = G(quod_consensus_quorum_pauses,   "Total watchdog expirations where this node withheld a complaint because fewer than a certificate quorum of validators had a live consensus link and freshly reported being caught up. It prevents recovering sockets from being mistaken for voting nodes."),
-    _ = G(quod_consensus_head_support_votes, "Verified support votes this node currently holds for the strongest block at the oldest unfinished slot. Reaching the certificate quorum approves that block."),
-    _ = G(quod_consensus_head_commit_votes, "Verified commit votes this node currently holds for the strongest block at the oldest unfinished slot. Reaching the certificate quorum makes that block final."),
-    _ = G(quod_consensus_head_complaint_votes, "Verified skip votes this node currently holds for the oldest unfinished slot. Reaching the certificate quorum skips that slot without applying its proposed changes."),
-    _ = G(quod_consensus_head_complaint_signed, "1 when this validator has itself durably voted to skip the oldest unfinished slot, 0 otherwise. A mixture of this value across nodes explains which finality camp each validator is locked into."),
+    _ = G(quod_consensus_progress_slot,   "The current protocol view watched by this node; 0 means no pending consensus demand."),
+    _ = G(quod_consensus_progress_phase,  "Current protocol wait: 0 idle, 1 a proposal, 2 notarization."),
+    _ = G(quod_consensus_progress_timeouts, "Total protocol-view watchdog expirations. Occasional increases recover packet loss; sustained increases mean consensus is not advancing."),
+    _ = G(quod_consensus_head_support_votes, "Verified support votes this node currently holds for the strongest block at the current protocol view. Reaching the certificate quorum approves that block."),
+    _ = G(quod_consensus_head_commit_votes, "Verified commit votes this node currently holds for the strongest block at the current protocol view. Reaching the certificate quorum makes that block final."),
+    _ = G(quod_consensus_head_complaint_votes, "Verified complaint votes this node currently holds for the current protocol view. A complaint quorum advances the protocol view without appending a material entry."),
+    _ = G(quod_consensus_head_complaint_signed, "1 when this validator has itself durably complained in the current protocol view, 0 otherwise. Commit and complaint votes exclude one another only within that same view."),
     _ = G(quod_consensus_missing_certified_blocks, "Quorum-approved in-flight blocks whose vote certificate this node has but whose transaction content it is still retrieving. A value that stays above 0 means block recovery is not reaching any holder."),
     _ = G(quod_consensus_is_validator,    "1 if this node is allowed to vote on changes, 0 if it only reads and follows along. It actually casts votes only when 'syncing' is also 0."),
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
-    _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
     _ = G(quod_dtx_admission_waiting, "Atomic roles awaiting Vote selection in the existing owner admission FIFO."),
     _ = G(quod_dtx_admission_dormant, "Source groups durably reserved before the proof activates their own material."),
@@ -520,7 +516,7 @@ declare(NodeId) ->
            {labels, [namespace]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_retries_total},
-           {help, "Total operations explicitly told to prove and submit again, grouped by cause. membership_skipped is the terminal membership re-proof path; stale_sequence means newer approved history overtook the signed author sequence. Ordinary retained content is internally retargeted after slot exclusion and does not increment this counter."},
+           {help, "Total operations explicitly told to prove and submit again, grouped by cause. stale_sequence means newer approved history overtook the signed author sequence. Ordinary retained content is internally retargeted after slot exclusion and does not increment this counter."},
            {labels, [namespace, reason]}, {constant_labels, CL}]),
     P = fun(Name, Help) ->
             prometheus_gauge:declare([{name, Name}, {help, Help}, {labels, [peer]},
@@ -810,11 +806,11 @@ refresh_log_ns(Ns) ->
         %% here but absent there silently skips EVERY consensus gauge (falls through to
         %% the `_ -> ok` arm). consensus_stat_keys/0 mirrors this list; the lockstep
         %% eunit in quod_simplex_tests pins the two together.
-        #{slot := Sl, committed := CI, approved := AV, pipeline_gap := PG,
+        #{slot := Sl, committed := CI, protocol_view := PV, pipeline_gap := PG,
           last_applied := LA, committee_size := CS,
           appends := AP, proposals := PR, batched_txs := BT,
           batch_window_ms := BW,
-          commits := CM, submitted := SU, skips := SK, pending := PE,
+          commits := CM, submitted := SU, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, r_stale := RS,
           membership_rejects := MR,
           ingress_queued := IQ, ingress_overflow := IO,
@@ -828,16 +824,15 @@ refresh_log_ns(Ns) ->
           relay_accepted := RA,
           relay_duplicates := RDU,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
-          progress_quorum_ready := PQ, progress_timeouts := PT,
-          quorum_pauses := QP, head_support_votes := HSV, head_commit_votes := HCV,
+          progress_timeouts := PT, head_support_votes := HSV, head_commit_votes := HCV,
           head_complaint_votes := HXV, head_complaint_signed := HXS,
           missing_certified_blocks := MCB,
-          weak_cert_waits := WC, is_validator := IV, syncing := SY,
+          is_validator := IV, syncing := SY,
           ahead_gap := AG} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
-            _ = S(quod_consensus_approved,        AV),
+            _ = S(quod_consensus_protocol_view,        PV),
             _ = S(quod_consensus_pipeline_gap,    PG),
             _ = S(quod_consensus_last_applied,    LA),
             _ = S(quod_consensus_committee_size,  CS),
@@ -847,7 +842,6 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_batch_window_ms, BW),
             _ = S(quod_consensus_commits,         CM),
             _ = S(quod_consensus_submitted,       SU),
-            _ = S(quod_consensus_skips,           SK),
             _ = S(quod_consensus_pending,         PE),
             _ = S(quod_consensus_append_busy,     RB),
             _ = S(quod_consensus_ingress_queued,  IQ),
@@ -881,9 +875,7 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_redrives,        RV),
             _ = S(quod_consensus_progress_slot,   PS),
             _ = S(quod_consensus_progress_phase,  PP),
-            _ = S(quod_consensus_progress_quorum_ready, PQ),
             _ = S(quod_consensus_progress_timeouts, PT),
-            _ = S(quod_consensus_quorum_pauses,   QP),
             _ = S(quod_consensus_head_support_votes, HSV),
             _ = S(quod_consensus_head_commit_votes, HCV),
             _ = S(quod_consensus_head_complaint_votes, HXV),
@@ -891,7 +883,6 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_missing_certified_blocks, MCB),
             _ = S(quod_consensus_is_validator,    IV),
             _ = S(quod_consensus_syncing,         SY),
-            _ = S(quod_consensus_weak_cert_waits, WC),
             _ = S(quod_consensus_ahead_gap,       AG),
             ok;
         _ -> ok
@@ -922,7 +913,7 @@ remove_consensus_metrics(NsLabel) ->
 consensus_gauge_names() ->
     [quod_consensus_slot,
      quod_consensus_committed,
-     quod_consensus_approved,
+     quod_consensus_protocol_view,
      quod_consensus_pipeline_gap,
      quod_consensus_last_applied,
      quod_consensus_committee_size,
@@ -932,7 +923,6 @@ consensus_gauge_names() ->
      quod_consensus_batch_window_ms,
      quod_consensus_commits,
      quod_consensus_submitted,
-     quod_consensus_skips,
      quod_consensus_pending,
      quod_consensus_append_busy,
      quod_consensus_ingress_queued,
@@ -954,9 +944,7 @@ consensus_gauge_names() ->
      quod_consensus_redrives,
      quod_consensus_progress_slot,
      quod_consensus_progress_phase,
-     quod_consensus_progress_quorum_ready,
      quod_consensus_progress_timeouts,
-     quod_consensus_quorum_pauses,
      quod_consensus_head_support_votes,
      quod_consensus_head_commit_votes,
      quod_consensus_head_complaint_votes,
@@ -964,7 +952,6 @@ consensus_gauge_names() ->
      quod_consensus_missing_certified_blocks,
      quod_consensus_is_validator,
      quod_consensus_syncing,
-     quod_consensus_weak_cert_waits,
      quod_consensus_ahead_gap].
 
 -ifdef(TEST).
@@ -1072,7 +1059,7 @@ subscribe_commits(State = #{subs := Subs}) ->
     State#{subs => Subs1}.
 
 %% A live-committed entry: observe content per transaction and DTX controls per
-%% phase. A `noop` skip is neither. Deliberately NOT observed here: commit latency — the block timestamp is the
+%% phase. Protocol carriers never reach this seam. Commit latency is not observed here: the block timestamp is the
 %% proposer's wall clock (ratcheted to the fleet maximum) and `submitted_at` is the author's, so their
 %% difference measures clock skew as much as processing time. Latency is observed at the SUBMITTING
 %% node instead (`observe_tx_latency/2`, called by quod_prolog when the parked write resolves).
@@ -1086,7 +1073,6 @@ observe_commit(Ns, Entry) ->
             lists:foreach(
               fun({Phase, _Control}) -> observe_dtx(Ns, Phase) end,
               Controls);
-        noop -> ok;
         invalid -> ok
     end.
 
@@ -1574,10 +1560,9 @@ observe_ingress_retarget_hops(_Ns, _Hops) ->
     ok.
 
 -doc "Count one locally authoritative re-proof response returned to a caller.".
--spec count_tx_retry(binary(), membership_skipped | stale_sequence) -> ok.
+-spec count_tx_retry(binary(), stale_sequence) -> ok.
 count_tx_retry(Ns, Reason)
-  when is_binary(Ns),
-       (Reason =:= membership_skipped orelse Reason =:= stale_sequence) ->
+  when is_binary(Ns), Reason =:= stale_sequence ->
     case whereis(?MODULE) of
         undefined ->
             ok;
@@ -1827,17 +1812,17 @@ owner_state(_, _) -> error.
 %% The lockstep eunit (quod_simplex_tests) asserts every one exists in stats_map — a key
 %% added to the pattern without the stat would otherwise silently zero ALL consensus gauges.
 consensus_stat_keys() ->
-    [slot, committed, approved, pipeline_gap, last_applied, committee_size,
+    [slot, committed, protocol_view, pipeline_gap, last_applied, committee_size,
      appends, proposals, batched_txs, batch_window_ms,
-     commits, submitted, skips, pending,
+     commits, submitted, pending,
      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
      custody_depth, custody_ready, custody_bytes, ingress_retargets,
      dtx_admission_waiting, dtx_admission_dormant,
      owner_current, owner_peak, owner_bytes_current, owner_bytes_peak,
      relay_accepted, relay_duplicates,
-     redrives, progress_slot, progress_phase_code, progress_quorum_ready,
-     progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,
+     redrives, progress_slot, progress_phase_code,
+     progress_timeouts, head_support_votes, head_commit_votes,
      head_complaint_votes, head_complaint_signed, missing_certified_blocks,
-     weak_cert_waits, is_validator, syncing, ahead_gap].
+     is_validator, syncing, ahead_gap].
 -endif.

@@ -18,14 +18,14 @@ queue_behind_exact(Mode) ->
         Gate = make_ref(),
         Held = atomics:new(1, []),
         Fetch0 = fetch(Fixture),
-        Fetch = fun(P, E, Ns, From, To) ->
+        Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
             case atomics:compare_exchange(Held, 1, 0, 1) of
                 ok ->
                     Parent ! {held_exact, Gate, self()},
                     receive {release_exact, Gate} -> ok end;
                 1 -> ok
             end,
-            Fetch0(P, E, Ns, From, To)
+            Fetch0(P, E, Ns, Query, Deadline, Consume)
         end,
         with_owner(Fetch, fun(Owner) ->
             {FirstContext, FirstSpan} = parent(<<"test.queue.predecessor">>),
@@ -124,7 +124,7 @@ custody_wait_is_distinct_from_a_route_park_test() ->
 route_park_names_itself_without_inventing_a_predecessor_test() ->
     quod_trace_tests:with_tracer(fun() ->
         Fixture = fixture(),
-        with_owner(fun(_, _, _, _, _) -> error(route_park_fetched) end, fun(Owner) ->
+        with_owner(fun(_, _, _, _, _, _) -> error(route_park_fetched) end, fun(Owner) ->
             {Context, Span} = parent(<<"test.queue.route-park">>),
             try
                 Request = {verify_reference, maps:get(ref, Fixture), resolve,

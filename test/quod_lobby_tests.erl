@@ -87,7 +87,8 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
                         <<98:256>>, {"127.0.0.1", 5001}, [{Ns, Anchor, validator}], 1, 1);
                 starting_consensus ->
                     quod_reg:publish({runtime, Ns},
-                        {proof_ready, {Ns, Anchor}, quod_reg:where({quod_simplex, Ns})})
+                        {proof_ready, {Ns, Anchor}, quod_reg:where({quod_simplex, Ns}),
+                         quod_reg:where({quod_prolog, Ns}), 1})
             end,
             receive
                 {first_scene, Caller, Result} ->

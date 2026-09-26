@@ -1,53 +1,26 @@
 -module(quod_feed).
 -moduledoc """
-Per-namespace **dissemination** endpoint — how a finalized block spreads from the small committee to
-the non-voting crowd (replicas, subscribers) by **push-pull epidemic gossip over the Brahms overlay**,
-so a change reaches far more nodes than a leader-star ever could. Every block carries the quorum
-`#cert{}` that finalized it, and **every hop verifies that cert against the committee-as-of-that-slot
-before it applies or re-pushes** — a tampering/equivocating relay is dropped, never propagated
-(`doc/deferred.md` §4 P2; design `~/.claude/plans/quod-feed-dissemination.md`).
+Per-namespace dissemination over the existing Brahms overlay and history service.
 
-A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, after catch-up
-and before the rebuildable runtime in the `m:quod_ns` `rest_for_one` chain (it
-holds no state the others need). It has two halves:
+Local live commits eager-push their canonical material entry. A settled
+observer treats a received entry as a live notification and acquires its
+selected ancestry through the same asynchronous, single-worker catch-up path
+used for digest-driven gap repair. The sole Simplex writer persists complete
+verified groups before applying or relaying any received material.
 
-- **Producer** (a committee Member): on each *live* commit `m:quod_simplex` publishes
-  `{committed, Ns, Slot, Entry}` on the shared `{committed, Ns}` property; the feed **eager-pushes** the block to a
-  small fanout of the node's `quod_brahms:view/1` (the Byzantine-resistant `sample/1` is reserved for
-  the F2 anti-entropy pull-source selection). Never on the replay/rebuild path, so catching up
-  never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay). A completed certified
-  catch-up publishes only `{certified_head, Ns, Slot}` on that property: this invalidates a stale cached
-  snapshot and wakes registered followers, but carries no block and fires no historical event.
-- **Relay / follower** (a caught-up non-member — see `follows/4`): a gossiped `{block, Entry}` for slot
-  `H+1` is verified against the current committee and this process's pinned
-  namespace/genesis domain (`quod_catchup:verify_forward/5`) and, if genuine,
-  handed to `m:quod_simplex` to append+apply (the sole store writer); then eager-pushed onward. A
-  duplicate (`slot ≤ H`) is dropped and **never re-pushed** (loop suppression); a gap (`slot > H+1`) is
-  dropped and recovered by anti-entropy.
-- **Anti-entropy** (the completeness guarantee): every `?ANTI_ENTROPY_MS` a follower advertises its
-  height (`{digest, Hi}`) to one `quod_brahms:sample/1` peer AND to every committee member; a behind
-  node PULLs the gap, an ahead node replies its height so the sender pulls. The pull is the SAME
-  trustless driver as cold-start catch-up (`quod_catchup:catch_up/7`) sourced from a live peer, so a
-  block missed by eager push (loss, an out-of-fanout peer, a transient ingest error) is always
-  recovered — and because members are always-known contacts, a caught-up observer keeps tracking the
-  head even with no overlay.
-- **Passive liveness** (the `peer_ready` readiness gate): every inbound digest is recorded as
-  `Pk => {Height, SeenAt}` in a public named per-ns ETS table (written only by this process; one atom
-  per operator-created namespace). `peer_ready/3` reads it DIRECTLY in the caller's process — the
-  admission rule (`can_join :- peer_ready(Pk)` in the root ontology) consults it from inside
-  `m:quod_prolog`, where a gen_server round-trip into the feed would deadlock. The digest sender is
-  authenticated (link header + mutual TLS); the HEIGHT is unauthenticated content — this is liveness
-  UX for admission, not a security boundary.
+The feed coalesces consecutively received live heights into one receipt
+interval. This is volatile delivery metadata, not a copy of history or proof
+authority. Only verified entries inside that interval receive live apply and
+eager relay; other fetched entries are replay. Restart, gaps and later replay
+cannot recreate a live interval from the ledger. Already installed heights
+retire receipts and suppress duplicate gossip. Reactions remain in Prolog.
 
-To avoid a sync `quod_simplex:status` call per inbound digest (O(followers) per round on a member), the
-feed keeps a cached consensus snapshot `{Height, Committee, Syncing}`: folded forward on each local commit
-and each ingest, refetched once per anti-entropy round (so a sync → settled transition is observed), and
-reset on any contiguity gap — fail-closed by construction (a stale snapshot only mis-classifies a block,
-never mis-verifies it).
-
-**Built (F1 + F2):** eager-push + fast-path verify/ingest/relay, and digest-driven anti-entropy pull.
-**Deferred:** IHAVE (per-block lazy advertisement, a push-latency tweak), the split cert/hash/payload
-verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single block over the frame cap.
+Authenticated recipient registrations carry coalesced height wakes only.
+Periodic anti-entropy digests maintain dissemination and admission liveness;
+they neither certify history nor discover local readiness by polling. The
+cached committee/height snapshot is invalidated on certified-head changes,
+worker retirement or an unrepresentable projection transition. No owner
+waits on network I/O, and one existing pull worker owns each acquisition.
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
@@ -60,20 +33,20 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([classify/2, encode/2, decode/2, digest_table/1, record_digest/3, ready/4, readiness_config_ok/1,
+-export([encode/2, decode/2, digest_table/1, record_digest/3, ready/4, readiness_config_ok/1,
          fold_snapshot/3, test_recipient_state/2,
          test_recipient_control/5, test_recipient_commit/2,
          test_recipient_down/3, test_recipient_rows/1,
-         test_set_snapshot/2, test_snapshot/1]).
+         test_set_snapshot/2, test_snapshot/1, test_pull_state/3, test_received/1]).
 -endif.
 
 -define(PUSH_FANOUT,     4).             %% eager-push targets per fresh block (best-effort; anti-entropy backstops)
--define(INGEST_MS,       5000).          %% budget for ONE fast-path block's append+apply through quod_simplex
--define(PULL_SINK_MS,    30000).         %% budget for a whole anti-entropy WINDOW (up to ?WINDOW entries;
-                                         %% matches quod_simplex's ?SINK_MS for the identical sink)
+-define(INGEST_MS,       5000).          %% existing live-group sink budget through quod_simplex
+-define(PULL_SINK_MS,    30000).         %% budget for one verified anti-entropy group
+                                         %% matches quod_simplex's ?SINK_MS for the identical sink
 -define(ANTI_ENTROPY_MS, 3000).          %% base period of the anti-entropy digest round (jittered ±20%)
 -define(MIN_ANTI_ENTROPY_MS, 200).       %% floor for the (operator-tunable) period — never busy-loop
--define(WINDOW,          256).           %% entries per anti-entropy pull window (matches quod_catchup's block cap)
+-define(READY_LAG, 256).                %% existing admission-readiness tolerance in material heights
 -define(READY_FRESH_MS,  15000).         %% peer_ready freshness: a digest older than this is a dead/mute peer
                                          %% (5 rounds at the default period; readiness_config_ok/0 enforces
                                          %% the window spans ≥2 periods so one lost digest can't drop a peer)
@@ -98,7 +71,13 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
             %% member (Slice C's per-digest read) collapse to ~1. `none` = must (re)fetch. `Syncing` is
             %% exactly `quod_simplex:status`'s `syncing` flag — the value `follows/4` keys on (`not Syncing`).
             snap     = none :: none | {log_index(), quod_simplex:history_projection(), boolean()},
-            pulling  = false :: false | pid(),   %% the in-flight anti-entropy pull worker (at most one)
+            pulling  = false :: false | pid(),   %% the existing proof-acquisition worker
+            pull_stage = none :: none | file:filename_all(),
+            pull_observed = 0 :: non_neg_integer(),
+            %% Receipt interval only, not a second history: consecutive live
+            %% notifications received after the settled local prefix. The
+            %% ordinary group verifier still supplies all material authority.
+            received = none :: none | {pos_integer(), pos_integer(), term()},
             pushed   = 0 :: non_neg_integer(),   %% local commits we originated onto the feed
             ingested = 0 :: non_neg_integer(),   %% gossiped blocks we verified, applied, and relayed
             pulled   = 0 :: non_neg_integer(),   %% anti-entropy pull rounds we started
@@ -233,7 +212,7 @@ stats(Ns) ->
 -doc """
 Is `Pk` a live, caught-up follower of `Ns`, as observed by THIS node? True iff its latest
 authenticated feed digest is fresh (`?READY_FRESH_MS`) and its height is within one catch-up window
-(`?WINDOW`) of `JudgeHeight` (the caller's own applied height) — the reality read behind the
+(`?READY_LAG`) of `JudgeHeight` (the caller's own applied height) — the reality read behind the
 `peer_ready/1` admission predicate.
 
 Runs in the CALLER's process: a direct read of the public digest table, never a call into the feed —
@@ -290,6 +269,11 @@ start(Ns, Config) ->
             {stop, missing_consensus_anchor}
     end.
 
+handle_call({pull_stage, Path}, {Worker, _}, S = #s{pulling = Worker, pull_stage = none}) ->
+    {reply, ok, S#s{pull_stage = Path}};
+handle_call(pull_live_interval, {Worker, _}, S = #s{pulling = Worker, received = Received}) ->
+    Interval = case Received of none -> replay; {First, Last, _} -> {live, First, Last} end,
+    {reply, Interval, S};
 handle_call(get_stats, _From, S) ->
     {Tracked, Fresh} = digest_counts(S#s.digests),
     {reply, #{pushed => S#s.pushed, ingested => S#s.ingested,
@@ -301,8 +285,8 @@ handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 handle_cast(_Msg, S) -> {noreply, S}.
 
 %% A local live commit: we are the ORIGIN for this block — eager-push it to the crowd (never ingest, we
-%% already hold it). Fires only on the live commit path (quod_simplex publishes here from commit_block/
-%% skip_block), never on rebuild/catch-up, so history is never re-broadcast. Also folds the snapshot
+%% already hold it). Simplex publishes here only for live material finality, never
+%% for carriers or historical replay, so history is never re-broadcast. Also folds the snapshot
 %% forward (this is how a MEMBER keeps its cache fresh between rounds without any status call).
 handle_info({committed, Ns, Slot, Entry}, S = #s{ns = Ns}) ->
     S1 = local_head_advanced(
@@ -337,13 +321,27 @@ handle_info(anti_entropy, S) ->
 %% It may have sunk windows out-of-process (advancing our height invisibly to us), so drop the snapshot
 %% too — the next use refetches. (Link lifecycle is owned by the transport now: we send fire-and-forget
 %% via quod_quic:send/3 and never monitor links ourselves, so the only process we monitor is the pull worker.)
+handle_info({feed_ingested, Worker, Entries, Interval}, S = #s{pulling = Worker}) ->
+    %% Only the sole writer's successful acknowledgement reaches this seam.
+    %% Historical rows are neither live events nor eager gossip.
+    Live = [E || E <- Entries, live_height(quod_ledger:entry_index(E), Interval)],
+    Next = lists:foldl(fun eager_push/2, S#s{ingested = S#s.ingested + length(Live)}, Live),
+    {noreply, Next};
 handle_info({'DOWN', _Ref, process, Pid, _Reason}, S = #s{pulling = Pid}) ->
-    {noreply, S#s{pulling = false, snap = none}};
+    Next = cleanup_pull_stage(S#s{pulling = false, snap = none}),
+    %% A newer receipt is a real dependency edge. Failure with no new receipt
+    %% cannot turn worker retirement into a self-triggered retry loop.
+    case S#s.received of
+        {_, Last, Peer} when Last > S#s.pull_observed ->
+            {noreply, start_pull(Peer, Next)};
+        _ -> {noreply, Next}
+    end;
 handle_info({'DOWN', MRef, process, Pid, _Reason}, S) ->
     {noreply, recipient_down(MRef, Pid, S)};
 handle_info(_Info, S) -> {noreply, S}.
 
-terminate(_Reason, #s{ns = Ns, chan = Chan, recipients = Recipients}) ->
+terminate(_Reason, S = #s{ns = Ns, chan = Chan, recipients = Recipients}) ->
+    _ = cleanup_pull_stage(S),
     maps:foreach(
       fun(_Peer, Recipient) -> retire_recipient(Recipient, true) end,
       Recipients),
@@ -382,7 +380,7 @@ inbound(Peer, InLink, Payload, S0) ->
 
 inbound_gossip(Peer, Payload, S) ->
     case decode(Payload, S#s.ns) of
-        {block, Entry}                -> on_block(Entry, S);
+        {block, Entry}                -> on_block(Peer, Entry, S);
         {digest, Hi} when is_integer(Hi), Hi >= 0 ->
             %% record the sender's liveness FIRST — every node keeps the table (a committee member is
             %% exactly the judge that never gets past the follows/eligibility gates below).
@@ -391,41 +389,38 @@ inbound_gossip(Peer, Payload, S) ->
         _                              -> S
     end.
 
-%% Handle one gossiped committed block. Two gates before we touch it:
-%%   1. `follows/4` — only a caught-up NON-member observer of a FOUNDED namespace ingests from the feed
-%%      (see its comment): a voter would desync its own engine, a mid-catch-up node would race the
-%%      catch-up worker, and an unfounded (slot-0) node must get genesis from the ANCHORED catch-up path,
-%%      never an unauthenticated feed push (else the genesis_hash trust anchor is bypassed).
-%%   2. the cert is the proof: verify it against the committee AS-OF-its-slot (for the fast path,
-%%      slot = H+1, that IS our current validator set) before we apply or re-push.
-%% Never applies out of order — a gap is left for anti-entropy (F2).
-on_block(Entry,
-         S0 = #s{ns = Ns, genesis_hash = GenesisHash, self = Self}) ->
-    #entry{index = Slot} = quod_ledger:entry_view(Entry),
-    {{Height, Projection, Syncing}, S} = current(S0),
-    Committee = quod_simplex:history_committee(Projection),
-    case follows(Self, Committee, Syncing, Height) of
-        false -> drop(non_following, S);            %% a voter / still-syncing / unfounded node doesn't ingest pushes
-        true  ->
-            case classify(Slot, Height) of
-                duplicate -> drop(duplicate, S);     %% already applied — loop suppression (benign gossip redundancy)
-                gap       -> drop(gap, S);           %% ahead of H+1 — anti-entropy will re-pull the missing prefix
-                next ->
-                    case quod_catchup:verify_forward(
-                           Ns, GenesisHash, Projection, Slot, [Entry]) of
-                        {ok, [_], Projection1} ->
-                            case ingest(
-                                   quod_reg:via({quod_simplex, Ns}), [Entry], Projection1,
-                                   quod_dtx_phase_index:new_delta(), ?INGEST_MS, live) of
-                                {ok, _View} -> %% our height advanced to Slot — fold the snapshot forward too
-                                              S1 = fold_snap(Entry, S),
-                                              eager_push(Entry, S1#s{ingested = S1#s.ingested + 1});
-                                {error, _} -> drop(ingest_busy, S)   %% verified but consensus busy; anti-entropy re-pulls
-                            end;
-                        {error, _} -> drop(unverified, S)   %% bad cert ⇒ drop, NEVER relay (the one to watch)
-                    end
+%% A live notification is an observation, not a self-contained ancestry
+%% proof. Coalesce consecutive receipts and let the existing pull worker
+%% acquire the selected witness; the feed owner never waits on network I/O.
+on_block(Peer, Entry, S0 = #s{self = Self}) ->
+    Slot = quod_ledger:entry_index(Entry),
+    {{Height, Projection, Syncing}, Captured} = current(S0),
+    S = retire_live_heights(Height, Captured),
+    case follows(Self, quod_simplex:history_committee(Projection), Syncing, Height) of
+        false -> drop(non_following, S);
+        true ->
+            case observe_live_height(Slot, Height, Peer, S#s.received) of
+                {ok, Received} ->
+                    Next = S#s{received = Received},
+                    case S#s.pulling of false -> start_pull(Peer, Next); _ -> Next end;
+                {error, Reason} -> drop(Reason, S)
             end
     end.
+
+observe_live_height(Slot, Height, _Peer, _Received) when Slot =< Height -> {error, duplicate};
+observe_live_height(Slot, Height, Peer, none) when Slot =:= Height + 1 -> {ok, {Slot, Slot, Peer}};
+observe_live_height(Slot, _Height, Peer, {First, Last, _}) when Slot =:= Last + 1 ->
+    {ok, {First, Slot, Peer}};
+observe_live_height(Slot, _Height, _Peer, {_, Last, _}) when Slot =< Last -> {error, duplicate};
+observe_live_height(_, _, _, _) -> {error, gap}.
+
+live_height(Height, {live, First, Last}) -> Height >= First andalso Height =< Last;
+live_height(_, replay) -> false.
+
+retire_live_heights(Height, S = #s{received = {_, Last, _}}) when Height >= Last -> S#s{received = none};
+retire_live_heights(Height, S = #s{received = {First, Last, Peer}}) when Height >= First ->
+    S#s{received = {Height + 1, Last, Peer}};
+retire_live_heights(_, S) -> S.
 
 %% Bump one per-reason drop counter. Reasons are pre-seeded in #s so the metric series are stable.
 drop(Reason, S = #s{dropped = D}) ->
@@ -573,9 +568,9 @@ newest_height(Height, Existing) -> max(Height, Existing).
 %% to fold that view.  Catch-up carries only a certified height, so invalidate
 %% the cache and let current/1 refresh it from Simplex on the next read.
 local_head_advanced(Height, certified, S) ->
-    recipient_committed(Height, S#s{snap = none});
+    recipient_committed(Height, retire_live_heights(Height, S#s{snap = none}));
 local_head_advanced(Height, Entry, S) ->
-    recipient_committed(Height, fold_snap(Entry, S)).
+    recipient_committed(Height, retire_live_heights(Height, fold_snap(Entry, S))).
 
 recipient_down(MRef, Pid,
                S = #s{recipient_mrefs = MonitorRefs,
@@ -620,18 +615,12 @@ retire_recipient(#recipient{}, false) ->
 %%     while it runs — racing it on the store churns/aborts the sync. Once settled (`Syncing=false`) the
 %%     feed takes over as the observer's completeness path (F1 one-puller handoff);
 %%   - not a committee voter (`Self ∉ Committee`): a member advances via consensus and finalizes the slot
-%%     in its own engine; sinking a copy through the catch-up path advances the store without pruning the
-%%     engine, wedging the just-committed slot in `commit_buf` forever.
+%%     in its own engine. Recovery and observer ingestion have distinct owner
+%%     capabilities; the feed must not compete with the active consensus owner.
 follows(Self, Committee, Syncing, Height) ->
     Height >= 1
         andalso not Syncing
         andalso not lists:member(Self, Committee).
-
-%% Slot vs our contiguous height: already-have / the next block / a gap (out of order).
--spec classify(slot(), log_index()) -> duplicate | next | gap.
-classify(Slot, Height) when Slot =< Height     -> duplicate;
-classify(Slot, Height) when Slot =:= Height + 1 -> next;
-classify(_Slot, _Height)                        -> gap.
 
 %% Our contiguous committed height, current validator set (= committee-as-of-(H+1)), and `syncing` flag,
 %% as a cached snapshot threaded through the state. On a hit, return the cache; on a miss, ONE status call
@@ -660,11 +649,8 @@ current(S = #s{ns = Ns, snap = none}) ->
 fold_snap(Entry, S = #s{ns = Ns}) ->
     S#s{snap = fold_snapshot(Ns, Entry, S#s.snap)}.
 
-%% The cached committee tracks the `peer_admitted` FACTS (the same fold `status.committee` reports today,
-%% epoch length 1). When epoch-frozen validators land (`quod_simplex:active_validators/1`, deferred.md §3),
-%% a block is verified against the FROZEN active set, not the per-commit facts — this fold and the meaning
-%% of `status.committee` must migrate together, or the feed's cached committee would drift from the
-%% verifying set. Fail-closed until then (a drifted snapshot mis-classifies → repull, never mis-verifies).
+%% This is the shared content reducer over already-installed material.
+%% DTX transitions need the owner's phase index and invalidate this cache.
 fold_snapshot(Ns, Entry, {SnapSlot, Projection, Syncing}) ->
     #entry{index = Slot, data = Data} = quod_ledger:entry_view(Entry),
     case Slot =:= SnapSlot + 1 of
@@ -673,11 +659,8 @@ fold_snapshot(Ns, Entry, {SnapSlot, Projection, Syncing}) ->
                 {content, _} ->
                     {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
                      Syncing};
-                noop ->
-                    {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
-                     Syncing};
                 {controls, _Controls} -> none;
-                invalid -> none
+                _ -> none
             end;
         false -> none
     end;
@@ -687,16 +670,10 @@ fold_snapshot(_Ns, _Entry, _Snap) -> none.
 invalidate_transient(S = #s{snap = {_, _, true}}) -> S#s{snap = none};
 invalidate_transient(S) -> S.
 
-%% Hand a verified, contiguous window to quod_simplex — the SOLE store writer. Reuses the catch-up sink
-%% (append + committee fold + KB apply, contiguity-checked); a duplicate/non-contiguous window is
-%% rejected there and surfaces as {error, _}. A verified next-block push is `live` for this settled
-%% observer and drives P incrementally. An anti-entropy gap window is `replay`: P reconciles once at
-%% its explicit ready edge, so best-effort effects are not reconstructed from missed history.
-ingest(Server, Entries, Projection, Delta, Timeout, Mode)
-  when Mode =:= live; Mode =:= replay ->
-    Source = {feed, Mode},
-    try gen_server:call(Server,
-                        {sink_catchup, Source, Entries, Projection, Delta}, Timeout)
+%% Simplex is the sole archive writer. The frozen receipt interval selects
+%% live apply per entry; all other material in a shared group remains replay.
+ingest(Server, Group, Timeout, Mode) ->
+    try gen_server:call(Server, {sink_catchup, {feed, Mode}, Group}, Timeout)
     catch exit:_ -> {error, unavailable} end.
 
 %%%===================================================================
@@ -798,7 +775,7 @@ record_digest(_Table, _NonPubkey, _Height) -> true.
 %% The pure readiness verdict: the digest is fresh AND its height is within one pull window of the
 %% judge's own applied height (a candidate any further behind would join a t=0 quorum mid-catch-up).
 ready(Height, SeenAt, NowMs, JudgeHeight) ->
-    NowMs - SeenAt =< ?READY_FRESH_MS andalso Height + ?WINDOW >= JudgeHeight.
+    NowMs - SeenAt =< ?READY_FRESH_MS andalso Height + ?READY_LAG >= JudgeHeight.
 
 %% Observability (metrics): how many peers this node tracks a liveness digest for, and how many of those
 %% are FRESH (digested within ?READY_FRESH_MS) — i.e. how many peers are currently liveness-admittable.
@@ -817,38 +794,41 @@ digest_counts(Table) ->
 %% anchor still derives the signature domain for every mid-chain certificate. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
 start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash}) ->
-    %% The initial capture uses the existing pull-window budget, starting
-    %% before worker scheduling. This is not a new deadline for the entire
-    %% multi-page recovery: fetch and sink windows keep their own bounds.
-    %% Later sinks return their view, with no per-page recapture/path discovery.
     Deadline = quod_time:mono_ms() + ?PULL_SINK_MS,
     Owner = quod_reg:where({quod_simplex, Ns}),
     Feed = self(),
-    {Pid, _Ref} = spawn_monitor(
-        fun() ->
-            _ = quod_process:kill_when_owner_dies(Feed, self()),
-            Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
-            Sink  = fun(Es, Projection1, Delta) ->
-                        ingest(Owner, Es, Projection1, Delta,
-                               ?PULL_SINK_MS, replay)
-                    end,
-            case quod_simplex:history_view(
-                       {Owner, {Ns, GenesisHash}}, committed, Deadline) of
-                    {ok, #{slot := Height, projection := Projection} = View} ->
-                        _ = quod_process:kill_when_owner_dies(Owner, self()),
-                        try
-                            quod_catchup:catch_up(
-                              Ns, GenesisHash, Fetch, Sink, Height + 1, Projection,
-                              #{history_view => View})
-                        after
-                            %% Close only the same writer's replay, including a
-                            %% partial pull. A replacement receives no stale completion.
-                            _ = finish_pull_replay(Owner)
-                        end;
-                    {error, _} = Error -> Error
+    {Pid, _Ref} = spawn_monitor(fun() ->
+        _ = quod_process:kill_when_owner_dies(Feed, self()),
+        Fetch = fun(Query, PullDeadline, Consume) ->
+            quod_catchup:pull(Ns, Query, Peer, PullDeadline, Consume)
+        end,
+        Sink = fun(Group = #{entries := Entries}) ->
+            Interval = gen_server:call(Feed, pull_live_interval, ?INGEST_MS),
+            Timeout = case Interval of replay -> ?PULL_SINK_MS; _ -> ?INGEST_MS end,
+            case ingest(Owner, Group, Timeout, Interval) of
+                {ok, _} = Ok -> Feed ! {feed_ingested, self(), Entries, Interval}, Ok;
+                {error, _} = Error -> Error
             end
-        end),
-    S#s{pulling = Pid, pulled = S#s.pulled + 1}.
+        end,
+        case quod_simplex:history_view({Owner, {Ns, GenesisHash}}, committed, Deadline) of
+            {ok, #{slot := Height, projection := Projection, snapshot := Snapshot} = View} ->
+                _ = quod_process:kill_when_owner_dies(Owner, self()),
+                Path = quod_ledger_store:staging_path(Snapshot),
+                ok = gen_server:call(Feed, {pull_stage, Path}, ?INGEST_MS),
+                try
+                    quod_catchup:catch_up(Ns, GenesisHash, Fetch, Sink, Height + 1, Projection,
+                                          #{history_view => View, stage_path => Path})
+                after _ = finish_pull_replay(Owner) end;
+            {error, _} = Error -> Error
+        end
+    end),
+    Observed = case S#s.received of none -> 0; {_, Last, _} -> Last end,
+    S#s{pulling = Pid, pull_observed = Observed, pulled = S#s.pulled + 1}.
+
+cleanup_pull_stage(S = #s{pull_stage = none}) -> S;
+cleanup_pull_stage(S = #s{pull_stage = Path}) ->
+    _ = file:delete(Path),
+    S#s{pull_stage = none}.
 
 finish_pull_replay(Owner) ->
     try gen_statem:call(Owner,
@@ -986,6 +966,9 @@ test_recipient_rows(#s{recipients = Recipients}) ->
             acked_height => Acked, in_flight => InFlight,
             pending_height => Pending}
       end, Recipients).
+
+test_pull_state(Pid, Observed, S) -> S#s{pulling = Pid, pull_observed = Observed}.
+test_received(#s{received = Received, pulling = Pulling}) -> {Received, Pulling}.
 
 test_set_snapshot(Snapshot, S) ->
     S#s{snap = Snapshot}.

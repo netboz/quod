@@ -17,10 +17,12 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 -export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
-         peer_prove/3, await_applied/3, await_operation_complete/3,
+         peer_prove/3, peer_protocol_position/2, await_applied/3, await_operation_complete/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
-         committed_entry/3,
+         committed_entry/3, protocol_fixture/1, protocol_certificate/2, fixture_finality/2,
+         direct_proof/1, append_direct_history/2,
+         history_group/4, history_advance/4, verify_finality/3, verify_finality/4,
          atomic_resolve_payload/0, atomic_role_fixture/0,
          signed_goal_fixture/1, signed_atomic_fixture/1,
          atomic_abort_record/3,
@@ -36,6 +38,95 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
 -export([proof_gate_row/3, https_request/4, https_request/5]).
+
+%% Deterministic canonical genesis, signed application and signer for protocol
+%% codec/consensus/archive tests. The caller chooses its namespace.
+protocol_fixture(Ns) ->
+    Seed = <<42:256>>,
+    {Pub, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    GenesisTx = quod_simplex:test_genesis_tx(
+      #{external_predicate_modules => [], node_addr => {<<"localhost">>, 1}}, Ns, Pub, <<6:256>>),
+    {ok, Genesis} = quod_ledger:new_block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    {genesis, 0, Anchor} = quod_ledger:block_ref(Genesis),
+    Identity = {Ns, Anchor},
+    Projection = quod_simplex:history_advance(Ns, quod_ledger:entry(1, Genesis, none),
+                                             quod_simplex:history_projection(Identity)),
+    Admission = maps:get(Pub, maps:get(admissions, Projection)),
+    {ok, Goal} = quod_durable_term:encode_goal(true),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    Unsigned = quod_transaction:bind_id(Identity,
+      #transaction{origin = Identity, proof_id = <<2:256>>, plan_digest = <<3:256>>,
+                   goal = Goal, result = Result, diff = [], read_check = #{},
+                   author = Pub, author_seq = 1, submitted_at = 1}),
+    {ok, Tx} = quod_transaction:sign({Ns, Anchor, Admission}, Unsigned, Signer),
+    #{identity => Identity, genesis => Genesis, era => quod_ledger:initial_era(Identity),
+      transaction => Tx, signer => Signer, admission => Admission, projection => Projection}.
+
+
+protocol_certificate(Block, #{identity := {Ns, Anchor}, signer := Signer}) ->
+    {Era, View, Hash} = quod_ledger:block_ref(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Share = quod_simplex:make_share(Domain, commit, {Era, View}, Hash, Signer),
+    {ok, Cert} = quod_simplex:form_cert(Domain, commit, {Era, View}, Hash,
+                                       [Share], [maps:get(pubkey, Signer)]),
+    Cert.
+
+
+verify_finality(Identity, Entry, Projection) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    verify_finality(Identity, Entry, Projection,
+      {fun([]) -> done; ([Bytes | Rest]) -> {ok, Bytes, Rest} end,
+       [quod_ledger:block_bytes(Block)]}).
+
+verify_finality(Identity, Entries, Projection, Source) ->
+    case quod_catchup:verify_finality(Identity, Entries, Projection, Source) of
+        {ok, _Summary} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+%% Install one direct-proof fixture through the same group verifier and delta
+%% commit used by archive recovery. The third result is its custody summary;
+%% fixtures never synthesize application effects or use a second reducer.
+history_advance(Identity, Entry, Projection, Index) ->
+    case history_group(Identity, Entry, Projection, Index) of
+        {ok, #{projection := P1, delta := Delta, finality := Summary}} ->
+            ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+            {ok, P1, Summary};
+        {error, _} = Error -> Error
+    end.
+
+%% Preview a direct-proof fixture without mutating its owner's index. Tests
+%% of descendant witnesses supply their actual streamed ancestry themselves.
+history_group(Identity, Entry, Projection, Index) ->
+    Proof = direct_proof(Entry),
+    Bodies = case Proof of none -> []; {_, _, Bs} -> Bs end,
+    Source = {fun([]) -> done; ([Bytes | Rest]) -> {ok, Bytes, Rest} end,
+              Bodies},
+    case quod_catchup:verify_forward_group(Identity, [Entry], Projection, Index, Source) of
+        {ok, P1, Delta, Summary} ->
+            {ok, #{entries => [Entry], projection => P1, delta => Delta,
+                   finality => Summary, proof => Proof}};
+        {error, _} = Error -> Error
+    end.
+
+%% Direct-cert fixtures only. Neither function authenticates history; use the
+%% real group verifier for authority. Descendant tests supply their full proof.
+direct_proof(Entry) ->
+    case quod_ledger:entry_index(Entry) of
+        1 -> none;
+        _ ->
+            {ok, Block} = quod_ledger:block_from_entry(Entry),
+            Bytes = quod_ledger:block_bytes(Block),
+            {quod_ledger_store:proof_frame_size(Bytes),
+             fun([]) -> done; ([B]) -> {B, []} end, [Bytes]}
+    end.
+
+append_direct_history(Store, Entries) ->
+    lists:foldl(fun(Entry, {ok, Previous}) ->
+        quod_ledger_store:append(Previous, {direct_proof(Entry), [Entry]})
+    end, {ok, Store}, Entries).
+
 
 %% Assertions inspect one decoded owner-side material object; production has
 %% no field getter which silently decodes the whole plan on every access.
@@ -83,13 +174,21 @@ atomic_resolve_payload() ->
     Signer = #{pubkey => Pubkey,
                key => quod_identity:key_term({Pubkey, Seed})},
     {ok, VoteRef} = quod_dtx:certified_ref(
-                      <<"quod:dtx-origin">>, <<3:256>>, 1,
-                      <<4:256>>, <<5:256>>, <<"qc">>),
+                      <<"quod:dtx-origin">>, <<3:256>>, 2,
+                      <<4:256>>, <<5:256>>, fixture_finality(1, <<4:256>>)),
     Record = atomic_abort_record(Target, <<6:256>>, VoteRef),
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} = quod_atomic:sign_control(
                       Target, Material, <<7:256>>, 1, 0, Signer),
     {batch, [{dtx, Control}]}.
+
+%% Canonical shape only, deliberately not signature authority. Callers that
+%% verify history supply a real certificate through protocol_certificate/2.
+fixture_finality(View, Hash) ->
+    {ok, Bytes} = quod_ledger:encode_finality_head(
+        #cert{kind = commit, era = <<9:256>>, slot = View, block_hash = Hash,
+              sigs = [{<<1:256>>, <<0:512>>}]}),
+    Bytes.
 
 %% Own-role atomic codec fixture with two real sealed plans/signatures.
 %% References are shape-only until a caller supplies its certified-entry seam.
@@ -133,7 +232,7 @@ atomic_role_fixture() ->
     {ok, SourceControl} = quod_atomic:sign_control(Origin, SourceMaterial, Admission, 1, 1, Signer),
     {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1, Signer),
     {ok, SourceRef} = quod_dtx:certified_ref(element(1, Origin), element(2, Origin),
-                          1, <<106:256>>, quod_atomic:record_digest(SourceVote), <<"qc">>),
+                          2, <<106:256>>, quod_atomic:record_digest(SourceVote), fixture_finality(1, <<106:256>>)),
     {ok, Blob} = quod_atomic:encode_record(Vote),
     #{origin => Origin, target => Target, group => Group,
       signer => Signer, admission => Admission,
@@ -408,7 +507,8 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                 Claim#transaction.tx_id},
     {ok, CertifiedClaimRef} = quod_dtx:certified_ref(
                                 OriginNs, OriginAnchor, 2, <<213:256>>,
-                                Claim#transaction.tx_id, <<"claim-qc">>),
+                                Claim#transaction.tx_id,
+                                fixture_finality(1, <<213:256>>)),
     Application0 = quod_transaction:attach_evidence(
                      quod_transaction:remote_application(ClaimRef, Claim, Target),
                      CertifiedClaimRef, Claim),
@@ -423,7 +523,8 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                  Application#transaction.tx_id},
     {ok, CertifiedTargetRef} = quod_dtx:certified_ref(
                                  TargetNs, TargetAnchor, 3, <<214:256>>,
-                                 Application#transaction.tx_id, <<"target-qc">>),
+                                 Application#transaction.tx_id,
+                                 fixture_finality(2, <<214:256>>)),
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     %% Already-verified-history input for pure admission tests; actual owner
     %% and admitted-node controls live in their own suites.
@@ -929,8 +1030,21 @@ committed_entry(Ns, Index, Data) ->
                       {batch, [committed_transaction(Ns, Tx) || Tx <- Txs]};
                   _ -> Data
               end,
-    {ok, Entry} = quod_ledger:new_entry(Index, Payload, 0, none),
-    Entry.
+    %% Bare applier fixtures exercise domain transitions after consensus.
+    %% Their descriptor is shape-only, never evidence for a history verifier.
+    case Index of
+        1 ->
+            {ok, Block} = quod_ledger:new_block({genesis, 0}, none, Payload, 0),
+            quod_ledger:entry(1, Block, none);
+        _ ->
+            Era = quod_ledger:initial_era({Ns, <<0:256>>}),
+            {ok, Block} = quod_ledger:new_block({Era, Index - 1},
+                {Era, Index - 2, <<0:256>>}, Payload, 0),
+            Cert = #cert{kind = commit, era = Era, slot = Index - 1,
+                         block_hash = quod_simplex:block_hash(Block),
+                         sigs = [{<<1:256>>, <<0:512>>}]},
+            quod_ledger:entry(Index, Block, Cert)
+    end.
 
 committed_transaction(_Ns, #transaction{sig = Sig} = Tx) when Sig =/= none -> Tx;
 committed_transaction(_Ns, #transaction{proof_id = none, plan_digest = none,
@@ -1077,3 +1191,10 @@ read_body(Socket, Acc, Length) ->
 header(Line) ->
     [Name, Value] = binary:split(Line, <<": ">>),
     {string:lowercase(Name), Value}.
+
+%% Capture the real owner through its existing TEST view, preserving era and
+%% exact hash-bound parent when transport fixtures construct a proposal.
+peer_protocol_position(Peer, Ns) ->
+    Owner = peer:call(Peer, quod_reg, where, [{quod_simplex, Ns}]),
+    {running, State} = peer:call(Peer, sys, get_state, [Owner]),
+    quod_simplex:test_protocol_position(State).

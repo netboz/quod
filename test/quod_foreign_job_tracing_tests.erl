@@ -10,9 +10,17 @@
 page_wait_normal_result_is_successful_observation_test() ->
     assert_stage_result(page_wait, normal_page_reply(), ok, <<"ok">>),
     assert_stage_result(page_wait, {decode_page, malformed}, error, <<"unclassified">>),
-    {decode_page, Key, _, Height, Deadline, Gate} = normal_page_reply(),
-    assert_stage_result(page_wait, {decode_page, Key, not_blobs, Height, Deadline, Gate},
+    {decode_page, Key, _, Height, Continuation, Deadline, Gate} = normal_page_reply(),
+    assert_stage_result(page_wait, {decode_page, Key, not_parts, Height, Continuation, Deadline, Gate},
                         error, <<"unclassified">>).
+
+retained_page_failure_preserves_its_observed_reason_test() ->
+    assert_stage_result(page_fetch, {error, retry, {ok, retained}}, error, <<"retry">>),
+    assert_stage_result(page_fetch, {ok, {error, invalid_history, retained}, 2, done},
+                        error, <<"invalid_history">>),
+    assert_stage_result(page_consume, {error, invalid_history, retained}, error, <<"invalid_history">>),
+    assert_stage_result(page_consume, {nomination, 2}, ok, <<"ok">>),
+    assert_stage_result(exact_validate, {nomination, 2}, error, <<"unclassified">>).
 
 probe_collection_normal_result_is_successful_observation_test() ->
     assert_stage_result(probe_collection, [], ok, <<"ok">>),
@@ -94,7 +102,7 @@ stage_result_selection_is_trace_correlated_test() ->
 
 normal_page_reply() ->
     Key = {self(), <<1:128>>, make_ref(), self(), <<2:128>>},
-    {decode_page, Key, [<<"opaque entry bytes">>], 2, quod_time:mono_ms() + 5000, undefined}.
+    {decode_page, Key, [{entry, <<"opaque entry bytes">>}], 2, done, quod_time:mono_ms() + 5000, undefined}.
 
 assert_stage_result(Stage, Result, Status, Reason) ->
     with_stage_trace(fun(TraceId) ->
@@ -199,7 +207,7 @@ routed_exact_reuses_the_verified_page_without_disk_lookup_test() ->
           ?assertMatch({ok, #{phase := resolve}}, Result),
           ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
           assert_stages(Worker, Spans,
-            [exact_route, cache_open, page_fetch, page_verify,
+            [exact_route, cache_open, page_fetch, page_consume,
              exact_validate, phase_suspend, ledger_suspend, worker_handoff]),
           assert_no_stage(exact_lookup, Spans)
       end).
@@ -244,7 +252,7 @@ changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
               assert_no_stage(cache_reconstruction, Spans),
               assert_no_stage(cache_replay, Spans),
               assert_stages(Worker, Spans,
-                [cache_prepare, cache_open, page_verify, exact_validate, worker_handoff])
+                [cache_prepare, cache_open, page_consume, exact_validate, worker_handoff])
           after quod_foreign_log_tests:stop_owner(Restarted)
           end
       end).
@@ -255,8 +263,8 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
     Token = make_ref(),
     with_fixture(
       fun(_Fixture, Base) ->
-          fun(Peer, Endpoint, Ns, From, To) ->
-              Parent ! {shared_fetch, Token, From,
+          fun(Peer, Endpoint, Ns, Query, Deadline, Consume) ->
+              Parent ! {shared_fetch, Token, Query,
                         otel_ctx:get_value(private_foreign_trace_sentinel)},
               case atomics:compare_exchange(Gate, 1, 0, 1) of
                   ok ->
@@ -264,7 +272,7 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
                       receive {release_shared_blocker, Token} -> ok end;
                   _ -> ok
               end,
-              Base(Peer, Endpoint, Ns, From, To)
+              Base(Peer, Endpoint, Ns, Query, Deadline, Consume)
           end
       end,
       fun(Fixture, _Dir, Owner, _Fetch) ->
@@ -309,7 +317,7 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
           Spans = exported_spans(otel_span:trace_id(FirstSpan)),
           ?assertEqual([], named(<<"quod.foreign.verification_worker">>, Spans)),
           ?assertEqual(nomatch, binary:match(term_to_binary([Worker | Spans]), Sentinel)),
-          ?assertEqual([{1, undefined}, {2, undefined}], shared_fetches(Token)),
+          ?assertEqual([{{range, 1, 1}, undefined}, {{range, 2, 2}, undefined}], shared_fetches(Token)),
           assert_stages(Worker, Spans, [cache_open, exact_route, page_fetch,
                                        exact_validate, worker_handoff])
       end).
@@ -367,7 +375,7 @@ historical_local_trace_keeps_local_reads_distinct_test() ->
         CacheDir = quod_foreign_log_tests:temp_dir("trace-local-cache"),
         SourceDir = quod_foreign_log_tests:temp_dir("trace-local-source"),
         Owner = quod_foreign_log_tests:start_owner(
-                  CacheDir, fun(_, _, _, _, _) -> error(local_trace_used_network) end),
+                  CacheDir, fun(_, _, _, _, _, _) -> error(local_trace_used_network) end),
         {SourcePid, SourceMRef, Source} =
             quod_foreign_log_tests:start_local_borrow_source(SourceDir, Fixture),
         {Context, Parent} = quod_trace:start_span(
@@ -400,9 +408,9 @@ unsampled_context_does_not_manufacture_worker_root_test() ->
     Parent = self(),
     with_fixture(
       fun(Fixture, Base) ->
-          fun(Peer, Endpoint, Ns, From, To) ->
+          fun(Peer, Endpoint, Ns, Query, Deadline, Consume) ->
               Parent ! {unsampled_worker, maps:get(ns, Fixture), self()},
-              Base(Peer, Endpoint, Ns, From, To)
+              Base(Peer, Endpoint, Ns, Query, Deadline, Consume)
           end
       end,
       fun(Fixture, _Dir, _Owner, _Fetch) ->
@@ -432,7 +440,7 @@ worker_exception_preserves_reason_without_exporting_payload_test() ->
     Sentinel = <<"foreign-worker-private-exception-sentinel">>,
     with_fixture(
       fun(_Fixture, _Base) ->
-          fun(_, _, _, _, _) ->
+          fun(_, _, _, _, _, _) ->
               Parent ! {throwing_worker, self()},
               receive throw_now -> error(Sentinel) end
           end
@@ -493,7 +501,7 @@ page_success_has_one_owner_terminal_despite_stale_messages_test() ->
             Spans = exported_spans(TraceId),
             {Page, Terminal} = assert_page_terminal(ReqId, completed, decoding, false, Spans),
             ?assert(Terminal#span.end_time =< Page#span.end_time),
-            assert_stages(WorkerSpan, Spans, [page_fetch, page_wait, page_decode, page_completion]),
+            assert_stages(WorkerSpan, Spans, [page_fetch, page_wait, page_consume, page_completion]),
             assert_successful_stage(page_wait, Spans),
             quod_foreign_log_tests:assert_page_owner_drained()
         after
@@ -526,7 +534,7 @@ page_link_death_during_decode_exports_its_actual_terminal_cause_test() ->
             {_Page, Terminal} = assert_page_terminal(ReqId, link_down, decoding, false, Spans),
             %% The decoder succeeded; only the owner can explain the lost link
             %% after raw delivery. Its unchanged late completion result is retry.
-            Decode = one(<<"quod.foreign.page_decode">>, Spans),
+            Decode = one(<<"quod.foreign.page_consume">>, Spans),
             ?assertEqual(<<"ok">>, maps:get('quod.foreign.reason', attrs(Decode))),
             Completion = one(<<"quod.foreign.page_completion">>, Spans),
             ?assertEqual(<<"retry">>, maps:get('quod.foreign.reason', attrs(Completion))),
@@ -605,7 +613,7 @@ begin_traced_page(#{owner := Owner, first := Fixture, peer := Peer,
 
 deliver_traced_page(Owner, Link, Binding, Grant, ReqId, Fixture) ->
     Owner ! {catchup_page, Link, Binding, Grant, ReqId,
-             {ok, quod_foreign_log_tests:fixture_entry_blobs(Fixture), 2},
+             {ok, quod_foreign_log_tests:fixture_page_parts(Fixture), 2, done},
              crypto:strong_rand_bytes(16)}.
 
 assert_page_terminal(ReqId, Cause, Turn, Expired, Spans) ->
@@ -660,7 +668,7 @@ owner_request(Owner, Context, Request) ->
        erlang:monotonic_time(), Request}).
 
 shared_fetches(Token) ->
-    receive {shared_fetch, Token, From, Value} -> [{From, Value} | shared_fetches(Token)]
+    receive {shared_fetch, Token, Query, Value} -> [{Query, Value} | shared_fetches(Token)]
     after 0 -> []
     end.
 
@@ -676,7 +684,7 @@ traced_work(Fun, Existing) ->
             {quod_foreign_log, open_cache_raw, 5},
             {quod_foreign_log, open_replayed_cache_raw, '_'},
             {quod_foreign_log, verification_worker, '_'},
-            {quod_catchup, verify_forward, 6},
+            {quod_catchup, preview_group, 5},
             {quod_dtx_phase_index, capture, 2},
             {quod_dtx_phase_index, resume, 1},
             {quod_ledger_store, open_ro_snapshot, 1},
@@ -739,8 +747,8 @@ collect_work(Counts, Pids) ->
             collect_work(add_count(captures, 1, Counts), [P | Pids]);
         {trace, P, call, {quod_foreign_log, verification_worker, _}} ->
             collect_work(add_count(worker_calls, 1, Counts), [P | Pids]);
-        {trace, P, call, {quod_catchup, verify_forward, [_, _, _, _, Entries, _]}} ->
-            collect_work(add_count(verified_entries, length(Entries), Counts), [P | Pids]);
+        {trace, P, call, {quod_catchup, preview_group, [_, [_ | _], _, _, _]}} ->
+            collect_work(add_count(verified_entries, 1, Counts), [P | Pids]);
         {trace, P, return_from, {quod_foreign_log, open_replayed_cache_raw, _Arity},
          {error, cache_corrupt}} ->
             collect_work(add_count(reconstruction_rejected, 1, Counts), [P | Pids]);

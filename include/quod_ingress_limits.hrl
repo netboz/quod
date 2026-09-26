@@ -7,9 +7,11 @@
 %% New volatile admissions share the ingress population bound. It never
 %% limits recovery of obligations already accepted into durable custody.
 -define(MAX_INGRESS_TXS, 512).
-%% The canonical block envelope adds only fixed slot/parent/time/tag framing
-%% around a payload already bounded by MAX_BLOCK_BYTES.
--define(QUOD_MAX_CANONICAL_BLOCK_BYTES, (?MAX_BLOCK_BYTES + 128)).
+%% Payload policy is unchanged. V2 adds three 32-byte ETF binaries (block era,
+%% parent era and parent hash) plus a tuple header to the prior envelope's
+%% slot/parent/time/tag allowance. This is encoding overhead, not payload space.
+-define(QUOD_MAX_CANONICAL_BLOCK_BYTES,
+        (?MAX_BLOCK_BYTES + 128 + 3 * (5 + 32) + 2)).
 %% One canonical signed transaction is the common opaque payload accepted by
 %% transaction verification and relay admission.  An operation-custody
 %% submission is the deterministic `{submit, Author, Signature, Canonical}`

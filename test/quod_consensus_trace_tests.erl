@@ -8,7 +8,10 @@
 owner_turns_cover_real_statem_calls_casts_and_info_test() ->
     quod_trace_tests:with_tracer(fun() ->
         Ns = <<"trace:owner:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
-        State = quod_simplex:test_state(#{ns => Ns, trace_owner_turns => true}),
+        Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
+        Root = {quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>},
+        State = quod_simplex:test_state(#{ns => Ns, trace_owner_turns => true,
+                    eng => quod_simplex:eng_new(Domain, [], {Root, 0})}),
         %% Enter the production callback module, not a synthetic tracing callback.
         %% The three events below have ordinary inert/read-only production arms.
         Owner = proc_lib:spawn(fun() ->
@@ -62,7 +65,9 @@ owner_turn_covers_keep_progress_steps_and_timeout_actions_test() ->
         Ns = <<"trace:owner-timeout:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
         Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
         State = quod_simplex:test_state(#{ns => Ns, consensus_domain => Domain,
-                    eng => quod_simplex:eng_new(Domain, [], 0)}),
+                    history_head => {0, <<0:256>>}, slot => 0,
+                    eng => quod_simplex:eng_new(Domain, [],
+                      {{quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>}, 0})}),
         %% A stale batch event still takes the real keep_progress path. Compare
         %% complete results/actions with diagnostics disabled, not a shape oracle.
         Expected = quod_simplex:running({timeout, batch}, {flush_batch, 1}, State),
@@ -313,20 +318,21 @@ foreign_validation_queued_success_respects_original_deadline_test_() ->
             %% This is a callback-state fixture, not candidate wire admission:
             %% the worker authenticates the actual signed entry and its AM3
             %% result in the real store. No verifier answer is supplied.
-            Block = #block{slot = 3, parent = 2, payload = {batch, [Receipt]},
-                           timestamp = 0, block_bytes = <<"queue-deadline-fixture">>},
+            Projection = quod_simplex:test_state_projection(State0),
+            {Era, 1, _} = Root = maps:get(protocol_root, Projection),
+            {ok, Block} = quod_ledger:new_block({Era, 2}, Root, {batch, [Receipt]}, 2),
             Hash = quod_simplex:block_hash(Block),
-            Eng0 = quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [], 2),
+            Eng0 = quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [], {Root, 2}),
             {Eng, _} = quod_simplex:eng_offer({block, Block}, Eng0),
             State = quod_simplex:test_state_set(eng, Eng, State0),
             true = quod_reg:reg({quod_prolog, Ns}),
             StartedAt = quod_time:mono_ms(),
-            Started = quod_simplex:test_start_content_validation([Receipt], 0, 3, Hash, State),
+            Started = quod_simplex:test_start_content_validation([Receipt], 2, 2, Hash, State),
             {Hash, {content_foreign, Worker, Monitor}, _, _, _} =
-                quod_simplex:test_dtx_round(3, Started),
+                quod_simplex:test_dtx_round(2, Started),
             try
                 receive
-                    {content_foreign_verdict, {3, Hash}, Worker, Deadline, valid} ->
+                    {content_foreign_verdict, {2, Hash}, Worker, Deadline, valid} ->
                         ?assert(Deadline >= StartedAt + 6000),
                         ?assert(Deadline =< quod_time:mono_ms() + 6000),
                         ?assert(Deadline > quod_time:mono_ms()),
@@ -335,19 +341,19 @@ foreign_validation_queued_success_respects_original_deadline_test_() ->
                             expired -> receive after max(0, Deadline - quod_time:mono_ms()) -> ok end
                         end,
                         Done = quod_simplex:on_content_foreign_verdict(
-                          3, Hash, Worker, Deadline, valid, Started),
+                          2, Hash, Worker, Deadline, valid, Started),
                         case When of
                             timely ->
                                 ?assertMatch({Hash, content, _, _, _},
-                                             quod_simplex:test_dtx_round(3, Done)),
+                                             quod_simplex:test_dtx_round(2, Done)),
                                 receive
-                                    {'$gen_cast', {content_verdict_req, [Receipt], 0,
-                                                  3, _, {3, Hash}, _}} -> ok
+                                    {'$gen_cast', {content_verdict_req, [Receipt], 2,
+                                                  3, _, {2, Hash}, _}} -> ok
                                 after 1000 -> error(valid_result_not_applied)
                                 end;
                             expired ->
                                 ?assertMatch({none, none, _, _, _},
-                                             quod_simplex:test_dtx_round(3, Done)),
+                                             quod_simplex:test_dtx_round(2, Done)),
                                 receive
                                     {'$gen_cast', {content_verdict_req, _, _, _, _, _, _}} ->
                                         error(expired_success_published)
@@ -387,8 +393,12 @@ with_certified_history(Fun) ->
         #{target := {Ns, Anchor}, store := Store, projection := Projection0,
           application := Transaction, certified_target_ref := Ref,
           node_identity := Signer = #{pubkey := Pub}} = F,
-        {ok, [_], Projection} = quod_catchup:verify_forward(
-            Ns, Anchor, Projection0, 2, [maps:get(entry, F)]),
+        IndexDir = filename:join("/tmp", "quod-trace-index-" ++
+            binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+        {ok, Index} = quod_dtx_phase_index:open(IndexDir, Ns),
+        {ok, Projection, _} = quod_ct:history_advance(
+            {Ns, Anchor}, maps:get(entry, F), Projection0, Index),
+        Root = maps:get(protocol_root, Projection),
         Domain = quod_simplex:consensus_domain(Ns, Anchor),
         true = quod_reg:reg({quod_simplex, Ns}),
         try
@@ -396,10 +406,13 @@ with_certified_history(Fun) ->
                      self => Pub, id => Signer, store => Store, slot => 2,
                      last_applied => 2, sync => ready, prolog_ready => true,
                      validators => [Pub], consensus_domain => Domain,
-                     eng => quod_simplex:eng_new(Domain, [Pub], 2)}),
+                     phase_index => Index,
+                     eng => quod_simplex:eng_new(Domain, [Pub], {Root, 2})}),
             State = quod_simplex:test_install_projection(Projection, Base),
             Fun(State, Transaction, Ref, maps:get(completion, F))
         after
-            true = gproc:unreg(quod_reg:name({quod_simplex, Ns}))
+            true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            ok = quod_dtx_phase_index:close(Index),
+            ok = file:del_dir_r(IndexDir)
         end
     end).

@@ -428,11 +428,12 @@ handle_info(refresh_system_catalogue, S) ->
 handle_info({replay_ready, _Id, _Height}, S) ->
     self() ! reconcile,
     {noreply, request_system_refresh(S)};
-handle_info({proof_ready, {Ns, Anchor}, Owner}, S) ->
+handle_info({proof_ready, {Ns, Anchor}, Owner, Prolog, _Generation}, S) ->
     %% Replay announces completion before Simplex installs the engine ACK.
     %% Only that installed edge can make a waiting host publishable.
     case maps:is_key(Ns, maps:get(content, S#s.desired)) andalso
          quod_reg:where({quod_simplex, Ns}) =:= Owner andalso
+         quod_reg:where({quod_prolog, Ns}) =:= Prolog andalso
          quod_simplex:genesis_hash(Ns) =:= Anchor of
         true ->
             self() ! reconcile,

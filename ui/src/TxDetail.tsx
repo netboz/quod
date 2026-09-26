@@ -447,11 +447,7 @@ function CertSection({ cert }: { cert: Cert }) {
   if (!cert) return null
   return (
     <Section
-      title={
-        cert.kind === 'implicit'
-          ? `Quorum certificate — implicit via child #${cert.child_slot}`
-          : `Quorum certificate — ${cert.kind}`
-      }
+      title={`Finality certificate — consensus round #${cert.head_view}`}
     >
       <div className="flex flex-wrap gap-1.5">
         {cert.signers.map((s, i) => (

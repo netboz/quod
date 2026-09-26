@@ -465,7 +465,7 @@ foreign_commit_metrics_use_target_namespace_test() ->
     {ok, Signed} = quod_transaction:sign(
                      {Target, <<0:256>>, Author}, Bound,
                      #{pubkey => Author, key => quod_identity:key_term({Author, Seed})}),
-    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Signed]}, 0, none),
+    Entry = quod_ct:committed_entry(Target, 2, {batch, [Signed]}),
     ok = quod_metrics:test_observe_commit(Target, Entry),
     AuthorLabel = quod_identity:short(Author),
     ?assertEqual(1, prometheus_counter:value(
@@ -480,15 +480,17 @@ dtx_commits_are_counted_by_phase_test() ->
     Ns = <<"metrics:non-content:",
            (integer_to_binary(
               erlang:unique_integer([positive])))/binary>>,
-    ok = quod_metrics:test_observe_commit(
-           Ns, quod_ledger:noop_entry(1, none)),
-    ?assertEqual({error, bad_entry},
-                 quod_ledger:new_entry(2, {batch, []}, 0, none)),
+    %% Empty protocol carriers never become material entries or metrics.
+    Era = quod_ledger:initial_era({Ns, <<0:256>>}),
+    {ok, Carrier} = quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, empty, 0),
+    ?assertException(error, _, quod_ledger:entry(2, Carrier, none)),
+    ?assertEqual({error, bad_block},
+                 quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, {batch, []}, 0)),
     ?assertEqual(
        undefined,
        prometheus_counter:value(
          quod_dtx_committed_total, [Ns, <<"resolve">>])),
-    {ok, Entry} = quod_ledger:new_entry(3, quod_ct:atomic_resolve_payload(), 0, none),
+    Entry = quod_ct:committed_entry(Ns, 3, quod_ct:atomic_resolve_payload()),
     ok = quod_metrics:test_observe_commit(Ns, Entry),
     ?assertEqual(
        1,
@@ -681,14 +683,13 @@ batch_and_retry_metrics_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     Ns = <<"batch:test">>,
     ok = quod_metrics:observe_batch(Ns, 4, 25),
-    ok = quod_metrics:count_tx_retry(Ns, membership_skipped),
+    ok = quod_metrics:count_tx_retry(Ns, stale_sequence),
     Placeholder = spawn(fun() -> receive stop -> ok end end),
     true = register(quod_metrics, Placeholder),
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
         ok = quod_metrics:observe_batch(Ns, 4, 25),
         ok = quod_metrics:observe_batch(Ns, 0, -1),
-        ok = quod_metrics:count_tx_retry(Ns, membership_skipped),
         ok = quod_metrics:count_tx_retry(Ns, stale_sequence),
         ok = quod_metrics:count_tx_retry(Ns, unknown),
         {_, SizeSum} = prometheus_histogram:value(
@@ -697,9 +698,6 @@ batch_and_retry_metrics_test() ->
                          quod_consensus_batch_wait_ms, [Ns]),
         ?assertEqual(4, SizeSum),
         ?assertEqual(25, WaitSum),
-        ?assertEqual(1, prometheus_counter:value(
-                          quod_tx_retries_total,
-                          [Ns, <<"membership_skipped">>])),
         ?assertEqual(1, prometheus_counter:value(
                           quod_tx_retries_total, [Ns, <<"stale_sequence">>]))
     after

@@ -206,60 +206,36 @@ mechanism is a small **committee**.
 Each ontology is run by a small group of computers — say 4 or 7 — that holds it and
 agrees on every change.
 
-- One member is **in charge** for each numbered slot. It collects a short ordered
-  batch of incoming changes into a **block** and sends that block to the others. A block
-  becomes official once **more than two-thirds** of the committee has signed off on it.
-- A change that arrives while the current block is already sealed is not turned away:
-  because everyone can compute whose turn comes next, it is sent **straight to the
-  member whose turn is coming** and **waits in a bounded line there**, pouring into
-  that block the moment the turn opens — block N+1 naturally carries everything that
-  arrived during block N, already in place, with no bouncing between members. The line
-  is first-come-first-served (so a waiting membership change drains the pipeline
-  instead of being overtaken), each member gets a fair share of it, and a request only
-  hears "busy" when the line truly overflows or the cluster is genuinely stalled —
-  which makes "busy" an alarm, not a retry hint.
-- Once a block has enough first-stage support, the next slot may begin while final
-  signatures for the parent are still arriving. The pipeline is deliberately only one
-  slot deep, and membership changes stop it until they are durably committed. Demand
-  already received for that next slot is retained while the parent finishes, then
-  becomes the watched head without requiring the client to submit it again.
-  The live engine therefore retains only the two slots above its durable head,
-  one block per slot, and one vote per signer/kind/slot. A valid farther commit
-  or skip certificate becomes a single recovery hint rather than retained
-  peer-controlled state; historical catch-up remains unbounded by this live window.
-- If the one in charge stalls or goes quiet, the others **agree to skip it** and move
-  on to the next, in a second or two. No human involved.
-- Each node keeps one explicit watchdog on the **oldest unfinished slot**. It follows
-  that slot from proposal, through first-stage approval, until durable commit or skip;
-  approval never cancels finality recovery. Complaint voting pauses unless enough
-  validators have both a live authenticated consensus stream and a fresh report that
-  they are caught up to the local committed height. A socket opened by a still-recovering
-  process therefore does not count as a voter. The first three readiness restorations for
-  one unchanged phase grant a fresh timeout; later flaps cannot keep moving the deadline.
-  A recovering validator processes a valid proposal it retained through the ordinary
-  support or membership-check path. If it already has a notarization certificate, it
-  resumes only the missing final vote and never invents support that bypasses validation.
-  Before sending support, it atomically records both the decision and the exact canonical
-  block; before sending a commit or skip signature, it records that final decision. Restarting
-  therefore cannot vote differently or forget the body it supported. One final-vote rule covers both
-  live pipeline slots: if enough peers already chose skip, an uncommitted validator joins
-  them even when the block was approved meanwhile; otherwise a notarized block selects commit.
-  A node that has the approval certificate but not the block asks one candidate holder at a
-  time, trying certificate signers before the rest of the committee, and verifies both block
-  and certificate before using them. The journal retains only supported blocks in the bounded
-  live consensus window; it is neither a knowledge-base snapshot nor a second ledger.
-  A final certificate beyond the block frontier also makes the node stop voting and recover
-  the missing committed entry from the durable log, including when it is only one block behind.
-  When quorum returns before notarization, a validator that already supported the proposal
-  re-sends that support once and waits one final timeout before it may complain; this gives
-  the leader's retained proposal time to reach a recovered validator without allowing an
-  endless retry loop.
-  Consensus connections and queued frames are scoped to the current committee: a committed
-  membership change closes and forgets transport state for every departed validator.
-  This improves **liveness** when a deployment temporarily loses more nodes than its normal
-  fault-tolerance bound, while durable vote decisions keep crash-restarted validators honest.
-  The Byzantine guarantee still assumes no more than the normal fault bound are malicious.
-  A simultaneous, mutually hidden split between final votes remains a later view-change job.
+- Each numbered **protocol view** has a leader. It collects an ordered batch
+  of changes into a block and sends it to the committee. Support from a quorum
+  approves that block's exact contents and parent; final signatures make its
+  history durable.
+- Approval lets the next view begin while final signatures are still arriving.
+  Work can overlap. A later certified block can also finalize its ancestors,
+  provided the complete parent chain has been verified.
+- A protocol view is not a ledger entry. If the leader stalls, a quorum of
+  complaints moves the committee to another view without changing ontology
+  state. Empty recovery blocks can finish the proof of an earlier change;
+  they do not create facts, events, reactions or application results.
+- The original signed request stays with its existing owner while it is moved
+  to the next eligible leader. It keeps the same bytes and deadline. A timeout
+  can leave its result unknown; it does not authorize submitting it again.
+- Before sending a first support or final vote, a validator records that choice
+  durably. Restart restores it. Commit and complaint cannot both be signed for
+  the same view. Recovery uses later views without changing previous votes.
+- A committee change is an ordinary governed ontology transaction. It is the
+  old committee's last state-changing block; any old-committee recovery blocks
+  after it are empty. The new committee starts from that certified change,
+  regardless of which valid recovery proof established it.
+- The existing ledger archive keeps the proof and its state-changing entries
+  durable together before they are published. Application and authorization
+  still belong to the ontology. Restoring its state does not replay historical
+  reactions.
+
+The exact vote, membership and recovery rules are in
+[consensus signatures](consensus-signatures.md) and the
+[finality recovery plan](finality-round-recovery-plan.md). The implementation's
+fault and hardware acceptance results are tracked separately from those rules.
 
 Why "more than two-thirds"? Because any two "more than two-thirds" groups overlap by
 enough that they always share at least one **honest** computer — and an honest

@@ -12,25 +12,30 @@ materializer_pins_owner_session_across_append_without_path_scan_test() ->
 
 materializer_session_case(Dir) ->
     Ns = <<"materializer-session">>,
-    {Pub, Seed} = quod_identity:generate(),
-    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
-    Genesis = quod_simplex:test_genesis_tx(
-                #{node_id => Pub, mode => create, committee => [],
-                  node_addr => {"127.0.0.1", 19000}, genesis_diff => []},
-                Ns, Pub, crypto:strong_rand_bytes(32)),
-    {ok, First} = quod_ledger:new_entry(1, {batch, [Genesis]}, 1, none),
-    Identity = {Ns, entry_hash(First)},
-    Projection = quod_simplex:history_advance(Ns, First, quod_simplex:history_projection(Identity)),
-    {ok, AuthorBinding} = quod_simplex:history_binding(Identity, Pub, Projection),
-    Last = material_entry(Identity, Pub, Signer, AuthorBinding, 258, 1),
-    Entries = [First | [begin {ok, E} = quod_ledger:new_entry(I, noop, 0, none), E end
-                        || I <- lists:seq(2, 257)]] ++ [Last],
+    F = quod_ct:protocol_fixture(Ns),
+    Identity = maps:get(identity, F),
+    First = quod_ledger:entry(1, maps:get(genesis, F), none),
+    Root = maps:get(protocol_root, maps:get(projection, F)),
+    {BlocksRev, LastRef} = lists:foldl(fun(Height, {Blocks, Parent}) ->
+        Diff = case Height of
+            258 -> [{assert, {{materializer_value, 1}, true}}];
+            _ -> []
+        end,
+        Block = material_block(F, Height, Parent, Diff),
+        {[Block | Blocks], quod_ledger:block_ref(Block)}
+    end, {[], Root}, lists:seq(2, 258)),
+    Cert = quod_ct:protocol_certificate(hd(BlocksRev), F),
+    Entries = [quod_ledger:entry(H, B, Cert) ||
+        {H, B} <- lists:zip(lists:seq(2, 258), lists:reverse(BlocksRev))],
     {ok, Store0} = quod_ledger_store:open(Ns, Dir, wrapped),
     try
-    {ok, Store1} = quod_ledger_store:append(Store0, Entries),
+    {ok, GenesisStore} = quod_ledger_store:append(Store0, {none, [First]}),
+    {ok, Store1} = quod_ledger_store:append(GenesisStore, {proof_source(BlocksRev), Entries}),
     View1 = view(Store1, Identity, lists:last(Entries)),
-    Extra = material_entry(Identity, Pub, Signer, AuthorBinding, 259, 2),
-    {ok, Store2} = quod_ledger_store:append(Store1, [Extra]),
+    ExtraBlock = material_block(F, 259, LastRef,
+                               [{assert, {{materializer_value, 2}, true}}]),
+    Extra = quod_ledger:entry(259, ExtraBlock, quod_ct:protocol_certificate(ExtraBlock, F)),
+    {ok, Store2} = quod_ledger_store:append(Store1, {proof_source([ExtraBlock]), [Extra]}),
     View2 = view(Store2, Identity, Extra),
     {Pid, MRef, Generation} = quod_foreign_projection:start_monitor(
                                 self(), Identity, filename:join(Dir, "scratch"), View1),
@@ -127,22 +132,21 @@ view(Store, Identity, Entry) ->
       projection => #{history_head =>
                         {(quod_ledger:entry_view(Entry))#entry.index, entry_hash(Entry)}}}.
 
-material_entry(Identity = {Ns, Anchor}, Pub, Signer, AuthorBinding, Slot, Sequence) ->
-    {ok, Goal} = quod_durable_term:encode_goal({materializer_append, Sequence}),
-    {ok, Result} = quod_durable_term:encode_result(#{}),
-    Tx0 = #transaction{origin = Identity,
-                       proof_id = crypto:hash(sha256, term_to_binary({proof, Sequence})),
-                       plan_digest = crypto:hash(sha256, term_to_binary({plan, Sequence})),
-                       goal = Goal, result = Result,
-                       diff = [{assert, {{materializer_value, Sequence}, true}}],
-                       read_check = #{}, author = Pub, author_seq = Sequence,
-                       submitted_at = Sequence + 1, sig = none},
-    {ok, Tx} = quod_transaction:sign(AuthorBinding, quod_transaction:bind_id(Identity, Tx0), Signer),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [Tx]}, Sequence + 1),
-    Hash = quod_simplex:block_hash(Block),
-    #share{sig = Signature} = quod_simplex:make_share(
-                               quod_simplex:consensus_domain(Ns, Anchor), commit, Slot, Hash, Signer),
-    quod_ledger:entry(Block, #cert{kind = commit, slot = Slot, block_hash = Hash, sigs = [{Pub, Signature}]}).
+material_block(#{identity := {Ns, Anchor} = Identity, signer := Signer,
+                 admission := Admission, era := Era, transaction := Template},
+               Height, Parent, Diff) ->
+    Tx0 = Template#transaction{diff = Diff, author_seq = Height - 1,
+                               submitted_at = Height, sig = none,
+                               signed_bytes = none, authentication = none},
+    {ok, Tx} = quod_transaction:sign({Ns, Anchor, Admission},
+                                    quod_transaction:bind_id(Identity, Tx0), Signer),
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, {batch, [Tx]}, Height),
+    Block.
+
+proof_source(Blocks) ->
+    Bytes = [quod_ledger:block_bytes(B) || B <- Blocks],
+    {lists:sum([quod_ledger_store:proof_frame_size(B) || B <- Bytes]),
+     fun([]) -> done; ([B | Rest]) -> {B, Rest} end, Bytes}.
 
 entry_hash(Entry) ->
     {ok, Block} = quod_ledger:block_from_entry(Entry),

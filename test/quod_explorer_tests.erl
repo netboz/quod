@@ -135,9 +135,21 @@ entry(Slot, Txs) ->
 stored_entry(Slot, Target, Txs) ->
     Signed = [signed_transaction(Target, Tx, {Slot, I})
               || {Tx, I} <- lists:zip(Txs, lists:seq(1, length(Txs)))],
-    {ok, Entry} = quod_ledger:new_entry(
-                    Slot, {batch, Signed}, 2000 + Slot, none),
-    Entry.
+    display_entry(Slot, {batch, Signed}, 2000 + Slot).
+
+%% Canonical rendering input, not a certified-history owner. Authorization and
+%% ancestry are exercised by the history suites; this suite checks the display
+%% of the selected artifact without re-verifying it on every render.
+display_entry(Height, Payload, Timestamp) when Height > 1 ->
+    F = quod_ct:protocol_fixture(<<"ont:test">>),
+    Era = maps:get(era, F),
+    Parent = maps:get(protocol_root, maps:get(projection, F)),
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, Payload, Timestamp),
+    quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block, F)).
+
+genesis_entry(Ns) ->
+    F = quod_ct:protocol_fixture(Ns),
+    quod_ledger:entry(1, maps:get(genesis, F), none).
 
 signed_transaction({Ns, Anchor} = Target, Tx0, Salt) ->
     Seed = crypto:hash(sha256, term_to_binary({explorer_tx, Salt})),
@@ -152,17 +164,11 @@ signed_transaction({Ns, Anchor} = Target, Tx0, Salt) ->
                      {Ns, Anchor, Author}, Tx, Signer),
     Signed.
 
-block_json_distinguishes_non_transaction_slots_test() ->
+block_json_distinguishes_content_and_control_test() ->
     Content = quod_explorer_http:block_json(<<"ont:test">>, entry(2, [tx(2)])),
     ?assertEqual(content, maps:get(kind, Content)),
     ?assertEqual(1, length(maps:get(txs, Content))),
-    Noop = quod_explorer_http:block_json(
-             <<"ont:test">>, quod_ledger:noop_entry(3, none)),
-    ?assertEqual(noop, maps:get(kind, Noop)),
-    ?assertEqual([], maps:get(txs, Noop)),
-    ?assertEqual({error, bad_entry},
-                 quod_ledger:new_entry(4, {batch, []}, 0, none)),
-    {ok, DtxEntry} = quod_ledger:new_entry(5, explorer_vote_payload(), 0, none),
+    DtxEntry = display_entry(5, explorer_vote_payload(), 0),
     Dtx = quod_explorer_http:block_json(<<"ont:test">>, DtxEntry),
     ?assertEqual(dtx_batch, maps:get(kind, Dtx)),
     ?assertEqual([], maps:get(txs, Dtx)),
@@ -175,13 +181,9 @@ block_json_distinguishes_non_transaction_slots_test() ->
 
 dtx_control_is_visible_in_paged_history_test() ->
     with_temp_store(fun(Store0) ->
-        {ok, DtxEntry} = quod_ledger:new_entry(
-                           2, explorer_vote_payload(), 2002, none),
-        {ok, Store} = quod_ledger_store:append(
-                        Store0,
-                        [stored_entry(
-                           1, {<<"ont:test">>, <<0:256>>}, [tx(1)]),
-                         DtxEntry]),
+        DtxEntry = display_entry(2, explorer_vote_payload(), 2002),
+        {ok, Store} = quod_ct:append_direct_history(Store0,
+                        [genesis_entry(<<"ont:test">>), DtxEntry]),
         #{txs := [Row, _Content], height := 2, next_before := null} =
             quod_explorer_http:txs_page(Store, undefined, 10),
         ?assertMatch(#{row_type := control, row_id := <<"dtx:", _/binary>>,
@@ -192,7 +194,7 @@ dtx_control_is_visible_in_paged_history_test() ->
 
 websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     Ns = <<"ont:test">>,
-    {ok, DtxEntry} = quod_ledger:new_entry(5, explorer_vote_payload(), 0, none),
+    DtxEntry = display_entry(5, explorer_vote_payload(), 0),
     {reply, {text, Frame}, state} =
         quod_explorer_ws:websocket_info(
           {committed, Ns, 5, DtxEntry}, state),
@@ -200,9 +202,7 @@ websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     ?assertEqual(
        {ok, state},
        quod_explorer_ws:websocket_info(
-         {committed, Ns, 6, quod_ledger:noop_entry(6, none)}, state)),
-    ?assertEqual({error, bad_entry},
-                 quod_ledger:new_entry(7, {batch, []}, 0, none)).
+         {certified_head, Ns, 6}, state)).
 
 explorer_vote_payload() ->
     F = quod_ct:signed_atomic_fixture(#{vote => {refused, [{test_abort, dtx_fixture}]}}),
@@ -523,8 +523,8 @@ drain_unrelated_history_spans() ->
 with_history_source(Fun) ->
     Suffix = integer_to_list(erlang:unique_integer([positive])),
     Ns = list_to_binary("ont:explorer-history:" ++ Suffix),
-    with_history_source({Ns, <<0:256>>},
-      [quod_ledger:noop_entry(I, none) || I <- [1, 2]], Fun).
+    F = quod_foreign_log_tests:foreign_fixture(Ns),
+    with_history_source({Ns, maps:get(anchor, F)}, maps:get(chain, F), Fun).
 
 with_history_source({Ns, _Anchor} = Identity, Entries, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -537,7 +537,7 @@ with_history_source({Ns, _Anchor} = Identity, Entries, Fun) ->
     Parent = self(),
     Owner = spawn(fun() ->
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
-        {ok, Store} = quod_ledger_store:append(Store0, Entries),
+        {ok, Store} = quod_ct:append_direct_history(Store0, Entries),
         try
             true = quod_reg:reg({quod_simplex, Ns}),
             Parent ! {history_source_ready, self()},
@@ -582,8 +582,9 @@ history_source_loop({Ns, Anchor} = SourceIdentity, Store, Parent, Mode) ->
             Caller ! {history_command_done, Ref},
             history_source_loop(SourceIdentity, Store, Parent, Mode);
         {history_command, Caller, Ref, append} ->
-            {ok, Next} = quod_ledger_store:append(
-                           Store, [quod_ledger:noop_entry(quod_ledger_store:last(Store) + 1, none)]),
+            Height = quod_ledger_store:last(Store) + 1,
+            {ok, Next} = quod_ct:append_direct_history(Store,
+                [stored_entry(Height, SourceIdentity, [tx(Height)])]),
             Caller ! {history_command_done, Ref},
             history_source_loop(SourceIdentity, Next, Parent, Mode);
         stop -> ok
@@ -608,35 +609,35 @@ resolve_rendering_uses_its_vote_reference_without_rereading_history_test() ->
     F = quod_ct:signed_atomic_fixture(#{}),
     {Ns, Anchor} = Target = maps:get(origin, F),
     Control = maps:get(vote_control, F),
-    {ok, VoteEntry} = quod_ledger:new_entry(1, {batch, [{dtx, Control}]}, 1, none),
+    VoteEntry = display_entry(2, {batch, [{dtx, Control}]}, 1),
     %% Reference shape only: display does not claim consensus certification.
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 1, <<120:256>>,
-                                      quod_atomic:record_digest(Control), <<"shape-only">>),
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<120:256>>,
+                                      quod_atomic:record_digest(Control), quod_ct:fixture_finality(1, <<120:256>>)),
     Other = hd([T || T <- maps:get(participant_targets, F), T =/= Target]),
     {ok, OtherRef} = quod_dtx:certified_ref(element(1, Other), element(2, Other),
-                                           1, <<121:256>>, <<122:256>>, <<"shape-only">>),
+                                           2, <<121:256>>, <<122:256>>, quod_ct:fixture_finality(1, <<121:256>>)),
     {ok, Resolve} = quod_atomic:new_resolve(maps:get(group, F), Ref, Target, commit,
                         {all_prepared, lists:sort([{Target, Ref}, {Other, OtherRef}])}, Ref, 2),
     {ok, Material} = quod_atomic:admission_material(Resolve),
     {ok, RC} = quod_atomic:sign_control(Target, Material, maps:get(admission, F), 2, 2,
                                         maps:get(node_identity, F)),
-    {ok, ResolveEntry} = quod_ledger:new_entry(2, {batch, [{dtx, RC}]}, 2, none),
-    with_history_source(Target, [VoteEntry, ResolveEntry], fun(Ns0, Owner) ->
-        #{txs := [ResolveRow, VoteRow]} = history_page(Ns0, live, quod_time:mono_ms() + 1000),
-        #{verdict := commit, vote_ref := #{height := 1}, voted := true} = maps:get(control, ResolveRow),
+    ResolveEntry = display_entry(3, {batch, [{dtx, RC}]}, 2),
+    with_history_source(Target, [genesis_entry(Ns), VoteEntry, ResolveEntry], fun(Ns0, Owner) ->
+        #{txs := [ResolveRow, VoteRow, _Genesis]} = history_page(Ns0, live, quod_time:mono_ms() + 1000),
+        #{verdict := commit, vote_ref := #{height := 2}, voted := true} = maps:get(control, ResolveRow),
         ?assertNot(maps:is_key(applied_plan, maps:get(control, ResolveRow))),
         ?assertMatch(#{plan := #{diff := [#{op := assert, clause := <<"saved(ok)">>}] }},
                      maps:get(control, VoteRow)),
         {{reply, {text, Frame}, state}, Names} = trace_history_reads(fun() ->
-            quod_explorer_ws:websocket_info({committed, Ns0, 2, ResolveEntry}, state)
+            quod_explorer_ws:websocket_info({committed, Ns0, 3, ResolveEntry}, state)
         end),
         ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names)),
         ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
         #{<<"controls">> := [WsControl]} = json:decode(Frame),
-        ?assertMatch(#{<<"vote_ref">> := #{<<"height">> := 1}}, WsControl),
+        ?assertMatch(#{<<"vote_ref">> := #{<<"height">> := 2}}, WsControl),
         stop_history_source(Owner),
         {{reply, {text, SameFrame}, state}, MissingNames} = trace_history_reads(fun() ->
-            quod_explorer_ws:websocket_info({committed, Ns0, 2, ResolveEntry}, state)
+            quod_explorer_ws:websocket_info({committed, Ns0, 3, ResolveEntry}, state)
         end),
         ?assertEqual(Frame, SameFrame),
         ?assertNot(lists:member(<<"quod.ledger.file_open">>, MissingNames))
@@ -649,7 +650,7 @@ pending_outcome_requires_same_anchored_owner_without_opening_reader_test() ->
           {Ns, IndexAnchor}, (tx(8))#transaction{tx_id = <<>>, plan_digest = <<24:256>>}),
     IdText = binary:encode_hex(T#transaction.tx_id, lowercase),
     lists:foreach(fun(SourceAnchor) ->
-        with_history_source({Ns, SourceAnchor}, [quod_ledger:noop_entry(1, none)],
+        with_history_source({Ns, SourceAnchor}, [genesis_entry(Ns)],
           fun(Ns0, _Owner) ->
               #{Ns0 := #{ledger := Dir}} = application:get_env(quod, content_storage_dirs, #{}),
               {ok, Index0} = quod_outcome:open(Ns0, IndexAnchor,
@@ -677,8 +678,8 @@ indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
            {Ns, Anchor}, T0#transaction{tx_id = <<>>, origin = {Ns, <<22:256>>},
              proof_id = <<23:256>>, plan_digest = <<24:256>>, author_seq = 1}),
     T = signed_transaction({Ns, Anchor}, T1, indexed),
-    {ok, Entry2} = quod_ledger:new_entry(2, {batch, [T]}, 2002, none),
-    with_history_source({Ns, Anchor}, [quod_ledger:noop_entry(1, none), Entry2],
+    Entry2 = display_entry(2, {batch, [T]}, 2002),
+    with_history_source({Ns, Anchor}, [genesis_entry(Ns), Entry2],
       fun(Ns0, Owner) ->
         #{Ns0 := #{data := DataDir, ledger := LedgerDir}} =
             application:get_env(quod, content_storage_dirs, #{}),
@@ -716,20 +717,20 @@ indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
 
 paging_test() ->
     with_temp_store(fun(Store0) ->
-        Entries = [stored_entry(
+        Entries = [genesis_entry(<<"ont:test">>) | [stored_entry(
                      S, {<<"ont:test">>, <<0:256>>},
                      [tx(S * 10), tx(S * 10 + 1)])
-                   || S <- lists:seq(1, 5)],
-        {ok, Store} = quod_ledger_store:append(Store0, Entries),
+                   || S <- lists:seq(2, 6)]],
+        {ok, Store} = quod_ct:append_direct_history(Store0, Entries),
         %% first page: newest first; the limit is block-granular (a block's transactions are
         %% never split across pages, so `next_before` stays a plain slot), hence 4 rows for 3
-        #{txs := Page1, height := 5, next_before := Next} =
+        #{txs := Page1, height := 6, next_before := Next} =
             quod_explorer_http:txs_page(Store, undefined, 3),
-        ?assertEqual([5, 5, 4, 4], [maps:get(height, T) || T <- Page1]),
-        ?assertEqual(4, Next),
-        %% second page resumes below — slot 3 downward
+        ?assertEqual([6, 6, 5, 5], [maps:get(height, T) || T <- Page1]),
+        ?assertEqual(5, Next),
+        %% second page resumes below — height 4 downward
         #{txs := Page2} = quod_explorer_http:txs_page(Store, Next, 100),
-        ?assertEqual([3, 3, 2, 2, 1, 1], [maps:get(height, T) || T <- Page2]),
+        ?assertEqual([4, 4, 3, 3, 2, 2, 1], [maps:get(height, T) || T <- Page2]),
         %% the last page reports genesis reached
         ?assertMatch(#{next_before := null}, quod_explorer_http:txs_page(Store, Next, 100)),
         ok
@@ -811,7 +812,7 @@ signed_tx_json_test() ->
     ?assertEqual(genesis,
                  maps:get(signature_status,
                           quod_explorer_http:tx_json_full(
-                            <<"ont:test">>, tx(1), entry(1, [tx(1)])))).
+                            <<"ont:test">>, tx(1), genesis_entry(<<"ont:test">>)))).
 
 signed_agent_intent_is_rendered_from_the_transaction_test() ->
     Fixture = quod_ct:signed_atomic_fixture(#{}),
@@ -847,7 +848,7 @@ signed_agent_intent_is_rendered_from_the_transaction_test() ->
 signed_agent_intent_and_only_own_plan_are_rendered_from_the_vote_test() ->
     Fixture = quod_ct:signed_atomic_fixture(#{}),
     Control = maps:get(vote_control, Fixture),
-    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, Control}]}, 2, none),
+    Entry = display_entry(2, {batch, [{dtx, Control}]}, 2),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     {{ok, Received}, IngressChecks} = material_work_calls(fun() -> quod_ledger:decode_entry(Bytes) end),
     ?assert(maps:get({quod_identity, verify, 3}, IngressChecks) > 0),
@@ -891,7 +892,7 @@ material_work_calls(Fun) ->
 
 refused_source_vote_does_not_display_a_permanent_request_claim_test() ->
     F = quod_ct:signed_atomic_fixture(#{vote => {refused, [vote_deadline]}}),
-    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, maps:get(vote_control, F)}]}, 2, none),
+    Entry = display_entry(2, {batch, [{dtx, maps:get(vote_control, F)}]}, 2),
     #{controls := [#{vote := refused, request := Request}]} =
         quod_explorer_http:block_json(element(1, maps:get(origin, F)), Entry),
     ?assertEqual(verified, maps:get(status, Request)),
@@ -956,7 +957,7 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
                       {Target, PlanDigest, PlanBlob, Attestation}, prepared),
     {ok, Material} = quod_atomic:admission_material(Vote),
     {ok, Control} = quod_atomic:sign_control(Target, Material, <<116:256>>, 1, 1, Signer),
-    {ok, Entry} = quod_ledger:new_entry(1, {batch, [{dtx, Control}]}, 1, none),
+    Entry = display_entry(2, {batch, [{dtx, Control}]}, 1),
     Json = quod_explorer_http:block_json(element(1, Target), Entry),
     [RenderedControl] = maps:get(controls, Json),
     Participant = maps:get(plan, RenderedControl),
@@ -978,7 +979,7 @@ compiled_clause_test() ->
     %% rules with the familiar comma body (never the raw `{[],false}` internals)
     T = (tx(1))#transaction{diff = [{assert, {{fact, a}, {[], false}}},
                                     {retract, {{rule, {'X'}}, {[{peer_ready, {'X'}}], false}}}]},
-    J = quod_explorer_http:tx_json_full(<<"ont:test">>, T, entry(1, [T])),
+    J = quod_explorer_http:tx_json_full(<<"ont:test">>, T, entry(2, [T])),
     ?assertEqual([#{op => assert, clause => <<"fact(a)">>},
                   #{op => retract, clause => <<"rule(X) :- peer_ready(X)">>}],
                  maps:get(diff, J)).

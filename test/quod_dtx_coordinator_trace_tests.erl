@@ -495,12 +495,13 @@ sign(Target, Record, Seq, F) ->
 
 entry({Ns, Anchor} = Target, Control, Slot, F) ->
     Payload = {batch, [{dtx, Control}]},
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, Payload, 0),
+    Era = quod_ledger:initial_era(Target),
+    {ok, Block} = quod_ledger:new_block({Era, Slot - 1}, {Era, 0, Anchor}, Payload, 0),
     Hash = quod_simplex:block_hash(Block),
     Signer = maps:get(node_identity, F),
     #share{sig = Sig} = quod_simplex:make_share(
-      quod_simplex:consensus_domain(Ns, Anchor), commit, Slot, Hash, Signer),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = Slot,
+      quod_simplex:consensus_domain(Ns, Anchor), commit, {Era, Slot - 1}, Hash, Signer),
+    Entry = quod_ledger:entry(Slot, Block, #cert{kind = commit, era = Era, slot = Slot - 1,
       block_hash = Hash, sigs = [{maps:get(pubkey, Signer), Sig}]}),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {Entry, Payload, Ref}.

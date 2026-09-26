@@ -528,16 +528,13 @@ retracted_founding_reaction_is_loud_test() ->
        quod_runtime:plan_runtime_catalog(
          [Fact], #{subscriptions => [], reactions => []})).
 
-%% Slot 1 is ontology content, never an empty skip or malformed payload. The
-%% old catch-all silently turned either into an ontology with no founding
-%% handlers, hiding ledger corruption.
+%% Genesis is ontology content. Empty protocol carriers cannot be ledger
+%% entries; a shape-valid control batch is still not founding content.
 non_content_founding_payload_is_rejected_test() ->
-    ?assertEqual(
-       {error, bad_entry},
-       quod_ledger:new_entry(1, {batch, []}, 0, none)),
-    lists:foreach(
-      fun assert_bad_founding/1,
-      [noop, quod_ct:atomic_resolve_payload()]).
+    [?assertEqual({error, bad_block},
+                  quod_ledger:new_block({genesis, 0}, none, Payload, 0))
+        || Payload <- [empty, {batch, []}]],
+    assert_bad_founding(quod_ct:atomic_resolve_payload()).
 
 assert_bad_founding(Data) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -545,13 +542,7 @@ assert_bad_founding(Data) ->
     Dir = filename:join("/tmp", "quod_rt_bad_genesis_" ++ U),
     Ns = list_to_binary("rtbad:" ++ U),
     try
-        Entry = case Data of
-                    noop -> quod_ledger:noop_entry(1, none);
-                    _ ->
-                        {ok, Canonical} = quod_ledger:new_entry(
-                                            1, Data, 0, none),
-                        Canonical
-                end,
+        Entry = quod_ct:committed_entry(Ns, 1, Data),
         Owner = start_founding_source(Ns, Dir, [Entry], ready),
         try
             ?assertEqual(
@@ -1976,9 +1967,7 @@ bare_founding_entry(Ns) ->
     Tx = #transaction{tx_id = <<"runtime-founding">>, origin = {Ns, <<0:256>>},
                       author = <<"runtime-fixture">>, read_check = #{},
                       diff = diff_for({founding_marker, true})},
-    {ok, Entry} = quod_ledger:new_entry(
-                    1, batch(Tx), 0, none),
-    Entry.
+    quod_ct:committed_entry(Ns, 1, batch(Tx)).
 
 with_founding_runtime(Mode, Fun) ->
     with_founding_runtime(Mode, #{}, Fun).
@@ -1992,7 +1981,8 @@ with_founding_runtime(Mode, RuntimeConfig, Fun) ->
     Owner = case Mode of
         absent -> undefined;
         empty -> start_founding_source(Ns, Dir, [], ready);
-        malformed -> start_founding_source(Ns, Dir, [quod_ledger:noop_entry(1, none)], ready);
+        malformed -> start_founding_source(Ns, Dir,
+            [quod_ct:committed_entry(Ns, 1, quod_ct:atomic_resolve_payload())], ready);
         _ -> start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], Mode)
     end,
     try
@@ -2032,7 +2022,7 @@ start_founding_source(Ns, Dir, Entries, Mode) ->
     Observer = self(),
     {Owner, MRef} = spawn_monitor(fun() ->
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
-        {ok, Store} = quod_ledger_store:append(Store0, Entries),
+        {ok, Store} = quod_ledger_store:append(Store0, {none, Entries}),
         try
             true = quod_reg:reg({quod_simplex, Ns}),
             Observer ! {founding_source_ready, self()},
@@ -2079,7 +2069,7 @@ founding_source_loop(Ns, Store, Mode, Observer) ->
             Caller ! {founding_mode_set, self()},
             founding_source_loop(Ns, Store, NewMode, Observer);
         {append_founding, Entry, Caller} ->
-            {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
+            {ok, Store1} = quod_ledger_store:append(Store, {none, [Entry]}),
             Caller ! {founding_appended, self()},
             founding_source_loop(Ns, Store1, Mode, Observer);
         stop -> ok;

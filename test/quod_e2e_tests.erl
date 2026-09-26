@@ -126,7 +126,10 @@ t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
 
 %% Even the local leader rechecks a committee transaction against the parent KB.
 %% This direct call bypasses the normal admit proof, so fail-closed can_join must
-%% reject it; at N=1 the validator's complaint immediately skips the slot.
+%% reject it. A complaint advances only the protocol view: it cannot certify
+%% exclusion or add a ledger row. Invalid membership cannot become a public
+%% retry merely because its original placement changed. Custody completion and
+%% original-deadline expiry are checked in the shared owner tests.
 t_direct_membership_revalidated({_Dir, Ns, Cfg}) ->
     fun() ->
         _Pid = start_ns(Ns, Cfg),
@@ -145,9 +148,25 @@ t_direct_membership_revalidated({_Dir, Ns, Cfg}) ->
                     sig = none},
         Change = quod_transaction:bind_id(
                    {Ns, quod_simplex:genesis_hash(Ns)}, Change0),
-        ?assertEqual({error, skipped}, quod_simplex:append(Ns, Change)),
-        ?assertEqual(1, length(quod_simplex:committee(Ns))),
-        ?assertMatch(#{slot := 2, membership_rejects := 1}, quod_simplex:stats(Ns))
+        Parent = self(), Tag = make_ref(),
+        {Caller, Monitor} = spawn_monitor(fun() ->
+            Parent ! {Tag, quod_simplex:append(Ns, Change)}
+        end),
+        try
+            ?assert(quod_ct:eventually(fun() ->
+                maps:get(protocol_view, quod_simplex:status(Ns), 0) > 1
+            end, 3000)),
+            ?assertEqual(1, length(quod_simplex:committee(Ns))),
+            Stats = quod_simplex:stats(Ns),
+            ?assertEqual(1, maps:get(slot, Stats)),
+            ?assert(maps:get(membership_rejects, Stats) >= 1),
+            receive {Tag, Premature} -> error({uncertified_exclusion, Premature})
+            after 0 -> ok end,
+            ?assertEqual(1, maps:get(custody_depth, quod_simplex:stats(Ns))),
+            ?assertEqual(1, length(quod_simplex:committee(Ns)))
+        after
+            exit(Caller, kill), erlang:demonitor(Monitor, [flush])
+        end
     end.
 
 t_restart_reload({Dir, Ns, Cfg}) ->

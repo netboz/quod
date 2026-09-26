@@ -1,6 +1,6 @@
 -module(quod_operation_fixture).
 -include("quod_ledger.hrl").
--export([with/2, with/3, with/4, view/3, entry/4]).
+-export([with/2, with/3, with/4, view/3, entry/5]).
 
 %% One real signed/certified history constructor for owner-interface controls.
 %% These genesis-derived projections are trusted owner inputs, not a witness
@@ -28,7 +28,7 @@ with(N, GenesisDiff, Result, Fun) ->
                                           maps:get(bundles, F0), maps:get(auth, F0), []),
     {ok, Claim} = quod_transaction:sign(SourceBinding,
       Claim0#transaction{author = NodeKey, author_seq = 1, submitted_at = 1}, Signer),
-    ClaimEntry = entry(Origin, Signer, 2, Claim),
+    ClaimEntry = entry(Origin, Signer, 2, maps:get(protocol_root, SourceProjection), Claim),
     {ok, ClaimRef} = quod_dtx:certified_entry_ref(Origin, ClaimEntry, Claim),
     {ok, #{operation_ref := OperationRef, digest := Digest}} = quod_transaction:request_claim(Claim),
     Dir = filename:join("/tmp", "quod-s8-operation-fixture-" ++ binary_to_list(Suffix)),
@@ -41,10 +41,10 @@ with(N, GenesisDiff, Result, Fun) ->
           ClaimRef, Claim),
         {ok, App} = quod_transaction:sign(TargetBinding,
           App0#transaction{author = NodeKey, author_seq = 1, submitted_at = 1}, Signer),
-        Entry = entry(Target, Signer, 2, App),
+        Entry = entry(Target, Signer, 2, maps:get(protocol_root, Projection), App),
         {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, App),
         {ok, Store0} = quod_ledger_store:open(TargetNs, Dir),
-        {ok, Store} = quod_ledger_store:append(Store0, [G, Entry]),
+        {ok, Store} = append_entries(Store0, [G, Entry]),
         Evidence = #{identity => Target, phase => transaction, slot => 2,
           block_hash => operation_entry_hash(Entry), record_digest => App#transaction.tx_id,
           transaction => App, committee => [NodeKey], committee_id => maps:get(committee_id, Projection)},
@@ -63,9 +63,10 @@ with(N, GenesisDiff, Result, Fun) ->
       quod_transaction:remote_complete(Origin, OperationRef, Digest, Receipt), Pairs),
     {ok, Completion} = quod_transaction:sign(SourceBinding,
       Completion0#transaction{author = NodeKey, author_seq = 2, submitted_at = 3}, Signer),
-    CompletionEntry = entry(Origin, Signer, 3, Completion),
+    {ok, ClaimBlock} = quod_ledger:block_from_entry(ClaimEntry),
+    CompletionEntry = entry(Origin, Signer, 3, quod_ledger:block_ref(ClaimBlock), Completion),
     {ok, Source0} = quod_ledger_store:open(Ns, Dir),
-    {ok, SourceStore} = quod_ledger_store:append(Source0, [Genesis, ClaimEntry, CompletionEntry]),
+    {ok, SourceStore} = append_entries(Source0, [Genesis, ClaimEntry, CompletionEntry]),
     SavedNodeKey = application:get_env(quod, node_pubkey),
     application:set_env(quod, node_pubkey, NodeKey),
     try
@@ -91,27 +92,41 @@ operation_genesis(Ns, #{pubkey := Key}, GenesisDiff) ->
     Tx = quod_simplex:test_genesis_tx(#{node_id => Key, mode => create, committee => [],
       genesis_diff => GenesisDiff, node_addr => {"127.0.0.1", 34249}},
       Ns, Key, crypto:hash(sha256, <<243:64>>)),
-    {ok, Genesis} = quod_ledger:new_entry(1, {batch, [Tx]}, 0, none),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [Tx]}, 0),
+    Genesis = quod_ledger:entry(1, Block, none),
     Anchor = operation_entry_hash(Genesis),
-    {ok, [_], Projection} = quod_catchup:verify_forward(
-      Ns, Anchor, quod_simplex:history_projection({Ns, Anchor}), 1, [Genesis]),
+    Projection = quod_simplex:history_advance(
+      Ns, Genesis, quod_simplex:history_projection({Ns, Anchor})),
     {{Ns, Anchor}, Genesis, Projection}.
 
-entry({Ns, Anchor}, Signer = #{pubkey := Key}, Slot, Tx) ->
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [Tx]}, Slot),
-    Hash = quod_simplex:block_hash(Block),
-    #share{sig = Signature} = quod_simplex:make_share(
-      quod_simplex:consensus_domain(Ns, Anchor), commit, Slot, Hash, Signer),
-    quod_ledger:entry(Block, #cert{kind = commit, slot = Slot, block_hash = Hash,
-                                 sigs = [{Key, Signature}]}).
+entry({Ns, Anchor} = Identity, Signer, Height, {Era, View, _} = Parent, Tx) ->
+    Era = quod_ledger:initial_era(Identity),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Tx]}, Height),
+    Certificate = quod_ct:protocol_certificate(Block, #{identity => {Ns, Anchor}, signer => Signer}),
+    quod_ledger:entry(Height, Block, Certificate).
+
+append_entries(Store, []) -> {ok, Store};
+append_entries(Store, [Entry | Rest]) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    Source = case quod_ledger:entry_index(Entry) of
+        1 -> none;
+        _ ->
+            Bytes = quod_ledger:block_bytes(Block),
+            {quod_ledger_store:proof_frame_size(Bytes),
+             fun([]) -> done; ([B]) -> {B, []} end, [Bytes]}
+    end,
+    {ok, Next} = quod_ledger_store:append(Store, {Source, [Entry]}),
+    append_entries(Next, Rest).
 
 operation_entry_hash(Entry) ->
     {ok, Block} = quod_ledger:block_from_entry(Entry), quod_simplex:block_hash(Block).
 
 view(Store, Projection, Entry) ->
     Ns = quod_ledger_store:namespace(Store), Height = quod_ledger_store:last(Store),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
     #{owner => quod_reg:where({quod_simplex, Ns}),
       identity => maps:get(target, maps:get(dtx, Projection)), slot => Height, applied => Height,
       snapshot => quod_ledger_store:snapshot(Store),
       projection => Projection#{history_head => {Height, operation_entry_hash(Entry)},
+                                 protocol_root => quod_ledger:block_ref(Block),
                                  timestamp => Height}}.

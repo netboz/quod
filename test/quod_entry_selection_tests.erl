@@ -3,13 +3,12 @@
 -include("quod_ledger.hrl").
 
 served_page_authenticates_at_consumption_not_on_both_ends_test() ->
-    with_served_entry(fun(Ns, Store, Entry, Bytes, _Dir) ->
+    with_served_entry(fun(_Ns, Store, Entry, Bytes, _Dir) ->
         Snapshot = quod_ledger_store:snapshot(Store),
-        {{ok, [Bytes], 2}, ServeCount} = counted(fun() ->
-            quod_catchup:serve_blocks(Ns, Snapshot, 2, 2)
-        end),
+        {{ok, Parts, done}, ServeCount} = counted(fun() -> serve(Snapshot, 2, 2) end),
+        ?assertEqual([Bytes], [B || {entry, B} <- Parts]),
         ?assertEqual(0, ServeCount),
-        {{ok, [Entry]}, ReceiveCount} = counted(fun() -> quod_catchup:decode_entries([Bytes], wrapped) end),
+        {{ok, Entry}, ReceiveCount} = counted(fun() -> quod_ledger:decode_entry(Bytes, wrapped) end),
         ?assertEqual(56, ReceiveCount),
         {{ok, [Entry], 2}, LocalCount} = counted(fun() ->
             {ok, Reader} = quod_ledger_store:open_ro_snapshot(Snapshot),
@@ -19,77 +18,106 @@ served_page_authenticates_at_consumption_not_on_both_ends_test() ->
         ?assertEqual(56, LocalCount),
         ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Bytes)),
         ?assertException(error, function_clause, quod_ledger:entry_view(Bytes)),
-        {ok, Third} = quod_ledger:new_entry(3, noop, 0, none),
-        {ok, _Advanced} = quod_ledger_store:append(Store, [Third]),
-        ?assertEqual({ok, [Bytes], 2}, quod_catchup:serve_blocks(Ns, Snapshot, 2, 3))
+        {Identity, Signer, _, _} = fixture(),
+        {ok, Block} = quod_ledger:block_from_entry(Entry),
+        #entry{data = {batch, [Tx | _]}} = quod_ledger:entry_view(Entry),
+        {Era, _, _} = quod_ledger:block_ref(Block),
+        {ok, ThirdBlock} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Block), {batch, [Tx]}, 3),
+        Third = quod_ledger:entry(3, ThirdBlock, quod_ct:protocol_certificate(
+            ThirdBlock, #{identity => Identity, signer => Signer})),
+        {ok, _Advanced} = append_group(Store, Third, [ThirdBlock]),
+        ?assertEqual({ok, Parts, done}, serve(Snapshot, 2, 3))
     end).
 
 served_page_retains_signature_checks_at_consumption_test() ->
     with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
         {I, Parent, [{transaction, First} | Rest], Time, Cert} = unpack(Bytes),
         Bad = pack(I, Parent, [{transaction, bad_signature(First)} | Rest], Time, Cert),
-        %% CRC-valid altered storage is still only transport data. The server
-        %% grants no authority; its receiver must reject the invalid signature.
-        rewrite_served_frame(Ns, Store, Dir, frame(Bad)),
-        ?assertEqual({ok, [Bad], 2}, quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2)),
-        ?assertEqual({error, bad_frame}, quod_catchup:decode_entries([Bad], wrapped)),
+        %% CRC-valid altered storage remains transport data. Only the receiver
+        %% authenticates payloads; the server does not grant append authority.
+        rewrite_frame(Ns, Dir, frame(<<2, Bytes/binary>>), frame(<<2, Bad/binary>>)),
+        {ok, Parts, done} = serve(quod_ledger_store:snapshot(Store), 2, 2),
+        ?assertEqual([Bad], [B || {entry, B} <- Parts]),
+        ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(Bad, wrapped)),
         ?assertException(error, {corrupt_entry, 2, bad_entry}, quod_ledger_store:read_range(Store, 2, 2, all))
     end).
 
-served_implicit_child_is_authenticated_by_the_receiver_test() ->
-    with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
-        {I, _Parent, [{transaction, First} | Rest], Time, Cert} = unpack(Bytes),
-        {quod_entry, 1, I, BlockBytes, _} = binary_to_term(Bytes, [safe]),
-        Child = canonical({quod_block, 1, I+1, I,
-                           {batch, [{transaction, bad_signature(First)} | Rest]}, Time}),
-        Bad = canonical({quod_entry, 1, I, BlockBytes, {implicit, Cert, Child, Cert}}),
-        rewrite_served_frame(Ns, Store, Dir, frame(Bad)),
-        ?assertEqual({ok, [Bad], 2}, quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2)),
-        ?assertEqual({error, bad_frame}, quod_catchup:decode_entries([Bad], wrapped))
+served_proof_payload_is_authenticated_by_the_receiver_test() ->
+    with_served_entry(fun(Ns, Store, Entry, Bytes, Dir) ->
+        {I, Parent, [{transaction, First} | Rest], Time, Cert} = unpack(Bytes),
+        {quod_entry, 2, I, OriginalBlock, _} = binary_to_term(Bytes, [safe]),
+        {quod_entry, 2, I, BadBlock, _} = binary_to_term(
+            pack(I, Parent, [{transaction, bad_signature(First)} | Rest], Time, Cert), [safe]),
+        rewrite_frame(Ns, Dir, frame(<<1, OriginalBlock/binary>>), frame(<<1, BadBlock/binary>>)),
+        {ok, Parts, done} = serve(quod_ledger_store:snapshot(Store), 2, 2),
+        Proofs = [B || {proof, B} <- Parts],
+        ?assert(lists:member(BadBlock, Proofs)),
+        F = quod_ct:protocol_fixture(Ns),
+        ?assertEqual({error, {malformed_finality_link, 2}}, quod_ct:verify_finality(
+            maps:get(identity, F), Entry, maps:get(projection, F),
+            {fun([]) -> done; ([B | Tail]) -> {ok, B, Tail} end, Proofs}))
     end).
 
 served_page_frame_integrity_test_() ->
     [{atom_to_list(Case), fun() -> with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
+        Original = frame(<<2, Bytes/binary>>),
         BadFrame = case Case of
             wrong_index ->
-                {quod_entry, 1, 2, B, C} = binary_to_term(Bytes, [safe]),
-                frame(canonical({quod_entry, 1, 9, B, C}));
+                {quod_entry, 2, 2, B, C} = binary_to_term(Bytes, [safe]),
+                Changed = canonical({quod_entry, 2, 9, B, C}),
+                frame(<<2, Changed/binary>>);
             bad_crc ->
-                <<Magic:32, Len:32, CRC:32, Body/binary>> = frame(Bytes),
+                <<Magic:32, Len:32, CRC:32, Body/binary>> = Original,
                 <<Magic:32, Len:32, (CRC bxor 1):32, Body/binary>>;
-            truncated -> binary:part(frame(Bytes), 0, byte_size(Bytes) + 11)
+            truncated -> binary:part(Original, 0, byte_size(Original) - 1)
         end,
-        rewrite_served_frame(Ns, Store, Dir, BadFrame),
-        Result = quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2),
+        rewrite_frame(Ns, Dir, Original, BadFrame),
+        Snapshot = quod_ledger_store:snapshot(Store),
         case Case of
-            %% Snapshot resume rejects a shortened file before the cursor runs.
-            truncated -> ?assertEqual({error, changed}, Result);
-            _ -> ?assertMatch({error, {corrupt_entry, 2, _}}, Result)
+            truncated -> ?assertEqual({error, changed}, serve(Snapshot, 2, 2));
+            wrong_index -> ?assertException(error, {corrupt_entry, 2, {wrong_index, 9}}, serve(Snapshot, 2, 2));
+            bad_crc -> ?assertException(error, {corrupt_material_group, _, _}, serve(Snapshot, 2, 2))
         end
     end) end} || Case <- [wrong_index, bad_crc, truncated]].
 
 with_served_entry(Fun) ->
     {{Ns, _}, _Signer, Entry, Bytes} = fixture(),
+    F = quod_ct:protocol_fixture(Ns),
+    Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
     Dir = filename:join("/tmp", "quod-served-page-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir, wrapped),
-    {ok, Genesis} = quod_ledger:new_entry(1, noop, 0, none),
     try
-        {ok, Store} = quod_ledger_store:append(Store0, [Genesis, Entry]),
+        {ok, Store1} = quod_ledger_store:append(Store0, {none, [Genesis]}),
+        {ok, Store} = append_group(Store1, Entry, proof_blocks(Entry)),
         Fun(Ns, Store, Entry, Bytes, Dir)
     after quod_ledger_store:close(Store0), file:del_dir_r(Dir) end.
 
-rewrite_served_frame(Ns, Store, Dir, Frame) ->
-    {ok, First} = quod_ledger_store:read_at(Store, 1),
-    {ok, Bytes} = quod_ledger:encode_entry(First),
-    Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
-    ok = file:write_file(Path, <<(frame(Bytes))/binary, Frame/binary>>).
+serve(Snapshot, From, To) ->
+    case quod_ledger_store:open_ro_snapshot(Snapshot) of
+        {ok, Reader} ->
+            try quod_catchup:transfer_page(Reader, quod_catchup:transfer_open(Reader, From, To))
+            after quod_ledger_store:close(Reader) end;
+        {error, _} = Error -> Error
+    end.
 
-frame(Bytes) -> <<16#915106B0:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
+append_group(Store, Entry, Blocks) ->
+    Bytes = [quod_ledger:block_bytes(B) || B <- Blocks],
+    Source = {lists:sum([quod_ledger_store:proof_frame_size(B) || B <- Bytes]),
+        fun([]) -> done; ([B | Rest]) -> {B, Rest} end, Bytes},
+    quod_ledger_store:append(Store, {Source, [Entry]}).
+
+rewrite_frame(Ns, Dir, Original, Replacement) ->
+    Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
+    {ok, Archive} = file:read_file(Path),
+    [Before, After] = binary:split(Archive, Original),
+    ok = file:write_file(Path, <<Before/binary, Replacement/binary, After/binary>>).
+
+frame(Bytes) -> <<16#915106B1:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
 
 %% Real signed two-target claims and applications, not a claim of consensus
 %% admission. Each item has its own proof/request; the one-member QC is real.
 selected_item_authenticates_seven_authorities_not_the_whole_batch_test() ->
-    {Identity, Signer, Entry, Bytes} = fixture(),
+    {Identity, _Signer, Entry, Bytes} = fixture(),
     {{ok, Full}, FullCount} = counted(fun() -> quod_ledger:decode_entry(Bytes, wrapped) end),
     #entry{data = {batch, [Tx | _]}} = quod_ledger:entry_view(Full),
     {{ok, Selected}, Count} = counted(fun() ->
@@ -100,9 +128,9 @@ selected_item_authenticates_seven_authorities_not_the_whole_batch_test() ->
     ?assertEqual(Tx, quod_ledger:selected_record(Selected)),
     ?assertEqual(quod_ledger:record_commitment(Full, Tx),
                  quod_ledger:record_commitment(Selected, Tx)),
+    ok = verify_fixture(Identity, Full),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Full, Tx),
-    ?assert(quod_dtx:certified_entry_ref_matches(Identity, Selected, Tx, Ref,
-                                              [maps:get(pubkey, Signer)])),
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Selected, Tx, Ref)),
     ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Entry)),
     ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Selected)),
     ?assertException(error, function_clause, quod_ledger:entry_view(Selected)),
@@ -119,21 +147,27 @@ unselected_bytes_still_bind_the_certificate_test() ->
     BadBytes = pack(I, Parent, [First, {transaction, bad_signature(Other)} | Rest], Time, Cert),
     {ok, Bad} = quod_ledger:select_entry(BadBytes, Select, wrapped),
     ?assertEqual(Tx, quod_ledger:selected_record(Bad)),
-    ?assertNot(quod_dtx:certified_entry_ref_matches(Identity, Bad, Tx, Ref,
-                                                 [maps:get(pubkey, Signer)])),
+    ?assertNot(quod_dtx:certified_entry_claim_matches(Identity, Bad, Tx, Ref)),
     ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(BadBytes, wrapped)),
     BadSelected = pack(I, Parent, [{transaction, bad_signature(FirstBytes)} | Rest], Time, Cert),
     ?assertEqual({error, bad_entry}, quod_ledger:select_entry(BadSelected, Select, wrapped)),
-    %% The immutable reference core does not authenticate each caller's proof.
-    BadCert = Cert#cert{sigs = [{maps:get(pubkey, Signer), <<0:512>>}]},
+    %% A caller's preferred head is only a hint. The archive's selected proof
+    %% is independently verified; corrupting that selected proof is refused.
+    BadCert = setelement(6, Cert, [{maps:get(pubkey, Signer), <<0:512>>}]),
     BadRef = setelement(8, Ref, canonical(BadCert)),
     ?assert(quod_dtx:same_certified_ref(Ref, BadRef)),
-    ?assertNot(quod_dtx:certified_entry_ref_matches(Identity, Good, Tx, BadRef,
-                                                 [maps:get(pubkey, Signer)])).
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Good, Tx, BadRef)),
+    {ok, Full} = quod_ledger:decode_entry(Bytes, wrapped),
+    ok = verify_fixture(Identity, Full),
+    {quod_entry, 2, I, B, Cert} = binary_to_term(Bytes, [safe]),
+    {ok, BadSelectedProof} = quod_ledger:decode_entry(
+        canonical({quod_entry, 2, I, B, BadCert}), wrapped),
+    ?assertEqual({error, {bad_cert, I}}, verify_fixture(Identity, BadSelectedProof)).
 
 carried_entry_decodes_only_its_selected_application_test() ->
-    {Identity, Signer, Full, Bytes} = fixture(),
+    {Identity, _Signer, Full, Bytes} = fixture(),
     #entry{data = {batch, [Tx | _]}} = quod_ledger:entry_view(Full),
+    ok = verify_fixture(Identity, Full),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Full, Tx),
     {ok, Selected} = quod_ledger:select_entry(Full, {application, Tx#transaction.tx_id}, wrapped),
     {{ok, Wire}, EncodeChecks} = counted(fun() ->
@@ -146,19 +180,20 @@ carried_entry_decodes_only_its_selected_application_test() ->
     ?assertEqual(7, DecodeChecks),
     ?assertEqual({ok, Bytes}, quod_ledger:hint_bytes(Received)),
     ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Received)),
-    ?assert(quod_dtx:certified_entry_ref_matches(Identity, Received, Tx, Ref,
-                                              [maps:get(pubkey, Signer)])),
-    %% Only actual prefix advancement materializes all eight applications.
-    {{ok, Imported}, ImportChecks} = counted(fun() -> quod_ledger:materialize_hint(Received) end),
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Received, Tx, Ref)),
+    %% History import uses the shared full decoder and authenticates all eight
+    %% applications. A point selection alone can never authorize append.
+    {{ok, Imported}, ImportChecks} = counted(fun() -> quod_ledger:decode_entry(Bytes, wrapped) end),
     ?assertEqual(56, ImportChecks),
     ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Imported)),
     {I, Parent, [First, {transaction, Other} | Rest], Time, Cert} = unpack(Bytes),
     BadBytes = pack(I, Parent, [First, {transaction, bad_signature(Other)} | Rest], Time, Cert),
     {ok, BadHint} = quod_ledger:select_entry(BadBytes, {application, Tx#transaction.tx_id}, wrapped),
-    ?assertEqual({error, bad_entry}, quod_ledger:materialize_hint(BadHint)).
+    ?assertEqual({ok, BadBytes}, quod_ledger:hint_bytes(BadHint)),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(BadBytes, wrapped)).
 
 ambiguous_missing_and_wrong_slot_selections_fail_closed_test() ->
-    {_, _, _, Bytes} = fixture(),
+    {Identity, _, _, Bytes} = fixture(),
     {I, Parent, [First | _], Time, Cert} = unpack(Bytes),
     {transaction, Blob} = First,
     {ok, Tx} = quod_transaction:decode_ledger_transaction(Blob, wrapped),
@@ -167,9 +202,14 @@ ambiguous_missing_and_wrong_slot_selections_fail_closed_test() ->
     ?assertEqual(none, quod_ledger:selected_record(Duplicate)),
     {ok, Missing} = quod_ledger:select_entry(Bytes, {application, <<0:256>>}, wrapped),
     ?assertEqual(none, quod_ledger:selected_record(Missing)),
-    {quod_entry, 1, I, Block, Cert} = binary_to_term(Bytes, [safe]),
+    {quod_entry, 2, I, Block, Cert} = binary_to_term(Bytes, [safe]),
     ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
-                   canonical({quod_entry, 1, I + 1, Block, Cert}), Select, wrapped)).
+                   canonical({quod_entry, 2, 0, Block, Cert}), Select, wrapped)),
+    {ok, WrongHeight} = quod_ledger:select_entry(
+        canonical({quod_entry, 2, I + 1, Block, Cert}), Select, wrapped),
+    {ok, Good} = quod_ledger:select_entry(Bytes, Select, wrapped),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Good, Tx),
+    ?assertNot(quod_dtx:certified_entry_claim_matches(Identity, WrongHeight, Tx, Ref)).
 
 request_and_native_material_bindings_survive_reuse_test() ->
     {_, _, _, Bytes} = fixture(),
@@ -206,10 +246,10 @@ operation_selectors_use_the_same_signed_identity_test() ->
     end).
 
 fixture() ->
-    {Key, Seed} = quod_identity:generate(),
-    Signer = #{pubkey => Key, key => quod_identity:key_term({Key, Seed})},
+    F0 = quod_ct:protocol_fixture(<<"quod:selection-target">>),
+    Signer = maps:get(signer, F0), Key = maps:get(pubkey, Signer),
     Origin = {<<"quod:selection-source">>, <<31:256>>},
-    Target = {Ns, Anchor} = {<<"quod:selection-target">>, <<32:256>>},
+    Target = {Ns, Anchor} = maps:get(identity, F0),
     Txs = [begin
         F = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => Target,
               node_identity => Signer, proof_id => <<I:256>>, provenance => 2}, [Origin, Target]),
@@ -218,25 +258,36 @@ fixture() ->
         {ok, Claim} = quod_transaction:sign({element(1, Origin), element(2, Origin), Admission},
           C0#transaction{author = Key, author_seq = I}, Signer),
         {ok, ClaimRef} = quod_dtx:certified_ref(element(1, Origin), element(2, Origin), 2,
-                                              <<33:256>>, Claim#transaction.tx_id, <<"qc">>),
+                                              <<33:256>>, Claim#transaction.tx_id, quod_ct:fixture_finality(1, <<33:256>>)),
         A0 = quod_transaction:attach_evidence(quod_transaction:remote_application(
                  quod_transaction:stable_ref(ClaimRef), Claim, Target), ClaimRef, Claim),
         {ok, App} = quod_transaction:sign({Ns, Anchor, Admission},
                                           A0#transaction{author = Key, author_seq = I}, Signer), App
     end || I <- lists:seq(1, 8)],
-    {ok, Block} = quod_ledger:new_block(2, 1, {batch, Txs}, 2),
-    Hash = quod_simplex:block_hash(Block),
-    #share{sig = Sig} = quod_simplex:make_share(quod_simplex:consensus_domain(Ns, Anchor), commit, 2, Hash, Signer),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = 2, block_hash = Hash, sigs = [{Key, Sig}]}),
+    Era = maps:get(era, F0),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, Txs}, 2),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Block), empty, 2),
+    Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Carrier, F0)),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     {Target, Signer, Entry, Bytes}.
 
 unpack(Bytes) ->
-    {quod_entry, 1, I, Block, Cert} = binary_to_term(Bytes, [safe]),
-    {quod_block, 1, I, Parent, {batch, Items}, Time} = binary_to_term(Block, [safe]),
-    {I, Parent, Items, Time, Cert}.
-pack(I, Parent, Items, Time, Cert) ->
-    canonical({quod_entry, 1, I, canonical({quod_block, 1, I, Parent, {batch, Items}, Time}), Cert}).
+    {quod_entry, 2, I, Block, Cert} = binary_to_term(Bytes, [safe]),
+    {quod_block, 2, Era, View, Parent, {batch, Items}, Time} = binary_to_term(Block, [safe]),
+    {I, {Era, View, Parent}, Items, Time, Cert}.
+pack(I, {Era, View, Parent}, Items, Time, Cert) ->
+    canonical({quod_entry, 2, I, canonical({quod_block, 2, Era, View, Parent, {batch, Items}, Time}), Cert}).
+
+proof_blocks(Entry) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    {Era, View, _} = Parent = quod_ledger:block_ref(Block),
+    {ok, Carrier} = quod_ledger:new_block({Era, View + 1}, Parent, empty, Block#block.timestamp),
+    [Carrier, Block].
+verify_fixture({Ns, _} = Identity, Entry) ->
+    F = quod_ct:protocol_fixture(Ns),
+    quod_ct:verify_finality(Identity, Entry, maps:get(projection, F),
+        {fun([]) -> done; ([B | Rest]) -> {ok, quod_ledger:block_bytes(B), Rest} end,
+         proof_blocks(Entry)}).
 canonical(Term) -> term_to_binary(Term, [deterministic]).
 bad_signature(Blob) ->
     {submit, A, S, B} = binary_to_term(Blob, [safe]), canonical({submit, A, flip(S), B}).

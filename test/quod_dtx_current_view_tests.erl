@@ -486,25 +486,26 @@ applied_certificate_accepts_an_equivalent_resolve_quorum_subset_test() ->
     #entry{index = Slot, cert = #cert{block_hash = BlockHash}} =
         quod_ledger:entry_view(Entry0),
     {ok, Block} = quod_ledger:block_from_entry(Entry0),
+    Position = {Block#block.era, Block#block.slot},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = maps:from_list(
                [{Key, quod_simplex:make_share(
-                        Domain, commit, Slot, BlockHash,
+                        Domain, commit, Position, BlockHash,
                         maps:get(Key, Signers))}
                 || Key <- Committee]),
     [A, B, C, D] = Committee,
     Form = fun(Keys) ->
                    {ok, Cert} = quod_simplex:form_cert(
-                                  Domain, commit, Slot, BlockHash,
+                                  Domain, commit, Position, BlockHash,
                                   [maps:get(Key, Shares) || Key <- Keys],
                                   Committee),
                    Cert
            end,
     RetainedCert = Form([A, B, C]),
     SuppliedCert = Form([B, C, D]),
-    Evidence = Evidence0#{entry => quod_ledger:entry(Block, RetainedCert)},
+    Evidence = Evidence0#{entry => quod_ledger:entry(Slot, Block, RetainedCert)},
     {ok, ResolveRef} = quod_dtx:certified_entry_ref(
-                          Target, quod_ledger:entry(Block, SuppliedCert), Control),
+                          Target, quod_ledger:entry(Slot, Block, SuppliedCert), Control),
     Claim = (maps:get(claim, F0))#{resolve_ref => ResolveRef},
     F = F0#{claim => Claim, evidence => Evidence},
     Certificate = certificate(F, [A, B], #{}),
@@ -782,7 +783,7 @@ read_certificate_selects_verified_proof_from_equivalent_votes_test() ->
     [A, B | _] = maps:get(committee, F),
     GoodRef = read_anchor_ref(
                 F, maps:values(maps:get(signers, F))),
-    BadRef = setelement(8, GoodRef, term_to_binary(invalid_finality)),
+    BadRef = setelement(8, GoodRef, quod_ct:fixture_finality(99, element(6, GoodRef))),
     PlanBlob = read_plan_blob(F, <<"verified_equivalent_proof">>),
     Deps0 = dependencies(
               F,
@@ -815,7 +816,7 @@ read_certificate_refuses_when_no_equivalent_proof_verifies_test() ->
     [A, B | _] = maps:get(committee, F),
     GoodRef = read_anchor_ref(
                 F, maps:values(maps:get(signers, F))),
-    BadRef = setelement(8, GoodRef, term_to_binary(invalid_finality)),
+    BadRef = setelement(8, GoodRef, quod_ct:fixture_finality(99, element(6, GoodRef))),
     PlanBlob = read_plan_blob(F, <<"no_verified_equivalent_proof">>),
     Deps0 = dependencies(
               F,
@@ -1413,16 +1414,18 @@ read_anchor_ref(F, Signers) ->
     {Ns, Anchor} = maps:get(target, F),
     Slot = 8,
     BlockHash = digest(20 + Slot),
+    Position = {quod_ledger:initial_era({Ns, Anchor}), Slot - 1},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = [quod_simplex:make_share(
-                Domain, commit, Slot, BlockHash, Signer)
+                Domain, commit, Position, BlockHash, Signer)
               || Signer <- Signers],
     {ok, Cert} = quod_simplex:form_cert(
-                   Domain, commit, Slot, BlockHash, Shares,
+                   Domain, commit, Position, BlockHash, Shares,
                    maps:get(committee, F)),
+    {ok, Finality} = quod_ledger:encode_finality_head(Cert),
     {ok, Ref} = quod_dtx:certified_ref(
                   Ns, Anchor, Slot, BlockHash, digest(241),
-                  term_to_binary(Cert, [deterministic])),
+                  Finality),
     Ref.
 
 read_entry_evidence(Ref) ->
@@ -1499,12 +1502,11 @@ resolve_evidence(Target, GroupId, Generation, Verdict,
                       Target, Material, digest(9), 1, 1, ControlSigner),
     Slot = 7,
     Payload = {batch, [{dtx, Control}]},
+    Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Slot - 1, Payload, 0),
-    BlockHash = quod_simplex:block_hash(Block),
-    Entry = quod_ledger:entry(
-              Block, #cert{kind = commit, slot = Slot,
-                           block_hash = BlockHash, sigs = []}),
+                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Payload, 0),
+    Entry = quod_ledger:entry(Slot, Block,
+        quod_ct:protocol_certificate(Block, #{identity => Target, signer => ControlSigner})),
     {ok, ResolveRef} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {#{identity => Target, phase => resolve, control => Control,
        entry => Entry, committee => Committee, committee_id => CommitteeId,
@@ -1563,7 +1565,7 @@ signer() ->
 certified_ref({Ns, Anchor}, Slot, Digest) ->
     {ok, Ref} = quod_dtx:certified_ref(
                   Ns, Anchor, Slot, digest(240), Digest,
-                  term_to_binary({qc, Slot}, [deterministic])),
+                  quod_ct:fixture_finality(Slot - 1, digest(240))),
     Ref.
 
 collect_started(0, Acc) ->

@@ -15,13 +15,15 @@ candidate_preview_rejection_keeps_owned_vote_for_reselection_test() ->
   isolated(fun() ->
     [F | _] = fixtures(), C = maps:get(vote_control, F),
     Payload = {batch, [{dtx, C}]},
-    {ok, Block} = quod_ledger:new_block(2, 1, Payload, 0),
+    {_, Anchor} = Target = maps:get(origin, F),
+    Era = quod_ledger:initial_era(Target),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, Payload, 0),
     Hash = quod_simplex:block_hash(Block), Parent = {1, <<17:256>>},
     S = quod_simplex:test_state_set(history_head, Parent,
         quod_simplex:test_state_set(validators, [], state(F))),
     Retained = quod_simplex:test_seed_dtx_submission(C, [{dtx_endpoint, self()}], S),
     {Monitor, Validating} = quod_simplex:test_latch_dtx_validation(
-        2, Hash, Parent, self(), Block, Retained),
+        1, Hash, Parent, self(), Block, Retained),
     %% There is no second material decoder to diverge from ingress. Exercise
     %% the actual preview refusal instead: a same-group negative vote already
     %% occupies the parent. Rejection cannot discard accepted own work.
@@ -29,13 +31,13 @@ candidate_preview_rejection_keeps_owned_vote_for_reselection_test() ->
                                            {refused, [vote_deadline]}),
     {ok, N} = quod_atomic:sign_control(maps:get(origin, F), Negative,
                     maps:get(admission, F), 2, 1, maps:get(node_identity, F)),
-    {ok, H, P, _} = quod_atomic:reduce(N, reference(N, 1),
+    {ok, H, P, _} = quod_atomic:reduce(N, reference(N, 2),
         quod_atomic:initial_group_history(), quod_atomic:initial_projection(maps:get(origin, F), 0)),
     Bound = quod_simplex:test_state_set(dtx_projection, P, Validating),
     try
-        Done = quod_simplex:test_on_dtx_verdict(2, Hash, Parent, self(), 1,
+        Done = quod_simplex:test_on_dtx_verdict(1, Hash, Parent, self(), 1,
                       {valid, #{quod_atomic:group_id(C) => H}}, Bound),
-        ?assertMatch({none, none, none, none, _}, quod_simplex:test_dtx_round(2, Done)),
+        ?assertMatch({none, none, none, none, _}, quod_simplex:test_dtx_round(1, Done)),
         ?assertEqual(0, maps:get(submissions, quod_simplex:test_dtx_endpoint_counts(Done))),
         ?assertMatch(#{active := 1, reserved := 0}, quod_simplex:test_dtx_admission_state(Done)),
         receive {dtx_submit_result, _} -> error(accepted_vote_lost_on_preview_rejection)
@@ -152,8 +154,8 @@ queued_blocked_intent() ->
     end, [F, Other]),
     Control = maps:get(vote_control, Holder),
     %% Real signatures and reducer; structural reference, not consensus admission.
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 1, <<9:256>>,
-        quod_atomic:record_digest(Control), <<"structural-callback-fixture">>),
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<9:256>>,
+        quod_atomic:record_digest(Control), quod_ct:fixture_finality(1, <<9:256>>)),
     {ok, _, Locked, _} = quod_atomic:reduce(Control, Ref,
         quod_atomic:initial_group_history(), quod_atomic:initial_projection(Target, 0)),
     {ok, Material} = quod_atomic:admission_material(maps:get(vote, Waiter)),
@@ -188,7 +190,9 @@ queued_blocked_intent() ->
             assert_no_auth(Counts)
         end, [ready, unconfirmed]),
         %% The full installed callback includes both the FIFO and retained owner.
-        {ok, Parent} = quod_ledger:new_block(2, 1, {batch, [{dtx, Control}]}, 2),
+        Era = quod_ledger:initial_era(Target),
+        {ok, Parent} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor},
+                                           {batch, [{dtx, Control}]}, 2),
         Blocked = quod_simplex:test_blocked_dtx_owner(Parent, Queued),
         {keep_state, Installed, _} = quod_simplex:running({timeout, batch}, {flush_batch, 0}, Blocked),
         {{keep_state, Next, _}, Counts} = counted(fun() ->
@@ -226,7 +230,9 @@ blocked(N) ->
         end, S0, Fs),
         %% A signed Vote parent (not a signature-free terminal control)
         %% also proves that the barrier query does not decode its payload.
-        {ok, Parent} = quod_ledger:new_block(2, 1,
+        {_, Anchor} = Target = maps:get(origin, F),
+        Era = quod_ledger:initial_era(Target),
+        {ok, Parent} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor},
             {batch, [{dtx, maps:get(vote_control, F)}]}, 2),
         S = quod_simplex:test_blocked_dtx_owner(Parent, Retained),
         {S, Counts} = counted(fun() -> quod_simplex:test_drive_retained_dtx(S) end),
@@ -257,8 +263,8 @@ unready_relay_owner_does_not_build_a_wave_test() ->
     Peer = crypto:hash(sha256, <<"fixture relay peer">>), Vs = lists:sort([Self, Peer]),
     Slot = hd([H || H <- [2, 3], quod_simplex:leader(H, Vs) =/= Self]),
     S0 = lists:foldl(fun({K,V}, Acc) -> quod_simplex:test_state_set(K,V,Acc) end,
-                    state(F), [{validators, Vs}, {slot, Slot - 1}, {approved, Slot - 1},
-                               {eng, quod_simplex:eng_with_certs(Slot - 1, [])}]),
+                    state(F), [{validators, Vs}, {slot, 1},
+                               {eng, engine(F, Vs, Slot - 1)}]),
     S = quod_simplex:test_seed_dtx_submission(maps:get(vote_control, F), [], S0),
     ?assertEqual(blocked, quod_simplex:test_dtx_slot_route(Slot, S)),
     {S, Counts} = counted(fun() -> quod_simplex:test_drive_retained_dtx(S) end),
@@ -280,8 +286,8 @@ relay_work_case(N) ->
     Replacement = spawn(fun() -> relay_frames([]) end),
     try
         S0 = lists:foldl(fun({K,V}, S) -> quod_simplex:test_state_set(K,V,S) end,
-            state(F), [{validators, Vs}, {slot, Slot - 1}, {approved, Slot - 1},
-              {eng, quod_simplex:eng_with_certs(Slot - 1, [])},
+            state(F), [{validators, Vs}, {slot, 1},
+              {eng, engine(F, Vs, Slot - 1)},
               {conns, #{Peer => {Link, make_ref()}}},
               {inbound_conns, #{Peer => {Link, make_ref()}}},
               {peer_readiness, #{Peer => {Link, Slot - 1, true, quod_time:mono_ms()}}}]),
@@ -363,8 +369,21 @@ preview_and_certified_reducer_produce_the_same_projection_test() ->
     P0 = quod_atomic:initial_projection(Target, 0),
     Candidates = [{maps:get(vote_control, X), Target, 2, <<19:256>>} || X <- Fs],
     {ok, Histories, Projection, Items} = quod_atomic:preview_batch(Candidates, #{}, P0),
-    ?assertEqual({ok, Histories, Projection, Items}, quod_atomic:reduce_batch(
+    ?assertMatch({error, {invalid_transition, bad_binding}}, quod_atomic:reduce_batch(
         [{maps:get(control, I), maps:get(ref, I)} || I <- Items], #{}, P0)),
+    References = maps:from_list([{maps:get(ref, I), reference(maps:get(control, I), 2)}
+                                || I <- Items]),
+    Bind = fun Walk(Term) ->
+        case maps:find(Term, References) of
+            {ok, Ref} -> Ref;
+            error when is_map(Term) -> maps:map(fun(_, V) -> Walk(V) end, Term);
+            error when is_list(Term) -> [Walk(V) || V <- Term];
+            error when is_tuple(Term) -> list_to_tuple([Walk(V) || V <- tuple_to_list(Term)]);
+            error -> Term
+        end
+    end,
+    ?assertEqual(Bind({ok, Histories, Projection, Items}), quod_atomic:reduce_batch(
+        [{maps:get(control, I), reference(maps:get(control, I), 2)} || I <- Items], #{}, P0)),
     [{C, _T, H, B} | _] = Candidates,
     %% One control owns its material; the old five-field candidate carrying
     %% an independently replaceable second copy is not a current input.
@@ -388,14 +407,19 @@ fixtures() ->
                         {2, <<"assertz(material_b(1)).">>},
                         {3, <<"assertz(material_c(1)).">>}]].
 
+engine(F, Validators, View) ->
+    Identity = {Ns, Anchor} = maps:get(origin, F),
+    quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), Validators,
+        {{quod_ledger:initial_era(Identity), View, Anchor}, 0}).
+
 state(F) ->
     {Ns, Anchor} = maps:get(origin, F), #{pubkey := Pub} = maps:get(node_identity, F),
     quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => Pub,
-        id => maps:get(node_identity, F), validators => [Pub], slot => 1, approved => 1,
+        id => maps:get(node_identity, F), validators => [Pub], slot => 1, history_head => {1, Anchor},
         author_admissions => #{Pub => maps:get(admission, F)},
         committee_id => <<18:256>>, sync => ready, prolog_ready => true,
         dtx_projection => quod_atomic:initial_projection(maps:get(origin, F), 0),
-        eng => quod_simplex:eng_with_certs(1, [])}).
+        eng => engine(F, [Pub], 0)}).
 
 row(F) ->
     C = maps:get(vote_control, F), {ok, Envelope} = quod_atomic:encode_control(C),
@@ -407,7 +431,7 @@ row(F) ->
 reference(C, H) ->
     {Ns, Anchor} = quod_atomic:control_target(C),
     {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, H, <<19:256>>,
-        quod_atomic:record_digest(C), <<"fixture-certified-reference">>), Ref.
+        quod_atomic:record_digest(C), quod_ct:fixture_finality(1, <<19:256>>)), Ref.
 
 counted(Fun) ->
     [{module, M} = code:ensure_loaded(M) || M <- [quod_identity, quod_dtx, quod_atomic, quod_ledger]],

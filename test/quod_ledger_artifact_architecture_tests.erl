@@ -26,72 +26,52 @@ production_artifact_inventory_test() ->
     ?assertNot(lists:member({encode_entry_view, 2}, Exports)).
 
 reviewed_sites() ->
-    [%% Byte ingress: each framed page/feed/sidecar or on-disk frame reaches
-     %% the same codec once. Hints decode only a selection at ingress; actual
-     %% history import materializes all bytes through that same full decoder.
-     {{quod_catchup, decode_entries, 2}, {call, quod_ledger, decode_entries, 2}},
-     {{quod_ledger, decode_entries, 2}, {call, quod_ledger, decode_entries, 4}},
-     {{quod_ledger, decode_entries, 4}, {call, quod_ledger, decode_entries, 4}},
-     {{quod_ledger, decode_entries, 4}, {call, quod_ledger, decode_entry, 3}},
-     {{quod_foreign_log, import_exact_entry_hint, 8}, {call, quod_ledger, materialize_hint, 1}},
-     {{quod_ledger, materialize_hint, 1}, {call, quod_ledger, decode_entry, 2}},
+    [%% Every history page, feed or archive frame reaches the shared decoder.
+     %% Point selections remain untrusted hints and cannot be appended.
+     {{quod_catchup, transfer_parts, 3}, {call, quod_ledger, decode_entry, 3}},
      {{quod_feed, decode_inner, 1}, {call, quod_ledger, decode_entry, 1}},
      {{quod_ledger_store, materialize_entry, 2}, {call, quod_ledger, decode_entry, 2}},
-     {{quod_ledger_store, scan, 9}, {call, quod_ledger, decode_entry, 2}},
+     {{quod_ledger_store, scan_decode, 4}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger, decode_entry, 1}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger, decode_entry, 2}, {call, quod_ledger, decode_entry, 3}},
-     %% The decoder's two arms and checked native constructor share one mint.
-     {{quod_ledger, decode_entry, 3}, {call, quod_ledger, mint_artifact, 3}},
+     %% The current envelope decoder and checked native constructors share
+     %% one private mint; no skip-entry or separate hint-import constructor.
      {{quod_ledger, decode_entry, 3}, {call, quod_ledger, mint_artifact, 3}},
      {{quod_ledger, encode_entry_view, 2}, {call, quod_ledger, mint_artifact, 3}},
-     {{quod_ledger, entry, 2}, {call, quod_ledger, encode_entry_view, 2}},
-     {{quod_ledger, new_entry, 4}, {call, quod_ledger, encode_entry_view, 2}},
-     {{quod_ledger, new_entry, 4}, {call, quod_ledger, encode_entry_view, 2}},
-     {{quod_ledger, noop_entry, 2}, {call, quod_ledger, encode_entry_view, 2}},
-     {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
+     {{quod_ledger, entry, 3}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, mint_artifact, 3}, artifact_record},
      %% Only the transaction decoder mints/updates the opaque call context.
-     %% Other modules may thread it, never seed it with native records.
      {{quod_transaction, decode_context, 0}, decode_context_record},
      {{quod_transaction, decode_ledger_transaction, 3}, decode_context_record},
      {{quod_transaction, decode_ledger_transaction, 3}, decode_context_record},
      {{quod_transaction, decode_ledger_transaction, 3}, decode_context_update},
-     %% These are read-only destructuring sites, not constructors.
+     %% Read-only destructuring sites, not constructors.
      {{quod_ledger, block_from_entry, 1}, artifact_record},
      {{quod_ledger, encode_entry, 1}, artifact_record},
      {{quod_ledger, entry_view, 1}, artifact_record},
      {{quod_ledger, entry_index, 1}, artifact_record},
      {{quod_ledger, select_entry, 3}, artifact_record},
-     {{quod_ledger, materialize_hint, 1}, artifact_record},
      {{quod_ledger, record_commitment, 2}, artifact_record},
-     %% Selections cannot be appended or treated as fully authenticated. Only
-     %% the checked materialize_hint byte ingress above can promote one; the
-     %% selection suite pins full verification of every item before import.
      {{quod_ledger, select_entry, 3}, selection_record},
      {{quod_ledger, select_entry, 3}, selection_record},
-     {{quod_ledger, select_entry, 3}, selection_update},
      {{quod_ledger, select_entry, 3}, selection_update},
      {{quod_ledger, select_entry, 3}, selection_update},
      {{quod_ledger, hint_bytes, 1}, selection_record},
-     {{quod_ledger, materialize_hint, 1}, selection_record},
-     {{quod_ledger, selected, 5}, selection_record},
      {{quod_ledger, selected, 5}, selection_record},
      {{quod_ledger, selected_record, 1}, selection_record},
      {{quod_ledger, entry_index, 1}, selection_record},
      {{quod_ledger, record_commitment, 2}, selection_record},
-     %% Local consensus and prepared-genesis import remain the only native
-     %% production construction origins; no raw record append is allowed.
-     {{quod_simplex, commit_block, 3}, {call, quod_ledger, entry, 2}},
-     {{quod_simplex, prepare_genesis, 3}, {call, quod_ledger, entry, 2}},
-     {{quod_simplex, skip_block, 2}, {call, quod_ledger, noop_entry, 2}},
+     %% Consensus archive groups and founding are the native construction
+     %% origins. Carriers never become material entries.
+     {{quod_simplex, eng_archive_group, 4}, {call, quod_ledger, entry, 3}},
+     {{quod_simplex, prepare_genesis, 3}, {call, quod_ledger, entry, 3}},
      {{quod_simplex, genesis_entry, 2}, {call, quod_ledger, from_entry_view, 1}},
-     %% Local and foreign installation all use the sole store append API.
+     %% One archive append path per existing installation owner.
      {{quod_simplex, append_genesis, 2}, {call, quod_ledger_store, append, 2}},
-     {{quod_simplex, persist_entry, 4}, {call, quod_ledger_store, append, 2}},
-     {{quod_simplex, apply_catchup_window, 5}, {call, quod_ledger_store, append, 2}},
-     {{quod_foreign_log, persist_verified_page, 6}, {call, quod_ledger_store, append, 2}},
-     %% The existing predicate registry is the sole unresolved dynamic MFA.
+     {{quod_simplex, commit_finality, 2}, {call, quod_ledger_store, append, 2}},
+     {{quod_simplex, apply_catchup_window, 3}, {call, quod_ledger_store, append, 2}},
+     {{quod_foreign_log, persist_verified_group, 6}, {call, quod_ledger_store, append, 2}},
      {{quod_predicates, dispatch, 3}, dynamic_dispatch}].
 
 source_root() ->

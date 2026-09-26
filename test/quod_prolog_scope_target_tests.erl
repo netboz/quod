@@ -376,7 +376,7 @@ read_certificate(Ns) ->
                key => quod_identity:key_term({Pubkey, Seed})},
     {ok, AnchorRef} = quod_dtx:certified_ref(
                         Ns, Anchor, 2, <<205:256>>, <<206:256>>,
-                        term_to_binary(read_certificate, [deterministic])),
+                        quod_ct:fixture_finality(1, <<205:256>>)),
     {ok, SignedRow} = quod_read_certificate:sign(
                         Target, ProofId, PlanDigest, AnchorRef,
                         CommitteeId, Signer),

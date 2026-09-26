@@ -7,6 +7,43 @@
 -define(NS, <<"ingress-state:test">>).
 -define(CID, <<"committee-1">>).
 
+era_view_routes_without_a_material_append_test() ->
+    [A, B] = validators(),
+    Request = request(<<"same-request">>, A, 1, <<0:512>>, false),
+    Facts = (facts(A, [A, B]))#{durable_head => 2, view => 166,
+                               proposal_slot => {ok, 166}},
+    Current = quod_ingress_state:put_view(current, Facts, quod_ingress_state:new()),
+    ?assertEqual({relay, B, 166}, route(entry, local, Request, Current)),
+    Advanced = quod_ingress_state:put_view(
+                 complaint, Facts#{view => 167, proposal_slot => {ok, 167}}, Current),
+    ?assertEqual({collect, 167}, route(entry, local, Request, Advanced)),
+    ?assertNotEqual(quod_ingress_state:fingerprint(Current),
+                    quod_ingress_state:fingerprint(Advanced)),
+    %% An application append changes no protocol placement on its own.
+    Applied = quod_ingress_state:put_view(
+                applied, Facts#{durable_head => 3}, Current),
+    ?assertEqual({relay, B, 166}, route(entry, local, Request, Applied)).
+
+era_change_rejects_old_placement_with_the_same_members_test() ->
+    [A, B] = validators(),
+    Request = request(<<"retained-request">>, A, 1, <<0:512>>, false),
+    Facts = facts(B, [A, B]),
+    Current = quod_ingress_state:put_view(current, Facts, quod_ingress_state:new()),
+    Next = quod_ingress_state:put_view(next, Facts#{era => <<"era-2">>}, Current),
+    ?assertNotEqual(quod_ingress_state:fingerprint(Current),
+                    quod_ingress_state:fingerprint(Next)),
+    ?assertEqual(redirect, route(entry, {relayed, ?CID, 4}, Request, Next)),
+    ?assertEqual({collect, 4}, route(entry, {relayed, <<"era-2">>, 4}, Request, Next)).
+
+membership_readiness_is_independent_of_empty_protocol_views_test() ->
+    [A, B] = validators(),
+    Request = request(<<"membership">>, B, 1, <<0:512>>, true),
+    Overrides = #{durable_head => 2, view => 166, proposal_slot => {ok, 166}},
+    ?assertEqual({collect, 166}, route(entry, local, Request,
+                                     with_view(B, [A, B], Overrides))),
+    ?assertEqual({park, awaiting_turn}, route(entry, local, Request,
+                    with_view(B, [A, B], Overrides#{membership_open => false}))).
+
 view_source_change_with_same_facts_does_not_wake_test() ->
     [A, B] = validators(),
     Facts = facts(B, [A, B]),
@@ -96,7 +133,7 @@ relay_owner_and_recovery_truth_table_test() ->
           B, [A, B],
           #{capability => hold}),
     ?assertEqual(
-       redirect,
+       {park, awaiting_turn},
        route(
          entry, local,
          request(<<"unsigned">>, B, 0, none, false),
@@ -137,9 +174,12 @@ custody_preserves_ambiguity_and_sequence_test() ->
     Valid =
         request(<<"stale-custody">>, A, 8, <<0:512>>, false),
     ?assertEqual(
-       {reject, stale_seq},
+       {park, awaiting_turn},
        route(
          drain, custody, Valid, Stale)),
+    Durable = with_view(B, [A, B],
+        #{approved_author_seqs => {ok, #{A => 8}}, durable_author_seqs => #{A => 8}}),
+    ?assertEqual({reject, stale_seq}, route(drain, custody, Valid, Durable)),
     Unknown =
         with_view(
           B, [A, B],
@@ -161,7 +201,7 @@ barrier_future_slot_and_capacity_truth_table_test() ->
         with_view(
           B, [A, B],
           #{proposal_slot => blocked,
-            approved => 3,
+            view => 4,
             proposal_visible => false}),
     Signed = request(<<"future">>, A, 1, <<0:512>>, false),
     ?assertEqual(
@@ -343,14 +383,16 @@ with_view(Self, Validators, Overrides) ->
 facts(Self, Validators) ->
     #{self => Self,
       capability => accept,
-      committee_id => ?CID,
+      era => ?CID,
       validators => Validators,
       durable_head => 3,
-      approved => 3,
+      membership_open => true,
+      view => 4,
       proposal_visible => false,
       proposal_slot => {ok, 4},
       consensus_barrier => false,
       approved_author_seqs => {ok, #{}},
+      durable_author_seqs => #{},
       collecting => none,
       custody_lane => empty,
       custody_ready => 0,

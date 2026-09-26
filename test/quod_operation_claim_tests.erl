@@ -173,14 +173,15 @@ certificate_variants({Ns, Anchor} = Target, Tx) ->
     Identities = [begin {P, S} = quod_identity:generate(),
       #{pubkey => P, key => quod_identity:key_term({P, S})} end || _ <- lists:seq(1, 4)],
     Validators = [maps:get(pubkey, I) || I <- Identities],
-    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [Tx]}, 0),
+    Era = quod_ledger:initial_era(Target),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [Tx]}, 0),
     Hash = quod_simplex:block_hash(Block), Domain = quod_simplex:consensus_domain(Ns, Anchor),
-    Sigs = [begin #share{sig = S} = quod_simplex:make_share(Domain, commit, 2, Hash, I),
+    Sigs = [begin #share{sig = S} = quod_simplex:make_share(Domain, commit, {Era, 1}, Hash, I),
                   {maps:get(pubkey, I), S} end || I <- Identities],
     [A, B] = [begin
-        Cert = #cert{kind = commit, slot = 2, block_hash = Hash, sigs = lists:sort(Subset)},
+        Cert = #cert{kind = commit, era = Era, slot = 1, block_hash = Hash, sigs = lists:sort(Subset)},
         ?assert(quod_simplex:verify_cert(Domain, Cert, Validators)),
-        {ok, Ref} = quod_dtx:certified_entry_ref(Target, quod_ledger:entry(Block, Cert), Tx),
+        {ok, Ref} = quod_dtx:certified_entry_ref(Target, quod_ledger:entry(2, Block, Cert), Tx),
         Ref
     end || Subset <- [lists:sublist(Sigs, 3), Sigs]],
     {A, B}.
@@ -199,7 +200,7 @@ receipt_complete_set_and_evidence_independence_test() ->
         App = quod_transaction:remote_application(ClaimRef, Claim, T),
         {Ns, Anchor} = T,
         {ok, CRef} = quod_dtx:certified_ref(Ns, Anchor, 3, <<214:256>>,
-                                         App#transaction.tx_id, <<"shape-only-qc">>),
+                                         App#transaction.tx_id, quod_ct:fixture_finality(1, <<214:256>>)),
         {CRef, App}
     end || R <- Refs],
     Attached = quod_transaction:attach_receipt_evidence(Complete, lists:reverse(Pairs)),

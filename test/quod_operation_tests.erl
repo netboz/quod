@@ -116,7 +116,7 @@ fixture(N) ->
     {ok, Claim} = quod_transaction:sign({Ns, Anchor, Admission},
         Claim0#transaction{author = Key, author_seq = 1, submitted_at = 1}, Signer),
     {ok, ClaimRef} = quod_dtx:certified_ref(Ns, Anchor, 2, <<72:256>>,
-                                          Claim#transaction.tx_id, <<"fixture-qc">>),
+                                          Claim#transaction.tx_id, quod_ct:fixture_finality(1, <<72:256>>)),
     {ok, #{operation_ref := Op}} = quod_transaction:request_claim(Claim),
     {ok, M} = quod_operation:new(Ns, Op, ClaimRef, Claim),
     F#{model => M, claim => Claim, claim_ref => ClaimRef, targets => Targets}.
@@ -126,7 +126,7 @@ vote(F, Target = {Ns, Anchor}, Result) ->
     App = quod_transaction:attach_evidence(
       quod_transaction:remote_application(quod_transaction:stable_ref(ClaimRef), Claim, Target),
       ClaimRef, Claim),
-    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 3, <<73:256>>, App#transaction.tx_id, <<"fixture-qc">>),
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 3, <<73:256>>, App#transaction.tx_id, quod_ct:fixture_finality(2, <<73:256>>)),
     Signer = maps:get(node_identity, F), Network = maps:get(network, F),
     E = #{identity => Target, phase => transaction, slot => 3, block_hash => <<73:256>>,
           record_digest => App#transaction.tx_id, transaction => App,

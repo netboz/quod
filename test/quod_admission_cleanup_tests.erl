@@ -12,7 +12,8 @@ obsolete_unsigned_plan_adapter_is_absent_test() ->
 captured_projection_is_validated_once_before_exact_evidence_test() ->
     %% Real signed/certified fixture bytes, not a consensus-admission witness.
     %% Only the owner registration is a stub; the production verifier reads the
-    %% real ledger and still checks this caller's certificate and historical era.
+    %% real ledger and checks its selected proof and historical era. A caller's
+    %% preferred certificate does not replace the archive's finality authority.
     quod_operation_fixture:with(2, fun(F) ->
         Store = maps:get(store, F), Ns = quod_ledger_store:namespace(Store),
         true = quod_reg:reg({quod_simplex, Ns}),
@@ -28,16 +29,18 @@ captured_projection_is_validated_once_before_exact_evidence_test() ->
             ?assertEqual(maps:get(application, F), maps:get(transaction, Evidence)),
             ?assertEqual(1, lists:sum([N || {quod_foreign_log, valid_projection, 2, Ps} <- Counts,
                                             {_, N, _} <- Ps])),
-            ?assertMatch(
-               {ok, #{transaction := _}},
-               quod_foreign_log:verify_local_entry_deadline(
-                 View, Ref, transaction, maps:get(entry, F), infinity)),
+            ?assertNot(erlang:function_exported(
+                         quod_foreign_log, verify_local_entry_deadline, 5)),
+            ?assertEqual(
+               {error, invalid_foreign_reference},
+               quod_foreign_log:verify_local_deadline(
+                 View, setelement(6, Ref, <<0:256>>), transaction, infinity)),
             Other = hd([D || {Target, D} <- maps:to_list(maps:get(target_data, F)),
                               Target =/= maps:get(target, F)]),
             ?assertEqual(
-               {error, invalid_foreign_reference},
-               quod_foreign_log:verify_local_entry_deadline(
-                 View, Ref, transaction, maps:get(entry, Other), infinity))
+               {error, bad_foreign_reference},
+               quod_foreign_log:verify_local_deadline(
+                 View, maps:get(certified_target_ref, Other), transaction, infinity))
         after gproc:unreg(quod_reg:name({quod_simplex, Ns}))
         end
     end).

@@ -294,7 +294,9 @@ with_fixture(Fun) ->
             P0 = quod_atomic:initial_projection({Ns, Anchor}, 7),
             S0 = quod_simplex:test_state(#{ns => Ns, self => Pub, genesis_hash => Anchor,
                 validators => [Pub], committee_id => <<52:256>>, prolog_ready => true,
-                sync => ready, dtx_projection => P0, eng => quod_simplex:eng_with_certs(0, [])}),
+                sync => ready, dtx_projection => P0, eng => quod_simplex:eng_new(
+                    quod_simplex:consensus_domain(Ns, Anchor), [Pub],
+                    {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
             Fun(#{ns => Ns, tab => Tab, router => Router, engine => Engine,
                   evidence => maps:get(evidence, F), fixture => F, fact => Fact, state => S0,
                   key => {proof_gate, {Ns, self()}}})

@@ -2,16 +2,50 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
-%%%===================================================================
-%%% classify/2 — the ordering decision (drop / take-next / gap)
-%%%===================================================================
+era_feed_receipts_coalesce_without_authorizing_or_replaying_history_test() ->
+    F = #{identity := {Ns, Anchor}} = quod_ct:protocol_fixture(<<"feed:streamed-live">>),
+    Peer = <<92:256>>, Worker = self(), Chan = quod_feed:channel(Ns),
+    S0 = quod_feed:test_pull_state(Worker, 3, quod_feed:test_set_snapshot(
+      {1, maps:get(projection, F), false}, quod_feed:test_recipient_state(Ns, Anchor))),
+    Receive = fun(Height, State) ->
+        Entry = feed_entry(Height),
+        {noreply, Next} = quod_feed:handle_info(
+            {quod_message, {{Peer, ignored}, self()}, Chan, quod_feed:encode(Ns, {block, Entry})}, State),
+        Next
+    end,
+    ?assertEqual({none, Worker}, quod_feed:test_received(Receive(1, S0))),
+    Cold = quod_feed:test_set_snapshot({0, maps:get(projection, F), true}, S0),
+    ?assertEqual({none, Worker}, quod_feed:test_received(Receive(1, Cold))),
+    S1 = Receive(2, S0), S2 = Receive(3, S1),
+    ?assertEqual({{2, 3, Peer}, Worker}, quod_feed:test_received(S2)),
+    %% A future gap, duplicate or malformed frame grants no wider live range.
+    ?assertEqual({{2, 3, Peer}, Worker}, quod_feed:test_received(Receive(5, Receive(3, S2)))),
+    {reply, {live, 2, 3}, S2} = quod_feed:handle_call(pull_live_interval, {Worker, make_ref()}, S2),
+    Other = spawn(fun() -> receive stop -> ok end end),
+    {reply, {error, unknown_call}, S2} =
+        quod_feed:handle_call(pull_live_interval, {Other, make_ref()}, S2),
+    Other ! stop,
+    {noreply, S3} = quod_feed:handle_info({certified_head, Ns, 2}, S2),
+    ?assertEqual({{3, 3, Peer}, Worker}, quod_feed:test_received(S3)),
+    {noreply, S4} = quod_feed:handle_info({certified_head, Ns, 3}, S3),
+    ?assertEqual({none, Worker}, quod_feed:test_received(S4)),
+    Captured = quod_feed:test_set_snapshot({3, maps:get(projection, F), false}, S4),
+    ?assertEqual({none, Worker}, quod_feed:test_received(Receive(1, Receive(3, Captured)))),
+    %% A terminated attempt with no new receipt cannot restart itself.
+    {noreply, S5} = quod_feed:handle_info({'DOWN', make_ref(), process, Worker, failed}, S4),
+    ?assertEqual({none, false}, quod_feed:test_received(S5)),
+    {noreply, Replay} = quod_feed:handle_info({certified_head, Ns, 9},
+      quod_feed:test_recipient_state(Ns, Anchor)),
+    ?assertEqual({none, false}, quod_feed:test_received(Replay)).
 
-classify_test_() ->
-    [ ?_assertEqual(duplicate, quod_feed:classify(1, 5)),   %% below our height
-      ?_assertEqual(duplicate, quod_feed:classify(5, 5)),   %% exactly our height
-      ?_assertEqual(next,      quod_feed:classify(6, 5)),   %% the contiguous next block (fast path)
-      ?_assertEqual(gap,       quod_feed:classify(7, 5)),   %% ahead ⇒ out of order (F2 anti-entropy)
-      ?_assertEqual(next,      quod_feed:classify(1, 0)) ]. %% genesis onto an empty follower
+feed_entry(1) ->
+    F = quod_ct:protocol_fixture(<<"feed:codec">>),
+    quod_ledger:entry(1, maps:get(genesis, F), none);
+feed_entry(Height) ->
+    F = quod_ct:protocol_fixture(<<"feed:codec">>),
+    {ok, B} = quod_ledger:new_block({maps:get(era, F), Height},
+      maps:get(protocol_root, maps:get(projection, F)), {batch, [maps:get(transaction, F)]}, 1),
+    quod_ledger:entry(Height, B, quod_ct:protocol_certificate(B, F)).
 
 %%%===================================================================
 %%% wire: encode/decode roundtrip + defensive rejects
@@ -19,7 +53,7 @@ classify_test_() ->
 
 roundtrip_test() ->
     Ns = <<"quod:root">>,
-    E = quod_ledger:noop_entry(7, none),
+    E = feed_entry(7),
     Payload = quod_feed:encode(Ns, {block, E}),
     ?assertEqual({block, E}, quod_feed:decode(Payload, Ns)),
     {feed, Ns, Inner} = binary_to_term(Payload, [safe]),
@@ -27,7 +61,7 @@ roundtrip_test() ->
     ?assertEqual({ok, E}, quod_ledger:decode_entry(EntryBlob)).
 
 decode_wrong_ns_test() ->
-    E = quod_ledger:noop_entry(1, none),
+    E = feed_entry(1),
     Payload = quod_feed:encode(<<"a">>, {block, E}),
     ?assertEqual(error, quod_feed:decode(Payload, <<"b">>)).
 
@@ -411,43 +445,31 @@ readiness_config_test_() ->
 %%% fold_snapshot/3 — the cached consensus snapshot advance (contiguity-guarded)
 %%%===================================================================
 
-%% A contiguous content entry advances height + folds the committee together (the as-of pairing); a
-%% `noop` preserves it; a membership entry folds the delta. A gap or DTX control resets to `none`: DTX
-%% reduction needs group history, so the ephemeral feed cache refetches Simplex's authoritative projection.
+%% The cache folds ordinary material, including a real empty-diff action;
+%% empty protocol carriers have no material entry to give this cache.
 fold_snapshot_test() ->
-    A = <<1>>, B = <<2>>,
-    Admit = #transaction{tx_id = <<"t">>, origin = {<<"n">>, <<0:256>>}, author = <<"a">>, sig = none, read_check = #{},
-                         diff = [{assert, {{peer_admitted, B, "h", 1, B}, true}}]},
-    Projection = quod_simplex:history_projection(
-                   [A], <<3:256>>, #{A => <<4:256>>}, #{}, 0),
-    Noop = quod_ledger:noop_entry(6, none),
-    {ok, AdmitEntry} = quod_ledger:new_entry(
-                         6, {batch, [Admit]}, 0, none),
-    %% contiguous content/noop entry: height advances, committee unchanged
-    {6, NoopProjection, done} =
-        quod_feed:fold_snapshot(<<"n">>, Noop, {5, Projection, done}),
-    ?assertEqual([A], quod_simplex:history_committee(NoopProjection)),
-    %% contiguous membership entry: committee folds the admit, height advances
-    {6, AdmitProjection, done} =
-        quod_feed:fold_snapshot(
-          <<"n">>, AdmitEntry, {5, Projection, done}),
-    ?assertEqual(lists:usort([A, B]),
-                 quod_simplex:history_committee(AdmitProjection)),
-    %% NON-contiguous (gap or behind) → reset to none, so the next use refetches real status [DA#5]
-    ?assertEqual(none, quod_feed:fold_snapshot(
-                         <<"n">>, quod_ledger:noop_entry(8, none),
-                         {5, Projection, done})),
-    ?assertEqual(none, quod_feed:fold_snapshot(
-                         <<"n">>, quod_ledger:noop_entry(5, none),
-                         {5, Projection, done})),
-    %% A real, signed DTX control must not enter the content-only projection
-    %% fold (which deliberately fails closed without its phase-history index).
-    {ok, Dtx} = quod_ledger:new_entry(
-                  6, quod_ct:atomic_resolve_payload(), 0, none),
-    ?assertEqual(none, quod_feed:fold_snapshot(
-                         <<"n">>, Dtx, {5, Projection, done})),
-    %% folding onto an unprimed snapshot stays none (primed later by a status call)
-    ?assertEqual(none, quod_feed:fold_snapshot(<<"n">>, Noop, none)).
+    F = #{identity := {Ns, Anchor}, signer := Signer, era := Era, projection := P,
+          transaction := Tx} = quod_ct:protocol_fixture(<<"feed:fold">>),
+    Pub = maps:get(pubkey, Signer), Added = <<25:256>>,
+    Root = maps:get(protocol_root, P),
+    {ok, B} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    EmptyDiff = quod_ledger:entry(2, B, quod_ct:protocol_certificate(B, F)),
+    {2, Ordinary, false} = quod_feed:fold_snapshot(Ns, EmptyDiff, {1, P, false}),
+    ?assertEqual([Pub], quod_simplex:history_committee(Ordinary)),
+    Unsigned = quod_transaction:bind_id({Ns, Anchor}, Tx#transaction{
+      diff = [{assert, {{peer_admitted, Added, <<"host">>, 1, Added}, true}}],
+      sig = none, signed_bytes = none, authentication = none}),
+    {ok, Admit} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, Signer),
+    {ok, M} = quod_ledger:new_block({Era, 1}, Root, {batch, [Admit]}, 1),
+    Membership = quod_ledger:entry(2, M, quod_ct:protocol_certificate(M, F)),
+    {2, Admitted, false} = quod_feed:fold_snapshot(Ns, Membership, {1, P, false}),
+    ?assertEqual(lists:sort([Pub, Added]), quod_simplex:history_committee(Admitted)),
+    ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, {0, P, false})),
+    ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, {2, Ordinary, false})),
+    {ok, Control} = quod_ledger:new_block({Era, 1}, Root, quod_ct:atomic_resolve_payload(), 1),
+    Dtx = quod_ledger:entry(2, Control, quod_ct:protocol_certificate(Control, F)),
+    ?assertEqual(none, quod_feed:fold_snapshot(Ns, Dtx, {1, P, false})),
+    ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, none)).
 
 fake_link() ->
     Owner = self(),

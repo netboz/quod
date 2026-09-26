@@ -159,27 +159,29 @@ grow_to_four(Config) ->
     probe(Config, Members, {grown, four}),
     {save_config, Members}.
 
-%% CASE 6 — rotation sweep at N=4: submit one write via each of four consecutive slot leaders and verify
-%% the deterministic leader function visits the whole committee.
+%% CASE 6 — every validator leads protocol work in a healthy N=4 sweep.
+%% Empty carriers can occupy intervening views, but never material heights.
 rotation_sweep(Config) ->
     Members = prev_joiners(Config),
-    Peers   = member_peers(Config, Members),
-    Pubs    = member_pubs(Config, Members),
+    Peers = member_peers(Config, Members),
+    Pubs = member_pubs(Config, Members),
     H0 = synced_height(Peers),
-    Leaders = [ begin
-                    Slot = H0 + I,
-                    LPub = quod_simplex:leader(Slot, Pubs),   %% the real rotation fn (exported), not a copy
-                    LPeer = peer_of(Config, Members, LPub),
-                    ?assert(eventually(
-                              fun() ->
-                                      ordinary_write_ok(
-                                        prove(LPeer,
-                                              {assertz, {rot, Slot}}))
-                              end, 20000)),
-                    ?assert(eventually(fun() -> synced_height(Peers) >= Slot end, 20000)),
-                    LPub
-                end || I <- lists:seq(1, length(Pubs)) ],
-    ?assertEqual(lists:sort(Pubs), lists:usort(Leaders)),   %% every member led exactly one swept slot
+    Before = [{P, peer:call(P, quod_simplex, stats, [?NS])} || P <- Peers],
+    lists:foreach(fun(I) ->
+        View = maps:get(protocol_view, status(hd(Peers))),
+        Leader = peer_of(Config, Members, quod_simplex:leader(View, Pubs)),
+        ?assert(eventually(fun() -> ordinary_write_ok(
+            prove(Leader, {assertz, {rot, I}})) end, 20000)),
+        ?assert(eventually(fun() -> synced_height(Peers) =:= H0 + I end, 20000))
+    end, lists:seq(1, length(Pubs))),
+    lists:foreach(fun({Peer, Prior}) ->
+        Current = peer:call(Peer, quod_simplex, stats, [?NS]),
+        ?assert(maps:get(proposals, Current) > maps:get(proposals, Prior)),
+        ?assertEqual(maps:get(progress_timeouts, Prior), maps:get(progress_timeouts, Current)),
+        lists:foreach(fun(I) ->
+            ?assert(eventually(fun() -> match_ok(prove(Peer, {rot, I})) end, 10000))
+        end, lists:seq(1, length(Pubs)))
+    end, Before),
     {save_config, Members}.
 
 %% CASE 7 — Byzantine injection on the GROWN committee (grown ≡ co-founded): a crafted membership proposal
@@ -190,7 +192,7 @@ byzantine_on_grown_committee(Config) ->
     Peers   = member_peers(Config, Members),
     Pubs    = member_pubs(Config, Members),
     H = synced_height(Peers),
-    V = H + 1,
+    V = maps:get(protocol_view, status(hd(Peers))),
     LeaderPub  = quod_simplex:leader(V, Pubs),
     LeaderPeer = peer_of(Config, Members, LeaderPub),
     Before  = committee(hd(Peers)),
@@ -211,11 +213,15 @@ byzantine_on_grown_committee(Config) ->
     Ts     = erlang:system_time(millisecond) + 1000,
     %% A canonical block must reach the validators. A raw record view is
     %% refused by the encoder before the invalid membership test can run.
-    {ok, Block} = quod_ledger:new_block(V, H, {batch, [Evil]}, Ts),
+    #{era := Era, view := V, parent := ParentRef} =
+        quod_ct:peer_protocol_position(LeaderPeer, ?NS),
+    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, {batch, [Evil]}, Ts),
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
     Frame  = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fp, Chan, Frame]) || Fp <- Pubs, Fp =/= LeaderPub],
-    [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || P <- Peers ],   %% skipped (noop), never committed
+    [ ?assert(eventually(fun() -> maps:get(protocol_view, status(P), -1) > V end, 20000))
+      || P <- Peers ],
+    ?assertEqual([H], lists:usort([slot(P) || P <- Peers])),
     ?assertEqual(Before, committee(hd(Peers))),
     ?assert(eventually(fun() -> rejects_total(Peers) > RejBefore end, 5000)),
     probe(Config, Members, {after_byzantine, V}),
@@ -333,7 +339,21 @@ start_node(Port, {Pub, Seed}, Config, EnvOverrides, Extra) ->
     DataDir = quod_ct:datadir(Config, Port),
     Set(effect_journal_data_dir, DataDir),
     Set(foreign_log, #{cache_dir => filename:join(DataDir, "foreign-history")}),
-    {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
+    try peer:call(Peer, application, ensure_all_started, [quod]) of
+        {ok, _} -> ok
+    catch Class:Reason:Stack ->
+        %% Preserve the original startup failure and deadline. Query stacks
+        %% through the peer controller, independently of application startup.
+        Diagnostics = catch begin
+            Pids = peer:call(Peer, erlang, processes, []),
+            [{Pid, peer:call(Peer, erlang, process_info,
+                            [Pid, [registered_name, current_stacktrace,
+                                   status, message_queue_len]])} || Pid <- Pids]
+        end,
+        ct:pal("application startup failed; peer stacks: ~p", [Diagnostics]),
+        _ = catch peer:stop(Peer),
+        erlang:raise(Class, Reason, Stack)
+    end,
     Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
                      Extra),
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),

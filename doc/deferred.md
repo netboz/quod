@@ -295,17 +295,17 @@ stages, not carried forward:
   remove their load-bearing policy difference.
   Diskless reconstruction was rejected because peer echoes can prove that a vote happened but never prove
   that no unseen vote happened.
-- **Finality view change (post-journal residual).** The current evidence rule
-  directs an unlatched validator to skip when it sees `f+1` peer complaints and otherwise to commit a
-  notarized block. One decision table owns notarization, ready recovery, complaint ingestion, and timeout
-  triggers for both slots in the depth-one pipeline. This resolves the live slot-6180 shape once evidence is
-  exchanged, but a sub-Delta photo finish can still put
-  at least `f+1` validators on each final-vote side before either side sees the other's threshold. Durable
-  latches correctly prevent switching, so resolving that already-formed split requires an explicit
-  view/epoch recovery protocol, not another exception in the timeout FSM. In-flight block availability is
-  now closed separately: every support latch atomically owns its exact block until commit, and restart
-  restores it through the ordinary engine. Do not claim unconditional liveness for arbitrary `>f` crash
-  schedules until the final-vote split is solved.
+- **Finality correction — implementation under validation, hardware acceptance open.**
+  The source cut separates protocol views from material ledger heights, replaces
+  terminal skips with complaint-only view advancement, and permits descendant
+  finality through verified ancestry. It also replaces the depth-one horizon,
+  cross-view vote exclusion and quorum-grace recovery with the reviewed era/view
+  rules. Membership ends the old era's material history at M; proof-only old
+  descendants and the new era's root preserve the same material prefix.
+  See `finality-round-recovery-plan.md` §0 for the current contract and
+  `WORK-IN-PROGRESS.md` for retained checks and unresolved observations. This is
+  not a deployment or unconditional liveness claim. Clean release checks,
+  completed-cut review and isolated fault/performance acceptance remain required.
 - **Ontology actors and system bootstrap — planned architecture migration.**
   `doc/ontology-actor-architecture.md` replaces the old split user/agent/AP
   identity model. Governed external-predicate ownership and root-driven

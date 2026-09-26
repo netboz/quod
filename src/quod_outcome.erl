@@ -1193,7 +1193,7 @@ valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
 
 
-ref_slot({quod_dtx_ref, 2, _, _, Slot, _, _, _}) -> Slot.
+ref_slot({quod_dtx_ref, 3, _, _, Slot, _, _, _}) -> Slot.
 backend_put(Index = #index{backend = {dets, Name}}, Key, Value) ->
     case dets_write(Name, {Key, Value}) of
         ok -> {ok, Index};

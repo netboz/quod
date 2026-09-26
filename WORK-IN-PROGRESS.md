@@ -1483,3 +1483,1237 @@ checks and four fresh-result cases, including a deliberately false transport
 label. All passed; no full gate or current-tree rebuild is claimed. Production
 source delta at this checkpoint is zero. Fleet remains .246, original signup
 unresolved, and d8deff1's narrow startup correction is still not deployed.
+
+### 2026-09-25 — F1 source cut in progress (not a release candidate)
+
+Yan accepted consensus-first/full-history scope and authorized continued work
+while away. Branch `feature/simplex-finality` starts at `d8deff1`; planning-only
+commit `de1de00` records the reconciliation. The old .246 fleet and its pending
+signup are untouched. No code commit, push, deployment or re-found has occurred.
+
+The working tree is deliberately an **incomplete atomic source cut**. Old
+runtime/API consumers and old fixtures have not all been migrated; do not run
+or deploy this tree as a candidate. Isolated compilation/test overrides live in
+`_build/finality-resume-20260925/codec-ebin`, separate from the old test build.
+Current implemented seams:
+
+- Canonical block2/entry2 separates material height from era/view; genesis has
+  fixed view zero, empty carriers cannot construct material entries, and one
+  compact head-QC descriptor replaces immediate-child proof encoding.
+- Signature domain3 and QSJ6 journal keys bind era/view. Same-view final votes
+  remain mutually exclusive across restart. Journal retirement now requires
+  archived protocol floors/sealed eras, not material height.
+- Pure engine permits descendant finality and complaint-driven view progress
+  without synthetic ledger skips. N=8 persisted 3/5 split and N=4 stacked split
+  regressions pass at the admitted-block seam; this is not full runtime or
+  hardware acceptance. Terminal membership refuses material descendants.
+- A measured whole-certificate-pool scan was replaced with dependency-specific
+  parent/complaint wakeups. The same 128/256/512/1024-view probe changed from
+  293071/1109285/4259780/16647337 reductions to
+  37034/72243/138851/286386. Elapsed time at 1024 views changed from 454307 to
+  386135 microseconds on this run; cryptography dominates, and this is not a
+  claim about fleet throughput.
+- V8 store prototype has complete proof/material append groups, one datasync,
+  proof cursors and sparse material seeking. Complete orphan proofs are trimmed
+  with an unfinished group; completed referenced corruption fails loudly.
+  Read-only recovery never truncates. Sequential reads preserve their buffer.
+- The existing catch-up module now owns a streamed exact-parent finality cursor,
+  including the parent carrier path between material entries, terminal-M shape,
+  timestamps and contiguous material claims. Groups sharing a head verify in
+  one backward pass. The history projection derives the next era from M rather
+  than from its selected witness head. Foreign projection format is version6.
+
+Focused evidence retained in `_build/finality-resume-20260925/`:
+`codec-first.log` (6), `signature-journal-first.log` (7),
+`engine-dependencies-first.log` (7), `store-buffer-and-crash.log` (8),
+`finality-group-first.log` (8). These are **36 distinct focused checks** across
+successive trees, not a clean gate suite on the final tree. The store checks
+include every byte truncation of a sample group and a witness exceeding one
+network page. Shared deterministic protocol fixtures are in existing `quod_ct`.
+Compilation failures `engine-compile-first.log` (accidentally removed helper,
+restored unchanged) and `finality-cursor-compile-first.log` (misplaced export
+attribute, corrected) are retained. No failure was silently overwritten.
+
+Remaining integration is substantial: owner era/view lifecycle and proposal
+admission, asynchronous validation barriers and autonomous empty recovery
+proposals; complete proof custody before journal release; new-era installation;
+streamed transport/forward-history consumers and group staging; DTX ref3 and
+verified-selected-witness matching; removal of old skip/grace/depth-one paths,
+old comments and superseded tests. Existing AM3 outcome authority stays intact.
+The final release review, sequential gates, isolated hardware campaign and
+coordinated activation have not begun. The code must not be committed as a
+completed consensus repair merely because the foundation checks pass.
+
+### F1 continuation — archive recovery and shared semantic verification
+
+The current focused checkpoint is `archive-foundation-first.log`: **48 checks
+passed on one captured working tree**, with selection and patch/SHA256 beside
+it under `_build/finality-resume-20260925/`. All changed Erlang modules and test
+modules compiled with `-DTEST` without warnings in
+`archive-foundation-compile-first.log`. Earlier 41/44/46/47-check checkpoint
+logs remain intact. These are isolated foundation checks, not a full build,
+release gates, live owner acceptance or permission to deploy this partial cut.
+
+Additional implementation and evidence:
+
+- DTX ref3 now treats its compact head as a preferred witness, not a second
+  immutable identity. Exact claims are matched against the history owner's
+  already verified selected entry. The caller-supplied-entry verifier was
+  removed; local application evidence uses one captured indexed read. The
+  regression counts one read and rejects altered immutable claims.
+- Archive spans can extend an already durable parent span without copying it.
+  A complete-group recovery fold streams each selected proof once. The shared
+  `quod_catchup:verify_forward_group/5` combines that finality cursor with the
+  existing semantic/index preview; hosted and foreign startup both use it.
+  The superseded direct-entry phase reducer was removed. Its eleven test
+  fixture callers now use the same common `quod_ct` group-verification helper;
+  their old-format fixtures still require migration before full-suite claims.
+- Hosted startup separately restores the last material root and the highest
+  complete archived protocol head. The real storage/journal recovery seam
+  resumes after view19 at material height2; a terminal membership entry starts
+  the next era at virtual view0 instead. Only journal eras actually certified
+  by this archive can be sealed. Unknown/future-era votes survive. Both cases
+  are recovered twice.
+- A bad later certificate leaves even earlier vote latches intact. A valid
+  proof of an exact historical entry whose head also contains unarchived
+  material is usable for that claim, but refused as complete validator
+  recovery custody. Neither condition retires journal decisions.
+- Carriers inherit their exact parent's timestamp. Live tree admission,
+  pruning/root restoration and streamed history enforce the same rule.
+- Runtime vote construction now binds the engine's era. Startup projects only
+  that era's journal latches into volatile rounds. Eligible body restoration
+  uses direct journal lookups; the full-body-map export is test-only. Wiring
+  restoration to live view-progress edges is still pending with the owner cut.
+- Engine committees are immutable per era. Repeated signer filtering at
+  certificate formation/lookup was removed; ingress remains the authenticated
+  trust boundary. This simplification is not a new fleet-performance claim.
+
+Next integration remains the live owner: one authoritative view/parent from
+its engine, material admission distinct from carrier progress, grouped live
+append/apply and protocol custody retirement, era replacement and ingress
+placement. Streamed network acquisition/staging and old fixture/API cleanup
+remain unfinished. In particular, `approved`, old material/view comparisons,
+skip/grace/depth-one paths and legacy append callers still exist in the owner;
+the tree is deliberately NOT runnable as the completed repair. The .246 fleet,
+original unresolved signup, and deployment boundary remain unchanged.
+
+### F1 continuation — live grouped finality, views and carrier owner
+
+Current focused checkpoint: `carrier-owner-first.log`, **80 checks passed** on
+one captured source patch/SHA256, with the exact selection beside it under
+`_build/finality-resume-20260925/`. The changed Simplex source/tests compiled
+with `-DTEST` without warnings in `carrier-owner-compile-first.log`. This is
+not the full suite, a normal-profile build, a runnable completed network cut,
+or hardware/release acceptance. Fleet .246 and the uncertain signup remain
+untouched. No implementation commit, push, deployment or re-found occurred.
+
+Completed since the 48-check foundation checkpoint:
+
+- Live owner archives a complete selected proof/material group before index
+  publication, journal retirement or ordered Prolog apply. Real store/journal,
+  publication and apply seams cover long empty suffixes, proof-span extension,
+  terminal-M era replacement and a real read-only-descriptor append failure.
+  Failed append exposes no material progress and retires no votes.
+- Complete-tree ancestry caches material counts/latest material references.
+  Parent height and author floors skip empty suffixes; content and DTX verdict
+  requests now carry the material position while correlating the protocol view.
+- Engine view edges own fresh commit intent. A late notarization after a
+  complaint-driven advance cannot invent it. Removed complaint amplification,
+  cross-view camp selection, synthetic skip appends, duplicate finalization
+  buffers' writers, weak-certificate waiting, and live committee mutation.
+- Relay placement and unsigned attempt identity bind era/view; transport frames
+  are sx3 / sx_relay2. Signed transaction format remains version15. Destination
+  results are hints only; local verified material history still owns custody
+  inclusion/exclusion. Removed the redundant historical relay-result lookup.
+- Timeout tracks exact era/view with no quorum-grace extension. Duplicate
+  evidence, phase changes, link readiness and stale-era timeouts cannot renew
+  the same view's deadline. The obsolete quorum-rearm fixture was removed;
+  the replacement checks no-renewal, local readiness and stale-era behavior.
+- Shared proposal admission checks exact complete parents, every skipped-view
+  complaint certificate and terminal-M/timestamp rules. Author sequence checks
+  use the candidate's actual parent, not the locally preferred parent. The
+  existing material overlap bound no longer limits empty consensus progress.
+- One local proposal publication helper now serves content, DTX and empty
+  carriers. After existing material queues drain, entering-view/readiness edges
+  can select one empty carrier for unfinished material. No idle carrier stream,
+  new timer, second executor or synthetic Prolog transaction was added.
+
+Intermediate checkpoints and failures remain intact. `era-wire-first.log`
+failed one obsolete shape-only DTX reference fixture at reserved genesis height1;
+`quod_ct` now uses material height2 with the canonical compact descriptor.
+`era-wire-fixture-corrected.log` passed six relay checks; later combined 76/77/78/
+79/80 checkpoints passed. Compilation failures `live-group-compile-first.log`
+(obsolete test export) and `live-owner-compile-first/second.log` (stale stats
+helper) were corrected, not overwritten. Watchdog/admission intermediate
+compiles recorded unused-helper/variable warnings; the 80-check compile is clean.
+
+Still unfinished: remove residual approved/material-view assumptions, obsolete
+record fields, diagnostics/docs and fixtures; finish catch-up/foreign network
+proof streaming and complete-group staging through existing workers/owners;
+serve archived protocol bodies through captured proofs, not view-as-height
+lookup; audit recovery custody exclusion and readiness transitions; retain AM3
+verification and useful healthy material overlap. The existing numeric material
+window has only been separated from protocol progress, not assigned a new
+Prolog resource policy. No new resource ceiling was introduced. Review that
+existing policy ownership as part of the complete candidate.
+
+Source/header delta at this checkpoint versus `de1de00`: +2047/-2291, net -244 lines;
+tests and handoff text excluded. This removes substantial old owner machinery,
+but the whole-cut deletion/fixture audit and required release gates are pending.
+
+### F1 continuation — custody and provisional DTX validation
+
+`dtx-preview-first.log` passes **84 focused checks** on its captured patch and
+SHA256, with a clean changed-module TEST compile. Earlier 81- and 82-check
+receipts remain intact. The normal-profile Simplex/metrics/Explorer compile
+and UI TypeScript check passed at the 81-check tree; they do not cover later
+custody/DTX edits. No full suite, release gate or hardware acceptance yet.
+
+- Removed residual approved/commit-buffer/skip state and migrated diagnostics
+  and Explorer labels to distinguish consensus view from material height.
+- View advance retires an obsolete placement, retaining the same signed
+  request, operation, sequence and absolute deadline. Only certified material
+  history resolves its outcome. A notarized but uncommitted author sequence
+  holds custody instead of reporting a stale request. The actual owner test
+  covers silent-leader replacement with no ledger append or premature reply.
+  This implements the already approved plan §4.5; ingress docs now agree.
+- DTX preview uses a private provisional reference through the same transition
+  reducer. Removed the fake certificate marker; provisional references cannot
+  enter certified replay or restored projections. A delayed valid verdict may
+  install a needed certified ancestor after its view advances, but may never
+  produce a fresh vote in that old view. Both seams have focused regressions.
+
+Next: streamed history transfer through the existing reader/link/fetch owners,
+complete-group staging and recovery installation, then obsolete fixture/API
+cleanup. The candidate remains incomplete and uncommitted. The .246 fleet and
+original uncertain signup remain untouched.
+
+### F1 continuation — paged proof transport foundation and owner lifecycle
+
+`transfer-client-first.log`: **9 additional focused tests passed**, clean
+changed-module TEST compile. These were a separate selection from the prior
+84 checks, not a combined full-suite result. Frozen patches, hashes and exact
+selections remain under `_build/finality-resume-20260925/`.
+
+- The archive's retained transfer cursor sends material descriptors followed
+  by the selected proof, finishing a partially requested group and stopping at
+  the receiver's previous material hash. Long proof traversal uses sequential
+  reads across pages, including reused/extended archive spans.
+- Existing catch-up paging can batch multiple groups. A group verifier keeps
+  one finality cursor across pages, stages validated proof frames in an unnamed
+  temporary file and returns a projection/index delta only after completion.
+  Staging reuses the archive frame codec; it grants no finality authority.
+  The standard file process permits the append owner to consume the source
+  while its fetch worker awaits acknowledgement. Worker kill closes it.
+  The existing work owner still must record/remove the staging path to cover
+  interruption between exclusive creation and unlink; that integration remains.
+- Replaced the link grammar with version-3 history requests/pages and opaque
+  continuation tokens. Local disk offsets never cross this grammar. One server
+  reader, captured source and original deadline span the whole material range.
+  Stale/wrong-link tokens cannot take over it. Idle expiry kills the reader.
+- Hosted page consumption now runs in its calling worker, retaining exact
+  page custody through acknowledgement. A dead consumer cancels its binding;
+  callbacks cannot acknowledge another caller's page.
+
+Retained failures: `archive-transfer-first.log` used a fixture whose proof bytes
+were below the intended 900 KiB boundary; the corrected 8000-carrier fixture
+crosses it. `proof-stage-first.log` timed out because its test looked for a
+file-process link; OTP monitors the opener instead. Corrected test observes
+that monitor and real descriptor death. `transfer-server-first.log` passed the
+two new lifecycle tests but hit a stale `/tmp` fixture from an earlier aborted
+VM in another test. Test directories now use random names across VM runs;
+`transfer-client-first.log` passes all nine checks. No failed log was replaced.
+
+**Integration is still incomplete:** production recovery/feed and foreign fetch
+drivers still expect the old entry-only pull/result forms and must be replaced
+with the new page/group consumer, staging ownership and complete-group sink.
+The new public hosted pull takes query/contact/original deadline/consumer;
+old callers are intentionally not retained behind a compatibility shim.
+Do not run this partial cut on the fleet. No implementation commit, deployment,
+ledger purge or original uncertain-request resubmission occurred.
+
+### F1 continuation — recovery group installation
+
+`recovery-groups-io-corrected-first.log`: **95 focused checks passed together**.
+The captured selection combines the earlier 84, nine transport/staging checks,
+and two new recovery-owner cases. Changed modules compile cleanly with TEST;
+this remains below the completed-cut release boundary.
+
+- The common range consumer threads installed context across multiple groups
+  in one page. A later invalid group returns the last successfully committed
+  context; it cannot throw away a foreign writer's updated handle. Temporary
+  proof bytes are reset only after each append acknowledgement.
+- The hosted catch-up driver now consumes query/continuation pages and complete
+  groups under each original range deadline. Recovery allocates/owns its stage
+  path before worker launch and removes it on completion/DOWN/termination.
+- The Simplex recovery sink appends proof plus material together, advances its
+  archived protocol head/floors before journal reconciliation, and restores the
+  engine from that head or the new terminal-M root. It rejects incomplete
+  material custody and stale windows. Real read-only append failure preserves
+  the owner and journal; replay emits a certified-height wake and replay apply,
+  never live committed-entry events. Ordinary and membership cases pass.
+- Recovery now uses live commit's exact submission/operation/DTX resolution.
+  Removed duplicate catch-up custody/relay/effect-retirement code and its
+  view-versus-height comparisons. Remaining placement exclusion uses the
+  archived protocol position or terminal-M seal; retained custody is re-placed
+  without inventing a request outcome. Volatile relay hints reset with their
+  owner generation.
+- Source proof traversal reads only the canonical block parent; it no longer
+  decodes/authenticates application transactions simply to forward their bytes.
+
+Retained failures: `recovery-groups-compile-first.log` found a test export for
+the removed custody implementation; the dormant-custody fixture now calls the
+shared recovery resolution seam. The next run passed 93 checks and failed two
+new fixtures which expected bare `ebadf`; the existing append boundary returns
+`{badmatch,{error,ebadf}}`. Only those expectations changed; the 95-check run
+then passed. No assertion about append safety or publication was weakened.
+
+Source/header delta versus `de1de00`: +2953/-2840, net +113 lines. The added
+streaming, staging and continuation lifecycle is a missing capability for long
+proofs. Retirement of the obsolete foreign/feed entry-only paths is pending.
+The foreign fetcher and feed still require migration; archived protocol-body
+serving and the broader obsolete fixture/API audit remain unfinished. Do not
+deploy this partial tree or claim completed hardware acceptance.
+
+### Finality continuation: foreign proof groups (2026-09-25, 102 checks)
+
+The same uncommitted coherent cut now routes foreign exact/current/follow
+acquisition through the shared streamed range consumer. One verifier cursor
+survives continuation pages and route failure. Complete groups append their
+proof plus material before phase-index/checkpoint publication; a later bad group
+or failed page-credit acknowledgement returns the latest committed cursor.
+Post-mutation failures still invalidate the cursor and enter the existing
+explicit reconstruction lifecycle. No caller-time prefix rebuild was added.
+
+- The foreign page owner retains its original deadline/monitor/credit through
+  consumption and accepts the new continuation query. Discovery only nominates
+  a source; incomplete discovery ranges release their link. Current-view quorum
+  confirmation verifies returned groups through the shared verifier and refuses
+  an empty response behind the already-certified prefix.
+- The existing request owns temporary staging names before workers open them.
+  Normal release, request retirement and the existing exclusive-writer startup
+  cleanup cover those names. The file is unlinked before proof bytes are written.
+- Local follows borrow one captured source descriptor and retain the transfer
+  cursor, with the same range verifier and source-incarnation checks. This path
+  still needs its updated lifecycle fixtures exercised.
+- Removed foreign isolated entry-hint import, entry-only page validation and
+  page persistence. A reference fixes the immutable claim; missing selected
+  ancestry is acquired through the existing history service.
+- Group byte reservation uses the archive's physical framing calculation.
+  Groups currently sync separately. Measure multi-group history acquisition
+  before claiming recovery throughput: fewer network round trips alone are not
+  a disk-throughput measurement.
+
+Evidence: `_build/finality-resume-20260925/foreign-stream-refusal-deadline-corrected-*`
+freezes source patch/hash, selection, clean TEST compilation and **102 passing
+focused checks**, including the previous 95, hosted transfer driver, actual
+foreign client credit/server integration, an 8,000-carrier proof, bad suffix,
+post-consumption acknowledgement failure, restart, current-view confirmation
+and a behind-source refusal. No full release gates or hardware campaign yet.
+Retained failures: `foreign-stream-first-compile.log` caught a function-boundary
+edit error; `foreign-stream-syntax-corrected-tests.log` caught stale arity-5
+adapter configuration; `foreign-stream-integrated-tests.log` passed 101 checks
+before its new refusal fixture exceeded EUnit's five seconds while correctly
+waiting on its own twenty-second caller deadline. That fixture now supplies a
+500 ms deadline; production deadlines were unchanged.
+
+Source/header delta against `de1de00`: **+3231 / -3163, net +68** at this checkpoint
+(tests/docs excluded). Observer/feed integration and certified-block serving
+still need completion, as do obsolete format/API fixture migration and the
+completed-cut gates/review. Do not deploy this partial tree. Fleet .246 and its
+uncertain original request remain untouched; no implementation commit/push.
+
+### Finality continuation: observers, archive handoff and material consumers
+
+The observer feed now acquires proof groups through its existing single pull
+worker and the shared verifier. Simplex is still the sole writer. Consecutive
+live receipts select live application only for those material heights; old
+history remains replay even inside the same archived group. Only acknowledged
+live material is relayed onward. Stage paths are owned before worker creation;
+worker exit alone cannot self-trigger a retry. The real sink origin/ownership
+checks and entire feed unit module pass. A full observer-worker network case
+and updated local-follow lifecycle fixtures remain outstanding.
+
+A pruned-body request now receives the owner's archived CommitQC through the
+existing certificate frame, leading a lagging peer to ordinary certified-history
+recovery. The owner no longer treats a protocol view as a material read offset.
+Tests cover live/recovery installation, ordinary/membership histories, zero
+ledger reads in that reply, and certificate retention after cold restoration.
+
+Removed the obsolete entry-only catch-up APIs (`verify_forward`, `verify_entry`,
+`serve_blocks`, page decoding/stats) and ledger page decoder. Their remaining
+production consumers were already migrated. Test fixture wrappers now use the
+shared finality verifier; other old test modules still require migration.
+Material consumers no longer accept/publish a synthetic skipped-row kind.
+Protocol carriers never reach Prolog application, metrics or Explorer history.
+The old implicit-certificate record remains only until its last fixtures move.
+
+Evidence under `_build/finality-resume-20260925/`:
+- `archived-handoff-fixtures-corrected-*`: **134 checks passed** together.
+- `material-envelope-corrected-*`: **161 checks passed**, including complete
+  ledger and artifact modules (the selection repeats its six initial codec
+  checks). Independent V2-envelope/V8-group byte comparisons replace the old
+  V7 golden contract; old vectors remain in git history. Constructor, hostile
+  byte ingress, opaque-symbol, sidecar and no-repeated-decode obligations stay.
+- `store-scan-observability-restored-*`: **54 checks passed**, the complete
+  storage and artifact modules. Storage fixtures now use complete groups and
+  test V1–V7 refusal, sparse checkpoints, immutable views, explicit writer
+  resumption, torn groups, valid footers behind corruption and trace structure.
+
+The expanded artifact boundary test found a real envelope allowance mismatch:
+V2 adds three 32-byte ETF binaries and one tuple header. Accounted for that
+**113-byte representation overhead**, retaining the existing 256 KiB payload
+budget. The boundary test uses maximum 64-bit views/time and verifies one-byte
+payload overflow refusal. This is not a policy/resource-budget increase.
+The old storage suite caught missing scan timing attributes; restored framing
+and decode aggregates and added proof-block count in the same startup cursor,
+without per-frame spans or another mutable owner.
+
+Retained failures: `archived-handoff-first` had stale compiled fixtures calling
+removed APIs plus a reply fixture consuming an earlier case's mailbox message;
+recompiled callers and isolated the response link. `material-consumers-first`
+passed 144 checks, found the envelope bug and a corruption fixture accidentally
+invalidating its outer group header. The fixed header preserves the intended
+entry-decoder refusal test. `store-fixtures-first` caught an illegal assertion
+pattern; `store-fixtures-compile-corrected` passed 53 checks and exposed the
+missing timing attributes. All logs remain intact; no silent reruns.
+
+Source/header delta versus `de1de00`: **+3440 / -3628, net -188 lines** (tests/docs
+excluded). No full release gates, completed-cut consensus review or hardware
+acceptance yet. The partial source remains uncommitted. Fleet .246 and its
+original uncertain request remain untouched; no deployment/purge/resubmission.
+
+### Finality continuation: Prolog projection and full catch-up endpoint checks
+
+`material-projection-fixtures-corrected-*`: **58 passing checks**, complete
+`quod_committed_projection_tests` and `quod_prolog_tests`. Shared bare-applier
+fixtures now construct the current material artifact; they explicitly claim
+no finality authority. Replaced synthetic skipped-row advancement with real
+empty-diff transactions or duplicate material. Still verified: same-block OCC,
+deduplication, quiet live/replay floor wakes, parked-parent validation and
+tracing, one-time reactions, effect-only work, policy preservation and manifest
+refusal. The first run passed 51 and retained seven fixture failures: old
+constructor/noop calls and DTX references incorrectly naming genesis height.
+No production rule was relaxed to pass them.
+
+`catchup-fixtures-proof-corrected-*`: **39 passing checks**, the entire catch-up
+endpoint module. The old byte-only transport fixtures now exercise the current
+canonical stream/credit grammar. The source archive has complete signed groups;
+request operations remain separate from continuation tokens. All source/link/
+endpoint death, expired admission, FIFO credit, retained-link, late-open and
+40-reader lifetime controls pass. Range byte/count bounds and noncanonical /
+wrong-namespace / opaque-symbol input checks remain. Obsolete `serve_blocks`
+and page-decoder fixtures now use retained transfer cursors and direct artifact
+decoding. Four-grammar coverage is in the existing current-wire test rather
+than a parallel legacy grammar test.
+
+Retained `catchup-fixtures-first` failures: incomplete fixture proofs stopped
+three server cases plus range serving; an unscoped transport assertion consumed
+a previous endpoint's release notice. The source now contains its actual
+ancestry and assertions are scoped to their endpoint. The production proof
+requirement and lifecycle checks stayed intact. Full gates/hardware acceptance
+remain pending; no deployment or implementation commit occurred.
+
+
+### Finality continuation: exact claims, operation endpoints and atomic application
+
+All dirty production modules compiled without TEST and the UI type check passed
+(`material-integration-normal-*`). Removed the feed's unused `classify/2`; its
+ordering obligations now run through actual receipt handling, including cold
+start and stale/duplicate heights. `observer-classifier-fixture-corrected-*`
+passes the full 24-check feed module. The first classifier fixture attempted to
+reuse a deliberately invalidated snapshot; supplying the new capture fixed it.
+
+Complete focused modules now passing:
+- `dtx-reference-fixtures-first-*`: **50 DTX checks**. Canonical references use
+  material heights and compact heads. Independent valid quorum subsets prove
+  the same immutable claim; a preferred head remains only a hint.
+- `atomic-transaction-outcome-fixtures-corrected-*`: **109 checks** across
+  atomic controls, transaction codecs and outcome reduction/publication.
+- `operation-history-reference-controls-*`: **27 checks** across outcome
+  endpoints and admission cleanup. The shared operation fixture has explicit
+  linked blocks and archived proof groups. Covered uncertain outcomes,
+  redelivery, restart, original deadlines, owner loss and historical result
+  authority. Wrong target and wrong hash remain separate typed refusals.
+- `entry-selection-stream-fixtures-first-*`: **12 checks**. The current
+  archive stream replaces the old entry-only transport fixture. Sender payload
+  authentication stays zero; selected application checks stay **7 versus 56**
+  for a full eight-item batch. Tampered unselected bytes change the exact claim;
+  corrupted selected proof signatures and streamed proof payloads are refused.
+  CRC/index/truncation, captured-prefix bounds and sidecar decode counts remain.
+- `atomic-projection-contiguous-publication-*`: **73 checks**, the complete
+  atomic projection module. Vote/Resolve/Complete references follow genesis;
+  publication remains contiguous. Owner fixtures explicitly supply their
+  protocol parent/time instead of the retired slot-based timestamp fallback.
+  The test-only blocked-parent constructor no longer changes material height
+  from a protocol view. Real parent-apply wakes, journal reopening, no duplicate
+  signing/selection, exact application acknowledgements and tombstones pass.
+
+A counted transport control exposed repeated sender authentication of the
+preceding material entry: three groups caused **three signature checks** merely
+to obtain their cutoff hashes. Reused the store's opaque CRC/index reader and a
+structural codec hash accessor; the selected receiver still authenticates the
+full payload and ancestry. `transfer-opaque-previous-material-*` passes **109
+checks** across catch-up, ledger, store and artifacts with sender count **zero**.
+The corrected baseline failure is retained as
+`transfer-previous-material-auth-owned-baseline-*`. The first baseline fixture
+incorrectly opened a raw descriptor outside the profiler's worker; that failed
+before measuring production and is retained separately.
+
+Other retained failures are fixture migrations, not waived checks:
+`atomic-transaction-fixtures-first` (64 pass, four old shared head placeholders),
+`operation-history-fixtures-first` (25 pass, retired test state/API),
+`operation-history-fixtures-corrected` (26 pass, wrong expected identity error),
+`atomic-projection-material-fixtures-first` (56 pass, old height/root fixtures),
+`atomic-projection-material-heights` (69 pass, four missing genesis publication
+steps). No production validity rule was relaxed for these fixtures.
+
+These are focused receipts at their individually frozen trees, not a full gate
+or completed-cut acceptance. Remaining legacy consensus/history/foreign-reader
+fixtures, actual observer-worker and local-follow integration, full sequential
+gates, consensus review and hardware performance/fault acceptance are pending.
+The .246 fleet and original uncertain request remain untouched. No
+implementation commit, push, deployment, ledger purge or request resubmission.
+
+
+### Finality continuation: receiver authentication and lifecycle integration
+
+`history-view-proof-fixtures-first-*` passes all **13** view checks with real
+linked material and shared archived proofs. Captured-prefix bounds, sparse
+lookup and owner/deadline lifetimes remain covered without prefix scans.
+
+A counted receiver regression was reproduced and fixed: the new transfer loop
+had lost the existing exact-envelope decode context. The receiver now threads
+that context through entries and proofs within one bounded page, then discards
+it. It does not retain authority or decoded payloads across pages. The retained
+`transfer-page-decode-reuse-baseline-*` failure measured two authentications
+where one was required. `transfer-page-decode-reuse-*` passes **110** checks;
+`receiver-page-context-restored-*` passes **76** catch-up/decoder/metrics checks.
+The actual complete-group receiver pays two payload checks plus one head-QC
+check for a two-transaction group. Committee, admission, freshness, exact claim
+and full ancestry checks remain independent of this byte cache.
+
+Additional complete focused modules:
+- `runtime-material-founding-*`: **90** checks (89 runtime plus the counted
+  complete-group control), including real reactions, unification and restart.
+- `foreign-materializer-session-resigned-*`: **2** checks. A captured source
+  remains bounded across append; incremental materialization never scans the
+  path again. The first run retained one fixture failure: changing a signed
+  template without clearing its cached bytes. The fixture now resigns it.
+- `suffix-material-current-custody-*`: **7** checks. Actual page receipt shares
+  authentication with proof bytes, including nested signed claims/applications/
+  completions. Altered content, wrong admission, invalid finality, stale request
+  context and duplicate custody remain checked. The first run retained five
+  passes and two fixture failures (old native certificate wire and an absent
+  installed material head).
+- `endpoint-material-hint-fixtures-*`: **22** DTX endpoint checks. Invalid
+  proof signatures can cross bounded untrusted hint transport; that gives no
+  finality authority. Current reference grammar, exact response correlation,
+  wrapped foreign symbols and malformed-sidecar refusal pass.
+- `lifecycle-material-history-full-*`: **48** checks, including normal creation,
+  open signup, personal lobbies, create-and-host, dynamic restart and prepared
+  effect journal recovery. The golden genesis/prepared vector changed with
+  block-v2; the prior vector mismatch is retained as
+  `lifecycle-current-genesis-vector-*`. The local prepared journal's schema and
+  exclusion of runtime cache fields are unchanged.
+
+`remaining-tests-compile-inventory` compiles every test module without warnings.
+This does not prove their retired runtime API calls are migrated; the larger
+consensus/history/foreign-reader modules still need behavioral migration and
+verification. Production src/include delta is **+3484/-3644, net -160** at this
+checkpoint, including TEST-only seams. Full clean gates, completed-cut review,
+observer-worker integration and hardware acceptance remain open. No fleet or
+uncertain-operation changes.
+
+
+### Finality continuation: observer worker, cold join and atomic recovery
+
+The complete Simplex module inventory was deliberately retained as a failed
+partial run: `simplex-complete-module-inventory-*` passed 47, failed 12 legacy
+fixtures and then cancelled at an old five-argument foreign fetch fixture.
+This is not a full module receipt. Migrated crypto/order/pruning controls plus
+all current-era controls pass **55** in `simplex-current-era-crypto-pruning-*`.
+The preceding run passed 54 and retained the old integer pruning-root failure.
+
+`observer-worker-owned-stage-cleanup-*` passes **66** catch-up/feed checks. A
+new integration starts the real feed process, its actual pull worker and the
+actual Simplex state machine. Only the remote page endpoint is a controlled
+byte source. It verifies a shared group's live/replay origins, append before
+credit completion, the actual staged path and feed processing of worker
+retirement. It does not claim QUIC hardware evidence; the separate current-wire
+endpoint tests cover that seam.
+
+`consensus-trace-explicit-owner-roots-*` passes all **13** tracing checks,
+including actual foreign-history workers and expiry of a queued successful
+result under its original six-second deadline. The first run retained six
+passes and seven fixture failures: missing protocol root, initial readiness
+advertisement in the comparison baseline, and passing a store handle to the
+configuration-only directory helper. No tracing/authority rule was relaxed.
+
+Two actual cold-join regressions were then reproduced before correction:
+- `cold-join-empty-material-baseline-*`: ordinary startup reconciliation
+  assumed the configured anchor already had an installed material head.
+- `cold-genesis-owned-recovery-baseline-*`: the first verified genesis group
+  could not establish custody from the joiner's identical configured root.
+
+The existing owner now keeps payload/membership admission closed while its
+material head is absent; its empty pipeline statistic is zero. Genesis can
+establish custody from no prior root (startup fold) or from exactly its configured
+root (cold join), never from a different or advanced root. The real bootstrap
+coordinator test downloads genesis and corroborates its tip, while proof access
+stays closed pending Prolog application. `cold-join-genesis-custody-established-*`
+passes **136** related checks. No alternate recovery owner or invented material
+entry was introduced.
+
+`phase-index-current-reference-fixtures-*` passes all **23** index checks. The
+first run passed 22 and retained one old foreign-reference placeholder failure.
+Shared founding/Vote/Resolve fixtures now contain linked material and signed
+current-era heads. `atomic-inclusion-archived-view-custody-*` passes all **19**
+exact-inclusion/recovery checks. A real empty-diff action replaces the former
+complaint ledger row when advancing history during an in-flight application
+acknowledgement. Captured, concurrent and later acknowledgements stay local;
+late delivery cannot create new custody. The first run passed ten and retained
+nine fixtures still passing material height to journal reconciliation instead
+of archived era/view floors.
+
+Current production src/include delta: **+3502/-3643, net -141**, including
+TEST-only seams. The additional 19 net lines since the prior checkpoint express
+the previously missing empty-history lifecycle. Larger consensus/foreign-reader
+fixture migration, normal-profile recompile, full clean sequential gates,
+completed-cut consensus review and hardware acceptance remain open. No commit,
+push, fleet mutation, purge or uncertain-operation resubmission occurred.
+
+### Finality continuation: retained results and source selection
+
+Yan reconfirmed that backward compatibility is unnecessary. The unused native
+implicit-certificate record and its old fixtures have been removed. Their
+still-valid direct/ancestor, wrong-link/root, terminal membership and streamed
+ancestry obligations are covered by the current catch-up tests; cross-domain
+refusal is covered by the current Simplex crypto tests. Recognizing an old file
+header to refuse it before tail repair is format rejection, not a decoder or
+compatibility execution path.
+
+Further retained receipts under `_build/finality-resume-20260925/`:
+- `retained-vote-material-publication-*`: **3** checks.
+- `retained-renewal-era-material-selection-corrected-*`: **7** checks. The first
+  selection-file parse failure is retained; it ran no tests.
+- `replay-completion-debug-record-layout-*`: **16** checks. The prior run passed
+  12 and failed four fixtures because their record introspection needed debug
+  information in two override beams, not because replay semantics changed.
+- `phase-writer-durable-group-failures-*`: **49** combined checks, including
+  four actual owner-sink append/index/publication failure controls.
+- `retired-implicit-schema-removed-*`: **99** combined checks, including the
+  current maximum-material-plus-compact-witness transfer envelope boundary.
+- `foreign-basic-material-reference-v3-*`: **6** checks.
+- `foreign-local-lifetime-current-fetch-*`: **15** checks, including actual
+  local follow capture, source death, historical committee lookup and restart.
+
+Migrating the transport/tracing controls exposed three actual regressions:
+page-delivery spans lost their fetch parent; retained consumption failures were
+misclassified; and exact reads reread the freshly downloaded entry from disk.
+The current page-consume span covers the actual interleaved decode, verification
+and durable group installation. It preserves failure reasons without exporting
+payloads. Exact requests retain only their selected immutable result from the
+verified group, after append/index/checkpoint succeeds. No retained entry cache
+or new owner was added. `foreign-selected-reuse-trace-gates-*` passes **44**
+checks, and `foreign-exact-all-delivery-controls-*` passes all **6** direct,
+routed, paginated, hint, wrong-phase and wrong-digest controls. Published later
+reads still use the durable store exactly once.
+
+`foreign-shared-group-and-confirmations-*` passes **33** checks. A new real
+foreign-owner case requests the first material entry in a shared descendant
+proof group; the whole group commits and survives restart. Long streamed proofs,
+committed-prefix survival after a bad suffix or failed page acknowledgement,
+source-behind refusal and confirmation cancellation/deadlines also pass.
+
+Source-selection controls reproduced another integration regression: an empty
+answer could end advancement instead of moving to another peer, and a rejected
+page could trigger a redundant address of the same peer. `fetch_range` now uses
+the existing `quod_peer_route:walk/5`: only pre-consumption transport failure
+selects another address. Receipt fixes the source and absolute deadline for its
+continuations. The peer walk retains committed progress and selects another
+peer for insufficient/invalid history. The extra advancement endpoint loop and
+duplicated confirmation endpoint loop are removed. The baseline failure and
+an intermediate missed confirmation caller are retained. The four controls pass
+in `foreign-suffix-shared-endpoint-walk-*`.
+
+`foreign-current-retained-owner-controls-*` then passes **110** focused checks
+at the corrected source tree, including all the transport/tracing/recovery
+controls above and moving current views, feed freshness, retained phase sessions,
+checkpoint mismatch and explicit corruption reconstruction. These receipts
+include overlaps; their counts must not be added as unique coverage. Earlier
+migration failures (old fixture arities/shapes, stale tracing targets, two
+compile errors and accidentally renamed gate messages) remain alongside the
+successful labeled runs. No assertions were weakened to accept those failures.
+
+The earlier `cold-join-normal-production-*` normal-profile compile succeeded
+without warnings. A fresh normal compile after these foreign-reader corrections
+is still pending. Full consensus/history fixture migration, clean sequential
+release gates, completed-cut review and isolated hardware acceptance remain
+open. This is still an uncommitted, incomplete implementation, not a release
+candidate. Fleet .246 and uncertain operations remain untouched.
+
+The foreign-reader migration is now complete at the module boundary:
+`foreign-complete-and-artifact-boundaries-*` passes **194** checks across the
+entire foreign-log, entry-selection and artifact-boundary modules. Intermediate
+receipts include **13** published-prefix controls, **3** hint/large-archive
+controls, **141** foreign-owner controls, **8** historical committee controls,
+and **25** remaining delivery controls; these overlap the complete receipt.
+
+The first larger inventory retained 108 passes, three fixture failures and a
+cancelled old-arity fetch. Those failures were a genesis-height placeholder for
+an ordinary reference, missing debug info for a fixture inspecting record
+layout, and retired synthetic skip entries. Two subsequent historical-fixture
+failures concerned missing gproc setup and a retired bulk verifier call. The
+remaining-delivery inventory retained 21 passes/four failures: fixture DTX
+folding without its index, the retired preferred-certificate authority premise,
+and a changed adapter exception boundary. No production checks were removed.
+
+The reference-authority control now tests both directions: a preferred head
+cannot replace independently verified archive custody, and an actual selected
+proof with an invalid signature or the wrong historical committee is refused.
+The old duplicate stale/malformed/uncertified current-view test was removed;
+all three obligations remain exercised through current framed delivery in
+`current_view_rejects_stale_malformed_and_uncertified_pages_test`. Callback
+faults retire the worker visibly because consumption may already own committed
+progress; blanket exception-to-retry conversion would lose that custody. Real
+transport failure/retry remains covered at the credited owner boundary.
+
+The unused `quod_ledger:materialize_hint/1` export/function is removed after
+checking all callers. Its former selection-versus-full-authentication control
+now invokes the existing full decoder, which still rejects tampering in an
+unselected item. The source AST guard enumerates only current construction and
+append sites, while retaining its negative controls against hidden constructors,
+forged decoding contexts and duplicate decoding. No legacy implementation was
+added to satisfy fixtures.
+
+`foreign-source-selection-normal-*` compiled all changed production modules
+without warnings before the final deletion of `materialize_hint/1`; the latter
+has passed the TEST compile and full related module checks, with its normal
+compile still due. Remaining work is the larger consensus/catch-up fixture
+migration and the release/review/hardware boundary already recorded above.
+No commit, push or fleet mutation occurred.
+
+`catchup-complete-captured-height-control-*` passes all **77** checks in both
+catch-up modules. Fixtures now use the shared proof-group verifier and sink,
+canonical parent-bound blocks and current credited pull messages. Successful
+groups remain committed when a later group on the same page fails. The real
+writer tests preserve historical committee lookup and captured-view bounds;
+owner death cancels an outstanding recovery worker. The counted 8/64/257
+content and DTX suffix controls each verify one new entry with zero old-prefix
+reads or reverifications (`catchup-retained-index-current-proof-groups-*`,
+52 overlapping checks). Obsolete synthetic skip/implicit-certificate fixtures
+are removed; current era/carrier and shared-ancestor proof controls cover their
+still-valid timestamp and finality obligations.
+
+Retained migration failures include two fixtures attempting to construct
+invalid checked artifacts (now tested at wire import), an obsolete pull tuple,
+and one transport fixture reporting different heights inside and outside its
+consumer callback. The latter larger run passed 76/77 before the fixture was
+corrected. No production assertion was relaxed. A fresh full Simplex inventory
+(`simplex-complete-after-catchup-migration-*`) passed 49, failed 11 old fixtures,
+then cancelled on an old-arity foreign-fetch fixture. Its log remains intact;
+the larger consensus fixture migration is still open.
+
+The current normal-profile production tree compiled with `-Werror` in
+`catchup-migration-normal-production-*` (zero warnings). Subsequent source
+edits only remove the obsolete TEST-only `eng_with_certs/2` and update the
+structural parent fixture to use the engine's existing ancestry calculation.
+All callers of the removed helper were migrated; no runtime compatibility
+wrapper was introduced. Current src/include delta is +3527/-3673, net -146;
+this includes TEST-only helpers and is not a final release delta.
+
+Further focused receipts:
+- `simplex-projection-current-material-*`: **8** committee/history/endpoint
+  checks; historical membership now uses canonical contiguous material rows.
+- `simplex-endpoint-certified-history-*`: **51** endpoint, retained-custody,
+  coordinator, history-read and read-attestation checks. The actual writer
+  catch-up test verifies and appends a signed DTX group after a real genesis,
+  then checks exact durable entry/reference publication. Read attestations
+  select real signed material history and preserve the admitted read height.
+- `simplex-recovery-material-admission-*`: **47** checks: 12 recovery gates,
+  the complete 15-check DTX admission-material module and the complete 20-check
+  agent-attestation readiness module. Recovery evidence enters as real signed
+  certificates; material height is explicitly distinct from protocol view.
+  A preview reference is explicitly refused by the certified reducer; the
+  equivalence control binds it to a canonical reference before comparing all
+  reducer outputs. Counted no-repeat-work controls remain intact.
+- `simplex-child-vm-exact-code-path-*`: **6** checks: canonical block bytes in
+  two fresh VMs, malformed nested-map rejection, catch-up wake semantics, and
+  the three cached atomic-parent selection controls. Child VMs now use the
+  caller's exact code-path ordering and assert canonical bytes/hash, preventing
+  stale baseline beams or equal failed calls from satisfying the comparison.
+
+Intermediate failed receipts remain: the endpoint inventory progressed from
+27/51 to 38/51 to 47/51 before all 51 passed; the recovery/admission inventory
+passed 41/47 before its six retired fixture inputs were migrated. A child-VM
+path assertion first compared absolute and relative names of the same file;
+paths are now normalized. No such inventory is a full release gate, and their
+counts overlap. The larger remaining Simplex/DTX/restart suite migration,
+completed-cut review and hardware acceptance still remain. No commit, push,
+fleet mutation, ledger purge or uncertain-operation resubmission occurred.
+
+`simplex-migrated-consensus-boundaries-*` passes **136** checks together in
+ordinary EUnit order: the migrated leading Simplex cases plus its engine and
+membership tail. The six callback fixtures that use their own PID as a fake
+transport now drain their ignored outbound frames, fixing the cross-case
+mailbox contamination seen in the initial full inventory.
+
+The former mutable-committee weak-certificate tests are replaced by explicit
+era controls: certified old-era material retains its old quorum authority;
+new-era blocks require the new committee's quorum; neither an old-era share
+from a retained member nor a removed member's fresh share contributes. The
+former skip-row test now checks one complaint progress edge, one certificate
+broadcast, no material rows and duplicate idempotence. These seven controls
+passed separately in `simplex-engine-era-membership-*`; four additional real
+owner/route-history controls passed in `simplex-engine-owner-material-routes-*`.
+The real content-only catch-up control restores routes from a two-validator
+signed proof group through the existing writer and historical projection.
+The prior tail inventory's 17 passes/11 retired-input failures remains saved.
+The middle owner scheduling/relay/restart fixtures are still pending; this is
+not a claim that the complete Simplex module or release suite has passed.
+
+Further owner migration receipts (2026-09-26; source still uncommitted):
+- `simplex-recovery-owned-notarization-*`: **18** checks. Readiness resumes
+  commit intent recorded by this owner on a notarization edge; a planted tree
+  row cannot invent that intent. Content/membership and below/above former
+  complaint-amplification thresholds are covered. Real journal restart checks
+  retain both final-vote choices and the exact supported body.
+- `simplex-owner-watch-current-*`: **16** scheduling checks. Material admission
+  uses actual notarized parents; peer demand starts the current view's watchdog
+  without extending its deadline. Future/foreign/invalid complaint evidence
+  cannot wake the wrong work. Placement readiness checks current material
+  height, freshness and the exact authenticated inbound generation.
+- `simplex-owner-material-history-group-*`: **14** custody/admission checks.
+  Recovery verifies and appends a real signed effect transaction through the
+  group sink, retires its pending signature, then reopens the journal to prove
+  that retirement is durable. Its preceding run passed 13/14 because the
+  fixture expected the old two-element return from the current history helper.
+- `simplex-ingress-journal-authority-*`: **54** overlapping checks covering
+  ingress batching, material-window reopening, transport separation, live stale
+  process rejection, protocol progress, real split schedules and vote custody.
+  The two unused exported `may_commit/2` and `may_complain/2` implementations
+  are removed after checking all source/test callers. The real signing journal
+  now tests both conflicting-vote orders across restart, same-vote redrive,
+  another view and another era. It is the sole vote-choice authority.
+
+Obsolete cross-slot exclusion, complaint amplification/grace and synthetic
+skip-row tests are removed. Their valid obligations are covered by the current
+N=8/stacked-split schedules, view watchdog, raw-collection retirement on both
+notarization and complaint progress, current-era complaint quorum-subset
+controls, the live/recovery archive-group tests, and journal restart controls.
+A complaint advances protocol position without producing a material result.
+Different genuine quorum subsets advance to the same position. The retired
+`run_schedule`/`guarded_vote` model and now-unused dispatch fixture are removed.
+
+Additional retained migration inventories: owner progress first passed 13/52,
+then custody-era inputs 9/19; ingress first passed 1/68, then 20/68 after
+replacing removed equal-height/frontier fields with explicit installed heads.
+The later transport selections passed 14/16 and 30/31 before the remaining
+old quorum-watchdog/cache assumptions were updated. The 49-check admission
+selection passed 48 before its isolated recovery case started its required
+local gproc application. The next 54-check run passed 53: the older journal
+conflict test still constructed retired DTX references; it is replaced by
+canonical era/view bodies and the real durable journal as described above.
+All failed receipts remain in `_build/finality-resume-20260925/`.
+
+Remaining older ingress/relay/restart and other module fixtures still need
+migration. No complete Simplex module or release gate is claimed. The latest
+production removal still needs a fresh normal-profile compile; TEST compile
+and the focused receipts pass. No commit, push, deployment, ledger purge or
+uncertain-operation resubmission occurred.
+
+Further current-protocol receipts (2026-09-26): the complete Simplex module
+passes **271** checks together in `simplex-complete-current-protocol-20260926b`.
+The preceding run passed 270/271: a recovery fixture left its expected inbound
+routing reply in the shared test mailbox. It now asserts that exact reply;
+the following stale-connection check remains unchanged. The preceding isolated
+custody selection passed **38** checks. These counts overlap.
+
+Recovery of simultaneous inbound/outbound work now verifies and appends one
+real, quorum-signed history group. Protocol views 1/2 resolve at material
+heights 2/3, exact signed custody settles once, and volatile reply hints clear.
+The last `new_entry`/synthetic-noop Simplex fixture is removed. The obsolete
+preinstalled `approved` scalar/body-gap fixture is retired: current delayed
+ancestry, certified-gap recovery and retained-readiness wake controls cover
+its still-valid obligations. Old local-exclusion fixtures now use actual
+complaint/notarization progress for placement; archived protocol-prefix cleanup
+still owns terminal membership exclusion. Signature, author order, original
+deadline, link-generation and no-public-retry assertions remain.
+
+Removed the unused material-height argument through recovery re-seating and
+reply/cache invalidation, including all callers; decisions use the installed
+archived protocol position. Current production Simplex compiles normally with
+`-Werror`, zero warnings (`simplex-recovery-args-normal-20260926`). Prior focused
+receipts also passed: `simplex-custody-view-readiness-*` (5),
+`simplex-relay-restart-placement-hints-*` (7; counted zero destination ledger
+reads), and `simplex-queue-current-boundaries-*` (5).
+
+The complete signing-journal module passes **48** checks in
+`signing-journal-material-reference-20260926a`: QSJ6 era/view keys, recovery,
+compaction, both final-vote orders, retained DTX custody, exact transaction
+activation, corruption and explicit old-format refusal. Its first migration
+run passed 35/48; one shared shape-only reference incorrectly used genesis
+material height 1 for a non-genesis control. It now uses height 2 and a current
+finality head. The prior malformed tuple match in the new relay fixture and a
+TEST compile guard error are retained as failed receipts too.
+
+The DTX parent-progress and remaining downstream fixtures, complete release
+gates, completed-cut review and isolated hardware acceptance remain open.
+No implementation commit, push, deployment, ledger purge or uncertain-operation
+resubmission occurred. The source is still one uncommitted, unreleased cut.
+
+The complete DTX parent-progress module now passes **68** checks in
+`dtx-parent-current-complete-20260926b`. Fixtures use real notarized parents,
+exact era/view/hash references, grouped recovery and archived finality replies.
+They distinguish protocol view from material height, including a new era at
+view 1 over material height 3. Stale-parent verdicts, old-era refusal, validation
+expiry and zero history reads for archived proof handoff remain checked.
+The preceding migration runs passed 57, 61, 65 and 67 of 68; all receipts remain.
+No additional runtime change was needed. Remaining integration/release and
+hardware gates are still open; no implementation commit or deployment occurred.
+
+Further complete module receipts: evidence resolver **28**
+(`evidence-current-range-verifier-20260926c`), foreign residency **15**
+(`residency-current-partial-group-20260926b`), and Explorer **48**
+(`explorer-current-artifacts-20260926a`). Tests use the current streamed groups
+and compact reference heads. Resident evidence keeps exact immutable claims and
+historical committees; malformed references fail before owner work, while an
+unused preferred witness cannot invalidate independently verified history.
+Streaming progress survives a source disconnect; post-mutation persistence
+faults preserve the first complete physical group but invalidate service custody.
+The resolver's two earlier 26/28 runs traced retired batch/transfer functions;
+positive controls now observe `range_accept/5`. Residency first passed 14/15:
+the partial-page fixture selected no bytes by incorrectly using a one-element
+chain for height 2. It now uses the same real range adapter as other fixtures.
+No runtime change was needed. Explorer no longer manufactures no-op rows and
+checks height-only notification suppression and current canonical material.
+All failure receipts remain; release gates and hardware acceptance remain open.
+
+Live Simplex Common Test passes **12/12** (`simplex-live-ct-20260926b`).
+The prior 11/12 run correctly rejected unsigned history but exposed a generic
+badmatch. Startup now propagates the shared verifier's exact failure reason;
+its rejection test expects `invalid_transaction` with the material height.
+The old bad-certificate unit expectation is migrated to that same explicit error.
+
+The integrated EUnit inventory (`integrated-eunit-inventory-20260926a`) is
+**failed**, reporting 2,644 tests, 201 failures and five cancellations; it is not
+a release gate. Most grouped failures are remaining old reference, block,
+callback and wire fixtures in DTX coordination, read certificates, transport,
+foreign custody and lifecycle tests. The full log and extracted failures are
+retained. Other findings: an obsolete store magic assertion, rebar's private
+escript paths in the fresh-VM codec test, an unscoped proof-ready mailbox check,
+and a hosting test parsing an expanded multi-clause policy as one goal. These
+are being corrected; no full integrated pass or hardware result is claimed.
+A focused migration run first passed 222 checks before an obsolete malformed
+reference killed a helper. Its next run passed 331/334; the three remaining
+failures were absent debug info in a private test beam and trace assertions
+still identifying the protocol parent by material height. No additional runtime
+algorithm change was needed. Implementation remains uncommitted and undeployed.
+
+Further migration receipts (2026-09-26): the 334-check downstream selection
+reached 332 passes; the remaining two trace fixtures still requested protocol
+view 2 after proposing view 1. The corrected group-trace module passes together
+with coordinator evidence, foreign lifecycle/custody and resolve endpoints:
+**99/99**, `remaining-evidence-current-20260926a`. Real signed evidence, custody
+failure controls and waiter delivery assertions remain. No runtime change.
+The five isolated broad-run regressions now pass in
+`final-fixture-controls-20260926b`: fresh-VM canonical bytes, exact ready ACK,
+explicit startup certificate failure, current store/journal magic and ordinary
+signed installation of the node delegation rule. The preceding run passed 4/5:
+source-file variables needed the existing signed parser's canonical numbering.
+No release pass, implementation commit or deployment is claimed yet.
+
+The next integrated inventory (`integrated-eunit-inventory-20260926b`) completed
+on its unchanged tree: **3,086 tests, two failures, two cancellations** (3,082
+passing markers). The two failures were an old QSJ5 expectation and a readiness
+assertion still accepting unrelated anchored identities. The cancellation was
+a direct invalid-membership test requiring the removed complaint-to-ledger-row
+transition. It now checks no premature exclusion, unchanged committee/height,
+and waiter retirement only after distinct later certified work. This does not
+claim autonomous terminal rejection of an invalid request without later work.
+Full Simplex + operation-format + end-to-end modules pass **280/280** in
+`integration-controls-20260926a`, including restart/rebuild and unchanged signer
+checks. No production algorithm changed. Multi-node fixtures now choose leaders
+by protocol view and retain the material-height assertions; over-f checks observe
+real timeout votes instead of the removed quorum-grace policy. Their live QUIC
+runs are next. `scripts/overf-recovery-test.sh` still encodes the old grace/skip
+contract and must not be used as new-format acceptance without replacement.
+
+Live multi-node receipts: `simplex-quic-current-20260926a` **8/8**, including
+>f outage/restart without changing old final votes; `join-quic-current-20260926a`
+**5/5**, including cold join, restart and observer-to-validator promotion.
+Growth run a passed 5/9: its rotation check assumed one protocol view per write.
+The revised check counts actual proposals from every validator (including empty
+carriers), exact material heights and no timeout increase. Run b passed 7/9,
+then exposed a real failure: dead-member removal reported outcome_unknown;
+the final dependent case could not run. No unknown write was resubmitted.
+
+`membership-leader-loss-baseline-20260926a` reproduced the failure independently:
+three live voters advance views while the removal origin retains no custody and
+never retargets. `membership-shared-custody-20260926a` passes that same real QUIC
+case after removing membership's old non-custodied exception. The old exception
+in `ingress-owner.md` conflicts with complaint-only view advancement; the explicit
+amendment is now in the finality plan §4.5 and remains subject to completed-cut
+review. Membership uses identical retained bytes/signature/author sequence and
+original deadlines; singleton/parent/Prolog validation remains. No new owner,
+queue, message type, re-proof or public uncertain-operation resubmission.
+
+The relay path is consequently one retained-envelope implementation; its old
+optional-custody branches and duplicate expiry/retirement pass are removed.
+Source/include delta is currently **+3634/-3983, net -349** (before final comment
+edits). Full Simplex + format + E2E run `membership-shared-owner-20260926b`
+passed 279/280: the invalid-membership test still counted exactly one validation,
+although the same retained request is rechecked at each new parent/view. It now
+requires an actual refusal and unchanged committee/ledger/custody. The first
+attempt had a test syntax error, retained. The old requirement for terminal
+`skipped` after displacement is superseded: exact inclusion and original-deadline
+completion are covered for both admit/remove in the shared owner test; invalid
+membership remains unauthorized and cannot emit a public retry. A new complete
+EUnit pass, growth/removal acceptance, release gates, review and hardware campaign
+remain open. No implementation commit, push, deployment or purge occurred.
+
+Growth/removal now passes **9/9** (`growth-quic-shared-membership-20260926c`),
+including dead-member removal through shared custody. Normal compile and the
+updated Explorer bundle build pass. The next complete EUnit run
+`integrated-eunit-finality-20260926c` is **failed: 3,084 passed, one failed,
+zero skipped** (349.2 s, exact tree unchanged). The sole failure is FIPA
+unstarted-request restart: resumed work returned outcome_unknown instead of
+the test's required committed result. Preserve this failure and diagnose it;
+no request is resubmitted and no release pass is claimed. Added bounded test
+failure diagnostics retaining the actual owner and operation outcome.
+
+Retired `scripts/overf-recovery-test.sh`: it depended on removed grace/skip
+semantics and an obsolete unsigned API, and incorrectly recommended repeating
+an uncertain write. Local outage/restart obligations now use
+`simplex_SUITE:over_fault_restart_recovers`; isolated hardware acceptance is
+still required and is not replaced by that local test. Corrected the remaining
+membership re-proof wording in transaction-signatures.md and stale journal/
+Simplex comments. No production algorithm change in this follow-up.
+
+Further retained validation (2026-09-26): the complete hosting module passes
+36/36; the original FIPA restart case passes in 20 and then 200 separately
+created fixtures. This does not establish why integrated run c returned an
+unknown outcome; that finding remains open, with bounded failure diagnostics.
+Integrated diagnostic run d passes the FIPA case but still **fails overall:
+3,084 passed / one failure / zero skips**, 439.24 s, exact tree unchanged. Its
+suffix-verification cost check counted one background signature verification.
+OTP tprof documents call_count as VM-wide. A deterministic new test starts an
+unrelated verifier during measurement: the old helper fails 2 versus 1; scoped
+call_time counts (unchanged exact cost assertions) pass all **8/8** suffix tests.
+Receipts: `suffix-counter-background-baseline-20260926a` (negative control),
+`suffix-counter-process-scope-20260926b` (pass). No production verification or
+deadline is relaxed.
+
+Sequential gate a stopped after remote-scope CT: 40/41. A creation test queried
+its namespace before observing the asynchronous effect's completion. Its
+existing applied-effect check now precedes the first proof; the focused real
+remote-effect case passes (`remote-effect-order-20260926b`). Remaining suites
+will run under a separately labelled gate b; neither failed campaign is resumed
+or erased. Retired obsolete outage script, reviewed custody/archive call paths
+and rebuilt Explorer assets. Read-only Nomad inspection confirms .246 remains
+the running application image. No implementation commit, push, deployment or
+purge occurred.
+
+Continuation on 2026-09-26: sequential CT inventories passed remote scopes
+41/41, Simplex 12/12, fault/restart Simplex 9/9, join 5/5, feed, read-set,
+peer-observation and peer-capacity. QUIC's sole obsolete request_page/6 fixture
+now uses the current request_page/5 grammar; its focused case passes. Growth c
+failed in application startup before running tests (peer call's existing five
+second timeout); failure-only stack capture added, growth d passes 9/9. This
+is retained as an unexplained startup observation, not a runtime fix. Dialyzer
+inventory's nine obsolete-branch/type warnings were corrected after inspecting
+callers; cleanup b passes. Xref passes after removing the dead test-only
+transaction_submission wrapper. All failed campaigns remain intact.
+
+The full failover suite exposed a concrete liveness defect: four target
+replicas restarted and became ready at the same material height, but the source
+coordinator remained parked. No new ledger entry meant no progress notice.
+`target-restart-recovery-diagnostic-20260926a` independently reproduces it;
+source and all four target states are retained. The existing foreign-history
+owner now consumes the existing installed proof-ready notification and
+reconfirms through its ordinary follower. Notices bind the anchored identity,
+current Simplex/Prolog processes and a monotone local generation, so stale or
+duplicate notices do no work and same-process rebuilds can wake dependants.
+No timer, new owner, additional signing authority or client resubmission.
+
+`target-restart-local-ready-20260926b` passes with the initial correction;
+`target-restart-ready-generation-20260926c` passes on the hardened tree (57.71 s,
+tree unchanged). The original durable operation completed after target restart
+without repeating its signed request. `local-ready-incarnations-20260926b`
+passes 34 focused tests including same-height recovery, stale owners/anchors,
+duplicates, same-process rebuild generations, directory/ingress and lobby.
+Run a failed in the test selection expression before tests ran; preserved.
+
+A fresh clean candidate will now run the complete sequential release checks.
+The prior clean-v1 snapshot was never run and predates this readiness fix; it
+is not release evidence. The earlier intermittent FIPA deadline failure is
+not yet causally attributed to this fix. No implementation commit, image push,
+fleet deployment or ledger purge has occurred; .246 and its original uncertain
+signup remain preserved pending isolated new-format acceptance.
+
+Clean-v2 stopped at EUnit: **3,086 passed / 1 failed / 0 skipped**, 500.71 s,
+source manifest unchanged. The FIPA pending-request restart reproduced with
+retained fixture `/tmp/quod_hosted_31CC263A3FBB0570`. Its old resolve-evidence
+request had selected foreign routing during the receiver's supervisor gap,
+then occupied the existing writer while the fixture had no network transport.
+The fixture manually owned supervisors but retained only root in the desired
+hosting projection. Production keeps the exact hosting declaration across child
+restart. Negative control `fipa-hosting-declaration-negative-20260926a` proves
+the mismatch deterministically: stopped receiver returns `not_hosted`, where
+this restart scenario requires `not_ready`. The existing production history
+view test already pins this distinction.
+
+The fixture now retains each manually hosted namespace's exact anchor in its
+existing desired-state fixture, restored by the existing with_host cleanup.
+The restart case asserts the no-foreign-fallback state during the stopped gap.
+No production route, timeout or outcome assertion was changed for this finding.
+`fipa-hosting-declaration-positive-20260926b` passes **77/77** hosting, history-view
+and evidence-resolver tests. An atomic operation's terminal receipt may still
+name a pending group; the diagnostic comment now states that explicitly.
+
+Corrected current consensus-signatures and content-layer documentation, and
+marked finality's deferred entry as implemented under validation rather than
+claiming its acceptance closed. Remaining source edits since clean-v2 are
+comments/documentation only; the executable fixture correction requires a
+separately labelled clean-v3 gate. Current src/include delta is +3707/-4043,
+net -336 lines. Isolated candidate/baseline Nomad templates are prepared and
+validated, with separate services, seed discovery and volume families. Read-only
+inspection confirms .246-c4p1 still runs. No images or cluster state changed.
+
+Clean-v3 passed all **3,087 EUnit tests**, remote scopes41/41, QUIC37/37 and
+Simplex12/12, then stopped at fault/restart CT8/9. In over_fault_restart_recovers,
+the interrupted write recovered but a new once-submitted write returned unknown.
+Offline read-only inspection confirms all four ledgers stop at material height3;
+three journals retain empty views4/5 and complaints6..9 while the fourth lacks
+those bodies despite the same installed height. The original failed tree and
+data remain intact. Diagnostic case a and eight b repeats pass; suite-context c2
+reproduces a stall before the first write recovers (c1 passes). Failure-only
+owner snapshots cover both stages; d1..d4 pass. Those passes alone are not fixes.
+
+Found a deterministic liveness defect in the same recovery seam: the body-request
+selector suppresses any request at/below a known finalizer. But a newer empty
+finalizer may have no material entry or selected archive proof at that height.
+A real-signature test receives support and commit certificates without that
+empty body: negative b fails with zero requests instead of one. Negative a
+failed fixture setup before that assertion (gproc missing); both retained.
+
+The existing body-request path now remains eligible within the live protocol
+window even after a commit certificate. Its ordinary exact hash, parent and
+payload checks restore the engine; no ledger entry, new signer, transport,
+executor or client resubmission. Shared missing-body selection also owns the
+metric. Positive c passes, including voting restored at unchanged material
+height and no archive store. Regression d passes **362/362** consensus/journal/
+store tests. Real fault suites e1/e2 both pass **9/9** (66.77/52.63s, frozen trees
+unchanged). The retained original failure has no live-owner snapshot, so the
+journal correspondence is supporting evidence, not a recovered execution trace.
+Clean-v4 will verify the full combined tree. Source/include delta is now
++3716/-4055, net -339. No commit, image publication, cluster mutation or purge.
+
+Clean-v4 stopped at EUnit:3087passed/1failed/0skipped,473.62s, manifest unchanged.
+The failure is parent-progress's obsolete expectation that a commit certificate
+erases an exact pending body request. The deterministic empty-body regression
+shows why that inference is invalid. Updated the test to require the same body
+request to remain while retaining its original single-worker, pinned-view,
+no-material-advance and no-voting-authority assertions. The explicit request
+expiry replaces the fixture's absolute0 sentinel. Parent-progress plus the new
+empty-body case pass **69/69** (`finalized-empty-body-owner-20260926f`). This is
+a fixture-expectation correction only; production source is unchanged since
+clean-v4. Clean-v5 is the next complete sequential release campaign. All failed
+runs retained, with no deployment, publication, commit or purge yet.
+
+Clean-v5 passed all3088 EUnit tests, Ask41/41, QUIC37/37 and Simplex12/12,
+then fault/restart8/9: the interrupted write recovered, but the immediately
+following write returned {not_leader,none}. Captured owner snapshots establish
+that its chosen node had material height3 and Prolog ready, yet was still
+recovering protocol view5 while the others had view6. Its redirect counter
+was1, with no queued or custodied request. A deterministic negative reproduces
+the same local-entry rejection during unconfirmed recovery.
+
+The existing ingress queue now holds structurally valid unsigned local work
+through temporary recovery and history re-seat. Original arrival/deadline and
+proof remain unchanged; drain revalidates before signing. It grants no voting,
+proof or application permission and adds no owner/retry. Relayed placements
+still clear at re-seat, with their original source custody unchanged. The
+positive regression proves no signing while unready, exact queue retention,
+one readiness-driven drain and one resulting custody record. The old test
+that expected unsigned recovery rejection is replaced by this obligation;
+far-finalizer testing now expects parking and still asserts no voting.
+Negative a fails as expected; positive b passes. Focused c has285pass/1obsolete
+redirect assertion; corrected d passes361/361 (ingress, consensus, Prolog,
+metrics). Real QUIC fault/restart e passes9/9 in63.79s, frozen tree unchanged.
+Removed the superseded Prolog membership-skip retry clause and metric label;
+all locally signed membership now uses custody. Source/include+3739/-4086,
+net-347. Clean-v6 will validate the resulting complete tree.
+
+Separately founded an isolated .246 baseline network, with new job/service/
+volume identities. Initial Nomad health preceded founder replacement; the
+controller now checks current job version. No original exec reached the VM.
+After two successful root admissions, the old binary returned {error,retry}
+on admission3. Baseline setup is stopped with the original reply and eight
+read-only inspections preserved; no request is repeated, no workload run,
+and no performance claim follows. Production job quod, old uncertain signup,
+all production volumes and image tags remain untouched. No implementation
+commit or candidate publication yet.
+
+## 2026-09-26 — finality validation continuation
+
+Clean-v6 passed all3088 EUnit tests, Ask41, QUIC37, Simplex12, fault/restart9,
+join, growth9, feed2, readset3, peer observation and capacity. Agent failover
+stopped4/5: its immediate prove_ro after applied-height synchronization raced
+an actual rebuild. The fixture now uses its existing event-driven await_goal
+under the same total30s allowance and requires height at least the committed
+height. The claim-delivery consequence assertion uses that same correction.
+Focused validator-host-loss c passes1/1 (47.86s). Attempt a overlapped the
+finishing v6 suite and was interrupted: its zero shutdown exit is NOT a pass.
+Attempt b caught an overstrict fixture equality (a map-pattern match allows
+named variables); corrected map/height/goal assertions pass c. All failures,
+stop markers and fixtures remain. No production readiness change for this.
+Remaining inventory (namespace/names CT, xref, Dialyzer, prod/diagnostic builds,
+UI build/lint and diff checks) passed sequentially on unchanged source.
+
+Isolated .246 baseline v1 stopped at old membership retry (no resubmission).
+v2 exposed an invalid benchmark guard causing expected predicate-read OCC
+conflicts. Its failed writes/receipts are preserved; v3 uses ordinary blind
+append of unique IDs. V3 completed three c1/c4/c16 local/remote write repeats
+without write failure. Its aggregate readback crossed the existing16KiB result
+budget at449facts; read-only diagnostic proved too_large/result (16584bytes).
+Replaced the acceptance oracle with existing signed cursors, not a larger
+budget or split domain transactions. Original readback failure remains, with
+separate successful exact-ID/no-duplicate reconciliation. Follow-on-a ran only
+new stages; its first atomic c4 batch stopped after2commits/3explicit conflicts.
+Those results are not a successful atomic-performance baseline.
+
+That oracle independently reproduced an existing forwarded-cursor defect on
+.246: open succeeds, first Next returns404. The router's short-lived opening
+worker owned the network stream; its exit closed the stream and cursor.
+A deterministic negative confirms that owner mismatch. The existing router
+now acquires existing explicit pinned-link leases asynchronously, forwards
+correlated acquisition notices to its workers, and retains a cursor's lease
+in its existing route until termination/expiry/loss. Noncursor completion
+releases its own exact lease; transport monitors already release on router
+death. No second cursor/executor/table or protocol format change. Regression
+checks open/Next/Stop, failed open, ordinary completion, session/peer/link
+binding and uncertainty:53/53 pass. Initial regression c consumed an earlier
+fixture's unscoped diagnostic notice; d/e scope those notices by exact link,
+with all evidence preserved. Source/include delta +3789/-4101, net-312.
+
+Clean-v7 will validate the complete source, including the cursor ownership
+correction. Production remains .246-c4p1, with old signup evidence and all
+production data untouched. No implementation commit or candidate image yet.
+
+Clean-v7: all25 sequential commands exited successfully, including3089 EUnit,
+Ask41, QUIC37, Simplex12, fault/restart9, growth9 and agent failover5. The final
+whole-tree freeze check correctly failed: UI rebuild inside the nested clean
+checkout auto-detected extra Tailwind source files and replaced four generated
+assets/entrypoints. No Erlang, test, client or UI application source changed.
+The original failed final receipt and generated output are retained. Explicit
+Tailwind source registration now restricts utility discovery to ui/src; the
+main-tree rebuild reproduces the previously committed/generated assets exactly.
+This is a CSS build-input correction only. A separately frozen packaging pass
+will verify clean UI reproducibility and both releases, inheriting the25 v7
+command results only for scopes whose exact source hashes remain unchanged.
+No full backend rerun is needed for that CSS directive. Hardware baseline v3
+and its separately labelled follow-on/serial/observed campaigns are retained;
+all baseline containers are now stopped with their volumes intact so candidate
+measurements run without their competing background load. Production untouched.

@@ -292,7 +292,7 @@ function StatCards({ info, liveHeight }: { info: NsSummary; liveHeight: number }
       <Card
         label={info.proposal_open ? 'Next proposer' : 'Finality leader'}
         value={
-          (info.proposal_open ? info.next_proposer?.id : info.finality_leader?.id) ?? '—'
+          (info.proposal_open ? info.next_proposer?.id : info.view_leader?.id) ?? '—'
         }
         mono
         sub={
@@ -300,12 +300,12 @@ function StatCards({ info, liveHeight }: { info: NsSummary; liveHeight: number }
             ? 'syncing'
             : info.proposal_open
               ? `slot #${info.proposal_slot}`
-              : `${info.progress_phase.replaceAll('_', ' ')} · finality #${info.finality_slot}`
+              : `${info.progress_phase.replaceAll('_', ' ')} · consensus round #${info.protocol_view}`
         }
         title={
           info.proposal_open
             ? `Validator responsible for proposing slot ${info.proposal_slot}`
-            : `Waiting for slot ${info.finality_slot}; its leader is ${info.finality_leader?.id ?? 'unknown'}`
+            : `Waiting for consensus round ${info.protocol_view}; its leader is ${info.view_leader?.id ?? 'unknown'}`
         }
         tone="border-teal"
       />

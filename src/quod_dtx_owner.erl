@@ -311,14 +311,14 @@ signature_action(#dtx_submission{control = Control},
 %% admissions. The retained phase index proves inclusion even after Complete
 %% has evicted the active group. Reads are bounded by pending groups, not the
 %% ledger prefix. Index errors stay loud at this owner boundary.
--spec reconcile_journal(non_neg_integer(), map(),
+-spec reconcile_journal(#{binary() => non_neg_integer() | sealed}, map(),
                         quod_dtx_phase_index:index(), quod_signing_journal:handle()) ->
           {ok, quod_signing_journal:handle()}.
-reconcile_journal(Slot, Projection, Index, Journal) ->
-    reconcile_pending(Slot, Projection, Index,
+reconcile_journal(Archived, Projection, Index, Journal) ->
+    reconcile_pending(Archived, Projection, Index,
                       quod_signing_journal:pending_dtx(Journal), Journal).
 
-reconcile_pending(Slot, Projection, Index, Rows, Journal) ->
+reconcile_pending(Archived, Projection, Index, Rows, Journal) ->
     Admissions = maps:get(admissions, Projection),
     Target = maps:get(target, maps:get(dtx, Projection)),
     Pending = maps:fold(
@@ -336,11 +336,11 @@ reconcile_pending(Slot, Projection, Index, Rows, Journal) ->
                   end
           end
       end, #{}, Rows),
-    reconcile(Slot, Projection, Pending, Journal).
+    reconcile(Archived, Projection, Pending, Journal).
 
-reconcile(Slot, Projection, Pending, Journal) ->
+reconcile(Archived, Projection, Pending, Journal) ->
     quod_signing_journal:reconcile(Journal,
-      #{committed_slot => Slot,
+      #{archived_protocol => Archived,
         live_dtx_lanes => maps:get(dtx_lanes, Projection),
         current_admissions => maps:get(admissions, Projection),
         pending_dtx => Pending}).

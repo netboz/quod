@@ -8,11 +8,11 @@ same_group_append_is_invisible_to_an_older_capture_test() ->
         quod_ct:with_network_identity(maps:get(network, F), fun() ->
         Identity = {maps:get(ns, F), maps:get(anchor, F)},
         [Genesis, Vote, Resolve] = maps:get(chain, F),
-        {ok, P1, _} = quod_simplex:history_advance(
+        {ok, P1, _} = quod_ct:history_advance(
             Identity, Genesis, quod_simplex:history_projection(Identity), Index),
-        {ok, P2, _} = quod_simplex:history_advance(Identity, Vote, P1, Index),
+        {ok, P2, _} = quod_ct:history_advance(Identity, Vote, P1, Index),
         {ok, Before} = quod_dtx_phase_index:capture(Index, 2),
-        {ok, _P3, _} = quod_simplex:history_advance(Identity, Resolve, P2, Index),
+        {ok, _P3, _} = quod_ct:history_advance(Identity, Resolve, P2, Index),
         Group = maps:get(group_id, F),
         {ok, Old} = quod_dtx_phase_index:history(Before, Group),
         {ok, New} = quod_dtx_phase_index:history(Index, Group),
@@ -22,9 +22,11 @@ same_group_append_is_invisible_to_an_older_capture_test() ->
         %% Real production suffix verification still sees Vote, not the
         %% subsequently installed Resolve. The sink must separately reject
         %% the overtaken base; readers never mutate the live index.
-        ?assertMatch({ok, [Resolve], _, _},
-            quod_catchup:verify_forward(element(1, Identity), element(2, Identity),
-                                       P2, 3, [Resolve], Before)),
+        {ok, Block} = quod_ledger:block_from_entry(Resolve),
+        Source = {fun([]) -> done; ([Bytes]) -> {ok, Bytes, []} end,
+                  [quod_ledger:block_bytes(Block)]},
+        ?assertMatch({ok, _, _, _},
+            quod_catchup:verify_forward_group(Identity, [Resolve], P2, Before, Source)),
         ?assertEqual({error, bad_phase_index_delta},
             quod_dtx_phase_index:commit_delta(Before, quod_dtx_phase_index:new_delta())),
         ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:close(Before))
@@ -621,7 +623,7 @@ direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
     {OriginNs, OriginAnchor} = {<<"quod:phase-origin">>, key(60)},
     {ok, VoteRef} =
         quod_dtx:certified_ref(
-          OriginNs, OriginAnchor, 7, key(61), VoteDigest, <<"vote-qc">>),
+          OriginNs, OriginAnchor, 7, key(61), VoteDigest, quod_ct:fixture_finality(6, key(61))),
     Record = quod_ct:atomic_abort_record(Target, ManifestDigest, VoteRef),
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} =
@@ -631,7 +633,8 @@ direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
     {ok, Ref} =
         quod_dtx:certified_ref(
           TargetNs, TargetAnchor, 10 + Sequence, key(70 + Sequence),
-          quod_atomic:record_digest(Control), <<"resolve-qc">>),
+          quod_atomic:record_digest(Control),
+          quod_ct:fixture_finality(9 + Sequence, key(70 + Sequence))),
     {Control, Ref}.
 
 signer() ->

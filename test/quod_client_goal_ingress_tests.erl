@@ -322,7 +322,7 @@ new_local_target_wakes_on_its_installed_ready_edge(
             true = quod_reg:reg({quod_prolog, Ns}), S
         end),
         quod_reg:publish({runtime, Ns},
-                         {proof_ready, {Ns, ?ANCHOR}, Engine}),
+                         {proof_ready, {Ns, ?ANCHOR}, Engine, Engine, 1}),
         receive
             {route_wait_result, Caller, Result} ->
                 ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}}, Result)

@@ -13,6 +13,8 @@ import '@babylonjs/core/Culling/ray.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { PALETTE } from './palette.js'
 import { paintMarks, clearMarks } from './scene.js'
+import { createProofPanel } from './proof-panel.js'
+import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
 
 const MENU_RADIUS = 0.36
 const MENU_DEAD_ZONE = 0.24
@@ -29,7 +31,7 @@ export function radialIndex({ x, y }, count, deadZone = MENU_DEAD_ZONE) {
 
 // The camera and lighting belong to this viewing session. All visible model
 // geometry comes from the ontology projection, including the lobby floor.
-export function createWorld(canvas, onPick) {
+export function createWorld(canvas, onPick, onImmersiveChanged = () => {}) {
   const engine = new Engine(canvas, true, { stencil: true })
   const scene = new Scene(engine)
   const sky = Color3.FromHexString(PALETTE.navy).scale(0.34)
@@ -42,6 +44,9 @@ export function createWorld(canvas, onPick) {
   const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
   light.intensity = 1.2
   let menu = { entries: [], activate: null, root: null, items: [], selected: null }
+  let workspace = null
+  let panel = null
+  let immersive = false
   scene.onPointerObservable.add(info => {
     let node = info.pickInfo?.pickedMesh
     if (node?.metadata?.menuEntry) {
@@ -61,7 +66,7 @@ export function createWorld(canvas, onPick) {
   }
 
   function selectMenuEntry(index) {
-    if (index === null || index < 0 || index >= menu.items.length) return
+    if (index !== null && (index < 0 || index >= menu.items.length)) return
     menu.selected = index
     for (let position = 0; position < menu.items.length; position += 1) {
       const { texture, entry } = menu.items[position]
@@ -71,12 +76,12 @@ export function createWorld(canvas, onPick) {
 
   function openMenu(axes = { x: 0, y: -1 }) {
     closeMenu()
-    if (menu.entries.length === 0 || !scene.activeCamera) return
+    if (workspace || menu.entries.length === 0 || !scene.activeCamera) return
     const root = new TransformNode('action-menu', scene)
     const cameraPosition = scene.activeCamera.globalPosition
     const direction = scene.activeCamera.getForwardRay().direction
     root.position.copyFrom(cameraPosition.add(direction.scale(1.15)))
-    root.lookAt(cameraPosition)
+    root.lookAt(cameraPosition, Math.PI)
     const count = menu.entries.length
     const items = menu.entries.map((entry, index) => {
       const angle = index * 2 * Math.PI / count
@@ -101,7 +106,7 @@ export function createWorld(canvas, onPick) {
     })
     menu = { ...menu, root, items, selected: null }
     const initial = radialIndex(axes, count)
-    if (initial !== null || count === 1) selectMenuEntry(initial ?? 0)
+    if (initial !== null) selectMenuEntry(initial)
     else for (const item of items) drawMenuLabel(item.texture, item.entry.label, false)
   }
 
@@ -131,6 +136,15 @@ export function createWorld(canvas, onPick) {
   }
 
   const resize = () => engine.resize()
+  function showWorkspace() {
+    if (workspace && immersive) {
+      panel ??= createProofPanel(scene)
+      panel.update(workspace, true)
+    } else if (panel) {
+      panel.dispose()
+      panel = null
+    }
+  }
   window.addEventListener('resize', resize)
   engine.runRenderLoop(() => scene.render())
   return {
@@ -139,23 +153,30 @@ export function createWorld(canvas, onPick) {
       closeMenu()
       menu = { ...menu, entries: [...entries], activate }
     },
+    setWorkspace(model) {
+      workspace = model
+      if (model) closeMenu()
+      showWorkspace()
+    },
     async immersive() {
       if (!xr) {
         await import('@babylonjs/core/XR/webXRDefaultExperience.js')
         const floor = painted.get('floor')?.node
         xr = await scene.createDefaultXRExperienceAsync({ floorMeshes: floor ? [floor] : [] })
+        xr.baseExperience.onStateChangedObservable.add(state => {
+          immersive = state === WebXRState.IN_XR
+          closeMenu()
+          showWorkspace()
+          onImmersiveChanged(immersive)
+        })
         for (const controller of xr.input.controllers) bindRadialControl(controller)
         xr.input.onControllerAddedObservable.add(bindRadialControl)
       }
       await xr.baseExperience.enterXRAsync('immersive-vr', 'local-floor')
     },
-    async leaveImmersive() {
-      if (xr?.baseExperience.sessionManager.inXRSession) {
-        await xr.baseExperience.exitXRAsync()
-      }
-    },
     dispose() {
       window.removeEventListener('resize', resize)
+      panel?.dispose()
       painted = clearMarks(painted)
       scene.dispose()
       engine.dispose()

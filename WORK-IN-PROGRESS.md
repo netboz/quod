@@ -3038,3 +3038,24 @@ handoff/cancellation ownership and freshness/deadline checks; obsolete
 unconditional generation-map replacement and temporary-only subscription
 lifetime are removed. The completed cut needs clean release gates and hardware
 measurement; no fleet latency improvement or F2/F3 approval is claimed yet.
+
+### Client lobby workspace resumed (2026-09-26)
+
+Yan deferred further performance tuning to resume client work. On branch
+`feature/client-lobby-workspace`, the existing ontology-defined proof form now
+has a spatial Babylon GUI adapter: goal keyboard, scrolling bindings and the
+same Run/Next/Accept/Stop commands as desktop. Opening it no longer exits XR;
+one existing console owner retains the draft/cursor across presentation changes.
+The obsolete forced-XR-exit path is removed. Reply text is shared by both views;
+rapid commands are gated before the next render. Touchpad centre cancels a menu
+selection, and plane orientation presents text from the correct side.
+
+Client-only verification:50node tests, UI TypeScript/build/lint, real Babylon
+browser controls/resource lifecycle, and simulated controller/XR state notices.
+Two fresh accounts passed signup/lobby/Next/Stop/Accept/committed reload against
+the retained candidate backend using the new client. A separate live-session
+check kept the same draft and cursor across lobby return (one proof opening).
+Physical-headset comfort/input acceptance remains outstanding. No core source,
+consensus protocol, public fleet or resource-policy change. The normal Vite proxy
+now routes the system catalogue to the client listener. Initial harness failures
+and their resolutions remain in `_build/client-workspace-20260926/FAILURES.md`.

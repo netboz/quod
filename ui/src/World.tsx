@@ -15,6 +15,7 @@ export default function World() {
   const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
   const canvas = useRef<HTMLCanvasElement>(null)
   const [scene, setScene] = useState<WorldScene | null>(null)
+  const [immersive, setImmersive] = useState(false)
   const [sceneError, setSceneError] = useState<string | null>(null)
   const [marks, setMarks] = useState<WorldMark[]>([])
   const [status, setStatus] = useState('Sign in and select an agent to open its lobby.')
@@ -61,7 +62,7 @@ export default function World() {
     void import('../../client/src/world-scene.js').then(({ createWorld }) => {
       if (!active || !canvas.current) return
       try {
-        world = createWorld(canvas.current, subject => pick.current(subject))
+        world = createWorld(canvas.current, subject => pick.current(subject), setImmersive)
         setScene(world)
       } catch (error) { setSceneError(String(error)) }
     }).catch(error => { if (active) setSceneError(String(error)) })
@@ -131,7 +132,6 @@ export default function World() {
     const requestContext = context.current
     const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}`
     if (workspace?.key === key) {
-      await scene?.leaveImmersive()
       setFocused(true)
       return
     }
@@ -143,10 +143,6 @@ export default function World() {
       const current = context.current
       if (current.identity !== requestContext.identity || current.agent !== requestContext.agent ||
           current.selected !== requestContext.selected) return
-      await scene?.leaveImmersive()
-      const afterExit = context.current
-      if (afterExit.identity !== requestContext.identity || afterExit.agent !== requestContext.agent ||
-          afterExit.selected !== requestContext.selected) return
       setWorkspace({ key, view: form })
       setFocused(true)
     } catch (error) {
@@ -213,8 +209,8 @@ export default function World() {
         <button onClick={() => setSelected(null)}>Dismiss</button>
       </div>}
     </section>
-    {workspace && <section className="world-workspace" hidden={!focused} aria-label="Focused console">
-      <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} />
+    {workspace && <section className="world-workspace" hidden={!focused || immersive} aria-label="Focused console">
+      <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} scene={scene} visible={focused} />
     </section>}
   </div>
 }

@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@babylonjs/core": "9.18.1"
+    "@babylonjs/core": "9.18.1",
+    "@babylonjs/gui": "9.18.1"
   }
 }

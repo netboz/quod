@@ -1393,7 +1393,7 @@ They do not require choosing a different action, identity or transaction model.
 ### 11.8 Initial lobby and toolkit implementation contract
 
 The first implementation covers the presentation recipe, one private console
-and its desktop workspace. It is a foundation for the acceptance in section
+and its desktop and spatial workspaces. It is a foundation for the acceptance in section
 11.7, not completion of that broader milestone. The shipped Prolog sources are
 founding inputs; adding a source file does not create or upgrade a system
 ontology in a running fleet. Browser enrollment and lobby creation are specified
@@ -1471,9 +1471,15 @@ the old console. This is not durable restoration of an interactive cursor after
 a browser restart; admitted operation outcomes remain in the existing journal.
 
 The edition recipe currently exposes a distinct structure presentation, not a
-model editor. Desktop controls remain usable without WebGL. Optional WebXR scene
-entry does not yet supply the round-touchpad menu or a headset proof workspace;
-headset acceptance remains outstanding. Projection is an explicit signed snapshot
+model editor. Desktop controls remain usable without WebGL. The WebXR adapter
+renders the same proof form on a spatial panel, with a Prolog virtual keyboard,
+scrollable bindings and Run/Next/Accept/Stop controls. Opening it keeps the XR
+session active. One console owner retains the draft and cursor across desktop,
+XR and returns to the lobby; rendering adapters cannot submit independent
+commands. Rapid input is serialized before the next render disables controls.
+The touchpad/thumbstick menu cancels selection inside its central dead zone.
+These browser-tested controls still require physical-headset acceptance for
+controller interaction and comfort. Projection is an explicit signed snapshot
 at entry/refresh, not a subscribed live view. Automatic revocation removal,
 continuous updates and missed-delta resynchronization therefore remain part of
 the future shared view-session work. A later command still passes ordinary ACLs.

@@ -2994,3 +2994,47 @@ co-hosting, malformed references, witness selection, actual signature decoding
 and expiry after selection. Evidence is in `batch-entry-reuse-focused-v1/v2`;
 the original failure and its causal triage are retained. Clean-v16 binds the
 completed source for release checks before commit and new hardware acceptance.
+
+### Directory projection lifetime correction (2026-09-26, release checks pending)
+
+The v6 normal hardware diagnostic still fails the remote c4 latency gate:
+64 distinct committed writes, exact readback passed, mean 473 ms and p99 700 ms
+against the 450 ms gate. The earlier 683 ms acceptance failure is retained.
+Passive host measurements and separate idle samples identify heavy background
+I/O on the shared test hosts; they do not assign all request latency to it.
+Production and candidate deployments remain unchanged.
+
+The directory renewal path opened and closed a temporary projection follow on
+every validation. Its final close discarded the materializer and its scratch
+outcome index, so the next unchanged renewal replayed history and synced the
+replacement index. Directory control now retains the existing follow for each
+validated advertisement's lease, with an asynchronous handoff before the
+worker's temporary follow closes. Expiry, cancellation, supersession, late
+registration replies and owner replacement share the existing cleanup paths.
+No new cache, executor, knowledge base, wire format or persistence backend is
+introduced. Indexed disk outcomes and consensus durability stay unchanged.
+
+Validation also now waits for the projection to reach the certified current
+tip. The shared clause-read result includes its actual applied height in the
+same materializer turn, preventing a stale notification from authorizing an
+older replacement projection. Waiting, clause reads and retention handoff use
+the original projection deadline. Unchanged renewals still check active keys
+and hosting facts; retained state grants no authority by itself.
+
+The focused directory/generation/materializer/foreign-history run passed 219
+checks. A separate real registration-stall test expires within the original
+allowance; the unchanged-renewal regression also passes. Tests cover cold
+materialization, zero replay/sync on renewal, lease expiry during validation,
+worker cancellation, supersession, foreign-owner death/restart, and key
+revocation while the materializer is held behind the certified tip. Revocation
+applies one new entry and refuses renewal. The original code fails the repeated
+renewal regression with replay and sync calls. Early runner/fixture failures
+(selection syntax, root fixture setup, trace-module loading, and one test guard)
+are retained and triaged in the directory-retention preparation record.
+
+Changes are in three existing production modules, net +176 lines including the
+TEST facade, plus tests and documentation. Growth accounts for subscription
+handoff/cancellation ownership and freshness/deadline checks; obsolete
+unconditional generation-map replacement and temporary-only subscription
+lifetime are removed. The completed cut needs clean release gates and hardware
+measurement; no fleet latency improvement or F2/F3 approval is claimed yet.

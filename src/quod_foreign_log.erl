@@ -943,22 +943,27 @@ ack(FollowRef, NoticeRef)
 ack(_FollowRef, _NoticeRef) ->
     ok.
 
--doc "Read exact clauses from the certified projection owned by this follow.".
+-doc "Read exact clauses and their applied height from this follow's certified projection.".
 -spec projection_clauses(reference(), [{term(), non_neg_integer()}],
-                         pos_integer()) -> {ok, map()} | {error, term()}.
+                         pos_integer()) -> {ok, non_neg_integer(), map()} | {error, term()}.
 projection_clauses(FollowRef, Functors, TimeoutMs)
   when is_reference(FollowRef), is_list(Functors),
        is_integer(TimeoutMs), TimeoutMs > 0 ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
             Handle = try gen_server:call(
-                           Pid, {projection_handle, FollowRef, self()}, 1000)
+                           Pid, {projection_handle, FollowRef, self()}, min(1000, TimeoutMs))
                      catch exit:_ -> {error, unavailable}
                      end,
             case Handle of
                 {ok, ProjectionPid, Generation} ->
-                    quod_foreign_projection:clauses(
-                      ProjectionPid, Generation, Functors, TimeoutMs);
+                    case Deadline - quod_time:mono_ms() of
+                        Remaining when Remaining > 0 ->
+                            quod_foreign_projection:clauses(
+                              ProjectionPid, Generation, Functors, Remaining);
+                        _ -> {error, unavailable}
+                    end;
                 {error, _} = Error -> Error
             end;
         undefined -> {error, unavailable}

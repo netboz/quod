@@ -31,6 +31,7 @@ relayed announcements only from a current root control peer.
          test_install_control_link/3,
          test_set_pending_link/3, test_validate_peer_proof/1,
          test_set_hosting_snapshot/2, test_set_manager_epoch/1,
+         test_expire_generations/0,
          test_partition_hosted/1, test_validate_described_hosted/1]).
 -endif.
 
@@ -57,6 +58,7 @@ relayed announcements only from a current root control peer.
     generations = #{},
     assemblies = #{},
     validations = #{},
+    follow_requests = #{},
     control_peers = #{},
     dial_queue = {[], []},
     pending_links = #{},
@@ -153,7 +155,18 @@ test_control_state() ->
       manager_pid => S#s.manager_pid,
       hosting_revision => S#s.hosting_revision,
       hosting_projection => S#s.hosting_projection,
+      generations => S#s.generations,
+      validations => S#s.validations,
+      follow_requests => gen_server:reqids_size(S#s.follow_requests),
       route_demands => maps:keys(S#s.route_demands)}.
+
+test_expire_generations() ->
+    sys:replace_state(quod_reg:via(?KEY), fun(S) ->
+        Expired = maps:map(fun(_Author, Entry) -> Entry#{expires_at := quod_time:mono_ms()} end,
+                           S#s.generations),
+        expire_generations(S#s{generations = Expired})
+    end),
+    ok.
 
 test_apply_peer_result(Result) ->
     sys:replace_state(
@@ -357,6 +370,13 @@ handle_info({quod_message, {PeerKey, LinkPid}, Channel, Payload},
                 Payload, {pinned_link, PeerKey, LinkPid}, S)};
 handle_info({directory_generation_validated, Token, Result}, S) ->
     {noreply, finish_generation_validation(Token, Result, S)};
+handle_info({directory_projection_verified, Token, Pid, Identity, Owner, Deadline}, S) ->
+    {noreply, retain_generation_projection(Token, Pid, Identity, Owner, Deadline, S)};
+handle_info({quod_foreign_follow, Ref, NoticeRef, _Identity, _Notice}, S) ->
+    %% The shared materializer owns the facts. This subscription keeps it
+    %% alive; each validation still reads a fresh certified projection.
+    ok = quod_foreign_log:ack(Ref, NoticeRef),
+    {noreply, S};
 handle_info({directory_route_available, Identity}, S) ->
     {noreply, clear_route_demand(Identity, S)};
 handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
@@ -366,11 +386,12 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
         {matched, S1} ->
             {noreply, S1};
         unmatched ->
-            {noreply, handle_control_link_down(Ref, Pid, S)}
+            S1 = handle_control_link_down(Ref, Pid, S),
+            {noreply, handle_follow_response({'DOWN', Ref, process, Pid, Reason}, S1)}
         end
     end;
-handle_info(_Info, S) ->
-    {noreply, S}.
+handle_info(Info, S) ->
+    {noreply, handle_follow_response(Info, S)}.
 
 terminate(_Reason, S) ->
     maps:foreach(
@@ -1110,7 +1131,7 @@ directory_tick(S = #s{renew_ms = RenewMs}) ->
     %% This clock exists only for lease and root-control transport liveness.
     %% Route discovery and peer-set authority are driven by exact demand and
     %% committed root-runtime edges respectively; no resync is sent here.
-    S1 = maintain_control_links(S),
+    S1 = maintain_control_links(expire_generations(S)),
     case S1#s.tracking andalso can_advertise(S1) of
         true -> renew_advertisement(S1);
         false -> S1
@@ -1150,8 +1171,7 @@ install_local_generations([{Pages, Complete} | Rest], S) ->
         {ok, ExpiresAt} ->
             Author = quod_directory_generation:author(Complete),
             Entry = #{pages => Pages, expires_at => ExpiresAt},
-            S1 = S#s{generations =
-                         (S#s.generations)#{Author => Entry}},
+            S1 = replace_generation(Author, Entry, S),
             S2 = send_generation_pages(Pages, S1#s.self_key, S1),
             install_local_generations(Rest, S2);
         {error, Reason} -> {error, Reason, S}
@@ -1340,7 +1360,7 @@ begin_generation_validation(Complete, Pages, SourceKey,
             case generation_order(Complete, Active) of
                 newer ->
                     stop_generation_validation(Entry),
-                    S0 = S#s{validations = maps:remove(Author, Validations)},
+                    S0 = remove_validation(Author, S),
                     start_generation_validation(
                       Author, Complete, Pages, SourceKey, S0);
                 _ -> S
@@ -1353,7 +1373,19 @@ start_generation_validation(Author, Complete, Pages, SourceKey, S) ->
     %% change governs the next generation; it cannot rewrite work in flight.
     ControlPeers = S#s.control_peers,
     {Pid, MRef} = spawn_monitor(fun() ->
-        Result = validate_remote_generation(Complete, ControlPeers),
+        Retain = fun(Identity, Owner, Deadline) ->
+            Parent ! {directory_projection_verified, Token, self(), Identity, Owner, Deadline},
+            receive
+                {directory_projection_retained, Token, Reply} ->
+                    case quod_time:mono_ms() < Deadline of
+                        true -> Reply;
+                        false -> {error, validation_timeout}
+                    end
+            after max(0, Deadline - quod_time:mono_ms()) ->
+                {error, validation_timeout}
+            end
+        end,
+        Result = validate_remote_generation(Complete, ControlPeers, Retain),
         Parent ! {directory_generation_validated, Token, Result}
     end),
     Entry = #{pid => Pid, mref => MRef, token => Token,
@@ -1374,7 +1406,7 @@ generation_order(A, B) ->
         _ -> stale
     end.
 
-validate_remote_generation(Page, ControlPeers) ->
+validate_remote_generation(Page, ControlPeers, Retain) ->
     case system_catalogue() of
         {ok, Catalog} ->
             case quod_directory_generation:author(Page) of
@@ -1387,7 +1419,7 @@ validate_remote_generation(Page, ControlPeers) ->
                         false -> {error, unauthorized_generation}
                     end;
                 {node_actor, Blob} ->
-                    validate_node_generation(Page, Blob, Catalog)
+                    validate_node_generation(Page, Blob, Catalog, Retain)
             end;
         {error, _} = Error -> Error
     end.
@@ -1400,7 +1432,7 @@ system_catalogue() ->
         {error, _} = Error -> Error
     end.
 
-validate_node_generation(Page, Blob, Catalog) ->
+validate_node_generation(Page, Blob, Catalog, Retain) ->
     case quod_agent_ref:decode(Blob) of
         {ok, #{identity := Identity}} ->
             NodeKey = quod_directory_generation:node_key(Page),
@@ -1408,62 +1440,87 @@ validate_node_generation(Page, Blob, Catalog) ->
             Routes = [{NodeKey, [Endpoint]}],
             case quod_foreign_log:current(
                    Routes, Identity, {NodeKey, Endpoint}, 10000) of
-                {ok, _View} ->
-                    validate_followed_node_generation(Page, Identity, Catalog);
+                {ok, #{slot := Minimum}} ->
+                    validate_followed_node_generation(Page, Identity, Catalog, Retain, Minimum);
                 {error, _} = Error -> Error
             end;
         _ -> {error, bad_generation}
     end.
 
-validate_followed_node_generation(Page, Identity, Catalog) ->
+validate_followed_node_generation(Page, Identity, Catalog, Retain, Minimum) ->
+    Owner = quod_reg:where({foreign_log, node}),
+    Deadline = quod_time:mono_ms() + 10000,
     case quod_foreign_log:follow(Identity, projection) of
         {ok, FollowRef} ->
-            try await_node_projection(Page, Identity, FollowRef, Catalog)
+            try
+                case await_node_projection(Page, Identity, FollowRef, Catalog, Deadline, Minimum) of
+                    ok -> Retain(Identity, Owner, Deadline);
+                    {error, _} = Error -> Error
+                end
             after quod_foreign_log:unfollow(FollowRef) end;
         {error, _} = Error -> Error
     end.
 
-await_node_projection(Page, Identity, FollowRef, Catalog) ->
-    receive
-        {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice} ->
-            ok = quod_foreign_log:ack(FollowRef, NoticeRef),
-            case Notice of
-                {resnapshot, _Height, _Projection, _Freshness} ->
-                    case quod_foreign_log:projection_clauses(
-                           FollowRef, [{agent_key, 3}, {hosts_ontology, 4}],
-                           5000) of
-                        {ok, Clauses} ->
-                            quod_directory_generation:validate_projection(
-                              Page, Clauses, Catalog);
+await_node_projection(Page, Identity, FollowRef, Catalog, Deadline, Minimum) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            receive
+                {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice} ->
+                    ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+                    case projection_notice(Notice, Minimum) of
+                        ready ->
+                            case node_projection_clauses(FollowRef, Deadline) of
+                                {ok, Height, Clauses} when Height >= Minimum ->
+                                    quod_directory_generation:validate_projection(
+                                      Page, Clauses, Catalog);
+                                {ok, _OlderHeight, _Clauses} ->
+                                    %% A materializer replacement can overtake a
+                                    %% queued notice. Its actual snapshot is the fence.
+                                    await_node_projection(Page, Identity, FollowRef, Catalog, Deadline, Minimum);
+                                {error, _} = Error -> Error
+                            end;
+                        pending ->
+                            await_node_projection(Page, Identity, FollowRef, Catalog, Deadline, Minimum);
                         {error, _} = Error -> Error
-                    end;
-                {building, _} ->
-                    await_node_projection(Page, Identity, FollowRef, Catalog);
-                {unreachable, Reason, _Height} -> {error, Reason}
-            end
-    after 10000 -> {error, validation_timeout}
+                    end
+            after Remaining -> {error, validation_timeout}
+            end;
+        _ -> {error, validation_timeout}
+    end.
+
+projection_notice({resnapshot, Height, _, _}, Minimum) when Height >= Minimum -> ready;
+projection_notice({advanced, _, Height, _, _, _, _}, Minimum) when Height >= Minimum -> ready;
+projection_notice({unreachable, Reason, _}, _Minimum) -> {error, Reason};
+projection_notice(_Notice, _Minimum) -> pending.
+
+node_projection_clauses(FollowRef, Deadline) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            quod_foreign_log:projection_clauses(
+                FollowRef, [{agent_key, 3}, {hosts_ontology, 4}], min(5000, Remaining));
+        _ -> {error, validation_timeout}
     end.
 
 finish_generation_validation(Token, Result,
                              S = #s{validations = Validations}) ->
     case validation_by_token(Token, Validations) of
         {ok, Author, #{mref := MRef, complete := Complete, pages := Pages,
-                      source_key := SourceKey}} ->
+                      source_key := SourceKey} = Validation} ->
             demonitor(MRef, [flush]),
-            S0 = S#s{validations = maps:remove(Author, Validations)},
-            case Result of
-                ok ->
+            S1 = case {Result, projection_owner_current(Validation)} of
+                {ok, true} ->
                     case install_generation(Complete) of
                         {ok, ExpiresAt} ->
-                            Entry = #{pages => Pages, expires_at => ExpiresAt},
-                            S1 = S0#s{generations =
-                                         (S0#s.generations)#{Author => Entry}},
+                            Entry = (maps:with([projection], Validation))#{
+                                      pages => Pages, expires_at => ExpiresAt},
+                            Installed = replace_generation(Author, Entry, S),
                             relay_validated_generation(
-                              Pages, SourceKey, S1);
-                        {error, _} -> S0
+                              Pages, SourceKey, Installed);
+                        {error, _} -> S
                     end;
-                {error, _} -> S0
-            end;
+                _ -> S
+            end,
+            remove_validation(Author, S1);
         error -> S
     end.
 
@@ -1481,6 +1538,113 @@ validation_by_token(Token, Validations) ->
                  (_Author, _Entry, Acc) -> Acc
               end, error, Validations).
 
+%% A successful worker hands demand to the advertisement's lease before
+%% releasing its own follow. Both use the existing shared materializer; no
+%% clauses or outcome history are copied into directory control.
+retain_generation_projection(Token, Pid, Identity, Owner, Deadline, S) ->
+    case validation_by_token(Token, S#s.validations) of
+        {ok, Author, #{pid := Pid} = Entry} ->
+            S0 = S#s{validations = (S#s.validations)#{
+                       Author => Entry#{projection_deadline => Deadline}}},
+            case is_pid(Owner) andalso Owner =:= quod_reg:where({foreign_log, node}) andalso
+                 quod_time:mono_ms() < Deadline of
+                false ->
+                    Pid ! {directory_projection_retained, Token, {error, unavailable}},
+                    S0;
+                true ->
+                    case maps:get(Author, S#s.generations, #{}) of
+                        #{projection := {Owner, _Ref} = Projection} ->
+                            attach_projection(Token, Projection, S0);
+                        _ ->
+                            case quod_foreign_log:follow_request(Identity, projection) of
+                                {ok, Request} ->
+                                    Label = {retain, Token, Author, Owner},
+                                    S0#s{follow_requests = gen_server:reqids_add(
+                                         Request, Label, S0#s.follow_requests)};
+                                {error, _} = Error ->
+                                    Pid ! {directory_projection_retained, Token, Error},
+                                    S0
+                            end
+                    end
+            end;
+        _ -> S
+    end.
+
+attach_projection(Token, Projection, S) ->
+    {ok, Author, #{pid := Pid} = Entry} =
+        validation_by_token(Token, S#s.validations),
+    Pid ! {directory_projection_retained, Token, ok},
+    S#s{validations = (S#s.validations)#{Author => Entry#{projection => Projection}}}.
+
+handle_follow_response(Info, S) ->
+    case gen_server:check_response(Info, S#s.follow_requests, true) of
+        {Reply, {retain, Token, Author, Owner}, Requests} ->
+            S0 = S#s{follow_requests = Requests},
+            case {Reply, validation_by_token(Token, S0#s.validations),
+                  quod_reg:where({foreign_log, node})} of
+                {{reply, {ok, Ref}}, {ok, Author, _}, Owner} ->
+                    attach_projection(Token, {Owner, Ref}, S0);
+                _ ->
+                    _ = case validation_by_token(Token, S0#s.validations) of
+                        {ok, Author, #{pid := Pid}} ->
+                            Pid ! {directory_projection_retained, Token,
+                                   {error, unavailable}};
+                        error -> ok
+                    end,
+                    case Reply of
+                        {reply, {ok, Ref}} -> release_unused_projection(Author, {Owner, Ref}, S0);
+                        _ -> S0
+                    end
+            end;
+        {_Reply, release, Requests} -> S#s{follow_requests = Requests};
+        _ -> S
+    end.
+
+projection_owner_current(#{projection := {Owner, _Ref}, projection_deadline := Deadline}) ->
+    Owner =:= quod_reg:where({foreign_log, node}) andalso quod_time:mono_ms() < Deadline;
+projection_owner_current(#{complete := Page}) ->
+    case quod_directory_generation:author(Page) of
+        {root_bootstrap, _, _} -> true;
+        {node_actor, _} -> false
+    end.
+
+remove_validation(Author, S) ->
+    {Entry, Remaining} = maps:take(Author, S#s.validations),
+    release_unused_projection(Author, maps:get(projection, Entry, undefined),
+                              S#s{validations = Remaining}).
+
+replace_generation(Author, Entry, S) ->
+    Previous = maps:get(Author, S#s.generations, #{}),
+    Generations = case Entry of
+        undefined -> maps:remove(Author, S#s.generations);
+        _ -> (S#s.generations)#{Author => Entry}
+    end,
+    release_unused_projection(Author, maps:get(projection, Previous, undefined),
+                              S#s{generations = Generations}).
+
+release_unused_projection(_Author, undefined, S) -> S;
+release_unused_projection(Author, {_Owner, Ref} = Projection, S) ->
+    Generation = maps:get(Author, S#s.generations, #{}),
+    Validation = maps:get(Author, S#s.validations, #{}),
+    case maps:get(projection, Generation, undefined) =:= Projection orelse
+         maps:get(projection, Validation, undefined) =:= Projection of
+        true -> S;
+        false ->
+            case quod_foreign_log:unfollow_request(Ref) of
+                {ok, Request} ->
+                    S#s{follow_requests = gen_server:reqids_add(
+                         Request, release, S#s.follow_requests)};
+                {error, unavailable} -> S
+            end
+    end.
+
+expire_generations(S) ->
+    Now = quod_time:mono_ms(),
+    maps:fold(fun(Author, #{expires_at := Expiry}, Acc) when Expiry =< Now ->
+                      replace_generation(Author, undefined, Acc);
+                 (_Author, _Entry, Acc) -> Acc
+              end, S, S#s.generations).
+
 handle_generation_validation_down(MRef, Pid, _Reason,
                                   S = #s{validations = Validations}) ->
     case maps:fold(
@@ -1489,20 +1653,20 @@ handle_generation_validation_down(MRef, Pid, _Reason,
               (_Author, _Entry, Acc) -> Acc
            end, error, Validations) of
         {ok, Author} ->
-            {matched, S#s{validations = maps:remove(Author, Validations)}};
+            {matched, remove_validation(Author, S)};
         error -> unmatched
     end.
 
-send_cached_generations(Source, S = #s{generations = Generations}) ->
+send_cached_generations(Source, S) ->
     {LinkPid, _PeerKey} = source_link_and_key(Source),
-    Live = live_generations(Generations),
+    S1 = expire_generations(S),
     maps:foreach(
       fun(_Author, #{pages := Pages}) ->
           lists:foreach(
             fun(Page) -> quod_link:send(LinkPid, generation_frame(Page)) end,
             Pages)
-      end, Live),
-    S#s{generations = Live}.
+      end, S1#s.generations),
+    S1.
 
 
 %%%===================================================================
@@ -1684,9 +1848,12 @@ reconcile_observed_hosted(S) ->
 
 recover_directory_state(S) ->
     %% Reinstall only freshly received or locally re-signed generations.
+    Cleared = maps:fold(fun(Author, _Entry, Acc) ->
+        replace_generation(Author, undefined, Acc)
+    end, S, S#s.generations),
     S1 = recover_route_demands(
            maintain_directory_control(
-             S#s{generations = #{}, assemblies = #{}})),
+             Cleared#s{assemblies = #{}})),
     case {S1#s.tracking, can_advertise(S1),
           reconcile_observed_hosted(S1)} of
         {true, true, {ok, S2}} ->

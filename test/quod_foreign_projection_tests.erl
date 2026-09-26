@@ -43,12 +43,16 @@ materializer_session_case(Dir) ->
         enable_source_trace(Pid),
         ok = quod_foreign_projection:advance(Pid, Generation, View1),
         ?assertMatch(#{height := 258, resnapshot := true}, ready(Identity, Generation)),
+        ?assertMatch({ok, 258, #{}}, quod_foreign_projection:clauses(
+                        Pid, Generation, [{materializer_value, 1}], 1000)),
         %% A later append cannot expand the already-admitted source snapshot.
         Calls1 = source_calls(Pid),
         ?assertEqual([], full_open_calls(Calls1)),
         ?assertEqual(2, length([ok || {open_ro_snapshot, _} <- Calls1])),
         ok = quod_foreign_projection:advance(Pid, Generation, View2),
         ?assertMatch(#{from := 258, height := 259}, ready(Identity, Generation)),
+        ?assertMatch({ok, 259, #{}}, quod_foreign_projection:clauses(
+                        Pid, Generation, [{materializer_value, 1}], 1000)),
         Calls2 = source_calls(Pid),
         ?assertEqual([], full_open_calls(Calls2)),
         ?assertEqual(1, length([ok || {open_ro_snapshot, _} <- Calls2])),

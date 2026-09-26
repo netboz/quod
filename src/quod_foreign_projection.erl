@@ -54,9 +54,9 @@ advance(Pid, Generation, View)
     Pid ! {advance, Generation, View},
     ok.
 
--doc "Read exact interpreted clauses from this certified materialized snapshot.".
+-doc "Read exact interpreted clauses and their applied height in one materializer turn.".
 -spec clauses(pid(), reference(), [{term(), non_neg_integer()}], pos_integer()) ->
-          {ok, map()} | {error, term()}.
+          {ok, non_neg_integer(), map()} | {error, term()}.
 clauses(Pid, Generation, Functors, TimeoutMs)
   when is_pid(Pid), is_reference(Generation), is_list(Functors),
        is_integer(TimeoutMs), TimeoutMs > 0 ->
@@ -237,7 +237,7 @@ source_view(_View, _S) -> error.
 
 stored_clauses(Functors, Projection) ->
     Est = quod_committed_projection:est(Projection),
-    lists:foldl(
+    Result = lists:foldl(
       fun(Functor, {ok, Acc}) ->
               case valid_functor(Functor) of
                   true ->
@@ -248,7 +248,11 @@ stored_clauses(Functors, Projection) ->
                   false -> {error, bad_request}
               end;
          (_Functor, {error, _} = Error) -> Error
-      end, {ok, #{}}, Functors).
+      end, {ok, #{}}, Functors),
+    case Result of
+        {ok, Clauses} -> {ok, quod_committed_projection:applied(Projection), Clauses};
+        {error, _} = Error -> Error
+    end.
 
 valid_functor({Name, Arity}) ->
     quod_wire_term:is_symbol(Name)

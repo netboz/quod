@@ -3912,7 +3912,7 @@ projection_demand_can_join_and_leave_a_progress_follow_test() ->
         {ok, Facts} = quod_foreign_log:follow(Identity, projection),
         {F, {resnapshot, 2, _, _}} = receive_follow_resnapshot(Facts, Identity),
         ok = quod_foreign_log:ack(Facts, F),
-        ?assertMatch({ok, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
+        ?assertMatch({ok, 2, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
         ?assertMatch(#{projection_workers := 1, projection_rebuilds := 1},
                      quod_foreign_log:stats()),
         %% Both notices and the stats reply came from this same owner: the
@@ -3944,7 +3944,7 @@ progress_attach_preserves_existing_projection_test() ->
         {ok, Progress} = quod_foreign_log:follow(Identity, progress),
         {R, {certified, 2, _}} = receive_certified_follow(Progress, Identity),
         ok = quod_foreign_log:ack(Progress, R),
-        ?assertMatch({ok, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
+        ?assertMatch({ok, 2, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
         ok = quod_foreign_log:unfollow(Progress),
         ?assertMatch(#{follow_consumers := 1, projection_workers := 1,
                       projection_rebuilds := 1}, quod_foreign_log:stats()),
@@ -5983,7 +5983,7 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
         ?assertNot(
            lists:member(
              StaticBridgeHead, maps:get(changed_heads, Result))),
-        {ok, Clauses} = quod_foreign_projection:clauses(
+        {ok, 1, Clauses} = quod_foreign_projection:clauses(
                           Pid, Generation,
                           [{agent_key, 3}, {hosts_ontology, 4}], 1000),
         ?assert(lists:any(

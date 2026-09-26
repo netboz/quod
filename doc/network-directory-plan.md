@@ -50,6 +50,19 @@ active `agent_key/3`, and every discoverable row must match an exact committed
 `hosts_ontology/4` fact. This reuses `quod_foreign_log`; there is no directory
 verifier or cache beside it.
 
+Validation first obtains a certified current tip, then waits for the shared
+materializer to reach at least that height. Clause reads return their actual
+applied height together with the facts; a queued notification cannot authorize
+a read from an older replacement materializer. Waiting and subscription handoff
+share one absolute projection-stage deadline.
+
+A successfully validated node-actor advertisement retains a projection follow
+in directory control for its lease lifetime. The validation worker releases its
+temporary follow only after control has registered or reused that demand.
+Renewals therefore reuse the same materializer and apply only new entries.
+Control stores the owner PID and subscription reference, never copied clauses
+or another outcome index. Every renewal still checks current certified authority.
+
 Directory rows provide reachability, never authority or quorum weight. Opening
 a scope still verifies the target identity and role through the normal target
 history path. A plain remote read may use only a certified current validator
@@ -78,6 +91,12 @@ not discover progress.
 Leases and signed epochs prevent stale endpoints from living forever. Renewal
 is a liveness safeguard. High-water state prevents an older generation from
 resurrecting withdrawn rows during the directory process lifetime.
+Expiry releases retained projection demand through the existing lease tick or
+cached-generation pruning. An in-flight validation keeps its own demand until
+completion or cancellation. Late subscription replies are released if their
+validation was superseded or died; foreign-owner replacement invalidates old
+references. Control death releases its subscriptions through existing consumer
+monitors.
 
 ## Acceptance
 

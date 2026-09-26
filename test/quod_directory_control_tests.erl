@@ -1,5 +1,400 @@
 -module(quod_directory_control_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+
+renewals_reuse_certified_projection_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+        trace_projection_work(Owner, true),
+        try
+            Prime = prime_node_projection(F),
+            submit_node_generation(F, Control, 1),
+            await_generation(F, 1),
+            ok = quod_foreign_log:unfollow(Prime),
+            First = projection_work(),
+            ?assertEqual(257, count_work(quod_committed_projection, First)),
+            ?assert(count_work(dets, First) > 0),
+            submit_node_generation(F, Control, 2),
+            await_generation(F, 2),
+            Repeat = projection_work(),
+            ?assertEqual(#{replayed => 0, syncs => 0},
+                         #{replayed => count_work(quod_committed_projection, Repeat),
+                           syncs => count_work(dets, Repeat)}),
+            ?assertMatch(#{projection_rebuilds := 1, projection_workers := 1},
+                         quod_foreign_log:stats())
+        after trace_projection_work(Owner, false)
+        end
+    end) end}.
+
+cold_generation_waits_for_certified_height_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+        trace_projection_work(Owner, true),
+        try
+            submit_node_generation(F, Control, 1),
+            await_generation(F, 1),
+            ?assertEqual(257, count_work(quod_committed_projection, projection_work()))
+        after trace_projection_work(Owner, false)
+        end
+    end) end}.
+
+expired_generation_releases_projection_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, _Owner) ->
+        submit_node_generation(F, Control, 1),
+        await_generation(F, 1),
+        ?assertMatch(#{follow_consumers := 1, projection_workers := 1}, quod_foreign_log:stats()),
+        ok = quod_directory_control:test_expire_generations(),
+        await_control(fun(#{generations := G, follow_requests := R}) ->
+            map_size(G) =:= 0 andalso R =:= 0
+        end),
+        ?assertMatch(#{follow_consumers := 0, projection_workers := 0}, quod_foreign_log:stats())
+    end) end}.
+
+cancelled_projection_handoff_is_released_test_() ->
+    [{atom_to_list(Case), {timeout, 30, fun() ->
+        with_node_generation(fun(F, Control, Owner) ->
+            hold_generation_handoff(Control),
+            submit_node_generation(F, Control, 1),
+            {Token, Worker} = receive
+                {projection_handoff, T, W} -> {T, W}
+            after 10000 -> error(handoff_not_reached)
+            end,
+            ok = sys:suspend(Owner),
+            try
+                Control ! {release_handoff, Token},
+                await_control(fun(#{follow_requests := N}) -> N =:= 1 end),
+                case Case of
+                    worker_down -> exit(Worker, kill);
+                    superseded -> submit_node_generation(F, Control, 2);
+                    owner_down -> unlink(Owner), exit(Owner, kill)
+                end,
+                await_control(fun(#{validations := V}) ->
+                    lists:all(fun(#{pid := P}) -> P =/= Worker end, maps:values(V))
+                end)
+            after catch sys:resume(Owner)
+            end,
+            case Case of
+                Cancelled when Cancelled =:= worker_down; Cancelled =:= owner_down ->
+                    await_control(fun(#{validations := V, follow_requests := R}) ->
+                        map_size(V) =:= 0 andalso R =:= 0
+                    end),
+                    ?assertMatch(#{follow_consumers := 0, projection_workers := 0},
+                                 quod_foreign_log:stats());
+                superseded ->
+                    await_generation(F, 2),
+                    await_control(fun(#{follow_requests := R}) -> R =:= 0 end),
+                    ?assertMatch(#{follow_consumers := 1, projection_workers := 1},
+                                 quod_foreign_log:stats())
+            end
+        end)
+    end}} || Case <- [worker_down, superseded, owner_down]].
+
+lease_expiry_during_validation_keeps_live_demand_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, _Owner) ->
+        submit_node_generation(F, Control, 1),
+        await_generation(F, 1),
+        hold_generation_handoff(Control),
+        submit_node_generation(F, Control, 2),
+        {Token, Worker} = receive {projection_handoff, T, W} -> {T, W}
+                         after 10000 -> error(handoff_not_reached)
+                         end,
+        true = erlang:suspend_process(Worker),
+        try
+            Control ! {release_handoff, Token},
+            await_control(fun(#{validations := V}) ->
+                lists:any(fun(E) -> maps:is_key(projection, E) end, maps:values(V))
+            end),
+            ok = quod_directory_control:test_expire_generations(),
+            ?assertMatch(#{follow_consumers := 2, projection_workers := 1,
+                           projection_rebuilds := 1}, quod_foreign_log:stats())
+        after erlang:resume_process(Worker)
+        end,
+        await_generation(F, 2),
+        ?assertMatch(#{follow_consumers := 1, projection_workers := 1,
+                       projection_rebuilds := 1}, quod_foreign_log:stats())
+    end) end}.
+
+projection_handoff_keeps_original_deadline_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+        hold_generation_handoff(Control),
+        observe_validation_results(Control),
+        submit_node_generation(F, Control, 1),
+        Token = receive {projection_handoff, T, _Worker} -> T
+                after 10000 -> error(handoff_not_reached)
+                end,
+        ok = sys:suspend(Owner),
+        try
+            Control ! {release_handoff, Token},
+            State = await_control(fun(#{follow_requests := N}) -> N =:= 1 end),
+            #{projection_deadline := Deadline} =
+                maps:get(maps:get(author, F), maps:get(validations, State)),
+            %% Wait for the real timeout result, including the existing
+            %% bounded unfollow cleanup. Registration gets no new allowance.
+            receive {validation_finished, Result} ->
+                ?assertEqual({error, validation_timeout}, Result)
+            after max(0, Deadline - quod_time:mono_ms()) + 2000 ->
+                error(validation_deadline_extended)
+            end,
+            ?assertMatch(#{generations := G, validations := V}
+                           when map_size(G) =:= 0 andalso map_size(V) =:= 0,
+                         quod_directory_control:test_control_state())
+        after sys:resume(Owner)
+        end,
+        await_control(fun(#{follow_requests := N}) -> N =:= 0 end),
+        await_foreign_consumers(0)
+    end) end}.
+
+foreign_owner_restart_replaces_retained_follow_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+        submit_node_generation(F, Control, 1),
+        First = await_generation(F, 1),
+        Author = maps:get(author, F),
+        #{projection := {Owner, OldRef}} = maps:get(Author, maps:get(generations, First)),
+        quod_foreign_log_tests:stop_owner(Owner),
+        Replacement = quod_foreign_log_tests:start_owner(maps:get(ledger_dir, F), maps:get(fetch, F)),
+        try
+            submit_node_generation(F, Control, 2),
+            Next = await_generation(F, 2),
+            #{projection := {Replacement, NewRef}} = maps:get(Author, maps:get(generations, Next)),
+            ?assertNotEqual(OldRef, NewRef),
+            ?assertMatch(#{follow_consumers := 1, projection_workers := 1}, quod_foreign_log:stats()),
+            gen_server:stop(Control),
+            await_foreign_consumers(0)
+        after quod_foreign_log_tests:stop_owner(Replacement)
+        end
+    end) end}.
+
+new_tip_revocation_refuses_renewal_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+        submit_node_generation(F, Control, 1),
+        First = await_generation(F, 1),
+        Author = maps:get(author, F),
+        #{projection := {Owner, Ref}} = maps:get(Author, maps:get(generations, First)),
+        {ok, Materializer, _} = gen_server:call(Owner, {projection_handle, Ref, Control}),
+        Identity = {Ns, _} = maps:get(identity, F),
+        Pub = maps:get(pubkey, maps:get(signer, F)),
+        {ok, LastBlock} = quod_ledger:block_from_entry(lists:last(maps:get(chain, F))),
+        Withdraw = node_history_entry(F, 258, quod_ledger:block_ref(LastBlock),
+                     [{retract, {{agent_key, directory_node, Pub, active}, true}}]),
+        true = ets:insert(maps:get(source, F), {chain, maps:get(chain, F) ++ [Withdraw]}),
+        true = erlang:suspend_process(Materializer),
+        observe_validation_results(Control),
+        1 = erlang:trace_pattern({quod_directory_control, projection_notice, 2},
+                                [{'_', [], [{return_trace}]}], [local]),
+        1 = erlang:trace(Control, true, [call, set_on_spawn, {tracer, self()}]),
+        trace_projection_work(Materializer, true),
+        try
+            Owner ! {quod_message, {Pub, self()}, quod_feed:channel(Ns),
+                     quod_feed:encode(Ns, {digest, 258})},
+            ?assertMatch({ok, #{slot := 258}}, quod_foreign_log:current(
+                [{Pub, [{<<"127.0.0.1">>, 19000}]}], Identity, 5000)),
+            submit_node_generation(F, Control, 2),
+            receive
+                {trace, _Worker, return_from,
+                 {quod_directory_control, projection_notice, 2}, pending} -> ok
+            after 5000 -> error(lagging_projection_not_parked)
+            end,
+            %% The certified tip includes revocation, while the paused
+            %% materializer still has the old key. That cannot renew a lease.
+            Still = quod_directory_control:test_control_state(),
+            ?assert(maps:is_key(Author, maps:get(validations, Still))),
+            ?assertEqual(maps:get(generations, First), maps:get(generations, Still)),
+            true = erlang:resume_process(Materializer),
+            receive {validation_finished, Result} ->
+                ?assertEqual({error, unauthorized_generation}, Result)
+            after 5000 -> error(revocation_not_validated)
+            end,
+            Final = await_control(fun(#{validations := V}) -> map_size(V) =:= 0 end),
+            ?assertEqual(maps:get(generations, First), maps:get(generations, Final)),
+            ?assertEqual(1, count_work(quod_committed_projection, projection_work())),
+            ?assertMatch(#{projection_rebuilds := 1, follow_consumers := 1}, quod_foreign_log:stats())
+        after
+            catch erlang:resume_process(Materializer),
+            trace_projection_work(Materializer, false),
+            _ = erlang:trace(Control, false, [call, set_on_spawn]),
+            _ = erlang:trace_pattern({quod_directory_control, projection_notice, 2}, false, [local])
+        end
+    end) end}.
+
+hold_generation_handoff(Control) ->
+    Parent = self(),
+    Gate = fun(armed, {in, {directory_projection_verified, Token, Pid, _, _, _}}, _) ->
+                   Parent ! {projection_handoff, Token, Pid},
+                   receive {release_handoff, Token} -> done
+                   after 10000 -> error(handoff_gate_not_released)
+                   end;
+              (State, _Event, _) -> State
+           end,
+    ok = sys:install(Control, {Gate, armed}).
+
+observe_validation_results(Control) ->
+    Parent = self(),
+    Observer = fun(State, {in, {directory_generation_validated, _, Result}}, _) ->
+                       Parent ! {validation_finished, Result}, State;
+                  (State, _, _) -> State
+               end,
+    ok = sys:install(Control, {Observer, observing}).
+
+await_foreign_consumers(Expected) ->
+    await_foreign_consumers(Expected, quod_time:mono_ms() + 10000).
+await_foreign_consumers(Expected, Deadline) ->
+    case quod_foreign_log:stats() of
+        #{follow_consumers := Expected} -> ok;
+        _ ->
+            ?assert(quod_time:mono_ms() < Deadline),
+            await_foreign_consumers(Expected, Deadline)
+    end.
+
+%% Real signatures, catalogue proof, current-tip verification, materializer,
+%% generation validation and directory installation. Only network delivery is
+%% replaced by the existing signed-history source fixture.
+with_node_generation(Fun) ->
+    F = node_generation_fixture(257),
+    {Ns, _Anchor} = maps:get(identity, F),
+    Dir = quod_foreign_log_tests:temp_dir("directory-projection"),
+    Source = ets:new(directory_source, [set, public]),
+    true = ets:insert(Source, {chain, maps:get(chain, F)}),
+    Fetch = fun(P, E, N, Query, Deadline, Consume) ->
+        [{chain, Chain}] = ets:lookup(Source, chain),
+        Read = quod_foreign_log_tests:chain_fetch(Ns, Chain),
+        Read(P, E, N, Query, Deadline, Consume)
+    end,
+    try quod_ct:with_network_identity(key(254), fun() ->
+        with_directory_and_control(fun() ->
+            %% The proof gate is owned by the same named table as a real root.
+            RootTable = ets:new('quod_simplex_genesis_quod:root', [named_table, set]),
+            Signer = maps:get(signer, F), Pub = maps:get(pubkey, Signer),
+            true = ets:insert(RootTable,
+                [{anchor, key(254)}, {proof_gate, true, 1, [], Pub, [Pub], key(2), #{}}]),
+            {ok, Root} = quod_prolog:start_link(<<"quod:root">>,
+                #{node_id => Pub, identity => Signer, outcome_backend => memory}),
+            Genesis = quod_simplex:test_genesis_tx(
+                #{mode => create, node_id => Pub, committee => [],
+                  external_predicate_modules => [],
+                  genesis_diff => quod_prolog:terms_to_diff(
+                    [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}}])},
+                <<"quod:root">>, Pub, key(3)),
+            ok = quod_prolog:apply_entry(<<"quod:root">>,
+                quod_ct:committed_entry(<<"quod:root">>, 1, {batch, [Genesis]}), live),
+            ok = quod_prolog:mark_ready(<<"quod:root">>),
+            Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
+            try
+                ?assertMatch({ok, _, [], #{}}, quod_system_ontology:catalog()),
+                Fun(F#{source => Source, fetch => Fetch, ledger_dir => Dir},
+                    quod_reg:where({directory, control}), Owner)
+            after
+                quod_foreign_log_tests:stop_owner(Owner),
+                gen_server:stop(Root),
+                ets:delete(RootTable)
+            end
+        end)
+    end)
+    after ets:delete(Source), _ = file:del_dir_r(Dir)
+    end.
+
+node_generation_fixture(Height) ->
+    F = quod_ct:protocol_fixture(quod_foreign_log_tests:unique_ns()),
+    {Ns, Anchor} = maps:get(identity, F),
+    Signer = maps:get(signer, F), Pub = maps:get(pubkey, Signer),
+    Instance = directory_node,
+    NodeRef = {agent_instance_ref, Ns, Anchor, Instance},
+    {ok, Blob} = quod_wire_term:encode_canonical(NodeRef),
+    {Entries, _} = lists:mapfoldl(fun(H, Parent) ->
+        Terms = case H of
+            2 -> [{agent_key, Instance, Pub, active},
+                  {hosts_ontology, NodeRef, Ns, Anchor, discoverable}];
+            _ -> [{directory_history, H}]
+        end,
+        Entry = node_history_entry(F, H, Parent, quod_prolog:terms_to_diff(Terms)),
+        {ok, Block} = quod_ledger:block_from_entry(Entry),
+        {Entry, quod_ledger:block_ref(Block)}
+    end, maps:get(protocol_root, maps:get(projection, F)), lists:seq(2, Height)),
+    F#{author => {node_actor, Blob},
+       chain => [quod_ledger:entry(1, maps:get(genesis, F), none) | Entries]}.
+
+node_history_entry(F, H, Parent, Diff) ->
+    {Ns, Anchor} = Identity = maps:get(identity, F),
+    Template = maps:get(transaction, F),
+    Tx0 = Template#transaction{diff = Diff, author_seq = H - 1,
+          submitted_at = H, sig = none, signed_bytes = none, authentication = none},
+    {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)},
+        quod_transaction:bind_id(Identity, Tx0), maps:get(signer, F)),
+    {ok, Block} = quod_ledger:new_block({maps:get(era, F), H - 1}, Parent,
+                                      H, {batch, [Tx]}, H),
+    quod_ledger:entry(H, Block, quod_ct:protocol_certificate(Block, F)).
+
+submit_node_generation(F, Control, Number) ->
+    {Ns, Anchor} = maps:get(identity, F),
+    Signer = maps:get(signer, F), Pub = maps:get(pubkey, Signer),
+    Endpoint = {<<"127.0.0.1">>, 19000},
+    {ok, Page} = quod_directory_generation:sign(
+        maps:get(author, F), Pub, Endpoint, 1, Number, 0, true,
+        [{Ns, Anchor, validator, node}], maps:get(key, Signer)),
+    Control ! {quod_message, {{Pub, Endpoint}, self()},
+               quod_directory_control:channel(),
+               term_to_binary({quod_directory_generation, Page}, [deterministic])}.
+
+await_generation(F, Number) ->
+    Author = maps:get(author, F),
+    await_control(fun(#{generations := Generations, validations := Validations}) ->
+        case {maps:find(Author, Generations), maps:is_key(Author, Validations)} of
+            {{ok, #{pages := [Page]}}, false} ->
+                {ok, Decoded} = quod_directory_generation:decode(Page),
+                quod_directory_generation:generation(Decoded) =:= Number;
+            _ -> false
+        end
+    end).
+
+await_control(Predicate) -> await_control(Predicate, quod_time:mono_ms() + 10000).
+await_control(Predicate, Deadline) ->
+    State = quod_directory_control:test_control_state(),
+    case Predicate(State) of
+        true -> State;
+        false ->
+            ?assert(quod_time:mono_ms() < Deadline),
+            await_control(Predicate, Deadline)
+    end.
+
+trace_projection_work(Owner, Enabled) ->
+    lists:foreach(fun({Module, _, _} = MFA) ->
+        {module, Module} = code:ensure_loaded(Module),
+        1 = erlang:trace_pattern(MFA, Enabled, [local])
+    end, [{quod_committed_projection, apply_entry, 3}, {dets, sync, 1}]),
+    _ = erlang:trace(Owner, Enabled, [call, set_on_spawn, {tracer, self()}]),
+    ok.
+
+projection_work() ->
+    Ref = erlang:trace_delivered(all),
+    receive {trace_delivered, all, Ref} -> ok after 1000 -> error(trace_timeout) end,
+    projection_work([]).
+projection_work(Acc) ->
+    receive
+        {trace, _Pid, call, {Module, Function, _Args}}
+          when Module =:= quod_committed_projection; Module =:= dets ->
+            projection_work([{Module, Function} | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+count_work(Module, Calls) -> length([ok || {M, _} <- Calls, M =:= Module]).
+
+prime_node_projection(F) ->
+    Identity = maps:get(identity, F),
+    Pub = maps:get(pubkey, maps:get(signer, F)),
+    ok = quod_foreign_log:observe_candidate(Identity, {Pub, {<<"127.0.0.1">>, 19000}}),
+    {ok, Ref} = quod_foreign_log:follow(Identity, projection),
+    await_projection(Ref, Identity, length(maps:get(chain, F))),
+    Ref.
+
+await_projection(Ref, Identity, Minimum) ->
+    receive
+        {quod_foreign_follow, Ref, NoticeRef, Identity, Notice} ->
+            ok = quod_foreign_log:ack(Ref, NoticeRef),
+            case Notice of
+                {resnapshot, H, _, _} when H >= Minimum -> ok;
+                {advanced, _, H, _, _, _, _} when H >= Minimum -> ok;
+                {unreachable, Reason, _} -> error({projection_unreachable, Reason});
+                _ -> await_projection(Ref, Identity, Minimum)
+            end
+    after 10000 -> error(projection_timeout)
+    end.
 
 one_generation_wire_rejects_old_shapes_test() ->
     Page = <<1,2,3>>,

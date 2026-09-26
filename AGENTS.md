@@ -50,6 +50,13 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
   the truth. Do not copy Prolog state between nodes during proofs or re-read
   ledger prefixes on ordinary requests. Recovery and rebuilds need explicit
   lifecycle reasons, not hidden request-time repair paths.
+- Keep reusable verified state alive for the lifetime of its real consumer,
+  not just one request. Proofs, renewals and readiness checks must reuse it
+  and process only changes; they must not repeatedly parse history, rebuild
+  projections or recreate disposable disk indexes. Unchanged checks must not
+  cause disk writes or syncs. Preserve required durability for actual changes;
+  do not hide an I/O lifecycle defect by weakening persistence or moving an
+  unbounded history into memory.
 
 ### Simplification and maintenance
 
@@ -77,6 +84,10 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
   reproductions to distinguish computation, mailbox residence, I/O and protocol
   waits. Add bounded, redacted, removable tracing when needed; observation must
   not change authority, mask errors or require another execution engine.
+- Check repeated-operation cost as well as first-use correctness. For changes
+  to shared-state lifecycles, verify through the real owner that an unchanged
+  repeat does not replay history, rebuild state or write/sync files, and that
+  a real update is still applied. Measure the relevant work, not just latency.
 - Preserve consensus, authorization, custody, proof/backtracking/cut and
   commit guarantees. Performance goals do not authorize weaker checks, extended
   deadlines, uncertain-operation resubmission or changed client semantics.

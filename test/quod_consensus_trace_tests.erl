@@ -69,13 +69,20 @@ owner_turn_covers_keep_progress_steps_and_timeout_actions_test() ->
                     eng => quod_simplex:eng_new(Domain, [],
                       {{quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>}, 1, 0})}),
         %% A stale batch event still takes the real keep_progress path. Compare
-        %% complete results/actions with diagnostics disabled, not a shape oracle.
+        %% complete results/actions, checking each independent clock sample
+        %% against its own callback interval before normalizing that leaf.
+        Before = quod_time:mono_ms(),
         Expected = quod_simplex:running({timeout, batch}, {flush_batch, 1}, State),
+        After = quod_time:mono_ms(),
         TracedState = quod_simplex:test_state_set(trace_owner_turns, true, State),
+        TracedBefore = quod_time:mono_ms(),
         {keep_state, TracedResult, Actions} =
             quod_simplex:running({timeout, batch}, {flush_batch, 1}, TracedState),
-        ?assertEqual(Expected, {keep_state,
-            quod_simplex:test_state_set(trace_owner_turns, false, TracedResult), Actions}),
+        TracedAfter = quod_time:mono_ms(),
+        ?assertEqual(checked_readiness_clock(Expected, Before, After),
+            checked_readiness_clock({keep_state,
+                quod_simplex:test_state_set(trace_owner_turns, false, TracedResult), Actions},
+                TracedBefore, TracedAfter)),
         Turn = take_owner_turn(Ns),
         ?assertEqual(<<"timeout_batch">>, owner_attribute('quod.owner.event', Turn)),
         Steps = take_owner_steps(Turn#span.trace_id, []),
@@ -88,6 +95,21 @@ owner_turn_covers_keep_progress_steps_and_timeout_actions_test() ->
             ?assert(S#span.end_time =< Turn#span.end_time)
         end, Steps)
     end).
+
+checked_readiness_clock({keep_state, State, Actions}, Before, After) ->
+    %% Read the actual private record layout; no copied tuple offsets or
+    %% masking of other state can conceal a tracing side effect.
+    {ok, {quod_simplex, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(code:which(quod_simplex), [abstract_code]),
+    [Fields] = [Fs || {attribute, _, record, {s, Fs}} <- Forms],
+    [Index] = [I || {I, {typed_record_field,
+                        {record_field, _, {atom, _, readiness_advertised}, _}, _}} <-
+                       lists:enumerate(2, Fields)],
+    {Readiness, At} = element(Index, State),
+    ?assert(is_integer(At)),
+    ?assert(At >= Before),
+    ?assert(At =< After),
+    {keep_state, setelement(Index, State, {Readiness, checked_clock}), Actions}.
 
 take_owner_turn(Ns) ->
     receive

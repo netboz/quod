@@ -178,29 +178,30 @@ failed_probe_retains_prefix_for_later_feed_confirmation_test_() ->
     {timeout, 15, fun failed_tip_confirmation/0}.
 
 failed_tip_confirmation() ->
-    Fixture = quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:unique_ns()),
+    Fixture = quod_foreign_log_tests:four_member_confirmation_fixture(
+        quod_foreign_log_tests:unique_ns(), 2),
     Ns = maps:get(ns, Fixture), Anchor = maps:get(anchor, Fixture),
-    Identity = {Ns, Anchor}, Peer = maps:get(pub, Fixture),
+    Identity = {Ns, Anchor}, [Peer | _] = Peers = maps:get(peers, Fixture),
     [Genesis, _] = Chain = maps:get(chain, Fixture),
-    Endpoint = {"127.0.0.1", 19000}, Routes = [{Peer, [Endpoint]}],
-    PrefixFetch = quod_foreign_log_tests:chain_fetch(Ns, [Genesis]),
-    FullFetch = quod_foreign_log_tests:chain_fetch(Ns, Chain),
-    Mode = atomics:new(2, []), Parent = self(),
+    Routes = maps:get(routes, Fixture),
+    PrefixFetch = quod_foreign_log_tests:peer_chain_fetch(Ns, [Genesis], Peers),
+    FullFetch = quod_foreign_log_tests:peer_chain_fetch(Ns, Chain, Peers),
+    Mode = atomics:new(1, []), Parent = self(),
     Fetch = fun(P, E, N, Query, Deadline, Consume) ->
         Parent ! {freshness_fetch, Query},
-        case {atomics:get(Mode, 1), Query} of
-            {0, _} -> PrefixFetch(P, E, N, Query, Deadline, Consume);
-            {1, _} ->
-                case atomics:add_get(Mode, 2, 1) of
-                    1 -> FullFetch(P, E, N, Query, Deadline, Consume);
-                    _ -> {error, retry}
-                end;
-            {2, _} -> FullFetch(P, E, N, Query, Deadline, Consume)
+        case atomics:get(Mode, 1) of
+            0 -> PrefixFetch(P, E, N, Query, Deadline, Consume);
+            %% One genuine member proves the tip but cannot confirm the
+            %% four-member committee. The other members refuse the request.
+            1 when P =:= Peer -> FullFetch(P, E, N, Query, Deadline, Consume);
+            1 -> {error, retry};
+            2 -> FullFetch(P, E, N, Query, Deadline, Consume)
         end
     end,
     Dir = quod_foreign_log_tests:temp_dir("failed-tip-residency"),
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
-    Link = spawn(fun() -> feed_link(Parent) end),
+    Links = [{Member, spawn(fun() -> feed_link(Parent) end)}
+             || Member <- lists:sublist(Peers, 3)],
     try
         ?assertMatch({ok, #{slot := 1}}, quod_foreign_log_tests:prime_projection(
             Routes, Identity, 1, 3000)),
@@ -220,20 +221,23 @@ failed_tip_confirmation() ->
         H = state_history(Identity, sys:get_state(Owner)),
         ?assertEqual(1, record_field(history, height, H)),
         ?assertEqual(true, record_field(history, resident_verified, H)),
+        ?assertMatch(#{height := 2}, record_field(history, certified_tip, H)),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         receive {CallRef, Result} -> ?assertEqual({error, retry}, Result)
         after 3000 -> error(failed_tip_caller_not_released) end,
         receive {'DOWN', MRef, process, Caller, normal} -> ok
         after 3000 -> error(failed_tip_caller_survived) end,
         1 = erlang:trace(Owner, false, ['receive']),
-        RegistrationId = crypto:strong_rand_bytes(16),
-        ok = quod_foreign_log:test_install_feed_registration(
-            Owner, Identity, Peer, Link, RegistrationId),
-        Owner ! {quod_message, {Peer, Link}, quod_feed:channel(Ns),
-                 quod_feed:encode(Ns, {recipient_registered, 1, RegistrationId, Anchor, 2})},
-        receive {residency_feed_ack, Link, Ack} ->
-            ?assertEqual({ack, RegistrationId, Anchor, 2}, quod_feed:decode_recipient(Ack, Ns))
-        after 1000 -> error(freshness_registration_not_acknowledged) end,
+        lists:foreach(fun({Member, Link}) ->
+            RegistrationId = crypto:strong_rand_bytes(16),
+            ok = quod_foreign_log:test_install_feed_registration(
+                Owner, Identity, Member, Link, RegistrationId),
+            Owner ! {quod_message, {Member, Link}, quod_feed:channel(Ns),
+                     quod_feed:encode(Ns, {recipient_registered, 1, RegistrationId, Anchor, 2})},
+            receive {residency_feed_ack, Link, Ack} ->
+                ?assertEqual({ack, RegistrationId, Anchor, 2}, quod_feed:decode_recipient(Ack, Ns))
+            after 1000 -> error(freshness_registration_not_acknowledged) end
+        end, Links),
         %% The failed caller above stays failed. A new caller may now use the
         %% live exact-height committee feed as its confirmation; the earlier
         %% failed probe is neither rewritten nor required again.
@@ -249,7 +253,7 @@ failed_tip_confirmation() ->
         assert_retained_entries(Owner, Identity, [Genesis])
     after
         _ = catch erlang:trace(Owner, false, [all]),
-        Link ! close,
+        [Link ! close || {_, Link} <- Links],
         quod_foreign_log_tests:stop_owner(Owner),
         _ = file:del_dir_r(Dir)
     end.

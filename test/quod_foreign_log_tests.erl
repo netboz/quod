@@ -5,13 +5,13 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([identity_current_global_network_dependency_case/0]).
+-export([material_network_dependency_case/0]).
 
 -ifdef(TEST).
 %% The lifecycle/trace suites exercise the same signed fixture and registered
 %% borrowed-source seams; do not build a second verifier or genesis fixture.
 -export([foreign_fixture/1, prepared_then_committed_fixture/1, long_identity_fixture/2,
-         membership_after_finalize_fixture/1,
+         membership_after_finalize_fixture/1, four_member_confirmation_fixture/2,
          chain_fetch/2, peer_chain_fetch/3, local_fixture_view/2, local_fixture_view/3,
          start_local_borrow_source/2, stop_local_borrow_source/2,
          hold_direct_local/4, receive_local_borrow_result/1,
@@ -197,6 +197,15 @@ foreign_stream_case(Carriers, Mode) ->
     Owner = start_owner_opts(Cache, Fetch, #{page_timeout_ms => 15000}),
     try
         Installed = length(Material) + 1,
+        case Mode of
+            behind ->
+                %% Retain a real verified tip before asking a holder that
+                %% answers below it. A first valid singleton response now
+                %% supplies quorum itself; no redundant second read is owed.
+                ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:verify(
+                  Peer, {"localhost", 1}, Ref, transaction, 1000));
+            _ -> ok
+        end,
         Result = case Mode of
             M when M =:= current; M =:= behind ->
                 quod_foreign_log:current([{Peer, [{"localhost", 1}]}], Identity,
@@ -1395,21 +1404,78 @@ final_confirmation_duplicate_owner_probe_reply_cannot_supply_third_peer_test() -
       end).
 
 observed_newer_tip_is_reconfirmed_before_current_reply_test() ->
-    with_confirmation_fixture(fun(C = #{peers := [A, B, D, Highest]}) ->
+    higher_tip_confirmation_case(refusals).
+
+newer_tip_received_before_old_quorum_cannot_return_old_tip_test() ->
+    higher_tip_confirmation_case(older_quorum).
+
+higher_tip_confirmation_case(OlderReplies) ->
+    with_confirmation_fixture(fun(C = #{peers := [A, B, D, Highest],
+                                        ns := Ns, fixture := Fixture}) ->
         {Call, Token, Initial} = begin_confirmation_wave(C),
+        #{active := #{worker := Worker}} = maps:get(
+          {Ns, maps:get(anchor, Fixture)}, quod_foreign_log:test_lifecycle_state()),
+        #{caller := HighestChild} = maps:get(Highest, Initial),
+        1 = erlang:trace(Worker, true, ['receive', {tracer, self()}]),
+        case OlderReplies of
+            refusals ->
+                #{caller := FirstChild} = maps:get(A, Initial),
+                reply_confirmation_pull(C, maps:get(A, Initial), {at, 2}),
+                receive
+                    {trace, Worker, 'receive',
+                     {foreign_probe, _, FirstChild, {A, _}, {ok, _}}} -> ok
+                after 2000 -> error(initial_tip_not_received)
+                end;
+            older_quorum -> ok
+        end,
         reply_confirmation_pull(C, maps:get(Highest, Initial), {at, 4}),
-        reply_confirmation_pull(C, maps:get(A, Initial), {at, 2}),
-        reply_confirmation_pull(C, maps:get(B, Initial), {error, not_ready}),
-        reply_confirmation_pull(C, maps:get(D, Initial), {error, not_ready}),
-        Worker = receive_confirmation_return(Token, false),
+        %% The higher proof has entered the collector before the remaining
+        %% older replies. An old quorum can no longer answer this question.
+        receive
+            {trace, Worker, 'receive',
+             {foreign_probe, _, HighestChild, {Highest, _}, {ok, _}}} -> ok
+        after 2000 -> error(higher_tip_not_received)
+        end,
+        1 = erlang:trace(Worker, false, ['receive']),
+        {Remaining, Reply} = case OlderReplies of
+            older_quorum -> {[A, B, D], {at, 2}};
+            refusals -> {[B, D], {error, not_ready}}
+        end,
+        lists:foreach(fun(Peer) ->
+            reply_confirmation_pull(C, maps:get(Peer, Initial), Reply)
+        end, Remaining),
+        %% Reuse Highest's exact proof; only the three obsolete observations
+        %% need replacement. Receiving these pulls orders the assertion.
+        Final = collect_confirmation_pulls(C, [A, B, D], #{}),
         ?assertEqual(timeout, gen_server:wait_response(Call, 0)),
-        Worker ! {release_foreign_confirmation, Token},
-        Final = collect_confirmation_pulls(C, [A, B, D, Highest], #{}),
         lists:foreach(fun(Peer) ->
             reply_confirmation_pull(C, maps:get(Peer, Final), {at, 4})
         end, [A, B, D]),
+        Worker = receive_confirmation_return(Token, true),
+        Worker ! {release_foreign_confirmation, Token},
         ?assertMatch({reply, {ok, #{slot := 4}}}, gen_server:wait_response(Call, 3000)),
-        ?assertMatch(#{pending := 0, pulls := 0}, quod_foreign_log:stats())
+        ?assertMatch(#{pending := 0, pulls := 0}, quod_foreign_log:stats()),
+        flush_confirmation_traces(Worker)
+    end).
+
+current_quorum_does_not_wait_for_the_preferred_source_test() ->
+    with_confirmation_fixture(fun(C = #{owner := Owner, peers := [Preferred, B, D, E],
+                                        links := Links}) ->
+        {Call, Token, Pulls} = begin_confirmation_wave(C),
+        #{id := Id, caller := Child} = maps:get(Preferred, Pulls),
+        Link = maps:get(Preferred, Links),
+        ChildMonitor = monitor(process, Child),
+        LinkMonitor = monitor(process, Link),
+        %% Deliberately withhold the preferred source's first answer. Each
+        %% other peer answers exactly once, through real verified page pulls.
+        [reply_confirmation_pull(C, maps:get(Peer, Pulls), {at, 2})
+         || Peer <- [B, D, E]],
+        Worker = receive_confirmation_return(Token, true),
+        assert_confirmation_pull_reaped(
+          C, Call, Worker, Id, Child, ChildMonitor, Link, LinkMonitor),
+        ?assertEqual(#{}, gen_server:call(Owner, test_page_rows)),
+        Worker ! {release_foreign_confirmation, Token},
+        ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Call, 3000))
     end).
 
 confirmation_candidates_group_distinct_members_in_endpoint_order_test() ->
@@ -1508,14 +1574,14 @@ confirmation_responses_preserve_original_collector_deadline_test() ->
           try
               [A, B, C, D] = Items,
               maps:get(A, Children) ! {confirmation_probe_reply, Token, true},
-              Deadline = receive_confirmation_collector_deadline(Collector, 3, 1),
+              Deadline = receive_confirmation_collector_deadline(Collector, 3),
               %% Deliver B in a later monotonic millisecond. Without this
               %% test-only scheduling, a reset-to-now bug could accidentally
               %% produce the same deadline for back-to-back responses.
               _ = erlang:send_after(5, maps:get(B, Children), {confirmation_probe_reply, Token, true}),
-              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 2, 2)),
+              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 2)),
               maps:get(C, Children) ! {confirmation_probe_reply, Token, false},
-              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 1, 2)),
+              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 1)),
               maps:get(D, Children) ! {confirmation_probe_reply, Token, false},
               ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token))
           after
@@ -1523,13 +1589,12 @@ confirmation_responses_preserve_original_collector_deadline_test() ->
           end
       end).
 
-receive_confirmation_collector_deadline(Collector, PendingCount, ConfirmedCount) ->
+receive_confirmation_collector_deadline(Collector, PendingCount) ->
     receive
         {trace, Collector, call,
          {quod_foreign_log, collect_probes,
-          [_, Pending, Deadline, {evidence, 3, _Expected, Confirmed, _Results}]}}
-          when map_size(Pending) =:= PendingCount,
-               map_size(Confirmed) =:= ConfirmedCount -> Deadline
+          [_, Pending, Deadline, Collection]}}
+          when map_size(Pending) =:= PendingCount, is_map(Collection) -> Deadline
     after 2000 -> error(confirmation_collector_deadline_not_observed)
     end.
 
@@ -1550,14 +1615,14 @@ confirmation_quorum_agrees_across_response_orders_test_() ->
 
 ordered_confirmation_result(Outcomes, Order) ->
     Expected = confirmation_evidence(),
-    Completion = {evidence, 3, Expected},
     Items = confirmation_collector_items(),
+    Completion = confirmation_collection_context(Items),
     OrderedItems = [lists:nth(I, Items) || I <- Order],
     Parent = self(),
     Token = make_ref(),
     %% Continue each child only after observing the collector receive the
     %% previous result: response order is not assumed from scheduling.
-    Probe = fun(Item) ->
+    Probe = fun(Item, _Authority) ->
                 Parent ! {confirmation_order_child, Token, Item, self()},
                 receive {confirmation_order_reply, Token, Value} -> confirmation_probe_result(Value, Expected) end
             end,
@@ -1596,13 +1661,24 @@ ordered_confirmation_result(Outcomes, Order) ->
         flush_confirmation_traces(Collector)
     end.
 
-confirmation_boolean(Results) -> length([ok || {_, {ok, _}} <- Results]) >= 3.
+confirmation_boolean({ok, _Verified}) -> true;
+confirmation_boolean({error, retry, _BestVerified}) -> false.
 
 confirmation_evidence() ->
     #{chain := [_, Entry]} = foreign_fixture(unique_ns()),
-    #{entry => Entry}.
+    %% The collector consumes already-verified evidence. Owner/transport
+    %% fixtures below exercise the actual signed committee induction.
+    #{entry => Entry, authority =>
+        #{committee => [Peer || {Peer, _} <- confirmation_collector_items()],
+          protocol_root => {key(confirmation_era), 0, key(confirmation_root)}}}.
+
+confirmation_collection_context(Items) ->
+    #{authority => maps:get(authority, confirmation_evidence()),
+      candidates => fun(_Authority) -> Items end,
+      feed => fun(_Verified) -> unknown end}.
 
 confirmation_probe_result(true, Evidence) -> {ok, Evidence};
+confirmation_probe_result({ok, Verified}, _Evidence) -> {ok, Verified};
 confirmation_probe_result(false, _Evidence) -> {error, retry}.
 
 confirmation_permutations([]) -> [[]];
@@ -1613,10 +1689,13 @@ confirmation_collector_items() -> [{key({confirmation_collector, I}), [I]} || I 
 
 with_controlled_confirmation_collector(Items, Timeout, Fun) ->
     Expected = confirmation_evidence(),
-    Completion = {evidence, 3, Expected},
+    Completion = confirmation_collection_context(Items),
+    with_controlled_confirmation_collector(Items, Timeout, Expected, Completion, Fun).
+
+with_controlled_confirmation_collector(Items, Timeout, Expected, Completion, Fun) ->
     Parent = self(),
     Token = make_ref(),
-    Probe = fun(Item) ->
+    Probe = fun(Item, _Authority) ->
                 Parent ! {confirmation_probe_started, Token, Item, self()},
                 receive
                     {confirmation_probe_reply, Token, Result} -> confirmation_probe_result(Result, Expected);
@@ -1691,9 +1770,9 @@ begin_confirmation_wave(C = #{owner := Owner}) ->
     Call = confirmation_current_request(C),
     {Call, Token, receive_initial_confirmation_pulls(C)}.
 
-receive_initial_confirmation_pulls(C = #{peers := [First | _] = Peers}) ->
-    Initial = collect_confirmation_pulls(C, [First], #{}),
-    reply_confirmation_pull(C, maps:get(First, Initial), {at, 2}),
+receive_initial_confirmation_pulls(C = #{peers := Peers}) ->
+    %% All available peers must start before any source has answered. The
+    %% first valid response is itself a confirmation, not a discarded probe.
     collect_confirmation_pulls(C, Peers, #{}).
 
 collect_confirmation_pulls(_C, [], Pulls) -> Pulls;
@@ -1978,7 +2057,7 @@ feed_established_current_view(Case) ->
                                  digest_higher, local_higher, opaque_progress]),
     Mode = atomics:new(1, []),
     Fetch = fun(P, E, N, Query, Deadline, Consume) ->
-        ets:insert(Calls, {erlang:unique_integer([monotonic]), Query}),
+        ets:insert(Calls, {erlang:unique_integer([monotonic]), P, Query}),
         case atomics:get(Mode, 1) =:= 1 andalso Advance of
             true -> Full(P, E, N, Query, Deadline, Consume);
             false -> Initial(P, E, N, Query, Deadline, Consume)
@@ -2063,10 +2142,18 @@ feed_established_current_view(Case) ->
             _ ->
                 ?assertMatch({ok, #{slot := Expected}}, quod_foreign_log:current(Routes, Identity, 5000))
         end,
-        Ranges = [Range || {_, Range} <- ets:tab2list(Calls)],
+        Fetches = [{Peer, Query} || {_, Peer, Query} <- ets:tab2list(Calls)],
+        Ranges = [Query || {_, Query} <- Fetches],
         case Case of
             resident -> ?assertEqual([], Ranges);
-            suffix -> ?assertMatch([{evidence, _, tip}], Ranges);
+            suffix ->
+                %% The parallel queries can begin before the first verified
+                %% tip permits feed reuse; none of those peers is queried twice.
+                Queried = [Peer || {Peer, _} <- Fetches],
+                ?assert(Queried =/= []),
+                ?assertEqual(length(Queried), length(lists:usort(Queried))),
+                ?assertEqual([], Queried -- Peers),
+                [?assertMatch({evidence, _, tip}, Query) || Query <- Ranges];
             _ -> ?assert(length(Ranges) > 0)
         end
     after
@@ -2082,19 +2169,26 @@ suffix_page_reply_uses_next_peer_through_owner_transport_test() ->
         [{A, [Historical]}, {B, [NextEndpoint]} | Rest] = Routes,
         Live = {"127.0.0.1", 19997}, Parent = self(),
         PageLink = spawn(fun() -> page_test_link(Parent) end),
+        SeedLinks = maps:from_list([{Peer, spawn(fun() -> page_test_link(Parent) end)}
+                                   || Peer <- Peers]),
+        ProbeLinks = maps:from_list([{Peer, spawn(fun() -> page_test_link(Parent) end)}
+                                    || Peer <- tl(Peers)]),
+        NextLink = spawn(fun() -> page_test_link(Parent) end),
         FeedLinks = [spawn(fun() -> fake_feed_link(Parent) end) || _ <- tl(Peers)],
         try
-            %% Establish the current-view watch through its real probe and
-            %% confirmation path before installing ordered feed progress.
+            %% Establish the current-view watch before its ordered feed
+            %% progress. Each later transport opening gets a new link PID;
+            %% the collector legitimately cancels its unused fourth peer.
             {WarmCall, Token, WarmPulls} = begin_confirmation_wave(C0),
             [reply_confirmation_pull(C0, maps:get(Peer, WarmPulls), {at, 2})
-             || Peer <- Peers],
+             || Peer <- lists:sublist(Peers, 3)],
             WarmWorker = receive_confirmation_return(Token, true),
             WarmWorker ! {release_foreign_confirmation, Token},
             ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(WarmCall, 3000)),
+            assert_page_owner_drained(),
             Registrations = [{Peer, Link, install_current_feed(Owner, Identity, Peer, Link, 2)}
                              || {Peer, Link} <- lists:zip(tl(Peers), FeedLinks)],
-            seed_confirmation_archive(C0, Identity),
+            seed_confirmation_archive(C0#{links := SeedLinks}, Identity),
             [begin
                  Owner ! {quod_message, {Peer, Link}, quod_feed:channel(Ns),
                             quod_feed:encode(Ns, {recipient_wake, 1, Registration,
@@ -2103,15 +2197,13 @@ suffix_page_reply_uses_next_peer_through_owner_transport_test() ->
                      receive_fake_feed_send(Link, 1000), Ns))
              end || {Peer, Link, Registration} <- Registrations],
             C = C0#{contact => {A, Live},
+                     links := ProbeLinks#{A => PageLink},
                      routes := [{A, [Live, Historical]}, {B, [NextEndpoint]} | Rest]},
             Call = make_ref(),
             ok = quod_foreign_log:observe_candidate(Identity, {A, Live}),
             spawn(fun() -> Parent ! {Call, prime_projection([], Identity, 4, 10000)} end),
-            {Lease, Owner} = receive_page_open(A, Live, Ns),
-            Binding = install_page_test_link(Owner, Lease, A, Ns, PageLink),
-            Owner ! {catchup_credit, PageLink, Binding, crypto:strong_rand_bytes(16)},
-            TipPull = receive_confirmation_pull(Owner, PageLink, 3, 4),
-            reply_confirmation_pull(C, TipPull, {at, 4}),
+            TipPulls = collect_confirmation_pulls(C, Peers, #{}),
+            reply_confirmation_pull(C, maps:get(A, TipPulls), {at, 4}),
             Pull = receive_material_confirmation_pull(Owner, PageLink, 3, 4),
             reply_confirmation_pull(C, Pull, {ok, [], 2, done}),
             Channel = quod_catchup:channel(Ns), OldLink = maps:get(A, Links),
@@ -2122,7 +2214,8 @@ suffix_page_reply_uses_next_peer_through_owner_transport_test() ->
             after 2000 -> error(next_page_source_not_selected)
             end,
             ?assertEqual({B, NextEndpoint}, {SelectedPeer, SelectedEndpoint}),
-            NextLink = maps:get(B, Links),
+            %% The tip collector canceled B's unfinished page. A later
+            %% opening is a new link incarnation, never that dead test PID.
             NextBinding = install_page_test_link(Owner, NextLease, B, Ns, NextLink),
             Owner ! {catchup_credit, NextLink, NextBinding, crypto:strong_rand_bytes(16)},
             NextPull = receive_material_confirmation_pull(Owner, NextLink, 3, 4),
@@ -2132,7 +2225,8 @@ suffix_page_reply_uses_next_peer_through_owner_transport_test() ->
             after 3000 -> error(suffix_projection_not_completed) end,
             assert_page_owner_drained()
         after
-            PageLink ! close, [L ! close || L <- FeedLinks]
+            PageLink ! close, NextLink ! close,
+            [L ! close || L <- maps:values(SeedLinks) ++ maps:values(ProbeLinks) ++ FeedLinks]
         end
     end).
 
@@ -2141,12 +2235,13 @@ seed_confirmation_archive(C = #{owner := Owner, routes := Routes, peers := Peers
     Parent = self(), Tag = make_ref(),
     spawn(fun() -> Parent ! {Tag, prime_projection(Routes, Identity, 2, 10000)} end),
     [First | _] = Peers,
-    Pulls = collect_confirmation_pulls(C, [First], #{}),
+    Pulls = collect_confirmation_pulls(C, Peers, #{}),
     reply_confirmation_pull(C, maps:get(First, Pulls), {at, 2}),
     Pull = receive_material_confirmation_pull(Owner, maps:get(First, Links), 1, 2),
     reply_confirmation_pull(C, Pull, {ok, fixture_page_parts(Fixture, 1, 2), 2, done}),
     receive {Tag, Result} -> ?assertMatch({ok, #{slot := 2}}, Result)
-    after 3000 -> error(seed_projection_not_completed) end.
+    after 3000 -> error(seed_projection_not_completed) end,
+    assert_page_owner_drained().
 
 receive_material_confirmation_pull(Owner, Link, From, To) ->
     receive
@@ -2259,12 +2354,12 @@ moving_current_view_keeps_one_job_until_the_tip_is_current_test() ->
         ok = quod_foreign_log:test_set_feed_height(Owner, Identity, FeedPeers, 4),
         ok = atomics:put(Available, 1, 4),
         Call = gen_server:send_request(Owner, current_request(Routes, Identity, none, 5000)),
-        Worker = receive {moving_current_fetch, 4, _, Pid4} -> Pid4
-                 after 2000 -> error(first_tip_not_started) end,
+        FirstProbes = [receive {moving_current_fetch, 4, Peer, Probe4} -> Probe4
+                       after 2000 -> error({first_tip_probe_missing, Peer}) end || Peer <- Peers],
         #{active := #{worker := Worker, ref := Job}} = maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
         ok = quod_foreign_log:test_set_feed_height(Owner, Identity, FeedPeers, 6),
         ok = atomics:put(Available, 1, 6),
-        Worker ! {release_moving_current_fetch, 4},
+        [Probe ! {release_moving_current_fetch, 4} || Probe <- FirstProbes],
         %% Every committee probe captures six before the observation moves to
         %% eight. All are held so a quorum cannot finish ahead of this change.
         Probes = [receive {moving_current_fetch, 6, Peer, Probe} -> Probe
@@ -2436,12 +2531,14 @@ current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
                                   quod_foreign_log:current(
                                     Routes, Identity, 5000)}
                          end),
-              Worker = receive
+              Probe = receive
                            {accounted_current_blocked, FetchWorker} ->
                                FetchWorker
                        after 2000 ->
                            error(accounted_current_not_started)
                        end,
+              #{active := #{worker := Worker}} = maps:get(
+                  Identity, quod_foreign_log:test_lifecycle_state()),
               %% A deliberate dependency hold makes the worker interval
               %% dominate scheduler noise; it is not a progress poll or a
               %% production deadline.
@@ -2450,7 +2547,7 @@ current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
                     {quod_trace, set_attributes, 2}, true, []),
               1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
               try
-                  Worker ! release_accounted_current,
+                  Probe ! release_accounted_current,
                   receive
                       {accounted_current_result, Result} ->
                           ?assertMatch(
@@ -6315,7 +6412,7 @@ identity_current_bootstrap_continues_after_selected_source_retry_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-identity_current_global_network_dependency_stops_route_failover_test() ->
+material_network_dependency_stops_route_failover_test() ->
     Name = list_to_atom(
              "foreign_identity_"
              ++ integer_to_list(erlang:unique_integer([positive]))),
@@ -6323,56 +6420,93 @@ identity_current_global_network_dependency_stops_route_failover_test() ->
                           #{name => Name, connection => standard_io,
                             args => ["-pa" | code:get_path()]}),
     try
+        %% Explicit parent loads do not reorder code:get_path(). Bind the
+        %% fresh VM to the same test and production beams, even when a
+        %% focused runner inherited an older build directory on its path.
+        lists:foreach(fun(Module) ->
+            Beam = code:which(Module),
+            ?assertEqual({module, Module},
+                         peer:call(Peer, code, load_abs,
+                                   [filename:rootname(Beam)])),
+            ?assertEqual(Beam, peer:call(Peer, code, which, [Module]))
+        end, [?MODULE, quod_foreign_log, quod_catchup, quod_ct]),
         ?assertEqual(
            ok,
            peer:call(
              Peer, ?MODULE,
-             identity_current_global_network_dependency_case, [], 15000))
+             material_network_dependency_case, [], 15000))
     after
         _ = peer:stop(Peer)
     end.
 
 %% Run in a fresh VM so no namespace started by another EUnit module can
 %% satisfy the deliberately unavailable root-network dependency. This keeps
-%% the route-policy test local without changing production identity precedence.
-identity_current_global_network_dependency_case() ->
+%% the material route-policy test local without changing identity precedence.
+material_network_dependency_case() ->
     Fixture = signed_content_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
-    %% Bootstrap routes are untrusted fetch hints, so they need not be the
-    %% ledger signer.  Fix their canonical order explicitly: the assertion
-    %% must exercise dependency failure at the selected first source rather
-    %% than depend on a random signing key's sort position.
-    [First, Second] = lists:sort([key(252), key(253)]),
+    First = maps:get(pub, Fixture),
+    Second = key(253),
     FirstEndpoint = {"127.0.0.1", 19000},
     SecondEndpoint = {"127.0.0.1", 19001},
     TestPid = self(),
     FetchTag = make_ref(),
-    ChainFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    %% The remote has already checked its history with its network identity.
+    %% Capture its wire bytes there; this receiver deliberately has no Root.
+    Cold = quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
+        fixture_evidence_parts(Fixture, {evidence, genesis, tip})
+    end),
+    Warm = lists:dropwhile(fun(Part) -> Part =/= {evidence, claim, 2} end, Cold),
+    Chain = maps:get(chain, Fixture),
+    ?assertEqual({error, not_hosted}, quod_ontology:network_identity()),
     Fetch =
-        fun(Peer, Endpoint, RequestedNs, Query, Deadline, Consume) ->
-                    {From, _To} = fixture_query_extent(Query),
-            TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
-            case {Peer, Endpoint} of
-                {First, FirstEndpoint} ->
-                    ChainFetch(Peer, Endpoint, RequestedNs, Query, Deadline, Consume);
-                {Second, SecondEndpoint} ->
-                    ChainFetch(Peer, Endpoint, RequestedNs, Query, Deadline, Consume);
-                _ ->
-                    {error, wrong_route}
-            end
+        fun(PeerKey, _Endpoint, RequestedNs, Query, _Deadline, Consume)
+          when RequestedNs =:= Ns ->
+            Parts = case Query of
+                {evidence, genesis, tip} -> Cold;
+                {evidence, _, tip} -> Warm;
+                {range, From, To} -> lists:append([
+                    fixture_transfer_parts(E) || E <- Chain,
+                    entry_index(E) >= From, entry_index(E) =< To])
+            end,
+            Consumed = Consume(Parts, 2, done),
+            TestPid ! {network_dependency_consumed, FetchTag, PeerKey, Query, Consumed},
+            {ok, Consumed, 2, done}
         end,
-    Dir = temp_dir("identity-current-global-dependency"),
+    Routes = route_candidates([{First, FirstEndpoint}, {Second, SecondEndpoint}]),
+    %% Point evidence relies on the certified admission, not local semantic
+    %% replay. Its exact committee/tip remains provable without local Root.
+    PointDir = temp_dir("identity-current-without-network"),
+    PointOwner = start_owner(PointDir, Fetch),
+    try
+        ?assertMatch({ok, #{identity := Identity, slot := 2, committee := [First]}},
+                     quod_foreign_log:current(Routes, Identity, 2000))
+    after stop_owner(PointOwner), _ = file:del_dir_r(PointDir)
+    end,
+    Dir = temp_dir("identity-material-global-dependency"),
     Pid = start_owner(Dir, Fetch),
     try
-        ?assertEqual(
-           {error, retry},
-           quod_foreign_log:current(
-             route_candidates(
-               [{First, FirstEndpoint}, {Second, SecondEndpoint}]),
-             Identity, 200)),
-        Calls = collect_bootstrap_route_fetches(FetchTag, []),
-        ?assertEqual([], [ok || {PeerKey, _} <- Calls, PeerKey =:= Second]),
+        ?assertMatch({error, {unreachable, _}},
+                     prime_projection(Routes, Identity, 2, 2000)),
+        %% This is the actual production material consumer's refusal, not a
+        %% source fixture exception or a rejection of an obsolete query shape.
+        receive
+            {network_dependency_consumed, FetchTag, First, {range, 1, 2}, Result} ->
+                ?assertMatch({error, {unavailable, network_identity, not_hosted}, _},
+                             Result)
+        after 2000 -> error(material_dependency_was_not_consumed)
+        end,
+        %% Completion of the owning follow attempt orders this absence check.
+        %% Genesis may be retained; the signed entry must remain uninstalled.
+        await_history_idle(Identity, quod_time:mono_ms() + 2000),
+        ?assertMatch(#{height := 1, certified_height := 2},
+                     gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        receive
+            {network_dependency_consumed, FetchTag, Second, {range, _, _}, _} ->
+                error(global_dependency_retried_another_material_source)
+        after 0 -> ok
+        end,
         ok
     after
         stop_owner(Pid),
@@ -6409,32 +6543,54 @@ malformed_remote_identity_current_request_is_rejected_before_owner_test() ->
 current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
     Peer = maps:get(pub, Fixture),
     Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
-    [Genesis, Resolve, Membership] = maps:get(chain, Fixture),
-    Prefix = chain_fetch(Ns, [Genesis, Resolve]),
-    Parts = fixture_transfer_parts(Membership),
+    Query = {evidence, genesis, tip},
+    Parts = fixture_evidence_parts(Fixture, Query),
+    %% The unmodified sparse proof really establishes the membership tip.
+    %% Negative variants must reach this same consumer, not fail because a
+    %% fixture still accepts only the retired range-query shape.
+    {ok, Valid} = quod_catchup:evidence_accept(
+        quod_catchup:evidence_begin(Identity, none, tip), Parts, 3, done),
+    {ok, #{authority := #{committee := Committee}}} = quod_catchup:evidence_result(Valid),
+    ?assertEqual(lists:sort([Peer, maps:get(new_pub, Fixture)]), lists:sort(Committee)),
+    [_, _, Membership] = maps:get(chain, Fixture),
+    {ok, MembershipBytes} = quod_ledger:encode_entry(Membership),
+    UncertifiedBytes = term_to_binary(
+        setelement(5, binary_to_term(MembershipBytes, [safe]), none), [deterministic]),
     Uncertified = [case Part of
-        {entry, Bytes} ->
-            Wire = binary_to_term(Bytes, [safe]),
-            {entry, term_to_binary(setelement(5, Wire, none), [deterministic])};
+        {entry, MembershipBytes} -> {entry, UncertifiedBytes};
         _ -> Part
     end || Part <- Parts],
-    Cases = [{stale, [], 1},
-             {malformed, [{group, 4, 4} | tl(Parts)], 4},
-             {uncertified, Uncertified, 3}],
-    lists:foreach(fun({Name, BadParts, Height}) ->
-        Fetch = fun(P, E, RequestedNs, Query = {range, From, _}, Deadline, Consume) ->
-            case From =< 2 of
-                true -> Prefix(P, E, RequestedNs, Query, Deadline, Consume);
-                false -> {ok, Consume(BadParts, Height, done), Height, done}
-            end
+    Malformed = [case Part of
+        {evidence, claim, 3} -> {evidence, claim, 4};
+        _ -> Part
+    end || Part <- Parts],
+    Cases = [{stale, [], 1, incomplete_evidence},
+             {malformed, Malformed, 4, wrong_selected_entry},
+             {uncertified, Uncertified, 3, malformed_entry},
+             {dishonest_height, Parts, 4, wrong_selected_entry},
+             {truncated, lists:droplast(Parts), 3, incomplete_evidence}],
+    Test = self(),
+    lists:foreach(fun({Name, BadParts, Height, Reason}) ->
+        Token = make_ref(),
+        Fetch = fun(_P, _E, RequestedNs, ActualQuery, _Deadline, Consume)
+                    when RequestedNs =:= Ns ->
+            Consumed = Consume(BadParts, Height, done),
+            Test ! {bad_current_evidence_consumed, Token, ActualQuery,
+                    BadParts, Height, Consumed},
+            {ok, Consumed, Height, done}
         end,
         Dir = temp_dir(atom_to_list(Name)),
         Pid = start_owner(Dir, Fetch),
         try
-            ?assertEqual({error, retry}, quod_foreign_log:current(
-                Routes, {Ns, maps:get(anchor, Fixture)}, 100))
+            ?assertEqual({error, retry}, quod_foreign_log:current(Routes, Identity, 100)),
+            receive
+                {bad_current_evidence_consumed, Token, Query, BadParts, Height, Consumed} ->
+                    ?assertEqual({error, Reason}, Consumed)
+            after 1000 -> error({bad_current_evidence_not_consumed, Name})
+            end
         after stop_owner(Pid), _ = file:del_dir_r(Dir) end
     end, Cases).
 
@@ -6568,8 +6724,8 @@ request_scoped_contact_precedes_stale_bootstrap_at_tip_test() ->
     Pid = start_owner(Dir, Fetch),
     try
         %% A retained contact can name the peer's previous allocation.  The
-        %% authenticated endpoint carrying this request must win both while
-        %% fetching genesis and while corroborating the resulting current tip.
+        %% authenticated endpoint carrying this request supplies the exact
+        %% proof and the sole committee member's current observation together.
         quod_foreign_log:observe_candidate(Identity, {Peer, Stale}),
         ?assertMatch(
            {ok, #{identity := Identity, slot := 2}},
@@ -6577,8 +6733,7 @@ request_scoped_contact_precedes_stale_bootstrap_at_tip_test() ->
              route_candidates([{Peer, Stale}]), Identity,
              {Peer, Live}, 5000)),
         Calls = collect_request_tip_fetches([]),
-        ?assert(length(Calls) >= 2),
-        ?assert(lists:all(fun(Endpoint) -> Endpoint =:= Live end, Calls))
+        ?assertEqual([Live], Calls)
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -7992,3 +8147,301 @@ key(N) -> crypto:hash(sha256, term_to_binary({foreign_key, N})).
 
 route_candidates(Routes) ->
     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
+
+confirmation_higher_feed_without_proof_refuses_without_repeated_queries_test() ->
+    Items = confirmation_collector_items(),
+    Expected = confirmation_evidence(),
+    Higher = quod_ledger:entry_index(maps:get(entry, Expected)) + 2,
+    Context = (confirmation_collection_context(Items))#{feed := fun(_) -> {behind, Higher} end},
+    with_controlled_confirmation_collector(Items, 10000, Expected, Context,
+      fun(Collector, Token, Children) ->
+          with_confirmation_edge_trace(Collector, fun() ->
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, Children) ! {confirmation_probe_reply, Token, true},
+                  _ = receive_confirmation_edge_state(
+                      Collector, Token, element(1, Item), 0, {ok, Expected})
+              end, Items),
+              Refreshed = maps:from_list(
+                  [{Item, receive_confirmation_edge_child(Token, Item)} || Item <- Items]),
+              [First, Second, Third, Last] = Items,
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, Refreshed) ! {confirmation_probe_reply, Token, true},
+                  _ = receive_confirmation_edge_state(
+                      Collector, Token, element(1, Item), Higher, {ok, Expected})
+              end, [First, Second, Third]),
+              maps:get(Last, Refreshed) ! {confirmation_probe_reply, Token, true},
+              %% Four matching old proofs cannot certify the higher hint.
+              %% Every peer already answered the new question, so there is
+              %% no dependency change that permits a third request.
+              ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token)),
+              assert_no_confirmation_edge_start(Token)
+          end)
+      end).
+
+confirmation_new_certified_endpoint_does_not_cycle_failed_bootstrap_test() ->
+    [A = {Peer, [OldEndpoint]}, B, C, D] = confirmation_collector_items(),
+    NewEndpoint = newly_certified_endpoint,
+    Expected = confirmation_evidence(),
+    Routes = [{Peer, [OldEndpoint, NewEndpoint]}, B, C, D],
+    Context = confirmation_collection_context(Routes),
+    with_controlled_confirmation_collector([A, B], 10000, Expected, Context,
+      fun(Collector, Token, Children) ->
+          with_confirmation_edge_trace(Collector, fun() ->
+              maps:get(A, Children) ! {confirmation_probe_reply, Token, false},
+              _ = receive_confirmation_edge_state(Collector, Token, Peer, {error, retry}),
+              maps:get(B, Children) ! {confirmation_probe_reply, Token, true},
+              _ = receive_confirmation_edge_state(Collector, Token, element(1, B), {ok, Expected}),
+              NewChild = receive_confirmation_edge_child(Token, {Peer, [NewEndpoint]}),
+              CChild = receive_confirmation_edge_child(Token, C),
+              _DChild = receive_confirmation_edge_child(Token, D),
+              %% The first failed address is remembered; only the newly
+              %% available certified address gets another request.
+              NewChild ! {confirmation_probe_reply, Token, true},
+              _ = receive_confirmation_edge_state(Collector, Token, Peer, {ok, Expected}),
+              CChild ! {confirmation_probe_reply, Token, true},
+              ?assertEqual(true, receive_controlled_confirmation_result(Collector, Token)),
+              assert_no_confirmation_edge_start(Token)
+          end)
+      end).
+
+confirmation_outsider_proof_never_supplies_quorum_test() ->
+    [A, B, C, D] = Members = confirmation_collector_items(),
+    Outsider = {key(confirmation_outsider), [outsider_endpoint]},
+    Expected = confirmation_evidence(),
+    Context = confirmation_collection_context(Members),
+    with_controlled_confirmation_collector(Members ++ [Outsider], 10000, Expected, Context,
+      fun(Collector, Token, Children) ->
+          with_confirmation_edge_trace(Collector, fun() ->
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, Children) ! {confirmation_probe_reply, Token, true},
+                  _ = receive_confirmation_edge_state(Collector, Token, element(1, Item), {ok, Expected})
+              end, [Outsider, A, B]),
+              maps:get(C, Children) ! {confirmation_probe_reply, Token, false},
+              _ = receive_confirmation_edge_state(Collector, Token, element(1, C), {error, retry}),
+              maps:get(D, Children) ! {confirmation_probe_reply, Token, false},
+              ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token)),
+              assert_no_confirmation_edge_start(Token)
+          end)
+      end).
+
+confirmation_disjoint_committee_replaces_old_confirmations_test() ->
+    Fixture = four_member_confirmation_fixture(unique_ns()),
+    [Genesis, Entry2, _, Entry4] = maps:get(chain, Fixture),
+    Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+    {ok, OldAuthority} = quod_simplex:history_validate_advance(
+        Identity, Genesis, quod_simplex:history_projection(Identity)),
+    [A, B, C, D] = OldRoutes = maps:get(routes, Fixture),
+    NewRoutes = [{key({replacement_member, I}), [I]} || I <- lists:seq(1, 4)],
+    [E, F, G, H] = NewRoutes,
+    NewMembers = [Peer || {Peer, _} <- NewRoutes],
+    NewAuthority = OldAuthority#{committee := NewMembers,
+        protocol_root := {key(replacement_era), 0, key(replacement_root)}},
+    Old = #{entry => Entry2, authority => OldAuthority},
+    %% These maps represent the verified output seam; signed membership
+    %% induction itself is exercised by the real owner/transport fixtures.
+    New = #{entry => Entry4, authority => NewAuthority},
+    AllRoutes = OldRoutes ++ NewRoutes,
+    Context = #{authority => OldAuthority, feed => fun(_) -> unknown end,
+        candidates => fun(#{committee := Committee}) ->
+            [Item || {Peer, _} = Item <- AllRoutes, lists:member(Peer, Committee)]
+        end},
+    with_controlled_confirmation_collector(OldRoutes, 10000, Old, Context,
+      fun(Collector, Token, Children) ->
+          with_confirmation_edge_trace(Collector, fun() ->
+              maps:get(A, Children) ! {confirmation_probe_reply, Token, true},
+              _ = receive_confirmation_edge_state(Collector, Token, element(1, A), {ok, Old}),
+              maps:get(B, Children) ! {confirmation_probe_reply, Token, {ok, New}},
+              #{expected := #{authority := #{committee := NewMembers}}} =
+                  receive_confirmation_edge_state(Collector, Token, element(1, B), {ok, New}),
+              NewChildren = maps:from_list(
+                  [{Item, receive_confirmation_edge_child(Token, Item)} || Item <- NewRoutes]),
+              %% Even three old members returning the exact new tip cannot
+              %% supply any member of the disjoint replacement committee.
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, Children) ! {confirmation_probe_reply, Token, {ok, New}},
+                  _ = receive_confirmation_edge_state(Collector, Token, element(1, Item), {ok, New})
+              end, [C, D]),
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, NewChildren) ! {confirmation_probe_reply, Token, {ok, New}},
+                  _ = receive_confirmation_edge_state(Collector, Token, element(1, Item), {ok, New})
+              end, [E, F]),
+              Held = maps:get(H, NewChildren),
+              HeldMonitor = erlang:monitor(process, Held),
+              maps:get(G, NewChildren) ! {confirmation_probe_reply, Token, {ok, New}},
+              ?assertEqual(true, receive_controlled_confirmation_result(Collector, Token)),
+              receive {'DOWN', HeldMonitor, process, Held, killed} -> ok
+              after 2000 -> error(replacement_committee_child_not_cancelled)
+              end,
+              assert_no_confirmation_edge_start(Token)
+          end)
+      end).
+
+with_confirmation_edge_trace(Collector, Fun) ->
+    1 = erlang:trace_pattern({quod_foreign_log, start_current_probes, 3}, true, [local]),
+    1 = erlang:trace(Collector, true, [call, {tracer, self()}]),
+    try Fun()
+    after
+        _ = erlang:trace_pattern({quod_foreign_log, start_current_probes, 3}, false, [local]),
+        flush_confirmation_traces(Collector)
+    end.
+
+receive_confirmation_edge_state(Collector, Token, Peer, Response) ->
+    receive_confirmation_edge_state(Collector, Token, Peer, any, Response).
+
+receive_confirmation_edge_state(Collector, Token, Peer, ExpectedQuestion, Response) ->
+    receive
+        {trace, Collector, call,
+         {quod_foreign_log, start_current_probes, [_, _, #{results := Results} = State]}} ->
+            case maps:get(Peer, Results, none) of
+                {{_ProvenHeight, Height, _Era} = Question, _Endpoints, Response}
+                  when ExpectedQuestion =:= any; ExpectedQuestion =:= Height;
+                       ExpectedQuestion =:= Question -> State;
+                _ -> receive_confirmation_edge_state(Collector, Token, Peer, ExpectedQuestion, Response)
+            end;
+        {confirmation_probe_collected, Token, Collector, Result} ->
+            error({confirmation_completed_before_required_member, Peer, Result})
+    after 2000 -> error({confirmation_observation_not_processed, Peer})
+    end.
+
+receive_confirmation_edge_child(Token, {Peer, Endpoints}) ->
+    receive
+        {confirmation_probe_started, Token, {Peer, Actual}, Child} ->
+            ?assertEqual(Endpoints, Actual),
+            Child
+    after 2000 -> error({confirmation_member_not_started, Peer, Endpoints})
+    end.
+
+assert_no_confirmation_edge_start(Token) ->
+    receive {confirmation_probe_started, Token, Item, _Child} ->
+        error({unexpected_repeated_confirmation, Item})
+    after 0 -> ok
+    end.
+
+confirmation_changed_era_refreshes_lower_reply_beneath_feed_floor_test() ->
+    confirmation_lower_reply_beneath_feed_floor_case(changed_era).
+
+confirmation_higher_proof_refreshes_lower_reply_beneath_feed_floor_test() ->
+    confirmation_lower_reply_beneath_feed_floor_case(same_era).
+
+confirmation_lower_reply_beneath_feed_floor_case(EraChange) ->
+    Fixture = four_member_confirmation_fixture(unique_ns(), 8),
+    [Genesis, _, _, Entry4, _, Entry6 | _] = maps:get(chain, Fixture),
+    Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+    {ok, Authority} = quod_simplex:history_validate_advance(
+        Identity, Genesis, quod_simplex:history_projection(Identity)),
+    [A, B, C, D] = Items = maps:get(routes, Fixture),
+    Old = #{entry => Entry4, authority => Authority},
+    %% Use the existing verified-result seam: actual membership proofs are
+    %% checked by the owner/transport fixtures. Both a same-era higher proof
+    %% and a new era change the verified basis beneath an unchanged floor.
+    NewAuthority = case EraChange of
+        changed_era -> Authority#{protocol_root := {key(feed_floor_era), 0, key(feed_floor_root)}};
+        same_era -> Authority
+    end,
+    OldEra = element(1, maps:get(protocol_root, Authority)),
+    NewEra = element(1, maps:get(protocol_root, NewAuthority)),
+    New = #{entry => Entry6, authority => NewAuthority},
+    Context = #{authority => Authority, candidates => fun(_) -> Items end,
+                feed => fun(_) -> {behind, 8} end},
+    with_controlled_confirmation_collector(Items, 10000, Old, Context,
+      fun(Collector, Token, Children) ->
+          with_confirmation_edge_trace(Collector, fun() ->
+              maps:get(A, Children) ! {confirmation_probe_reply, Token, true},
+              #{minimum_height := 8, first_height := 4} =
+                  receive_confirmation_edge_state(Collector, Token, element(1, A), {ok, Old}),
+              AAtFloor = receive_confirmation_edge_child(Token, A),
+              AAtFloor ! {confirmation_probe_reply, Token, true},
+              #{results := Before} =
+                  receive_confirmation_edge_state(Collector, Token, element(1, A), {4, 8, OldEra}, {ok, Old}),
+              {{4, 8, OldEra}, _, {ok, Old}} = maps:get(element(1, A), Before),
+              %% A already answered the height-eight question, but under the
+              %% old proof basis. New certified progress must refresh it once
+              %% even though the required height remains eight.
+              maps:get(B, Children) ! {confirmation_probe_reply, Token, {ok, New}},
+              #{minimum_height := 8, expected := New} =
+                  receive_confirmation_edge_state(Collector, Token, element(1, B), {ok, New}),
+              ANewEra = receive_confirmation_edge_child(Token, A),
+              BNewEra = receive_confirmation_edge_child(Token, B),
+              ANewEra ! {confirmation_probe_reply, Token, true},
+              #{results := After} =
+                  receive_confirmation_edge_state(Collector, Token, element(1, A), {6, 8, NewEra}, {ok, Old}),
+              {{6, 8, NewEra}, _, {ok, Old}} = maps:get(element(1, A), After),
+              BNewEra ! {confirmation_probe_reply, Token, {ok, New}},
+              _ = receive_confirmation_edge_state(Collector, Token, element(1, B), {ok, New}),
+              lists:foreach(fun(Item) ->
+                  maps:get(Item, Children) ! {confirmation_probe_reply, Token, false},
+                  _ = receive_confirmation_edge_state(Collector, Token, element(1, Item), {error, retry})
+              end, [C, D]),
+              CNewEra = receive_confirmation_edge_child(Token, C),
+              DNewEra = receive_confirmation_edge_child(Token, D),
+              CNewEra ! {confirmation_probe_reply, Token, false},
+              _ = receive_confirmation_edge_state(Collector, Token, element(1, C), {error, retry}),
+              DNewEra ! {confirmation_probe_reply, Token, false},
+              %% A known demand for eight never becomes proof of eight, and
+              %% unchanged replies/errors cannot turn into a retry loop.
+              ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token)),
+              assert_no_confirmation_edge_start(Token)
+          end)
+      end).
+
+current_feed_advance_between_first_proof_and_matching_quorum_keeps_job_test() ->
+    Fixture = four_member_confirmation_fixture(unique_ns(), 6),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    [First | _] = Peers = maps:get(peers, Fixture),
+    Routes = maps:get(routes, Fixture), Chain = maps:get(chain, Fixture),
+    Available = atomics:new(1, []), Parent = self(),
+    ok = atomics:put(Available, 1, 2),
+    Fetch = fun(P, E, RequestedNs, Query, Deadline, Consume) ->
+        Height = atomics:get(Available, 1),
+        Snapshot = peer_chain_fetch(Ns, lists:sublist(Chain, Height), Peers),
+        case Height of
+            H when H =:= 4; H =:= 6 ->
+                Parent ! {late_feed_fetch, H, P, self()},
+                receive {release_late_feed_fetch, H} -> ok end;
+            _ -> ok
+        end,
+        Snapshot(P, E, RequestedNs, Query, Deadline, Consume)
+    end,
+    Dir = temp_dir("feed-after-first-proof"), Owner = start_owner(Dir, Fetch),
+    Link = spawn(fun() -> fake_feed_link(Parent) end),
+    try
+        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:current(Routes, Identity, 5000)),
+        %% One ordered registration supplies a freshness hint, never the
+        %% three-member feed quorum that could immediately confirm proof four.
+        ok = quod_foreign_log:test_install_feed_registration(
+            Owner, Identity, First, Link, crypto:strong_rand_bytes(16)),
+        ok = quod_foreign_log:test_set_feed_height(Owner, Identity, [First], 4),
+        ok = atomics:put(Available, 1, 4),
+        Call = gen_server:send_request(Owner, current_request(Routes, Identity, none, 5000)),
+        Initial = maps:from_list([receive {late_feed_fetch, 4, Peer, Child} -> {Peer, Child}
+                                 after 2000 -> error({late_feed_initial_missing, Peer}) end
+                                 || Peer <- Peers]),
+        #{active := #{worker := Worker, ref := Job}} =
+            maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
+        with_confirmation_edge_trace(Worker, fun() ->
+            maps:get(First, Initial) ! {release_late_feed_fetch, 4},
+            receive
+                {trace, Worker, call,
+                 {quod_foreign_log, start_current_probes,
+                  [_, _, #{expected := #{entry := ObservedEntry}, minimum_height := 4,
+                           feed_confirmed := false}]}} ->
+                    ?assertEqual(4, quod_ledger:entry_index(ObservedEntry))
+            after 2000 -> error(first_proof_not_installed_before_feed)
+            end,
+            %% This owner call is a processing barrier. The newer observation
+            %% precedes quorum completion, not merely the owner's final reply.
+            ok = quod_foreign_log:test_set_feed_height(Owner, Identity, [First], 6),
+            ok = atomics:put(Available, 1, 6),
+            [maps:get(Peer, Initial) ! {release_late_feed_fetch, 4}
+             || Peer <- Peers, Peer =/= First],
+            Fresh = [receive {late_feed_fetch, 6, Peer, Child6} -> Child6
+                     after 2000 -> error({late_feed_refresh_missing, Peer}) end || Peer <- Peers],
+            ?assertMatch(#{active := #{worker := Worker, ref := Job}},
+                maps:get(Identity, quod_foreign_log:test_lifecycle_state())),
+            [Child6 ! {release_late_feed_fetch, 6} || Child6 <- Fresh],
+            ?assertMatch({reply, {ok, #{slot := 6}}}, gen_server:wait_response(Call, 5000)),
+            ?assertMatch(#{pending := 0, pulls := 0}, quod_foreign_log:stats())
+        end)
+    after
+        stop_owner(Owner), Link ! close, _ = file:del_dir_r(Dir)
+    end.

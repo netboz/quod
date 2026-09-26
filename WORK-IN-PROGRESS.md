@@ -2857,3 +2857,94 @@ the owner diagnosed it. Both affected tests now await actual projection refusal,
 the held initializer and its installed result, checking that reconstruction is
 counted exactly once. Both focused cases pass; production bytes are unchanged.
 Clean-v12 will repeat the release gates on this corrected frozen test contract.
+
+Clean-v12 passed all 25 sequential gates: 3118 EUnit and 145 Common Test cases,
+client tests, xref, Dialyzer, both release profiles and reproducible UI checks.
+The reviewed 721-file manifest is
+`0e2dc6b69489ed9fd1f12c96c9f257db4c155a75ce64027b37e9882df2e6fe7f`.
+Commit `993dc30` is pushed and its immutable prod candidate image is published.
+
+Matched isolated hardware runs each verified 1401 healthy requests. The first
+cold atomic pair after 1000 source writes fell from 5,181 ms to 333 ms; this is one
+matched sample, not a stable percentile. Candidate cursor, retained-volume VM
+restart, system catalog, paused-proposer recovery, membership removal and
+re-admission, and two normal browser signup/console/reload flows passed.
+The final contention diagnostic retained its failed workload exit: 5 submissions,
+2 commits and 3 explicit pre-claim conflict refusals, with exact consequence
+readback and no resubmission. That run did not exercise a refused-source
+GroupRef outcome. All original failed harness and measurement runs remain.
+
+F2 performance approval remains open. Remote c4 p99 improved from 1,038 to 766 ms but
+misses 450 ms; local c4 had four clustered 766–921 ms tails. A separately labelled
+128-request diagnostic passed exact readback, with local p99 260ms and remote
+p99 858ms. It does not replace the original measurements. All 64 remote traces
+attribute mean 556 ms HTTP time to identity 20 ms, scope opening 118 ms, source
+claim 127 ms, result wait 236 ms and 55 ms around admission/sealing/return. A shared
+418 ms page-acquisition wait explains the three slowest scope openings; the
+trace does not split its source/storage/transport components. No material
+prefix replay occurred. The original local tail also coincides with two slow
+journal syncs, but its requests were unsampled, so causal attribution is incomplete.
+
+The current-tip verifier unnecessarily fetches a preferred source before
+starting committee confirmation and then fetches that source again. Its
+replacement keeps one concurrent collection of verified exact-tip responses,
+preserving committee authority, distinct-member quorum, higher-tip handling,
+deadline and cancellation. This source refinement is in progress and requires
+its own tests and review before commit; the passed `993dc30` evidence is unchanged.
+Production .246 remains untouched. Old volumes and the original uncertain
+signup are retained, with a protected archive under
+`_build/finality-resume-20260925/old-network-archive-v1/`. Prepared .247 build
+and clean activation scripts have not run.
+
+The concurrent collector refinement now passes 227 focused tests: 187 foreign
+proof/lifecycle cases, 19 tracing cases and 21 metrics cases, with production
+and test compilation under warnings-as-errors. Evidence is
+`_build/finality-resume-20260925/collector-full-focused-v2/`; the runner asserts
+the loaded modules' exact paths and records their hashes. Earlier failed runs
+are retained. Five old fixtures depended on serial fetching; correcting them
+also exposed a real moving-feed regression in the first collector revision.
+The corrected collector retains both the verified basis and the required
+height, checks installed progress before completing a probe quorum, and keeps
+the same job as the tip advances. Feed observations grant no proof authority;
+unchanged observations cannot start repeated requests. The original absolute
+deadline reaches the owner unchanged.
+
+Review also found that an older malformed-page test never consumed its intended
+payload. It now verifies a valid sparse proof first and asserts actual consumer
+rejection of stale, malformed, uncertified, dishonest-height and truncated
+responses. A focused runner initially loaded the wrong test beam; those results
+were invalidated and replaced by explicit-path runs, preserving the originals.
+The final production delta is 158 added and 83 removed lines in the existing
+foreign owner, net +75. The removed serial discovery/confirmation path is gone;
+the extra lines track concrete query dependencies and preserve progress during
+concurrent collection. No production module, process, protocol format or cache
+was added. Clean-v13 is the next release boundary for this exact source.
+
+Clean-v13 stopped at EUnit with 3,125 passes and two failures; its frozen tree,
+logs and exit are retained. Production remains byte-identical to the reviewed
+collector. Both failures concerned old fixtures. The single-member residency
+fixture could no longer refuse confirmation after its first valid reply; a
+four-member version now proves genuine quorum failure, preserves material H1
+and certified H2 separately, then confirms H2 from three ordered feeds without
+fetching. All 21 residency tests pass.
+
+The network-dependency fixture failed in its simulated sender before the
+receiver consumed a proof. Its obligation belongs to material validation;
+certified point evidence uses the accepted admission-trust contract in §0.
+The corrected fixture prebuilds the remote bytes, checks current evidence with
+no local network identity, and checks that actual material consumption refuses
+that dependency without trying another source or installing the signed entry.
+The fresh test VM now explicitly loads the same beams as its parent: a parent
+load alone did not reorder the child's inherited search path. Clean-v14 will
+bind these corrected tests and the unchanged production source. The renamed
+material-dependency test passes in its fresh VM with explicit parent/child beam
+binding; both fixture corrections have independent review.
+
+Clean-v14 stopped at 3,126 passes and one tracing-test failure. A controlled
+comparison found only independently sampled readiness timestamps differed;
+two untraced callbacks reproduce the same difference. The test now checks each
+timestamp against its own callback interval before comparing all remaining
+state and actions, preserving the tracing assertions. All 13 consensus tracing
+tests pass; no production code changed. The original failure and causal evidence
+remain in `clean-v14-trace-triage-v1`. Clean-v15 binds the corrected fixture for
+the release gates; deployment still requires isolated hardware acceptance.

@@ -20,9 +20,11 @@ retained_page_failure_preserves_its_observed_reason_test() ->
                         error, <<"invalid_history">>),
     assert_stage_result(page_consume, {error, invalid_history, retained}, error, <<"invalid_history">>).
 
-probe_collection_normal_result_is_successful_observation_test() ->
-    assert_stage_result(probe_collection, [], ok, <<"ok">>),
-    assert_stage_result(probe_collection, [{peer, {error, retry}}], ok, <<"ok">>),
+probe_collection_terminal_result_is_reported_test() ->
+    assert_stage_result(probe_collection, {ok, #{entry => verified_tip}}, ok, <<"ok">>),
+    assert_stage_result(probe_collection, {error, retry, none}, error, <<"retry">>),
+    assert_stage_result(probe_collection, {error, retry, #{entry => verified_tip}}, error, <<"retry">>),
+    assert_stage_result(probe_collection, [], error, <<"unclassified">>),
     assert_stage_result(probe_collection, #{unexpected => result}, error, <<"unclassified">>),
     assert_stage_result(probe_collection, false, error, <<"rejected">>).
 
@@ -36,7 +38,7 @@ ledger_suspend_normal_result_is_successful_observation_test() ->
 
 normal_helper_shapes_are_not_generic_successes_test() ->
     Shapes = [{page_wait, normal_page_reply()},
-              {probe_collection, []},
+              {probe_collection, {error, retry, none}},
               {ledger_suspend, #{cache_session => opaque_session}}],
     lists:foreach(fun({OwningStage, Result}) ->
         lists:foreach(fun(Stage) ->
@@ -56,15 +58,16 @@ stage_error_vocabulary_is_unchanged_test() ->
               {unexpected_shape, <<"unclassified">>}])
     end, [page_wait, probe_collection, ledger_suspend]).
 
-probe_collection_success_does_not_claim_successful_votes_test() ->
+probe_collection_refusal_preserves_failed_vote_observations_test() ->
     with_stage_trace(fun(TraceId) ->
-        Results = quod_foreign_log:test_parallel_probes(
-                    [{first, []}, {second, []}], fun(_) -> {error, retry} end,
-                    1000, {evidence, 2, #{}}),
-        ?assertEqual([{{first, []}, {error, retry}}, {{second, []}, {error, retry}}],
-                     lists:sort(Results)),
+        Context = #{authority => none, candidates => fun(_) -> [] end,
+                    feed => fun(_) -> unknown end},
+        Result = quod_foreign_log:test_parallel_probes(
+                    [{first, [first_endpoint]}, {second, [second_endpoint]}],
+                    fun(_, _) -> {error, retry} end, 1000, Context),
+        ?assertEqual({error, retry, none}, Result),
         Collection = quod_trace_tests:take_span(<<"quod.foreign.probe_collection">>, TraceId),
-        assert_span_result(Collection, ok, <<"ok">>),
+        assert_span_result(Collection, error, <<"retry">>),
         Probes = [quod_trace_tests:take_span(<<"quod.foreign.probe_worker">>, TraceId) || _ <- [1, 2]],
         lists:foreach(fun(Probe) -> assert_span_result(Probe, error, <<"retry">>) end, Probes)
     end).

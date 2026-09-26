@@ -1888,10 +1888,10 @@ current_feed_tip(Identity, Height, Committee0, S) ->
         false -> unknown
     end.
 
-worker_feed_tip(Owner, RequestRef, Height, Projection, Timeout) ->
+worker_feed_tip(Owner, RequestRef, Height, Projection, Deadline) ->
     page_owner_call(Owner,
       {current_feed_tip, RequestRef, Height, quod_simplex:history_committee(Projection)},
-      quod_time:mono_ms() + Timeout).
+      Deadline).
 
 touch_history(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -5317,16 +5317,16 @@ foreign_stage_result({error, _}) -> failed;
 foreign_stage_result(_) -> failed.
 
 %% Normalize only observation, never the helper's return value. These shapes
-%% mean completion at their named stage, not successful verification: an all-
-%% probe collection can contain refusals, and a suspended session stays opaque
-%% to this layer. Other stages and unknown shapes keep the failing catch-all.
+%% mean completion at their named stage, not successful verification. A
+%% suspended session stays opaque to this layer. Other stages and unknown
+%% shapes keep the failing catch-all.
 foreign_stage_observation(page_wait, {decode_page, {_, _, _, _, _}, Parts, Height, _Continuation, Deadline, _})
   when is_list(Parts), is_integer(Height), Height >= 0, is_integer(Deadline) -> ok;
 foreign_stage_observation(Stage, {error, Reason, _Retained})
   when Stage =:= page_fetch; Stage =:= page_consume -> {error, Reason};
 foreign_stage_observation(page_fetch, {ok, {error, Reason, _Retained}, _Height, _Continuation}) ->
     {error, Reason};
-foreign_stage_observation(probe_collection, Results) when is_list(Results) -> ok;
+foreign_stage_observation(probe_collection, {error, Reason, _Verified}) -> {error, Reason};
 foreign_stage_observation(ledger_suspend, #{cache_session := _} = Meta)
   when not is_map_key(cache_store, Meta) -> ok;
 foreign_stage_observation(_Stage, Result) -> Result.
@@ -5408,10 +5408,26 @@ exact_evidence_sources([{Peer, Endpoint} | Rest], Ref, Phase, Owner, RequestRef,
 
 current_evidence(Sources, Identity, Owner, RequestRef, Fetch, Deadline, Context) ->
     Authority = latest_authority(maps:get(authorities, Context)),
-    Candidates = history_source_candidates(Sources),
-    case first_evidence(Candidates, Identity, Authority, Owner, RequestRef, Fetch, Deadline) of
-        {ok, Verified} -> confirm_evidence(Verified, Sources, Identity, Owner, RequestRef, Fetch, Deadline);
-        {error, _} -> {{error, retry}, #{}}
+    Discovery = [{Peer, [Endpoint]} || {Peer, Endpoint} <- history_source_candidates(Sources)],
+    Candidates = confirmation_candidates(Discovery, [Peer || {Peer, _} <- Discovery]),
+    Collection = #{authority => Authority,
+      candidates => fun(A) -> current_route_candidates(Sources, A) end,
+      feed => fun(#{authority := A, entry := Entry}) ->
+          Height = quod_ledger:entry_index(Entry),
+          worker_feed_tip(Owner, RequestRef, Height, A, Deadline)
+      end},
+    Result = parallel_probes(Candidates,
+      fun({Peer, Endpoints}, A) ->
+          fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, A, tip, Fetch, Deadline)
+      end, Deadline, Collection),
+    _ = confirmation_collected(element(1, Result) =:= ok),
+    case Result of
+        {ok, Verified = #{authority := A, entry := Entry}} ->
+            Height = quod_ledger:entry_index(Entry),
+            Routes = current_route_candidates(Sources, A),
+            {{ok, current_view_evidence(Identity, Height, A, Routes)}, evidence_meta(Verified)};
+        {error, retry, none} -> {{error, retry}, #{}};
+        {error, retry, Verified} -> {{error, retry}, evidence_meta(Verified)}
     end.
 
 latest_authority(Authorities) when map_size(Authorities) =:= 0 -> none;
@@ -5420,45 +5436,6 @@ latest_authority(Authorities) ->
                   (#{height := H} = A, #{height := Old}) when H > Old -> A;
                   (_, Best) -> Best
                 end, none, maps:values(Authorities)).
-
-first_evidence([], _Identity, _Authority, _Owner, _RequestRef, _Fetch, _Deadline) -> {error, retry};
-first_evidence([{Peer, Endpoint} | Rest], Identity, Authority, Owner, RequestRef, Fetch, Deadline) ->
-    case fetch_evidence(Owner, RequestRef, Peer, [Endpoint], Identity, Authority, tip, Fetch, Deadline) of
-        {ok, _} = Ok -> Ok;
-        {error, _} -> first_evidence(Rest, Identity, Authority, Owner, RequestRef, Fetch, Deadline)
-    end.
-
-confirm_evidence(Verified = #{authority := Authority, entry := Entry}, Sources, Identity,
-                 Owner, RequestRef, Fetch, Deadline) ->
-    Height = quod_ledger:entry_index(Entry),
-    Committee = maps:get(committee, Authority),
-    Routes = current_route_candidates(Sources, Authority),
-    case worker_feed_tip(Owner, RequestRef, Height, Authority, max(1, Deadline - quod_time:mono_ms())) of
-        Height -> {{ok, current_view_evidence(Identity, Height, Authority, Routes)}, evidence_meta(Verified)};
-        _ ->
-            Probes = parallel_probes(confirmation_candidates(Routes, Committee),
-              fun({Peer, Endpoints}) ->
-                  fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, tip, Fetch, Deadline)
-              end, max(0, Deadline - quod_time:mono_ms()),
-              {evidence, quod_simplex:quorum(length(Committee)), Verified}),
-            Confirmed = [V || {_Peer, {ok, V}} <- Probes, same_evidence_tip(V, Verified)],
-            case confirmation_collected(length(Confirmed) >= quod_simplex:quorum(length(Committee))) of
-                true -> {{ok, current_view_evidence(Identity, Height, Authority, Routes)}, evidence_meta(Verified)};
-                false ->
-                    Newer = [V || {_Peer, {ok, #{entry := E} = V}} <- Probes,
-                                  quod_ledger:entry_index(E) > Height],
-                    case {Newer, Deadline > quod_time:mono_ms()} of
-                        {[_ | _], true} ->
-                            Next = lists:foldl(fun(V = #{entry := E}, Acc = #{entry := Prior}) ->
-                                case quod_ledger:entry_index(E) > quod_ledger:entry_index(Prior) of
-                                    true -> V; false -> Acc
-                                end
-                            end, Verified, Newer),
-                            confirm_evidence(Next, Sources, Identity, Owner, RequestRef, Fetch, Deadline);
-                        _ -> {{error, retry}, evidence_meta(Verified)}
-                    end
-            end
-    end.
 
 same_evidence_tip(#{entry := A}, #{entry := B}) ->
     quod_ledger:entry_index(A) =:= quod_ledger:entry_index(B) andalso
@@ -5470,7 +5447,7 @@ evidence_meta(#{authority := Authority, authorities := Authorities, entry := Ent
           authority => Authority}}.
 
 fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, Selection, Fetch, Deadline) ->
-    KnownEra = case Authority of none -> genesis; #{protocol_root := {Era, _, _}} -> Era end,
+    KnownEra = evidence_known_era(Authority),
     Receiver = quod_catchup:evidence_begin(Identity, Authority, Selection),
     Query = {evidence, KnownEra, Selection},
     quod_peer_route:walk(Endpoints, Deadline,
@@ -5479,6 +5456,9 @@ fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, Selectio
       end,
       fun({ok, _} = Ok, _) -> {done, Ok}; (Error, _) -> {next, Error} end,
       {error, retry}).
+
+evidence_known_era(none) -> genesis;
+evidence_known_era(#{protocol_root := {Era, _, _}}) -> Era.
 
 fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity = {Ns, _}, Query, Receiver, Fetch, Deadline) ->
     Consume = fun(Parts, Height, Continuation) ->
@@ -6131,35 +6111,73 @@ flatten_route_candidates(Candidates) ->
      || {Peer, Endpoints} <- Candidates,
         Endpoint <- Endpoints].
 
-%% Confirmation counts distinct committee keys and retains newer verified
-%% tips for convergence. Every child shares the same absolute probe deadline.
-parallel_probes(Items, Probe, TimeoutMs, Completion) ->
+%% A completed tip proof establishes both the exact head and its authority.
+%% Discovery and confirmation share these observations, counted only for the
+%% proven committee. A higher proof changes the question under the same deadline.
+parallel_probes(Items, Probe, Deadline, Context) ->
     trace_foreign_stage(probe_collection,
       #{'quod.foreign.expected_probe_children' => length(Items)},
-      fun() -> parallel_probes_raw(Items, Probe, TimeoutMs, Completion) end).
+      fun() -> parallel_probes_raw(Items, Probe, Deadline, Context) end).
 
-parallel_probes_raw(Items, Probe, TimeoutMs, Completion) ->
-    Parent = self(),
+parallel_probes_raw(Items, Probe, Deadline, Context) ->
     Tag = make_ref(),
+    Collection = Context#{probe => Probe, items => Items, expected => none,
+                          first_height => 0, minimum_height => 0,
+                          results => #{}, feed_confirmed => false},
+    collect_probes(Tag, #{}, Deadline, Collection).
+
+start_current_probes(Tag, Pending, Collection) ->
+    Parent = self(),
     TraceCtx = quod_trace:context(),
     TraceStages = get(?TRACE_STAGE_ACTIVE),
+    #{probe := Probe, authority := Authority, items := Candidates} = Collection,
+    Question = {current_candidate_height(Collection), current_question_height(Collection),
+                evidence_known_era(Authority)},
+    Active = maps:from_keys([Peer || {_MRef, {Peer, _}, _Question} <- maps:values(Pending)], true),
+    Items = [{Peer, Endpoints} || {Peer, _} = Item <- Candidates,
+             not is_map_key(Peer, Active),
+             Endpoints <- [current_probe_endpoints(Item, Collection)], Endpoints =/= []],
     trace_count(probes_started, length(Items)),
-    Pending = lists:foldl(
+    lists:foldl(
                 fun({Ordinal, Item}, Acc) ->
                     {Pid, MRef} = spawn_opt(
                                     fun() ->
                                         Result = traced_probe_work(
                                                    TraceCtx, TraceStages, Ordinal,
-                                                   fun() -> Probe(Item) end),
+                                                   fun() -> Probe(Item, Authority) end),
                                         Parent ! {foreign_probe, Tag, self(),
                                                   Item, Result}
                                     end, [link, monitor]),
-                    Acc#{Pid => {MRef, Item}}
-                end, #{}, lists:enumerate(Items)),
-    Deadline = quod_time:mono_ms() + TimeoutMs,
-    {evidence, Needed, Expected} = Completion,
-    Collection = {evidence, Needed, Expected, #{}, []},
-    collect_probes(Tag, Pending, Deadline, Collection).
+                    Acc#{Pid => {MRef, Item, Question}}
+                end, Pending, lists:enumerate(Items)).
+
+current_probe_endpoints({Peer, Endpoints}, Collection = #{results := Results,
+                        expected := Expected, first_height := FirstHeight, authority := Authority}) ->
+    case maps:find(Peer, Results) of
+        error -> Endpoints;
+        {ok, {{PriorProven, PriorHeight, PriorEra}, Tried, Result}} ->
+            Proven = current_candidate_height(Collection),
+            Height = current_question_height(Collection),
+            ChangedEra = evidence_known_era(Authority) =/= PriorEra,
+            case Result of
+                {ok, Verified} ->
+                    case Height =:= quod_ledger:entry_index(maps:get(entry, Verified))
+                         andalso same_evidence_tip(Verified, Expected) of
+                        true -> [];
+                        false when Height > PriorHeight; Proven > PriorProven; ChangedEra -> Endpoints;
+                        false -> Endpoints -- Tried
+                    end;
+                _ when Height > max(PriorHeight, FirstHeight);
+                       Proven > max(PriorProven, FirstHeight); ChangedEra -> Endpoints;
+                _ -> Endpoints -- Tried
+            end
+    end.
+
+current_candidate_height(#{expected := none}) -> 0;
+current_candidate_height(#{expected := #{entry := Entry}}) -> quod_ledger:entry_index(Entry).
+
+current_question_height(Collection = #{minimum_height := Minimum}) ->
+    max(current_candidate_height(Collection), Minimum).
 
 traced_probe_work(TraceCtx, true, Ordinal, Fun) ->
     quod_trace:with_span(
@@ -6187,53 +6205,110 @@ traced_probe_work(TraceCtx, true, Ordinal, Fun) ->
 traced_probe_work(TraceCtx, _Inactive, _Ordinal, Fun) ->
     quod_trace:with_context(TraceCtx, Fun).
 
-collect_probes(Tag, Pending, Deadline, Collection) ->
-    case probe_collection_complete(Collection, map_size(Pending)) of
+collect_probes(Tag, Pending0, Deadline, Collection0) ->
+    %% A notice may arrive after candidate selection while its peer replies
+    %% are pending. Validate freshness once at quorum completion so that a
+    %% newer installed demand continues this job instead of being parked.
+    Collection = case Deadline > quod_time:mono_ms() andalso
+                      probe_collection_complete(Collection0) andalso
+                      not maps:get(feed_confirmed, Collection0) of
+        true -> refresh_current_feed(Collection0);
+        false -> Collection0
+    end,
+    Complete = probe_collection_complete(Collection),
+    Expired = Deadline =< quod_time:mono_ms(),
+    Pending = case Complete orelse Expired of
+        true -> Pending0;
+        false -> start_current_probes(Tag, Pending0, Collection)
+    end,
+    case Complete orelse Expired orelse map_size(Pending) =:= 0 of
         true ->
             stop_current_probes(Pending),
-            probe_collection_result(Collection);
+            probe_collection_result(Collection, Complete andalso not Expired);
         false ->
             Wait = max(0, Deadline - quod_time:mono_ms()),
             receive
                 {foreign_probe, Tag, Pid, Item, Result}
                   when is_map_key(Pid, Pending) ->
                     case maps:get(Pid, Pending) of
-                        {MRef, Item} ->
+                        {MRef, Item, Question} ->
                             trace_count(probe_results, 1),
                             _ = erlang:demonitor(MRef, [flush]),
                             collect_probes(
                               Tag, maps:remove(Pid, Pending), Deadline,
-                              collect_probe_result(Collection, Item, Result));
+                              collect_probe_result(Collection, Item, Question, Result));
                         _ ->
                             collect_probes(Tag, Pending, Deadline, Collection)
                     end;
                 {'DOWN', MRef, process, Pid, _Reason}
                   when is_map_key(Pid, Pending) ->
                     case maps:get(Pid, Pending) of
-                        {MRef, _Item} ->
+                        {MRef, Item, Question} ->
                             collect_probes(
-                              Tag, maps:remove(Pid, Pending), Deadline, Collection);
+                              Tag, maps:remove(Pid, Pending), Deadline,
+                              collect_probe_result(Collection, Item, Question, {error, retry}));
                         _ ->
                             collect_probes(Tag, Pending, Deadline, Collection)
                     end
             after Wait ->
                 stop_current_probes(Pending),
-                probe_collection_result(Collection)
+                probe_collection_result(Collection, false)
             end
     end.
 
-probe_collection_complete({evidence, Needed, _Expected, Confirmed, _Results}, Remaining) ->
-    confirmation_sufficient(Needed, Confirmed) orelse Remaining =:= 0.
+probe_collection_complete(#{expected := none}) -> false;
+probe_collection_complete(#{expected := #{authority := #{committee := Committee},
+                                         entry := Entry} = Expected,
+                            results := Results, minimum_height := Minimum,
+                            feed_confirmed := FeedConfirmed}) ->
+    Confirmed = maps:from_keys([Peer || Peer <- Committee,
+        {_Question, _Tried, {ok, Verified}} <- [maps:get(Peer, Results, none)],
+        same_evidence_tip(Verified, Expected)], true),
+    quod_ledger:entry_index(Entry) >= Minimum andalso
+        (FeedConfirmed orelse confirmation_sufficient(quod_simplex:quorum(length(Committee)), Confirmed)).
 
-collect_probe_result({evidence, Needed, Expected, Confirmed, Results}, {Peer, _} = Item, Result) ->
-    Next = case Result of
-        {ok, V} -> case same_evidence_tip(V, Expected) of
-            true -> Confirmed#{Peer => true}; false -> Confirmed end;
-        _ -> Confirmed
+collect_probe_result(Collection = #{results := Results}, {Peer, Endpoints}, Question, Result) ->
+    Tried = case maps:find(Peer, Results) of
+        error -> Endpoints;
+        {ok, {_PriorQuestion, PriorEndpoints, _PriorResult}} -> lists:uniq(PriorEndpoints ++ Endpoints)
     end,
-    {evidence, Needed, Expected, Next, [{Item, Result} | Results]}.
+    Next = Collection#{results := Results#{Peer => {Question, Tried, Result}}},
+    case Result of
+        {ok, Verified} -> select_current_evidence(Verified, Next);
+        _ -> Next
+    end.
 
-probe_collection_result({evidence, _Needed, _Expected, _Confirmed, Results}) -> lists:reverse(Results).
+select_current_evidence(#{entry := Entry} = Verified, Collection = #{expected := none}) ->
+    install_current_candidate(Verified, Collection#{first_height := quod_ledger:entry_index(Entry)});
+select_current_evidence(#{entry := Entry} = Verified,
+                        Collection = #{expected := #{entry := Prior}}) ->
+    case quod_ledger:entry_index(Entry) > quod_ledger:entry_index(Prior) of
+        true -> install_current_candidate(Verified, Collection);
+        false -> Collection
+    end.
+
+install_current_candidate(#{authority := Authority} = Verified,
+                          Collection = #{candidates := Candidates}) ->
+    Committee = maps:get(committee, Authority),
+    refresh_current_feed(Collection#{expected := Verified, authority := Authority,
+      items := confirmation_candidates(Candidates(Authority), Committee)}).
+
+refresh_current_feed(Collection = #{expected := #{entry := Entry} = Verified,
+                                    feed := Feed, minimum_height := Minimum}) ->
+    Height = quod_ledger:entry_index(Entry),
+    FeedTip = Feed(Verified),
+    %% A newer installed observation raises the required proof height. It
+    %% supplies neither that proof nor permission to renew the deadline.
+    Required = case FeedTip of
+        H when is_integer(H) -> H;
+        {behind, H} -> H;
+        _ -> Height
+    end,
+    Collection#{minimum_height := max(Minimum, Required),
+                feed_confirmed := FeedTip =:= Height}.
+
+probe_collection_result(#{expected := Expected}, true) -> {ok, Expected};
+probe_collection_result(#{expected := Expected}, false) -> {error, retry, Expected}.
 
 %% Both live feeds and authenticated probes count distinct admitted members.
 %% Their source-specific checks establish each observation before this quorum.
@@ -6242,7 +6317,7 @@ confirmation_sufficient(Needed, Members) -> map_size(Members) >= Needed.
 stop_current_probes(Pending) ->
     trace_count(probes_cancelled, map_size(Pending)),
     maps:foreach(
-      fun(Pid, {MRef, _Item}) ->
+      fun(Pid, {MRef, _Item, _Question}) ->
           _ = erlang:demonitor(MRef, [flush]),
           _ = unlink(Pid),
           exit(Pid, kill)
@@ -6305,7 +6380,7 @@ confirmation_candidates(Hints, Committee) ->
 
 -ifdef(TEST).
 test_parallel_probes(Items, Probe, TimeoutMs, Completion) ->
-    parallel_probes(Items, Probe, TimeoutMs, Completion).
+    parallel_probes(Items, Probe, quod_time:mono_ms() + TimeoutMs, Completion).
 
 test_confirmation_candidates(Hints, Committee) ->
     confirmation_candidates(Hints, Committee).

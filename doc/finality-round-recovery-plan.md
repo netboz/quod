@@ -184,6 +184,32 @@ Current committee discovery additionally requires the existing current-committee
 quorum confirmation under the original deadline. A higher verified tip changes
 the question to confirm; a failed probe cannot renew the deadline.
 
+One collection acquires and confirms the current tip. Each authenticated peer's
+completed response binds the exact signed height, block hash and verified
+post-entry committee. A matching response from an admitted member counts once;
+there is no preliminary response that must be discarded and fetched again.
+Available candidates are queried concurrently, so a slow preferred source does
+not prevent the other members from establishing the same quorum. A bootstrap
+nonmember may supply verified authority but cannot confirm that committee.
+Discovering a new committee or a higher verified tip updates the collection's
+question and may require further requests. Older responses cannot complete the
+previous question after that update. A failed observation is revisited only
+when its verified basis or required height advances, the known era changes,
+or a newly certified endpoint is available. Merely selecting the first target does not
+repeat an unchanged failed request. An installed feed observation at a higher
+height raises the minimum proof height within that same collection; it supplies
+no history or committee authority. Even an old-tip quorum cannot satisfy that
+newer demand. Before a probe quorum completes, the owner is checked for progress
+observed since candidate selection. Existing workers, cancellation, installed
+feed checks and the original absolute deadline retain their ownership.
+
+This supersedes the response-reuse restriction in
+`phase-1b-current-view-review.md` §5 for these verified point-evidence responses.
+That restriction concerned range replies lacking an exact head hash and era
+binding. Raw ranges, truncated evidence, transport height claims and observations
+from another collection remain insufficient. It does not promise one network
+round across discovery, membership changes or concurrently advancing tips.
+
 The same credited history reader streams both kinds of demand. There is no
 second worker pool, materializer, mutable authority database or transport.
 Installed evidence wakes only the existing identity-scoped subscribers.

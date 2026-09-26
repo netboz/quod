@@ -3,7 +3,7 @@
 %% The `quod:lens` ontology (priv/ontologies/quod_lens.pl): a lens and its
 %% encoding declared apart, an encoding's preconditions actually refusing a
 %% picture the data does not support, and one authored lens over `quod:licence`
-%% producing descriptors that `quod:present` accepts.
+%% producing descriptors that `quod_rendering` accepts.
 %%
 %% The end-to-end tests load both sources into one engine whose proof context is
 %% `quod:licence`, so the lens's `::` asks take the real self-ask path in
@@ -41,7 +41,7 @@ a_lens_and_its_encoding_are_separate_test() ->
         %% the encoding says how it is shown, and is reached through the lens
         ?assertEqual([<<"reach_columns">>],
                      solutions({'E'}, {encoding, {'E'}, <<"work_licences">>, {'_'}}, St)),
-        ?assertEqual([<<"quod:present">>],
+        ?assertEqual([<<"quod_rendering">>],
                      solutions({'P'}, {encoding, <<"reach_columns">>, {'_'}, {'P'}}, St)),
         ?assertEqual([<<"box">>],
                      solutions({'K'}, {encoding_mark, <<"reach_columns">>, {'K'}}, St)),
@@ -111,12 +111,12 @@ the_scene_bound_is_its_own_test() ->
         holds({satisfied, {within, <<"marks">>}, tl(Rows)}, St)
     end).
 
-%% The lens never produces more marks, or longer labels, than `quod:present`
+%% The lens never produces more marks, or longer labels, than `quod_rendering`
 %% accepts. Each ontology owns its own bound; this is the check that the two
 %% agree, so neither has to restate the other's number.
 the_lens_bounds_sit_inside_the_presentation_bounds_test() ->
     Lens = terms(lens_source()),
-    Present = terms(present_source()),
+    Present = terms(rendering_source()),
     ?assertEqual(true, limit_of(Lens, <<"marks">>) =< limit_of(Present, <<"scene">>)),
     ?assertEqual(true, limit_of(Lens, <<"label">>) =< limit_of(Present, <<"label">>)).
 
@@ -168,7 +168,7 @@ a_value_nobody_declared_is_shown_absent_not_as_zero_test() ->
                       {component, <<"odd">>, <<"mystery">>}}, depicts_of(Mystery))
     end).
 
-the_view_is_a_scene_quod_present_accepts_test() ->
+the_view_is_a_scene_quod_rendering_accepts_test() ->
     Marks = with_work(?PARTS, fun(St) -> view(<<"quod">>, St) end),
     with_present(fun(Present) -> holds({well_formed_scene, Marks}, Present) end).
 
@@ -179,7 +179,7 @@ the_view_is_a_scene_quod_present_accepts_test() ->
 generated_text_is_short_test() ->
     with_work(?PARTS, fun(St) ->
         lists:foreach(
-          fun({mark, Id, _Kind, _Size, _T, {material, Colour, _F}, Label, _D}) ->
+          fun({mark, Id, _Kind, _Size, _T, {surface, Colour, _M, _R, _E, _Textures}, Label, _D}) ->
               ?assert(byte_size(Id) =< 16),
               ?assertEqual(7, byte_size(Colour)),
               case Label of
@@ -243,7 +243,7 @@ a_height_channel_must_carry_an_ordinal_measure_test() ->
           "lens(<<\"by_family\">>, <<\"which families are here\">>).\n"
           "lens_subject(<<\"by_family\">>, <<\"quod:licence\">>, <<\"component\">>).\n"
           "lens_measure(<<\"by_family\">>, <<\"family\">>, <<\"nominal\">>).\n"
-          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod:present\">>).\n"
+          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod_rendering\">>).\n"
           "encoding_mark(<<\"family_columns\">>, <<\"box\">>).\n"
           "encoding_layout(<<\"family_columns\">>, <<\"grouped_columns\">>).\n"
           "encoding_channel(<<\"family_columns\">>, <<\"high\">>, <<\"family\">>).\n"
@@ -322,7 +322,7 @@ has_float(_) -> false.
 
 lens_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_lens.pl").
 licence_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_licence.pl").
-present_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_present.pl").
+rendering_source() -> filename:join(code:priv_dir(quod), "ontologies/quod_rendering.pl").
 
 terms(Path) -> quod_committed_projection:read_terms(Path).
 
@@ -337,7 +337,7 @@ view(Work, St) ->
     [Marks] = solutions({'M'}, {view, <<"work_licences">>, [Work], {'M'}}, St),
     Marks.
 
-group_of({mark, _Id, _K, _S, _T, {material, Colour, _F}, _L, _D}) -> Colour.
+group_of({mark, _Id, _K, _S, _T, {surface, Colour, _M, _R, _E, _Textures}, _L, _D}) -> Colour.
 label_of({mark, _Id, _K, _S, _T, _M, {label, Text, _P}, _D}) -> Text.
 depicts_of({mark, _Id, _K, _S, _T, _M, _L, Depicts}) -> Depicts.
 across_of({mark, _Id, _K, _S, {transform, X, _Y, _Z, _A, _B, _C}, _M, _L, _D}) -> X.
@@ -365,7 +365,7 @@ with_committed_lens(Extra, Fun) ->
     with_sources([lens_source()], Extra, undefined, Fun).
 
 with_present(Fun) ->
-    with_sources([present_source()], <<>>, undefined,
+    with_sources([rendering_source()], <<>>, undefined,
                  fun(_Committed, St) -> Fun(St) end).
 
 %% The lens and the ontology it looks at, in one engine whose proof context is

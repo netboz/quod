@@ -22,4 +22,4 @@ export type WorldScene = {
   immersive(): Promise<void>
   dispose(): void
 }
-export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void): WorldScene
+export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void, onResourceError?: (error: Error) => void): WorldScene

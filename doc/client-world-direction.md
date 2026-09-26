@@ -600,6 +600,51 @@ occurrence/revision so a late load cannot resurrect a removed object. Limits
 on geometry, assets and effects are governed resource policy, not population
 ceilings or arbitrary constants hidden in the client or Erlang.
 
+#### Client extension boundary
+
+The client has four responsibilities with no per-domain JavaScript dispatch:
+
+1. `marks.js` decodes the returned terms and refuses unsupported geometry,
+   surfaces and asset types. It contains no class selection or physical facts.
+2. `scene.js` reconciles stable occurrence IDs with engine objects. A changed
+   transform keeps geometry and texture leases. A changed surface acquires its
+   replacement before retiring the previous binding. Removal releases resources.
+3. `render-resources.js` owns asynchronous assets for a scene. Verified bytes are
+   shared by digest; textures are shared by binding, including slot and tiling.
+   Last-consumer release cancels fetches and disposes decoded resources. Late
+   completion cannot restore a retired occurrence. Errors are surfaced to the UI.
+4. `world-scene.js` handles the camera, picking and XR session. Action/form
+   semantics continue through the existing GUI and signed-client paths.
+
+Adding an ontology containing recipes built from supported types requires no
+new JavaScript module. Adding a genuinely new rendering concept requires a
+contract extension and its engine adapter, with tests for decoding, reconciliation
+and disposal. Engine-specific APIs never enter ontology recipe inputs. An Unreal
+client replaces these engine adapters while retaining the same ontology queries
+and description semantics; no claim of an implemented Unreal adapter is made.
+
+The first implemented surface is
+`surface(Colour, Metallic, Roughness, Emission, Textures)`, with integer permille
+factors. Texture bindings are
+`texture(Slot, asset(Sha256Hex, MediaType), repeat(U, V))`.
+This first asset set supports JPEG and the fixed `base_colour` (sRGB), `normal`
+(OpenGL tangent-space data) and `orm` (linear occlusion/roughness/metallic RGB)
+slots. Repeat factors are permille over UV0. They are **not yet physical texture
+scale**; portable per-primitive UV mappings and grain orientation remain required
+before claiming interchangeable output from another engine. Opacity, other image
+formats, imported meshes, skeletons and particles extend this contract later.
+
+Initial public CC0 assets are served by the existing static asset route at
+`/assets/textures/<sha256>.jpg`. Bytes are verified before decoding directly to
+an ImageBitmap, preserving the existing content-security policy. This is an
+initial public asset delivery mechanism, not a private-asset authorization service.
+The ontology records texture provenance; the packaged asset manifest records the
+same source and checksum for distribution auditing. They must agree in checks.
+
+An unchanged refresh retains the current scene during the read; a different
+identity/view or a failed read clears it. This preserves actual live resource
+consumers without displaying a former identity's private scene in a new scope.
+
 #### GUI, actions and the improved lobby
 
 The console recipe supplies the physical-looking body and a screen surface.

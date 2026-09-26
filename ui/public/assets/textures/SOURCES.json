@@ -1,0 +1,54 @@
+{
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "assets": [
+    {
+      "asset": "wood_table_001",
+      "slot": "Diffuse",
+      "digest": "460dd08d240f4a1f02982415048c3c5c200f385db212da18dc7e2df68bf4d0be",
+      "bytes": 215573,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_diff_1k.jpg",
+      "license": "CC0-1.0"
+    },
+    {
+      "asset": "wood_table_001",
+      "slot": "nor_gl",
+      "digest": "9bf7ddf5721e225c20290f1772ae37f9bdfd49658f6d458259eb794e2149d3cf",
+      "bytes": 51927,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_nor_gl_1k.jpg",
+      "license": "CC0-1.0"
+    },
+    {
+      "asset": "wood_table_001",
+      "slot": "arm",
+      "digest": "29d3f34a7c2c213e21b320365495fad673d3c8a3ce885b879fc0a77a187dd828",
+      "bytes": 214520,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_arm_1k.jpg",
+      "license": "CC0-1.0"
+    },
+    {
+      "asset": "floor_tiles_02",
+      "slot": "Diffuse",
+      "digest": "05988d474ecb1f9cd48e65d978db88212252ef8b5af8ed3833395c1f86b2b469",
+      "bytes": 354550,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/floor_tiles_02/floor_tiles_02_diff_1k.jpg",
+      "license": "CC0-1.0"
+    },
+    {
+      "asset": "floor_tiles_02",
+      "slot": "nor_gl",
+      "digest": "5ce11f7e5f12a1d61588f226a79e27eb8b57b95d2f95d1d6cbde613110696669",
+      "bytes": 156697,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/floor_tiles_02/floor_tiles_02_nor_gl_1k.jpg",
+      "license": "CC0-1.0"
+    },
+    {
+      "asset": "floor_tiles_02",
+      "slot": "arm",
+      "digest": "e03673c57b47c2ce436d8cd3851ff1030e1304162d16c47e82c54721e5c17479",
+      "bytes": 159606,
+      "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/floor_tiles_02/floor_tiles_02_arm_1k.jpg",
+      "license": "CC0-1.0"
+    }
+  ]
+}

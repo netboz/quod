@@ -12,11 +12,11 @@ import { diagnosisGoal, viewGoal } from '../src/lens.js'
 const REPLY =
   '[mark(<<"m0">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 1500), ' +
   'f(<<"depth">>, 400)], transform(0, 750, 0, 0, 0, 0), ' +
-  'material(<<"#F9C80E">>, <<"matte">>), label(<<"NOASSERTION">>, <<"above">>), ' +
+  'surface(<<"#F9C80E">>, 0, 900, 0, []), label(<<"NOASSERTION">>, <<"above">>), ' +
   'depicts(<<"quod:licence">>, ships(<<"quod">>, <<"NOASSERTION">>))), ' +
   'mark(<<"m1">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 300), ' +
   'f(<<"depth">>, 400)], transform(600, 150, -900, 0, 0, 0), ' +
-  'material(<<"#698F3F">>, <<"matte">>), label(<<"cowboy">>, <<"above">>), ' +
+  'surface(<<"#698F3F">>, 0, 900, 0, []), label(<<"cowboy">>, <<"above">>), ' +
   'depicts(<<"quod:licence">>, component(<<"quod">>, <<"cowboy">>)))]'
 
 test('a reply becomes drawable marks', () => {
@@ -27,7 +27,7 @@ test('a reply becomes drawable marks', () => {
   assert.equal(verdict.kind, 'box')
   assert.deepEqual(verdict.size, { width: 400, height: 1500, depth: 400 })
   assert.deepEqual(verdict.transform, { x: 0, y: 750, z: 0, rx: 0, ry: 0, rz: 0 })
-  assert.deepEqual(verdict.material, { colour: '#F9C80E', finish: 'matte' })
+  assert.deepEqual(verdict.material, { colour: '#F9C80E', metallic: 0, roughness: 0.9, emission: 0, textures: [] })
   assert.deepEqual(verdict.label, { text: 'NOASSERTION', placement: 'above' })
   assert.equal(verdict.depicts.ontology, 'quod:licence')
   // the subject stays a term: selection resolves through it, not a mesh name
@@ -39,7 +39,7 @@ test('a reply becomes drawable marks', () => {
 test('a mark may show nothing and carry no label', () => {
   const [mark] = readMarks(
     '[mark(<<"m0">>, <<"sphere">>, [f(<<"diameter">>, 900)], ' +
-    'transform(0, 0, 0, 0, 0, 0), material(<<"#C14953">>, <<"emissive">>), ' +
+    'transform(0, 0, 0, 0, 0, 0), surface(<<"#C14953">>, 0, 900, 650, []), ' +
     'unlabelled, depicts_nothing)]')
   assert.equal(mark.label, null)
   assert.equal(mark.depicts, null)
@@ -64,7 +64,7 @@ test('an unreadable descriptor fails closed', () => {
       '[f(<<"width">>, 400), f(<<"height">>, 1500), f(<<"depth">>, 400)]',
       '[f(<<"height">>, 1500), f(<<"width">>, 400), f(<<"depth">>, 400)]'),
     'a colour that is not one': REPLY.replace('<<"#F9C80E">>', '<<"gold">>'),
-    'an unknown finish': REPLY.replace('<<"matte">>', '<<"velvet">>'),
+    'an invalid factor': REPLY.replace('0, 900, 0, []', '0, 1001, 0, []'),
     'an unknown placement': REPLY.replace('<<"above">>', '<<"left">>'),
     'a fractional dimension': REPLY.replace('400)', '400.5)'),
     'a repeated mark identity': REPLY.replace('<<"m1">>', '<<"m0">>'),
@@ -119,4 +119,20 @@ test('binary identities and UTF-8 text survive lossless signed bindings', () => 
   for (const bad of ['<<"\\x100\\">>', '<<"\\xgg\\">>', '<<"\\x0">>']) {
     assert.throws(() => readTerm(bad))
   }
+})
+
+
+test('texture slots carry digest identity and explicit sampling; invalid bindings fail', () => {
+  const hash = 'a'.repeat(64)
+  const texture = `texture(<<"base_colour">>,asset(<<"${hash}">>,<<"image/jpeg">>),repeat(1000,2500))`
+  const textured = REPLY.replace('0, 900, 0, []', `0, 900, 0, [${texture}]`)
+  assert.deepEqual(readMarks(textured)[0].material.textures,
+    [{ slot: 'base_colour', digest: hash, repeat: [1, 2.5] }])
+  for (const invalid of [
+    textured.replace(hash, 'bad'),
+    textured.replace('base_colour', 'arbitrary_shader'),
+    textured.replace('repeat(1000,2500)', 'repeat(0,2500)'),
+    textured.replace('image/jpeg', 'image/svg+xml'),
+    textured.replace(`[${texture}]`, `[${texture},${texture}]`),
+  ]) assert.throws(() => readMarks(invalid))
 })

@@ -10,7 +10,8 @@ can_join(_, _, Key) :- peer_ready(Key).
 lobby_query(lobby_recipe(_, _, _)).
 lobby_query(device_menu(_, _)).
 lobby_query(isa(_, _)).
-lobby_query(class_eidolon(_, _, _)).
+lobby_query(class_eidolon(_, _, _, _)).
+lobby_query(eidolon(_, _, _)).
 lobby_query(lobby_options(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 
@@ -29,63 +30,80 @@ ontology_creation_allowed(Owner, Name, Options) :-
 
 %% A template is reviewed founding source stored in this ontology, not a path
 %% read from whichever node happens to receive the creation request.
-%% Founding supplies instance_template/1 and exact presentation/GUI references.
+%% Founding supplies instance_template/1 and exact modelling/GUI references.
 lobby_options(Owner,
     [source(Source),
      terms([lobby_owner(Owner), instance_of(lobby, personal_lobby),
             instance_of(prolog_console, console),
             lobby_device(personal_lobby, console),
+            device_placement(console, <<"console">>, transform(0, 0, 0, 0, 0, 0)),
             lobby_vocabulary(Namespace, Anchor),
-            presentation_vocabulary(PresentationNamespace, PresentationAnchor),
+            modelling_vocabulary(ModellingNamespace, ModellingAnchor),
             gui_vocabulary(GuiNamespace, GuiAnchor)]),
      external_predicate_modules([quod_agent_predicates])]) :-
     term_variables(Owner, []),
     Owner = agent_instance_ref(_, _, _),
     current_ontology_identity(Namespace, Anchor),
     instance_template(Source),
-    presentation_vocabulary(PresentationNamespace, PresentationAnchor),
+    modelling_vocabulary(ModellingNamespace, ModellingAnchor),
     gui_vocabulary(GuiNamespace, GuiAnchor).
 
 isa(lobby, thing).
 isa(device, thing).
 isa(prolog_console, device).
-class_eidolon(prolog_console, playing, console).
-class_eidolon(prolog_console, edition, console).
+%% Class associations name ordinary, anchored Prolog recipe entry points.
+class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
+    device_eidolon(Class, Mode, Style, Recipe), current_ontology_identity(Ns, Anchor).
+device_eidolon(prolog_console, playing, solid, console_playing).
+device_eidolon(prolog_console, edition, solid, console_edition).
 
-%% Menu selection opens a local view. It does not claim an ontology action
-%% committed. The entered goal subsequently uses the ordinary signed cursor.
 device_menu(prolog_console,
     [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console))]).
 
-%% +Y is up; the console faces -Z. Child transforms are in the parent's frame.
-%% The two presentations reuse one recipe with different exposed surfaces.
-%% HSL harmony pairs terracotta (18 degrees) with green (138), 120 degrees apart.
-%% Ivory and amber share a neighbouring warm hue (38); painted surfaces retain
-%% their colour with low metallic factors under the lobby's simple lighting.
-lobby_recipe(Mode, Subject,
-    [part(<<"floor">>, cylinder(10000, 100), transform(0, -50, 0, 0, 0, 0),
-          pbr(<<"#813F22">>, 0, 900, 0), unlabelled, depicts_nothing),
-     part(<<"console">>, group, transform(0, 0, 0, 0, 0, 0),
-          no_surface, unlabelled, Subject),
-     part(<<"pedestal">>, cylinder(460, 850),
-          relative(<<"console">>, transform(0, 425, 0, 0, 0, 0)),
-          pbr(<<"#E1D2B7">>, 100, 600, 0), unlabelled, depicts_nothing),
-     part(<<"body">>, box(1600, 1000, 160),
-          relative(<<"console">>, transform(0, 1400, 0, 0, 0, 0)),
-          Body, unlabelled, depicts_nothing),
-     part(<<"screen">>, plane(1440, 820),
-          relative(<<"body">>, ScreenAt),
-          pbr(<<"#06180C">>, 0, 450, 80), unlabelled, depicts_nothing),
-     part(<<"status">>, sphere(55),
-          relative(<<"body">>, transform(700, -465, -95, 0, 0, 0)),
-          pbr(<<"#EEA62B">>, 0, 500, 400), unlabelled, depicts_nothing),
-     part(<<"console-label">>, group,
-          relative(<<"body">>, transform(0, 640, 0, 0, 0, 0)),
-          no_surface, label(Label, <<"centre">>), depicts_nothing)]) :-
-    console_surface(Mode, Body, Label),
-    presentation_vocabulary(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-                align(plane(1440, 820), centre, box(1600, 1000, 160), front, 5, ScreenAt)).
+%% Every placed device is selected by class; repeated instances share recipes.
+lobby_recipe(Mode, lobby(Ns, Anchor, Devices), [Floor | Parts]) :-
+    material_surface(marble, Stone),
+    Floor = part(<<"floor">>, cylinder(10000, 100), transform(0, -50, 0, 0, 0, 0),
+                 Stone, unlabelled, depicts_nothing),
+    device_parts(Devices, Mode, Ns, Anchor, Parts).
+device_parts([], _, _, _, []).
+device_parts([device(Class, Entity, Id, At) | Devices], Mode, Ns, Anchor, Parts) :-
+    findall(Recipe, device_eidolon(Class, Mode, solid, Recipe), [Recipe]),
+    eidolon(Recipe, device(Entity), Model),
+    modelling_vocabulary(MNs, MA),
+    MNs::(current_ontology_identity(MNs, MA),
+          place_model(Id, At, depicts(Ns, Anchor, Entity), Model, Placed)),
+    device_parts(Devices, Mode, Ns, Anchor, Rest), append(Placed, Rest, Parts).
 
-console_surface(playing, pbr(<<"#196630">>, 150, 550, 0), <<"PROLOG CONSOLE">>).
-console_surface(edition, pbr(<<"#BD8728">>, 150, 550, 0), <<"CONSOLE STRUCTURE">>).
+material_surface(Material, Surface) :-
+    material_eidolons(Ns, Anchor),
+    Ns::(current_ontology_identity(Ns, Anchor),
+         class_eidolon(Material, playing, solid, recipe(RecipeNs, RecipeAnchor, Recipe))),
+    RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
+               eidolon(Recipe, material(Material), Surface)).
+
+%% Operational and exploded structure views share physical dimensions, while
+%% their placement and labels express different uses of the same device.
+eidolon(console_playing, device(_), Parts) :- console_parts(playing, Parts).
+eidolon(console_edition, device(_), Parts) :- console_parts(edition, Parts).
+console_parts(Mode,
+    [part(<<"pedestal">>, cylinder(460, 850), transform(0, 425, 0, 0, 0, 0),
+          Bronze, PedestalLabel, depicts_nothing),
+     part(<<"body">>, box(1600, 1000, 160), transform(0, 1400, 0, 0, 0, 0),
+          Wood, BodyLabel, depicts_nothing),
+     part(<<"screen">>, plane(1440, 820), relative(<<"body">>, ScreenAt),
+          surface(<<"#102024">>,0,450,80,[]), ScreenLabel, depicts_nothing),
+     part(<<"status">>, sphere(55), relative(<<"body">>, transform(700, -465, -95, 0, 0, 0)),
+          surface(<<"#DDAB46">>,0,500,400,[]), unlabelled, depicts_nothing),
+     part(<<"label">>, group, relative(<<"body">>, transform(0, 640, 0, 0, 0, 0)),
+          no_surface, label(Title, <<"centre">>), depicts_nothing)]) :-
+    material_surface(oak_wood, Wood), material_surface(bronze, Bronze),
+    console_layout(Mode, Gap, Title, PedestalLabel, BodyLabel, ScreenLabel),
+    modelling_vocabulary(Ns, Anchor),
+    Ns::(current_ontology_identity(Ns, Anchor),
+         align(plane(1440, 820), centre, box(1600, 1000, 160), front, Gap, ScreenAt)).
+console_layout(playing, 5, <<"PROLOG CONSOLE">>, unlabelled, unlabelled, unlabelled).
+console_layout(edition, 400, <<"CONSOLE PARTS">>,
+               label(<<"BRONZE SUPPORT">>, <<"above">>),
+               label(<<"OAK BODY">>, <<"above">>),
+               label(<<"SCREEN">>, <<"above">>)).

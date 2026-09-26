@@ -722,11 +722,19 @@ signup_namespace(Token) ->
     <<"human:", Encoded/binary>>.
 
 found_lobby_classes() ->
-    {PresentNs, PresentAnchor} = found_lobby_source(<<"presentation">>, "quod_present.pl", []),
+    {RenderNs, RenderAnchor} = found_lobby_source(<<"rendering">>, "quod_rendering.pl", []),
+    {ModelNs, ModelAnchor} = found_lobby_source(<<"modelling">>, "quod_modelling.pl",
+        [{rendering_vocabulary, RenderNs, RenderAnchor}]),
+    {MeasureNs, MeasureAnchor} = found_lobby_source(<<"measure">>, "quod_measure.pl", []),
+    {MaterialNs, MaterialAnchor} = found_lobby_source(<<"material">>, "quod_material.pl",
+        [{measure_vocabulary, MeasureNs, MeasureAnchor}]),
+    {EidolonNs, EidolonAnchor} = found_lobby_source(<<"material-eidolons">>, "quod_material_eidolons.pl",
+        [{material_vocabulary, MaterialNs, MaterialAnchor}]),
     {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
-        [{presentation_vocabulary, PresentNs, PresentAnchor},
+        [{modelling_vocabulary, ModelNs, ModelAnchor},
+         {material_eidolons, EidolonNs, EidolonAnchor},
          {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template}]).
 
 found_lobby_source(Prefix, File, Facts) ->

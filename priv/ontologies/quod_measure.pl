@@ -31,6 +31,7 @@
 acl_sovereign(quod:measure).
 
 can_invoke(Goal, _Principal, _CallChain, _Ns) :- measure_query(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- measure_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
@@ -220,6 +221,16 @@ unit(<<"galUS">>, [<<"length">>, <<"length">>, <<"length">>], [], 3785411784, 10
 unit(<<"tsp">>, [<<"length">>, <<"length">>, <<"length">>], [], 5, 1000000).
 unit(<<"tbsp">>, [<<"length">>, <<"length">>, <<"length">>], [], 15, 1000000).
 unit(<<"cup">>, [<<"length">>, <<"length">>, <<"length">>], [], 25, 100000).
+
+%% Material quantities; exact ratios to SI, without a second unit parser.
+unit(<<"kg/m3">>, [<<"mass">>], [<<"length">>, <<"length">>, <<"length">>], 1, 1).
+unit(<<"g/cm3">>, [<<"mass">>], [<<"length">>, <<"length">>, <<"length">>], 1000, 1).
+unit(<<"W/(m K)">>, [<<"mass">>, <<"length">>],
+     [<<"time">>, <<"time">>, <<"time">>, <<"temperature">>], 1, 1).
+unit(<<"J/(kg K)">>, [<<"length">>, <<"length">>],
+     [<<"time">>, <<"time">>, <<"temperature">>], 1, 1).
+unit(<<"1">>, [], [], 1, 1).
+unit(<<"percent">>, [], [], 1, 100).
 
 %% derived, where the dimensions are the whole point
 unit(<<"Hz">>, [], [<<"time">>], 1, 1).

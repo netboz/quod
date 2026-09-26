@@ -31,6 +31,7 @@ export default function World() {
   const pick = useRef(setSelected)
   pick.current = setSelected
   // Async view reads are invalidated when the acting identity or target changes.
+  const projection = useRef({ identity, agent, view })
   const context = useRef({ identity, agent, selected })
   context.current = { identity, agent, selected }
 
@@ -62,7 +63,8 @@ export default function World() {
     void import('../../client/src/world-scene.js').then(({ createWorld }) => {
       if (!active || !canvas.current) return
       try {
-        world = createWorld(canvas.current, subject => pick.current(subject), setImmersive)
+        world = createWorld(canvas.current, subject => pick.current(subject), setImmersive,
+          error => { if (active) setStatus(error.message) })
         setScene(world)
       } catch (error) { setSceneError(String(error)) }
     }).catch(error => { if (active) setSceneError(String(error)) })
@@ -73,17 +75,24 @@ export default function World() {
 
   useEffect(() => {
     let active = true
+    const previous = projection.current
+    const sameScope = previous.identity === identity && previous.agent === agent && previous.view === view
+    projection.current = { identity, agent, view }
+    if (!sameScope) {
+      setMarks([])
+      setWorkspace(null)
+      setFocused(false)
+    }
     setSelected(null)
     setMenu(null)
-    setMarks([])
     setMissingLobby(false)
-    setWorkspace(null)
-    setFocused(false)
     if (!identity || !agent) {
+      setMarks([])
       setStatus('Sign in and select an agent to open its lobby.')
       return
     }
     if (viewUnavailable !== null) {
+      setMarks([])
       setStatus(viewUnavailable)
       return
     }
@@ -105,7 +114,9 @@ export default function World() {
           setStatus(result.marks ? 'Licence lens · Quod release dependencies.'
             : 'The licence lens has no compatible representation for this data.')
         }
-      } catch (error) { if (active) setStatus(`Could not open this view: ${String(error)}`) }
+      } catch (error) {
+        if (active) { setMarks([]); setStatus(`Could not open this view: ${String(error)}`) }
+      }
     }
     void load()
     return () => { active = false }

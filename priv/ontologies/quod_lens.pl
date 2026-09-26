@@ -22,7 +22,7 @@
 %% written in — `group_at/2` declares precedence explicitly, and a group with
 %% none is a refused view rather than an arbitrary one.
 %%
-%% Descriptors are built to the schema of `quod:present`, named here by its
+%% Descriptors are built to the schema of `quod_rendering`, named here by its
 %% flat binary name. This ontology does not re-prove that schema on every read;
 %% conformance is a tested invariant of the two sources, so one ordinary read
 %% is one selection and one layout, not a validation round trip.
@@ -35,7 +35,7 @@
 %%   lens_detail(Lens, Detail)
 %%
 %% Model — the encoding:
-%%   encoding(Encoding, Lens, Presentation)
+%%   encoding(Encoding, Lens, Rendering)
 %%   encoding_mark(Encoding, Kind)
 %%   encoding_layout(Encoding, Layout)
 %%   encoding_channel(Encoding, Channel, Measure)
@@ -84,7 +84,7 @@ lens_query(attribute(_, _, _)).
 
 %% --- the bounds ---------------------------------------------------------------
 %% This ontology's own bounds on what it will produce, not a copy of anyone
-%% else's. They are held below `quod:present`'s corresponding limits, which the
+%% else's. They are held below `quod_rendering`'s corresponding limits, which the
 %% tests check against that source rather than restating here.
 
 limit(<<"marks">>, 256).
@@ -96,7 +96,7 @@ limit(<<"label">>, 24).
 %% and its encoding produce for these parameters. One selection, one layout, one
 %% answer: a caller reads it like any other goal.
 view(Lens, Parameters, Marks) :-
-    encoding(Encoding, Lens, _Presentation),
+    encoding(Encoding, Lens, _Rendering),
     rows(Lens, Parameters, Rows),
     met(Encoding, Rows),
     laid_out(Encoding, Lens, Rows, Marks).
@@ -105,7 +105,7 @@ view(Lens, Parameters, Marks) :-
 %% that the selected data does not meet. Asked when `view/3` has no answer; it
 %% is the bounded diagnostic, not a second picture.
 diagnosis(Lens, Parameters, Unmet) :-
-    encoding(Encoding, Lens, _Presentation),
+    encoding(Encoding, Lens, _Rendering),
     rows(Lens, Parameters, Rows),
     requires(Encoding, Unmet),
     \+ satisfied(Unmet, Rows).
@@ -212,7 +212,7 @@ one_mark(row(Thing, Group, Rank, Text), Encoding, Ontology, Depth, Across, Next,
          mark(Id, <<"box">>,
               [f(<<"width">>, Side), f(<<"height">>, High), f(<<"depth">>, Side)],
               transform(X, Y, Z, 0, 0, 0),
-              material(Colour, <<"matte">>),
+              surface(Colour, 0, 900, 0, []),
               label(Short, <<"above">>),
               Depicts)) :-
     mark_id(Next, Id),
@@ -294,7 +294,7 @@ lens_measure(<<"work_licences">>, <<"reach">>, <<"ordinal">>).
 lens_measure(<<"work_licences">>, <<"family">>, <<"nominal">>).
 lens_detail(<<"work_licences">>, <<"component">>).
 
-encoding(<<"reach_columns">>, <<"work_licences">>, <<"quod:present">>).
+encoding(<<"reach_columns">>, <<"work_licences">>, <<"quod_rendering">>).
 encoding_mark(<<"reach_columns">>, <<"box">>).
 encoding_layout(<<"reach_columns">>, <<"grouped_columns">>).
 encoding_channel(<<"reach_columns">>, <<"high">>, <<"reach">>).
@@ -401,7 +401,7 @@ isa(lens, thing).
 isa(encoding, thing).
 
 instance_of(lens, Lens) :- lens(Lens, _Purpose).
-instance_of(encoding, Encoding) :- encoding(Encoding, _Lens, _Presentation).
+instance_of(encoding, Encoding) :- encoding(Encoding, _Lens, _Rendering).
 
 have_attribute(lens, purpose, binary).
 have_attribute(lens, measure, binary).
@@ -410,5 +410,5 @@ have_attribute(encoding, requires, term).
 
 attribute(Lens, purpose, Purpose) :- lens(Lens, Purpose).
 attribute(Lens, measure, Measure) :- lens_measure(Lens, Measure, _Scale).
-attribute(Encoding, lens, Lens) :- encoding(Encoding, Lens, _Presentation).
+attribute(Encoding, lens, Lens) :- encoding(Encoding, Lens, _Rendering).
 attribute(Encoding, requires, Requirement) :- requires(Encoding, Requirement).

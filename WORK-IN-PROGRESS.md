@@ -3097,3 +3097,46 @@ Client TypeScript and production build passed. No backend change or rollout:
 old persisted vocabulary identifiers are removed with the planned governed
 ontology replacement, not renamed only in source while live references use them.
 Historical evidence is retained. Untracked user-owned Forgejo files are untouched.
+
+
+### Modelling and material implementation checkpoint (2026-09-27)
+
+Yan clarified that the task includes the client as well as Prolog ontologies;
+Erlang runtime changes remain excluded. He explicitly authorized Claude advice
+for this work. Read-only Fable (`claude-fable-5-1`) consulted; its report and
+verified dispositions are retained under
+`_build/material-eidolons-20260926/CLAUDE-{REVIEW,ADJUDICATION}.md`.
+
+Implemented source split: `quod_rendering`, `quod_modelling`, `quod_material`,
+`quod_material_eidolons`; old `quod_present.pl` removed. The toolkit composes
+named/nested subrecipes and exact alignment. Material knowledge uses contextual
+quantity claims and existing measure conversions. Material recipe specificity
+is resolved by one scoped material query rather than repeated remote ancestry
+queries. Lobby recipes use class-selected devices, warm marble/oak/bronze
+surfaces and different playing/edition geometry. No rendered facts are asserted.
+
+The client accepts one `surface/5` format, loads packaged CC0 Poly Haven maps
+by verified SHA-256, and retains scene-owned resource leases. Changed surfaces
+acquire before releasing; stale completions cannot restore retired geometry.
+Same-scope refresh keeps consumers alive. Scope changes/failures clear them.
+No old/new surface fallback remains. Geometry is right-handed with explicit XYZ
+rotation; image data slots are linear and base colour is sRGB. ImageBitmap
+avoids the blob-URL CSP violation found during browser acceptance. Quod's
+Erlang sources and security headers are unchanged.
+
+Evidence: focused-v6 **92/0**, client-v5 **58/0**, UI build/lint and diff check
+pass. Browser-v7 uses the actual signed endpoints and current fixture ontologies:
+six texture requests initially, zero additional requests on unchanged refresh;
+menu, proof bindings, Next, Stop, discarded writes, accepted writes and retained
+draft pass, with separately synchronized edition screenshot. Failed earlier
+runs and their causes remain in FAILURES.md. Asset digests/provenance and copied
+build bytes verified. These are focused checks, not a full backend release gate.
+
+Not yet deployed. This is an implementation checkpoint, not completion of the
+entire target design. Existing private lobbies still need an owner-authorized
+migration; do not override their ACL or user edits. Physical instance material
+assignments, portable UV/physical repeat semantics, world-authored lighting,
+explicit ambiguity diagnostics and XR locomotion affordances remain recorded
+in the adjudication. New shape recipes using the supported contract require no
+object-specific JavaScript; additional engine concepts require adapter work.
+Unrelated user-owned Forgejo/CI files remain untouched and excluded.

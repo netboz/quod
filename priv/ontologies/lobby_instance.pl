@@ -4,20 +4,29 @@
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
 
 lobby_view(Mode, Scene) :-
-    findall(Device, instance_of(prolog_console, Device), [Console]),
     current_ontology_identity(Namespace, Anchor),
+    findall(Entity, lobby_device(personal_lobby, Entity), Entities),
+    placed_devices(Entities, Devices),
     lobby_vocabulary(LobbyNamespace, LobbyAnchor),
     LobbyNamespace::(current_ontology_identity(LobbyNamespace, LobbyAnchor),
-                    lobby_recipe(Mode, depicts(Namespace, Anchor, Console), Parts)),
-    presentation_vocabulary(PresentationNamespace, PresentationAnchor),
-    PresentationNamespace::(current_ontology_identity(PresentationNamespace, PresentationAnchor),
-                           model(Parts, Scene)).
+                    lobby_recipe(Mode, lobby(Namespace, Anchor, Devices), Parts)),
+    modelling_vocabulary(ModellingNamespace, ModellingAnchor),
+    ModellingNamespace::(current_ontology_identity(ModellingNamespace, ModellingAnchor),
+                        model(Parts, Scene)).
+
+%% Missing or ambiguous instance data fails the view, rather than silently
+%% dropping a device inside findall/3. No class or device is hardcoded here.
+placed_devices([], []).
+placed_devices([Entity | Entities], [device(Class, Entity, Id, At) | Devices]) :-
+    findall(C, instance_of(C, Entity), [Class]),
+    findall(placed(I, T), device_placement(Entity, I, T), [placed(Id, At)]),
+    placed_devices(Entities, Devices).
 
 lobby_menu(Device, Entries) :-
-    instance_of(prolog_console, Device),
+    instance_of(Class, Device),
     lobby_vocabulary(Namespace, Anchor),
     Namespace::(current_ontology_identity(Namespace, Anchor),
-                device_menu(prolog_console, Entries)).
+                device_menu(Class, Entries)).
 
 lobby_workspace(Device, View) :-
     instance_of(prolog_console, Device),

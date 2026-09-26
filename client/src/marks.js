@@ -1,6 +1,6 @@
 // One signed read's bindings become marks this client can draw.
 //
-// `quod:present` is the authority on what a descriptor may contain; this is the
+// `quod_rendering` is the authority on what a descriptor may contain; this is the
 // Babylon adapter's half of the contract — which renderer-neutral kind becomes
 // which mesh, and which field name becomes which parameter. It recognises what
 // it can draw and refuses everything else, so an unknown kind, an unknown
@@ -12,7 +12,7 @@
 
 import { readList } from './prolog-read.js'
 
-// kind -> the fields it takes, in the order quod:present declares them.
+// kind -> the fields it takes, in the order quod_rendering declares them.
 const GEOMETRY = Object.freeze({
   box: ['width', 'height', 'depth'],
   sphere: ['diameter'],
@@ -21,7 +21,6 @@ const GEOMETRY = Object.freeze({
   group: [],
 })
 
-const FINISHES = Object.freeze(['matte', 'glossy', 'emissive'])
 const PLACEMENTS = Object.freeze(['above', 'centre', 'below'])
 const COLOUR = /^#[0-9A-F]{6}$/
 
@@ -95,16 +94,28 @@ function readTransform(term) {
 }
 
 function readMaterial(term) {
-  if (term?.functor === 'pbr') {
-    const [colour, metallic, roughness, emission] = args(term, 'pbr', 4)
-    return Object.freeze({
-      colour: readColour(colour),
-      metallic: fraction(metallic), roughness: fraction(roughness),
-      emission: fraction(emission),
+  const [colour, metallic, roughness, emission, bindings] = args(term, 'surface', 5)
+  if (bindings.type !== 'list' || bindings.tail !== null) throw new Error('expected texture bindings')
+  const slots = new Set()
+  const textures = bindings.items.map(binding => {
+    const [slotTerm, asset, tiling] = args(binding, 'texture', 3)
+    const slot = oneOf(slotTerm, ['base_colour', 'normal', 'orm'], 'texture slot')
+    if (slots.has(slot)) throw new Error('duplicate texture slot')
+    slots.add(slot)
+    const [hash, mime] = args(asset, 'asset', 2)
+    const digest = binaryValue(hash, 'texture digest')
+    if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid texture SHA-256')
+    oneOf(mime, ['image/jpeg'], 'texture media type')
+    const [u, v] = args(tiling, 'repeat', 2)
+    const repeat = [u, v].map(value => {
+      const n = whole(value, 'texture repeat')
+      if (n <= 0) throw new Error('texture repeat must be positive')
+      return n / 1000
     })
-  }
-  const [colour, finish] = args(term, 'material', 2)
-  return Object.freeze({ colour: readColour(colour), finish: oneOf(finish, FINISHES, 'finish') })
+    return Object.freeze({ slot, digest, repeat: Object.freeze(repeat) })
+  })
+  return Object.freeze({ colour: readColour(colour), metallic: fraction(metallic),
+    roughness: fraction(roughness), emission: fraction(emission), textures: Object.freeze(textures) })
 }
 
 function readColour(colour) {

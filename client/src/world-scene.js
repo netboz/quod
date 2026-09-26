@@ -13,6 +13,7 @@ import '@babylonjs/core/Culling/ray.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { PALETTE } from './palette.js'
 import { paintMarks, clearMarks } from './scene.js'
+import { createRenderResources } from './render-resources.js'
 import { createProofPanel } from './proof-panel.js'
 import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
 
@@ -31,9 +32,11 @@ export function radialIndex({ x, y }, count, deadZone = MENU_DEAD_ZONE) {
 
 // The camera and lighting belong to this viewing session. All visible model
 // geometry comes from the ontology projection, including the lobby floor.
-export function createWorld(canvas, onPick, onImmersiveChanged = () => {}) {
+export function createWorld(canvas, onPick, onImmersiveChanged = () => {}, onResourceError = () => {}) {
   const engine = new Engine(canvas, true, { stencil: true })
   const scene = new Scene(engine)
+  scene.useRightHandedSystem = true
+  const resources = createRenderResources(scene)
   const sky = Color3.FromHexString(PALETTE.navy).scale(0.34)
   scene.clearColor.set(sky.r, sky.g, sky.b, 1)
   const camera = new ArcRotateCamera('observer', -Math.PI / 2, Math.PI / 2.4,
@@ -148,7 +151,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {}) {
   window.addEventListener('resize', resize)
   engine.runRenderLoop(() => scene.render())
   return {
-    paint(marks) { painted = paintMarks(scene, marks, painted) },
+    paint(marks) { painted = paintMarks(scene, marks, painted, resources, onResourceError) },
     setActionMenu(entries, activate) {
       closeMenu()
       menu = { ...menu, entries: [...entries], activate }
@@ -178,6 +181,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {}) {
       window.removeEventListener('resize', resize)
       panel?.dispose()
       painted = clearMarks(painted)
+      resources.dispose()
       scene.dispose()
       engine.dispose()
     },

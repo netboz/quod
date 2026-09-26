@@ -127,7 +127,7 @@ is therefore network state, not an Erlang allowlist or a property inferred from
 a source filename.
 
 The bundled system vocabulary includes node, agent, and human-user policy. The
-current domain system ontologies also include:
+bundled domain ontology sources also include:
 
 | ontology | purpose |
 | --- | --- |
@@ -135,7 +135,10 @@ current domain system ontologies also include:
 | `quod:licence` | licence families, compatibility, obligations, and release reach |
 | `quod:measure` | quantities, units, dimensions, and conversion |
 | `quod:lens` | reusable selections and rendering encodings |
-| `quod:present` | bounded renderer-neutral rendering marks |
+| `quod_rendering` | client-neutral geometry, surface and asset contract |
+| `quod_modelling` | pure Prolog construction, alignment and named composition |
+| `quod_material` | material classes and contextual physical properties |
+| `quod_material_eidolons` | reusable surface recipes and texture references |
 
 The naming and licence sources and tests live at
 [`priv/ontologies/quod_names.pl`](priv/ontologies/quod_names.pl),

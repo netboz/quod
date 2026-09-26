@@ -1,4 +1,9 @@
-%% quod:present — the marks a renderer may be asked to draw.
+%% Coordinates: right-handed, Y up, console front -Z. Local rotations apply
+%% X, then Y, then Z, before translation and parent composition. Lengths are
+%% integer millimetres; angles degrees; optical factors and UV repeat permille.
+%% Surface texture slots: base_colour is sRGB; normal is OpenGL tangent space;
+%% orm is linear R=occlusion/G=roughness/B=metallic. JPEG assets use SHA-256.
+%% quod_rendering — the marks a renderer may be asked to draw.
 %%
 %% A mark is a visual occurrence. It is not the thing it shows: several marks
 %% may depict one entity, and a mark may depict nothing at all. Keeping the two
@@ -22,7 +27,6 @@
 %% Model:
 %%   mark_kind(Kind)                    one of the bounded geometries
 %%   geometry_field(Kind, At, Field)    the fields that kind takes, in order
-%%   finish(Finish)                     how a surface takes light
 %%   placement(Placement)               where a label sits on its mark
 %%   limit(What, Max)                   the bound a descriptor may not exceed
 %%
@@ -31,8 +35,8 @@
 %%     Id        a view-scoped occurrence identity, not a domain name
 %%     Size      [f(Field, Millimetres), ...] in the kind's declared order
 %%     Transform transform(X,Y,Z,RX,RY,RZ) | relative(Parent, transform(...))
-%%     Material  material(Colour, Finish) | pbr(Colour, Metal, Rough, Emission)
-%%               PBR factors are integer permille; groups use no_surface.
+%%     Surface   surface(Colour, Metal, Rough, Emission, Textures)
+%%               Optical factors/repeats are permille; groups use no_surface.
 %%     Label     label(Text, Placement) | unlabelled
 %%     Depicts   depicts(Ontology, Anchor, Entity) | depicts_nothing
 %%               Unanchored depicts(Ontology, Entity) is display-only.
@@ -45,33 +49,29 @@
 %% Interactive subjects carry the exact history anchor. The client proves that
 %% identity in the selected scope before reading its menu or workspace.
 
-acl_sovereign(quod:present).
+acl_sovereign(quod_rendering).
 
 %% Anyone may read the vocabulary and check a descriptor against it. Changing
 %% the vocabulary stays with admitted nodes, as in the other system ontologies.
-can_invoke(Goal, _Principal, _CallChain, _Ns) :- present_query(Goal).
+can_invoke(Goal, _Principal, _CallChain, _Ns) :- rendering_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _Principal, _CallChain, _Ns) :-
-    present_query(Goal).
+    rendering_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 
-present_query(mark_kind(_)).
-present_query(geometry_field(_, _, _)).
-present_query(finish(_)).
-present_query(placement(_)).
-present_query(limit(_, _)).
-present_query(well_formed_mark(_)).
-present_query(well_formed_scene(_)).
-present_query(depicted(_, _, _, _)).
-present_query(depicted(_, _, _, _, _)).
-present_query(model(_, _)).
-present_query(shape(_, _, _)).
-present_query(align(_, _, _, _, _, _)).
-present_query(isa(_, _)).
-present_query(instance_of(_, _)).
-present_query(have_attribute(_, _, _)).
-present_query(attribute(_, _, _)).
+rendering_query(mark_kind(_)).
+rendering_query(geometry_field(_, _, _)).
+rendering_query(placement(_)).
+rendering_query(limit(_, _)).
+rendering_query(well_formed_mark(_)).
+rendering_query(well_formed_scene(_)).
+rendering_query(depicted(_, _, _, _)).
+rendering_query(depicted(_, _, _, _, _)).
+rendering_query(isa(_, _)).
+rendering_query(instance_of(_, _)).
+rendering_query(have_attribute(_, _, _)).
+rendering_query(attribute(_, _, _)).
 
 %% --- the geometries -----------------------------------------------------------
 %% Four bounded parameterized shapes and a transform group. A kind's fields are declared once, in
@@ -94,9 +94,6 @@ geometry_field(<<"plane">>, 2, <<"height">>).
 geometry_field(<<"cylinder">>, 1, <<"diameter">>).
 geometry_field(<<"cylinder">>, 2, <<"height">>).
 
-finish(<<"matte">>).
-finish(<<"glossy">>).
-finish(<<"emissive">>).
 
 placement(<<"above">>).
 placement(<<"centre">>).
@@ -110,7 +107,8 @@ placement(<<"below">>).
 %% the identity is in `depicts` — so a producer may shorten one to fit.
 
 limit(<<"scene">>, 512).
-limit(<<"mark_id">>, 16).
+%% Structural occurrence paths include their instance and named parts.
+limit(<<"mark_id">>, 256).
 limit(<<"label">>, 24).
 limit(<<"ontology">>, 64).
 limit(<<"extent">>, 100000).
@@ -155,9 +153,25 @@ offset(V) :-
 
 turn(V) :- integer(V), V >= 0, V < 360.
 
-surfaced(material(Colour, Finish)) :- colour(Colour), finish(Finish).
-surfaced(pbr(Colour, Metallic, Roughness, Emission)) :-
-    colour(Colour), fraction(Metallic), fraction(Roughness), fraction(Emission).
+surfaced(surface(Colour, Metallic, Roughness, Emission, Textures)) :-
+    colour(Colour), fraction(Metallic), fraction(Roughness), fraction(Emission),
+    texture_bindings(Textures, []).
+
+%% One binding per semantic slot. Assets are verified JPEG bytes, addressed by
+%% lowercase SHA-256; references never carry a URL or executable engine code.
+texture_bindings([], _).
+texture_bindings([texture(Slot, asset(Digest, <<"image/jpeg">>), repeat(U, V)) | Rest], Seen) :-
+    texture_slot(Slot), \+ member(Slot, Seen),
+    binary_codes(Digest, Bytes), length(Bytes, 64), digest_hex(Bytes),
+    integer(U), U > 0, integer(V), V > 0,
+    texture_bindings(Rest, [Slot | Seen]).
+texture_slot(<<"base_colour">>).
+texture_slot(<<"normal">>).
+texture_slot(<<"orm">>).
+digest_hex([]).
+digest_hex([C | Cs]) :- digest_digit(C), digest_hex(Cs).
+digest_digit(C) :- C >= 48, C =< 57.
+digest_digit(C) :- C >= 97, C =< 102.
 
 fraction(N) :- integer(N), N >= 0, N =< 1000.
 
@@ -239,68 +253,6 @@ depicted(Marks, Id, Ontology, Thing) :-
 depicted(Marks, Id, Ontology, Anchor, Thing) :-
     member(mark(Id, _, _, _, _, _, depicts(Ontology, Anchor, Thing)), Marks).
 
-%% --- reusable recipe helpers -------------------------------------------------
-%% A recipe proves Parts; model/2 derives a scene without asserting anything.
-%% Occurrence IDs remain independent from both recipe and subject identities.
-model(Parts, Marks) :-
-    term_variables(Parts, []),
-    limit(<<"scene">>, Max), length(Parts, Count), Count =< Max,
-    model_parts(Parts, Marks), well_formed_scene(Marks).
-
-model_parts([], []).
-model_parts([part(Id, Shape, At, Surface, Label, Subject) | Parts],
-            [mark(Id, Kind, Size, Placed, Surface, Label, Subject) | Marks]) :-
-    shape(Shape, Kind, Expressions), model_dimensions(Expressions, Size),
-    model_transform(At, Placed), model_parts(Parts, Marks).
-
-%% Source-level arithmetic is evaluated by Prolog once, not shipped as client
-%% code. The final scene schema still requires bounded integer measurements.
-model_dimensions([], []).
-model_dimensions([f(Name, Expression) | Rest], [f(Name, Value) | Values]) :-
-    Value is Expression, model_dimensions(Rest, Values).
-model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
-    X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
-model_transform(relative(Parent, At), relative(Parent, Placed)) :-
-    At = transform(_, _, _, _, _, _), model_transform(At, Placed).
-
-shape(group, <<"group">>, []).
-shape(box(W, H, D), <<"box">>,
-      [f(<<"width">>, W), f(<<"height">>, H), f(<<"depth">>, D)]).
-shape(sphere(D), <<"sphere">>, [f(<<"diameter">>, D)]).
-shape(plane(W, H), <<"plane">>, [f(<<"width">>, W), f(<<"height">>, H)]).
-shape(cylinder(D, H), <<"cylinder">>, [f(<<"diameter">>, D), f(<<"height">>, H)]).
-
-%% Align two axis-aligned bounding-box anchors in the target's local frame.
-%% A positive gap runs outward along the target face's normal. The returned
-%% transform belongs under that target, whose own rotation remains independent.
-%% Require an exact whole-mm result rather than silently rounding half-mm gaps.
-align(Shape, Face, TargetShape, TargetFace, Gap, transform(X, Y, Z, 0, 0, 0)) :-
-    shape(Shape, Kind, Size), findall(F, geometry_field(Kind, _, F), Fields),
-    sized(Fields, Size), bounds(Shape, W, H, D),
-    shape(TargetShape, TK, TS), findall(F, geometry_field(TK, _, F), TF),
-    sized(TF, TS), bounds(TargetShape, TW, TH, TD),
-    face(Face, FX, FY, FZ), face(TargetFace, TX, TY, TZ), offset(Gap),
-    aligned_axis(W, FX, TW, TX, Gap, X),
-    aligned_axis(H, FY, TH, TY, Gap, Y),
-    aligned_axis(D, FZ, TD, TZ, Gap, Z).
-
-bounds(box(W, H, D), W, H, D).
-bounds(sphere(D), D, D, D).
-bounds(plane(W, H), W, H, 0).
-bounds(cylinder(D, H), D, H, D).
-
-face(centre, 0, 0, 0).
-face(left, -1, 0, 0).
-face(right, 1, 0, 0).
-face(bottom, 0, -1, 0).
-face(top, 0, 1, 0).
-face(front, 0, 0, -1).
-face(back, 0, 0, 1).
-
-aligned_axis(Size, Side, TargetSize, TargetSide, Gap, Position) :-
-    Twice is TargetSize * TargetSide - Size * Side + 2 * Gap * TargetSide,
-    0 =:= Twice mod 2, Position is Twice // 2, offset(Position).
-
 %% --- the class view -----------------------------------------------------------
 %% The house vocabulary of doc/content-layer-design.md, derived from the
 %% relations above rather than stored beside them, so the two views cannot
@@ -315,3 +267,8 @@ have_attribute(geometry, field, binary).
 have_attribute(mark, depicts, term).
 
 attribute(Kind, field, Field) :- geometry_field(Kind, _, Field).
+
+isa(eidolon, thing).
+isa(model_eidolon, eidolon).
+isa(surface_eidolon, eidolon).
+isa(gui_eidolon, eidolon).

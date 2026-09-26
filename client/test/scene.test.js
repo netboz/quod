@@ -9,7 +9,7 @@ import { Ray } from '@babylonjs/core/Culling/ray.js'
 import { paintMarks, clearMarks } from '../src/scene.js'
 
 const root = 'mark(<<"console">>,<<"group">>,[],transform(1000,0,0,0,90,0),no_surface,unlabelled,depicts_nothing)'
-const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),pbr(<<"#F9C80E">>,0,900,700),unlabelled,depicts_nothing)'
+const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),surface(<<"#F9C80E">>,0,900,700,[]),unlabelled,depicts_nothing)'
 
 function withScene(run) {
   const engine = new NullEngine()
@@ -64,7 +64,7 @@ test('malformed hierarchy and material never reach the renderer', () => {
     `[${child}]`, `[${child},${root}]`, `[${root},${root}]`,
     `[${root},${child.replace('900,700', '1001,700')}]`,
     `[${root},${child.replace('900,700', '-1,700')}]`,
-    `[${root.replace('no_surface', 'material(<<"#FFFFFF">>,<<"matte">>)')}]`,
+    `[${root.replace('no_surface', 'surface(<<"#FFFFFF">>, 0, 900, 0, [])')}]`,
   ]) assert.throws(() => readMarks(text))
 })
 
@@ -88,4 +88,66 @@ test('radial selection starts at the top, proceeds clockwise, and preserves its 
   assert.equal(radialIndex({ x: 1, y: 0 }, 4), 1)
   assert.equal(radialIndex({ x: 0, y: 1 }, 4), 2)
   assert.equal(radialIndex({ x: -1, y: 0 }, 4), 3)
+})
+
+
+test('the neutral transform applies X then Y then Z before translation', () => {
+  withScene(scene => {
+    scene.useRightHandedSystem = true
+    const rotated = root.replace('1000,0,0,0,90,0', '1000,2000,3000,90,90,90')
+    const translated = child.replace('transform(0,0,-100,0,0,0)', 'transform(100,200,300,0,0,0)')
+    const painted = paintMarks(scene, readMarks(`[${rotated},${translated}]`))
+    const mesh = painted.get('screen').node
+    mesh.computeWorldMatrix(true)
+    // (x,y,z) -> Rx:(x,-z,y) -> Ry:(y,-z,-x) -> Rz:(z,y,-x).
+    assert.ok(Vector3.Distance(mesh.getAbsolutePosition(), new Vector3(1.3, 2.2, 2.9)) < 1e-6)
+    assert.equal(mesh.material.invertNormalMapX, false)
+    assert.equal(mesh.material.invertNormalMapY, true)
+    clearMarks(painted)
+  })
+})
+
+test('textured scene reconciliation retains leases and retires stale completions', async () => {
+  const engine = new NullEngine()
+  const scene = new Scene(engine)
+  const events = [], errors = [], pending = []
+  const resources = { acquire(binding) {
+    events.push(`acquire:${binding.digest}`)
+    let resolve, reject
+    const ready = new Promise((yes, no) => { resolve = yes; reject = no })
+    const lease = { ready, resolve, reject, release() { events.push(`release:${binding.digest}`) } }
+    pending.push(lease)
+    return lease
+  } }
+  const base = readMarks(`[${root},${child}]`)
+  const a = { ...base[1], material: { ...base[1].material,
+    textures: [{ slot: 'base_colour', digest: 'a', repeat: [1, 1] }] } }
+  const b = { ...a, material: { ...a.material,
+    textures: [{ slot: 'base_colour', digest: 'b', repeat: [1, 1] }] } }
+  let painted = new Map()
+  try {
+    painted = paintMarks(scene, [base[0], a], painted, resources, e => errors.push(e.message))
+    const node = painted.get('screen').node
+    assert.equal(node.isVisible, false)
+    painted = paintMarks(scene, [base[0], a], painted, resources, e => errors.push(e.message))
+    assert.deepEqual(events, ['acquire:a'])
+    painted = paintMarks(scene, [base[0], b], painted, resources, e => errors.push(e.message))
+    assert.deepEqual(events, ['acquire:a', 'acquire:b', 'release:a'])
+    pending[0].resolve(null)
+    await pending[0].ready
+    await Promise.resolve()
+    assert.equal(node.isVisible, false)
+    assert.equal(node.material.albedoTexture, null)
+    pending[1].reject(new Error('asset unavailable'))
+    // Wait for the actual error handler, without timing assumptions.
+    await new Promise(resolve => {
+      const append = errors.push.bind(errors)
+      errors.push = (...values) => { append(...values); resolve() }
+    })
+    assert.equal(node.isVisible, false)
+    assert.match(errors[0], /asset unavailable/)
+    painted = clearMarks(painted)
+    assert.deepEqual(events, ['acquire:a', 'acquire:b', 'release:a', 'release:b'])
+    assert.equal(node.isDisposed(), true)
+  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
 })

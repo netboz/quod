@@ -6,13 +6,31 @@
 %% isa(?Subclass, ?Superclass).
 %%
 %% `isa/2` is Quod's Web Ontology subclass relation. Ontologies declare its
-%% immediate edges as ordinary `isa/2` facts or rules; this shared rule
-%% adds the transitive answers. `clause/2` deliberately selects declarations
-%% rather than recursively asking the derived relation. The private marker is
-%% filtered out, cycles terminate, and multiple inheritance remains ordinary
-%% Prolog backtracking.
+%% immediate edges as ordinary `isa/2` facts or rules; these shared rules add
+%% the reflexive and transitive answers. `clause/2` deliberately selects
+%% declarations rather than recursively asking the derived relation. The
+%% private semantic rules are filtered out, cycles terminate, and multiple
+%% inheritance remains ordinary Prolog backtracking.
+isa(Class, Class) :-
+    '$quod_known_class'(Class).
 isa(Subclass, Superclass) :-
     '$quod_transitive_isa'(Subclass, Superclass).
+
+%% Reflexivity applies to declared classes, not to every arbitrary Prolog term.
+%% Ground checks avoid enumerating the complete local taxonomy. Open queries
+%% enumerate each declared class once even when it occurs in several edges.
+'$quod_known_class'(Class) :-
+    nonvar(Class),
+    !,
+    ('$quod_direct_isa'(Class, _); '$quod_direct_isa'(_, Class)),
+    !.
+'$quod_known_class'(Class) :-
+    findall(C, '$quod_declared_class'(C), Raw),
+    sort(Raw, Classes),
+    member(Class, Classes).
+
+'$quod_declared_class'(Class) :- '$quod_direct_isa'(Class, _).
+'$quod_declared_class'(Class) :- '$quod_direct_isa'(_, Class).
 
 '$quod_transitive_isa'(Subclass, Superclass) :-
     '$quod_isa_requires_closure'(Subclass, Superclass),
@@ -52,6 +70,7 @@ isa(Subclass, Superclass) :-
     call(Body).
 
 '$quod_isa_semantics'('$quod_transitive_isa'(_, _)).
+'$quod_isa_semantics'('$quod_known_class'(_)).
 '$quod_isa_semantics'((nonvar(_), (_, '$quod_follow_unique'(_)))).
 
 '$quod_qualified_class'(_, Ns:Class, Ns:Class) :- !.

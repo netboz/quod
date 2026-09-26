@@ -304,7 +304,7 @@ notice a `::`-tagged argument and re-issue themselves as a goal-position call in
 that ontology. **One mechanism**, not two; both bottom out in the staged proved
 scope.
 
-`isa(Subclass, Superclass)` has the transitive semantics of
+`isa(Subclass, Superclass)` has the reflexive-transitive semantics of
 `rdfs:subClassOf`. Immediate class declarations remain ordinary local Prolog
 facts or rules, while the shared Prolog vocabulary derives longer paths with
 cycle protection. For example, `isa(dog, mammal)` and `isa(mammal, animal)`

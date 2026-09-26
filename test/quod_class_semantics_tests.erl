@@ -16,6 +16,9 @@ transitive_isa_is_shared_ontology_semantics_test() ->
           holds({isa, northern_red_oak, wood}, St),
           holds({isa, northern_red_oak, material}, St),
           holds({isa, northern_red_oak, hardwood}, St),
+          holds({isa, northern_red_oak, northern_red_oak}, St),
+          holds({isa, material, material}, St),
+          fails({isa, undeclared, undeclared}, St),
           fails({isa, northern_red_oak, stone}, St)
       end).
 

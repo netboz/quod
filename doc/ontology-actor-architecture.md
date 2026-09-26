@@ -45,7 +45,7 @@ instance_of(fipa_agent, local_agent_1).
 agent_key(local_agent_1, PublicKey, active).
 ```
 
-`isa/2` has the transitive semantics of `rdfs:subClassOf`. From
+`isa/2` has the reflexive-transitive semantics of `rdfs:subClassOf`. From
 `isa(fipa_agent, agent)` and `isa(agent, thing)`, every ontology must therefore
 be able to prove `isa(fipa_agent, thing)` without storing that derived edge.
 This is shared ontology semantics, including cycle-safe multiple inheritance;

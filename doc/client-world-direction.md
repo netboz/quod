@@ -461,7 +461,7 @@ physical constants enter the first catalogue just to make the scene render.
 
 The generic `have_attribute`/`attribute` view is derived from the authoritative
 property relations; it is not a second stored copy. `isa/2` is the shared,
-transitive subclass relation; it does not by itself make physical property
+reflexive-transitive subclass relation; it does not by itself make physical property
 claims inheritable. Any property applicability and override rule remains
 explicit Prolog with ambiguity handling. A broad class range does not silently
 override a sample's measurement.

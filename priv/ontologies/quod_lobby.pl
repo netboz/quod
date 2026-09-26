@@ -126,7 +126,7 @@ console_parts(Mode,
           Bronze, unlabelled, depicts_nothing),
      part(<<"top-sign">>, box(900, 100, 80),
           relative(<<"body">>, transform(0, 650, -150, 0, 0, 0)),
-          Bronze, label(Title, <<"centre">>), depicts_nothing)]) :-
+          Bronze, label(Title, <<"above">>), depicts_nothing)]) :-
     material_surface(oak_wood, Wood), material_surface(bronze, Bronze),
     Shell = surface(<<"#253239">>,650,420,0,[]),
     Inset = surface(<<"#10191E">>,250,300,40,[]),

@@ -3154,3 +3154,46 @@ attempt was stopped before creation-policy activation and is retained offline
 as failed evidence. The authorized test-network reset will be repeated with
 fresh storage and canonical identities. System rows drive automatic fleet
 joining; no per-node or durable host declaration is part of system installation.
+
+### Shared class semantics and clean client deployment (2026-09-27)
+
+The canonical deployment supersedes the preceding pending-reset wording. The
+active eight-node candidate network was founded from clean storage with system
+identities `quod:rendering`, `quod:modelling`, `quod:material` and
+`quod:material:eidolons`. Root contains fourteen valid system descriptors with
+zero rejected entries, and all fourteen are ready on every node through the
+normal root-catalogue loader. Installation founded and registered each system
+ontology once; it issued no per-node ontology-hosting commands. The unrelated
+production `quod` job remained at Nomad index 773043.
+
+`isa/2` is now the shared pure-Prolog reflexive-transitive Web Ontology
+subclass relation. Immediate edges remain ordinary ontology facts or rules;
+cycle protection and cross-ontology qualified traversal live in
+`common_predicates.pl`. The material-specific `material_kind/2` and private
+ancestry closure were removed. The architecture, content-layer,
+inter-ontology and client-world documents state the same invariant. Commit
+`4e6d1d0` introduced transitivity; hardware rendering then exposed the missing
+reflexive case because an exact `oak_wood` selected its generic `wood` recipe.
+Commit `837133f` adds reflexivity for declared classes and exact-class material
+regressions. Both commits are pushed on `feature/client-lobby-workspace`.
+
+Focused verification passed 69/69 tests, including local and cross-ontology
+closure, rule-defined edges, cycles, staged assert/retract, exact `oak_wood`
+and `marble` recipe selection. The deployed image is
+`client-materials-semantic-v4@sha256:8c5bbf4c656df8d1157ff3fe12c13db788ebd0035894029f00e46495f778ae0f`;
+its backend libraries are byte-identical to the accepted parent and only the
+client and ontology assets are replaced. Live proofs confirm reflexive and
+transitive `isa/2` plus exact-class material selection.
+
+Fresh browser acceptance passed open signup, six verified texture loads,
+unchanged refresh with no additional texture request or decode, cursor
+Next/Stop/Accept, committed readback and reload. Signup to the textured lobby
+took 13.90 seconds; unchanged refresh took 659 ms. A persistent browser then
+committed `restart_probe(preserved)`, allocation `[6]` was replaced, and the
+same browser reloaded and proved that fact in 2.68 seconds. An earlier recovery
+attempt that imported Playwright's JSON storage snapshot is retained as a
+harness failure: Playwright serialized the IndexedDB `CryptoKey` as a plain
+object, so no signed recovery request was made. It is not counted as product
+recovery evidence. Final system-catalogue checks pass on all eight nodes after
+replacement. Evidence is under
+`_build/material-network-20260927/semantic-v4/`.

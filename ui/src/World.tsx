@@ -181,8 +181,8 @@ export default function World() {
     <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" tabIndex={0} />
     {navigationActive && <div className="world-crosshair" aria-hidden="true" />}
     <div className={`world-navigation-hint${navigationActive ? ' active' : ''}`} aria-live="polite">
-      {navigationActive ? 'Mouse to look · WASD or arrows to move · Shift for faster movement · Esc to release'
-        : 'Click the world to explore · WASD or arrows to move · Shift for faster movement'}
+      {navigationActive ? 'Mouse to look · ZQSD, WASD or arrows to move · Shift for faster movement · Esc to release'
+        : 'Click the world to explore · ZQSD, WASD or arrows to move · Shift for faster movement'}
     </div>
     <header className={`world-header${navigationActive ? ' navigation-active' : ''}`}>
       <a href="/" className="world-brand">quod <span>∴</span></a>

@@ -4,9 +4,9 @@ export function configureDesktopCamera(camera) {
   camera.speed = 2
   camera.inertia = 0.55
   camera.angularSensibility = 2600
-  camera.keysUp = [87, 38]
+  camera.keysUp = [87, 90, 38]
   camera.keysDown = [83, 40]
-  camera.keysLeft = [65, 37]
+  camera.keysLeft = [65, 81, 37]
   camera.keysRight = [68, 39]
 }
 

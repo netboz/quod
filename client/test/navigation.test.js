@@ -5,9 +5,9 @@ import { configureDesktopCamera, createMovementSpeed, createPointerLock } from '
 test('desktop camera uses familiar movement keys and measured controls', () => {
   const camera = {}
   configureDesktopCamera(camera)
-  assert.deepEqual(camera.keysUp, [87, 38])
+  assert.deepEqual(camera.keysUp, [87, 90, 38])
   assert.deepEqual(camera.keysDown, [83, 40])
-  assert.deepEqual(camera.keysLeft, [65, 37])
+  assert.deepEqual(camera.keysLeft, [65, 81, 37])
   assert.deepEqual(camera.keysRight, [68, 39])
   assert.equal(camera.speed, 2)
   assert.equal(camera.angularSensibility, 2600)

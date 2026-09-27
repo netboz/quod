@@ -3287,3 +3287,33 @@ decodes, unchanged refresh without another decode, Next/Stop/Accept, committed
 readback and reload. Signup to the textured lobby took 13.29 seconds and
 unchanged refresh 508 ms. Production remained unchanged at Nomad index 773043.
 Evidence is under `_build/material-network-20260927/environment-v13/`.
+
+### First-person desktop navigation (2026-09-27)
+
+Commit `6c2b7cb` replaces the lobby's orbit-only desktop camera with Babylon's
+`UniversalCamera`. Clicking the world or the explicit **Explore in 3D** control
+requests pointer lock; mouse movement looks around and WASD or arrow keys move.
+The browser's Escape gesture, opening a focused workspace, entering XR and
+scene disposal all release capture. A centre crosshair is shown while captured,
+and locked picking uses that exact screen-centre ray. Screen-space controls fade
+and stop accepting pointer events until capture is released. These operations
+change only the local observer camera; no ontology or authoritative world state
+is mutated.
+
+Client tests pass 65/65, and TypeScript/Vite build plus UI lint pass. The
+immutable overlay is
+`client-navigation-v14@sha256:fe490840616cabddb9150750410cf56a5aa962358d8875f238c4ccc45ecd6ab9`;
+its backend libraries are byte-identical to the accepted base. It was rolled
+onto the existing candidate volumes without resetting ledgers; root remains
+`94222E5D56145782A77D2602CE644D1547591B3D3469663E4CA240B64B69EADC`.
+All eight allocations are healthy at candidate Nomad index 786779, while
+production remains unchanged at index 773043.
+
+Hardware browser acceptance passed explicit pointer capture, sustained `W`
+movement with a changed rendered camera view, pointer-lock exit with restored
+controls, canvas-click recapture, fresh signup, texture loading, console
+Next/Stop/Accept, committed readback and reload. Headless Chromium does not
+execute its privileged browser Escape action from a synthetic key event; that
+first harness run is retained as failed evidence. The successful run drove the
+standard pointer-lock exit event that real Chrome/Firefox emit after Escape.
+Evidence is under `_build/material-network-20260927/navigation-v14/`.

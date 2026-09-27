@@ -3317,3 +3317,23 @@ execute its privileged browser Escape action from a synthetic key event; that
 first harness run is retained as failed evidence. The successful run drove the
 standard pointer-lock exit event that real Chrome/Firefox emit after Escape.
 Evidence is under `_build/material-network-20260927/navigation-v14/`.
+
+### Desktop navigation speed (2026-09-27)
+
+Commit `24069ed` restores Babylon's `2.0` baseline movement speed in place of
+the overly conservative `0.12` initial value. Holding Shift temporarily raises
+the camera speed to `5.0`; key release, browser focus loss and scene disposal
+all restore walking speed. This remains local observer state.
+
+Client tests pass 66/66, and the TypeScript/Vite build plus UI lint pass. The
+immutable overlay is
+`client-navigation-speed-v15@sha256:ad5bfcf5d4421e40cf05f4bf0b214bacac2ce19fb63de4982276147fe06182af`;
+its 1,034 non-priv application/runtime files are byte-identical to the accepted
+base. It was rolled onto the existing candidate volumes without resetting
+ledgers; root remains
+`94222E5D56145782A77D2602CE644D1547591B3D3469663E4CA240B64B69EADC`.
+All eight allocations are healthy at candidate Nomad index 786887/version 39,
+while production remains unchanged at index 773043. The deployed bundle is
+byte-identical to the local build and public browser startup completes without
+page errors. Evidence is under
+`_build/material-network-20260927/navigation-speed-v15/`.

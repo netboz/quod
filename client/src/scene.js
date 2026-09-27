@@ -130,6 +130,8 @@ function applyMaterial(scene, entry, { id, kind, material }, resources, onError)
   surface.roughness = material.roughness
   surface.emissiveColor = surface.albedoColor.scale(material.emission)
   surface.unlit = kind === 'sky_sphere'
+  surface.backFaceCulling = kind !== 'sky_sphere'
+  surface.disableDepthWrite = kind === 'sky_sphere'
   surface.albedoTexture = surface.bumpTexture = surface.metallicTexture = null
   // OpenGL tangent-space normal maps, matching the glTF adapter convention.
   surface.invertNormalMapX = !scene.useRightHandedSystem

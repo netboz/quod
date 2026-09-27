@@ -68,6 +68,8 @@ test('the Babylon adapter draws an unlit inward sky which cannot intercept selec
     const dome = painted.get('sky').node
     assert.equal(dome.isPickable, false)
     assert.equal(dome.material.unlit, true)
+    assert.equal(dome.material.backFaceCulling, false)
+    assert.equal(dome.material.disableDepthWrite, true)
     const hit = scene.pickWithRay(new Ray(new Vector3(0, 0, 0), new Vector3(1, 0, 0)))
     assert.equal(hit.pickedMesh, painted.get('screen').node)
     clearMarks(painted)

@@ -730,11 +730,18 @@ found_lobby_classes() ->
         [{measure_vocabulary, MeasureNs, MeasureAnchor}]),
     {EidolonNs, EidolonAnchor} = found_lobby_source(<<"material-eidolons">>, "quod_material_eidolons.pl",
         [{material_vocabulary, MaterialNs, MaterialAnchor}]),
+    {EnvironmentNs, EnvironmentAnchor} = found_lobby_source(
+        <<"environment">>, "quod_environment.pl", []),
+    {EnvironmentEidolonNs, EnvironmentEidolonAnchor} = found_lobby_source(
+        <<"environment-eidolons">>, "quod_environment_eidolons.pl",
+        [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
     {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
         [{modelling_vocabulary, ModelNs, ModelAnchor},
          {material_eidolons, EidolonNs, EidolonAnchor},
+         {environment_vocabulary, EnvironmentNs, EnvironmentAnchor},
+         {environment_eidolons, EnvironmentEidolonNs, EnvironmentEidolonAnchor},
          {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template}]).
 
 found_lobby_source(Prefix, File, Facts) ->

@@ -14,8 +14,6 @@ lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
 lobby_query(lobby_options(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
-lobby_query(panorama_asset(_, _, _)).
-lobby_query(have_attribute(_, _, _)).
 
 %% A user's editable facts cannot grant names outside its own personal lobby.
 %% The pending requirement is read in the same proof as the prepared creation.
@@ -47,6 +45,7 @@ lobby_options(Owner,
             device_placement(console, <<"console">>, transform(0, 0, 0, 0, 0, 0)),
             lobby_vocabulary(Namespace, Anchor),
             modelling_vocabulary(ModellingNamespace, ModellingAnchor),
+            environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
             gui_vocabulary(GuiNamespace, GuiAnchor)]),
      external_predicate_modules([quod_agent_predicates])]) :-
     term_variables(Owner, []),
@@ -54,33 +53,17 @@ lobby_options(Owner,
     current_ontology_identity(Namespace, Anchor),
     instance_template(Source),
     modelling_vocabulary(ModellingNamespace, ModellingAnchor),
+    environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
     gui_vocabulary(GuiNamespace, GuiAnchor).
 
 isa(lobby, thing).
 isa(device, thing).
 isa(prolog_console, device).
-isa(sky_sphere, thing).
-
-%% A lobby owns its sky instance and may tune these values with ordinary
-%% transactions. Panorama assets stay content-addressed shared vocabulary.
-have_attribute(sky_sphere, panorama, atom).
-have_attribute(sky_sphere, diameter, millimetres).
-have_attribute(sky_sphere, rotation, degrees).
-have_attribute(sky_sphere, brightness, permille).
-have_attribute(sky_sphere, tint, colour).
-
-panorama_asset(belfast_sunset_puresky,
-    asset(<<"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4">>, <<"image/jpeg">>),
-    source(<<"https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/belfast_sunset_puresky.jpg">>, <<"CC0-1.0">>)).
 %% Class associations name ordinary, anchored Prolog recipe entry points.
 class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
     device_eidolon(Class, Mode, Style, Recipe), current_ontology_identity(Ns, Anchor).
-class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
-    environment_eidolon(Class, Mode, Style, Recipe), current_ontology_identity(Ns, Anchor).
 device_eidolon(prolog_console, playing, solid, console_playing).
 device_eidolon(prolog_console, edition, solid, console_edition).
-environment_eidolon(sky_sphere, playing, panoramic, sky_sphere_panoramic).
-environment_eidolon(sky_sphere, edition, panoramic, sky_sphere_panoramic).
 
 device_menu(prolog_console,
     [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console))]).
@@ -94,16 +77,12 @@ lobby_recipe(Mode, lobby(Ns, Anchor, Sky, Devices), [SkyPart, Floor | Parts]) :-
     device_parts(Devices, Mode, Ns, Anchor, Parts).
 
 environment_parts(Mode, Sky, Ns, Anchor, Parts) :-
-    findall(Recipe, environment_eidolon(sky_sphere, Mode, panoramic, Recipe), [Recipe]),
-    eidolon(Recipe, environment(Sky, Ns, Anchor), Parts).
-
-eidolon(sky_sphere_panoramic,
-        environment(sky(Entity, Panorama, Diameter, Rotation, Brightness, Tint), Ns, Anchor),
-        [part(<<"sky">>, sky_sphere(Diameter), transform(0, 0, 0, 0, Rotation, 0),
-              Surface, unlabelled, depicts(Ns, Anchor, Entity))]) :-
-    panorama_asset(Panorama, Asset, _),
-    Surface = surface(Tint, 0, 1000, Brightness,
-                      [texture(<<"base_colour">>, Asset, repeat(1000, 1000))]).
+    environment_eidolons(EidolonNs, EidolonAnchor),
+    EidolonNs::(current_ontology_identity(EidolonNs, EidolonAnchor),
+                class_eidolon(sky_sphere, Mode, panoramic,
+                              recipe(RecipeNs, RecipeAnchor, Recipe))),
+    RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
+               eidolon(Recipe, environment(Sky, Ns, Anchor), Parts)).
 device_parts([], _, _, _, []).
 device_parts([device(Class, Entity, Id, At) | Devices], Mode, Ns, Anchor, Parts) :-
     findall(Recipe, device_eidolon(Class, Mode, solid, Recipe), [Recipe]),

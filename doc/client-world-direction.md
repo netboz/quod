@@ -9,8 +9,9 @@ before implementation.
 
 Section 4.1.2 records the implemented material/rendering/toolkit separation
 requested by Yan on 2026-09-26. The canonical system ontologies are
-`quod:rendering`, `quod:modelling`, `quod:material`, and
-`quod:material:eidolons`.
+`quod:rendering`, `quod:modelling`, `quod:material`,
+`quod:material:eidolons`, `quod:environment`, and
+`quod:environment:eidolons`.
 
 The generic acting identity is now the deployed actor model in
 `ontology-actor-architecture.md`: every acting node, agent, service, or
@@ -394,8 +395,10 @@ Existing GUI, measurement, lobby and lens ontologies retain their own purposes.
 | `quod:modelling` / `quod_modelling.pl` | Pure construction, composition, face/anchor alignment, spacing, repetition, surface and texture-binding helpers | Physical properties, named wood/stone appearances, Babylon calls |
 | `quod:material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
 | `quod:material:eidolons` / `quod_material_eidolons.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
+| `quod:environment` / `quod_environment.pl` | Reusable environment classes and their attribute vocabulary, initially `sky_sphere` | A particular world's sky values, panorama assets or client objects |
+| `quod:environment:eidolons` / `quod_environment_eidolons.pl` | Environment-to-recipe associations, renderer-neutral environment recipes and content-addressed visual assets | A particular world's selected environment values or Babylon calls |
 | Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable eidolon declarations | A second proof executor or material catalogue |
-| Existing `quod:lobby` / `quod_lobby.pl` | Lobby, device and environment classes; their eidolons; arrangement and default eidolon policy | Copies of shared materials, toolkit functions or private user state |
+| Existing `quod:lobby` / `quod_lobby.pl` | Lobby and device classes, device eidolons, lobby arrangement and default composition policy | Shared environment/material classes, toolkit functions or private user state |
 | Each personal lobby or world | Instances, their physical material assignments, accepted appearance choices and world policy | Copies of the standard class/recipe libraries |
 | Existing `quod:measure` / `quod_measure.pl` | Units, dimensions and exact conversions | A second material or surface catalogue |
 
@@ -408,14 +411,16 @@ calling back into the lobby or choosing which wood a world must use. Recipe
 libraries are explicit anchored dependencies of their consumers, not entries
 in a new global mutable registry.
 
-A sky is modelled as an environment object rather than a client setting. The
-shared lobby vocabulary defines `sky_sphere` and its attributes. Each personal
-lobby owns a `personal_sky` instance with a panorama, diameter, rotation,
-brightness and tint. Its eidolon turns those durable facts into one neutral
-`sky_sphere` mark. An ordinary signed transaction can therefore change the
-view's sky, and restart recovery obtains the new value from the lobby ledger;
-the Babylon adapter only maps that mark to inward-facing, non-selectable
-geometry. Other renderers may implement the same descriptor differently.
+A sky is modelled as an environment object rather than a client setting.
+`quod:environment` defines `sky_sphere` and its attributes, while
+`quod:environment:eidolons` owns its panorama asset and visual recipe. Each
+personal lobby owns a `personal_sky` instance with a panorama, diameter,
+rotation, brightness and tint. `quod:lobby` only selects and composes the
+environment eidolon with the lobby's devices and floor. An ordinary signed
+transaction can therefore change the view's sky, and restart recovery obtains
+the new value from the lobby ledger; the Babylon adapter only maps the neutral
+mark to inward-facing, non-selectable geometry. Other renderers may implement
+the same descriptor differently.
 
 #### Physical materials and their properties
 
@@ -513,6 +518,9 @@ Object associations normally live beside the object's class. Shared material
 associations live in `quod:material:eidolons`, against material classes
 qualified by the collection's exact material-vocabulary dependency. This lets
 the physical catalogue remain usable without a rendering dependency.
+Environment associations and assets follow the same split in
+`quod:environment:eidolons`; worlds and personal lobbies retain their own
+environment instances and selected attribute values.
 An application selects the recipe collections it trusts; libraries do not
 install declarations into other ontologies. The inputs carry the authorized
 subject, its relevant state, selected purpose/style and supported capabilities.
@@ -1766,31 +1774,36 @@ founding inputs; adding a source file does not create or upgrade a system
 ontology in a running fleet. Browser enrollment and lobby creation are specified
 in section 11.9; activating their sources is a separate deployment operation.
 
-`quod_lobby.pl` defines the shared lobby/device classes, class-to-eidolon
-associations and console menu. `quod_gui.pl` defines the first composite proof
-form using semantic editor, bindings and button roles. `lobby_instance.pl`
-defines private instance behaviour and grants invocation only to its explicit
-owner. Founding supplies these facts, using exact real anchors:
+`quod_environment.pl` defines reusable environment classes and attributes;
+`quod_environment_eidolons.pl` defines their renderer-neutral recipes and
+assets. `quod_lobby.pl` defines only the shared lobby/device classes, their
+eidolons, composition and console menu. `quod_gui.pl` defines the first
+composite proof form using semantic editor, bindings and button roles.
+`lobby_instance.pl` defines private instance behaviour and grants invocation
+only to its explicit owner. Founding supplies these facts, using exact real
+anchors:
 
 ```prolog
 % Personal lobby:
 lobby_owner(agent_instance_ref(UserNamespace, UserAnchor, UserInstance)).
 instance_of(prolog_console, console).
+instance_of(sky_sphere, personal_sky).
 lobby_vocabulary(LobbyClassNamespace, LobbyClassAnchor).
-% Exact rendering-library dependency: see the current founding source.
+environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor).
 gui_vocabulary(GuiNamespace, GuiAnchor).
 % Selected user's ontology (lobby_reference/1 is derived):
 lobby_provisioning(me, linked(ontology_ref(PersonalLobbyNamespace, PersonalLobbyAnchor))).
 ```
 
-The shared lobby vocabulary also pins its rendering-library dependency by
-namespace and anchor; the exact current fact is in `quod_lobby.pl`. These
+The shared lobby vocabulary pins its modelling, material-eidolon and
+environment-eidolon dependencies by namespace and anchor; personal lobbies pin
+the environment vocabulary that gives their sky instance meaning. These
 ontologies are founded with `quod_agent_predicates` so their ordinary scoped reads can prove `current_ontology_identity/2`. Device subjects
 use `depicts(Namespace, Anchor, Entity)`; an unanchored subject from an older
 lens remains display-only. Neither a namespace string nor a mesh name grants
 authority. All console requests use the user's selected signing identity.
 
-The existing rendering vocabulary supplies pure authoring helpers:
+The modelling vocabulary supplies pure authoring helpers:
 
 ```prolog
 model(Parts, Marks).
@@ -1881,8 +1894,8 @@ do not grant names outside this scope.
 `human_user_instance.pl` defines `provision_lobby/1`: the pending requirement,
 prepared lobby reference and receiver creation effect form one atomic transition.
 The same transaction records the lobby's node hosting declaration and consumes
-the signup receipt. `quod_lobby.pl` supplies reviewed
-instance source and exact rendering/GUI references as Prolog founding data.
+the signup receipt. `quod_lobby.pl` supplies reviewed instance source and exact
+modelling, environment and GUI references as Prolog founding data.
 Root proves the full options through the delegated creation policy. No imported
 source path is evaluated on whichever node receives a public signup request.
 

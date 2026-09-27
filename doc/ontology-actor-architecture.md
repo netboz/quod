@@ -143,6 +143,8 @@ The system family includes:
 | `quod:modelling` | pure model construction, alignment and named composition |
 | `quod:material` | physical material classes and contextual properties |
 | `quod:material:eidolons` | reusable surface recipes and texture references |
+| `quod:environment` | reusable environment classes and their attributes |
+| `quod:environment:eidolons` | renderer-neutral environment recipes and assets |
 
 The table describes bundled system roles. A non-root ontology has system status
 only when root contains its exact `system_ontology/2` row. Source filenames do

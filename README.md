@@ -139,6 +139,8 @@ bundled domain ontology sources also include:
 | `quod:modelling` | pure Prolog construction, alignment and named composition |
 | `quod:material` | material classes and contextual physical properties |
 | `quod:material:eidolons` | reusable surface recipes and texture references |
+| `quod:environment` | reusable environment classes and their attributes |
+| `quod:environment:eidolons` | renderer-neutral environment recipes and assets |
 
 The naming and licence sources and tests live at
 [`priv/ontologies/quod_names.pl`](priv/ontologies/quod_names.pl),

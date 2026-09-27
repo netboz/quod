@@ -200,7 +200,9 @@ vocabulary_fits_the_genesis_budget_test() ->
         New = quod_wire_term:cold_new_symbols(Terms),
         ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {Name, New, length(New)}),
         ?assertNot(lists:any(fun has_float/1, Terms))
-    end, ["quod_rendering.pl", "quod_modelling.pl", "quod_material.pl", "quod_material_eidolons.pl"]).
+    end, ["quod_rendering.pl", "quod_modelling.pl", "quod_material.pl",
+          "quod_material_eidolons.pl", "quod_environment.pl",
+          "quod_environment_eidolons.pl"]).
 
 texture_bindings_are_typed_and_unique_test() ->
     with_rendering(fun(St) ->

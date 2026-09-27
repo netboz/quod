@@ -74,7 +74,7 @@ rendering_query(have_attribute(_, _, _)).
 rendering_query(attribute(_, _, _)).
 
 %% --- the geometries -----------------------------------------------------------
-%% Six bounded parameterized shapes and a transform group. A kind's fields are
+%% Seven bounded parameterized shapes and a transform group. A kind's fields are
 %% declared once, in order, and a descriptor carries exactly those fields: the
 %% client never has to know that a box's three numbers happen to be width,
 %% height and depth.
@@ -85,6 +85,7 @@ mark_kind(<<"plane">>).
 mark_kind(<<"cylinder">>).
 mark_kind(<<"capsule">>).
 mark_kind(<<"torus">>).
+mark_kind(<<"sky_sphere">>).
 mark_kind(<<"group">>).
 
 geometry_field(<<"box">>, 1, <<"width">>).
@@ -99,6 +100,7 @@ geometry_field(<<"capsule">>, 1, <<"diameter">>).
 geometry_field(<<"capsule">>, 2, <<"height">>).
 geometry_field(<<"torus">>, 1, <<"diameter">>).
 geometry_field(<<"torus">>, 2, <<"thickness">>).
+geometry_field(<<"sky_sphere">>, 1, <<"diameter">>).
 
 
 placement(<<"above">>).

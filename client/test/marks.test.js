@@ -93,6 +93,15 @@ test('capsules and tori keep their neutral dimensions', () => {
     `transform(0,0,0,0,0,0),${surface},unlabelled,depicts_nothing)]`))
 })
 
+test('a sky sphere keeps its renderer-neutral diameter', () => {
+  const [sky] = readMarks(
+    '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+    'unlabelled,depicts_nothing)]')
+  assert.equal(sky.kind, 'sky_sphere')
+  assert.deepEqual(sky.size, { diameter: 80000 })
+})
+
 // Display-only Explorer abbreviations must never be mistaken for signed result data.
 test('a binary that did not survive the reply is refused', () => {
   assert.throws(() => readMarks(REPLY.replace('<<"cowboy">>', 'kp_545337d5')))

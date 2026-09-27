@@ -20,6 +20,7 @@ const GEOMETRY = Object.freeze({
   cylinder: ['diameter', 'height'],
   capsule: ['diameter', 'height'],
   torus: ['diameter', 'thickness'],
+  sky_sphere: ['diameter'],
   group: [],
 })
 

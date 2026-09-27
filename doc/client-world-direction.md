@@ -395,7 +395,7 @@ Existing GUI, measurement, lobby and lens ontologies retain their own purposes.
 | `quod:material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
 | `quod:material:eidolons` / `quod_material_eidolons.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
 | Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable eidolon declarations | A second proof executor or material catalogue |
-| Existing `quod:lobby` / `quod_lobby.pl` | Lobby/device classes, device eidolons, arrangement and default eidolon policy | Copies of shared materials, toolkit functions or private user state |
+| Existing `quod:lobby` / `quod_lobby.pl` | Lobby, device and environment classes; their eidolons; arrangement and default eidolon policy | Copies of shared materials, toolkit functions or private user state |
 | Each personal lobby or world | Instances, their physical material assignments, accepted appearance choices and world policy | Copies of the standard class/recipe libraries |
 | Existing `quod:measure` / `quod_measure.pl` | Units, dimensions and exact conversions | A second material or surface catalogue |
 
@@ -407,6 +407,15 @@ those results. `quod:rendering` validates the resulting descriptions without
 calling back into the lobby or choosing which wood a world must use. Recipe
 libraries are explicit anchored dependencies of their consumers, not entries
 in a new global mutable registry.
+
+A sky is modelled as an environment object rather than a client setting. The
+shared lobby vocabulary defines `sky_sphere` and its attributes. Each personal
+lobby owns a `personal_sky` instance with a panorama, diameter, rotation,
+brightness and tint. Its eidolon turns those durable facts into one neutral
+`sky_sphere` mark. An ordinary signed transaction can therefore change the
+view's sky, and restart recovery obtains the new value from the lobby ledger;
+the Babylon adapter only maps that mark to inward-facing, non-selectable
+geometry. Other renderers may implement the same descriptor differently.
 
 #### Physical materials and their properties
 

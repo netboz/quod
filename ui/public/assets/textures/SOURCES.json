@@ -49,6 +49,15 @@
       "bytes": 159606,
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/floor_tiles_02/floor_tiles_02_arm_1k.jpg",
       "license": "CC0-1.0"
+    },
+    {
+      "asset": "belfast_sunset_puresky",
+      "slot": "base_colour",
+      "digest": "d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4",
+      "bytes": 151993,
+      "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/belfast_sunset_puresky.jpg",
+      "license": "CC0-1.0",
+      "derived": "resized to 2048x1024, metadata stripped, JPEG quality 90"
     }
   ]
 }

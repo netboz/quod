@@ -15,7 +15,7 @@ kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
-                      <<"plane">>, <<"sphere">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
         %% the order a descriptor must use is the order they are written in.
@@ -44,6 +44,8 @@ a_well_formed_mark_test() ->
         holds({well_formed_mark,
                sized(<<"torus">>, [{f, <<"diameter">>, 110},
                                     {f, <<"thickness">>, 18}])}, St),
+        holds({well_formed_mark,
+               sized(<<"sky_sphere">>, [{f, <<"diameter">>, 80000}])}, St),
         %% a mark may sit behind the origin and be turned
         holds({well_formed_mark,
                {mark, <<"m3">>, <<"plane">>,
@@ -174,7 +176,7 @@ the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
-                      <<"plane">>, <<"sphere">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
                      solutions({'F'}, {attribute, <<"cylinder">>, field, {'F'}}, St))

@@ -2,6 +2,7 @@
 // objects; parents compose local transforms. No domain state is stored here.
 
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
 import { CreateCapsule } from '@babylonjs/core/Meshes/Builders/capsuleBuilder.js'
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
@@ -105,6 +106,13 @@ function buildGeometry(scene, { id, kind, size }) {
       return CreateTorus(name, {
         diameter: size.diameter / MM, thickness: size.thickness / MM, tessellation: 32,
       }, scene)
+    case 'sky_sphere': {
+      const sky = MeshBuilder.CreateSphere(name, {
+        diameter: size.diameter / MM, segments: 48, sideOrientation: Mesh.BACKSIDE,
+      }, scene)
+      sky.isPickable = false
+      return sky
+    }
     default:
       // readMarks refuses an unknown kind, so reaching this is a bug here.
       throw new Error(`no mesh for ${kind}`)
@@ -113,7 +121,7 @@ function buildGeometry(scene, { id, kind, size }) {
 
 // The single neutral surface contract maps to Babylon's metallic/roughness
 // material. Resource leases survive transform changes and unchanged refreshes.
-function applyMaterial(scene, entry, { id, material }, resources, onError) {
+function applyMaterial(scene, entry, { id, kind, material }, resources, onError) {
   const mesh = entry.node
   const surface = mesh.material ?? new PBRMaterial(`mark-material:${id}`, scene)
   const colour = Color3.FromHexString(material.colour)
@@ -121,6 +129,7 @@ function applyMaterial(scene, entry, { id, material }, resources, onError) {
   surface.metallic = material.metallic
   surface.roughness = material.roughness
   surface.emissiveColor = surface.albedoColor.scale(material.emission)
+  surface.unlit = kind === 'sky_sphere'
   surface.albedoTexture = surface.bumpTexture = surface.metallicTexture = null
   // OpenGL tangent-space normal maps, matching the glTF adapter convention.
   surface.invertNormalMapX = !scene.useRightHandedSystem

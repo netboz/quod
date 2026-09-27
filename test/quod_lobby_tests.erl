@@ -12,8 +12,13 @@ lobby_projection_recovery_test_() ->
             {ontology_ref, Ns, Anchor} = Ref,
             Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
                                     {lobby_view, playing, {0}}}},
-            {ok, [#{<<"V0">> := Scene}], Height} = read(Ctx, Goal),
-            ?assertEqual(17, length(Scene)),
+            {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Goal),
+            ?assertEqual(18, length(Scene)),
+            ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>,
+                          [{f, <<"diameter">>, 80000}],
+                          {transform, 0, 0, 0, 0, 35, 0}, _, unlabelled,
+                          {depicts, Ns, Anchor, personal_sky}},
+                         lists:keyfind(<<"sky">>, 2, Scene)),
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
                {transform, 0, 0, 0, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
@@ -31,6 +36,17 @@ lobby_projection_recovery_test_() ->
             Other = Ctx#{instance => <<"human_user(other_agent).">>},
             ?assertMatch({ok, _, _}, read(Other, {lobby_reference, {0}})),
             ?assertMatch({fail, _}, read(Other, Goal)),
+            %% Sky settings are ordinary durable lobby facts. One transaction
+            %% changes the recipe input; no client or system ontology changes.
+            TuneSky = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
+                {',', {retract, {attribute, personal_sky, rotation, 35}},
+                      {assertz, {attribute, personal_sky, rotation, 215}}}}},
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                         submit(Ctx, execute, TuneSky)),
+            {ok, [#{<<"V0">> := ChangedScene}], _} = read(Ctx, Goal),
+            ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>, _,
+                          {transform, 0, 0, 0, 0, 215, 0}, _, _, _},
+                         lists:keyfind(<<"sky">>, 2, ChangedScene)),
             %% The exact same ledger restores the lobby; no creation event or
             %% model facts are replayed into another database.
             {Sup, Config} = maps:get(Ns, maps:get(ontologies, Ctx)),
@@ -38,7 +54,7 @@ lobby_projection_recovery_test_() ->
             ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)),
             {Resumed, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
             try
-                ?assertEqual({ok, [#{<<"V0">> => Scene}], Height}, read(Ctx, Goal))
+                ?assertMatch({ok, [#{<<"V0">> := ChangedScene}], _}, read(Ctx, Goal))
             after stop_process(Resumed) end
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
@@ -93,7 +109,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
             receive
                 {first_scene, Caller, Result} ->
                     ?assertMatch({ok, [#{<<"V0">> :=
-                        [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]}], _}, Result)
+                        [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]}], _}, Result)
             after 5000 -> error(first_scene_timeout)
             end
         after
@@ -228,7 +244,13 @@ start(Dir) ->
     AgentAnchor = quod_simplex:genesis_hash(AgentNs),
     Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
     LobbyNs = <<"lobby-test-personal">>,
-    LobbyFacts = [{lobby_owner, Owner}, {instance_of, prolog_console, console},
+    LobbyFacts = [{lobby_owner, Owner}, {instance_of, sky_sphere, personal_sky},
+       {attribute, personal_sky, panorama, belfast_sunset_puresky},
+       {attribute, personal_sky, diameter, 80000},
+       {attribute, personal_sky, rotation, 35},
+       {attribute, personal_sky, brightness, 1000},
+       {attribute, personal_sky, tint, <<"#FFFFFF">>},
+       {instance_of, prolog_console, console},
        {lobby_device, personal_lobby, console},
        {device_placement, console, <<"console">>, {transform, 0, 0, 0, 0, 0, 0}},
        {modelling_vocabulary, <<"lobby-test-modelling">>, quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},

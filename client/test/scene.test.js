@@ -59,6 +59,21 @@ test('the Babylon adapter builds capsule and torus geometry from neutral dimensi
   })
 })
 
+test('the Babylon adapter draws an unlit inward sky which cannot intercept selection', () => {
+  withScene(scene => {
+    const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+      'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+      'unlabelled,depicts_nothing)'
+    const painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
+    const dome = painted.get('sky').node
+    assert.equal(dome.isPickable, false)
+    assert.equal(dome.material.unlit, true)
+    const hit = scene.pickWithRay(new Ray(new Vector3(0, 0, 0), new Vector3(1, 0, 0)))
+    assert.equal(hit.pickedMesh, painted.get('screen').node)
+    clearMarks(painted)
+  })
+})
+
 test('reparented children survive removed parents; geometry replacement retires only old resources', () => {
   withScene(scene => {
     let painted = paintMarks(scene, readMarks(`[${root},${child}]`))

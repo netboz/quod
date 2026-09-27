@@ -16,7 +16,7 @@ lobby_projection_recovery_test_() ->
             ?assertEqual(18, length(Scene)),
             ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>,
                           [{f, <<"diameter">>, 80000}],
-                          {transform, 0, 0, 0, 0, 35, 0}, _, unlabelled,
+                          {transform, 0, 0, 0, 0, 75, 0}, _, unlabelled,
                           {depicts, Ns, Anchor, personal_sky}},
                          lists:keyfind(<<"sky">>, 2, Scene)),
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
@@ -39,7 +39,7 @@ lobby_projection_recovery_test_() ->
             %% Sky settings are ordinary durable lobby facts. One transaction
             %% changes the recipe input; no client or system ontology changes.
             TuneSky = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
-                {',', {retract, {attribute, personal_sky, rotation, 35}},
+                {',', {retract, {attribute, personal_sky, rotation, 75}},
                       {assertz, {attribute, personal_sky, rotation, 215}}}}},
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, TuneSky)),
@@ -247,8 +247,8 @@ start(Dir) ->
     LobbyFacts = [{lobby_owner, Owner}, {instance_of, sky_sphere, personal_sky},
        {attribute, personal_sky, panorama, belfast_sunset_puresky},
        {attribute, personal_sky, diameter, 80000},
-       {attribute, personal_sky, rotation, 35},
-       {attribute, personal_sky, brightness, 1000},
+       {attribute, personal_sky, rotation, 75},
+       {attribute, personal_sky, brightness, 120},
        {attribute, personal_sky, tint, <<"#FFFFFF">>},
        {instance_of, prolog_console, console},
        {lobby_device, personal_lobby, console},

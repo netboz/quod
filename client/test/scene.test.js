@@ -76,6 +76,27 @@ test('the Babylon adapter draws an unlit inward sky which cannot intercept selec
   })
 })
 
+test('a sky panorama drives the adapter emissive texture', async () => {
+  const engine = new NullEngine()
+  const scene = new Scene(engine)
+  const texture = { dispose() {} }
+  const resources = { acquire() { return { ready: Promise.resolve(texture), release() {} } } }
+  const sky = readMarks(
+    '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,' +
+    '[texture(<<"base_colour">>,asset(<<"' + 'a'.repeat(64) +
+    '">>,<<"image/jpeg">>),repeat(1000,1000))]),unlabelled,depicts_nothing)]')
+  let painted = new Map()
+  try {
+    painted = paintMarks(scene, sky, painted, resources)
+    await Promise.resolve()
+    await Promise.resolve()
+    const material = painted.get('sky').node.material
+    assert.equal(material.albedoTexture, texture)
+    assert.equal(material.emissiveTexture, texture)
+  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
 test('reparented children survive removed parents; geometry replacement retires only old resources', () => {
   withScene(scene => {
     let painted = paintMarks(scene, readMarks(`[${root},${child}]`))

@@ -132,7 +132,7 @@ function applyMaterial(scene, entry, { id, kind, material }, resources, onError)
   surface.unlit = kind === 'sky_sphere'
   surface.backFaceCulling = kind !== 'sky_sphere'
   surface.disableDepthWrite = kind === 'sky_sphere'
-  surface.albedoTexture = surface.bumpTexture = surface.metallicTexture = null
+  surface.albedoTexture = surface.bumpTexture = surface.metallicTexture = surface.emissiveTexture = null
   // OpenGL tangent-space normal maps, matching the glTF adapter convention.
   surface.invertNormalMapX = !scene.useRightHandedSystem
   surface.invertNormalMapY = scene.useRightHandedSystem
@@ -155,7 +155,11 @@ function applyMaterial(scene, entry, { id, kind, material }, resources, onError)
   Promise.all(leases.map(lease => lease.ready)).then(textures => {
     if (!active) return
     const slots = { base_colour: 'albedoTexture', normal: 'bumpTexture', orm: 'metallicTexture' }
-    textures.forEach((texture, i) => { surface[slots[material.textures[i].slot]] = texture })
+    textures.forEach((texture, i) => {
+      const slot = material.textures[i].slot
+      surface[slots[slot]] = texture
+      if (kind === 'sky_sphere' && slot === 'base_colour') surface.emissiveTexture = texture
+    })
     mesh.isVisible = true
   }).catch(error => {
     if (active) onError(new Error(`Cannot draw ${id}: ${error.message}`))

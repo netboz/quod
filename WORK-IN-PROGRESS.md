@@ -3337,3 +3337,12 @@ while production remains unchanged at index 773043. The deployed bundle is
 byte-identical to the local build and public browser startup completes without
 page errors. Evidence is under
 `_build/material-network-20260927/navigation-speed-v15/`.
+
+Commit `a158922` adds the French AZERTY positions to the same camera input:
+Z/Q/S/D map to forward/left/back/right while WASD and arrow keys remain
+available. Client tests remain 66/66, the build and lint pass, and the deployed
+bundle advertises the combined controls. The immutable overlay is
+`client-navigation-azerty-v16@sha256:680ceb7bc725bc5192501e06584dffeeb579d5d0f779b9223e49fdf54df8783b`.
+All eight candidate allocations are healthy at Nomad index 787060/version 40;
+the existing root and ledgers remain in place and production remains unchanged.
+Evidence is under `_build/material-network-20260927/navigation-azerty-v16/`.

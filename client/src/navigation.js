@@ -1,13 +1,43 @@
 // Desktop navigation is a client concern. It changes only the observer's local
 // camera; ontology geometry and authoritative world state remain untouched.
 export function configureDesktopCamera(camera) {
-  camera.speed = 0.12
+  camera.speed = 2
   camera.inertia = 0.55
   camera.angularSensibility = 2600
   camera.keysUp = [87, 38]
   camera.keysDown = [83, 40]
   camera.keysLeft = [65, 37]
   camera.keysRight = [68, 39]
+}
+
+export function createMovementSpeed(canvas, camera, {
+  normal = 2,
+  fast = 5,
+} = {}) {
+  const owner = canvas.ownerDocument
+  const view = owner.defaultView
+  let disposed = false
+
+  const setSpeed = speed => { if (!disposed) camera.speed = speed }
+  const keyDown = event => { if (event.key === 'Shift') setSpeed(fast) }
+  const keyUp = event => { if (event.key === 'Shift') setSpeed(normal) }
+  const reset = () => setSpeed(normal)
+
+  camera.speed = normal
+  owner.addEventListener('keydown', keyDown)
+  owner.addEventListener('keyup', keyUp)
+  view?.addEventListener('blur', reset)
+
+  return {
+    dispose() {
+      if (disposed) return
+      disposed = true
+      camera.speed = normal
+      owner.removeEventListener('keydown', keyDown)
+      owner.removeEventListener('keyup', keyUp)
+      view?.removeEventListener('blur', reset)
+    },
+  }
 }
 
 export function createPointerLock(canvas, {

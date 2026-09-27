@@ -15,7 +15,7 @@ import { PALETTE } from './palette.js'
 import { paintMarks, clearMarks } from './scene.js'
 import { createRenderResources } from './render-resources.js'
 import { createProofPanel } from './proof-panel.js'
-import { configureDesktopCamera, createPointerLock } from './navigation.js'
+import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
 import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
 
 const MENU_RADIUS = 0.36
@@ -45,6 +45,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   camera.setTarget(new Vector3(0, 1.1, 0))
   configureDesktopCamera(camera)
   camera.attachControl(canvas)
+  const movementSpeed = createMovementSpeed(canvas, camera)
   const navigation = createPointerLock(canvas, {
     onChanged: onNavigationChanged,
     onError: onResourceError,
@@ -194,6 +195,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     dispose() {
       window.removeEventListener('resize', resize)
       navigation.dispose()
+      movementSpeed.dispose()
       panel?.dispose()
       painted = clearMarks(painted)
       resources.dispose()

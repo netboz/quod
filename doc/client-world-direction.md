@@ -635,7 +635,8 @@ The client has four responsibilities with no per-domain JavaScript dispatch:
 
 The initial desktop adapter uses a first-person camera. Clicking the world or
 the explicit Explore control requests browser pointer lock; mouse movement
-looks around and WASD or arrow keys move. The browser's Escape gesture,
+looks around, WASD or arrow keys move at walking speed, and Shift accelerates
+movement. The browser's Escape gesture,
 opening a focused workspace, entering XR, or disposing the scene releases the
 pointer. While locked, picking uses the screen-centre crosshair rather than a
 stale pre-lock cursor position. These controls alter only the local observer

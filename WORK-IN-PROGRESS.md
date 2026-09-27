@@ -3245,3 +3245,45 @@ loads, unchanged refresh, Next/Stop/Accept, committed readback and reload.
 Signup to the textured lobby took 10.71 seconds and unchanged refresh 281 ms.
 Production remained unchanged at Nomad index 773043. Evidence is under
 `_build/material-network-20260927/console-v7/`.
+
+### Environment ontology split and clean lobby deployment (2026-09-27)
+
+Commit `14cf358` corrects the ownership boundary exposed by the first sky
+implementation. `quod:lobby` no longer defines `sky_sphere`, its attributes,
+its panorama asset or its visual recipe. The new `quod:environment` system
+ontology owns reusable environment classes and attributes;
+`quod:environment:eidolons` owns renderer-neutral environment recipes and
+content-addressed visual assets. The lobby ontology retains only lobby/device
+classes and composes an anchored environment eidolon with its floor and
+devices. Each personal lobby owns its durable `personal_sky` instance and exact
+attribute values, so ordinary signed transactions still tune the sky and
+restart recovery still reads the lobby ledger.
+
+The initial split added redundant runtime reads of the immutable class schema
+to every scene proof. Focused signed-goal tests exposed the resulting unavailable
+composed proof. Those reads were removed: the exact environment vocabulary is
+already pinned in the environment-eidolon genesis and personal-lobby genesis.
+No fallback or duplicate recipe path was retained. Focused rendering/lobby
+verification passes 18/18, including ownership separation, fresh scene
+composition, an ordinary durable sky transaction and ontology restart.
+
+The immutable image is
+`client-environment-sky-v12@sha256:0eca852a636117a60064091ec6610d4d2385fbff52301639b5ba90af1224af6c`;
+backend libraries are byte-identical to the accepted base. The first clean
+founding attempt is retained as failed evidence under `environment-v12`: its
+deployment helper misspelled the lobby dependency as
+`quod:environment_eidolons`. Catalogue activation refused before signup policy
+activation. The corrected candidate was founded again on fresh volumes rather
+than amending immutable founding data.
+
+The final clean root anchor is
+`94222E5D56145782A77D2602CE644D1547591B3D3469663E4CA240B64B69EADC`.
+All eight allocations are healthy and all sixteen canonical system ontologies,
+including `quod:environment` and `quod:environment:eidolons`, are ready through
+the ordinary root catalogue. Live proofs confirm that `quod:lobby` pins both
+exact identities while the class and panorama asset resolve from their new
+owners. Browser acceptance passed fresh open signup, seven verified texture
+decodes, unchanged refresh without another decode, Next/Stop/Accept, committed
+readback and reload. Signup to the textured lobby took 13.29 seconds and
+unchanged refresh 508 ms. Production remained unchanged at Nomad index 773043.
+Evidence is under `_build/material-network-20260927/environment-v13/`.

@@ -16,6 +16,7 @@ export default function World() {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [scene, setScene] = useState<WorldScene | null>(null)
   const [immersive, setImmersive] = useState(false)
+  const [navigationActive, setNavigationActive] = useState(false)
   const [sceneError, setSceneError] = useState<string | null>(null)
   const [marks, setMarks] = useState<WorldMark[]>([])
   const [status, setStatus] = useState('Sign in and select an agent to open its lobby.')
@@ -64,7 +65,8 @@ export default function World() {
       if (!active || !canvas.current) return
       try {
         world = createWorld(canvas.current, subject => pick.current(subject), setImmersive,
-          error => { if (active) setStatus(error.message) })
+          error => { if (active) setStatus(error.message) },
+          captured => { if (active) setNavigationActive(captured) })
         setScene(world)
       } catch (error) { setSceneError(String(error)) }
     }).catch(error => { if (active) setSceneError(String(error)) })
@@ -176,13 +178,18 @@ export default function World() {
     account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
   const devices = marks.filter(mark => mark.depicts?.anchor)
   return <div className="world-shell">
-    <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" />
-    <header className="world-header">
+    <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" tabIndex={0} />
+    {navigationActive && <div className="world-crosshair" aria-hidden="true" />}
+    <div className={`world-navigation-hint${navigationActive ? ' active' : ''}`} aria-live="polite">
+      {navigationActive ? 'Mouse to look · WASD or arrows to move · Esc to release'
+        : 'Click the world to explore · WASD or arrows to move'}
+    </div>
+    <header className={`world-header${navigationActive ? ' navigation-active' : ''}`}>
       <a href="/" className="world-brand">quod <span>∴</span></a>
       <SessionControls />
       <a href="/explorer/">Explorer ↗</a>
     </header>
-    <section className="world-panel" aria-label="World controls">
+    <section className={`world-panel${navigationActive ? ' navigation-active' : ''}`} aria-label="World controls">
       <p className="world-eyebrow">YOUR SPACE</p>
       <h1>Personal lobby</h1>
       <p role="status">{sessionError ?? status}</p>
@@ -206,6 +213,7 @@ export default function World() {
         <button onClick={() => setRevision(n => n + 1)} disabled={!identity || !agent}>Refresh view</button>
         {missingLobby && selectedAccount &&
           <button disabled={busy || unresolved > 0} onClick={() => void finishSetup()}>Finish account setup</button>}
+        <button disabled={!scene || immersive} onClick={() => scene?.captureNavigation()}>Explore in 3D</button>
         <button disabled={!scene} onClick={() => {
           void scene?.immersive().catch(error => setStatus(`Immersive mode unavailable: ${String(error)}`))
         }}>Enter VR</button>

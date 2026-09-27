@@ -633,6 +633,14 @@ The client has four responsibilities with no per-domain JavaScript dispatch:
 4. `world-scene.js` handles the camera, picking and XR session. Action/form
    semantics continue through the existing GUI and signed-client paths.
 
+The initial desktop adapter uses a first-person camera. Clicking the world or
+the explicit Explore control requests browser pointer lock; mouse movement
+looks around and WASD or arrow keys move. The browser's Escape gesture,
+opening a focused workspace, entering XR, or disposing the scene releases the
+pointer. While locked, picking uses the screen-centre crosshair rather than a
+stale pre-lock cursor position. These controls alter only the local observer
+camera and never assert world state.
+
 Adding an ontology containing recipes built from supported types requires no
 new JavaScript module. Adding a genuinely new rendering concept requires a
 contract extension and its engine adapter, with tests for decoding, reconciliation

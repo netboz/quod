@@ -1,6 +1,6 @@
 import { Engine } from '@babylonjs/core/Engines/engine.js'
 import { Scene } from '@babylonjs/core/scene.js'
-import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
+import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
@@ -15,6 +15,7 @@ import { PALETTE } from './palette.js'
 import { paintMarks, clearMarks } from './scene.js'
 import { createRenderResources } from './render-resources.js'
 import { createProofPanel } from './proof-panel.js'
+import { configureDesktopCamera, createPointerLock } from './navigation.js'
 import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
 
 const MENU_RADIUS = 0.36
@@ -32,18 +33,22 @@ export function radialIndex({ x, y }, count, deadZone = MENU_DEAD_ZONE) {
 
 // The camera and lighting belong to this viewing session. All visible model
 // geometry comes from the ontology projection, including the lobby floor.
-export function createWorld(canvas, onPick, onImmersiveChanged = () => {}, onResourceError = () => {}) {
+export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
+  onResourceError = () => {}, onNavigationChanged = () => {}) {
   const engine = new Engine(canvas, true, { stencil: true })
   const scene = new Scene(engine)
   scene.useRightHandedSystem = true
   const resources = createRenderResources(scene)
   const sky = Color3.FromHexString(PALETTE.navy).scale(0.34)
   scene.clearColor.set(sky.r, sky.g, sky.b, 1)
-  const camera = new ArcRotateCamera('observer', -Math.PI / 2, Math.PI / 2.4,
-    5.8, new Vector3(0, 1.1, 0), scene)
-  camera.lowerRadiusLimit = 1
-  camera.upperRadiusLimit = 40
-  camera.attachControl(canvas, true)
+  const camera = new UniversalCamera('observer', new Vector3(0, 1.7, -5.8), scene)
+  camera.setTarget(new Vector3(0, 1.1, 0))
+  configureDesktopCamera(camera)
+  camera.attachControl(canvas)
+  const navigation = createPointerLock(canvas, {
+    onChanged: onNavigationChanged,
+    onError: onResourceError,
+  })
   const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
   light.intensity = 1.2
   let menu = { entries: [], activate: null, root: null, items: [], selected: null }
@@ -51,7 +56,10 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {}, onRes
   let panel = null
   let immersive = false
   scene.onPointerObservable.add(info => {
-    let node = info.pickInfo?.pickedMesh
+    const pick = navigation.active()
+      ? scene.pick(engine.getRenderWidth() / 2, engine.getRenderHeight() / 2)
+      : info.pickInfo
+    let node = pick?.pickedMesh
     if (node?.metadata?.menuEntry) {
       menu.activate?.(node.metadata.menuEntry)
       closeMenu()
@@ -158,10 +166,16 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {}, onRes
     },
     setWorkspace(model) {
       workspace = model
-      if (model) closeMenu()
+      if (model) {
+        navigation.release()
+        closeMenu()
+      }
       showWorkspace()
     },
+    captureNavigation() { navigation.capture() },
+    releaseNavigation() { navigation.release() },
     async immersive() {
+      navigation.release()
       if (!xr) {
         await import('@babylonjs/core/XR/webXRDefaultExperience.js')
         const floor = painted.get('floor')?.node
@@ -179,6 +193,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {}, onRes
     },
     dispose() {
       window.removeEventListener('resize', resize)
+      navigation.dispose()
       panel?.dispose()
       painted = clearMarks(painted)
       resources.dispose()

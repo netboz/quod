@@ -1,0 +1,65 @@
+# Claude reviews each pull request once, when it is opened or marked ready for review,
+# and posts one comment. It runs the Claude Code CLI directly with the subscription token
+# in secret CLAUDE_CODE_OAUTH_TOKEN (create it with `claude setup-token`, store it as an
+# Actions secret of the `quod` organisation or of the repository).
+#
+# Why not markwylde/claude-code-gitea-action: it nests anthropics/claude-code-base-action,
+# which Forgejo resolves against its default action mirror (code.forgejo.org), where that
+# repository does not exist, so the job would fail on every pull request.
+#
+# The CLI comes from the CI image (deploy/ci/Dockerfile, CLAUDE_CODE_VERSION).
+#
+# Claude only reads: its tools are limited to reading files and git history. Pushes to an
+# open pull request do not re-trigger it; close and reopen the PR to ask for a new review.
+name: claude-review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: docker
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -eu
+          test -n "$CLAUDE_CODE_OAUTH_TOKEN" || { echo "secret CLAUDE_CODE_OAUTH_TOKEN is not set"; exit 1; }
+          git fetch --no-tags origin "$BASE_REF"
+          BASE=$(git merge-base FETCH_HEAD HEAD)
+          cat > prompt.txt <<PROMPT
+          You are reviewing pull request "$PR_TITLE" in this repository.
+          The change is: git diff $BASE HEAD (use git log $BASE..HEAD for the commits).
+          Read AGENTS.md first and review according to it; read the specs it points to when the
+          change touches their area. Report only real defects you have verified against the code:
+          correctness, consensus and authorization guarantees, resource and lifecycle leaks,
+          violations of AGENTS.md rules. No style remarks, no praise, no summary of the change.
+          For each defect give the file and line, what goes wrong and in which situation.
+          If you find no real defect, say so in one sentence.
+          Write the answer as Markdown, ready to post as a single pull request comment.
+          PROMPT
+          # The prompt goes on stdin: --allowedTools takes a list and would swallow it.
+          claude -p --max-turns 40 --output-format text \
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
+            < prompt.txt > review.md
+          test -s review.md
+
+      - name: Post the review
+        env:
+          TOKEN: ${{ github.token }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
+        run: |
+          set -eu
+          node -e 'const fs=require("fs"); process.stdout.write(JSON.stringify({body: "**Claude review**\n\n" + fs.readFileSync("review.md","utf8")}))' > comment.json
+          curl -sf -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+            --data @comment.json "$API" > /dev/null

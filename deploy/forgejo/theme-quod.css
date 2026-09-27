@@ -1,0 +1,109 @@
+/* quod theme for Forgejo 16: the BBSVX house palette over the stock light theme.
+ *   primary #0B3954  grey #848FA5  red #C14953  green #698F3F  yellow #F9C80E
+ * Only palette-bearing variables are overridden; layout, text and surfaces stay stock.
+ * Shade ladders are derived in HSL from each base colour (generated, keep in sync by hand).
+ * Installed by deploy/forgejo.nomad into /data/gitea/public/assets/css/ and registered
+ * through [ui] THEMES / DEFAULT_THEME. */
+@import "theme-forgejo-light.css";
+
+:root {
+  /* primary: teal-navy. Already dark, so hover/active go darker and tints go lighter. */
+  --color-primary: #0b3954;
+  --color-primary-contrast: #ffffff;
+  --color-primary-dark-1: #0a344d;
+  --color-primary-dark-2: #092e44;
+  --color-primary-dark-3: #08283b;
+  --color-primary-dark-4: #072536;
+  --color-primary-dark-5: #062232;
+  --color-primary-dark-6: #061f2d;
+  --color-primary-dark-7: #051c29;
+  --color-primary-light-1: #0f5075;
+  --color-primary-light-2: #146899;
+  --color-primary-light-3: #1a87c6;
+  --color-primary-light-4: #39a5e5;
+  --color-primary-light-5: #78c2ed;
+  --color-primary-light-6: #bbe0f6;
+  --color-primary-light-7: #e8f5fc;
+  --color-primary-alpha-10: #0b395419;
+  --color-primary-alpha-20: #0b395433;
+  --color-primary-alpha-30: #0b39544b;
+  --color-primary-alpha-40: #0b395466;
+  --color-primary-alpha-50: #0b395480;
+  --color-primary-alpha-60: #0b395499;
+  --color-primary-alpha-70: #0b3954b3;
+  --color-primary-alpha-80: #0b3954cc;
+  --color-primary-alpha-90: #0b3954e1;
+
+  /* secondary: a slate ladder built on the house grey (borders, dividers, subtle fills).
+   * dark-6/7 is the grey itself; the stock theme's zinc ladder is replaced step for step. */
+  --color-secondary: #dcdfe5;
+  --color-secondary-dark-1: #dcdfe5;
+  --color-secondary-dark-2: #cacfd8;
+  --color-secondary-dark-3: #cacfd8;
+  --color-secondary-dark-4: #adb4c3;
+  --color-secondary-dark-5: #adb4c3;
+  --color-secondary-dark-6: #838ea4;
+  --color-secondary-dark-7: #838ea4;
+  --color-secondary-dark-8: #67748d;
+  --color-secondary-dark-9: #67748d;
+  --color-secondary-dark-10: #525c70;
+  --color-secondary-dark-11: #525c70;
+  --color-secondary-dark-12: #3c4452;
+  --color-secondary-dark-13: #3c4452;
+  --color-secondary-light-1: #dcdfe5;
+  --color-secondary-light-2: #edeff2;
+  --color-secondary-light-3: #edeff2;
+  --color-secondary-light-4: #f6f7f9;
+  --color-secondary-alpha-10: #cacfd819;
+  --color-secondary-alpha-20: #cacfd833;
+  --color-secondary-alpha-30: #cacfd84b;
+  --color-secondary-alpha-40: #cacfd866;
+  --color-secondary-alpha-50: #cacfd880;
+  --color-secondary-alpha-60: #cacfd899;
+  --color-secondary-alpha-70: #cacfd8b3;
+  --color-secondary-alpha-80: #cacfd8cc;
+  --color-secondary-alpha-90: #cacfd8e1;
+  --color-grey: #5b667c;
+  --color-grey-light: #848fa5;
+  --color-grey-dark-1: #4e576a;
+  --color-grey-dark-2: #414958;
+
+  /* red */
+  --color-red: #c14953;
+  --color-red-light: #cb676f;
+  --color-red-dark-1: #b33d47;
+  --color-red-dark-2: #a0363f;
+  --color-error-border: #ecc6c9;
+  --color-error-bg: #f6e4e6;
+  --color-error-bg-hover: #ecc6c9;
+  --color-error-bg-active: #e2abb0;
+  --color-error-text: #5f2026;
+  --color-red-badge: #c14953;
+  --color-red-badge-bg: #c1495322;
+  --color-red-badge-hover-bg: #c1495344;
+
+  /* green */
+  --color-green: #698f3f;
+  --color-green-light: #7daa4b;
+  --color-green-dark-1: #5e7f38;
+  --color-green-dark-2: #537132;
+  --color-success-border: #d2e3bf;
+  --color-success-bg: #ebf3e3;
+  --color-success-text: #394e22;
+  --color-green-badge: #698f3f;
+  --color-green-badge-bg: #698f3f22;
+  --color-green-badge-hover-bg: #698f3f44;
+
+  /* yellow: the brand yellow is too bright to carry white text, so it is the light/fill
+   * variant and the warning border; the text-bearing yellow is a darker step of it. */
+  --color-yellow: #d1a705;
+  --color-yellow-light: #f9c80e;
+  --color-yellow-dark-1: #bd9705;
+  --color-yellow-dark-2: #a98704;
+  --color-warning-border: #f9c80e;
+  --color-warning-bg: #fef6d7;
+  --color-warning-text: #6d5703;
+  --color-yellow-badge: #d1a705;
+  --color-yellow-badge-bg: #d1a70522;
+  --color-yellow-badge-hover-bg: #d1a70544;
+}

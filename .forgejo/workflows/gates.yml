@@ -1,0 +1,62 @@
+# Gates for every push and pull request: the README verification sequence, in order, on a
+# clean checkout, inside the release builder's Erlang (deploy/ci/Dockerfile via the runner's
+# `docker` label). The rebar3 hex cache and the dialyzer PLT come back from the runner's
+# cache volume, keyed on rebar.lock. On master, a second job builds the release image and
+# pushes it to the cluster registry under rebar.config's version, never overwriting a tag.
+name: gates
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore rebar3 cache and dialyzer PLT
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build/default/*_plt
+          key: rebar3-otp28-${{ hashFiles('rebar.lock') }}
+          restore-keys: |
+            rebar3-otp28-
+
+      - name: eunit
+        run: rebar3 as test eunit
+
+      - name: common test
+        run: rebar3 as test ct
+
+      - name: xref
+        run: rebar3 xref
+
+      - name: dialyzer
+        run: rebar3 dialyzer
+
+  release-image:
+    needs: gates
+    if: github.ref == 'refs/heads/master'
+    runs-on: docker
+    container:
+      image: 192.168.1.11:5000/quod-ci:28
+      options: -v /var/run/docker.sock:/var/run/docker.sock
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and push the release image
+        run: |
+          set -eu
+          REGISTRY=192.168.1.11:5000
+          VERSION=$(sed -n 's/.*{release, {quod, "\([^"]*\)"}.*/\1/p' rebar.config)
+          test -n "$VERSION"
+          if curl -sf -o /dev/null -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+               "http://$REGISTRY/v2/quod/manifests/$VERSION"; then
+            echo "quod:$VERSION is already in the registry; a tag is never overwritten"
+            exit 0
+          fi
+          docker build -t "$REGISTRY/quod:$VERSION" .
+          docker push "$REGISTRY/quod:$VERSION"

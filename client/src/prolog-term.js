@@ -89,7 +89,7 @@ function renderNumber(value) {
   if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
     throw new Error('unsafe Prolog integer')
   }
-  return Object.is(value, -0) ? '0' : String(value)
+  return Object.is(value, -0) ? '-0.0' : String(value)
 }
 
 function escapeQuoted(value, quote) {
@@ -128,6 +128,94 @@ function escapeBinary(value) {
     }
   }
   return result
+}
+
+// Readable code uses the frozen operator priorities from
+// quod_client_goal_parser. This is a printer, not another Prolog parser.
+// renderTerm above retains the byte spelling used by signed request builders.
+const INFIX = new Map([
+  [':-', [1199, 1200, 1199]], ['-->', [1199, 1200, 1199]],
+  [';', [1099, 1100, 1100]], ['->', [1049, 1050, 1050]],
+  [',', [999, 1000, 1000]],
+  ...['=', '\\=', '\\==', '==', '@<', '@=<', '@>', '@>=', '=..',
+      'is', '=:=', '=\\=', '<', '=<', '>', '>='].map(op => [op, [699, 700, 699]]),
+  [':', [599, 600, 600]], ['::', [649, 650, 649]],
+  ...['+', '-', '/\\', '\\/'].map(op => [op, [500, 500, 499]]),
+  ...['*', '/', '//', 'rem', 'mod', '<<', '>>'].map(op => [op, [400, 400, 399]]),
+  ['**', [199, 200, 199]], ['^', [199, 200, 200]],
+])
+const PREFIX = new Map([
+  ['?-', [1200, 1199]], [':-', [1200, 1199]], ['\\+', [900, 900]],
+  ...['+', '-', '\\'].map(op => [op, [200, 200]]),
+])
+
+export function formatTerm(value) {
+  return formatAt(value, 1200)
+}
+
+export function formatClause(value) {
+  const text = formatTerm(value)
+  // Keep a trailing graphic operator separate from the clause terminator.
+  const separator = '-#$&*+./\\:<=>?@^~'.includes(text.at(-1)) ? ' ' : ''
+  return `${text}${separator}.`
+}
+
+function formatAt(value, context) {
+  if (!value || typeof value !== 'object') throw new Error('invalid Prolog term')
+  if (value.type === 'number') {
+    const text = formatNumber(value)
+    return text.startsWith('-') ? `(${text})` : text
+  }
+  if (value.type === 'atom') {
+    if (value.value === '!') return '!'
+    if (value.value === '') return "''"
+    return renderAtom(value.value)
+  }
+  if (value.type === 'list') {
+    if (!Array.isArray(value.items) || (value.tail !== null && value.items.length === 0)) {
+      throw new Error('invalid Prolog list')
+    }
+    return `[${value.items.map(item => formatAt(item, 999)).join(', ')}${
+      value.tail === null ? '' : ` | ${formatAt(value.tail, 999)}`}]`
+  }
+  if (value.type !== 'compound') return renderTerm(value)
+  const { functor, args } = value
+  if (typeof functor !== 'string' || functor.length === 0 ||
+      !Array.isArray(args) || args.length === 0) throw new Error('invalid Prolog compound')
+  let text, priority
+  if (args.length === 2 && INFIX.has(functor)) {
+    const [left, current, right] = INFIX.get(functor)
+    priority = current
+    const separator = functor === ',' ? ', ' : ` ${functor} `
+    text = `${formatAt(args[0], left)}${separator}${formatAt(args[1], right)}`
+  } else if (args.length === 1 && PREFIX.has(functor)) {
+    const [current, argument] = PREFIX.get(functor)
+    priority = current
+    text = `${functor} ${formatAt(args[0], argument)}`
+  } else if (args.length === 1 && functor === '*') {
+    priority = 400
+    text = `${formatAt(args[0], 400)} *`
+  } else {
+    return `${renderFunctor(functor)}(${args.map(arg => formatAt(arg, 999)).join(', ')})`
+  }
+  return priority > context ? `(${text})` : text
+}
+
+function formatNumber(term) {
+  if (term.literal !== undefined) {
+    if (typeof term.literal !== 'string' ||
+        !/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(term.literal) ||
+        !Number.isFinite(term.value) || !Object.is(Number(term.literal), term.value)) {
+      throw new Error('invalid Prolog numeric literal')
+    }
+    return decimalExponent(term.literal)
+  }
+  return decimalExponent(renderNumber(term.value))
+}
+
+function decimalExponent(text) {
+  // The frozen source grammar requires a decimal point before an exponent.
+  return text.replace(/^(-?\d+)([eE])/, '$1.0$2')
 }
 
 // Wrap console input as one goal. Only its final full stop is moved; quoted

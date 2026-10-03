@@ -1250,6 +1250,9 @@ inconclusive_loss_confirmation_is_reobserved(_Config) ->
         receive {peer_loss, Authority, Key, Episode, {unknown, {peer_identity, _}}, _} -> ok
         after 8000 -> ct:fail(identity_rejection_was_not_unknown) end,
         ok = quic:stop_server(inconclusive_probe),
+        %% stop_server joins the listener shutdown; its registry monitor is
+        %% asynchronous. Complete named cleanup before reusing that name.
+        ok = quic_server_registry:unregister(inconclusive_probe),
         {ok, _} = Start(Right),
         %% No new route/assignment edge and no write outcome: the same shared
         %% physical detector must continue after an inconclusive attempt.

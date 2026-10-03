@@ -65,8 +65,8 @@ without publishing the target identity to the network.
 3. **Agents feed the directory declaratively.** An agent commits hosting and
    private-contact truth. It cannot call an API which inserts a route row
    directly.
-4. **One projection path.** `state_handler/4` projects the node ontology's
-   current hosting facts into the existing `quod_namespace_manager`; the
+4. **One projection path.** The node's existing resource owner selects its
+   committed hosting facts for `quod_namespace_manager`; the
    manager is still the sole desired-state and supervisor-mutation owner.
 5. **One route owner.** `quod_directory` remains the only live route-index
    writer. `quod_directory_control` remains the signed dissemination owner.
@@ -242,8 +242,8 @@ The exact order is:
    neither hosting authority nor a general restart catalogue. The node actor's
    own discoverable hosting row makes its exact actor identity routable after
    this local bootstrap; it does not participate in bootstrapping itself.
-4. **Ordinary dynamic ontologies.** The node actor's founding
-   `state_handler/4` projects its committed `hosts_ontology/4` and
+4. **Ordinary dynamic ontologies.** The node's existing resource owner
+   reconciles its committed `hosts_ontology/4` and
    `knows_ontology_host/4` rows. The namespace manager resumes local ledgers or
    parks exact joins on route availability. Local private contacts become
    directory-private routes only after their exact host actor route is known.
@@ -264,16 +264,12 @@ case, not something route discovery may conceal.
 
 ## 6. One committed node-policy projection
 
-The node actor's immutable genesis contains one founding handler:
-
-```prolog
-state_handler(node_ontology_hosting,
-              [hosts_ontology/4, knows_ontology_host/4], [],
-              reconcile_node_ontology_hosting).
-```
-
-Its convergence goal reads the complete current solution set and calls one
-genesis-pinned `projection`-class Erlang predicate. The bridge:
+The node ontology defines `node_ontology_hosting_projection/2`. Its existing
+resource worker evaluates that selector against committed state in the
+restricted policy context, retaining its read dependencies. Startup, owner
+replacement and relevant changes drive selection directly. No arbitrary goal
+runs as the physical node, and no staged hosting facts become local resources.
+The owner:
 
 1. requires a ground, canonical list;
 2. accepts both row types only for the exact locally verified `NodeRef`;
@@ -282,10 +278,11 @@ genesis-pinned `projection`-class Erlang predicate. The bridge:
 4. hands one revisioned node-policy snapshot to `quod_namespace_manager`; and
 5. never calls `quod_directory`, opens a connection, or mutates a ledger.
 
-The bridge is placed in the reviewed node-actor predicate module pinned by the
-node ontology's genesis. It is not installed globally. `quod_runtime` keeps
-the existing P-before-E ordering and reruns the same handler after replay,
-restart, assertion, and retraction.
+The manager publishes actual installation separately; the runtime does not wait
+for every reaction before processing another event. Unchanged notices perform
+no repeated selection or installation. Stored-policy migration and coordinated
+native activation are specified in `event-reaction-refinement-plan.md`; the
+implementation alone does not establish that an existing fleet is upgraded.
 
 `quod_namespace_manager` merges exactly three sources:
 
@@ -898,7 +895,7 @@ shim remains.
 | `ontology-actor-architecture.md` §3 and §7 | mark the reviewed node-actor projection-module extension; replace planned hosting text with the single `hosts_ontology/4` plus `knows_ontology_host/4` path and delete local checkpoint wording |
 | `node-instance-identity-plan.md` §3, §6.1(4), §6.2(4), §8, Slices 2–4 | move the pointer from the deleted desired-state store to the identity directory beside `node.key`/directory epoch; record principal activation, fact owner, manager projection, and route reconstruction; preserve the distinction between node class ontology and dedicated node actor ontology |
 | `agent-fipa-plan.md` invariant 5, §11, §13 | name `hosts_ontology/4` and `knows_ontology_host/4` as reconstructible node-level relations; state that exact public route ads derive only from discoverable rows while DF remains name-to-identity only |
-| `event-reaction-refinement-plan.md` §5 | change the illustrative hosting example to implemented status and link this plan; keep `state_handler` distinct from `react_on` |
+| `event-reaction-refinement-plan.md` §5 | change the illustrative hosting example to implemented status and link this plan; use ordinary readiness/change reactions and retain the resource owners |
 | `durable-lifecycle-effects-plan.md` root/bootstrap and recovery passages | distinguish one-time create/join effect custody from persistent fact-driven hosting; retain root-first custody and remove checkpoint claims |
 | `network-directory-plan.md` §§1–6, §9 acceptance tests 3–6/10–11/15, and §§10–11 | replace config allowlist/direct-seed authority with root bootstrap, discoverable fact-backed generations, and fact-projected local private routes; state explicitly that plain remote reads trust one certified current validator; document paged generations, no population caps, and exact route demand/wake |
 | `network-directory-root-control-plan.md` §§5–10 | remove generic allowlist authority and its deferred root replacement; retain root control relays, signatures, epochs, leases, and one resync family |

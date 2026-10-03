@@ -409,6 +409,28 @@ content_uses_the_same_reservation_until_resolve_test() ->
     {_, Applied} = fold(resolve(F, Target, commit, Votes, 2), {H, P}),
     ?assertEqual(ready, quod_atomic:content_readiness(Content, Applied)).
 
+front_insertions_reserve_foreign_predicates_until_resolve_test() ->
+    %% Seal a real proof containing asserta at the foreign participant. Its
+    %% write must conflict with readers and with either insertion direction;
+    %% neither side may disappear from the shared conflict descriptor.
+    F = fixture(#{goal_text => <<"asserta(saved(ok)).">>}),
+    Target = foreign(F), Votes = votes(F),
+    {H, Reserved} = fold(maps:get(Target, Votes), fresh(Target)),
+    Contenders =
+        [#transaction{diff = [{Kind, {{saved, another}, true}}], read_check = #{}}
+         || Kind <- [assert, asserta]] ++
+        [#transaction{diff = [], read_check = #{{saved, 1} => never_present}}],
+    [?assertEqual({blocked, active_group},
+                  quod_atomic:content_readiness(Content, Reserved))
+     || Content <- Contenders],
+    ?assertEqual(ready, quod_atomic:content_readiness(
+                         #transaction{diff = [{asserta, {{unrelated, ok}, true}}],
+                                      read_check = #{}},
+                         Reserved)),
+    {_, Resolved} = fold(resolve(F, Target, commit, Votes, 2), {H, Reserved}),
+    [?assertEqual(ready, quod_atomic:content_readiness(Content, Resolved))
+     || Content <- Contenders].
+
 phase_index_captures_hide_later_records_of_the_same_group_test() ->
     with_index(fun(Index) ->
         F = fixture(), Target = foreign(F), Votes = votes(F),

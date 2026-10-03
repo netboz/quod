@@ -61,6 +61,21 @@ v2_binary_literals_are_signed_as_exact_opaque_bytes_test() ->
     ?assertEqual({error, invalid_goal},
                  quod_client_goal:verify(V1Bytes, V1Signature)).
 
+v3_negative_literal_signature_keeps_v2_evidence_frozen_test() ->
+    Seed = list_to_binary(lists:seq(0, 31)),
+    {PublicKey, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    V3 = (request(PublicKey, execute, <<"assertz(saved(-3)).">>))#{parser_version => 3},
+    {ok, Bytes} = quod_client_goal:encode(V3),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term({PublicKey, Seed})),
+    {ok, #{goal := Goal}} = quod_client_goal:verify(Bytes, Signature),
+    ?assertEqual({{'$quod_symbol', <<"assertz">>}, {{'$quod_symbol', <<"saved">>}, -3}}, Goal),
+    V2 = V3#{parser_version => 2},
+    {ok, OldBytes} = quod_client_goal:encode(V2),
+    OldSignature = quod_identity:sign(OldBytes, quod_identity:key_term({PublicKey, Seed})),
+    {ok, #{goal := OldGoal}} = quod_client_goal:verify(OldBytes, OldSignature),
+    ?assertEqual({{'$quod_symbol', <<"assertz">>}, {{'$quod_symbol', <<"saved">>}, {'-', 3}}}, OldGoal),
+    ?assertMatch({error, _}, quod_client_goal:verify(Bytes, OldSignature)).
+
 non_ascii_browser_signature_vector_test() ->
     Seed = list_to_binary(lists:seq(0, 31)),
     {PublicKey, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
@@ -226,7 +241,7 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
        quod_client_goal:encode(Base#{unexpected => value})),
     ?assertEqual(
        {error, invalid_request},
-       quod_client_goal:encode(Base#{parser_version => 3})),
+       quod_client_goal:encode(Base#{parser_version => 4})),
     ?assertEqual(
        {error, {too_large, namespace}},
        quod_client_goal:encode(

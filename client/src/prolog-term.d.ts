@@ -2,7 +2,7 @@ export type PrologTerm =
   | { type: 'atom'; value: string }
   | { type: 'string'; value: string }
   | { type: 'binary'; value: Uint8Array }
-  | { type: 'number'; value: number | bigint }
+  | { type: 'number'; value: number | bigint; literal?: string }
   | { type: 'variable'; value: string }
   | { type: 'compound'; functor: string; args: PrologTerm[] }
   | { type: 'list'; items: PrologTerm[]; tail: PrologTerm | null }
@@ -17,3 +17,5 @@ export function list(items: PrologTerm[], tail?: PrologTerm | null): PrologTerm
 export function renderTerm(value: PrologTerm): string
 export function goalText(value: PrologTerm): string
 export function scopedGoal(agentNamespace: string, targetNamespace: string, source: string): string
+export function formatTerm(value: PrologTerm): string
+export function formatClause(value: PrologTerm): string

@@ -9,6 +9,39 @@ source_formatter_request_spelling_is_stable_test() ->
     ?assertEqual({ok, <<"'\\x61\\'(<<\"\\x0\\\\x41\\\">>).">>},
                  quod_client_goal_parser:format({a, <<0, 65>>})).
 
+program_clause_boundaries_and_variable_scopes_test() ->
+    Source = <<"% initial comment\np(X, _, X, _). /* . */\n"
+               "p(Y, <<\"a.b\">>, 'quoted.dot', 1.25) :- q(Y), !.\n"
+               "q([X|Xs]) :- (X = a -> q(Xs); true). % tail">>,
+    {ok, [One, Two, Three]} = quod_client_goal_parser:parse_program(Source, 2),
+    ?assertEqual(canonical({p, {0}, {1}, {0}, {2}}), canonical(maps:get(goal, One))),
+    ?assertEqual([{<<"X">>, 0}], maps:get(variables, One)),
+    ?assertEqual([{<<"Y">>, 0}], maps:get(variables, Two)),
+    ?assertEqual([{<<"X">>, 0}, {<<"Xs">>, 1}], maps:get(variables, Three)),
+    ?assertEqual({ok, []}, quod_client_goal_parser:parse_program(<<"/* empty */">>, 2)),
+    ?assertEqual({error, invalid_syntax}, quod_client_goal_parser:parse(Source, 2)),
+    lists:foreach(fun(Bad) ->
+        ?assertEqual({error, invalid_syntax}, quod_client_goal_parser:parse_program(Bad, 2))
+    end, [<<"p. q">>, <<"p. /* unfinished">>, <<"p.q.">>, <<"p([a).">>]),
+    ?assertEqual({error, unsupported_parser},
+                 quod_client_goal_parser:parse_program(<<>>, 4)).
+
+readable_clause_formatter_preserves_program_semantics_test() ->
+    Terms = [{':-', {choose, {0}},
+              {',', {';', {'->', {test, {0}}, {accept, {0}}}, fail}, '!'}},
+             {':-', {arith, {0}}, {is, {0}, {'*', {'+', 1, 2}, {'-', 3, 4}}}},
+             {':-', {path, [{0} | {1}]}, {'::', {':', a, b}, {call, {1}}}},
+             {payload, <<0, 255, 34, 92>>, 'has spaces', {'$quod_symbol', <<"novel">>}},
+             {':-', {negation, {0}}, {'\\+', {';', {check, {0}}, fallback}}}],
+    lists:foreach(fun(Clause) ->
+        {ok, Source} = quod_client_goal_parser:format_clause(Clause),
+        {ok, [#{goal := Parsed}]} = quod_client_goal_parser:parse_program(Source, 2),
+        ?assertEqual(canonical(Clause), canonical(Parsed))
+    end, Terms),
+    ?assertEqual({ok, <<"p(V0) :- q(V0) , !.">>},
+        quod_client_goal_parser:format_clause({':-', {p, {0}}, {',', {q, {0}}, '!'}})),
+    ?assertEqual({ok, <<"payload((-3)).">>}, quod_client_goal_parser:format_clause({payload, -3})).
+
 source_formatter_preserves_terms_and_byte_values_test() ->
     Terms = [{agent_instance_ref, <<"agents">>, <<1:256>>, {worker, 'quoted name'}},
              {'::', <<"target">>, {',', {sign, <<0, 255, 34, 92>>, {0}}, {check, {0}}}},
@@ -19,9 +52,7 @@ source_formatter_preserves_terms_and_byte_values_test() ->
         ?assertEqual(canonical(Term), canonical(Parsed))
     end, Terms),
     ?assertEqual({error, invalid_term}, quod_client_goal_parser:format(self())),
-    %% The frozen grammar parses -3 as the unary expression, not a numeric
-    %% literal. Never silently change a bound numeric payload into that term.
-    ?assertEqual({error, invalid_term}, quod_client_goal_parser:format({payload, -3})).
+    ?assertMatch({ok, _}, quod_client_goal_parser:format({payload, -3})).
 
 basic_goal_and_variable_numbering_test() ->
     {ok, #{goal := Goal, variables := Variables}} =
@@ -114,6 +145,44 @@ negative_number_spacing_is_prefix_syntax_test() ->
     ?assertEqual(canonical({f, {'-', 1}}), canonical(Tight)),
     ?assertEqual(canonical(Tight), canonical(Spaced)).
 
+v3_numeric_literals_preserve_subtraction_and_old_signed_meanings_test() ->
+    Cases = [{<<"p(-3).">>, {p, -3}},
+             {<<"p(- 3).">>, {p, {'-', 3}}},
+             {<<"p(-(3)).">>, {p, {'-', 3}}},
+             {<<"p('-'(3)).">>, {p, {'-', 3}}},
+             {<<"p(- -3).">>, {p, {'-', -3}}},
+             {<<"p(X-3).">>, {p, {'-', {0}, 3}}},
+             {<<"p(-3 ** 2).">>, {p, {'-', {'**', 3, 2}}}},
+             {<<"p((-3) ** 2).">>, {p, {'**', -3, 2}}},
+             {<<"p(-0x2a,-0b11,-0'a).">>, {p, -42, -3, -97}},
+             {<<"p(-3.5,1.0e-3).">>, {p, -3.5, 0.001}},
+             {<<"p(- /* gap */ 3, '-3', <<\"-3\">>).">>,
+              {p, {'-', 3}, '-3', <<"-3">>}},
+             {<<"p('$quod_lexical_magnitude'(3)).">>,
+              {p, {'$quod_lexical_magnitude', 3}}}],
+    lists:foreach(fun({Text, Expected}) ->
+        {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(Text, 3),
+        ?assertEqual(canonical(Expected), canonical(Parsed))
+    end, Cases),
+    lists:foreach(fun(Version) ->
+        {ok, #{goal := Old}} = quod_client_goal_parser:parse(<<"p(-3).">>, Version),
+        ?assertEqual(canonical({p, {'-', 3}}), canonical(Old))
+    end, [1, 2]).
+
+negative_numeric_code_roundtrips_exactly_test() ->
+    Terms = [{p, -3, -3.5, -0.0, 0.0},
+             {p, [1, -2 | -3]}, {p, {'-', -3}},
+             {':-', {p, -2}, {is, {0}, {'**', -3, 2}}}],
+    lists:foreach(fun(Term) ->
+        lists:foreach(fun(Formatter) ->
+            {ok, Text} = Formatter(Term),
+            {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(Text, 3),
+            %% Canonical bytes distinguish negative zero, unlike numeric equality.
+            ?assertEqual(canonical(Term), canonical(Parsed))
+        end, [fun quod_client_goal_parser:format/1,
+              fun quod_client_goal_parser:format_clause/1])
+    end, Terms).
+
 numbers_strings_quoted_atoms_and_lists_test() ->
     Text = <<"values(12, 1.25e+2, 0b101, 0o17, 0x2a, "
              "0'\\n, 'quoted atom', \"a\\tb\", [one,two|Tail]).">>,
@@ -154,7 +223,7 @@ one_dot_terminated_term_only_test() ->
     ?assertEqual({error, invalid_syntax}, parse(<<"f([a,b).">>)),
     ?assertEqual({error, invalid_syntax}, parse(<<"1.0e+.">>)),
     ?assertEqual({error, unsupported_parser},
-                 quod_client_goal_parser:parse(<<"true.">>, 3)).
+                 quod_client_goal_parser:parse(<<"true.">>, 4)).
 
 v2_binary_literals_use_erlang_notation_without_changing_v1_test() ->
     Literal = <<"payload(<<\"a\\n\">>).">>,

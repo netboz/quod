@@ -27,18 +27,27 @@ generation_matches_count_test() ->
         ?assert(lists:all(fun is_binary/1, Names))
     end).
 
-name_nth_follows_enumeration_order_test() ->
-    with_names(fun(St) ->
-        Names = halfling_males(St),
-        lists:foreach(
-          fun({I, Name}) ->
+name_nth_follows_enumeration_order_test_() ->
+    %% Each ordinal is an independent query. Keep the shared committed source
+    %% alive for the fixture, but give each query its own proof/read-set and
+    %% normal EUnit deadline instead of timing all 384 queries as one operation.
+    {setup, fun() -> names_state(<<>>) end, fun delete_names/1,
+     fun(Committed) ->
+         Names = with_names_view(Committed, fun halfling_males/1),
+         [{integer_to_list(I), fun() ->
+              with_names_view(Committed, fun(St) ->
                   ?assertEqual(Name, value({'N'}, {name_nth, <<"halfling">>, <<"personal">>,
                                                     <<"male">>, I, {'N'}}, St))
-          end, lists:zip(lists:seq(0, ?HALFLING_MALES - 1), Names)),
-        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, ?HALFLING_MALES, {'N'}}, St),
-        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, -1, {'N'}}, St),
-        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, one, {'N'}}, St)
-    end).
+              end)
+          end} || {I, Name} <- lists:zip(lists:seq(0, ?HALFLING_MALES - 1), Names)] ++
+         [{"invalid ordinal", fun() ->
+              with_names_view(Committed, fun(St) ->
+                  lists:foreach(fun(I) ->
+                      fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, I, {'N'}}, St)
+                  end, [?HALFLING_MALES, -1, one])
+              end)
+          end}]
+     end}.
 
 %% A pool grown by ordinary writes arrives in chunks: several listed facts
 %% for one pool. It counts, enumerates, indexes and recognises exactly as the
@@ -364,16 +373,24 @@ with_names(Fun) ->
 %% predicates), committed once; Fun gets the committed state and a wrapped
 %% read state over it.
 with_committed_names(Extra, Fun) ->
+    Committed = names_state(Extra),
+    try with_names_view(Committed, fun(St) -> Fun(Committed, St) end)
+    after delete_names(Committed)
+    end.
+
+names_state(Extra) ->
     Base = quod_committed_projection:new_est(),
     File = filename:join(code:priv_dir(quod), "ontologies/quod_names.pl"),
     Loaded = load_terms(quod_committed_projection:read_terms(File), Base),
-    Committed = quod_ct:commit_kb(load_source(Extra, Loaded)),
+    quod_ct:commit_kb(load_source(Extra, Loaded)).
+
+with_names_view(Committed, Fun) ->
     St = quod_erlog_db_local_prove:wrap_state(Committed, #{read_set => true}),
-    try Fun(Committed, St)
-    after
-        #est{db = #db{ref = Ref}} = Committed,
-        quod_erlog_db_mvcc:delete(Ref)
+    try Fun(St)
+    after quod_erlog_db_local_prove:cleanup_read_set(St)
     end.
+
+delete_names(#est{db = #db{ref = Ref}}) -> quod_erlog_db_mvcc:delete(Ref).
 
 load_source(<<>>, St) -> St;
 load_source(Source, St) ->

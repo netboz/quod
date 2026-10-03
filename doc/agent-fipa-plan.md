@@ -1,11 +1,12 @@
 # Quod agents and FIPA -- architecture and implementation plan
 
-**Status:** revised architecture direction. The runtime/reaction substrate,
-explicit committed events, generic agent identity, durable DTX effects,
-prioritized shared streams, and generic hosted-agent recovery are delivered
-through 0.7.236. The first internal Request conversation is implemented on the
-feature branch in `fipa-request-transactions.md`; automatic pending-conversation
-continuation, AMS/DF services, and the remaining FIPA profile are pending.
+**Status:** the internal Request conversation and guarded pending continuation
+are implemented through existing transactions. The working tree now uses editable
+ordinary `react_on/2` goals and direct committed resource selection in place of
+founding-only reactions and state handlers. Frozen integration validation is
+recorded in `WORK-IN-PROGRESS.md`; stored-policy activation remains open. Reaction ownership and privileged calling contexts follow
+`event-reaction-refinement-plan.md`. AMS/DF services and
+external FIPA interoperability remain later work.
 `ontology-actor-architecture.md` is the
 authority for actor identity, system-ontology bootstrap, key ownership, and
 hosting. It corrects this document's former Agent Platform record model: every
@@ -38,10 +39,8 @@ There is no intermediate message queue, delivery acknowledgement or additional
 reliable-messaging subsystem. Committed events participate in the normal diff
 and Prolog pattern unification without becoming asserted message history.
 
-This contract supersedes the older outbox/scheduler prerequisites in Slices
-3–4 for internal agent communication. The delivery choices in §9 describe
-separate effect requirements, not prerequisites for internal FIPA. External
-FIPA transport is deferred. Completed state and admitted transactions recover
+Internal communication has no outbox/scheduler prerequisite. External FIPA
+transport is deferred. Completed state and admitted transactions recover
 through the existing ontology/transaction owners; automatically continuing a
 pending decision must also respect uncertain-operation identity and custody.
 Restoring state does not replay historical reactions.
@@ -93,8 +92,9 @@ projection of committed facts.
    other actors are represented by classed instances in ontology state. Public
    keys, class facts, and policies are durable facts in the containing
    ontology; endpoints and private keys are not.
-9. **The authenticated subject is end-to-end.** No caller may construct or
-   shorten its own authority chain.
+9. **The authenticated principal is end-to-end.** A foreign ontology call
+   retains the actor. Only the engine constructs the ontology call path;
+   content cannot substitute authority. `subject/3` remains future work.
 10. **Bounded work.** Proofs, reactions, projections, conversations, queues, and
     transport frames all have explicit resource bounds.
 11. **One logical effect executor.** Every E effect names one durable logical
@@ -102,10 +102,10 @@ projection of committed facts.
     Receiver deduplication handles crash retries and the bounded overlap during
     a host-epoch transfer; it is not the normal defense against every replica
     emitting the same effect.
-12. **Runtime declarations are privileged code.** `state_handler/4` and
-    `react_on/3` facts are executable
-    configuration. They may become active only when their provenance satisfies
-    the ontology's runtime-declaration policy.
+12. **One authorization model.** Reactions are ordinary editable Prolog code.
+    Existing `can_invoke/4`, signed identity and transaction checks govern their
+    modification and execution. There is no founding lock or extra runtime-code
+    permission layer.
 
 ## 3. Lessons retained and rejected
 
@@ -114,8 +114,8 @@ projection of committed facts.
 - BBSvx's prove-before-broadcast principle.
 - The later Onia model: an Agent Platform is an ontology-level authority and a
   hosted agent is a supervised runtime instance.
-- Onia's three-part subject authorization context, generalised in Quod to
-  `subject(Agent, AgentChain, Capabilities)`.
+- Onia's three-part subject authorization context as a possible later design
+  for `subject(Agent, AgentChain, Capabilities)`, not the implemented ACL input.
 - Onia's distinction between deterministic state, runtime projection, and
   external effect.
 - Prolog definitions for communicative acts, protocols, lifecycle rules, and
@@ -148,7 +148,7 @@ D consists of:
 - committed Prolog facts and rules;
 - a proof's private assert/retract overlay;
 - transaction goal, result, diff, read-check, author, and signature;
-- durable agent lifecycle, ownership, conversation, inbox, and outbox facts.
+- durable agent lifecycle, ownership, conversation and pending-work facts.
 
 D is changed only by a committed transaction.
 
@@ -178,95 +178,47 @@ E consists of irreversible or externally observable operations:
 - notifying a client;
 - firing an expired timer.
 
-E runs asynchronously after D and P complete for a live transaction. E never runs
-from replay.
+E follows the controlling commit and its actual resource prerequisites.
+Processing canonical runtime input is not proof that every reaction or resource
+has completed. Historical replay does not execute old E occurrences.
 
 ## 5. External predicate contract
 
-External Erlang predicates are divided into four explicit classes.
+Prolog owns policy, actions and domain state. Erlang predicates expose existing
+runtime services through the ontology's declared modules. The common registry
+retains these execution classes:
 
-| Class | May read runtime | May stage D | May mutate P | May perform E |
-|---|---:|---:|---:|---:|
-| `query` | yes | no | no | no |
-| `staging` | yes | yes | no | no |
-| `projection` | yes | no | yes | no |
-| `reaction` | yes | no | no | yes |
+| Class | Purpose |
+| --- | --- |
+| `query` | Observe permitted state or engine-owned request metadata. |
+| `staging` | Stage ordinary durable changes in a proof. |
+| `reaction` | Match-local runtime metadata, unavailable to an ordinary proof. |
 
-A `reaction` bridge performs live post-commit E only from a `reaction`
-continuation; it cannot stage D or mutate P. This class does not replace durable
-effect custody. A `staging` predicate may prepare a bounded effect request as
-part of the ordinary proof, and the node-wide effect journal performs that
-request only after the controlling transaction commits and verifies the real
-result. Authorization, proof, sealing, and consensus therefore remain on one
-path.
+The `reaction` execution context is only the read-only eligibility phase. It
+cannot stage a transaction, submit a goal or prepare a key. The bound reaction
+goal then executes in the ordinary `proof` context under its real owner.
+Membership `verdict` and `policy_verdict` retain their existing restricted
+contexts. The retired `projection` context and predicate class have no successor
+permission layer.
 
-A `query` may call Erlang and bind its answer into the continuing Prolog goal
-with `unify_prove_body`. If the completed goal stages no durable change or
-effect request, it is a read and creates no ledger entry. Query predicates must
-therefore be safe to repeat during backtracking or proof retry.
+One engine-owned context carries namespace, height and anchored call chain.
+Authenticated principal and request custody remain in their existing private
+proof/session ownership, not caller-supplied flags. Metadata classification
+still distinguishes proof-bound inputs from live observations. Native resource
+commands accept a scope and ask the existing owner to select committed desired
+state; they accept neither speculative rows nor arbitrary callbacks.
 
-One narrow subtype is authority-releasing without changing durable truth. The
-node-vault predicate that signs a typed canonical Quod request still uses the
-same `query` execution path, but its module declaration and ordinary Prolog
-policy must explicitly authorize that operation. It may not accept arbitrary
-bytes or become a second permission path.
+A normal query binds results through Erlog unification. If the complete proof
+stages no write or effect, it creates no ledger entry. Irreversible effects
+still require existing prepared effect custody where applicable; ordinary
+reactions are not permission to send external I/O speculatively. The typed vault
+signing bridge still proves ordinary Prolog authorization before releasing a
+signature and never signs arbitrary caller bytes.
 
-Examples:
-
-- `peer_ready/1` is `query`.
-- `admit/3` and `remove/1` are `staging`.
-- `ensure_agent_started/2` is `projection`.
-- a live notification or delivery-attempt bridge is `reaction`.
-- a future `mts_send/2` action would use a `staging` bridge to prepare its
-  post-commit send; the bridge would not send during the proof.
-
-Each predicate declares:
-
-- functor and arity;
-- class;
-- accepted binding modes;
-- allowed execution contexts;
-- timeout or synchronous cost expectation.
-
-The former per-proof process-dictionary namespace values have been replaced by
-one explicit execution context carried in Erlog's `#est.fs` flags. These flags
-are created by the engine, survive the MVCC proof boundary, and are not
-caller-supplied. Its five kinds are:
-
-```text
-proof(Namespace, Height, Subject)
-verdict(Namespace, Height)
-policy_verdict(Namespace, Height)
-projection(Namespace, Height, HandlerId)
-reaction(Namespace, Height)
-```
-
-Registration and invocation fail closed when a predicate is used in the wrong
-context. Staging predicates are callable only from ordinary proofs; projection
-predicates remain confined to projection apply; reaction predicates remain
-confined to live post-commit reaction continuations.
-
-> **As built.** The context is one `#qctx{kind, ns, height, subject,
-> chain}` record (owned by `m:quod_predicates`), stored under a single
-> `none`-valued `#est.fs` flag. `kind` is `proof | verdict |
-> policy_verdict | projection | reaction`. The record also carries `chain` (the
-> inter-ontology ask chain, which used to be a separate `$quod_ask_chain`
-> value). `verdict` is a strictly local membership re-proof;
-> `policy_verdict` is a strictly local policy re-proof with governed bridges
-> disabled. `none`-valued means ontology content can neither set nor
-> clear it (`set_prolog_flag/2` refuses a `none` flag), so it cannot be forged;
-> content may still *read* it via `current_prolog_flag/2` (forge-resistant, not
-> secret). Today's fields are fine to expose (`ns`/`height`/`kind`/`chain` are
-> already visible to `can_read` policies), but the authenticated **subject** (§10)
-> must be carried out-of-band — the `#lp{}` overlay pattern (as for
-> `follow_disabled`), not this readable flag. All five kinds now have concrete
-> constructors: normal proofs, membership verdicts, policy verdicts, runtime
-> projections, and post-commit reactions. Lifecycle
-> is no longer another context: signed and node-authored `execute` use the
-> ordinary proof context, whose private request record already carries the
-> authenticated principal. The
-> four process-dictionary values (`$quod_ns`/`$quod_applied`/`$quod_ask_chain`/
-> `$quod_in_verdict`) are removed, not retained as a second mechanism.
+Declared module names select implementations from the coordinated installed
+release. Founding digests are provenance, not lifetime BEAM locks. The cold
+activation contract in `ontology-actor-architecture.md` applies; there is no
+unrestricted module loader or automatic mixed-release negotiation.
 
 ## 6. Actions
 
@@ -317,7 +269,7 @@ action(record_agent_display_name(Agent, Name),
        agent_display_name(Agent, Name)).
 ```
 
-The authenticated subject will be read by authorization prerequisites from
+The authenticated principal is read by authorization prerequisites from
 the engine-owned execution context; it is not a positional field of
 `action/3`.
 
@@ -336,410 +288,119 @@ volatile hosting fact is asserted into consensus.
 
 ## 7. Apply, replay, reconciliation, and events
 
-The existing `{committed, Namespace}` publication occurs before
-`quod_prolog` has applied the block. It remains suitable for dissemination and
-observability, but it must not become the reaction source.
+Simplex finality and Prolog application remain separate boundaries. Reactions
+consume the immutable canonical application result, never the earlier
+`committed` announcement. `applied_ops` contains the ordered changes actually
+applied; no-op assertions/retractions manufacture no notifications.
+`trigger_event/1` adds an occurrence to that same diff without asserting a
+message fact. Durable prepends preserve clause order while both prepend and
+append facts publish `assert(Fact)`.
 
-The former undifferentiated apply interface has been replaced with an explicit
-origin:
+Live transaction T matches the declaration catalog installed before T. Its
+catalog changes govern T+1, including in the same block. Application exports
+those boundaries; ordinary requests do not scan history or reconstruct old
+catalogs. The queued reaction goal uses its normal current proof snapshot and
+conflict checks, not a promised historical view of the event-time ontology.
 
-```text
-apply(Index, Batch, live)
-apply(Index, Batch, replay)
-```
-
-The per-namespace sequence is:
-
-### Live
-
-1. Simplex finalizes and durably stores the block.
-2. `quod_prolog` applies D and publishes the new MVCC snapshot.
-3. `quod_prolog` sends an immutable `applied_live` envelope to
-   `quod_runtime` and immediately continues applying later blocks.
-4. `quod_runtime` runs the thin ordered P tier against the applied snapshot;
-   handlers may enqueue heavy resource-specific projection jobs.
-5. Once the ordered tier completes, matching E reactions are scheduled. Effects
-   depending on a heavy resource wait on that resource's own revision barrier.
-
-P never runs in the `quod_prolog` process and cannot stall consensus or D
-application.
-
-### Replay and catch-up re-entry
-
-Replay is not only a boot phase. An established member can discover a gap and
-enter in-process recovery while `quod_prolog` remains available for
-stale-but-valid reads. Runtime mode is therefore a repeatable state machine:
+The existing repeatable recovery transition remains:
 
 ```text
-live -> replaying(RecoveryId) -> reconciling(RecoveryId) -> live
+live -> replaying(RecoveryId) -> current-state reconciliation -> live
 ```
 
-Initial boot follows the same state machine, starting in `replaying`.
+Recovery restores committed state without rerunning historical occurrences.
+The owning process publishes a scoped readiness observation when its current
+view is installed. Existing typed owners select committed resources from current
+assignments and pending domain work, retaining actual policy dependencies.
+Runtime owner loss, reader cancellation,
+replay boundaries and collapsed best-effort input use this same lifecycle.
+Stale recovery IDs and owner incarnations cannot reopen an old view.
 
-1. Before the first recovery block is applied, `quod_prolog` observes the
-   live→replay origin transition and announces `replay_started(RecoveryId,
-   FromHeight)` on the namespace runtime channel. `quod_runtime` stops scheduling
-   new E work for the namespace.
-2. `quod_prolog` applies each recovered block as D with origin `replay`.
-   Per-block P and E do not run.
-3. Once verified recovery reaches a corroborated ready edge, Simplex casts
-   `mark_ready` after all replay apply casts; `quod_prolog` then announces
-   `replay_ready(RecoveryId, ReadyHeight)`. This also closes a quiet recovery.
-4. `quod_runtime` reconciles all P once from the newest applied MVCC snapshot.
-5. Live envelopes that arrive during reconciliation wait in a bounded ordered
-   queue. After reconciliation they run through P then E in height order. If the
-   queue fills before reconciliation completes, the queued envelopes are
-   discarded and one fresh reconciliation runs at the newest applied snapshot —
-   the same collapse rule the unhealthy-projection path uses (section 8). Durable
-   effects are recovered from the outbox either way; only best-effort reactions
-   from the collapsed window are lost, and they are counted.
-6. The namespace returns to `live`. A later gap repeats the same transition.
+Remote subscriptions use the existing certified foreign materializer and
+`from(Namespace, Anchor, Event)` wrapper. Each subscriber's initial baseline is
+state-only. Later certified live changes use the same reaction matcher.
+Subscription/snapshot ordering, cancellation and caller deadlines remain with
+the existing owners; no publisher-side callback registry is added.
 
-Recovery IDs make stale or duplicated boundary messages harmless. No API caller
-may label an apply `live` merely because `quod_prolog` is already marked ready;
-the origin comes from the Simplex path that obtained the block. A runtime crash
-also returns through reconciliation before E resumes.
+`event-reaction-refinement-plan.md` specifies the authoritative live ordering,
+trusted notice vocabulary, frontier meaning, overflow recovery and verification
+obligations. It replaces the former namespace-wide P-before-E promise: actual
+resource readiness belongs to the resource owner, while canonical input may
+continue independently.
 
-Durable outbox facts learned during replay are recovered by reconciliation.
-Best-effort effects from replayed history remain deliberately absent.
+## 8. Runtime resources
 
-> **As built (Slices 1–2).** The apply origin is `live | replay`: Simplex tags local
-> commits and a settled observer's contiguous feed block `live`; rebuild, member recovery,
-> and observer anti-entropy gaps are `replay`. `quod_prolog` owns the
-> `live | {replaying, RecoveryId}` state machine, **mints the RecoveryId itself**
-> on the live→replay edge, and publishes all three messages
-> (`replay_started` / `replay_ready` / `applied_live`) on the `{runtime, Ns}`
-> property. Simplex does not mint IDs, but it explicitly casts `mark_ready` after a
-> recovery or complete feed pull; because it also sends the apply casts, mailbox order
-> guarantees the ready edge cannot overtake the final replay block. `quod_runtime`
-> consumes these boundaries and reconciles once per interval.
+There is one behavior declaration, `react_on(Pattern, Goal) :- Eligibility`.
+No `state_handler/4`, handler dependency graph or generic heavy-work scheduler
+is retained. The existing owner selects each concrete resource directly on
+dependency/lifecycle changes. The fixed selector runs under restricted committed
+policy before installation; a failed transaction's staged facts are never
+projected. No physical-node reaction or arbitrary goal is needed for restoration.
 
-### Live apply publication
+The retained duties are hosted-agent start/stop, remote-host observation,
+ontology hosting and contacts, effect-custody capacity, and guarded pending
+agent work. Their actual owners remain `quod_runtime`, the host observer,
+node actor/namespace manager/directory, effect journal and existing hosted-agent
+queue. An Erlang module need not introduce another process.
 
-One live-applied material transaction currently produces this compact runtime
-publication:
-
-```text
-#{ns, height, tx_id, subject, diff, applied_ops, effects}
-```
-
-`diff` is the signed requested operation list. The canonical committed
-projection separately computes ordered `applied_ops`, excluding identical
-assertions and absent retractions while preserving every explicit event
-occurrence. The runtime publication carries that existing result and converts
-each applied operation to one event; it does not treat requested no-ops as
-changes and does not add a second event envelope. `effects` contains only the already-validated bounded
-descriptors from that transaction; effect-only transactions therefore cross
-the same ordered runtime boundary with `diff = []`. An ordinary transaction
-keeps goal and result in the ledger for detail readers. A DTX group publication
-also carries `proof_id`, `origin`, `goal`, `result`, and `plan_digest`, because
-the group reducer already has that canonical proof context.
-
-> **As built (Slice 1 plus DTX-group extension).** The ordinary envelope is a
-> map carrying exactly the displayed fields, published as
-> `{applied_live, Env}` on `{runtime, Ns}`. A map (rather than a fixed `/7`
-> record) so Slice 5 can add subject-chain fields without reshaping. It is emitted
-> once per material transaction on a **live** commit, including a direct-effect
-> transaction with an empty D diff. An
-> OCC-rejected transaction publishes `{rejected_live, #{ns, height, tx_id,
-> subject, effects}}` with no diff. A live DTX group publication adds the
-> proof fields listed above and carries its
-> authenticated principal, including `{agent, CanonicalBytes}` after the agent-
-> identity format break. Ordinary single-ontology applied and rejected
-> publications still carry `subject = undefined`; that is the current
-> observability shape, not a missing agent identity or authorization path.
-
-### Shared substrate consumers
-
-The post-apply origin and event contract is useful independently of agents:
-
-- deferred reader arc P3 can invalidate bounded predicate caches only from
-  `applied_live`, never replay;
-- The ontology-subscription plan routes canonical certified foreign-projection
-  changes through the same ordered handler tier, then through this plan's one
-  `react_on/3` reaction owner. The subscriber matches its own source-qualified
-  `react_on/3` declarations locally; the first implementation does not install
-  those patterns at the target. Proof-local read sets remain OCC dependencies
-  and are not notification registrations.
-
-These consumers reuse the origin boundary and handler indexing from Slices 1--2
-without depending on hosted agents, FIPA, or client/world work.
-
-## 8. Projection handlers
-
-Projection declarations are facts:
-
-```prolog
-state_handler(Id, WatchedPatterns, Needs, ConvergeGoal).
-```
-
-There is one recipe per handler and no separate dependency fact. The same
-`ConvergeGoal` runs everywhere with a scope argument appended (declared arity N
-is invoked at N+1 — this erlog has no `call/2`): `all` at reconcile,
-`{keys, ChangedHeads}` after a live change, where the heads are full terms
-INCLUDING retracted heads, a narrowing hint only — a join-shaped handler may
-treat it as `all`. This replaces the OnDiff/Reconcile pair (one recipe cannot
-drift from itself; idempotency is structural). Ordering is the onia/bbsvx
-action-pattern shape: `Needs` is a list carried IN the declaration, restricted
-in this slice to ground `current(OtherId)` terms so the whole graph validates
-statically at reconcile; matched handlers and their transitive dependents run
-in the global converge order (Kahn, Id-term-order tiebreak — deterministic per
-node). Arbitrary condition goals in Needs are deferred: under `unknown => fail`
-a typo'd condition is indistinguishable from a false one, and data-dependent
-conditions would activate different handler sets on nodes reconciling at
-different heights.
-
-Rules:
-
-- handler IDs are globally qualified names;
-- dependencies are topologically sorted deterministically;
-- an unknown dependency or cycle prevents the namespace from becoming ready;
-- live incremental handlers execute in `quod_runtime`, in order, before E
-  publication for that event;
-- reconciliation uses the same ordering;
-- handlers receive a frozen MVCC snapshot at the applied height;
-- the ordered handler tier may update small indexes and enqueue idempotent work,
-  but may not perform network IO, large scans, mesh/collider construction,
-  simulation steps, asset work, or other unbounded computation;
-- heavy P runs in supervised queue-fed resource workers outside the ordered
-  namespace pipeline. Workers preserve per-resource order, coalesce superseded
-  jobs where semantics allow, and publish dependent output only after installing
-  the requested resource revision;
-- every handler and worker has a hard time budget and is instrumented;
-- runtime input and worker counts are bounded;
-- distinct pending heavy resources and encoded job size are bounded; overflow is
-  rejected loudly, and resources are scheduled in FIFO order;
-- an ordered-handler timeout or failure stops E publication and collapses pending
-  P work into one reconciliation at the newest applied snapshot; repeated failures
-  mark the namespace runtime unhealthy;
-- a heavy-worker failure is isolated from the ordered tier, but blocks that
-  resource's revision until a later full rebuild succeeds;
-- after successful reconciliation, durable effects are recovered from their
-  outbox; best-effort reactions skipped during the unhealthy interval are
-  counted and deliberately not reconstructed;
-- a projection failure is never silently absorbed.
-
-The namespace-wide P-before-E barrier covers the thin ordered tier. It does not
-wait for unrelated heavy resource work. An effect that depends on a heavy
-projection is released by that resource worker's own revision barrier, not by
-blocking every later event in the namespace. This distinction is part of
-`quod_runtime`'s initial API, even before any world worker exists.
+A readiness observation wakes only affected work. Existing queue capacity and
+custody installation drive progress without polling. Repeated unchanged
+reconciliation reuses owner-held state and performs no history fold, writes or
+syncs. Meaningful owner failure is reported; an unrelated later event does not
+certify that a failed resource was installed.
 
 ### 8.1 Declaration authority
 
-Handler and reaction facts are executable content: they can create processes,
-consume resources, and ultimately cause external IO. Ordinary write permission
-is not sufficient to activate them.
+Existing ontology invocation/write policy governs changes to reactions,
+helpers, actions and policy itself. Admission checks the policy before the
+submitted edit; the edit cannot first grant itself permission. There is no
+founding comparison or `can_declare_runtime` layer. Malformed active code is
+reported and can be repaired through ordinary authorized editing.
 
-The policy predicate is:
+An already running match or admitted transaction keeps its original custody
+and cancellation rules. Removing its declaration prevents later matching;
+it does not invent permission to cancel committed or uncertain work.
 
-```prolog
-can_declare_runtime(Subject, Kind, Declaration).
-```
+## 9. Reactions and durable consequences
 
-The planned kinds are `state_handler` and `reaction`. The separate
-`handler_dependency` declaration was retired when dependencies moved into the
-`Needs` field of `state_handler/4`.
-
-Every ontology uses its own slot-1 block as the declaration-execution lock; the
-ontology need not be a system ontology. A `state_handler/4` activates only when
-its complete ground term occurs in that founding block and remains present in
-current D. A founding handler which is nonground or has been retracted makes
-the runtime distinctly and loudly unhealthy. `react_on/3` intentionally permits
-pattern variables, so its founding and current clauses are alpha-normalized and
-fully validated instead; a missing or invalid founding reaction is likewise a
-distinct loud failure. Later-written declarations remain inert, refused, and
-counted even when their ordinary write passed `can_invoke/4`.
-
-Generic transaction-author identity now exists, but a future dynamic
-`can_declare_runtime/3` policy has not replaced this founding lock. External
-predicate functors referenced by an active declaration must be provided by an
-audited module named and hash-pinned by that ontology's immutable genesis, and
-that module must be shipped in the release. Root names only the ontology
-identity. Ontology content cannot load arbitrary Erlang modules; there is no
-application-global predicate catalogue.
-
-The first handlers will own:
-
-- hosted-agent processes;
-- agent timers;
-- AMS/DF indexes;
-- MTS delivery routes.
-
-## 9. Reactions and reliable effects
-
-`react_on(Executor, Pattern, Handler)` is durable ontology content, but its body is
-an E rule and therefore runs only for live events.
-
-`Executor` is the logical owner of the effect, not the source or class of the
-event, and it is not agent-specific. `agent(A)` is the common FIPA case;
-`service(S)`, `node(NodeKey)`, or another ontology-defined single-owner term
-uses the same mechanism. Local and remote event sources remain part of
-`Pattern`.
-
-Reaction input is the ordered `applied_ops` already produced by the canonical
-committed-state reducer. Reaction matching is Prolog work. `quod_runtime` may
-index candidates by source and event functor, but the actual match and continuation use
-`erlog_int:unify_prove_body`, which installs the pattern's variable bindings
-before executor resolution and Handler continuation. There is no Erlang-side
-matcher or parallel binding representation.
-
-The Handler is ordinary trusted Prolog. It runs in the single
-`reaction` context: query and reaction-class external predicates are allowed;
-staging and projection predicates are refused. Observable Erlang bridges are
-registered through the existing ontology predicate-module mechanism with
-class `reaction`; there is no typed callback catalogue or second dispatcher.
-
-### Logical agent versus live Erlang process
-
-An agent is a durable classed instance and state in D. Its Erlang process is
-only the current live P incarnation on the node selected by committed
-ownership/residency facts. The process owns bounded mailbox draining, timers,
-conversation progress, and effects; it keeps no private knowledge base and can
-be killed, restarted, or moved without changing the agent's identity. Any
-durable change it requests still enters as an ordinary signed goal through the
-same Prolog, `can_invoke/4`, OCC/DTX, consensus, and outcome path.
-
-Events are not broadcast blindly to every agent process in an ontology. The
-ontology receives an event once; its committed `react_on/3` clauses are matched
-centrally through `erlog_int:unify_prove_body`. Each successful match grounds
-an `Executor`, such as `agent(Bob)`. Runtime then proves that this node is the
-unique current host and delivers only that grounded reaction to Bob's live
-process. A rule may intentionally produce several agent executors, but that
-fan-out is explicit, bounded, and observable. Agent processes never implement
-a second matcher or receive every raw event merely because they belong to the
-ontology.
-
-Only active locally hosted agents have processes. Dormant, historical, or
-remotely owned agent facts allocate no Erlang process here. The existing
-runtime reconciliation is the sole process start/stop owner; a later agent
-slice may split a supervisor only when the concrete hosted-agent workload
-requires it, not as advance scaffolding.
-
-`Executor` may contain variables bound by `Pattern`, for example:
+A reaction's pattern is unified with an event for an existing owned agent.
+Its eligibility clause may use `me/1`, `instance_of/2` and transitive `isa/2`.
+The resulting bound goal enters the agent's existing ordinary signed queue;
+normal ACL, action, multi-ontology transaction and outcome rules apply. The
+originating clause executes once per event/agent even when inheritance has
+several paths. Distinct clauses may all apply in stored order.
 
 ```prolog
-react_on(agent(Agent),
-         assert(task_ready(Agent, Task)),
-         notify_agent(Agent, Task)).
+react_on(assert(task_ready(Agent, Task)), handle_task(Task)) :-
+    me(agent_instance_ref(_, _, Agent)),
+    instance_of(Class, Agent),
+    isa(Class, task_worker).
 ```
 
-Before scheduling the goal, `quod_runtime` resolves the executor against the
-event's committed snapshot. The reaction runs only when that resolution names
-this node as the unique current host. No owner or multiple owners is a
-fail-closed runtime-integrity error; it never falls back to execution on every
-replica.
+The durable agent is its classed ontology instance; its Erlang process is a
+rebuildable current-host incarnation with no private knowledge base. Host epoch
+and active-key checks fence new signed work. Typed resource owners handle node
+bootstrap directly. The logical node receives an actor binding only in its own
+exact ontology. For recovery, the affected ontology supplies typed data and
+the node's trusted handler authenticates it through `recovery_observation/1`
+before constructing a permitted report for its existing signed queue. Neither
+an editable foreign reaction nor a lookalike public event supplies node authority.
 
-Four delivery choices are required. They differ independently in whether the
-occurrence itself is committed and whether delivery is acknowledged/recovered:
+Live notifications may be lost across a crash. Required work is represented
+by ordinary domain facts or existing transaction/effect custody, not a second
+message queue. For example, one transaction can record A waiting and B pending;
+B's decision atomically records its consequence and both agents' completion.
+Both agents recover that committed state after restart.
 
-| Choice | Occurrence in D | Delivery acknowledgement/recovery |
-|---|---:|---:|
-| best-effort reaction | no dedicated record | no |
-| acknowledged volatile delivery | no custody record | bounded live retry and dedup only |
-| `trigger_event/1` | one ordered committed occurrence | no |
-| durable outbox | pending until separately committed completion | yes, across crash and host move |
+`fipa-pending-continuation-plan.md` specifies the explicit guarded continuation
+policy, including its approved narrow exception for an unknown earlier domain
+attempt. It must not become a generic retry of uncertain requests. An admitted
+transaction retains its existing recovery owner and immutable signed identity.
 
-### Best-effort reactions
-
-Suitable for telemetry and replaceable or expiring updates. They are bounded,
-asynchronous, and may be lost if the node dies after commit but before
-execution.
-
-### Acknowledged volatile delivery
-
-Suitable for ordinary live ACL traffic when the conversation protocol can retry
-or reconstruct the message. It uses bounded transport acknowledgement, retry,
-and receiver deduplication, but does not create an outbox fact for every frame.
-A sender-process crash may lose an in-flight message; the protocol's durable
-conversation state decides whether and how to reconstruct it.
-
-### Committed signal without delivery confirmation
-
-`trigger_event(Term)` stages one signed, ordered, auditable occurrence in the
-ordinary transaction operation list. It costs one consensus commit and changes
-no fact. Local and subscribed ontologies may react to it only when they observe
-that commit live: replay proves that the occurrence existed but never reruns its
-handler. Use it when the signal itself must be committed but missing one live
-notification is acceptable. It is not delivery confirmation and must not be
-described as guaranteed delivery.
-
-### Durable outbox delivery
-
-Reserved for low-rate control-plane or external actions whose loss across a
-sender crash would violate semantics and which cannot be reconstructed safely
-from current D. The action stages an outbox fact as part of D:
-
-```prolog
-outbox(MessageId, Executor, Destination, Payload, pending).
-```
-
-`Executor` is normally `agent(AgentId)`. System effects may explicitly use
-`node(NodeId)` or another ontology-defined single-owner identity; there is no
-implicit `all` executor.
-
-The outbox fact is the sole durable custody. One founding `state_handler/4`
-watches pending-outbox and host-assignment facts and projects the complete
-current local obligation set after a live change, restart, replay, or host move.
-It is both the live and recovery path: the assertion's changed head already
-selects it in the same ordered runtime batch, so delivery needs no duplicate
-`react_on/3` wake rule. Applications may independently react to outbox state for
-their own notifications, but that is not the delivery scheduler. The handler
-feeds one rebuildable scheduler keyed by a stable `DeliveryId`; neither side
-owns a second queue of durable truth or independently scans a ledger.
-
-For the first agent vertical, the hosted-agent process (or a small supervised
-child extracted only if the concrete retry loop needs it) owns the volatile
-timers, in-flight sends, acknowledgements, and backoff. There is no separate
-per-namespace `quod_outbox` process. The handler's projection bridge installs
-or withdraws revision-tagged desired local work but performs no IO. The
-scheduler sends only after the existing P-before-E frontier reaches that
-revision. Before every send, it checks the newest local committed view for both
-the exact pending tuple and one current host epoch selecting this node. No
-owner, multiple owners, a remote owner, or a stale epoch sends nothing and
-leaves the fact pending.
-
-The node-wide `quod_effect_journal` is deliberately separate. It owns private
-prepared custody for local ontology-lifecycle effects before and after their
-controlling commit. An agent outbox is replicated application D whose custody
-moves with its executor. Copying an outbox row into that journal would create
-two custody owners and break clean host migration; only low-level utilities may
-be shared.
-
-Every replica stores the outbox fact, but only the node currently hosting the
-logical executor schedules delivery. If ownership moves, the new owner
-reconciles pending entries and continues delivery. Completion is recorded by a
-separate ordinary signed transaction. Receivers deduplicate by `MessageId`.
-An uncertain completion outcome is resolved by rereading the exact current D
-state, never by blindly resubmitting. Temporary route, link, or authority
-unavailability retains the same pending message and retries without an
-attempt-count drop.
-
-This is a transactional-outbox model: it avoids both BBSvx's duplicate replay
-and an at-most-once window that silently loses essential messages.
-
-The cost is explicit: normally one consensus commit stages the effect and a
-second commit records completion. Durable effects are therefore expected to be
-low-rate. Completion may be batched or piggybacked on a later protocol-state
-transaction when semantics permit, but durability must not be silently weakened.
-High-volume conversations use acknowledged volatile delivery plus explicit
-protocol state, not an automatic two-commit outbox entry per message.
-
-Two legitimate duplicate windows remain. A sender can crash after delivery but
-before committing completion, and an ownership-move block can be applied at
-different times on the old and new owner so both briefly schedule the same
-pending effect. Stable `MessageId` receiver deduplication is the correctness
-mechanism for both. It does not excuse every committee replica sending effects.
-
-Timers follow the same ownership rule. A durable timer belongs to one agent or
-other logical executor; only its current host arms and fires the BEAM timer.
-
-Client and world effects consume this ownership and delivery machinery but do
-not define it. Their directional design lives in
-`doc/client-world-direction.md`. Its sections 4.3–4.4 assign presentation
-selection to world/application policy, with class defaults and per-view
-purposes. Platform hosting does not select appearance, and an editing
-presentation grants no authority beyond ordinary read and signed-goal checks.
+`trigger_event/1` is a committed signal, not delivery confirmation. External
+FIPA transport, volatile acknowledgements and irreversible external sends need
+their own demonstrated integration requirements later. This plan does not
+prescribe an outbox or extra reliable-delivery subsystem for internal agents.
 
 ## 10. Agents, users, and authorization
 
@@ -780,7 +441,16 @@ The deployed transport authenticates a stable agent reference and its
 active signing key in one format, without a second ACL or legacy signed route.
 That identity proof does not replace or redefine the target ACL decision.
 
-The ACL term remains exactly:
+The current ACL is `can_invoke(Goal, Principal, OntologyCallChain, Target)` with
+one authenticated actor and the active ontology namespace path. The engine
+retains anchored scope identities internally. Direct-context node privileges
+use this existing path; they do not require agent-to-agent delegation evidence.
+
+The following `subject/3` vocabulary and examples are a **deferred proposal**,
+not implemented proof fields, a settled ACL shape or transport guarantees.
+Authentication, propagation and capability semantics require a separate design
+before use. Neither current Quod nor its internal Request conversation depends
+on this representation:
 
 ```prolog
 subject(Agent, AgentChain, Capabilities)
@@ -793,7 +463,8 @@ subject(Agent, AgentChain, Capabilities)
 - `Capabilities` are derived for the current agent by the receiver and replace
   the previous agent's capabilities.
 
-The signing credential and ACL subject are orthogonal. The signature proves
+In that proposed model, the signing credential and ACL subject are orthogonal.
+The existing signature proves
 that an active key bound to the claimed agent instance signed the exact
 request. `subject/3` states on whose behalf, through which agents, and with
 which current capabilities it acts. Wielding and agent-to-agent delegation
@@ -813,18 +484,18 @@ subject(H, [B, A], BCapabilities).
 subject(M, [M], MCapabilities).
 ```
 
-At an agent-to-agent hop:
+The proposed agent-to-agent hop would require:
 
 - the receiving agent is prepended to the chain;
 - the receiving agent's capabilities replace the caller's capabilities;
 - the authenticated origin and complete chain are transport-bound;
 - every ontology in a cross-ontology call checks the same immutable chain.
 
-Transaction-author signatures must bind at least the target namespace, action or
-goal, subject, nonce, and submitted transaction content.
+Any future signed delegation format would need to bind its subject evidence.
+This proposal does not change Quod's current canonical signed request format.
 
-Capability replacement is intentional attenuation, not an implementation
-accident. The chain preserves who delegated to whom, while the capability set
+The proposal intends capability replacement as attenuation. Its chain would
+preserve who delegated to whom, while the capability set
 answers what the current receiving agent itself may do. A caller cannot lend its
 capabilities to a weaker receiving agent. Policies that care about an ancestor
 express that explicitly against the immutable chain.
@@ -939,7 +610,7 @@ is accepted. Conversation IDs are globally unique and non-empty.
 - `query_ref(Goal)` streams target answers into one or more `inform` messages.
 - A FIPA `subscribe(Goal)` performative is application-level protocol state. It
   may establish or reuse the explicit durable subscriber-owned ontology
-  relation and a source-qualified `react_on/3` interest described by
+  relation and a source-qualified `react_on/2` interest described by
   `ontology-subscription-plan.md`; it is not itself a second transport
   subscription and is never inferred from query completion or a proof read
   set.
@@ -1035,9 +706,9 @@ an ontology through that service remain two separate operations.
    support before those lower-priority producers are deployed.
 7. Direct `::` queries remain the fast path; ACL is not inserted around every
    local proof.
-8. Conversation and outbox retention have explicit pruning rules.
-9. Handler matching is indexed by changed functor rather than scanning every
-   handler for every transaction.
+8. Conversation retention has explicit domain pruning rules.
+9. Reaction and resource selection is scoped to relevant event/changed heads;
+   an unrelated update must not wake all pending work.
 10. Metrics must expose queue depth, handler latency, reconciliation duration,
     retries, deduplication, dropped best-effort effects, and oldest pending
     durable effect.
@@ -1059,14 +730,10 @@ modules and narrowed one existing owner:
 - `quod_predicates` (added): predicate registration metadata and context
   enforcement.
 
-The first durable-agent delivery must reuse this substrate: one founding
-`state_handler/4` feeds the hosted agent's volatile delivery scheduler on both
-live changes and reconciliation, while the outbox fact remains sole custody.
-Do not add a duplicate `react_on/3` delivery wake or a
-per-namespace `quod_outbox` scanner/process. Extract a small delivery worker
-module only if the concrete retry/ack loop makes the hosted-agent process
-unclear; it may own volatile attempts, never D, policy, or another queue of
-durable truth.
+Internal FIPA reuses existing multi-ontology transactions. Pending continuation
+uses one existing hosted-agent work cursor and queue, selected by Prolog and
+woken by actual custody/resource changes. No per-namespace outbox scanner,
+duplicate executor or durable copy of pending work belongs here.
 
 Later slices introduce responsibilities for hosted-agent supervision, subjects,
 MTS routing, AMS/DF indexes, and ontology resolution. Their ownership boundaries
@@ -1084,226 +751,25 @@ earlier child depends on its rebuildable P/E state. Its own crash therefore
 restarts no consensus, KB, catch-up, or feed process; any earlier restart does
 restart and reconcile it against the fresh KB.
 
-## 16. Rewrite sequence
+## 16. Remaining implementation sequence
 
-### Slice 1 -- execution contexts and apply origin
+1. Complete the ordinary-reaction integration and focused lifecycle tests from
+   `prolog-editing-plan.md`: live code changes, actual owner authority, recovery,
+   host changes, cancellation and unchanged-operation cost. Remove the replaced
+   handler/submission APIs and their obsolete fixtures.
+2. Freeze the integrated tree and run the standing sequential release gates.
+   Update stored system/domain reaction definitions through governed transactions
+   at the coordinated release boundary. A code-only deploy cannot convert their
+   old declarations; do not hide that requirement with a compatibility executor.
+3. Continue internal FIPA with local AMS/DF ontology actions, selected profile
+   requirements and representative conversations on this same substrate.
+4. Add external interoperability only after selecting a real wire transport and
+   counterpart. It must not redefine internal ontology transaction semantics.
 
-**Status: DELIVERED (0.7.15).** The typed-predicate substrate, the `#est.fs`
-context migration, `apply_entry/3` with a complete certified entry and `live | replay`, the `applied_live` event,
-and the `replay_started`/`replay_ready` boundaries are built and green (285 eunit,
-25 CT, dialyzer + xref clean). The "reconciles P exactly once" and "cannot resume
-E early" acceptance items are substrate-only until `quod_runtime` (Slice 2)
-consumes the boundaries; throughput was validated by the consensus CT suites
-passing unchanged, not by a dedicated benchmark. See the "As built" notes in
-sections 5 and 7.
-
-- Introduce explicit predicate metadata and execution contexts.
-- Replace the payload-only apply call with the live/replay-aware full-entry contract.
-- Add explicit recovery-start and ready-edge boundaries for initial rebuild and
-  every in-process catch-up transition.
-- Add a post-D applied event.
-- Keep the existing pre-apply committed publication only for feed/metrics until
-  its consumers are migrated.
-
-Acceptance:
-
-- a proof cannot invoke an E predicate;
-- replay cannot publish a live event;
-- a live event observes the newly committed facts;
-- a ready member can transition live -> replaying -> reconciling -> live without
-  restarting Prolog, and every ready edge reconciles P exactly once;
-- stale/duplicated recovery boundary messages cannot resume E early;
-- throughput regression is measured and remains negligible.
-
-### Slice 2 -- runtime and reconciliation
-
-- Add `quod_runtime`.
-- Implement state-handler discovery, indexing, dependency ordering, and bulk
-  reconciliation.
-- Move any existing runtime projection behavior behind handlers.
-
-Acceptance:
-
-- restarting runtime reconstructs P without replaying the KB;
-- handler cycles and missing dependencies fail loudly;
-- the thin ordered P tier is complete before general E sees an event;
-- a deliberately slow heavy P worker cannot delay later namespace events, and
-  its dependent output is not published before its resource revision installs.
-
-> **As built (Slice 2 — DELIVERED, all four acceptance bullets test-pinned).** `m:quod_runtime`
-> per namespace, LAST in `quod_ns`'s rest_for_one chain; one-recipe handlers with the
-> action-pattern Needs (the §8 note above); §8.1's provenance check is a FULL-TERM
-> match against the founding (slot-1) block — the declaration-execution lock,
-> distinct from the ordinary `can_invoke/4` write ACL — with retracted or
-> nonground founding `state_handler/4` declarations a distinct loud unhealthy,
-> founding reactions separately alpha-normalized and validated, and dynamic
-> declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
-> killable budgeted runner (never in the server); execution failures collapse pending work
-> into one reconciliation with exponential backoff (crash to the supervisor after 5); the
-> runtime raises its MVCC floor as the tier completes; at replay it reaps every reader before
-> detaching the pin, so neither stale reads nor replay-long history retention are possible.
-> The heavy framework ships as API shape + machinery (enqueue_projection/2 bridge, bounded
-> FIFO per-resource queues, worker cap, encoded-size cap, revision barrier via await_revision/4);
-> jobs are Prolog goals against the newest snapshot, Erlang job kinds arrive with the first
-> real worker. A resource with no work advances with the ordered frontier; a failed job blocks
-> that inference until a later successful rebuild. Settled observers process contiguous feed
-> blocks live and reconcile once after an anti-entropy gap. "Move existing projection behavior
-> behind handlers" was vacuous (grep-verified: none existed).
-
-### Slice 3 -- reactions and outbox
-
-**Status: PARTIALLY DELIVERED.** Ordered local and certified-subscribed
-`applied_ops` matching, bounded best-effort reactions, and `trigger_event/1`
-are committed and deployed through Slices 1--3 of
-`event-reaction-refinement-plan.md`. Reaction counters, latency histograms, and
-their Grafana rate/latency panels are live. The remaining work is acknowledged
-volatile delivery, the durable agent outbox, and RFC 9218 stream priorities.
-
-- **Delivered:** ordered applied-operation matching through the one dispatcher
-  in `event-reaction-refinement-plan.md`.
-- **Delivered:** bounded best-effort reactions and `trigger_event/1`.
-- Add acknowledged volatile delivery for normal conversation traffic.
-- Add durable outbox delivery, completion, retry, and receiver deduplication.
-- **Transport work item — RFC 9218 stream priority classes.** Connection
-  consolidation is already done: consensus, feed, catch-up, and Brahms all key
-  their peer connection by `NodeId` (pubkey), so every steady-state channel to a
-  member shares one outbound connection (a cold-start bootstrap seed keys by
-  endpoint, transiently, until the pubkey is learned). The remaining, deliberate
-  "two connections per pair" is one *per direction* — each node stays the client
-  for its own outbound streams (the proven client-initiated QUIC stream path); that
-  stays. Because all those streams share one congestion window, feed, ACL, and
-  future client traffic can contend with consensus, so before ACL shares
-  connections, assign RFC 9218 priorities (`{log}`/`{catchup}` high urgency; feed,
-  ACL, and future client state lower) via the pinned fork's `set_stream_priority/4`,
-  with a load test proving lower-priority producers cannot starve `{log}`.
-
-Acceptance:
-
-- history replay sends nothing;
-- a crash between commit and delivery is recovered;
-- a host-epoch transfer may overlap sends but receiver deduplication preserves
-  one logical effect;
-- duplicate delivery does not duplicate the receiver's action;
-- load tests price the two-commit durable path separately from acknowledged
-  volatile delivery and show lower-priority traffic cannot starve consensus;
-- loops and worker exhaustion are bounded.
-
-### Slice 4 -- minimal agent vertical slice
-
-This is the proof of the architecture and remains trusted-fleet-only.
-
-It starts only after three prerequisites exist: durable outbox delivery from
-Slice 3; stable `NodeRef` creation and activation from Slices 2--3 of
-`node-instance-identity-plan.md`; and the node-vault canonical signing bridge
-from `ontology-actor-architecture.md` §4.1. A hosted autonomous agent needs the
-vault to sign its ordinary completion and consequence transactions. A raw node
-key, embedded test key, or node-authority shortcut is not an acceptable
-temporary host identity or signer.
-
-The hosting projection itself is product work in Slice 4 of
-`event-reaction-refinement-plan.md`: one founding `state_handler/4` consumes
-committed host facts and starts/stops the local process. This vertical consumes
-that owner; it does not add another hosting manager.
-
-- Consume the root-catalogued `quod:node`, `quod:agent`, and
-  `quod:human_user` system-ontology vocabulary.
-- Create two agent ontologies, each with its own committed state and public
-  key binding.
-- Reconcile one hosted-agent process only on each agent's committed host epoch.
-- Execute one target-driven `goal(DesiredState)` whose selected transition
-  changes an agent's own facts.
-- Deliver one durable outbox message between two agents.
-- Restart the runtime, agent process, and host node during delivery.
-
-This slice deliberately has no FIPA ACL encoding, AMS search, DF, agent
-delegation, dynamic handler declaration, or directory federation. Browser
-login and the generic signed-agent principal are supplied by the separate
-signed-client architecture. `human_user` is one specialisation of the
-`agent` class.
-
-Acceptance:
-
-- every replica commits the same outbox fact but only the current host sends it;
-- host failover resumes a pending delivery from the agent's containing ontology;
-- receiver deduplication makes a crash retry harmless;
-- restarting runtime reconstructs the agent without replaying completed E;
-- the action and delivery path uses no copied KB.
-
-### Slice 5 -- agent subjects and delegation
-
-**Status: PARTIALLY DELIVERED.** The transitional signed base-user label has
-been replaced and deployed as the generic agent-bound identity defined in
-`ontology-actor-architecture.md`; no compatibility principal remains.
-
-- Extend that generic identity into immutable delegated subjects.
-- Add delegation, capabilities, and receiving-side subject validation without
-  replacing the existing signed-goal or `can_invoke/4` paths.
-- Test whole-chain authorization and laundering attempts.
-
-Acceptance:
-
-- a node cannot forge an origin agent or remove a delegation hop;
-- signature replay and subject substitution fail;
-- private origin-agent facts are not exposed by directory queries.
-
-### Slice 6 -- complete agent lifecycle and local AMS
-
-- Complete `quod:agent` beyond the Slice 4 minimum.
-- Add `quod:node`-governed host assignment and migration policy above the one
-  hosting projection owned by `event-reaction-refinement-plan.md` Slice 4,
-  using the stable physical-node references from
-  `node-instance-identity-plan.md`. Do not implement another hosting owner.
-- Implement AID construction and AMS operations.
-- Implement wielding.
-
-Acceptance:
-
-- killing an agent process reconstructs it from facts;
-- moving the committed host epoch starts exactly one current process;
-- an unauthorized user cannot wield or manage an agent;
-- AID identity remains stable when endpoints change.
-
-Client/world validation milestones are kept separately in
-`doc/client-world-direction.md`; they are not prerequisites for the next slice.
-
-### Slice 7 -- minimal FIPA request protocol
-
-- Implement ACL encoding, validation, MTS routing, and conversation state.
-- Implement request/agree/refuse/failure/inform/not-understood/cancel.
-- Map requests to target-owned `goal(DesiredState)`.
-
-Acceptance:
-
-- local, co-hosted, and remote conversations have identical semantics;
-- malformed or out-of-sequence messages fail loudly;
-- restart resumes durable conversations without replaying completed messages;
-- load tests show that ACL traffic cannot starve consensus.
-
-### Slice 8 -- public ontology discovery and independent local DF
-
-- Implement the approved Prolog-owned public-name-to-exact-identity discovery
-  service above the existing route resolver. Do not put public-name policy in
-  `quod_directory`, and do not add another live-route owner.
-- Feed contact hints into existing identity/host verification; neither a public
-  discovery result nor DF/AMS/MTS/OA output is an authoritative route.
-- Independently implement indexed local DF agent/service operations and leases.
-
-Acceptance:
-
-- an unknown node can resolve an ontology without already hosting it;
-- a public name resolves first to an anchored identity and then independently
-  to a verified current route;
-- stale endpoints do not alter durable identity;
-- DF, AMS, MTS, or OA-like output alone never becomes an ontology route;
-- local service registration and bounded search survive restart.
-
-### Deferred FIPA extensions
-
-- Add query-if and query-ref over the existing ask engine.
-- Add subscribe/cancel after the explicit certified ontology-subscription
-  slices in `ontology-subscription-plan.md` exist.
-- Add bounded DF federation only when more than one real AP directory needs it.
-- Add broker/recruit/contract-net only when required by a real application.
+Execution contexts, durable effects, generic identity, hosting and the internal
+Request conversation already have concrete owners. This sequence extends those
+owners for demonstrated missing capabilities rather than scaffolding parallel
+platform machinery.
 
 ## 17. Documentation replaced by this plan
 
@@ -1323,40 +789,30 @@ The replacement is already in force for delivered reaction work:
 
 ## 18. Decisions needed before later FIPA slices
 
-These do not block the remaining Slice-4 vertical:
+These do not block the current internal Request conversation:
 
 AID identity is no longer an open design choice. Its semantic `Name` is the
 canonical agent-reference bytes and its text encoding is fixed in §12; an Agent
 Platform appears only in resolver/residency data.
 
-1. The concrete capability vocabulary carried by `subject/3` for wielding and
-   delegation. The ACL shape and `agent_instance_ref/3` identities are already
-   fixed.
+1. Whether and how to introduce `subject/3` for wielding and delegation,
+   including authenticated evidence and capability vocabulary. Only the stable
+   `agent_instance_ref/3` identity is fixed; the current ACL retains one principal.
 2. Whether durable ACL inbox facts are retained indefinitely, retained by
    conversation policy, or compacted after an acknowledgement horizon.
 
-## 19. First implementation checkpoints
+## 19. Current checkpoints
 
-Do not begin with FIPA message syntax.
+Generic hosted-agent identity, epoch/key fencing, committed assignment,
+authenticated failure reporting, policy-selected takeover and restart/partition
+acceptance preceded this refactor. The current ordinary-reaction replacement
+must preserve those guarantees; earlier deployment evidence alone does not
+validate the replacement.
 
-The core substrate checkpoint has passed: Quod repeatedly separates live from
-catch-up apply, rebuilds runtime state without KB copies, dispatches local and
-certified-subscribed reactions from canonical `applied_ops`, commits explicit
-`trigger_event/1` occurrences, and releases durable DTX group effects through
-one journal. This does not claim that all Slice-3 messaging is complete:
-acknowledged volatile delivery and the agent durable outbox remain open.
-
-The generic hosting checkpoint has passed: stable NodeRefs, vault-backed
-signing, epoch/key fencing, committed host assignment, process reconstruction,
-authenticated failure reporting, policy-selected takeover, and restart/partition
-acceptance are deployed. Reactions can submit bounded work through a hosted
-agent into the ordinary signed-goal path. They do not recover volatile queues or
-automatically resubmit an uncertain write.
-
-The next product checkpoint belongs to FIPA ontology policy: two hosted agents
-exchange a durable protocol message, commit the receiver consequence once, and
-resume the conversation obligation after process or host restart. That work
-must build on the existing event and signed-goal paths; it must not add a generic
-Erlang outbox, private KB, or second executor. FIPA syntax, AMS/DF directories,
-delegation, and federation follow that checkpoint. Client/world work remains a
-separate consumer of the same runtime architecture and does not gate it.
+The internal Request conversation already commits related sender/receiver
+state through existing multi-ontology transactions. Its guarded continuation
+uses current pending domain facts and existing custody. The next checkpoints
+are the completed ordinary-reaction lifecycle gates and the universal editing
+eidolon, followed by AMS/DF and additional FIPA conversations. External transport
+is separate work. None calls for an Erlang outbox, private knowledge base or
+second executor.

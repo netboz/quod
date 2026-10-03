@@ -28,6 +28,7 @@ payload; one aggregate payload gets one bounded allocation budget.
 
 -export([encode/1, decode/1,
          encode_canonical/1, decode_canonical/2,
+         encode_bindings/2, decode_bindings/2,
          materialize_symbols/1, materialize_goal_symbols/1,
          normalize_answer_symbols/2,
          goal_symbol_names/1, symbol_names/1,
@@ -137,6 +138,60 @@ decode_canonical(Blob, MaxBytes)
     end;
 decode_canonical(_Blob, _MaxBytes) ->
     {error, bad_term}.
+
+-doc "Encode canonical named bindings under the caller's owning byte allowance.".
+-spec encode_bindings(map(), non_neg_integer()) ->
+          {ok, binary()} | {error, bad_term | invalid_result | too_large}.
+encode_bindings(Bindings, MaxBytes) when is_map(Bindings),
+                                        is_integer(MaxBytes), MaxBytes >= 0 ->
+    case binding_pairs(Bindings) of
+        {ok, Pairs} ->
+            case valid_bindings(Pairs, none) of
+                true ->
+                    case encode_canonical(Pairs) of
+                        {ok, Blob} when byte_size(Blob) =< MaxBytes -> {ok, Blob};
+                        {ok, _} -> {error, too_large};
+                        {error, _} = Error -> Error
+                    end;
+                false -> {error, invalid_result}
+            end;
+        error -> {error, invalid_result}
+    end;
+encode_bindings(_, _) -> {error, invalid_result}.
+
+-doc "Decode canonical named bindings without allocating atoms or choosing a resource allowance.".
+-spec decode_bindings(term(), non_neg_integer()) ->
+          {ok, [{binary(), term()}]} | {error, bad_term | invalid_result | too_large}.
+decode_bindings(Blob, MaxBytes) ->
+    case decode_canonical(Blob, MaxBytes) of
+        {ok, Pairs} when is_list(Pairs) ->
+            case valid_bindings(Pairs, none) of
+                true -> {ok, Pairs};
+                false -> {error, invalid_result}
+            end;
+        {ok, _} -> {error, invalid_result};
+        {error, _} = Error -> Error
+    end.
+
+%% Signed requests use atom-free variable names; trusted VM proofs use atoms.
+%% Both retain the same strictly ordered canonical names and wire bytes.
+binding_pairs(Bindings) ->
+    try
+        {ok, lists:sort([{binding_name(Name), Value}
+                         || {Name, Value} <- maps:to_list(Bindings)])}
+    catch error:badarg -> error
+    end.
+
+binding_name(Name) when is_atom(Name) -> atom_to_binary(Name, utf8);
+binding_name(Name) when is_binary(Name) -> Name;
+binding_name(_) -> error(badarg).
+
+valid_bindings([], _Previous) -> true;
+valid_bindings([{Name, _Value} | Rest], Previous)
+  when is_binary(Name), byte_size(Name) > 0,
+       (Previous =:= none orelse Previous < Name) ->
+    valid_bindings(Rest, Name);
+valid_bindings(_, _) -> false.
 
 -doc """
 The vocabulary every node of this release holds: the atom tables of the

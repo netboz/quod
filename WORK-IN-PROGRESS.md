@@ -3346,3 +3346,460 @@ bundle advertises the combined controls. The immutable overlay is
 All eight candidate allocations are healthy at Nomad index 787060/version 40;
 the existing root and ledgers remain in place and production remains unchanged.
 Evidence is under `_build/material-network-20260927/navigation-azerty-v16/`.
+
+### Universal Prolog editing and ordinary reactions — integration (2026-09-28)
+
+Branch `feature/client-lobby-workspace`, base `ec71a20`. This working-tree
+implementation follows Yan's approved revision in `doc/prolog-editing-plan.md`
+and Forgejo issue #9. It is not committed or deployed. User-owned ontology
+content and the plan's earlier decisions are preserved; no fleet action or
+ledger reset has occurred.
+
+The generic editing eidolon is supplied by `quod:prolog` and
+`quod:prolog:eidolons` through the normal root catalogue. Classes, instances and
+ontology definitions use the same recipe selection, including inherited device
+recipes. The client shares the existing proof cursor, Accept/Stop and operation
+journal between the console and editor. Text and clause cards use one draft;
+Babylon renders ordinary GUI controls on a spatial board. The new ontologies
+compile an inspectable ordinary anchored transaction, checking the opened source
+before exact ordered mutations. There is no editor persistence service or new
+write endpoint. Shared durable `asserta` preserves prepend order through commit
+and replay. Generated conjunctions are balanced without splitting transactions.
+
+Editable `react_on/2` replaces founding-locked executor declarations and the
+state-handler graph. Prolog matches patterns and guards with the actual owned
+actor bound by `me/1`; the resulting goal uses its existing queue, proof, ACL
+and transaction machinery. Existing resource owners select only committed state.
+The shared matcher standardizes declaration and event variables apart, including
+non-ground clause-head changes. Resource readiness is retained in the existing
+queue, and an impossible zero-capacity configuration fails visibly rather than
+looping. The Prolog owner now shares genuine control-only committed snapshot
+progress with its attached runtime: aborted/rejected/control entries must not
+strand a resource reader behind an unreachable minimum height. This notification
+uses the existing pin and ordered queue, without history repair or event replay.
+
+Native module names remain declared by ontology identity; their founding digest
+is provenance, not a lifetime implementation pin. Native code updates require a
+coordinated cold release. New signed writers use parser version 3 in the existing
+field so stored numeric negatives round-trip faithfully; old signed grammar
+versions retain their original meanings. These changes require the coordinated
+release and migration described in the plan before live use.
+
+Focused receipts include 40 runtime tests; 47 compiler/common/replay tests;
+46 reaction/action/custody tests; both multi-node recovery tests; and 84 client
+tests. The lifecycle module passed its first 46 scenarios but its final naming
+query timed out: its private recursive `within` duplicated the already-transitive
+`isa` and looped. The corrected isolated lifecycle case passed using shared
+`isa`, preserving all naming data. Real React/crypto/IndexedDB and Babylon browser
+checks pass, including cards, interrupted Accept, identity isolation and a late
+catalogue response after recovering a newly created predicate. Save-response
+body loss now retains the exact operation for outcome lookup. UI build/lint pass.
+
+The final focused runtime regression passed 3/3: restart after durable FIPA
+admission, canonical progress without a material event (with stale/wrong-owner
+controls), and unchanged reconciliation with zero history reads or file syncs.
+Evidence is in `_build/prolog-editing-20260928/` and
+`_build/prolog-editing-inheritance-20260928/`; failed runs and negative controls
+are retained. The complete frozen sequential gates are the next check, so these
+focused receipts are not a full-release or hardware-acceptance claim.
+
+Production source delta at this boundary, including new files and excluding
+built assets, tests and documentation: +2,823/-2,299 lines, net +524. The runtime
+itself shrinks by 735 lines; growth comes from the universal editor, shared GUI
+adapter and faithful source/mutation support.
+
+### Editing integration — full-gate triage and resource admission (2026-09-28)
+
+The first frozen sequential candidate, `clean-v1`, passed client installation,
+UI installation and 84 client tests, then failed EUnit: 2,884 passed, 19 failed,
+and a naming aggregate timed out. Logs, exact inputs and true child exits remain
+under `_build/prolog-editing-20260928/clean-v1/`. Eighteen failures were fixture
+assumptions exposed by the new ownership, reaction and mutation contracts, or
+trace/ordering contamination. Corrected controls preserve anchor fencing,
+metric-label bounds, custody exclusion, cancellation, capacity and zero-I/O
+assertions. The 384 independent naming queries are now individual tests over
+one retained fixture with private read sets; no application deadline changed.
+Separate diagnostics passed all 1,044 tests after the cancelled module, 427
+naming/mutation/architecture tests, 40 ingress/metrics tests, 63 directory/runtime
+tests and 18 custody tests. These receipts do not replace the full release gate.
+
+The remaining failure was a real runtime admission defect: all twenty recovery
+assignments committed, but six resource requests were refused behind a full
+event queue and their corresponding agents remained absent. The existing node
+executor is sequential; its runtime cursor now releases the next owned reaction
+only after actual completion instead of speculatively filling its request queue.
+If canonical input fills the event queue after dispatch, resource admission
+reports its honest refusal and invokes the existing overflow reconciliation.
+That owner captures current committed state and emits readiness; it never
+resubmits the refused goal or scans/replays historical events. There is no new
+queue, timer, capacity allowance or deadline extension.
+
+The corrected production seam passes three focused cases: twenty-agent recovery
+with all hosts restored and no collapse, twenty readiness goals with canonical
+progress, and a deterministic full-queue-after-dispatch race. The latter proves
+blocked-reader retirement followed by autonomous fresh-state selection, without
+manual retry or historical event replay. Evidence is
+`_build/prolog-editing-inheritance-20260928/resource-admission-lifecycle-v1.log`.
+The next complete frozen sequential run is `clean-v2`; no fleet mutation has
+occurred during this integration.
+
+### Editing integration — candidate verification and retained-state upgrade (2026-09-28)
+
+The clean-v2 freeze passed all 3,546 EUnit tests, 84 client tests, and sequential
+Common Test suites through peer capacity. The failover suite stopped in fixture
+setup: its observer waiter sent `stats` instead of the real `get_stats` message
+and missed installation that had already happened. The corrected subscription-
+before-snapshot waiter retains the installed height check; all five focused
+failover cases now pass. The frozen failure and triage remain intact. Diagnostic
+tail checks passed namespace CT and xref. Naming CT exposed a fixture assumption
+that `recipe` must be an unknown wire symbol, although the shared eidolon
+vocabulary now knows it; the assertion now checks the full canonical wire value.
+Dialyzer identified one discarded send-result warning, corrected with an explicit
+`ok` return after the unchanged snapshot notification. These diagnostic tails
+are not a passed full release gate.
+
+The cold-upgrade audit found that root and node module manifests did not install
+`current_ontology_identity/2`. That existing proof-context query now belongs to
+the universally loaded runtime primitives, beside `me/1`; the agent signer reuses
+its same identity decoder. This grants no new authority, performs no live lookup,
+and needs no new manifest or alternate editor path. Focused signed root/node
+editor coverage uses their real production module declarations.
+
+Candidate deployment preparation preserves existing accounts, all ontology
+anchors, node identities and retained ledgers. The operator helper compiles
+ordinary exact-baseline transactions with `quod:prolog`; it preserves unrelated
+custom/domain/generated clauses, rejects conflicts, records actual checkpoints
+and never resubmits an unknown write. The new two system ontologies will propagate
+through root's existing catalogue. A coordinated cold native update precedes
+stored source migration, with browser ingress disabled during maintenance.
+The separate production job is outside this candidate scope. No live mutation,
+commit, image publication or deployment has occurred at this boundary.
+
+### Editing acceptance — transient result ownership (2026-09-28)
+
+Clean-v3 passed all 3,547 EUnit tests and the ask Common Test suite. Independent
+acceptance then found a genuine ordinary-use blocker: a successful two-console
+scene proof was rejected by the client normalizer because it applied the 16 KiB
+durable transaction-result allowance to a transient read. The raw proof was
+successful; the codec returned `{too_large,result}`, which normalization hid as
+`proof_unavailable`. That run and its bounded trace are retained. Remaining
+clean-v3 gates were explicitly interrupted (true exit 143, STOP.json retained)
+because this source freeze is superseded; it is not a passed release gate.
+
+The correction moves canonical named-binding encoding into the existing shared
+wire codec with the consuming boundary's byte allowance. Durable wrappers keep
+their stored bytes and storage contract; client reads/previews use the existing
+complete-reply frame contract and report typed oversize errors. This removes an
+incorrect persistence charge from transient replies, without raising a numeric
+constant, adding a transport or maintaining two binding codecs. Real two-device
+shared-class editing and single-subclass specialization remain required before
+the next final integration freeze.
+
+The deployment audit also confirmed that direct Nomad allocation URLs change
+port on replacement, stranding browser-local identities and pending operation
+journals at their original origin. The candidate needs a stable TLS-passthrough
+entry point for its currently published URL, using existing Traefik infrastructure
+and the retained node-0 certificate. Preparation keeps this candidate ingress
+separate from shared production ingress; no fleet mutation has occurred.
+
+### Editing integration — canonical source and migration rehearsal (2026-09-30)
+
+The interruption left the source tree and verification evidence intact. The
+final common source query formats the actual ordered authored program before
+comparing a bound canonical source. Compiled edits retain ordinary transaction
+composition and return no temporary copies of their inspected source. An
+intermediate collector approach failed a nested-transaction control and was
+removed; its negative evidence remains under `acceptance/`. No result allowance
+was raised to accommodate compiler scratch state.
+
+The consolidated focused run passed 106 of 107 checks; its sole failure was a
+new test's exact diagnostic-list expectation, while the required conflict
+reason was present. After checking that reason within the normal diagnostic
+list, the whole lobby module passed nine checks. Large signed edits, nested
+transactions, cut, source equality and read dependencies passed. The retained
+two-console case covers shared-class edits, explicit subclass specialization
+and refusal of an unauthorized policy self-grant.
+
+The final retained-state migration rehearsal passed both real-owner cases:
+old node source, and the largest old lobby source plus its exact instance
+template. Each component uses one ordinary transaction. The lobby edit commits
+one block, preserves domain/key facts and becomes a no-op on an unchanged
+second plan; the node case covers restart, conflicts and recovery of the
+original checkpoint after a missing reply. Sources and BEAMs stayed unchanged
+through the run. Evidence is `migration/operator-components-v4-source-literals`
+under `_build/prolog-editing-20260928/`. Final integrated release gates and live
+candidate acceptance still remain; no deployment is claimed by these checks.
+
+### Editing release — queue-test synchronization (2026-09-30)
+
+Clean-v4 completed EUnit with 3,555 passes and one failure. The retained failure
+was a fixture ordering error: restored actor installation precedes completion
+of its ordinary node reconciliation request. A deterministic negative control
+held that real request after installation and measured 52 legitimate pending
+bytes with zero replayed events. The corrected test waits for the runtime's
+actual completion receipt before retaining its exact zero-byte and no-replay
+assertions. Both focused queue controls pass; all production files remain
+byte-identical to clean-v4. The failed freeze and diagnostic tail stay intact.
+Final verification uses the corrected frozen test tree; no release is claimed
+from the failed run.
+
+### Prolog editing and reactions — reviewed design direction (2026-09-30)
+
+The current uncommitted editor/reaction tree is not ready for release. A local
+production-seam control reproduced the authority bug: a reaction editable in a
+personal lobby can use the physical node queue to write as that node. Correct
+the ownership boundary first. Agent reactions act as their agent; node service
+work is authorized by the node's own Prolog policy in the same transaction as
+the requested goal, using the existing signed delegation and exact identities.
+Bootstrap may perform narrowly typed work for its existing resource owners; it
+must not execute arbitrary hosted-source reaction goals as the physical node.
+
+Fact changes should match reactions by unification. Existing resource owners
+should retain the proof engine's actual read dependencies for derived hosting
+and custody rules, so changing a helper wakes the affected owner without a
+handwritten list. Recovery reconciles current facts and does not replay events.
+One proposed rule uses the completed block's committed program and facts for
+both reaction declarations and guard evaluation, preserving event order. Under
+that rule, a reaction added in the block may match its events; a removed one
+cannot. This would replace the per-transaction activation proposal in
+doc/prolog-editing-plan.md if the architecture review accepts it. Ordinary
+reaction goals still run through normal authorization and conflict checks.
+
+Editor integration remains in this scope: named, policy-governed code reads;
+explicit choices to edit an instance, its class, or its eidolon; the same
+controls reachable in VR; one class-based eidolon selection path; parser and
+formatting corrections; and an explicit read-latest/merge path after conflicts.
+The arbitrary 2048-token parser allowance must not be treated as a domain
+budget. Preserve one atomic edit and the existing signed request boundary.
+Retain the failed gate evidence and run a new frozen gate only after correction.
+The block-level reaction timing above is a proposal, not an accepted semantic
+change. Before implementation, review the complete path from a committed event
+to actor selection, goal authorization, commit and runtime effect, including
+node bootstrap and host replacement. Trace representative cases with diagrams
+and revise this plan against the chosen contract. Keep the current uncommitted
+tree intact as an implementation candidate during that review.
+
+Yan is considering Nimbalyst and Zed as local work surfaces. Their choice does
+not change Quod's architecture or the repository rules. Keep one writing owner
+per worktree while this branch has extensive uncommitted changes; use separate
+worktrees for genuinely parallel editing.
+
+### Reaction ownership correction — concrete plan contracts (2026-10-03)
+
+Incorporated the review and Yan's four amendments into
+`doc/event-reaction-refinement-plan.md` as the single correction plan; aligned
+`doc/prolog-editing-plan.md` and removed its superseded physical-node restoration
+instructions. This is documentation only, not evidence that the candidate tree
+implements the correction. HEAD remains `ec71a20` on
+`feature/client-lobby-workspace`; existing user changes and retained failures are
+preserved. Only documentation changed; no tests, reviewer consultations, commits
+or deployments were performed during this plan update.
+
+The plan now requires recovery data selected in the affected ontology and bound
+to the original authenticated observation; node-owned operation construction;
+identical report/request expiry with no renewed allowance; reuse of dependency
+observation without altering consensus semantics, including exceptions and unknown
+native observations; generic match metadata in the universal runtime bridge;
+and direct-context node privileges across every alternative grant. Own-agent work
+may still return a goal to that agent's signed queue. FIPA continuation, transaction
+atomicity, existing owners, class semantics and uncertain outcomes remain intact.
+
+The next implementation follows three steps in the plan: ownership/recovery-data
+and authorization regressions; shared dependency-driven restoration; then failover,
+FIPA, obsolete-path removal and frozen release gates. Existing node manifests must
+load the relocated metadata through the common bridge; stored policy updates and
+coordinated native activation retain histories and keys. No data reset is implied.
+
+### Reaction ownership implementation — candidate validation (2026-10-03)
+
+Yan authorized implementation of the reviewed correction. Work began from
+`feature/client-lobby-workspace` at `ec71a20`; the original dirty source, index,
+patches and hashes were retained under
+`/tmp/quod-reaction-correction-20261003-cgqhurkt/`. Coding helpers edited isolated
+copies; this session integrated their patches and ran tests sequentially. No
+external reviewer was consulted, and no commit, reset or deployment occurred.
+
+Both physical-node reaction audiences and the local unsigned execution path are
+removed. Reactions use agents belonging to their exact containing ontology; the
+verified logical node is available only in its own behavior scope. `me/1` retains
+its meaning. Node/root privileged alternatives now use the existing authenticated
+principal and calling path, including public creation admission. The existing
+node wrapper remains an explicit construction by trusted node behavior, never
+automatic wrapping of a foreign catalogue's goal. Named source inspection through
+a foreign editor requires its own explicit read grant; direct administration
+does not lend that helper mutation authority.
+
+Recovery uses the existing affected-ontology policy worker to select typed data,
+then the node's ordinary matcher and signed queue. A private observation envelope
+fences the full anchored target, source owner, producer/contact incarnation and
+original wall-clock/monotonic bounds. Each candidate rechecks currency; report
+and request expiry remain identical. Custody selection uses the restricted
+committed-policy context and the existing vault. Receipt expiry releases unsent
+evidence only; it does not retry or cancel admitted uncertain work. First
+attachment retains that incarnation's bounded valid receipts.
+
+The existing resource worker now restores all five duties directly. Shared
+observation collection supplies local resource dependencies through absence,
+failure, negation, reflection and exceptions without changing consensus
+classification or transaction read-token formats. Existing owner notifications
+and one coalesced cursor in the current ordered queue drive selective updates.
+Failed inventories do not install empty answers; a relevant intervening commit
+supersedes selection. Real-owner tests cover root-before-node startup, journal
+replacement and unchanged operations doing no selection, history read or disk
+write/sync. FIPA's finite guarded continuation and current per-transaction
+reaction activation remain intact.
+
+The implementation audit before this handoff records +388 production lines,
++1,538 test lines and +208 architecture-document lines net against the starting
+working tree (not against HEAD). Production growth is principally the missing
+resource dependency lifecycle and authenticated recovery handoff in the existing
+runtime; superseded restoration reactions, unsigned execution and duplicate
+metadata registration were removed. `session-change-audit-v5.json` and
+`session-change-audit-v5.patch` retain the exact per-file delta. No user-owned
+source outside this scope was changed.
+
+Focused and integration logs, including all failed attempts, remain in `logs/`
+under that evidence directory. Integration-13 recorded 3,604 passes and five
+failures: obsolete physical-node fixtures, a stale reaction-completion wait,
+foreign-custody test scheduling and an implicit editor read grant. Integration-14
+passed 132 with one exact capacity-counter mismatch; diagnostic-15 passed all
+nine lobby tests and confirmed the legitimate second refusal on changed
+assignment while a retiring child still held its slot. Capacity-16 then passed
+the unchanged exact capacity obligations with the corrected counter expectation.
+The custody fixture now waits for owner processing evidence; no assertion was
+removed or production scheduling altered to satisfy it.
+
+The first frozen campaign, `clean-reactions-v1`, passed all 3,618 EUnit tests
+and the Common Test gates through failover and namespace recovery. It stopped
+at names with eight passes and one assertion expecting `isa(orc, W)` to return
+`vile` first. Both the names fixture and class-semantic tests were unchanged
+from the starting candidate; the documented relation is reflexive and transitive,
+so `orc` is a valid first result. The corrected authorization check asks for
+its intended ancestor `isa(orc, vile)` explicitly, retaining the permitted-read
+and refused-write obligations. The original frozen failure is preserved. The
+corrected names suite passed all nine cases in `names-ct-17`; separately labeled xref-18 and dialyzer-19 both
+exited zero before the new complete freeze.
+
+The second freeze, `clean-reactions-v2`, passed installation and all 84 client
+tests, then was intentionally stopped during EUnit after a further dependency
+lifecycle gap was identified. The child received SIGINT (actual exit -2; shell
+130); it was not reported as a passed run. Its exact source remained unchanged,
+and its stop reason, logs and stop marker were retained.
+
+The new real-owner regression `worker-death-repro-20` confirmed that killing a
+selector before its dependency handoff stranded a later helper-only repair
+(11 passes, one failure). Persistent resource selections now retain a conservative
+parent dependency after an unreported worker failure or expiry before evaluation.
+The next committed change can repair the resource; the full reported basis then
+restores selective invalidation. Captured Prolog errors remain selective, including
+`throw(deadline_exceeded)`, and occurrence-bound recovery/custody is never replayed.
+No retry timer, extra executor or deadline renewal was added. The separately
+labeled `interrupted-resource-21` passed all 37 focused lifecycle, basis and
+recovery tests, including worker death, prelaunch expiry and unchanged I/O checks.
+
+The third frozen campaign, `clean-reactions-v3`, stopped at EUnit with 3,618
+passes and two failures, retaining an unchanged source/index freeze and child
+exit 1. One was an existing foreign-history fixture accepting a valid cached
+prefix before its injected worker crash. It now requests the next height beyond
+the retained prefix, so demand survives until that crash; all custody-loss,
+published-read and reconstruction assertions remain. The separately labeled
+`resident-crash-22` passed that corrected regression without production changes.
+
+The second failure was a lifecycle defect: reaction admission could start the
+logical node queue before its identity notice updated the runtime cache, then
+withdrawal looked unchanged and skipped retirement. `node-withdrawal-repro-23`
+made that order deterministic through real owner calls and reproduced the failure.
+The shared identity refresh now checks an existing node handle even when its
+validated identity notice equals the cached value. Equal bindings remain a no-op;
+it does not create a queue, select resource policy or write storage. Changed
+identities retain their existing reconciliation path. The separately
+labeled `node-withdrawal-24` passed all 50 hosting and resource-lifecycle tests,
+including FIPA restart/uncertain-operation and unchanged-operation checks.
+
+The fourth freeze, `clean-reactions-v4`, passed all 3,620 EUnit tests and all
+41 inter-ontology Common Test cases, then stopped at transport with 36 passes
+and one fixture failure (`already_started` while replacing its named listener).
+The source/index checks remained unchanged and the gate exited 1. QUIC joins
+listener shutdown synchronously, but its registry removes the name on a later
+monitor message. The fixture now completes named cleanup through the existing
+registry owner's synchronous unregister API before restarting the same name.
+No transport production code or assertion changed. The separately
+labeled `quic-cleanup-25` passed all 37 transport cases.
+
+The separately frozen `clean-reactions-v5` completed all 25 required sequential
+commands with exit zero: 3,620 EUnit tests, 145 Common Test cases across 13
+suites, 84 client tests, xref, Dialyzer, both production release builds, UI
+build/lint and staged/unstaged whitespace checks. Full logs, child exits and
+hashes remain in its `gates/RESULTS.json`; `FREEZE.json` identifies the inputs.
+
+The harness retained a stop after the last successful command because it
+compared raw Git index bytes. Git 2.55.0 refreshes cached timestamps/inodes
+during `git diff --check` after byte-identical asset regeneration, even with
+`GIT_OPTIONAL_LOCKS=0`. `index-refresh-26` reproduces this independently. The
+original failed freeze receipt and STOP marker are preserved, not relabeled.
+The separate `freeze-attestation-v5/RESULT.json` checks all 25 child exits,
+every source/evidence boundary, and every staged path, mode, blob ID and stage
+against the frozen source manifest: all 804 entries are unchanged. No test
+input changed, so the completed tests/builds were not repeated for stat-cache
+metadata. Only this handoff and five architecture status paragraphs changed
+after validation; production and test bytes still match the frozen candidate.
+
+Existing histories and keys were preserved. Bundled source edits do not update
+stored policy histories. The reaction document contains the exact-clause policy
+migration inventory and coordinated cold-activation contract for the common
+runtime bridge; neither migration nor activation has been applied to a live node.
+
+### Prolog editing and reactions — policy wake-up corrections (2026-10-03)
+
+The two follow-up review findings were reproduced and corrected through the
+existing runtime owner. A finite agent-work pass now retains the union of all
+its selector dependencies, including the terminal idle lookup. Admission checks
+the accumulated basis. Starting a new pass or incarnation retires that basis;
+completion, queue capacity and custody notices continue the existing pass.
+Changing an earlier helper wakes idle work; after a new pass takes another
+branch, the obsolete helper no longer wakes it.
+
+Committed height advances now invalidate context-dependent or conservative
+resource selections independently of predicate changes. The same check covers
+queued input before installation and completed input afterwards. A real rejected
+transaction with no applied facts exercises both paths. Precise predicate-only
+consumers remain asleep, and unchanged notices cause no selection, installation
+or resource I/O. The dependency collector, transaction read tokens, authorization,
+finite FIPA continuation, signing and deadlines are unchanged.
+
+Evidence is retained under `/tmp/quod-policy-wake-correction-20261003`.
+`height-repro-01` failed both stale-height assertions against the unfixed runtime
+(14 passes, two failures), while its predicate-only control passed.
+`work-pass-repro-02` failed the earlier-helper wake assertion as expected.
+After correction, `height-fix-03` passed all 30 lifecycle/basis tests and
+`integrated-fix-04` passed all 69 dependency, lifecycle, hosting and recovery
+tests. The four new tests use production owners and delivery/processing evidence;
+no polling sleeps or alternate evaluator were added. All original failed logs
+remain alongside their separately labeled successful runs.
+
+The new clean-campaign tooling compares source bytes and complete staged paths,
+modes, blob IDs and stages at every boundary. Raw Git index bytes are retained as
+diagnostics, so a stat-cache refresh cannot masquerade as a source change. Its
+46 disposable checks cover SHA-1 and SHA-256 repositories and verify detection
+of source, staging, HEAD and evidence changes. All 25 standing commands and their
+order are unchanged. The preceding campaign's metadata STOP and its independent
+attestation remain untouched.
+
+The separately frozen `clean-policy-wake-v1` passed all 25 sequential gates with
+actual child exit zero: 3,624 EUnit tests, 145 Common Test cases across 13 suites,
+84 client tests, xref, Dialyzer, both production release profiles, UI build/lint
+and staged/unstaged whitespace checks. Every boundary retained identical source
+and staged content. `PASSED.json`, `FREEZE.json` and `gates/RESULTS.json` record
+the complete campaign; no retry or supplemental attestation was needed.
+
+Before this handoff, all 805 source files in the working tree matched the frozen
+candidate, and HEAD and staged content were unchanged. Only this appended handoff
+differs afterwards. The follow-up adds 24 production lines net in the existing
+runtime, 183 test lines and 14 architecture-document lines before this handoff.
+The production growth retains the correct dependency lifetime and distinguishes
+context advances from predicate deltas; it adds no new owner or executor.
+`followup-change-audit-final.json` and its patch retain the exact session delta.
+
+Existing user changes and earlier failed evidence are preserved. Nothing was
+committed, deployed or migrated. Hardware deployment and the documented stored
+policy migration/coordinated cold activation remain unverified and unapplied.

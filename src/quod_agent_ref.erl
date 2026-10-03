@@ -31,7 +31,7 @@ ordinary ontology policy.
 -type error_reason() :: invalid_agent_reference | {too_large, agent_reference}.
 
 -doc "Parse and canonically encode one dot-terminated ground instance term.".
--spec from_text(binary(), <<_:256>>, binary(), 1 | 2) ->
+-spec from_text(binary(), <<_:256>>, binary(), 1 | 2 | 3) ->
           {ok, decoded()} | {error, error_reason()}.
 from_text(Namespace, <<_:256>> = Anchor, InstanceText, ParserVersion)
   when is_binary(Namespace), byte_size(Namespace) > 0,

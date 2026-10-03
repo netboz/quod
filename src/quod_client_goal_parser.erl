@@ -4,7 +4,9 @@ Atom-safe parser for the frozen signed-goal text grammar.
 
 Each supported version owns its lexer, token bounds, variable numbering, and
 exact operator table. Version 2 adds only Erlang-style `<<"...">>` byte terms;
-version 1 remains frozen. Every non-operator symbol remains
+version 1 remains frozen. Version 3 recognizes an adjacent negative numeric
+literal while preserving spaced unary expressions and binary subtraction.
+Versions 1 and 2 retain their original signed meaning. Every non-operator symbol remains
 `{'$quod_symbol', Utf8}` until the authenticated owning ontology performs
 controlled callable materialization.
 The parse result therefore cannot depend on which atoms happen to exist in a
@@ -24,20 +26,21 @@ instead of silently changing how signed text is interpreted.
 -include("quod_client_goal_limits.hrl").
 -include("quod_vm_limits.hrl").
 
--export([parse/2, supported_version/1, format/1, value_text/1]).
+-export([parse/2, parse_program/2, supported_version/1,
+         format/1, format_clause/1, value_text/1]).
 
 -doc "Lossless text for normalized result values, without display-only key shortening.".
 -spec value_text(term()) -> binary().
 value_text(Term) -> iolist_to_binary(source_term(Term, value)).
 
--doc "Render exact version-2 source, refusing terms the frozen grammar cannot represent.".
+-doc "Render exact current-version source, refusing terms the frozen grammar cannot represent.".
 -spec format(term()) -> {ok, binary()} | {error, invalid_term}.
 format(Term) ->
     case quod_wire_term:encode_canonical(Term) of
         {ok, Original} ->
             try iolist_to_binary([source_term(Term), $.]) of
                 Text ->
-                    case parse(Text, 2) of
+                    case parse(Text, 3) of
                         {ok, #{goal := Parsed}} ->
                             case quod_wire_term:encode_canonical(Parsed) of
                                 {ok, Original} -> {ok, Text};
@@ -49,6 +52,64 @@ format(Term) ->
             end;
         _ -> {error, invalid_term}
     end.
+
+-doc "Readable clause source using the same current grammar as signed requests.".
+-spec format_clause(term()) -> {ok, binary()} | {error, invalid_term}.
+format_clause(Clause) ->
+    try
+        true = operator_contract(),
+        Text = iolist_to_binary([pretty_term(Clause, 1200), $.]),
+        {ok, #{goal := Parsed}} = parse(Text, 3),
+        {ok, Bytes} = quod_wire_term:encode_canonical(Clause),
+        {ok, Bytes} = quod_wire_term:encode_canonical(Parsed),
+        {ok, Text}
+    catch _:_ -> {error, invalid_term}
+    end.
+
+%% The pinned reader owns the operator table. Parenthesize by its exact
+%% associativity, including comma (handled specially by Erlog's parser).
+pretty_term(Number, _) when is_number(Number) ->
+    case iolist_to_binary(source_term(Number, value)) of
+        <<$-, _/binary>> = Text -> [$(, Text, $)];
+        Text -> Text
+    end;
+pretty_term({'$quod_symbol', _} = Symbol, _) -> source_term(Symbol, value);
+pretty_term({Functor, Left, Right}, Context) when is_atom(Functor) ->
+    Operator = case Functor of
+                   ',' -> {yes, 999, 1000, 1000};
+                   _ -> erlog_parse:infix_op(Functor)
+               end,
+    case Operator of
+        {yes, L, P, R} ->
+            pretty_parens([pretty_term(Left, L), " ", atom_to_list(Functor),
+                           " ", pretty_term(Right, R)], P, Context);
+        _ -> pretty_compound(Functor, [Left, Right])
+    end;
+pretty_term({Functor, Arg}, Context) when is_atom(Functor) ->
+    case erlog_parse:prefix_op(Functor) of
+        {yes, P, R} ->
+            pretty_parens([atom_to_list(Functor), " ", pretty_term(Arg, R)], P, Context);
+        _ -> pretty_compound(Functor, [Arg])
+    end;
+pretty_term(Term, _) when is_tuple(Term), tuple_size(Term) > 1,
+                          element(1, Term) =/= '$quod_symbol' ->
+    [Functor | Args] = tuple_to_list(Term),
+    pretty_compound(Functor, Args);
+pretty_term([Head | Tail], _) ->
+    [$[, pretty_term(Head, 999), pretty_tail(Tail), $]];
+pretty_term('!', _) -> "!";
+pretty_term(Term, _) -> source_term(Term, value).
+
+pretty_compound(Functor, Args) ->
+    [source_term(Functor, value), $(,
+     lists:join(", ", [pretty_term(Arg, 999) || Arg <- Args]), $)].
+
+pretty_tail([]) -> [];
+pretty_tail([Head | Tail]) -> [", ", pretty_term(Head, 999), pretty_tail(Tail)];
+pretty_tail(Tail) -> [" | ", pretty_term(Tail, 999)].
+
+pretty_parens(Text, Precedence, Context) when Precedence > Context -> [$(, Text, $)];
+pretty_parens(Text, _, _) -> Text.
 
 %% Request spelling is retained byte-for-byte: durable prepared operations may
 %% already bind it. Result values use readable symbols and lossless byte escapes.
@@ -111,7 +172,10 @@ source_hex(C) -> ["\\x", integer_to_list(C, 16), $\\].
               variable_names = [] :: [{binary(), non_neg_integer()}],
               next_variable = 0 :: non_neg_integer(),
               token_count = 0 :: non_neg_integer(),
-              parser_version = 1 :: 1 | 2}).
+              parser_version = 1 :: 1 | 2 | 3,
+              negative_magnitude = false :: boolean(),
+              numeric_annotations = false :: boolean(),
+              terminator = final :: final | next}).
 
 -type parse_error() :: invalid_syntax | unsupported_parser |
                        parser_contract_mismatch | {too_large, goal}.
@@ -151,7 +215,39 @@ parse(_Text, Version) ->
 -spec supported_version(term()) -> boolean().
 supported_version(1) -> true;
 supported_version(2) -> true;
+supported_version(3) -> true;
 supported_version(_) -> false.
+
+-doc "Read a source file with the frozen lexer; variable scope restarts at each clause.".
+-spec parse_program(term(), term()) -> {ok, [map()]} | {error, parse_error()}.
+parse_program(Text, Version)
+  when is_binary(Text), byte_size(Text) =< ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
+    case {supported_version(Version), unicode:characters_to_list(Text, utf8)} of
+        {false, _} -> {error, unsupported_parser};
+        {true, Chars} when is_list(Chars) ->
+            case operator_contract() of
+                true -> program_terms(Chars, 1, Version, []);
+                false -> {error, parser_contract_mismatch}
+            end;
+        _ -> {error, invalid_syntax}
+    end;
+parse_program(Text, Version) -> parse(Text, Version).
+
+program_terms(Chars, Line, Version, Acc) ->
+    case skip_layout(Chars, Line, false) of
+        {ok, [], _, _} -> {ok, lists:reverse(Acc)};
+        {ok, Rest, NextLine, _} ->
+            case lex(Rest, NextLine, false,
+                     #lex{parser_version = Version, terminator = next}) of
+                {ok, Tokens, Lex, Tail, EndLine} ->
+                    case parsed(erlog_parse:term(Tokens), Lex) of
+                        {ok, Term} -> program_terms(Tail, EndLine, Version, [Term | Acc]);
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
 
 parse_chars(Chars, Version) ->
     case operator_contract() of
@@ -166,7 +262,8 @@ parse_chars(Chars, Version) ->
             end
     end.
 
-parsed({ok, Goal}, #lex{variable_names = NamesRev}) ->
+parsed({ok, Parsed}, #lex{variable_names = NamesRev, numeric_annotations = Annotated}) ->
+    Goal = case Annotated of true -> numeric_literals(Parsed); false -> Parsed end,
     %% The lexer emits only the wire alphabet and validates Unicode values.
     %% A remaining encoder rejection can therefore only be a structural/node
     %% bound, for which `too_large` is the accurate public result.
@@ -183,6 +280,17 @@ parsed({ok, Goal}, #lex{variable_names = NamesRev}) ->
 parsed({error, _}, _Lex) ->
     {error, invalid_syntax}.
 
+%% Only the version-3 lexer can create this private annotation. Let the
+%% existing precedence parser distinguish unary negation from subtraction,
+%% then erase every annotation before wire validation or symbol admission.
+%% Quoted source symbols remain opaque and cannot forge a lexer annotation.
+numeric_literals({'-', {'$quod_lexical_magnitude', Number}}) -> -Number;
+numeric_literals({'$quod_lexical_magnitude', Number}) -> Number;
+numeric_literals(Term) when is_tuple(Term) ->
+    list_to_tuple([numeric_literals(Element) || Element <- tuple_to_list(Term)]);
+numeric_literals([Head | Tail]) -> [numeric_literals(Head) | numeric_literals(Tail)];
+numeric_literals(Term) -> Term.
+
 %% ------------------------------------------------------------------
 %% Lexer
 %% ------------------------------------------------------------------
@@ -197,6 +305,16 @@ lex(Chars0, Line0, PriorLayout, Lex0) ->
             Error
     end.
 
+lex_token([$. | Rest], Line, _Layout, #lex{terminator = next} = Lex0) ->
+    case skip_layout(Rest, Line, false) of
+        {ok, Tail, EndLine, Layout} when Tail =:= []; Layout =:= true ->
+            case push({'.', Line}, Lex0) of
+                {ok, Lex} -> {ok, lists:reverse(Lex#lex.tokens), Lex, Tail, EndLine};
+                {error, _} = Error -> Error
+            end;
+        {ok, _, _, _} -> lex_graphic([$. | Rest], Line, Lex0);
+        {error, _} = Error -> Error
+    end;
 lex_token([$. | Rest], Line, _Layout, Lex0) ->
     case only_layout(Rest, Line) of
         true ->
@@ -226,7 +344,7 @@ lex_token([$, | Rest], Line, _Layout, Lex0) ->
 lex_token([$| | Rest], Line, _Layout, Lex0) ->
     continue(Rest, Line, push({'|', Line}, Lex0));
 lex_token([$<, $<, $" | Rest], Line, _Layout,
-          #lex{parser_version = 2} = Lex0) ->
+          #lex{parser_version = Version} = Lex0) when Version >= 2 ->
     lex_binary(Rest, Line, Lex0);
 lex_token([$' | Rest], Line, _Layout, Lex0) ->
     lex_quoted(Rest, Line, $', atom, Lex0);
@@ -337,7 +455,12 @@ lex_variable(Name, Rest, Line,
 
 lex_graphic(Chars, Line, Lex0) ->
     {Graphic, Rest} = take_graphic(Chars, []),
-    lex_symbol(Graphic, Rest, Line, Lex0).
+    Lex = case {Graphic, Rest, Lex0#lex.parser_version} of
+              {"-", [Digit | _], 3} when Digit >= $0, Digit =< $9 ->
+                  Lex0#lex{negative_magnitude = true, numeric_annotations = true};
+              _ -> Lex0
+          end,
+    lex_symbol(Graphic, Rest, Line, Lex).
 
 take_graphic([C | Rest], Acc) ->
     case graphic(C) of
@@ -471,7 +594,7 @@ escape_char(_) -> error.
 lex_number([$0, $' | Rest], Line, Lex0) ->
     case escaped_or_plain_char(Rest) of
         {ok, Char, Tail} ->
-            continue(Tail, Line, push({number, Line, Char}, Lex0));
+            continue(Tail, Line, push_number(Char, Line, Lex0));
         error ->
             {error, invalid_syntax}
     end;
@@ -483,7 +606,7 @@ lex_number([$0, Prefix | Rest], Line, Lex0)
          length(Digits) =< ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS of
         true ->
             continue(Tail, Line,
-                     push({number, Line, list_to_integer(Digits, Base)}, Lex0));
+                     push_number(list_to_integer(Digits, Base), Line, Lex0));
         false ->
             {error, invalid_syntax}
     end;
@@ -528,13 +651,18 @@ number_value_token(_Kind, Chars, _Rest, _Line, _Lex0)
     {error, {too_large, goal}};
 number_value_token(integer, Chars, Rest, Line, Lex0) ->
     continue(Rest, Line,
-             push({number, Line, list_to_integer(Chars)}, Lex0));
+             push_number(list_to_integer(Chars), Line, Lex0));
 number_value_token(float, Chars, Rest, Line, Lex0) ->
     try list_to_float(Chars) of
-        Value -> continue(Rest, Line, push({number, Line, Value}, Lex0))
+        Value -> continue(Rest, Line, push_number(Value, Line, Lex0))
     catch
         error:badarg -> {error, invalid_syntax}
     end.
+
+push_number(Number, Line, #lex{negative_magnitude = true} = Lex) ->
+    push({number, Line, {'$quod_lexical_magnitude', Number}},
+         Lex#lex{negative_magnitude = false});
+push_number(Number, Line, Lex) -> push({number, Line, Number}, Lex).
 
 take_decimal_digits([C | Rest], Acc) when C >= $0, C =< $9 ->
     take_decimal_digits(Rest, [C | Acc]);

@@ -17,14 +17,12 @@ runtime_restart_after_host_loss_recovers_through_expired_contact_test_() ->
           peer := Peer, peer_key := PeerKey, contact := Contact,
           assignments := Assignments, old_host := Old} = Ctx,
         application:set_env(quod, runtime_max_queued_events, 8),
-        true = quod_reg:reg({host_test, barrier}),
         true = quod_reg:subscribe({peer_connections, PeerKey}),
         try
-            %% The real reaction barrier prevents a takeover racing the planned
-            %% runtime restart. It does not stop the transport or its evidence.
-            commit(Ns, {trigger_event, pause_batch}),
-            receive {host_projection_waiting, _Runner} -> ok
-            after 5000 -> error(recovery_barrier_not_reached) end,
+            %% Freeze this actual owner before physical loss. Transport evidence
+            %% still advances independently, and restart must restore watches
+            %% from committed assignments rather than replay an occurrence.
+            ok = sys:suspend(Runtime),
             Snapshot = quod_quic:peer_connections(Transport, PeerKey),
             Revision = receive
                 {Snapshot, {peer_connections, Transport, R, PeerKey, [_ | _]}} -> R
@@ -47,8 +45,8 @@ runtime_restart_after_host_loss_recovers_through_expired_contact_test_() ->
                                          quod_time:mono_ms() + 45000),
             assert_recovered(Ctx, NextRuntime, Installed)
         after
-            quod_reg:unsubscribe({peer_connections, PeerKey}),
-            gproc:unreg(quod_reg:name({host_test, barrier}))
+            case is_process_alive(Runtime) of true -> sys:resume(Runtime); false -> ok end,
+            quod_reg:unsubscribe({peer_connections, PeerKey})
         end
     end) end}.
 
@@ -63,8 +61,8 @@ with_recovery_peer(Count, Fun) ->
                                                        "ontologies/agent_recovery_policy.pl")),
         Ns = <<"host-test-agent">>,
         Policy ++
-          [{react_on, {agent, {'I'}}, {recovered_work, {'I'}},
-            {submit_agent_goal, {'I'}, execute, {record_recovered_work, {'I'}}, 5000}},
+          [{':-', {react_on, {recovered_work, {'I'}}, {record_recovered_work, {'I'}}},
+            {me, {agent_instance_ref, Ns, {'_'}, {'I'}}}},
            {can_invoke, {record_recovered_work, {'I'}},
             {agent_instance_ref, Ns, {'_'}, {'I'}}, {'_'}, Ns},
            {':-', {record_recovered_work, {'I'}}, {assertz, {recovery_work_done, {'I'}}}}]
@@ -84,6 +82,9 @@ with_transport(#{directory := Dir, identity := Identity, node := Node}, Fun) ->
     {ok, Transport} = quod_quic:start_link(),
     {Peer, PeerKey, Endpoint} = quod_agent_peer:start(filename:join(Dir, "fanout-peer")),
     Old = setelement(2, Node, <<"remote-node">>),
+    Physical = {node, maps:get(pubkey, Identity)},
+    true = quod_reg:subscribe({agent, Node}),
+    true = quod_reg:subscribe({agent, Physical}),
     try
         {ok, Blob} = quod_wire_term:encode_canonical(Old),
         {ok, _} = quod_directory:install_generation(
@@ -94,6 +95,8 @@ with_transport(#{directory := Dir, identity := Identity, node := Node}, Fun) ->
         Fun(#{peer => Peer, peer_key => PeerKey, transport => Transport,
               old_host => Old, contact => Contact})
     after
+        quod_reg:unsubscribe({agent, Node}),
+        quod_reg:unsubscribe({agent, Physical}),
         catch quod_agent_peer:stop(Peer),
         gen_server:stop(Transport),
         gen_server:stop(Directory),
@@ -142,8 +145,8 @@ prepare_assignments(Count, Ctx = #{namespace := Ns, node := Node,
                          quod_client_goal_ingress:submit(Bytes, Signature))
         end, Assignments),
         await_healthy_return(Runtime, Old, Count, quod_time:mono_ms() + 10000),
-        ok = quod_runtime:await_revision(Ns, agent_observation, quod_prolog:applied(Ns), 10000),
-        ?assertMatch(#{mode := live, collapses := 0}, quod_runtime:stats(Ns)),
+        ?assertMatch(#{mode := live, collapses := 0, observed_agent_instances := Count},
+                     quod_runtime:stats(Ns)),
         Ctx#{runtime => Runtime, assignments => Assignments}
     after
         erlang:trace(Runtime, false, [call]),
@@ -172,20 +175,37 @@ await_disconnection(Transport, Key, Revision, Deadline) ->
 
 await_recovered(Ns, Runtime, Assignments, Deadline) ->
     Expected = maps:from_list([{maps:get(reference, A), maps:get(key, A)} || A <- Assignments]),
-    await_recovered(Ns, Runtime, Expected, #{}, Deadline).
+    await_recovered(Ns, Runtime, Expected, #{}, Deadline, []).
 
-await_recovered(_Ns, _Runtime, Expected, Installed, _Deadline) when map_size(Expected) =:= 0 ->
+await_recovered(_Ns, _Runtime, Expected, Installed, _Deadline, _Results) when map_size(Expected) =:= 0 ->
     Installed;
-await_recovered(Ns, Runtime, Expected, Installed, Deadline) ->
+await_recovered(Ns, Runtime, Expected, Installed, Deadline, Results) ->
     receive
         {agent_installed, Runtime, Child,
          #{reference := Ref, epoch := 2, public_key := Key}, _Height}
           when is_map_key(Ref, Expected) ->
             ?assertEqual(maps:get(Ref, Expected), Key),
-            await_recovered(Ns, Runtime, maps:remove(Ref, Expected), Installed#{Ref => Child}, Deadline)
+            await_recovered(Ns, Runtime, maps:remove(Ref, Expected), Installed#{Ref => Child}, Deadline, Results);
+        {agent_request_finished, Runtime, _, Binding, _, Result} ->
+            await_recovered(Ns, Runtime, Expected, Installed, Deadline,
+                            [{maps:get(reference, Binding), request_outcome(Result)} | Results])
     after max(0, Deadline - quod_time:mono_ms()) ->
-        error({not_all_assignments_recovered, maps:keys(Expected), quod_runtime:stats(Ns)})
+        State = quod_prolog:prove_ro(Ns,
+          {',', {findall, {assignment, {'I'}, {'H'}, {'E'}},
+                  {agent_host, {'I'}, {'H'}, {'E'}, {'_'}}, {'Assignments'}},
+           {',', {findall, {round, {'I'}, {'R'}},
+                   {agent_recovery_round, {'I'}, {'_'}, {'_'}, {'R'}}, {'Rounds'}},
+             {findall, {report, {'I'}, {'Kind'}, {'Observation'}},
+               {agent_failure_report, {'I'}, {'_'}, {'_'}, {'_'}, {'_'}, {'Observation'}, {'Kind'}},
+               {'Reports'}}}}),
+        error({not_all_assignments_recovered, maps:keys(Expected), quod_runtime:stats(Ns),
+               State, lists:reverse(Results)})
     end.
+
+request_outcome({ok, _, {normalized, {committed, _, _}}}) -> committed;
+request_outcome({ok, _, {normalized, Outcome}}) -> Outcome;
+request_outcome({ok, _, Height}) when is_integer(Height) -> {answers, Height};
+request_outcome(Result) -> Result.
 
 assert_recovered(#{namespace := Ns, node := Node, assignments := Assignments}, Runtime, Installed) ->
     ?assertEqual(Runtime, quod_reg:where({quod_runtime, Ns})),

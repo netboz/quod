@@ -27,10 +27,13 @@ reviewed_sites() ->
      %% Public default-mode API delegation, not additional recovery owners.
      {{quod_ledger_store, open, 2}, {call, open, 3}},
      {{quod_ledger_store, open_ro, 2}, {call, open_ro, 3}},
-     %% The sole opaque remote dispatch is the governed predicate registry,
-     %% not a ledger-open permission. Pin it too so new dynamic wrappers require
+     %% Opaque remote dispatch is not a ledger-open permission. Pin each site
+     %% so new dynamic wrappers require
      %% review instead of bypassing the statically named full-open inventory.
-     {{quod_predicates, dispatch, 3}, dynamic_dispatch}].
+     {{quod_predicates, dispatch, 3}, dynamic_dispatch},
+     %% Same engine-owned retraction hook used by ordinary retract/1; retaining
+     %% it preserves staged policy changes without any ledger access.
+     {{quod_common_primitives, retract_exact_1, 3}, dynamic_dispatch}].
 
 source_root() ->
     Source = proplists:get_value(source, ?MODULE:module_info(compile)),

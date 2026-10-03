@@ -1,21 +1,18 @@
 -module(quod_agent_predicates).
 -moduledoc """
 Governed bridges for an ontology containing hosted agents. The containing
-ontology explicitly pins this module; domain actions and policy remain Prolog.
+ontology explicitly declares this installed module; domain actions and policy remain Prolog.
 
 `current_principal(-Principal)` reuses the authenticated-principal bridge.
-`current_ontology_identity(-Namespace, -Anchor)` reads the current exact scope
-from engine-owned proof context. Both are bounded proof-bound queries, not
-node observations, and fail when their authenticated context is absent.
+Request signing uses the universal runtime bridge's exact proof scope; it
+does not obtain identity from a live node observation.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([quod_predicate_module/0, load/1, current_ontology_identity/3,
-         current_request_expiry/3,
-         sign_agent_request/3, project_agent_hosts/3, submit_agent_goal/3,
-         submit_node_goal/3, submit_node_prepared_goal/3,
-         project_agent_observers/3, local_node_agent/3]).
+-export([quod_predicate_module/0, load/1,
+         sign_agent_request/3, reconcile_agent_hosts/3, reconcile_agent_observers/3,
+         local_node_agent/3]).
 
 quod_predicate_module() -> true.
 
@@ -24,26 +21,14 @@ load(Est) ->
     WithPrincipal = quod_predicates:register(
                       Est, {current_principal, 1}, query, proof_bound,
                       quod_ontology_predicates, current_principal_predicate),
-    WithExpiry = quod_predicates:register(
-      WithPrincipal, {current_request_expiry, 1}, query, proof_bound,
-      ?MODULE, current_request_expiry),
-    WithIdentity = quod_predicates:register(
-      WithExpiry, {current_ontology_identity, 2}, query, proof_bound,
-      ?MODULE, current_ontology_identity),
-    WithLocalNode = quod_predicates:register(WithIdentity, {local_node_agent, 1}, query,
+    WithLocalNode = quod_predicates:register(WithPrincipal, {local_node_agent, 1}, query,
                                              ?MODULE, local_node_agent),
     WithSigning = quod_predicates:register(WithLocalNode, {sign_agent_request, 2}, query,
                                            ?MODULE, sign_agent_request),
-    WithHosting = quod_predicates:register(WithSigning, {project_agent_hosts, 2}, projection,
-                                           ?MODULE, project_agent_hosts),
-    WithObservers = quod_predicates:register(WithHosting, {project_agent_observers, 2}, projection,
-                                               ?MODULE, project_agent_observers),
-    WithAgent = quod_predicates:register(WithObservers, {submit_agent_goal, 4}, reaction,
-                                          ?MODULE, submit_agent_goal),
-    WithNode = quod_predicates:register(WithAgent, {submit_node_goal, 3}, reaction,
-                                         ?MODULE, submit_node_goal),
-    quod_predicates:register(WithNode, {submit_node_prepared_goal, 5}, reaction,
-                             ?MODULE, submit_node_prepared_goal).
+    WithHosting = quod_predicates:register(WithSigning, {reconcile_agent_hosts, 1}, query,
+                                            ?MODULE, reconcile_agent_hosts),
+    quod_predicates:register(WithHosting, {reconcile_agent_observers, 1}, query,
+                              ?MODULE, reconcile_agent_observers).
 
 -doc "Observe the installed local node identity; this is not committed proof authority.".
 -spec local_node_agent(term(), term(), tuple()) -> term().
@@ -55,116 +40,12 @@ local_node_agent({local_node_agent, Node}, Next, St) ->
         _ -> erlog_int:fail(St)
     end.
 
--doc "Bind verified request metadata; no live clock observation enters the proof.".
-current_request_expiry({current_request_expiry, Expiry}, Next, St) ->
-    Bound = case quod_scope_session:request_expiry() of
-        error -> quod_proof_context:request_expiry();
-        ScopeExpiry -> ScopeExpiry
-    end,
-    case Bound of
-        {ok, Value} -> erlog_int:unify_prove_body(Expiry, Value, Next, St);
-        none -> erlog_int:fail(St)
-    end.
+-doc "Ask the existing resource owner to reconcile from its own committed selection.".
+reconcile_agent_hosts({reconcile_agent_hosts, Scope}, Next, St) ->
+    quod_runtime_predicates:request_resource(agent_hosts, Scope, Next, St).
 
--doc "Project committed host assignments into the existing runtime owner.".
-project_agent_hosts({project_agent_hosts, Scope0, Hosts0}, Next, #est{bs = Bs} = St) ->
-    Ctx = quod_predicates:context(St),
-    [Scope, Hosts] = erlog_int:dderef([Scope0, Hosts0], Bs),
-    case quod_runtime:project_agents(quod_predicates:ctx_ns(Ctx),
-                                     quod_predicates:ctx_handler(Ctx), Scope, Hosts) of
-        ok -> erlog_int:prove_body(Next, St);
-        {blocked, capacity} -> erlog_int:prove_body(Next, St);
-        {error, Reason} -> throw({erlog_error, {agent_projection_failed, Reason}})
-    end.
-
--doc "Project authorized physical-host subscriptions into the existing runtime owner.".
-project_agent_observers({project_agent_observers, Scope0, Rows0}, Next, #est{bs = Bs} = St) ->
-    Ctx = quod_predicates:context(St),
-    [Scope, Rows] = erlog_int:dderef([Scope0, Rows0], Bs),
-    case quod_runtime:project_agent_observers(quod_predicates:ctx_ns(Ctx),
-             quod_predicates:ctx_handler(Ctx), Scope, Rows) of
-        ok -> erlog_int:prove_body(Next, St);
-        {blocked, capacity} -> erlog_int:prove_body(Next, St);
-        {error, Reason} -> throw({erlog_error, {agent_observer_projection_failed, Reason}})
-    end.
-
--doc "Submit bounded work only for the hosted executor selected by this reaction.".
-submit_agent_goal({submit_agent_goal, Instance0, Mode0, Goal0, Timeout0}, Next, #est{bs = Bs} = St) ->
-    [Instance, Mode, Goal, Timeout] = erlog_int:dderef([Instance0, Mode0, Goal0, Timeout0], Bs),
-    Ctx = quod_predicates:context(St),
-    case {quod_predicates:ctx_executor(Ctx), quod_wire_term:is_ground(Goal)} of
-        {{agent, Instance, _, _} = Executor, true}
-          when (Mode =:= read orelse Mode =:= execute), is_integer(Timeout),
-               Timeout > 0, Timeout =< 60000 ->
-            case quod_client_goal_parser:format(Goal) of
-                {ok, _} ->
-                    case quod_runtime:agent_request(quod_predicates:ctx_ns(Ctx),
-                           quod_predicates:ctx_height(Ctx), Executor, Mode, Goal, Timeout) of
-                        ok -> erlog_int:prove_body(Next, St);
-                        {error, _} -> erlog_int:fail(St)
-                    end;
-                _ -> erlog_int:fail(St)
-            end;
-        _ -> erlog_int:fail(St)
-    end.
-
--doc "Queue explicit node execution with a grant proved in the node ontology at commit.".
-submit_node_goal({submit_node_goal, Mode0, Goal0, Expiry0}, Next, #est{bs = Bs} = St) ->
-    [Mode, Goal, Expiry] = erlog_int:dderef([Mode0, Goal0, Expiry0], Bs),
-    case {quod_wire_term:is_ground(Goal), quod_client_goal_parser:format(Goal)} of
-        {true, {ok, _}} -> queue_node_goal(Mode, Goal, Expiry, Next, St);
-        _ -> erlog_int:fail(St)
-    end.
-
--doc "Queue local custody preparation and one bound signed continuation in the existing node worker.".
-submit_node_prepared_goal(
-  {submit_node_prepared_goal, Instance0, Epoch0, Variable0, Template0, Expiry0},
-  Next, #est{bs = Bs} = St) ->
-    [Instance, Epoch, Variable, Template, Expiry] =
-        erlog_int:dderef([Instance0, Epoch0, Variable0, Template0, Expiry0], Bs),
-    Ctx = quod_predicates:context(St),
-    Ns = quod_predicates:ctx_ns(Ctx),
-    case {Variable, quod_wire_term:is_ground(Instance), erlog:vars_in(Template),
-          quod_ontology:genesis_anchor(Ns)} of
-        {{Id}, true, [{Id, Variable}], {ok, Anchor}}
-          when is_integer(Id), is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64) ->
-            Reference = {agent_instance_ref, Ns, Anchor, Instance},
-            Work = {custody, Reference, Epoch, Variable, Template},
-            queue_node_goal(execute, Work, Expiry, Next, St);
-        _ -> erlog_int:fail(St)
-    end.
-
-queue_node_goal(Mode, Work, Expiry, Next, St) ->
-    Ctx = quod_predicates:context(St),
-    Now = quod_time:now_ms(),
-    case quod_predicates:ctx_executor(Ctx) of
-        {node, _} = Executor
-          when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry),
-               Expiry > Now, Expiry =< Now + 60000 ->
-            case quod_runtime:agent_request(quod_predicates:ctx_ns(Ctx),
-                   quod_predicates:ctx_height(Ctx), Executor, Mode, Work, {expires, Expiry}) of
-                ok -> erlog_int:prove_body(Next, St);
-                {error, _} -> erlog_int:fail(St)
-            end;
-        _ -> erlog_int:fail(St)
-    end.
-
--doc "Bind the exact identity of the executing proof scope without a live lookup.".
--spec current_ontology_identity(term(), term(), tuple()) -> term().
-current_ontology_identity({current_ontology_identity, Namespace, Anchor}, Next, St) ->
-    case scope_identity(St) of
-        {ok, {Ns, Hash}} ->
-            erlog_int:unify_prove_body([Namespace, Anchor], [Ns, Hash], Next, St);
-        error -> erlog_int:fail(St)
-    end.
-
-scope_identity(St) ->
-    Context = quod_predicates:context(St),
-    case {quod_predicates:ctx_ns(Context), quod_predicates:ctx_chain(Context)} of
-        {Ns, [{Ns, <<_:256>> = Hash} | _]} when is_binary(Ns), byte_size(Ns) > 0 ->
-            {ok, {Ns, Hash}};
-        _ -> error
-    end.
+reconcile_agent_observers({reconcile_agent_observers, Scope}, Next, St) ->
+    quod_runtime_predicates:request_resource(agent_observers, Scope, Next, St).
 
 -doc "Authorize one canonical request in a committed read-only session before releasing its signature.".
 -spec sign_agent_request(term(), term(), tuple()) -> term().
@@ -182,7 +63,8 @@ sign_typed({agent_goal_v1, Network,
                 signing_public_key => Pub, operation_id => Operation,
                 not_after_ms => Deadline, mode => Mode, parser_version => Parser,
                 goal_text => GoalText},
-    case {scope_identity(St), quod_client_goal:encode(Request), quod_node_actor:principal()} of
+    case {quod_runtime_predicates:scope_identity(St),
+          quod_client_goal:encode(Request), quod_node_actor:principal()} of
         {{ok, {Ns, Anchor}}, {ok, _}, {ok, NodePrincipal}} ->
             case {quod_agent_ref:from_text(Ns, Anchor, InstanceText, Parser),
                   quod_wire_term:encode_canonical(AgentRef),

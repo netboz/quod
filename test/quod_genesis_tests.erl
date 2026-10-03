@@ -89,7 +89,7 @@ generated_genesis_source_equivalence_test() ->
     InitialOffset = length(FullDiff) - length(InitialDiff),
     ?assertEqual(InitialDiff, lists:nthtail(InitialOffset, FullDiff)).
 
-generated_genesis_contains_one_pinned_predicate_manifest_test() ->
+generated_genesis_contains_one_predicate_provenance_manifest_test() ->
     Self = <<0:256>>,
     Ns = <<"genesis:predicate-manifest">>,
     Modules = [quod_directory_predicates, quod_ontology_predicates],

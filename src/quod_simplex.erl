@@ -12867,7 +12867,7 @@ nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 %% term as an element — the catch-all keeps the scan total.
 touches_committee(Diff) ->
     lists:any(fun({K, {{peer_admitted, _, _, _, _}, _}})
-                    when K =:= assert; K =:= retract -> true;
+                    when K =:= assert; K =:= asserta; K =:= retract -> true;
                  (_)                                      -> false
               end, Diff).
 
@@ -15221,7 +15221,8 @@ committee_diff(Diff, Acc) ->
         false -> Acc
     end.
 
-committee_op({assert,  {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {addq(Pk, A), R -- [Pk]};
+committee_op({Kind, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R})
+  when Kind =:= assert; Kind =:= asserta -> {addq(Pk, A), R -- [Pk]};
 committee_op({retract, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {A -- [Pk], addq(Pk, R)};
 committee_op(_Op, Acc)                                                  -> Acc.
 
@@ -15249,7 +15250,8 @@ admitted_endpoints(Data) ->
 
 transaction_endpoints(#transaction{diff = Diff}) ->
     case proper_list(Diff) of
-        true  -> [{Pk, {H, P}} || {assert, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff];
+        true  -> [{Pk, {H, P}} || {Kind, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff,
+                                 Kind =:= assert orelse Kind =:= asserta];
         false -> []
     end.
 
@@ -15274,8 +15276,8 @@ transaction_validator_routes(#transaction{diff = Diff}, Routes) ->
     end.
 
 validator_route_op(
-  {assert, {{peer_admitted, _Id, Host, Port, <<_:256>> = Key}, _Body}},
-  Routes) ->
+  {Kind, {{peer_admitted, _Id, Host, Port, <<_:256>> = Key}, _Body}},
+  Routes) when Kind =:= assert; Kind =:= asserta ->
     Endpoint = {Host, Port},
     case quod_quic:valid_endpoint(Endpoint) of
         true -> Routes#{Key => Endpoint};

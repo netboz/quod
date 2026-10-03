@@ -3132,7 +3132,10 @@ worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test() ->
         Gate = make_ref(),
         ok = gen_server:call(Pid, {test_hold_next_initialization, self(), Gate}),
         ok = atomics:put(Crash, 1, 1),
-        ?assertMatch({error, _}, prime_projection([{Peer, [Endpoint]}], Identity, 2, 5000)),
+        %% Keep demand until the fresh attempt fails. An initial certified
+        %% notice can already satisfy the retained prefix before custody moves.
+        MissingHeight = length(maps:get(chain, Fixture)) + 1,
+        ?assertMatch({error, _}, prime_projection([{Peer, [Endpoint]}], Identity, MissingHeight, 5000)),
         Initializer = receive
             {initialization_held, Gate, _, W} -> W
         after 2000 -> error(no_explicit_reconstruction)

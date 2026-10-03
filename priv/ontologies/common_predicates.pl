@@ -3,6 +3,26 @@
 %% This file contains framework mechanics only. Domain rules belong in the
 %% ontology that owns them.
 
+%% Code is an eidolon of every class. The root catalogue supplies the exact
+%% recipe identity; an absent editing ontology simply offers no such recipe.
+%% This is a recipe association, never permission to change the target.
+class_eidolon(Class, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :-
+    nonvar(Class),
+    Namespace = <<"quod:prolog:eidolons">>,
+    quod:root::system_ontology(Namespace, Anchor).
+
+entity_eidolons(Entity, Eidolons) :-
+    findall(Class, (instance_of(Class, Entity); Class = Entity, isa(Class, Class)), Raw),
+    sort(Raw, Classes),
+    findall(eidolon(Purpose, Style, Recipe), (member(Class, Classes),
+            class_eidolon(Class, Purpose, Style, Recipe)), Choices),
+    sort(Choices, Eidolons).
+
+ontology_eidolons(Eidolons) :-
+    findall(eidolon(Purpose, Style, Recipe),
+            class_eidolon(ontology, Purpose, Style, Recipe), Choices),
+    sort(Choices, Eidolons).
+
 %% isa(?Subclass, ?Superclass).
 %%
 %% `isa/2` is Quod's Web Ontology subclass relation. Ontologies declare its
@@ -15,6 +35,20 @@ isa(Class, Class) :-
     '$quod_known_class'(Class).
 isa(Subclass, Superclass) :-
     '$quod_transitive_isa'(Subclass, Superclass).
+
+%% Return every most-specific applicable candidate, not an arbitrary winner.
+%% Subjects may have several classes. Equivalent cyclic classes and unrelated
+%% parents remain alternatives; sorting removes duplicates, never chooses one.
+most_specific_classes(Subjects, Candidates, Selected) :-
+    term_variables(Subjects-Candidates, []), sort(Candidates, Classes),
+    findall(Class, (member(Class, Classes), member(Subject, Subjects),
+                   isa(Subject, Class)), RawApplicable),
+    sort(RawApplicable, Applicable),
+    findall(Class, (member(Class, Applicable),
+                   \+ '$quod_stricter_class'(Class, Applicable)), Selected).
+
+'$quod_stricter_class'(Class, Classes) :-
+    member(Other, Classes), isa(Other, Class), \+ isa(Class, Other).
 
 %% Reflexivity applies to declared classes, not to every arbitrary Prolog term.
 %% Ground checks avoid enumerating the complete local taxonomy. Open queries

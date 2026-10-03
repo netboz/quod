@@ -7,7 +7,7 @@ journal retains the
 exact private preparation needed to execute that descriptor after ordered
 apply.  It is deliberately not a catalogue or an authorization database: a
 row can execute only after its matching applied transaction releases it. On
-recovery the same P-before-E frontier must cover the committed height before
+recovery the processed canonical-input frontier must cover the committed height before
 the journal may infer that release from the outcome index.
 
 Active custody follows the capacity projected from committed root

@@ -33,57 +33,16 @@ decode_goal(Blob) ->
 
 -doc "Encode a solution map with non-empty canonical binary variable names.".
 -spec encode_result(map()) -> {ok, binary()} | codec_error().
-encode_result(Bindings) when is_map(Bindings) ->
-    case result_pairs(Bindings) of
-        {ok, Pairs} ->
-        case lists:all(
-               fun({Name, _Value}) -> byte_size(Name) > 0 end, Pairs)
-             andalso unique_result_names(Pairs) of
-            true -> encode(result, Pairs, ?QUOD_MAX_DURABLE_RESULT_BYTES);
-            false -> {error, invalid_result}
-            end;
-        error ->
-            {error, invalid_result}
-    end;
-encode_result(_) ->
-    {error, invalid_result}.
-
-%% Keep input validation separate from the codec. Signed browser goals retain
-%% their atom-free binary variable names; trusted in-VM callers still use the
-%% traditional atom keys. Both converge on the same durable binary-name form.
-result_pairs(Bindings) ->
-    try
-        {ok,
-         lists:sort(
-           [{result_name(Name), Value}
-            || {Name, Value} <- maps:to_list(Bindings)])}
-    catch
-        error:badarg -> error
-    end.
-
-result_name(Name) when is_atom(Name) -> atom_to_binary(Name, utf8);
-result_name(Name) when is_binary(Name) -> Name;
-result_name(_Name) -> error(badarg).
-
-unique_result_names([], _Previous) -> true;
-unique_result_names([{Name, _Value} | _Rest], Name) -> false;
-unique_result_names([{Name, _Value} | Rest], _Previous) ->
-    unique_result_names(Rest, Name).
-
-unique_result_names(Pairs) -> unique_result_names(Pairs, none).
+encode_result(Bindings) ->
+    durable_result(quod_wire_term:encode_bindings(Bindings, ?QUOD_MAX_DURABLE_RESULT_BYTES)).
 
 -doc "Decode and validate the canonical ordered durable solution pairs.".
 -spec decode_result(binary()) -> {ok, [{binary(), term()}]} | codec_error().
 decode_result(Blob) ->
-    case decode(result, Blob, ?QUOD_MAX_DURABLE_RESULT_BYTES) of
-        {ok, Pairs} ->
-            case valid_result(Pairs) of
-                true -> {ok, Pairs};
-                false -> {error, invalid_result}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
+    durable_result(quod_wire_term:decode_bindings(Blob, ?QUOD_MAX_DURABLE_RESULT_BYTES)).
+
+durable_result({error, too_large}) -> {error, {too_large, result}};
+durable_result(Result) -> Result.
 
 encode(Kind, Term, MaxBytes) ->
     case quod_wire_term:encode(Term) of
@@ -111,17 +70,3 @@ decode(Kind, Blob, MaxBytes) when is_binary(Blob), byte_size(Blob) > MaxBytes ->
     {error, {too_large, Kind}};
 decode(_Kind, _Blob, _MaxBytes) ->
     {error, bad_term}.
-
-valid_result(Pairs) when is_list(Pairs) ->
-    valid_result(Pairs, none);
-valid_result(_) ->
-    false.
-
-valid_result([], _Previous) ->
-    true;
-valid_result([{Name, _Value} | Rest], Previous)
-  when is_binary(Name), byte_size(Name) > 0,
-       (Previous =:= none orelse Previous < Name) ->
-    valid_result(Rest, Name);
-valid_result(_, _) ->
-    false.

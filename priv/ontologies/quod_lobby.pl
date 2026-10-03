@@ -8,7 +8,9 @@ can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
 lobby_query(lobby_recipe(_, _, _)).
+lobby_query(lobby_modes(_)).
 lobby_query(device_menu(_, _)).
+lobby_query(device_eidolons(_, _, _, _)).
 lobby_query(isa(_, _)).
 lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
@@ -61,11 +63,36 @@ isa(device, thing).
 isa(prolog_console, device).
 %% Class associations name ordinary, anchored Prolog recipe entry points.
 class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
-    device_eidolon(Class, Mode, Style, Recipe), current_ontology_identity(Ns, Anchor).
+    isa(Class, Class),
+    device_eidolons([Class], Mode, Style, Recipes),
+    member(recipe(Ns, Anchor, Recipe), Recipes).
+
+device_eidolons(Classes, Mode, Style, Recipes) :-
+    findall(purpose(M, S), device_eidolon(_, M, S, _), RawPurposes),
+    sort(RawPurposes, Purposes), member(purpose(Mode, Style), Purposes),
+    findall(candidate(Class, Recipe), device_eidolon(Class, Mode, Style, Recipe), Candidates),
+    findall(Class, member(candidate(Class, _), Candidates), Owners),
+    most_specific_classes(Classes, Owners, Selected),
+    current_ontology_identity(Ns, Anchor),
+    findall(recipe(Ns, Anchor, Recipe),
+            (member(candidate(Class, Recipe), Candidates), member(Class, Selected)), Raw),
+    sort(Raw, Recipes).
+
 device_eidolon(prolog_console, playing, solid, console_playing).
 device_eidolon(prolog_console, edition, solid, console_edition).
 
-device_menu(prolog_console,
+lobby_modes(Modes) :-
+    findall(Mode, device_eidolon(_, Mode, solid, _), Offered), sort(Offered, Modes).
+
+device_menu(Classes, Entries) :-
+    findall(candidate(Class, Menu), class_device_menu(Class, Menu), Candidates),
+    findall(Class, member(candidate(Class, _), Candidates), Owners),
+    most_specific_classes(Classes, Owners, Selected),
+    findall(Entry, (member(candidate(Class, Menu), Candidates),
+                   member(Class, Selected), member(Entry, Menu)), Raw),
+    sort(Raw, Entries).
+
+class_device_menu(prolog_console,
     [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console))]).
 
 %% Every placed device is selected by class; repeated instances share recipes.
@@ -84,13 +111,22 @@ environment_parts(Mode, Sky, Ns, Anchor, Parts) :-
     RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
                eidolon(Recipe, environment(Sky, Ns, Anchor), Parts)).
 device_parts([], _, _, _, []).
-device_parts([device(Class, Entity, Id, At) | Devices], Mode, Ns, Anchor, Parts) :-
-    findall(Recipe, device_eidolon(Class, Mode, solid, Recipe), [Recipe]),
-    eidolon(Recipe, device(Entity), Model),
+device_parts([device(Classes, Entity, Id, At) | Devices], Mode, Ns, Anchor, Parts) :-
+    device_eidolons(Classes, Mode, solid, Recipes),
+    device_model(Recipes, Entity, Model),
     modelling_vocabulary(MNs, MA),
     MNs::(current_ontology_identity(MNs, MA),
           place_model(Id, At, depicts(Ns, Anchor, Entity), Model, Placed)),
     device_parts(Devices, Mode, Ns, Anchor, Rest), append(Placed, Rest, Parts).
+
+device_model([recipe(Ns, Anchor, Recipe)], Entity, Model) :-
+    current_ontology_identity(Ns, Anchor), eidolon(Recipe, device(Entity), Model).
+device_model([], _, Parts) :- device_eidolon_status(<<"No matching eidolon">>, Parts).
+device_model([_, _ | _], _, Parts) :-
+    device_eidolon_status(<<"Choose an eidolon">>, Parts).
+device_eidolon_status(Text,
+    [part(<<"eidolon-status">>, group, transform(0, 0, 0, 0, 0, 0),
+          no_surface, label(Text, <<"above">>), depicts_nothing)]).
 
 material_surface(Material, Surface) :-
     material_eidolons(Ns, Anchor),

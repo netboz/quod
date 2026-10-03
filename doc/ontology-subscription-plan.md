@@ -11,6 +11,9 @@ height-wake registrations on the target's existing feed links; this working
 tree still requires review and hardware acceptance before that part is a
 deployment claim.
 
+The `react_on/2` migration described here is under integration and is not yet
+deployed. It replaces the old executor argument and founding lock.
+
 This document is the authority for the subscription relation and certified
 foreign projection. `inter-ontology.md` remains authoritative for `::`, ACL,
 OCC, DTX, and outcome recovery. `event-reaction-refinement-plan.md` is the
@@ -116,7 +119,7 @@ still fetch and verify the exact anchored history before anything changes. A
 future selective or payload-bearing push remains subject to the ordinary ACL
 rule above.
 
-The first reaction implementation sends no `react_on/3` patterns to the target
+The first reaction implementation sends no `react_on/2` patterns to the target
 and keeps no target-side pattern registry. Publication filtering or selective
 payload delivery may be added later only as a measured optimization expressed
 by target-side Prolog policy around the same certified history, never as an
@@ -131,16 +134,16 @@ disclosure would require a separate cryptographic format and trust review.
 | Artifact | Class | Owner and lifetime |
 |---|---|---|
 | `subscribes/2` | D | Subscriber ledger |
-| founding-authorized source-qualified `react_on/3` | D | Subscriber ledger |
+| editable source-qualified `react_on/2` | D | Subscriber ledger |
 | target facts | D | Target ledger only |
 | routes/private contacts | P | Existing local directory derived from signed generations and committed node facts |
 | certified target history/cache | P | Node-wide `quod_foreign_log` |
 | materialized foreign facts and MVCC state | P | Shared active target projection |
 | consumer refs, coalesced wake state, freshness, revision | P | Runtime/foreign-log only |
 | feed recipient registration, correlation id, live link, pending height | P | Volatile source/target feed owners; rebuilt from current certified routes |
-| `state_handler/4` convergence | P | Existing ordered runtime tier |
+| resource installation | P | Existing resource owner, invoked by an ordinary reaction |
 | verified height/digest wake-up | E | Freshness hint, never authority |
-| grounded `react_on/3` Handler | E | Live-only reaction tier after P |
+| matched `react_on/2` goal | E/D | Existing owned queue and ordinary authenticated proof; changes commit normally |
 | durable consequence of a reaction | D | New ordinary signed goal/transaction |
 
 Foreign facts are not inserted into the subscriber's own Prolog D and cannot
@@ -209,7 +212,7 @@ follow consumers, or materialized projections. A dormant identity consumes no
 worker or decoded projection. Per-page byte and term bounds protect individual
 inputs without limiting ontology population.
 
-## 7. Implemented and deployed reaction delivery
+## 7. Reaction delivery
 
 Reaction delivery is the four-line pipeline in
 `event-reaction-refinement-plan.md`:
@@ -218,7 +221,7 @@ Reaction delivery is the four-line pipeline in
 certified committed target entry
     -> canonical reducer returns ordered applied_ops
     -> wrap each event as from(TargetNamespace, TargetAnchor, Event)
-    -> unify with subscriber react_on/3 and continue the bound Handler
+    -> unify with subscriber react_on/2 and queue the bound goal for its owned agent
 ```
 
 The initial attachment, restart, cache rebuild, anti-entropy repair, and
@@ -228,32 +231,37 @@ produce best-effort reactions. Local and remote events use the same
 `diff_to_events(AppliedOps)` helper and the same
 `erlog_int:unify_prove_body` boundary. There is no remote matcher.
 
-The subscriber's own `react_on/3` declarations select relevant events locally.
-Candidate indexing by source and outer functor is an optimization only. The
-actual match, variable binding, executor resolution, and Handler continuation
-remain Prolog work. An ontology subscribes to an ontology; predicates do not
-subscribe to predicates.
+The subscriber's own `react_on/2` clauses select relevant events locally.
+Candidate indexing by source and outer functor is only an optimization. Prolog
+unifies the event and checks the guard with `me/1` bound to the owned agent.
+The resulting goal enters that agent's existing queue and ordinary authenticated
+proof. An ontology subscribes to an ontology; predicates do not subscribe to
+predicates. The reaction contract is defined in
+[`event-reaction-refinement-plan.md`](event-reaction-refinement-plan.md).
 
-All physical hosts of subscriber A can reconstruct the same certified B
-projection. Only the one host selected by the grounded Executor may perform an
-observable reaction. An unresolvable or multiply resolved Executor is inert,
-counted, and never falls back to every replica.
+All physical hosts may maintain the certified projection. Only the currently
+hosted incarnation runs its agent's reactions. Physical node resource reactions
+run for that node under its normal Prolog authority. A reaction does not acquire
+someone else's authority by mentioning that principal in its goal.
 
 ## 8. State convergence is not event replay
 
-`state_handler/4` answers what rebuildable local state must exist now. It runs
-after live D and after restart/replay, using the current snapshot. `react_on/3`
-answers what to do because a new live occurrence happened. It never replays
-historical E.
+A rule matching `observed(ready(ontology, all))` reconstructs resources from
+current committed state after attachment or recovery. The same ordinary reaction
+mechanism handles meaningful installed-state changes and new domain occurrences.
+There is no separate state-handler declaration or dependency graph.
 
-For example, a durable hosting fact may make one state handler start or stop a
-local ontology process both on live change and after node restart. A separate
-`react_on` rule is neither needed nor sufficient for that reconstruction.
+For example, a hosting reaction invokes the existing owner to reconcile the
+committed hosting facts. The owner publishes once the process is actually
+installed. Historical door-opening events are not replayed to rebuild that
+process. A durable unfinished task remains a domain fact selected on readiness.
 
-The P tier finishes before E. Reaction Handlers run in the planned read-only
-`reaction` context and cannot directly stage D. A durable response is a new
-ordinary signed goal through `can_invoke/4`, proof, OCC/DTX, consensus, and
-outcome recovery.
+Matching and its guard read committed state without staging changes. The selected
+goal then runs as an ordinary proof and may write through the existing ACL,
+OCC/DTX, consensus and outcome recovery paths. Conditions that must hold when the
+action commits belong in that action; a matching guard is not its transaction
+read set. Resource installation may finish asynchronously; there is no global
+barrier waiting for every reaction before another event can be matched.
 
 ## 9. Direct, chained, and circular subscriptions
 
@@ -333,8 +341,8 @@ canonical transaction grammar and every exhaustive diff consumer. That one
 hard break is coordinated with the agent-identity re-found; old decoders and
 compatibility paths are deleted together.
 
-1. **Implemented:** exact `subscribes/2` catalogue and founding-authorized
-   source-qualified `react_on/3` catalogue in `quod_runtime`.
+1. **Implemented:** exact `subscribes/2` catalogue and editable
+   source-qualified `react_on/2` catalogue in `quod_runtime`.
 2. **Implemented:** shared continuous certified follow and canonical foreign
    materialization in `quod_foreign_log`/`quod_foreign_projection`.
 3. **Implemented and deployed:** local applied-op reactions through the
@@ -372,8 +380,10 @@ before the next slice.
    apart from the explicit `from/3` wrapper.
 9. Identical assertions and absent retractions produce no event; recurring
    explicit events each do.
-10. A dynamically asserted non-founding `react_on/3` never executes.
-11. An unresolvable/ambiguous Executor performs nothing and is counted.
+10. An authorized reaction edit takes effect after its transaction; it cannot
+    react retroactively to the same transaction that installed it.
+11. Only owned agent incarnations run their matched goals, under ordinary ACL.
+    Pattern or guard failure creates no queued request.
 12. Height-only freshness wakes disclose no facts and require no target-side
     delivery ACL. Any future selective or payload-bearing target cooperation is
     authorized through the existing `can_invoke/4` path; denial retains no

@@ -69,7 +69,7 @@ The one post-commit runtime may receive two different durable inputs:
 
 Both cross the same ordered P-before-E owner. This is not a second matcher,
 callback registry, or apply path: direct lifecycle descriptors retain their
-existing journal custody, while `react_on/3` handlers use the ordinary Prolog
+existing journal custody, while `react_on/2` handlers use the ordinary Prolog
 reaction dispatcher. Neither performs IO in the proof, consensus, or apply
 process.
 
@@ -328,8 +328,9 @@ root policy: `effect_custody_capacity/1` defaults to 64, a single
 non-negative integer or `unlimited` is valid; there is no compiled maximum.
 Root is the one ontology every node starts before it can create or join the
 remaining system ontologies, avoiding a circular bootstrap dependency. Its
-founding `state_handler/4` projects that fact through the existing P tier into
-the journal, and a full configured capacity is a loud `busy` refusal.
+ordinary readiness/change reaction invokes the existing journal owner with
+that committed capacity. A full configured capacity is a loud `busy` refusal.
+See `event-reaction-refinement-plan.md` for the reaction migration.
 Per-effect descriptor and byte bounds remain protocol validation; ingress rate
 limits remain a separate concern.
 
@@ -520,10 +521,10 @@ reference:
 - **not found with neither valid custody nor the original continuous
   admission:** retire visibly; never re-prove;
 - **rejected:** retire it and perform no effect;
-- **committed, ordered P projection not yet through that height:** keep the
-  pending row and wait; the outcome alone does not bypass P-before-E;
-- **committed, ordered P projection complete, local state absent:** run the
-  exact prepared effect;
+- **committed, canonical runtime input not yet processed through that height:**
+  keep the pending row and wait for the existing processed frontier;
+- **committed, canonical input processed, local state absent:** run the exact
+  prepared effect through its existing owner and postcondition checks;
 - **committed, exact desired state already present:** mark applied;
 - **committed, incompatible local state:** fail closed and expose an operator
   error; never overwrite it.
@@ -539,9 +540,12 @@ projection afterward; it does not depend on an old DETS row surviving.
 For a submitted ordinary row or pending group row, a committed outcome becomes
 an executable journal row only after `quod_runtime`'s existing `e_frontier`
 covers the ordinary transaction height or participant-Finalize height. Live
-apply and restart recovery therefore cross the same P-before-E barrier. A row
-persisted as `released` is itself the durable record that this release happened
-before the crash.
+apply and restart recovery therefore use the same processed-input boundary.
+This does not wait for every ordinary reaction or resource installation; doing
+so would deadlock create/join effects against their requesting proofs. Resource
+owners publish actual installed-state changes, and the journal retains its
+own custody and postcondition checks. A row persisted as `released` records that
+this input boundary was crossed before the crash.
 
 Historical ledger replay never blindly re-executes all effects. The local
 journal and an incremental applied-effect frontier identify unfinished local

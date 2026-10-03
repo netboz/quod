@@ -240,7 +240,7 @@ genesis_manifest_loads_the_same_predicates_in_projection_test() ->
         ok = quod_outcome:close(Outcomes)
     end.
 
-wrong_genesis_module_digest_keeps_projection_unavailable_test() ->
+founding_module_digest_does_not_lock_current_projection_code_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"projection-manifest-wrong:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
@@ -271,13 +271,14 @@ wrong_genesis_module_digest_keeps_projection_unavailable_test() ->
                     {Ns, Anchor}, 0,
                     quod_committed_projection:new_est(), Outcomes, none),
     try
-        ?assertEqual(
-           {error,
-            {predicate_modules_unavailable,
-             {predicate_module_digest_mismatch,
-              quod_directory_predicates}}},
-           project(1, {batch, [Genesis]}, Projection0)),
-        ?assertEqual(0, quod_committed_projection:applied(Projection0))
+        {ok, Projection1, #{kind := content}} =
+            project(1, {batch, [Genesis]}, Projection0),
+        ?assertEqual(1, quod_committed_projection:applied(Projection1)),
+        ?assertMatch({query, live_observation, quod_directory_predicates, directory_host_5},
+          quod_predicates:descriptor(quod_committed_projection:est(Projection1),
+                                     {directory_host, 5})),
+        {ok, Manifest} = quod_simplex:genesis_predicate_manifest(Genesis),
+        ?assert(proves({external_predicate_modules, Manifest}, Projection1))
     after
         #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection0),
         quod_erlog_db_mvcc:delete(Ref),

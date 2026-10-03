@@ -126,6 +126,54 @@ aggregate_result_bound_is_identical_before_transport_test() ->
     ?assertEqual({413, #{error => result_too_large}},
                  quod_client_result:http_normalized(Evidence, Result)).
 
+transient_bindings_use_the_complete_reply_contract_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    Value = binary:copy(<<"x">>, ?QUOD_MAX_DURABLE_RESULT_BYTES + 1),
+    Answers = quod_client_result:normalize(Evidence, {ok, [#{0 => Value}], 7}),
+    ?assertMatch({answers, 7, [_]}, Answers),
+    {answers, _, [Binding]} = Answers,
+    ?assertEqual({error, {too_large, result}}, quod_durable_term:decode_result(Binding)),
+    ?assertEqual({ok, [{<<"X">>, Value}]}, quod_client_result:decode_binding(Binding)),
+    Preview = quod_client_result:normalize(Evidence,
+        {solution, <<7:256>>, #{0 => Value}, 7}),
+    ?assertEqual({solution, <<7:256>>, 7, Binding}, Preview),
+    lists:foreach(fun(Result) ->
+        {ok, ResultBlob} = quod_client_result:encode(Result),
+        {ok, Frame} = quod_client_goal_endpoint:encode_response(
+            {result, <<8:128>>, ResultBlob}),
+        ?assertEqual({ok, {result, <<8:128>>, ResultBlob}},
+                     quod_client_goal_endpoint:decode_response(Frame)),
+        ?assertEqual({ok, Result}, quod_client_result:decode(ResultBlob)),
+        {200, #{bindings := [#{<<"X">> := Text}]}} =
+            quod_client_result:http_normalized(Evidence, Result),
+        ?assertEqual(quod_client_goal_parser:value_text(Value), Text)
+    end, [Answers, Preview]).
+
+single_and_aggregate_byte_overflow_remain_specific_errors_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    Oversized = binary:copy(<<"x">>, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+    lists:foreach(fun(Raw) ->
+        Result = quod_client_result:normalize(Evidence, Raw),
+        ?assertEqual({error, result_too_large}, Result),
+        ?assertEqual({413, #{error => result_too_large}},
+                     quod_client_result:http_normalized(Evidence, Result))
+    end, [{ok, [#{0 => Oversized}], 7},
+          {solution, <<7:256>>, #{0 => Oversized}, 7},
+          {error, {too_large, result}}]),
+    ?assertEqual({error, result_too_large},
+                 quod_client_result:encode({answers, 7, [Oversized]})),
+    ?assertEqual({error, proof_unavailable},
+                 quod_client_result:normalize(Evidence, {ok, [#{0 => self()}], 7})).
+
+client_binding_validation_retains_canonical_name_rules_test() ->
+    lists:foreach(fun(Pairs) ->
+        {ok, Blob} = quod_wire_term:encode_canonical(Pairs),
+        ?assertEqual({error, invalid_result}, quod_client_result:decode_binding(Blob)),
+        ?assertEqual({error, invalid_result}, quod_durable_term:decode_result(Blob)),
+        ?assertEqual({error, invalid_result}, quod_client_result:encode({answers, 7, [Blob]}))
+    end, [[{<<"same">>, 1}, {<<"same">>, 2}], [{<<>>, value}],
+          [{<<"z">>, 1}, {<<"a">>, 2}]]).
+
 conflict_retry_is_a_specific_public_conflict_test() ->
     ?assertEqual(
        {409, #{error => conflict_retry}},

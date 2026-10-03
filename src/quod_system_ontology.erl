@@ -2,8 +2,9 @@
 -moduledoc """
 Process-free root system-ontology catalogue reader and join materializer.
 
-Root commits only exact ontology identities. Predicate modules belong to and
-are hash-pinned by each ontology's immutable genesis; live endpoints remain
+Root commits only exact ontology identities. Predicate module names belong to
+each ontology's immutable genesis; implementations come from the installed
+coordinated release. Live endpoints remain
 directory hints. This module never creates an
 ontology, owns desired state, or bypasses the normal pinned join path;
 `m:quod_namespace_manager` is the sole caller which reconciles the returned

@@ -111,9 +111,11 @@ namespace restart-intent store. On restart the normal namespace lifecycle
 resumes that exact anchored node ontology and the identity projection
 revalidates the pointer. A missing, conflicting, or wrong-anchor pointer leaves
 actor identity unavailable; it never silently creates or selects another
-instance. Once the node ontology is live, ordinary hosting facts are reconciled
-through `state_handler/4` as specified by
-`event-reaction-refinement-plan.md`.
+instance. Once the node ontology is live, its committed hosting selector drives
+the existing resource owner on dependency and lifecycle changes, as specified
+by `event-reaction-refinement-plan.md`. The verified pointer supplies a logical
+node reaction binding only in that exact ontology. Another ontology never gains
+this binding merely because it is hosted on the same physical node.
 
 The node ontology may be replicated on other nodes for durability. Hosting its
 ledger does not grant possession of the represented node's private key and
@@ -144,7 +146,7 @@ Normal inter-ontology behavior remains ontology-based:
   through the directory; no durable node contact or target-side pattern
   registry is created.
 - Every A host reconstructs its own certified B projection. Exactly one host
-  selected by the grounded `react_on/3` executor may perform the live effect.
+  hosting the owned agent incarnation may run its `react_on/2` goal.
   A durable consequence is submitted as an ordinary transaction to A and is
   then replicated by A's consensus.
 
@@ -272,7 +274,7 @@ of node-instance authority waits for the common agent path.
 | endpoint, QUIC link, route, lease, expiry, and retry state | P | existing `quod_quic`, `quod_directory`, and namespace runtime owners |
 | private node seed | secret provider state | existing node data directory/vault; never an ontology fact |
 | create/join lifecycle operation | E | existing post-commit effect journal and namespace lifecycle |
-| hosting start/stop convergence | P/E boundary | one `state_handler/4` reads committed node-ontology hosting facts and calls governed bridges |
+| hosting start/stop convergence | P/E boundary | the existing resource owner selects committed node-ontology hosting policy directly; no physical-node reaction queue |
 
 No node-instance datum is copied into a second Erlang authority table. Erlang
 may cache the verified reference and current key for execution, but the exact

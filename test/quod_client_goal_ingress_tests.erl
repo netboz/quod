@@ -292,13 +292,21 @@ anchor_is_checked_at_ingress_and_inside_the_worker(
        {error, wrong_target},
        quod_client_goal_ingress:submit(
          read, SessionId, WrongBytes, WrongSignature, ?PEER)),
-    %% Freeze the engine after the public check, wait until the anchored request
-    %% is in its mailbox, then simulate an incarnation change.  The worker must
-    %% compare the carried anchor again and refuse the old request.
-    ok = sys:suspend(Engine),
+    %% Hold the actual public request before processing, then simulate an
+    %% incarnation change. The worker must recheck the carried anchor.
+    Parent = self(), Tag = make_ref(),
+    Observe = fun(State, {in, Message}, _) ->
+                  case is_anchored_public_cast(Message) of
+                      true ->
+                          Parent ! {anchored_request_received, Tag},
+                          receive {release_anchored_request, Tag} -> State end;
+                      false -> State
+                  end;
+                 (State, _, _) -> State
+              end,
+    ok = sys:install(Engine, {Observe, none}),
     {Bytes, Signature} =
         signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
-    Parent = self(),
     Caller = spawn(
                fun() ->
                    Parent ! {anchored_proof_result, self(),
@@ -306,9 +314,10 @@ anchor_is_checked_at_ingress_and_inside_the_worker(
                                read, SessionId, Bytes, Signature, ?PEER)}
                end),
     try
-        ok = await_anchored_public_cast(Engine, 1000),
+        receive {anchored_request_received, Tag} -> ok
+        after 1000 -> error(anchored_public_cast_timeout) end,
         true = ets:insert(Table, {anchor, OtherAnchor}),
-        ok = sys:resume(Engine),
+        Engine ! {release_anchored_request, Tag},
         receive
             {anchored_proof_result, Caller, Reply} ->
                 ?assertMatch(
@@ -318,7 +327,8 @@ anchor_is_checked_at_ingress_and_inside_the_worker(
             error(anchored_proof_timeout)
         end
     after
-        _ = catch sys:resume(Engine),
+        Engine ! {release_anchored_request, Tag},
+        _ = catch sys:remove(Engine, Observe),
         true = ets:insert(Table, {anchor, ?ANCHOR}),
         case is_process_alive(Caller) of
             true -> exit(Caller, kill);
@@ -707,21 +717,10 @@ unique_symbol(Prefix) ->
     <<Prefix/binary,
       (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
 
-await_anchored_public_cast(_Engine, 0) ->
-    error(anchored_public_cast_timeout);
-await_anchored_public_cast(Engine, Remaining) ->
-    {messages, Messages} = process_info(Engine, messages),
-    case lists:any(fun is_anchored_public_cast/1, Messages) of
-        true -> ok;
-        false ->
-            receive after 1 -> ok end,
-            await_anchored_public_cast(Engine, Remaining - 1)
-    end.
-
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
                  {proof_request, _TraceCtx, {agent, _AgentRef},
-                  ?ANCHOR, _RequestAuth, _StartedNative}}}) ->
+                  ?ANCHOR, _RequestAuth, _Deadline, _StartedNative}}}) ->
     true;
 is_anchored_public_cast(_) ->
     false.

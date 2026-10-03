@@ -7,7 +7,7 @@ module projects the affected assignments and captures their exact epoch/round
 in one immutable occurrence per host. The runtime's existing work queue drains
 that occurrence through the ordinary Prolog reaction matcher.
 """.
--export([new/1, project/3, handle/2, stop/1, merge/2, next/1, current/2,
+-export([new/1, project/3, handle/2, stop/1, merge/2, next/1, current/2, evidence_current/1,
          stats/1, capacity_released/2]).
 
 new(SelfKey) ->
@@ -255,14 +255,20 @@ observe(_, _, _, _, S) -> {S, []}.
 
 %% Revalidate unsent physical evidence at admission, after any time waiting in
 %% the ordinary queue. Already signed work keeps its original protocol outcome.
-current(#{host := H, transport := T, contact := C}, #{transport := T, hosts := Hosts}) ->
+current(Batch = #{host := H, transport := T, contact := C}, #{transport := T, hosts := Hosts}) ->
     case maps:find(H, Hosts) of
-        {ok, #{contact := C}} ->
-            quod_reg:where({transport, node}) =:= T andalso is_process_alive(T) andalso
-            quod_directory:node_contact_current(C);
+        {ok, #{contact := C}} -> evidence_current(Batch);
         _ -> false
     end;
 current(_, _) -> false.
+
+%% The source owner already checked its assignment projection. Its immutable
+%% evidence remains fenced by the producer and contact incarnations after
+%% delivery to the node; checking currency performs only local owner reads.
+evidence_current(#{transport := T, contact := C}) when is_pid(T) ->
+    quod_reg:where({transport, node}) =:= T andalso is_process_alive(T) andalso
+    quod_directory:node_contact_current(C);
+evidence_current(_) -> false.
 
 %% A newer physical occurrence replaces unsent evidence, preserving the remaining
 %% instances' turn before already-dispatched instances. No signed request is retried.

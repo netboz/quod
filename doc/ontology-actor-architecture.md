@@ -7,7 +7,11 @@ committed, and deployed through 0.7.236. This document is the authority for
 actor identity, system-ontology startup, agent hosting, and the boundary between
 Prolog and Erlang. `generic-agent-identity-plan.md` owns the identity wire
 contract; `generic-agent-hosting-plan.md` and `hosted-agent-runtime.md` record
-the implemented hosting and recovery contracts.
+the implemented hosting and recovery contracts. The working-tree reaction
+ownership correction is implemented; its contract is recorded in
+`event-reaction-refinement-plan.md`. Stored-policy migration and coordinated
+activation remain deployment prerequisites; validation evidence is in
+`WORK-IN-PROGRESS.md`.
 
 ## 1. One durable model
 
@@ -84,12 +88,12 @@ Here, the creator is the authenticated agent whose authorized
 that happened to execute the post-commit effect. The exact durable ownership
 fact/ACL representation remains one of the reviewed choices in section 10.
 
-Every identity in an ACL delegation chain uses this same
-`agent_instance_ref/3` shape. A signing key and an ACL subject are deliberately
-different: a signature proves which key submitted exact request bytes, while
-the subject names the originating agent, delegation chain, and derived
-capabilities. Validators accept the signature only when the key is active for
-the claimed stable agent reference in the relevant committed view.
+The current proof carries one authenticated principal. A signature proves
+control of the active key for that stable `agent_instance_ref/3` in the relevant
+committed view; the key is not the agent's durable identity. A foreign ontology
+call preserves that principal. The existing ACL also receives the active
+ontology call path, not a list of agents or delegation capabilities. A possible
+future `subject/3` model is deferred in §4 and is not part of this correction.
 
 Those subclass facts belong to their defining ontologies: `quod:node` defines
 `node`, `quod:human_user` defines `human_user`, and the FIPA vocabulary defines
@@ -122,8 +126,9 @@ joining node reads those facts from its synced root state and starts or
 connects each described ontology. The shipped Prolog source and selected
 external-predicate modules are founding inputs when an ontology is created;
 they are not injected over a synced ledger. The generated genesis fact
-`external_predicate_modules/1` pins each module name to the SHA-256 digest of
-its shipped BEAM. Existing ontology
+`external_predicate_modules/1` records each selected module name and its founding
+BEAM's SHA-256 digest. The digest is historical provenance; the installed
+coordinated release supplies the implementation. Existing ontology
 identity, directory, and QUIC mechanisms provide the contacts and verified
 history; the root fact does not contain a socket endpoint.
 
@@ -220,8 +225,8 @@ ordinary authorised transactions. This is not a special delegation protocol.
 
 `instance_of(Class, Instance)` has no hidden runtime effect. It states class
 membership. An ontology may define a derived `active_agent/1` rule from class,
-active key, and any other required facts. A separate committed hosting fact,
-such as `agent_hosted_on/3`, controls whether an Erlang agent process should
+active key, and any other required facts. The separate committed `agent_host/4`
+assignment controls whether an Erlang agent process should
 run. A browser-controlled `human_user` instance may need no Erlang process at
 all.
 
@@ -243,8 +248,8 @@ reconciliation.
 Quod consumes only this `/2` catalogue. The shipped root starts from static
 bootstrap configuration and is not a catalogue row. Root stores no source
 path, Erlang module, option, or socket address; live routes remain directory
-P-state. A node that lacks a module or whose local BEAM does not match the
-genesis digest keeps that ontology not-ready while healthy catalogue rows
+P-state. A node that lacks a declared module or cannot load its release
+implementation keeps that ontology not-ready while healthy catalogue rows
 continue normally.
 
 Catalogue reads and potentially slow child reconciliation run outside the
@@ -307,14 +312,19 @@ unchanged; editing this source file alone does not update committed ontologies.
 Prolog rules and actions describe the desired durable state. Governed Erlang
 external predicates are the narrow interface to the actual node, network, and
 runtime. Each ontology-specific external predicate belongs to the ontology
-whose immutable genesis names and hashes its shipped Erlang module. For the
+whose immutable genesis names its shipped Erlang module and records founding
+provenance. For the
 actor implementation, system ontologies and audited actor-instance ontologies
-may pin their required bridge modules at founding. Ordinary domain ontologies
-otherwise use Prolog plus the explicit common execution primitives; bridges
-are never installed globally. The
-common primitives are pure and read no node state: the action mechanics, the
-proof-bound draw `'$quod_draw'/3` (`proof_draw/3`, a function of the proof's
-identity and a caller salt) and `binary_codes/2`; none is a governed bridge.
+may declare their required bridge modules at founding. Ordinary domain ontologies
+otherwise use Prolog plus the explicit common execution primitives. Reality
+bridges are never installed globally. Common primitives include action
+mechanics, `binary_codes/2`, and the proof-bound draw `'$quod_draw'/3`
+(`proof_draw/3`, a function of the proof's identity and a caller salt).
+The universal runtime queries `me/1` and `current_ontology_identity/2` read
+the engine-owned actor and exact executing scope from the current context.
+They perform no live node lookup and grant no additional authority. These
+engine context queries need no ontology-specific module declaration; resource
+and real-world services still require their declared bridges.
 
 When a node starts or follows an ontology, the canonical committed projection
 reads the module manifest from certified slot 1 and installs those exact
@@ -332,8 +342,9 @@ implements the same loader contract already used by Quod and Onia:
 load(ErlogState) -> NewErlogState.
 ```
 
-The shared loader verifies the local BEAM digest before loading code, calls
-`Module:load/1`, and installs the returned state only in that ontology. It retains
+The shared loader checks that each named module ships in Quod's release directory
+with the required exports and marker, calls `Module:load/1`, and installs the
+returned state only in that ontology. It retains
 Quod's existing invocation-context and predicate-class checks. It must not copy
 BBSvx's `external_predicates/0` triples, its silent load-failure handling, or
 its later workaround that loads physics, voxel, and agent runtime modules into
@@ -355,22 +366,27 @@ release (`quod_wire_term:release_vocabulary/0`) — nothing merely present on
 a code path counts. An ontology keeps its data (names, tables, labels, even its
 own class names) as binaries and spends symbols only on predicates.
 
-This is an explicit genesis-format break: a slot-1 transaction without the
-canonical manifest is invalid. A module digest is immutable for that ontology
-identity. Upgrades therefore keep the old versioned BEAM available for existing
-ontologies and use a new module name/digest in a newly founded ontology when
-behavior changes. Removing or replacing the pinned BEAM makes that ontology
-not-ready; there is no compatibility fallback. A network whose existing root
-predates the manifest requires the separately reviewed clean re-found or an
-explicit migration format before deployment; changing root's own pinned module
-set later has the same requirement.
+The canonical manifest retains one durable shape, a list of module names paired
+with founding digests. The list is immutable and a missing or malformed slot-1
+manifest is invalid. Digests do not impose a lifetime code version. Existing
+ledger bytes and anchors stay intact when installed implementations change;
+replay does not rewrite their provenance or use an alternate format.
 
-This makes a pinned module append-only release history. A defect—including a
-security defect—in that exact module cannot be patched in place for an existing
-ontology identity: the correction requires a new versioned module, a newly
-founded ontology, and an explicit state migration/succession. Releases must
-therefore retain every historical BEAM still pinned by an ontology the network
-expects to serve; deleting one deliberately makes that ontology unavailable.
+Native changes currently require a cold coordinated release: stop new requests,
+finish admitted work where practical, then stop every old validator, proof
+engine and projection consumer before the new artifact participates. Restart
+every participant on the same supported release with its ledgers and keys
+retained. Each registry is rebuilt from installed code through the shared
+reducer; no running proof crosses the update. Verify replay and pending-operation
+recovery before reopening traffic, preserving uncertain operation identities.
+An offline or lagging node must upgrade before rejoining. The current protocol
+does not automatically fence old releases, and a single ontology height is not
+a network-wide activation boundary.
+
+There is no hot compiler/updater or mutable native registry in this release.
+That future root-governed facility must define installation and activation
+before the module-registration list can become editable. These runtime mechanics
+do not add another permission layer to ordinary Prolog actions.
 
 | class | role |
 |---|---|
@@ -401,26 +417,20 @@ action(Transition, Prerequisites, DesiredState).
 goal(DesiredState).
 ```
 
-For example, `quod:node` defines the policy and actions by which a node starts
-or stops an agent runtime, and its named Erlang predicate module implements the
-actual local process operation. The durable fact says which node should host
-the agent. After that fact commits, the existing runtime/reaction machinery
-calls the `quod:node` bridge on the selected node. If the process later dies,
-the committed fact still says that it should run, so reconciliation can start
-it again. The same separation applies to creating, joining, leaving, and
-stopping hosted ontologies.
-
-In plain terms, Prolog first records **what must be true**; Erlang then makes
-the machine match that truth. A proof may decide and commit
-`agent_hosted_on(A, N, Epoch)`. Only after that commit may the external
-`start_agent` predicate start A's process on N. If N restarts, it reads the
-committed fact and starts A again. A failed or abandoned proof never starts A.
-This is one ordered path, not a Prolog path plus an Erlang management path.
+The agent's containing ontology owns its assignment and signing policy.
+`goal(agent_hosted(Instance, Node, Epoch, Key))` uses the ordinary action relation;
+the committed state is `agent_host/4` plus the active `agent_key/3`.
+The existing resource worker reads `agent_hosting_projection/4` and starts the
+eligible process only from that committed state. A failed or abandoned proof
+starts no process. On restart the same selection restores it, without replaying
+reactions or needing a physical-node goal queue. Ontology hosting and contacts
+are similarly governed by the installed logical node's exact ontology.
 
 ```prolog
-action(assign_agent_host(Agent, Node, Epoch),
-       [eligible_host(Agent, Node), next_host_epoch(Agent, Epoch)],
-       agent_hosted_on(Agent, Node, Epoch)).
+% Initial assignment; the existing action proves its policy and key prerequisites.
+goal(agent_hosted(Instance, Node, 1, PublicKey)).
+% A move names the exact previous assignment and rotates to an unused key.
+goal(agent_assignment(Instance, OldNode, OldEpoch, NewNode, NewEpoch, NewKey)).
 ```
 
 The precise policy predicates are domain content. The common action relation, proof,
@@ -433,7 +443,7 @@ The actor model adds no hidden state category:
 | artifact | class | consequence |
 |---|---|---|
 | `instance_of/2`, `agent_key/3`, ACL, explicit ownership, and agent domain state | D | ordinary committed ontology facts |
-| `agent_hosted_on/3` and its host epoch | D | ordinary committed desired state |
+| `agent_host/4` and its host epoch | D | ordinary committed desired state |
 | `system_ontology/2` | D | ordinary committed root catalogue fact |
 | live Erlang agent process, sockets, timers, and reconstructed working set | P | rebuildable from committed state; never authoritative |
 | local encrypted private key | outside the ontology D/P/E model | secret provider state; never committed, published, subscribed, or logged |
@@ -449,7 +459,7 @@ projection/effect machinery.
 `quod_predicates` now owns only common loading, engine-local registration, and
 invocation checks. There is no application-global ownership list. Predicate
 modules register their own bridges, and each system ontology receives only the
-modules pinned by its certified genesis:
+modules declared by its certified genesis, using the coordinated installed release:
 
 | current functors | current class | direction |
 |---|---|---|
@@ -457,9 +467,11 @@ modules pinned by its certified genesis:
 | `directory_host/5`, `directory_control_peer/1` | `query` | `quod:root` or a later directory system ontology; one owner only |
 | `ontology_join_state/2`, `ontology_genesis_anchor/2` | `query` | move with lifecycle ownership to the `quod:node` predicate module; node policy reuses these local observations rather than duplicating them |
 | `current_principal/1`, `create_ontology/3`, `join_ontology/3` | query plus ordinary action/staging | the principal query binds existing proof authority; root owns creation of a new identity and node owns joining an existing identity, while both reuse the normal action path and one prepared-effect journal |
-| `effect_custody_capacity/1`, `set_effect_custody_capacity/1`, internal capacity projection | ordinary D plus one founding `projection` bridge | root is the sole policy owner because it starts before any other system ontology; default 64 or one committed override (including `unlimited`) is projected through the existing state-handler tier into the one node-wide journal |
+| `effect_custody_capacity/1`, `set_effect_custody_capacity/1`, internal capacity projection | ordinary D plus direct committed resource selection | root is the sole policy owner because it starts before any other system ontology; default 64 or one committed override (including `unlimited`) is selected from committed state by the existing owner and installed into the one node-wide journal |
 | current user-home helpers | Prolog convenience plus query | the temporary root rule derives fixed home arguments and calls generic creation; remove it at the agent-format break, and add no agent-specific executor |
-| `projection_noop/1`, `enqueue_projection/2` | `projection` | common runtime machinery registered in every ontology |
+| `reconcile_agent_hosts/1`, `reconcile_agent_observers/1`, `reconcile_node_ontologies/1`, `reconcile_effect_custody/0`, `continue_agent_work/2` | `query`, proof context only | explicit requests reuse the same typed owners and committed selectors; automatic restoration runs directly on dependency/lifecycle changes and does not call these through physical-node reactions |
+| `me/1`, `current_request_expiry/1` | proof-bound query | expose the selected actor during matching or existing authenticated proof metadata; matching itself grants no proof authority |
+| `limit_reaction_expiry/1`, `prepare_agent_custody/3`, `recovery_observation/1` | reaction metadata | common runtime bridge narrows expiry, describes exact anchored preparation and authenticates recovery data; matching performs no vault or signing I/O |
 
 `ask`, `transaction`, `goal`, and the common action relation are Prolog execution
 primitives, not reality bridges, and do not move into this registry. Internal
@@ -528,21 +540,32 @@ bind the key to the claimed instance in its containing ontology, and run the ord
 `can_invoke/4`, proof, transaction, multi-ontology transaction, and outcome
 paths.  The signing layer must not classify goals or create an agent-only ACL.
 
-The ACL remains a triplet, generalised without changing its role:
-`subject(Agent, AgentChain, Capabilities)`. `Agent` is the originating
-`agent_instance_ref/3`, and every member of `AgentChain` has that same stable
-reference shape. The referenced instance may
-be a `human_user`, `monkey_user`, FIPA agent, or autonomous service. The
-request signer and ACL subject answer different questions. The signer
-identifies the key that submitted the bytes; the triplet carries the origin
-agent, immutable delegation chain, and receiver-derived current capabilities.
-Wielding/delegation constructs that triplet. An agent key alone does not
-create, shorten, or replace it.
+The implemented entry policy is
+`can_invoke(Goal, Principal, OntologyCallChain, TargetNamespace)`. It receives
+one authenticated principal and namespace path entries; the engine retains
+anchored scope identities internally. Calling another ontology changes scope,
+not actor. A recipient agent's later signed request has its own principal.
+FIPA acceptance and conversation semantics remain ordinary Prolog above this
+generic mechanism, not a mandatory messaging or authorization layer.
+
+Node privileges require the direct context `[NodeNamespace]`, together with
+the target's existing exact-identity grant. A foreign implementation executing
+as the node carries its scope in the path, including through intermediaries;
+it cannot obtain node administration via another permissive entry alternative.
+The node's own handlers and executable helpers must have trusted editors.
+Namespace paths do not identify immutable code versions and do not constrain
+every local helper. See the concrete policy contract in the reaction plan §4.4.
+
+`subject(Agent, AgentChain, Capabilities)` is a deferred design vocabulary,
+not an implemented proof field, ACL input or delegation certificate. Any future
+design must define authentication and propagation before relying on it. The
+current correction neither constructs a universal agent chain nor derives new
+capabilities from a signature.
 
 The deployed signed request uses the stable `{agent, AgentReferenceBlob}`
 principal. The former `{user, Key}` label is deleted rather than retained as a
 compatibility alias or second signed-goal route. The signing key proves current
-control of that agent reference; it is not the ACL subject's durable identity.
+control of that agent reference; it is not the principal's durable identity.
 
 ## 5. Hosting, restart, and migration
 
@@ -607,7 +630,8 @@ The work above consensus has the following disposition:
    ontology or deliberately place several instances in one, while Agent
    Platforms coordinate them as ordinary ontologies.
 5. **Implemented:** host assignment and failover through ordinary ontology
-   actions and the existing `state_handler` projection tier.
+   actions and committed selection through existing resource owners. The
+   ownership correction removes restoration through physical-node reactions.
 6. **Implemented:** node-local vault custody and rotation-based host migration;
    later HSM or threshold backends retain the same narrow provider boundary.
 7. **Future vocabulary work:** align class and identity vocabulary with the selected Web Ontology
@@ -688,9 +712,11 @@ Before implementation is declared complete, tests must show:
 3. **Node vault—implemented and deployed.** The one supervised local vault, narrow authority-query
    bridge, encrypted local store, internal mutually authenticated HTTPS
    provider boundary, canonical request binding, and negative security tests.
-4. **Hosting and migration—implemented and deployed.** Ordinary actions, committed host fencing,
-   `state_handler` reconciliation, and move-by-rotation through destination
-   vaults.
+4. **Hosting and migration—implemented and deployed.** Ordinary actions,
+   committed host fencing and move-by-rotation through destination vaults.
+   Editable ordinary reactions and direct resource restoration are under
+   integration; see `event-reaction-refinement-plan.md` and its explicit
+   stored-policy migration inventory.
 5. **FIPA specialisation.** Resume message, AMS, DF, delegation, and
    subscription slices with FIPA agents as ordinary `agent` subclasses stored
    in their exact containing ontologies.
@@ -699,10 +725,10 @@ Each slice must close its old names, routes, comments, tests, metrics, and docs
 before the next starts. None creates a new proof, ACL, transaction, consensus,
 directory, or runtime-projection path.
 
-The concrete capability vocabulary carried by `subject/3` remains a later
-delegation/FIPA design decision. It does not block the bootstrap, identity, or
-hosting slices because those slices preserve the existing ACL evaluator and do
-not manufacture capabilities.
+The entire proposed `subject/3` representation, including delegation evidence
+and capability vocabulary, remains future work. The current bootstrap, identity
+and hosting paths retain one authenticated principal and the existing ACL
+evaluator; they do not manufacture capabilities.
 
 ## 10. Reviewed decisions and remaining proof obligation
 

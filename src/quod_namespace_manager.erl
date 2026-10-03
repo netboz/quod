@@ -710,9 +710,12 @@ install_system_content(System,
         {node_host_anchor_conflict, Ns} = Reason ->
             logger:error(
               "quod: rejected node hosting projection conflicting with "
-              "root system ontology ~p: ~p", [Ns, Reason]),
-            wake_node_actor(S#s.node_actor)
+              "root system ontology ~p: ~p", [Ns, Reason])
     end,
+    %% A changed system catalogue can also remove a former conflict. Wake the
+    %% node's existing projection owner even when no rejected row remains in
+    %% NodeContent; unchanged catalogues returned above without a notification.
+    wake_node_actor(S#s.node_actor),
     Desired1 = Desired#{content => NewContent},
     persist_desired(Desired1),
     self() ! reconcile,
@@ -1021,7 +1024,9 @@ invalidate_projection(_Conflict, Projection) ->
     Projection#{status => invalid}.
 
 wake_node_actor(none) -> ok;
-wake_node_actor(#{namespace := Ns}) -> quod_runtime:reconcile_now(Ns).
+wake_node_actor(#{namespace := Ns}) ->
+    quod_reg:publish({runtime, Ns}, {node_hosting_invalidated, self()}),
+    ok.
 
 log_ignored_static_content(Static) when map_size(Static) =:= 0 -> ok;
 log_ignored_static_content(Static) ->

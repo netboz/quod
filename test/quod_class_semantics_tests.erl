@@ -39,6 +39,22 @@ cycles_terminate_without_inventing_an_answer_test() ->
           fails({isa, alpha, missing}, St)
       end).
 
+class_selection_keeps_all_incomparable_or_equivalent_choices_test() ->
+    with_classes(
+      [{isa, smart_console, prolog_console}, {isa, prolog_console, device},
+       {isa, smart_console, diagnostic_device}, {isa, diagnostic_device, device},
+       {isa, alpha, beta}, {isa, beta, alpha}, {isa, beta, device}],
+      fun(St) ->
+          holds({most_specific_classes, [smart_console, device],
+                 [device, prolog_console, prolog_console, diagnostic_device, missing],
+                 [diagnostic_device, prolog_console]}, St),
+          holds({most_specific_classes, [alpha], [device, alpha, beta],
+                 [alpha, beta]}, St),
+          holds({most_specific_classes, [smart_console], [missing], []}, St),
+          %% A selection query is pure; it stores neither ancestry nor choices.
+          ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
+      end).
+
 staged_assert_and_retract_keep_the_same_semantics_test() ->
     with_classes(
       [{isa, wood, material}],

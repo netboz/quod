@@ -34,6 +34,7 @@ e2e_test_() ->
       fun t_concurrent_writes_batch/1,
       fun t_direct_membership_revalidated/1,
       fun t_restart_reload/1,
+      fun t_ordered_edit_restart_reload/1,
       fun t_prolog_restart_rebuild/1,
       fun t_failing_proofs_no_ets_leak/1]}.
 
@@ -200,6 +201,38 @@ t_restart_reload({Dir, Ns, Cfg}) ->
         %% genesis config @1 + two writes @2,@3
         ?assertMatch(#{committed := 3, last_applied := 3}, quod_simplex:stats(Ns))
     end.
+
+%% Faithful code edits cross the real overlay, transaction validation, durable
+%% entry and canonical replay paths. Clause order affects both answers and cut.
+t_ordered_edit_restart_reload({_Dir, Ns, Cfg}) ->
+    fun() ->
+        Pid1 = start_ns(Ns, Cfg),
+        {ok, _, _} = rp(Ns,
+            {',', {assertz, {choose, original}},
+                  {assertz, {decision, general}}}),
+        Edit = {',', {asserta, {choose, front_one}},
+               {',', {assertz, {choose, tail_one}},
+               {',', {asserta, {choose, front_two}},
+               {',', {assertz, {choose, tail_two}},
+               {',', {asserta, {':-', {decision, specific}, '!'}},
+                     {findall, {'X'}, {choose, {'X'}}, {'Choices'}}}}}}},
+        Expected = [front_two, front_one, original, tail_one, tail_two],
+        %% This binding comes from the proof's staged ordered program.
+        ?assertMatch({ok, [#{'Choices' := Expected}], _}, rp(Ns, Edit)),
+        assert_ordered_program(Ns, Expected),
+        stop_ns(Pid1),
+        %% A fresh owner must reconstruct the same program from the ledger.
+        _Pid2 = start_ns(Ns, Cfg),
+        assert_ordered_program(Ns, Expected)
+    end.
+
+assert_ordered_program(Ns, Expected) ->
+    ?assertMatch(
+       {ok, [#{'Choices' := Expected}], _},
+       rp(Ns, {findall, {'X'}, {choose, {'X'}}, {'Choices'}})),
+    ?assertMatch(
+       {ok, [#{'Decisions' := [specific]}], _},
+       rp(Ns, {findall, {'X'}, {decision, {'X'}}, {'Decisions'}})).
 
 %% quod_prolog crashes alone (rest_for_one restarts only it); the rebuild handshake
 %% must refill the kb from quod_simplex's committed log without an apply_gap crash.

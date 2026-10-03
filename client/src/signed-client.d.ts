@@ -17,6 +17,7 @@ export type SignedIdentity = {
 
 export type SignedClientError = Error & {
   outcomeUnknown?: boolean
+  operationId?: string
   status?: number
 }
 
@@ -39,6 +40,7 @@ export function readSystemOntologies(identity: SignedIdentity): Promise<Array<{ 
 export function pendingSignedOperations(identity: SignedIdentity, options?: SignedGoalOptions): Promise<Array<Record<string, unknown>>>
 export type SignedGoalOptions = {
   journal?: SignedOperationJournal
+  operationId?: string
   context?: Record<string, unknown>
   replaceOperation?: string
   onTerminal?: (reply: Record<string, unknown>, operation: Record<string, unknown>) => Promise<void | boolean>

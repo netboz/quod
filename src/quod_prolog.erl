@@ -54,7 +54,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include("quod_proof_limits.hrl").
 
 -export([start_link/2, prove/2, prove_ro/2,
-         execute/2, execute_signed/3,
+         execute/2, execute_async/5, execute_signed/3,
          open_cursor/5, cancel_cursor/3,
          submit_role/4, outcome/1,
          local_outcome/2, outcome_snapshot/3, dtx_group_state/2,
@@ -177,6 +177,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           principal = undefined :: term(),
           expected_anchor = any :: any | <<_:256>>,
           request_evidence = none :: none | quod_client_goal:evidence(),
+          deadline_ms = infinity :: infinity | integer(),
           started_native = undefined :: undefined | integer()
          }).
 
@@ -480,6 +481,20 @@ execute(TargetNs, Goal) ->
         Engine ->
             public_proof(
               Engine, TargetNs, execute, Goal, quod_trace:context())
+    end.
+
+-doc "Submit a trusted local goal through the ordinary proof owner with an absolute caller deadline.".
+-spec execute_async({binary(), <<_:256>>}, term(), pid(), reference(), integer()) ->
+          {ok, pid()} | {error, term()}.
+execute_async({TargetNs, <<_:256>> = Anchor}, Goal, Owner, CallRef, Deadline)
+  when is_pid(Owner), is_reference(CallRef), is_integer(Deadline) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Engine ->
+            Request = (proof_request(quod_trace:context(), undefined, Anchor, none))
+                        #proof_request{deadline_ms = Deadline},
+            gen_server:cast(Engine, {public_proof, Owner, CallRef, execute, Goal, Request}),
+            {ok, Engine}
     end.
 
 -doc "Execute one already-verified signed request through the ordinary proof boundary.".
@@ -878,18 +893,22 @@ height, raised via `runtime_floor/2`) joins `oldest_snapshot/2`, so MVCC history
 the floor survives until the runtime is done with it. The pin is cleared by `DOWN`, so a dead
 runtime can never block history pruning.
 
+The reply also identifies this Prolog owner incarnation, the exact anchored
+ontology and the owner's effective proof timeout for queued reaction goals.
+Runtime recovery uses this binding, without opening the ledger.
+
 Refused (`{error, not_ready}`) while the KB is unready or replaying: a pin held across a long
 rebuild would retain every fact version since the pin height (unbounded history growth), and
 the runtime reconciles from a fresh snapshot at the ready edge anyway. Re-attaching — same or
 a restarted runtime process — replaces the pin at the newest applied height.
 """.
--spec attach_runtime(binary()) -> {ok, tuple(), log_index()} | {error, not_ready}.
+-spec attach_runtime(binary()) -> {ok, tuple(), log_index(), map()} | {error, not_ready}.
 attach_runtime(Ns) ->
     gen_server:call(quod_reg:via({quod_prolog, Ns}), {attach_runtime, self()}, infinity).
 
 -doc """
 Monotonically raise the attached runtime's snapshot floor to `Height` (its oldest still-needed
-snapshot: pending ordered-tier work or queued heavy-job revision). Ignored unless cast by the
+snapshot: ordered input and the single current resource reader). Ignored unless cast by the
 currently pinned runtime; lowering is impossible by construction.
 """.
 -spec runtime_floor(binary(), log_index()) -> ok.
@@ -1304,10 +1323,13 @@ handle_call(
 %% never span a rebuild. Replacing an existing pin demonitors it first (a restarted runtime
 %% re-attaches before its predecessor's DOWN is processed).
 handle_call({attach_runtime, Pid}, _From,
-            S = #s{ready = true, runtime_mode = live, est = Est, applied = A}) ->
+            S = #s{ready = true, runtime_mode = live, est = Est, applied = A, ns = Ns,
+                   proof_timeout_ms = ProofTimeout}) ->
     S1 = clear_runtime_pin(S),
     MRef = erlang:monitor(process, Pid),
-    {reply, {ok, Est, A}, S1#s{runtime_pin = {Pid, MRef, A}}};
+    Binding = #{owner => self(), identity => {Ns, quod_simplex:genesis_hash(Ns)},
+                request_timeout_ms => ProofTimeout},
+    {reply, {ok, Est, A, Binding}, S1#s{runtime_pin = {Pid, MRef, A}}};
 handle_call({attach_runtime, _Pid}, _From, S) ->
     {reply, {error, not_ready}, S};
 handle_call(
@@ -1452,9 +1474,19 @@ handle_cast({apply_entry, Entry, Origin}, S0) ->
     %% floor too. Waiting readers re-query that floor; this signal is not a
     %% reaction event and supplies no evidence or authority of its own.
     case Advanced of
-        true -> publish_runtime(S2#s.ns,
-                  {projection_advanced, self(),
-                   {S2#s.applied, quod_simplex:entry_history_hash(Entry)}, Changes});
+        true ->
+            publish_runtime(S2#s.ns,
+              {projection_advanced, self(),
+               {S2#s.applied, quod_simplex:entry_history_hash(Entry)}, Changes}),
+            %% The attached reader also needs control-only committed progress.
+            %% This follows every transaction envelope from the same owner and
+            %% carries its existing pinned snapshot, never another fact copy.
+            case {Origin, S2#s.runtime_pin} of
+                {live, {Pid, _, _}} ->
+                    Pid ! {runtime_snapshot_advanced, self(), S2#s.applied, S2#s.est},
+                    ok;
+                _ -> ok
+            end;
         false -> ok
     end,
     {noreply, S2};
@@ -4043,6 +4075,15 @@ admit_public_request(Kind, Goal, From, Request, S)
 %% refusal; only work that reached durable custody may be outcome-unknown.
 %% Distinct operations still proceed independently to Simplex admission.
 admit_public_proof(Kind, Goal, From, Request,
+                   S) ->
+    case Request#proof_request.deadline_ms > quod_time:mono_ms() of
+        true -> admit_public_proof_ready(Kind, Goal, From, Request, S);
+        false ->
+            reply_client(From, {error, deadline_exceeded}),
+            {noreply, S}
+    end.
+
+admit_public_proof_ready(Kind, Goal, From, Request,
                    S = #s{workers = Workers,
                           max_proof_workers = Max}) ->
     case proof_operation_gate(Request, S) of
@@ -4145,7 +4186,7 @@ spawn_proof(Kind, Goal, From, #proof_request{} = Request,
     ProofId = crypto:strong_rand_bytes(32),
     StartedNative = erlang:monotonic_time(),
     Request1 = Request#proof_request{started_native = StartedNative},
-    Deadline = quod_time:mono_ms() + ProofTimeout,
+    Deadline = min(quod_time:mono_ms() + ProofTimeout, Request#proof_request.deadline_ms),
     {Pid, MRef} = spawn_opt(fun() ->
         proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal,
                      Ns, Est, Applied, Request1, Signer)
@@ -5926,8 +5967,7 @@ local-prove overlay (staged writes never touch the shared KB table). Returns
 `{ok, Bindings, StagedChanges, ReadSet} | fail | {error, _}`. This is a strictly local adapter
 used by `m:quod_runtime`; a foreign `::` returns
 `{error, {ask_requires_anchored_proof, Namespace}}`, while an exact self-selection stays
-in place. Runtime handlers set a semantic context via `quod_predicates:set_context/2` and
-treat a non-empty `StagedChanges` as a projection violation. The caller must hold a snapshot
+in place. The caller must set its appropriate semantic context and hold a snapshot
 guarantee for the est (a proof-worker height entry or the runtime floor pin), or reads can
 race history pruning.
 """.
@@ -6599,9 +6639,10 @@ finish_projection_result(
     S2 = lists:foldl(
            fun(#{control := Control, group_id := GroupId,
                  publication := Publication, applied_ops := AppliedOps,
-                 deferred_ack := DeferredAck}, Acc0) ->
+                 deferred_ack := DeferredAck} = Item, Acc0) ->
                    Acc1 = publish_dtx_outcome(
-                            Publication, AppliedOps, Index, Origin, Acc0),
+                            Publication, AppliedOps, maps:get(runtime_catalog, Item, keep),
+                            Index, Origin, Acc0),
                    Acc2 = finish_dtx_apply(
                             DeferredAck, Control, Origin, Acc1),
                    maybe_release_completed_group(Control, GroupId, Acc2)
@@ -6623,11 +6664,12 @@ finish_projection_result(#{kind := already_applied}, _Index, _Origin, S) ->
 
 content_post_apply(
   #{status := applied, change := Change, height := Height,
-    applied_ops := AppliedOps},
+    applied_ops := AppliedOps} = Result,
   Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
     notify_operation_projection(S, Height, Change),
-    {outcome_applied(Change, AppliedOps, Index, Origin, S),
+    {outcome_applied(Change, AppliedOps, maps:get(runtime_catalog, Result, keep),
+                     Index, Origin, S),
      {committed, Tx, Height}};
 content_post_apply(
   #{status := rejected, change := Change, reason := Reason,
@@ -6901,8 +6943,10 @@ oldest_snapshot(Current, #s{workers = Workers, agent_attesters = Attesters,
 %% `boot` for the quiet-boot ready edge). `{projection_advanced, EnginePid, Height}` reports
 %% every successfully advanced P floor, including metadata/no-op/replay blocks; it is only a
 %% snapshot-read wake, never an E event or reaction input. The ATTACHED runtime (`attach_runtime/1`) additionally
-%% receives each applied envelope as a direct `{applied_live, Env, Est}` carrying the post-commit
-%% snapshot handle — see publish_outcome/2 for why the handle is never broadcast. The pre-apply
+%% receives each applied envelope as a direct `{applied_live, Env, Est}` and a
+%% following `{runtime_snapshot_advanced, EnginePid, Height, Est}` carrying the pinned
+%% committed snapshot. The latter advances read readiness without any reaction;
+%% see publish_outcome/2 for why snapshot handles are never broadcast. The pre-apply
 %% `{committed, Ns}` publication (quod_simplex → feed/metrics) is untouched and is deliberately NOT the
 %% reaction/runtime source (it fires before this kb has applied).
 %%
@@ -6939,7 +6983,7 @@ note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
     publish_runtime(Ns, {replay_started, Id, Before}),
     %% Keep the pin until quod_runtime has killed and reaped every reader of its old snapshot.
     %% It then calls runtime_detach/1; the next replay commit can prune released history. An
-    %% eager clear here races the runtime's event/heavy workers and invalidates their MVCC view.
+    %% eager clear here races the runtime's event/resource reader and invalidates their MVCC view.
     S#s{runtime_mode = {replaying, Id}};
 note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns}) ->
     publish_runtime(Ns, {replay_ready, Id, Before}),
@@ -6947,24 +6991,24 @@ note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns})
 note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying, or live while already live
 
 %% One publication per ordinary material committed transaction on a LIVE commit
-%% only — never replay. The requested diff remains a conservative state-handler
+%% only — never replay. The requested diff remains a conservative resource
 %% invalidation hint; reactions consume only the canonical reducer's applied_ops.
 %% Direct effects and identifiers share the same envelope; goal/result remain
 %% canonical ledger blobs decoded lazily only by a detail reader. Genesis is not
 %% a reaction occurrence.
-outcome_applied(#transaction{plan_digest = none}, _AppliedOps,
+outcome_applied(#transaction{plan_digest = none}, _AppliedOps, _Catalog,
                 _Index, _Origin, _S) -> none;
-outcome_applied(#transaction{role = Role}, _AppliedOps,
+outcome_applied(#transaction{role = Role}, _AppliedOps, _Catalog,
                 _Index, _Origin, _S)
   when element(1, Role) =:= remote_claim;
        element(1, Role) =:= remote_complete ->
     none;
 outcome_applied(#transaction{tx_id = Tx, diff = Diff, effects = Effects},
-                AppliedOps, Index, live, #s{ns = Ns}) ->
+                AppliedOps, Catalog, Index, live, #s{ns = Ns}) ->
     {applied, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
                 diff => Diff, applied_ops => AppliedOps,
-                effects => Effects}};
-outcome_applied(_Change, _AppliedOps, _Index, replay, _S) -> none.
+                effects => Effects, runtime_catalog => Catalog}};
+outcome_applied(_Change, _AppliedOps, _Catalog, _Index, replay, _S) -> none.
 
 %% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors
 %% `outcome_applied` so every live tx in a block yields exactly one outcome event (applied or
@@ -7027,10 +7071,10 @@ publish_outcome({rejected, Env}, S = #s{ns = Ns}) ->
 %% signal as an ordinary write, with the durable GroupId as its identity.
 %% Replay, aborts, duplicate controls, and empty participant diffs are silent;
 %% the runtime reconciles replay from the committed snapshot boundary.
-publish_dtx_outcome(none, _AppliedOps, _Index, _Origin, S) ->
+publish_dtx_outcome(none, _AppliedOps, _Catalog, _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
-  {group_applied, _GroupId, _Context, [], []}, _AppliedOps,
+  {group_applied, _GroupId, _Context, [], []}, _AppliedOps, _Catalog,
   _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
@@ -7038,14 +7082,14 @@ publish_dtx_outcome(
    #{proof_id := ProofId, origin := ProofOrigin,
      principal := Principal, goal := Goal, result := Result,
      plan_digest := PlanDigest}, Diff, DirectEffects},
-  AppliedOps, Index, live, S = #s{ns = Ns}) ->
+  AppliedOps, Catalog, Index, live, S = #s{ns = Ns}) ->
     Env = #{ns => Ns, height => Index, tx_id => {group, GroupId},
             proof_id => ProofId, origin => ProofOrigin,
             subject => Principal, goal => Goal, result => Result,
             plan_digest => PlanDigest, diff => Diff,
-            applied_ops => AppliedOps, effects => DirectEffects},
+            applied_ops => AppliedOps, effects => DirectEffects, runtime_catalog => Catalog},
     publish_outcome({applied, Env}, S);
-publish_dtx_outcome({group_applied, _, _, _, _}, _AppliedOps,
+publish_dtx_outcome({group_applied, _, _, _, _}, _AppliedOps, _Catalog,
                     _Index, replay, S) ->
     S.
 

@@ -23,38 +23,34 @@ the complete policy path. `ontology_join_state/2` and
          current_principal_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3,
-         effect_custody_capacity_projection_predicate/3,
-         node_ontology_hosting_projection_predicate/3]).
+         reconcile_effect_custody/3, reconcile_node_ontologies/3]).
 -export([lifecycle_error/2, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).
 -define(CONTINUATION, '$quod_stage_ontology').
--define(EFFECT_CAPACITY_PROJECTION,
-        '$quod_project_effect_custody_capacity').
--define(NODE_HOSTING_PROJECTION, '$quod_project_node_ontology_hosting').
 
 quod_predicate_module() -> true.
 
 -spec load(tuple()) -> tuple().
 load(Est0) ->
+    WithPrincipal = quod_predicates:register(
+      Est0, {current_principal, 1}, query, proof_bound,
+      ?MODULE, current_principal_predicate),
     Entries =
         [{{create_ontology, 3}, staging, lifecycle_request_predicate},
          {{join_ontology, 3}, staging, lifecycle_request_predicate},
          {{?CONTINUATION, 3}, staging, lifecycle_continuation_predicate},
-         {{current_principal, 1}, query, current_principal_predicate},
          {{ontology_join_state, 2}, query, ontology_join_state_predicate},
          {{ontology_genesis_anchor, 2}, query,
           ontology_genesis_anchor_predicate},
-         {{?EFFECT_CAPACITY_PROJECTION, 2}, projection,
-          effect_custody_capacity_projection_predicate},
-         {{?NODE_HOSTING_PROJECTION, 3}, projection,
-          node_ontology_hosting_projection_predicate}],
+         {{reconcile_effect_custody, 0}, query, reconcile_effect_custody},
+         {{reconcile_node_ontologies, 1}, query, reconcile_node_ontologies}],
     lists:foldl(
       fun({Functor, Class, Function}, Est) ->
               quod_predicates:register(
                 Est, Functor, Class, ?MODULE, Function)
-      end, Est0, Entries).
+      end, WithPrincipal, Entries).
 
 -doc "Enter the shared action relation with one opaque proof-local request.".
 -spec lifecycle_request_predicate(term(), term(), tuple()) -> term().
@@ -291,48 +287,19 @@ match_genesis_anchor(Expected, RawAnchor, Next, St) ->
             end
     end.
 
--doc "Project the one effective root-owned effect-custody capacity.".
--spec effect_custody_capacity_projection_predicate(
-        term(), term(), tuple()) -> term().
-effect_custody_capacity_projection_predicate(
-  {?EFFECT_CAPACITY_PROJECTION, Capacities0, _Scope}, Next,
-  #est{bs = Bs} = St) ->
-    Capacities = erlog_int:dderef(Capacities0, Bs),
-    Ctx = quod_predicates:context(St),
-    case {quod_predicates:ctx_ns(Ctx), Capacities} of
-        {?ROOT_NS, [Capacity]}
-          when (is_integer(Capacity) andalso Capacity >= 0) orelse
-               Capacity =:= unlimited ->
-            case quod_effect_journal:configure_capacity(Capacity) of
-                ok -> erlog_int:prove_body(Next, St);
-                {error, Reason} ->
-                    throw({erlog_error,
-                           {effect_custody_capacity_unavailable, Reason}})
-            end;
-        {?ROOT_NS, _} ->
-            throw({erlog_error, invalid_effect_custody_capacity});
-        _ ->
-            throw({erlog_error, wrong_effect_custody_ontology})
-    end;
-effect_custody_capacity_projection_predicate(_Goal, _Next, _St) ->
-    throw({erlog_error, invalid_effect_custody_capacity}).
+-doc "Ask the existing journal owner to apply its committed root capacity policy.".
+reconcile_effect_custody(reconcile_effect_custody, Next, St) ->
+    case quod_predicates:ctx_ns(quod_predicates:context(St)) of
+        ?ROOT_NS -> request_resource(effect_custody, all, Next, St);
+        _ -> throw({erlog_error, wrong_effect_custody_ontology})
+    end.
 
--doc "Project the node actor's complete committed hosting policy.".
-node_ontology_hosting_projection_predicate(
-  {?NODE_HOSTING_PROJECTION, Hosts0, Contacts0, Scope0}, Next,
-  #est{bs = Bs} = St) ->
-    Hosts = erlog_int:dderef(Hosts0, Bs),
-    Contacts = erlog_int:dderef(Contacts0, Bs),
-    Scope = erlog_int:dderef(Scope0, Bs),
-    Ctx = quod_predicates:context(St),
-    case quod_node_actor:hosting_projection(
-           quod_predicates:ctx_ns(Ctx), quod_predicates:ctx_height(Ctx),
-           Scope, Hosts, Contacts) of
-        ok -> erlog_int:prove_body(Next, St);
-        {error, Reason} -> throw({erlog_error, Reason})
-    end;
-node_ontology_hosting_projection_predicate(_Goal, _Next, _St) ->
-    throw({erlog_error, malformed_node_hosting_projection}).
+-doc "Ask the current node policy owner to select committed hosting state.".
+reconcile_node_ontologies({reconcile_node_ontologies, Scope0}, Next, #est{bs = Bs} = St) ->
+    request_resource(node_ontologies, erlog_int:dderef(Scope0, Bs), Next, St).
+
+request_resource(Resource, Scope, Next, St) ->
+    quod_runtime_predicates:request_resource(Resource, Scope, Next, St).
 
 normalize_public_anchor(Raw) when is_binary(Raw), byte_size(Raw) =:= 32 ->
     {ok, Raw};

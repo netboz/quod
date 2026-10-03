@@ -15,15 +15,37 @@ acl_sovereign(quod:root).
 %% Founding also supplies the local empty-call-chain host entry; signed goals
 %% and cross-ontology callers still enter through these authored rules.
 can_invoke(Goal, _, _, _) :- root_public_goal(Goal).
-can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
-can_invoke(_, Principal, _, _) :- root_administrator_agent(Principal).
+can_invoke(create_ontology(_, _, _), Principal, Chain, Namespace) :-
+    root_creation_context(Principal, Chain, Namespace).
+can_invoke(_, node(Key), Chain, Namespace) :-
+    root_direct_context(node(Key), Chain, Namespace),
+    peer_admitted(Key, _, _, Key).
+can_invoke(_, Principal, Chain, Namespace) :-
+    root_direct_context(Principal, Chain, Namespace),
+    root_administrator_agent(Principal).
+
+%% General creation grants do not lend authority to a foreign implementation.
+%% Its public entry must enforce this too: can_create_ontology/3 is an action
+%% prerequisite and does not receive the authenticated calling path. Callers
+%% without these elevated grants still use the delegated creation policy.
+root_creation_context(Principal, Chain, Namespace) :-
+    (Principal = node(_) -> root_direct_context(Principal, Chain, Namespace)
+    ; root_administrator_agent(Principal) -> root_direct_context(Principal, Chain, Namespace)
+    ; ontology_creator_agent(Principal) -> root_direct_context(Principal, Chain, Namespace)
+    ; true).
+
+%% Native root bootstrap uses the empty path. A signed agent's direct request
+%% starts in its own ontology; an intermediate ontology cannot disappear from
+%% the engine-owned path. The durable grant above pins the complete principal.
+root_direct_context(node(_), [], _).
+root_direct_context(node(_), [Namespace], Namespace).
+root_direct_context(agent_instance_ref(Origin, _, _), [Origin], _).
 
 root_public_goal(system_ontology(_, _)).
 root_public_goal(ontology_creation_policy(_, _)).
 root_public_goal(effect_custody_capacity(_)).
 root_public_goal(peer_admitted(_, _, _, _)).
 root_public_goal(acl_sovereign(_)).
-root_public_goal(create_ontology(_, _, _)).
 root_public_goal(findall(_, Query, _)) :- root_catalogue_query(Query).
 
 root_catalogue_query(system_ontology(_, _)).
@@ -49,17 +71,6 @@ set_effect_custody_capacity(Capacity) :-
     valid_effect_custody_capacity(Capacity),
     abolish(effect_custody_capacity_override/1),
     assertz(effect_custody_capacity_override(Capacity)).
-
-%% This founding handler projects D into the one node-wide journal before E.
-%% The bridge receives the complete solution list and fails loudly unless the
-%% effective policy has exactly one valid value.
-state_handler(effect_custody_capacity_projection,
-              [effect_custody_capacity_override/1], [],
-              reconcile_effect_custody_capacity).
-
-reconcile_effect_custody_capacity(Scope) :-
-    findall(Capacity, effect_custody_capacity(Capacity), Capacities),
-    '$quod_project_effect_custody_capacity'(Capacities, Scope).
 
 %% Root governs the creation of new ontology identities. The node which authors
 %% the accepted root transaction remains the direct-effect executor and

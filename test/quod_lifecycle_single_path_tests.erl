@@ -65,15 +65,18 @@ lifecycle_single_path_test_() ->
            ?_test(system_names_is_created_hosted_and_registered(Fixture))}]
      end}.
 
-effect_capacity_is_committed_root_policy(_Fixture) ->
+effect_capacity_is_committed_root_policy(#{root_config := Config, actor_keypair := {Pub, _}}) ->
+    ?assertNot(lists:member(quod_agent_predicates,
+                           maps:get(external_predicate_modules, Config))),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?ROOT_NS, {me, {node, Pub}})),
     ?assertEqual(64, quod_effect_journal:capacity()),
     ?assertMatch(
        {ok, [#{'Capacity' := 64}], _},
        quod_prolog:prove_ro(
          ?ROOT_NS, {effect_custody_capacity, {'Capacity'}})),
     try
-        %% A direct assertion is sufficient; the founding handler projects the
-        %% resulting committed policy through the same P-before-E tier.
+        %% A direct assertion invalidates the resource selector. The owning
+        %% journal installs the resulting committed policy without a reaction.
         commit_root(
           {assertz, {effect_custody_capacity_override, 3}}),
         ok = wait_effect_capacity(3, 300),
@@ -248,17 +251,14 @@ bundled_agent_policy_uses_ordinary_creation(_Fixture) ->
     {ok, [#{'Anchor' := Anchor}], _} = quod_prolog:execute(
         ?ROOT_NS, {create_ontology, Ns, Options, {'Anchor'}}),
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
-    %% These owned revision waits cover installation of both founding handlers,
-    %% including their empty projections; no readiness sleep or polling.
-    ?assertEqual(ok, quod_runtime:await_revision(Ns, agent_hosting, 1, 5000)),
-    ?assertEqual(ok, quod_runtime:await_revision(Ns, agent_observation, 1, 5000)),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
         Ns, {domain_state, <<"worker">>, <<"before-loss">>})),
-    ?assertMatch({ok, [#{'Handlers' := [agent_hosting, agent_observation]}], _},
-        quod_prolog:prove_ro(Ns,
-            {findall, {'Handler'},
-             {state_handler, {'Handler'}, {'Watched'}, {'Needs'}, {'Converge'}},
-             {'Handlers'}})),
+    %% Bundled policies are ordinary, readable reaction clauses. Their actual
+    %% installation and recovery are covered through the hosting owner tests.
+    lists:foreach(fun(Service) ->
+        ?assertMatch({ok, [_ | _], _}, quod_prolog:prove_ro(Ns,
+            {clause, {react_on, {observed, {'Event'}}, {Service, {'Scope'}}}, {'Guard'}}))
+    end, [reconcile_agent_hosts, reconcile_agent_observers]),
     ?assertMatch([#{state := applied}],
         [Row || #{target := {Target, _}} = Row <- quod_effect_journal:rows(),
                 Target =:= Ns]).
@@ -2119,14 +2119,27 @@ wait_effect_target_state(Ns, Expected, N) ->
              end
     end.
 
-wait_effect_capacity(_Expected, 0) ->
-    error(effect_capacity_timeout);
-wait_effect_capacity(Expected, N) ->
+wait_effect_capacity(Expected, Attempts) ->
+    Journal = quod_reg:where({quod_effect_journal, node}),
+    Parent = self(), Token = make_ref(),
+    Observe = fun(State, {in, {'$gen_call', _, {configure_capacity, _}}}, _) ->
+                      Parent ! {effect_capacity_input, Token}, State;
+                 (State, _, _) -> State end,
+    %% Subscribe before querying installed state. The following capacity call
+    %% joins a delivered configuration to completion of its real owner handler.
+    ok = sys:install(Journal, {Observe, none}),
+    try wait_effect_capacity_notice(Expected, Token, quod_time:mono_ms() + Attempts * 10)
+    after sys:remove(Journal, Observe) end.
+
+wait_effect_capacity_notice(Expected, Token, Deadline) ->
     case quod_effect_journal:capacity() of
         Expected -> ok;
-        _ -> receive after 10 ->
-                 wait_effect_capacity(Expected, N - 1)
-             end
+        _ -> receive
+            {effect_capacity_input, Token} ->
+                wait_effect_capacity_notice(Expected, Token, Deadline)
+        after max(0, Deadline - quod_time:mono_ms()) ->
+            error({effect_capacity_timeout, quod_runtime:stats(?ROOT_NS)})
+        end
     end.
 
 wait_storage_dirs(_Ns, _Expected, 0) ->

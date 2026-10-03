@@ -795,7 +795,7 @@ t_self_ask(#{animals := A}) ->
 %% an exact self-selection remains ordinary in-place Prolog. Verdict refusal
 %% retains its older, stronger public error.
 t_raw_snapshot_selector_boundary(#{pets := P, animals := A}) ->
-    {ok, Est0, Height} = quod_prolog:attach_runtime(P),
+    {ok, Est0, Height, _} = quod_prolog:attach_runtime(P),
     try
         Est = quod_predicates:set_context(
                 Est0, quod_predicates:proof_context(P, Height, undefined)),

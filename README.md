@@ -61,10 +61,10 @@ first.
 - **Cross-ontology proofs and writes.** Read dependencies use certified
   snapshots. A single foreign writer uses the source-claimed independent lane;
   changes to several writers use the atomic DTX lane.
-- **Deterministic reactions.** Applied diffs become events. `react_on/3` patterns
-  match them with ordinary Prolog unification, so bindings flow into the
-  reaction goal. `trigger_event/1` records an event without asserting it as a
-  permanent fact.
+- **Prolog reactions.** Applied diffs become events. Editable `react_on/2`
+  clauses match them with ordinary Prolog unification. The selected goal runs
+  for its owning agent through normal authorization and transactions.
+  `trigger_event/1` records an event without asserting it as a permanent fact.
 - **Generic agent hosting.** Committed host assignments select one local Erlang
   process per agent epoch. The process and its transient queues are disposable;
   its durable state remains in its ontology. Host moves rotate the signing key,

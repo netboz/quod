@@ -38,7 +38,7 @@ when they need the complete validator check.
           agent_genesis_anchor := <<_:256>>,
           agent_instance_text := binary(),
           mode := mode(),
-          parser_version := 1 | 2,
+          parser_version := 1 | 2 | 3,
           not_after_ms := pos_integer(),
           goal_text := binary()}.
 -type evidence() ::

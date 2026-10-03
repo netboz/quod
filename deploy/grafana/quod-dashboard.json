@@ -1415,7 +1415,7 @@
         "x": 0,
         "y": 145
       },
-      "description": "Derived working state per node. healthy is 1 while the runtime is live; e_frontier should track the committed height (effects are released only after state handlers and reactions for that local block finish); collapses climbing means ordered work keeps being rebuilt; heavy failures are isolated resource rebuild failures; heavy rejected means a job exceeded the size limit or the bounded pending-resource queue was full; rejected dynamic means someone tried to install running code after founding.",
+      "description": "Live runtime state per node. The event frontier tracks processed canonical input, while each resource owner publishes actual installation readiness. Collapses restore current committed obligations after dropped work without replaying historical reactions.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -1440,21 +1440,6 @@
           "refId": "C",
           "expr": "quod_runtime_collapses{node_id=~\"$node\", namespace=~\"$namespace\"}",
           "legendFormat": "collapses \u00b7 {{node_id}}"
-        },
-        {
-          "refId": "D",
-          "expr": "quod_runtime_rejected_dynamic{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "rejected dynamic \u00b7 {{node_id}}"
-        },
-        {
-          "refId": "E",
-          "expr": "quod_runtime_heavy_failures{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "heavy failures \u00b7 {{node_id}}"
-        },
-        {
-          "refId": "F",
-          "expr": "quod_runtime_heavy_rejected{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "heavy rejected \u00b7 {{node_id}}"
         }
       ]
     },
@@ -2225,7 +2210,9 @@
       "options": {
         "reduceOptions": {
           "values": false,
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": ""
         },
         "orientation": "auto",
@@ -2287,11 +2274,6 @@
           "expr": "rate(quod_runtime_reactions_executed{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "executed/s · {{namespace}} · {{node_id}}",
           "refId": "C"
-        },
-        {
-          "expr": "rate(quod_runtime_reaction_inert{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "inert/s · {{namespace}} · {{node_id}}",
-          "refId": "D"
         },
         {
           "expr": "rate(quod_runtime_reaction_failures{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",

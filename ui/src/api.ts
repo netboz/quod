@@ -2,7 +2,7 @@
 
 import { signedCursorCommand, signedGoal } from '../../client/src/signed-client.js'
 import { scopedGoal } from '../../client/src/prolog-term.js'
-import type { SignedIdentity } from '../../client/src/signed-client.js'
+import type { SignedIdentity, SignedGoalOptions } from '../../client/src/signed-client.js'
 import type { AgentReference } from '../../client/src/signed-client.js'
 
 export type PeerId = { id: string; pubkey: string | null }
@@ -63,7 +63,7 @@ export type ControlRow = {
 export type LedgerRow = TxRow | ControlRow
 
 export type Op =
-  | { op: 'assert' | 'retract'; clause: string }
+  | { op: 'assert' | 'asserta' | 'retract'; clause: string }
   | { op: 'event'; term: string }
 
 export type Effect = {
@@ -224,6 +224,7 @@ export type FoundTx = {
 export type FoundOutcome = FoundTx | { outcome: TxOutcome }
 
 export type ProveReply =
+  | { result: 'recovered'; operationId: string; status: string; evidence: Record<string, unknown> }
   | { result: 'solution'; cursor: string; height: number; bindings: Record<string, string>[] }
   | { result: 'ok'; height: number; bindings: Record<string, string>[] }
   | { result: 'ok'; ns: string; anchor: string; tx_id: string; bindings: Record<string, string>[] }
@@ -239,7 +240,7 @@ export type ProveReply =
       bindings: Record<string, string>[]
     }
   | { result: 'fail'; reasons?: string[] }
-  | { result: 'pending'; ns: string; anchor: string; tx_id: string }
+  | { result: 'pending'; ns: string; anchor: string; tx_id: string; operationId?: string }
   | {
       result: 'pending'
       ns: string
@@ -247,6 +248,7 @@ export type ProveReply =
       coordinator: string
       coordinator_admission: string
       group_id: string
+      operationId?: string
     }
   | { result: 'stopped' }
   | { error: string; detail?: string; leader?: PeerId | null }
@@ -277,9 +279,11 @@ export const openProofCursor = (
   ns: string,
   _anchor: string,
   goal: string,
+  options?: SignedGoalOptions,
 ) => signedGoal(
   identity,
   { mode: 'cursor', agent, goal: scopedGoal(agent.namespace, ns, goal) },
+  options,
 ) as Promise<ProveReply>
 
 export const nextProofSolution = (identity: SignedIdentity, cursor: string) =>

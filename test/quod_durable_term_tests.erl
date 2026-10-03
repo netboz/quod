@@ -25,6 +25,19 @@ result_names_are_canonical_binary_keys_test() ->
        {ok, Blob},
        quod_durable_term:encode_result(#{<<"z">> => 2, <<"a">> => 1})).
 
+stored_result_bytes_and_allowance_are_unchanged_test() ->
+    %% Captured from the durable codec before sharing the named-binding layer.
+    Before = <<131,104,3,97,6,104,2,97,4,108,0,0,0,2,104,2,97,1,109,0,0,0,1,97,
+               104,2,97,2,97,1,106,104,3,97,6,104,2,97,4,108,0,0,0,2,104,2,97,1,
+               109,0,0,0,1,122,104,2,97,2,97,2,106,104,1,97,5>>,
+    ?assertEqual({ok, Before}, quod_durable_term:encode_result(#{z => 2, a => 1})),
+    ?assertEqual({ok, [{<<"a">>, 1}, {<<"z">>, 2}]},
+                 quod_durable_term:decode_result(Before)),
+    Large = #{<<"X">> => binary:copy(<<"x">>, ?QUOD_MAX_DURABLE_RESULT_BYTES)},
+    ?assertEqual({error, {too_large, result}}, quod_durable_term:encode_result(Large)),
+    {ok, Blob} = quod_wire_term:encode_bindings(Large, ?QUOD_MAX_DURABLE_RESULT_BYTES * 2),
+    ?assertEqual({error, {too_large, result}}, quod_durable_term:decode_result(Blob)).
+
 duplicate_result_names_are_rejected_test() ->
     {ok, Wire} = quod_wire_term:encode(
                    [{<<"same">>, 1}, {<<"same">>, 2}]),

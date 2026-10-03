@@ -6,7 +6,7 @@ const encoder = new TextEncoder()
 const GOAL_DOMAIN = encoder.encode('quod.agent.goal.v1\0')
 const CHALLENGE_DOMAIN = encoder.encode('quod.agent.challenge.v1\0')
 const REQUEST_TTL_MS = 30_000
-const PARSER_VERSION = 2
+const PARSER_VERSION = 3
 const MODE_TAG = { read: 0, execute: 1, cursor: 2 }
 const cursorOperations = new Map()
 
@@ -81,12 +81,13 @@ export async function signedCursorCommand(identity, cursor, command) {
     const journal = tracked.journal || signedOperationJournal()
     try {
       await journal.put(tracked.operation)
-      const reply = await postJson(url, body)
+      const reply = writeReply(await postJson(url, body))
       if (reply.result === 'pending') await retainPendingReference(journal, tracked.operation, reply)
       else await journal.delete(tracked.operation.id)
       cursorOperations.delete(cursor)
-      return reply
+      return reply.result === 'pending' ? { ...reply, operationId: tracked.operation.id } : reply
     } catch (error) {
+      if (error.outcomeUnknown) error.operationId = tracked.operation.id
       if (!error.outcomeUnknown) await journal.delete(tracked.operation.id)
       const retryableCursor = error.message === 'cursor_busy' ||
         error.message === 'cursor_not_ready'
@@ -107,6 +108,7 @@ export async function resolveSignedOperations(identity, options = {}) {
   const rows = await pendingSignedOperations(identity, { journal })
   const results = []
   for (const row of rows) {
+    if (options.operationId && options.operationId !== row.id) continue
     try {
       const reply = await (options.post || postJson)('/api/goals/outcomes', {
         session_id: identity.session.session_id,
@@ -152,7 +154,7 @@ async function submitDurable(journal, operation, url, body, post, options) {
   else await journal.put(operation)
   let reply
   try {
-    reply = await post(url, body)
+    reply = writeReply(await post(url, body))
   } catch (error) {
     if (!error.outcomeUnknown) await journal.delete(operation.id)
     throw error
@@ -287,7 +289,7 @@ export function assertCrypto() {
 // retaining the client's one HTTP error/uncertain-outcome boundary.
 // Optional traceparent is transport metadata, never part of the signed body.
 export async function postJson(url, body, method = 'POST', { traceparent } = {}) {
-  let response
+  let response, payload
   try {
     response = await fetch(url, {
       method,
@@ -297,21 +299,37 @@ export async function postJson(url, body, method = 'POST', { traceparent } = {})
       },
       body: JSON.stringify(body),
     })
+    payload = await response.json()
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        (!response.ok && typeof payload.error !== 'string')) {
+      throw new Error('invalid server response')
+    }
   } catch (cause) {
     // The browser cannot know whether the server accepted a write before the
     // connection failed. Mark that uncertainty so a caller never turns it
     // into a fresh operation by retrying the goal.
-    const error = new Error('the request outcome is unknown; do not resubmit it', { cause })
-    error.outcomeUnknown = true
-    throw error
+    throw unknownOutcome(cause)
   }
-  const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const error = new Error(payload.error || `request failed (${response.status})`)
+    const error = new Error(payload.error)
     error.status = response.status
     throw error
   }
   return payload
+}
+
+function writeReply(reply) {
+  // Only a complete, recognized write result may retire recovery evidence.
+  if (!reply || !['ok', 'fail', 'pending'].includes(reply.result)) {
+    throw unknownOutcome(new Error('invalid signed write response'))
+  }
+  return reply
+}
+
+function unknownOutcome(cause) {
+  const error = new Error('the request outcome is unknown; do not resubmit it', { cause })
+  error.outcomeUnknown = true
+  return error
 }
 
 function challengeBytes(challenge, publicKey, clientNonce) {

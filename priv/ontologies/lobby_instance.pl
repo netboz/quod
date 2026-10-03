@@ -1,7 +1,11 @@
 %% Personal lobby behaviour. Founding supplies lobby_owner/1, exact vocabulary
-%% references and instance_of(prolog_console, Device); no user registry here.
+%% references and device class memberships; no user registry here.
 %% Found with quod_agent_predicates for proof-bound identity checks.
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
+
+lobby_modes(Modes) :-
+    lobby_vocabulary(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor), lobby_modes(Modes)).
 
 lobby_view(Mode, Scene) :-
     current_ontology_identity(Namespace, Anchor),
@@ -31,19 +35,38 @@ one_attribute(Entity, Name, Value) :-
 %% Missing or ambiguous instance data fails the view, rather than silently
 %% dropping a device inside findall/3. No class or device is hardcoded here.
 placed_devices([], []).
-placed_devices([Entity | Entities], [device(Class, Entity, Id, At) | Devices]) :-
-    findall(C, instance_of(C, Entity), [Class]),
+placed_devices([Entity | Entities], [device(Classes, Entity, Id, At) | Devices]) :-
+    device_classes(Entity, Classes),
     findall(placed(I, T), device_placement(Entity, I, T), [placed(Id, At)]),
     placed_devices(Entities, Devices).
 
-lobby_menu(Device, Entries) :-
-    instance_of(Class, Device),
+%% Local subclasses contribute their declared parents. The pinned vocabulary
+%% resolves its own ancestry; no foreign class definitions are copied here.
+device_classes(Device, Classes) :-
+    lobby_vocabulary(Namespace, _),
+    findall(Class, (instance_of(Direct, Device),
+                    (Parent = Direct; isa(Direct, Parent)),
+                    vocabulary_class(Parent, Namespace, Class)), Raw),
+    sort(Raw, Classes), Classes = [_ | _].
+
+vocabulary_class(Namespace:Class, Namespace, Class).
+vocabulary_class(Class, Namespace, Class) :- Class \= (Namespace:_).
+
+lobby_eidolons(Device, Mode, Style, Recipes) :-
+    device_classes(Device, Classes),
     lobby_vocabulary(Namespace, Anchor),
     Namespace::(current_ontology_identity(Namespace, Anchor),
-                device_menu(Class, Entries)).
+                device_eidolons(Classes, Mode, Style, Recipes)).
 
-lobby_workspace(Device, View) :-
-    instance_of(prolog_console, Device),
+lobby_menu(Device, Entries) :-
+    device_classes(Device, Classes),
+    lobby_vocabulary(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                device_menu(Classes, Entries)).
+
+lobby_workspace(Device, ViewId, View) :-
+    lobby_menu(Device, Entries),
+    member(menu_entry(_, _, open_view(ViewId)), Entries),
     gui_vocabulary(Namespace, Anchor),
     Namespace::(current_ontology_identity(Namespace, Anchor),
-                gui_view(proof_console, View)).
+                gui_view(ViewId, View)).

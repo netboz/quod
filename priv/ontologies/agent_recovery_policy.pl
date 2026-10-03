@@ -63,33 +63,16 @@ agent_observer_threshold(Instance, OldHost, Epoch, Round, Kind) :-
     length(Distinct, Count),
     Count >= Required.
 
-%% All placement inputs used here are local committed facts. Custom derived
-%% policy must declare its additional support heads in its founding handler.
-state_handler(agent_observation,
-    [agent_host/4, agent_key/3, agent_recovery_round/4, agent_recovery_observer/2],
-    [current(agent_hosting)], reconcile_agent_observation).
-
-reconcile_agent_observation(Changed) :-
-    agent_observation_scope(Changed, Scope),
-    (local_node_agent(Observer) ->
+%% The containing ontology owns its current observation inventory.
+agent_observation_projection(Scope, Observer, Scope, Watches) :-
+    (Observer \= none ->
         agent_observation_instances(Scope, Observer, Instances),
         findall(watch(I, Host, Epoch, Round),
             (member(I, Instances), agent_recovery_observer(I, Observer),
              agent_hosted(I, Host, Epoch, _), Host \= Observer,
              agent_observed_round(I, Host, Epoch, Round)), Raw),
         sort(Raw, Watches)
-    ; Watches = []),
-    project_agent_observers(Scope, Watches).
-
-agent_observation_scope(keys(Heads), keys(Instances)) :-
-    findall(I, (member(Head, Heads), agent_observation_head(Head, I)), Changed),
-    term_variables(Changed, []), !, sort(Changed, Instances).
-agent_observation_scope(_, all).
-
-agent_observation_head(agent_host(I, _, _, _), I).
-agent_observation_head(agent_key(I, _, _), I).
-agent_observation_head(agent_recovery_round(I, _, _, _), I).
-agent_observation_head(agent_recovery_observer(I, _), I).
+    ; Watches = []).
 
 agent_observation_instances(keys(Instances), _, Instances).
 agent_observation_instances(all, Observer, Instances) :-
@@ -101,35 +84,23 @@ agent_observed_round(I, Host, Epoch, Round) :-
 agent_observed_round_rows([], _, _, none).
 agent_observed_round_rows([recovery(H, E, R)], H, E, current(R)).
 
-react_on(node(NodeKey),
-    observed(agent_host_observed(NodeKey, Observer, I, Host, Epoch, Expected,
-                                  Round, Observation, Kind, ObservedAt, MaximumExpiry)),
-    react_agent_host_observation(Observer, I, Host, Epoch, Expected, Round,
-                                 Observation, Kind, ObservedAt, MaximumExpiry)).
-
-react_agent_host_observation(Observer, I, Host, Epoch, Expected, Round,
-                             Observation, Kind, ObservedAt, MaximumExpiry) :-
-    local_node_agent(Observer),
+%% The source worker selects data under restricted committed policy. The
+%% observer and observation fields are authenticated inputs, not policy output.
+agent_recovery_data(Observer, I, Host, Epoch, Expected, Round, Kind,
+                    ObservedAt, Maximum, recovery(Sequence, Expiry, Preparation)) :-
     can_report_agent_failure(Observer, I, Host, Kind),
     agent_hosted(I, Host, Epoch, _),
     agent_observed_round(I, Host, Epoch, Expected),
     agent_report_next(I, Host, Epoch, Round, Observer, Sequence),
     agent_observation_expiry(I, Host, Epoch, Round, Observer, Kind,
-                             ObservedAt, MaximumExpiry, Expiry),
-    Report = observation(Sequence, Observation, Expiry),
+                             ObservedAt, Maximum, Expiry),
     (Kind = suspected_unreachable,
      can_prepare_agent_key(Observer, I, Host, Epoch),
-     \+ agent_candidate_key(I, Host, Epoch, Observer, _) ->
-        submit_node_prepared_goal(I, Epoch, Preparation,
-            report_agent_observation_with_custody(I, Host, Epoch, Expected,
-                                                   Round, Report, Kind, Preparation), Expiry)
-    %% Keep live support stable for competing takeover proofs. The sequence
-    %% check above rejects ambiguous rows; missing custody still takes its branch.
+     \+ agent_candidate_key(I, Host, Epoch, Observer, _) -> Preparation = required
     ; agent_failure_report(I, Host, Epoch, Round, Observer,
                            observation(_, _, ReportExpiry), Kind),
-      ReportExpiry > ObservedAt -> true
-    ; submit_node_goal(execute,
-        report_agent_observation(I, Host, Epoch, Expected, Round, Report, Kind), Expiry)).
+      ReportExpiry > ObservedAt -> fail
+    ; Preparation = none).
 
 %% Choose a live supporting subset. Expired or unauthorized rows cannot veto
 %% renewal, and the new request may not outlive the reports it needs to count.

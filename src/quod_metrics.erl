@@ -42,11 +42,10 @@ Two collection paths:
 | `quod_consensus_signing_journal_vote_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
 | `quod_consensus_redrives{namespace}` | gauge | | proposals re-sent while waiting |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
-| `quod_runtime_healthy/handlers_active/subscriptions_active/reactions_active/source_targets_active/source_interests_active/source_views_active/source_views_ready/source_views_building/source_views_unreachable/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, local subscription/reaction catalogue and certified source-view states, rebuilt-through height, effect-release frontier, queued events |
-| `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused executable declarations, and malformed subscription clauses |
-| `quod_runtime_reaction_candidates/matches/reactions_executed/reaction_inert/reaction_failures{namespace}` | gauge | | running totals for local and subscribed reaction selection, Erlog matches, completed handlers, non-local/ambiguous executors, and handler failures |
-| `quod_runtime_reaction_seconds{namespace,result}` | histogram | | local and subscribed reaction matching, owner resolution, and handler time by bounded result |
-| `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
+| `quod_runtime_healthy/subscriptions_active/reactions_active/source_targets_active/source_interests_active/source_views_active/source_views_ready/source_views_building/source_views_unreachable/p_height/e_frontier/queue_len{namespace}` | gauge | | runtime: live flag, local subscription/reaction catalogue and certified source-view states, rebuilt-through height, effect-release frontier, queued events |
+| `quod_runtime_reconciles/collapses/dropped_events/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events and malformed subscription clauses |
+| `quod_runtime_reaction_candidates/matches/reactions_executed/reaction_failures{namespace}` | gauge | | running totals for local and subscribed reaction selection, Erlog matches, queued goals and matching or queue failures |
+| `quod_runtime_reaction_seconds{namespace,result}` | histogram | | local and subscribed reaction matching, owner resolution, and queue admission time by bounded result |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
 | `quod_foreign_history_custody_losses/corruptions/index_losses` | gauge | | separate owner-lifetime integrity-loss totals; worker loss never counts as corruption unless corruption is independently diagnosed |
 | `quod_foreign_feed_registrations` | gauge | | live target-validator height-wake registrations owned by the node-wide certified follower |
@@ -309,36 +308,28 @@ declare(NodeId) ->
            "Highest simultaneous row count observed by that node-wide owner process since it started. The value resets when the owning process restarts."),
     _ = NBG(quod_node_owner_bytes_current,
             "Current encoded bytes retained by one node-wide internal owner."),
-    %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
+    %% Runtime: live ordered input and actual resource owners.
     _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Missing means the runtime process is absent. A persistent 0 means it cannot currently release effects; check runtime logs and the failure metrics."),
-    _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
     _ = G(quod_runtime_subscriptions_active, "How many distinct valid anchored subscribes/2 facts are active in this namespace's local runtime catalogue."),
-    _ = G(quod_runtime_reactions_active, "How many founding-authorized react_on/3 declarations are active."),
-    _ = G(quod_runtime_reaction_candidates, "Total react_on/3 clauses considered for canonical applied fact events (only ever goes up)."),
-    _ = G(quod_runtime_reaction_matches, "Total react_on/3 event matches produced by Erlog unification (only ever goes up)."),
-    _ = G(quod_runtime_reactions_executed, "Total matched reaction handlers completed on their unique owner node (only ever goes up)."),
-    _ = G(quod_runtime_reaction_inert, "Total matched reactions not run because their executor had no unique local owner (only ever goes up)."),
-    _ = G(quod_runtime_reaction_failures, "Total matched reaction handlers that failed, errored, or attempted to stage durable data (only ever goes up)."),
-    _ = RH(quod_runtime_reaction_seconds, "Time spent matching, resolving and running one reaction candidate, split by its bounded result.", ?REACTION_BUCKETS),
+    _ = G(quod_runtime_reactions_active, "How many currently committed react_on/2 clauses are active."),
+    _ = G(quod_runtime_reaction_candidates, "Total react_on/2 clauses considered for canonical applied fact events (only ever goes up)."),
+    _ = G(quod_runtime_reaction_matches, "Total react_on/2 event matches produced by Erlog unification (only ever goes up)."),
+    _ = G(quod_runtime_reactions_executed, "Total reaction goals accepted by their current actor queue (only ever goes up)."),
+    _ = G(quod_runtime_reaction_failures, "Total eligibility or queue admission failures (only ever goes up)."),
+    _ = RH(quod_runtime_reaction_seconds, "Time spent matching and queueing one reaction candidate, split by its bounded result.", ?REACTION_BUCKETS),
     _ = G(quod_runtime_source_targets_active, "How many distinct anchored remote ontologies have at least one active source-qualified reaction interest."),
-    _ = G(quod_runtime_source_interests_active, "How many active source-qualified react_on/3 interests are compiled across all targets."),
+    _ = G(quod_runtime_source_interests_active, "How many active source-qualified react_on/2 interests are compiled across all targets."),
     _ = G(quod_runtime_source_views_active, "How many durable subscription targets this namespace runtime currently tracks; unavailable targets remain parked until an owner or route/feed wake."),
     _ = G(quod_runtime_source_views_ready, "How many subscribed foreign projections are currently certified and materialized for this namespace."),
     _ = G(quod_runtime_source_views_building, "How many subscribed foreign projections are currently rebuilding from certified history."),
     _ = G(quod_runtime_source_views_unreachable, "How many durable subscription targets this runtime cannot currently certify or reach."),
-    _ = G(quod_runtime_p_height,        "The newest block whose derived working state this node has finished rebuilding."),
-    _ = G(quod_runtime_e_frontier,      "The newest local block whose state handlers and reactions have completed; effects for a block are released only once this reaches it."),
-    _ = G(quod_runtime_queue_len,       "Local and certified subscribed publications waiting for ordered state convergence and reactions right now."),
-    _ = G(quod_runtime_reconciles,      "Total full rebuilds of the derived working state (only ever goes up). One per boot or recovery is normal; climbing steadily means handlers keep failing."),
-    _ = G(quod_runtime_collapses,       "Total times pending handler work was thrown away and replaced by one full rebuild, due to overload or a handler failure (only ever goes up)."),
+    _ = G(quod_runtime_p_height,        "The newest local block whose canonical input has been processed."),
+    _ = G(quod_runtime_e_frontier,      "The processed local canonical input frontier used by the existing direct effect owner. Resource consumers use actual installation readiness."),
+    _ = G(quod_runtime_queue_len,       "Local and certified subscribed publications waiting for ordered reaction matching and resource selection."),
+    _ = G(quod_runtime_reconciles,      "Total committed snapshot attachments and catalog reconciliations (only ever goes up). One per boot or recovery is normal."),
+    _ = G(quod_runtime_collapses,       "Total event batches collapsed into current-state recovery after overload or a reader failure (only ever goes up)."),
     _ = G(quod_runtime_dropped_events,  "Total change events dropped because a rebuild made them redundant or the queue overflowed (only ever goes up)."),
-    _ = G(quod_runtime_rejected_dynamic,"Total executable runtime declarations refused because they were written after the ontology was founded (only ever goes up). Any value above 0 deserves a look: someone tried to install running code."),
     _ = G(quod_runtime_rejected_subscriptions,"Total malformed subscribes/2 clauses ignored by local runtime reconciliation (only ever goes up)."),
-    _ = G(quod_runtime_heavy_pending,   "Heavy background jobs queued, one slot per resource (newer jobs replace older queued ones)."),
-    _ = G(quod_runtime_heavy_running,   "Heavy background jobs running right now."),
-    _ = G(quod_runtime_heavy_superseded,"Total queued heavy jobs replaced by a newer job for the same resource before they ran (only ever goes up)."),
-    _ = G(quod_runtime_heavy_rejected,  "Total heavy jobs refused before retention because the bounded pending-resource queue was full or the encoded job exceeded its size limit (only ever goes up). Any increase means handlers are producing work faster or larger than configured."),
-    _ = G(quod_runtime_heavy_failures,  "Total heavy background jobs that failed or were killed (only ever goes up). These are isolated from the handler pipeline; a climbing value means one heavy resource is broken while the rest of the node keeps working."),
     %% One node-wide certified foreign-history/fact owner. Target namespaces
     %% are deliberately absent from labels so hostile or high-cardinality
     %% durable subscription catalogues cannot grow Prometheus series.
@@ -607,27 +598,23 @@ refresh_ns(Ns) ->
 
 refresh_runtime_ns(Ns) ->
     case quod_runtime:stats(Ns) of
-        #{mode := Mode, handlers_active := HA, subscriptions_active := SA,
+        #{mode := Mode, subscriptions_active := SA,
           reactions_active := RA, source_targets_active := STA,
           source_interests_active := SIA, p_height := PH, e_frontier := EF,
           source_views_active := SVA, source_views_ready := SVR,
           source_views_building := SVB, source_views_unreachable := SVU,
           queue_len := QL, reconciles := RC, collapses := CO, dropped_events := DE,
-          rejected_dynamic := RJ, rejected_subscriptions := RS,
+          rejected_subscriptions := RS,
           reaction_candidates := RCa, reaction_matches := RM,
-          reactions_executed := RE, reaction_inert := RI,
-          reaction_failures := RF,
-          heavy_pending := HP, heavy_running := HR,
-          heavy_superseded := HS, heavy_rejected := HX, heavy_failures := HF} ->
+          reactions_executed := RE,
+          reaction_failures := RF} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_runtime_healthy, case Mode of live -> 1; _ -> 0 end),
-            _ = S(quod_runtime_handlers_active, HA),
             _ = S(quod_runtime_subscriptions_active, SA),
             _ = S(quod_runtime_reactions_active, RA),
             _ = S(quod_runtime_reaction_candidates, RCa),
             _ = S(quod_runtime_reaction_matches, RM),
             _ = S(quod_runtime_reactions_executed, RE),
-            _ = S(quod_runtime_reaction_inert, RI),
             _ = S(quod_runtime_reaction_failures, RF),
             _ = S(quod_runtime_source_targets_active, STA),
             _ = S(quod_runtime_source_interests_active, SIA),
@@ -641,23 +628,17 @@ refresh_runtime_ns(Ns) ->
             _ = S(quod_runtime_reconciles, RC),
             _ = S(quod_runtime_collapses, CO),
             _ = S(quod_runtime_dropped_events, DE),
-            _ = S(quod_runtime_rejected_dynamic, RJ),
             _ = S(quod_runtime_rejected_subscriptions, RS),
-            _ = S(quod_runtime_heavy_pending, HP),
-            _ = S(quod_runtime_heavy_running, HR),
-            _ = S(quod_runtime_heavy_superseded, HS),
-            _ = S(quod_runtime_heavy_rejected, HX),
-            _ = S(quod_runtime_heavy_failures, HF),
             ok;
         _ -> remove_runtime_metrics(Ns)
     end.
 
 remove_runtime_metrics(Ns) ->
     Labels = [label(Ns)],
-    Names = [quod_runtime_healthy, quod_runtime_handlers_active,
+    Names = [quod_runtime_healthy,
              quod_runtime_subscriptions_active, quod_runtime_reactions_active,
              quod_runtime_reaction_candidates, quod_runtime_reaction_matches,
-             quod_runtime_reactions_executed, quod_runtime_reaction_inert,
+             quod_runtime_reactions_executed,
              quod_runtime_reaction_failures,
              quod_runtime_source_targets_active, quod_runtime_source_interests_active,
              quod_runtime_source_views_active, quod_runtime_source_views_ready,
@@ -665,10 +646,7 @@ remove_runtime_metrics(Ns) ->
              quod_runtime_source_views_unreachable,
              quod_runtime_p_height, quod_runtime_e_frontier, quod_runtime_queue_len,
              quod_runtime_reconciles, quod_runtime_collapses, quod_runtime_dropped_events,
-             quod_runtime_rejected_dynamic, quod_runtime_rejected_subscriptions,
-             quod_runtime_heavy_pending,
-             quod_runtime_heavy_running, quod_runtime_heavy_superseded,
-             quod_runtime_heavy_rejected, quod_runtime_heavy_failures],
+             quod_runtime_rejected_subscriptions],
     _ = [prometheus_gauge:remove(Name, Labels) || Name <- Names],
     ok.
 
@@ -1094,7 +1072,7 @@ observe_dtx(Ns, Phase) ->
 
 -doc "Observe one local or subscribed reaction candidate without making metrics a runtime dependency.".
 -spec observe_runtime_reaction(binary(),
-                               executed | unmatched | {inert, term()} |
+                               executed | unmatched |
                                {failed, term()},
                                non_neg_integer()) -> ok.
 observe_runtime_reaction(Ns, Result, ElapsedUs)
@@ -1107,7 +1085,6 @@ observe_runtime_reaction(Ns, Result, ElapsedUs)
                 case Result of
                     executed -> <<"executed">>;
                     unmatched -> <<"unmatched">>;
-                    {inert, _} -> <<"inert">>;
                     {failed, _} -> <<"failed">>
                 end,
             try

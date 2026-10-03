@@ -85,7 +85,7 @@ today makes *everything* that touches two ontologies atomic — including plain
 reads. That is the gap.
 
 ### F4. "Propagate later" already exists, and is explicitly non-atomic
-- Subscriptions + `react_on/3`: best-effort reactions over certified follow;
+- Subscriptions + `react_on/2`: best-effort reactions over certified follow;
   a durable response is a new signed goal.
 - `trigger_event/1`: an ordered occurrence, not a delivery.
 - Durable outbox (spec in `agent-fipa-plan.md:639-704`): intent fact →

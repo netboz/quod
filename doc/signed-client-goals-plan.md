@@ -170,7 +170,7 @@ agent_namespace        = bounded UTF-8 bytes
 agent_genesis_anchor   = 32 bytes
 agent_instance_text    = one ground dot-terminated Prolog term
 mode                   = read | execute | cursor
-parser_version         = 1 | 2
+parser_version         = 1 | 2 | 3
 not_after_ms            = signed admission deadline
 goal_text              = exact bounded UTF-8 bytes
 ```
@@ -202,13 +202,28 @@ meaning. Literal escapes must resolve to bytes (`0..255`); full Erlang
 bit-syntax segments are intentionally outside this grammar. A later grammar or
 operator change requires another parser version.
 
-Both supported versions accept exactly one dot-terminated term, followed only
+Version 3 retains the same operators and byte literals, and distinguishes
+adjacent numeric negation from a unary expression: `p(-3)` contains the negative
+number, while `p(- 3)`, `p(-(3))` and `p('-'(3))` contain the unary compound.
+Binary subtraction remains subtraction. Operator precedence is unchanged:
+`-3 ** 2` remains unary negation of the power, and `(-3) ** 2` explicitly uses
+the negative numeric base. Canonical readable formatting parenthesizes negative
+numeric values, including negative zero, so arbitrary stored code roundtrips.
+The one lexer privately annotates adjacent magnitudes for the pinned parser;
+annotations disappear before wire validation and never allocate source atoms.
+They cannot be constructed by quoted source data. New browser and hosted-agent
+requests use version 3. Existing signed version-1/2 bytes are never rewritten
+or reinterpreted; their parsers retain their frozen meanings for verification
+and pending-operation recovery. No signed field or framing is added.
+
+
+All three supported versions accept exactly one dot-terminated term, followed only
 by layout or comments. Bare identifiers use the Prolog ASCII
 letter/digit/underscore form; UTF-8 remains available inside quoted atoms and
 strings. A missing terminator, a second term, or trailing non-layout input is
 rejected.
 
-Quoted values use strict backslash escapes. Both versions accept `n r t v b f e s d`,
+Quoted values use strict backslash escapes. All versions accept `n r t v b f e s d`,
 escaped single quote, double quote, and backslash, plus terminated hexadecimal
 `\x...\` and octal `\...\` numeric escapes. Any other escape, an invalid
 Unicode code point, or ISO doubled-quote syntax is rejected rather than
@@ -1005,7 +1020,8 @@ format failure reasons, or wait for proof execution in its serialized loop.
 
 Factor proof-result normalization out of the HTTP renderer. Local execution
 and a remote target both produce the same closed result form. Bindings use the
-existing signed variable-name projection and `quod_durable_term` result codec;
+existing signed variable-name projection and the canonical named-binding codec
+in `quod_wire_term`, with the client reply boundary supplying its byte allowance;
 failure stacks use the existing bounded failure-reason codec; anchored outcome
 references use their existing validated forms. The gateway's HTTP renderer
 then renders that one normalized result regardless of where it ran. Do not
@@ -1018,7 +1034,11 @@ Apply that same source-of-truth bound to local HTTP results so routing does not
 change observable semantics. A read whose complete answer list exceeds that
 bound fails with the same typed `result_too_large` reply locally and remotely
 and may be performed with the existing cursor mode instead; do not add a
-private multi-frame result stream in this slice.
+private multi-frame result stream in this slice. Transient read answers and
+cursor previews do not consume a durable-result storage allowance. Persistence
+uses the same named-binding codec through `quod_durable_term`, which retains
+its separate stored-result contract and canonical bytes. No secondary binding
+format, renderer, or per-answer storage limit belongs in the live reply path.
 
 #### Admission, route changes, and uncertainty
 

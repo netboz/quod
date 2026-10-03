@@ -19,7 +19,8 @@
 -type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
 %% The differ's ordered material operations: fact mutations plus explicit
 %% occurrences which the reducer publishes without mutating ontology facts.
--type op()     :: {assert, clause()} | {retract, clause()} | {event, term()}.
+-type op()     :: {assert, clause()} | {asserta, clause()}
+                | {retract, clause()} | {event, term()}.
 %% The read-set: one exact mutation-version token per predicate {Functor, Arity}.
 %% This header owns the token alphabet — it is part of the signed transaction
 %% bytes; the MVCC store implements it (`quod_erlog_db_mvcc:version_token/2`).

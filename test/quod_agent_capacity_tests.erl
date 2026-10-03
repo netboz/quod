@@ -14,8 +14,8 @@ capacity_refuses_only_new_children_and_retries_on_slot_release_test_() ->
         end
     end}.
 
-capacity(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns, Anchor, actor},
-           node := Node = {agent_instance_ref, NodeNs, _, _}, key := Key}) ->
+capacity(#{namespace := Ns, reference := Ref,
+           node := {agent_instance_ref, NodeNs, NodeAnchor, _} = Node, key := Key}) ->
     Other = setelement(4, Ref, other), Extra = setelement(4, Ref, extra),
     OtherKey = <<71:256>>, ExtraKey = <<72:256>>,
     commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
@@ -33,17 +33,27 @@ capacity(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns, Anchor, 
                    collapses := 0, reconcile_failures := 0}, quod_runtime:stats(Ns)),
     ?assertEqual({Owner, [ActorPid, OtherPid]}, current_children(Ns, [Ref, Other])),
 
-    %% Capacity applies to hosted instances; the same runtime's node executor
-    %% must remain available to submit the action that can resolve placement.
+    %% The containing ontology cannot borrow node authority when its slots are
+    %% full. Its logical node acts through its own scope and an explicit grant.
+    Anchor = element(3, Ref),
+    Operation = {record_ping, at_capacity},
+    commit(NodeNs,
+      {',', {assertz, {can_execute_for, Ns, Anchor, Operation}},
+        {assertz, {':-', {react_on, capacity_probe,
+                          {node_authorized_goal, Ns, Anchor, Operation}}, {me, Node}}}}),
+    NodeOwner = quod_reg:where({quod_runtime, NodeNs}),
     true = quod_reg:subscribe({agent, Node}),
-    commit(NodeNs, {assertz, {can_execute_for, Ns, Anchor, {record_ping, at_capacity}}}),
-    commit(Ns, {trigger_event, {node_work, at_capacity, quod_time:now_ms() + 10000}}),
-    NodePid = receive
-        {agent_request_finished, Owner, Pid, #{reference := Node}, _, Result} ->
-            ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, Result), Pid
-    after 10000 -> error(node_executor_blocked_by_agent_capacity) end,
-    quod_reg:unsubscribe({agent, Node}),
-    ?assertMatch(#{hosted_agents := 3, hosted_agent_instances := 2,
+    NodePid = try
+        commit(NodeNs, {trigger_event, capacity_probe}),
+        receive
+            {agent_request_finished, NodeOwner, Pid,
+             #{reference := Node, source := {NodeNs, NodeAnchor}}, _,
+             {ok, _, {normalized, {committed, _, _}}}} -> Pid
+        after 10000 -> error(node_work_blocked_by_agent_capacity) end
+    after quod_reg:unsubscribe({agent, Node}) end,
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, at_capacity})),
+    ?assertEqual({NodeOwner, [NodePid]}, current_children(NodeNs, [Node])),
+    ?assertMatch(#{hosted_agents := 2, hosted_agent_instances := 2,
                    agent_capacity_refusals_total := 1}, quod_runtime:stats(Ns)),
 
     %% The slot is occupied until the retiring process actually exits. Hold it
@@ -59,7 +69,10 @@ capacity(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns, Anchor, 
             {trace, Owner, return_from, {quod_runtime, stop_agent, 2},
              #{pid := OtherPid, stopping := true, successor := none}} -> ok
         after 10000 -> error(retirement_not_processed) end,
-        ?assertMatch(#{hosted_agent_instances := 2, agent_capacity_status := blocked},
+        %% This assignment change rechecks the refused binding while the
+        %% retiring child still owns its slot; unrelated input did not do so.
+        ?assertMatch(#{hosted_agent_instances := 2, agent_capacity_status := blocked,
+                       agent_capacity_refusals_total := 2},
                      quod_runtime:stats(Ns)),
         {Owner, BeforeRelease} = quod_runtime:agents(Ns),
         ?assertNot(lists:any(fun(#{binding := #{reference := R}}) -> R =:= Extra end,
@@ -72,10 +85,14 @@ capacity(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns, Anchor, 
     receive {'DOWN', OtherMonitor, process, OtherPid, _} -> ok
     after 10000 -> error(retiring_agent_did_not_exit) end,
     {Owner, ExtraPid} = installed(Extra),
-    ?assertEqual({Owner, [ActorPid, ExtraPid, NodePid]}, current_children(Ns, [Ref, Extra, Node])),
-    ?assertMatch(#{mode := live, hosted_agent_instances := 2,
-                   agent_capacity_status := ready, agent_capacity_refusals_total := 1,
-                   collapses := 0, reconcile_failures := 0}, quod_runtime:stats(Ns)).
+    ?assertEqual({Owner, [ActorPid, ExtraPid]}, current_children(Ns, [Ref, Extra])),
+    ?assertEqual({NodeOwner, [NodePid]}, current_children(NodeNs, [Node])),
+    ?assertEqual(#{mode => live, hosted_agent_instances => 2,
+                   agent_capacity_status => ready, agent_capacity_refusals_total => 2,
+                   collapses => 0, reconcile_failures => 0},
+                 maps:with([mode, hosted_agent_instances, agent_capacity_status,
+                            agent_capacity_refusals_total, collapses, reconcile_failures],
+                           quod_runtime:stats(Ns))).
 
 current_children(Ns, Refs) ->
     {Owner, Children} = quod_runtime:agents(Ns),

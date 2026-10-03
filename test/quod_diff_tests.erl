@@ -97,6 +97,93 @@ interpreted_clauses_returns_content_not_proved_answers_test() ->
     ?assertEqual({ok, []},
                  quod_diff:interpreted_clauses(Est, {catalog_absent, 1})).
 
+%% The same ordered program must answer identically while staged and after
+%% the ordinary canonical reducer has applied the sealed proof's diff.
+front_insertion_preserves_first_solution_on_apply_test() ->
+    with_ordered_proof([{choose, general}], fun(Committed, Wrapped) ->
+        {succeed, Edited} = erlog_int:prove_goal(
+                             {asserta, {choose, specific}}, Wrapped),
+        ?assertEqual([specific, general], choices(Edited)),
+        Ops = local_changes(Edited),
+        ?assert(quod_diff:valid_ops(Ops)),
+        {ok, Applied, _} = quod_diff:apply_ops_report(Committed, Ops),
+        ?assertEqual([specific, general], choices(Applied))
+    end).
+
+mixed_insertions_preserve_program_order_on_apply_test() ->
+    with_ordered_proof([{choose, first}, {choose, last}],
+      fun(Committed, Wrapped) ->
+          Edited = lists:foldl(fun(Goal, St) ->
+              {succeed, Next} = erlog_int:prove_goal(Goal, St),
+              Next
+          end, Wrapped,
+          [{asserta, {choose, front_one}},
+           {assertz, {choose, tail_one}},
+           {asserta, {choose, front_two}},
+           {assertz, {choose, tail_two}},
+           {retract, {choose, first}}]),
+          Expected = [front_two, front_one, last, tail_one, tail_two],
+          ?assertEqual(Expected, choices(Edited)),
+          {ok, Applied, _} = quod_diff:apply_ops_report(
+                               Committed, local_changes(Edited)),
+          ?assertEqual(Expected, choices(Applied))
+      end).
+
+front_insertion_keeps_content_dedup_and_fact_event_contract_test() ->
+    with_ordered_proof([{choose, original}], fun(Committed, _Wrapped) ->
+        Ops = [{asserta, {{choose, original}, true}},
+               {asserta, {{choose, new}, true}},
+               {assert, {{choose, new}, true}},
+               {event, code_saved}],
+        {ok, Applied, Changes} = quod_diff:apply_ops_report(Committed, Ops),
+        ?assertEqual([new, original], choices(Applied)),
+        ?assertEqual([{assert, {choose, new}}, code_saved],
+                     quod_runtime_predicates:diff_to_events(Changes)),
+        {ok, Repeated, NoChanges} = quod_diff:apply_ops_report(
+                                    Applied, lists:sublist(Ops, 3)),
+        ?assertEqual([new, original], choices(Repeated)),
+        ?assertEqual([], NoChanges)
+    end).
+
+ordered_edit_rollback_keeps_reads_but_discards_writes_and_events_test() ->
+    with_ordered_proof([{choose, original}, {input, old}],
+      fun(Committed, Wrapped) ->
+          Checkpoint = quod_erlog_db_local_prove:checkpoint(Wrapped),
+          {succeed, Read} = erlog_int:prove_goal({input, old}, Wrapped),
+          {succeed, Inserted} = erlog_int:prove_goal(
+                                 {asserta, {choose, discarded}}, Read),
+          {ok, Event} = quod_erlog_db_local_prove:stage_event(Inserted, discarded),
+          Restored = quod_erlog_db_local_prove:restore(Event, Checkpoint),
+          ?assertEqual([], local_changes(Restored)),
+          ?assertEqual([original], choices(Restored)),
+          Reads = quod_erlog_db_local_prove:get_read_set(
+                    (Restored#est.db)#db.ref),
+          ?assertEqual({present, 1}, maps:get({input, 1}, Reads)),
+          {ok, Changed} = quod_diff:apply_ops(
+                            Committed, quod_ct:diff_for({input, new})),
+          Published = quod_ct:commit_kb(Changed, 2, 1),
+          ?assertEqual({conflict, {input, 1}},
+                       quod_diff:validate(Reads, (Published#est.db)#db.ref))
+      end).
+
+with_ordered_proof(Facts, Fun) ->
+    Committed = quod_ct:committed_kb(Facts),
+    Wrapped = quod_erlog_db_local_prove:wrap_state(
+                Committed, #{read_set => true}),
+    try Fun(Committed, Wrapped)
+    after
+        quod_erlog_db_local_prove:cleanup_read_set(Wrapped),
+        quod_erlog_db_mvcc:delete((Committed#est.db)#db.ref)
+    end.
+
+local_changes(#est{db = #db{ref = Ref}}) ->
+    quod_erlog_db_local_prove:get_local_changes(Ref).
+
+choices(St) ->
+    {succeed, Answer} = erlog_int:prove_goal(
+                         {findall, {'Choice'}, {choose, {'Choice'}}, {'Choices'}}, St),
+    erlog_int:dderef({'Choices'}, Answer#est.bs).
+
 %%%===================================================================
 %%% The pure genesis policy-presence primitives (slice 3).
 %%%===================================================================

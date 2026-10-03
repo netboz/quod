@@ -1,6 +1,6 @@
-%% Explicit delegation by this node's own ontology. The runtime supplies the
-%% requesting ontology's installed identity; a hosting declaration alone grants
-%% no node signing authority. Grant and consequence belong to one signed proof.
+%% Explicit delegation constructed by this node's own trusted handler. Source
+%% identity and permission are checked in the consequence's signed proof; a
+%% hosting declaration alone grants no node signing authority.
 node_authorized_goal(Source, Anchor, Goal) :-
     can_execute_for(Source, Anchor, Goal),
     Source::(current_ontology_identity(Source, Anchor), call(Goal)).
@@ -12,11 +12,21 @@ node_instance_reference(agent_instance_ref(Namespace, _, Instance)) :-
     node_ontology(Namespace),
     instance_of(node, Instance).
 
-can_invoke(_, Principal, _, Namespace) :-
+can_invoke(_, Principal, [Namespace], Namespace) :-
     node_ontology(Namespace), node_instance_reference(Principal).
-can_invoke(host_ontology(Node, Namespace, Anchor, Visibility), Principal, _, _) :-
+can_invoke(host_ontology(Node, Namespace, Anchor, Visibility), Principal, Chain, Target) :-
+    node_hosting_context(Principal, Chain, Target),
     can_host_ontology(Principal, Node, Namespace, Anchor, Visibility).
-can_invoke(request_ontology_hosting(Principal, _, _, _, _), Principal, _, _).
+can_invoke(request_ontology_hosting(Principal, _, _, _, _), Principal, Chain, Target) :-
+    node_hosting_context(Principal, Chain, Target).
+
+%% Every hosting entry shares the self-authority restriction. A foreign helper
+%% still acting as this node cannot recover its privileges through an alternate
+%% grant; independent callers retain their ordinary hosting policy checks.
+node_hosting_context(Principal, Chain, Namespace) :-
+    (node_instance_reference(Principal) ->
+        node_ontology(Namespace), Chain = [Namespace]
+    ; true).
 
 %% Applications may add narrower can_host_ontology/5 rules to this node's
 %% policy. A user login or a hosting declaration alone grants no authority.
@@ -51,13 +61,31 @@ ontology_hosting_request(Node, Namespace, Anchor, Visibility) :-
     binary_codes(Anchor, Bytes), length(Bytes, 32),
     (Visibility = private ; Visibility = discoverable).
 
-state_handler(node_ontology_hosting,
-              [hosts_ontology/4, knows_ontology_host/4], [],
-              reconcile_node_ontology_hosting).
-
-reconcile_node_ontology_hosting(Scope) :-
+node_ontology_hosting_projection(Hosts, Contacts) :-
     findall(host(NodeRef, Namespace, Anchor, Visibility),
             hosts_ontology(NodeRef, Namespace, Anchor, Visibility), Hosts),
     findall(contact(NodeRef, Namespace, Anchor, HostNodeRef),
-            knows_ontology_host(NodeRef, Namespace, Anchor, HostNodeRef), Contacts),
-    '$quod_project_node_ontology_hosting'(Hosts, Contacts, Scope).
+            knows_ontology_host(NodeRef, Namespace, Anchor, HostNodeRef), Contacts).
+
+%% Only this node's behavior constructs a goal to execute with its identity.
+%% Runtime supplies validated data from the affected ontology and retains the
+%% original observation in private match metadata for custody validation.
+react_on(observed(agent_recovery_ready(Observer, Target, Host, Epoch, Expected,
+                                      Round, Report, Kind, Preparation)), Goal) :-
+    recovery_observation(agent_recovery_ready(Observer, Target, Host, Epoch, Expected,
+                                               Round, Report, Kind, Preparation)),
+    me(Observer),
+    Report = observation(_, _, Expiry),
+    limit_reaction_expiry(Expiry),
+    node_recovery_goal(Target, Host, Epoch, Expected, Round, Report, Kind, Preparation, Goal).
+
+node_recovery_goal(Target, Host, Epoch, Expected, Round, Report, Kind, required,
+                   node_authorized_goal(Source, Anchor, Operation)) :-
+    Target = agent_instance_ref(Source, Anchor, Instance),
+    prepare_agent_custody(Target, Epoch, Prepared),
+    Operation = report_agent_observation_with_custody(Instance, Host, Epoch,
+                                                     Expected, Round, Report, Kind, Prepared).
+node_recovery_goal(agent_instance_ref(Source, Anchor, Instance), Host, Epoch,
+                   Expected, Round, Report, Kind, none,
+                   node_authorized_goal(Source, Anchor,
+                     report_agent_observation(Instance, Host, Epoch, Expected, Round, Report, Kind))).

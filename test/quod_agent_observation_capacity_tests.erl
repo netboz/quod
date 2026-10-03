@@ -42,7 +42,7 @@ exercise(Limit, #{namespace := Ns, node := Node, reference := Ref, key := Key}) 
                    agent_observation_refusals_total := 1,
                    collapses := 0, reconcile_failures := 0}, quod_runtime:stats(Ns)),
     ?assert(is_process_alive(Child)),
-    ?assertMatch({Owner, [#{pid := Child}]}, quod_runtime:agents(Ns)),
+    ?assertMatch({Owner, [#{pid := Child}]}, quod_agent_hosting_tests:domain_agents(Ns)),
     commit(Ns, {retract, {agent_recovery_observer, a, Node}}),
     Withdrawal = quod_prolog:applied(Ns),
     receive
@@ -54,6 +54,6 @@ exercise(Limit, #{namespace := Ns, node := Node, reference := Ref, key := Key}) 
                    agent_observation_capacity := ready,
                    agent_observation_refusals_total := 1,
                    collapses := 0, reconcile_failures := 0}, quod_runtime:stats(Ns)),
-    ?assertMatch({Owner, [#{pid := Child}]}, quod_runtime:agents(Ns)).
+    ?assertMatch({Owner, [#{pid := Child}]}, quod_agent_hosting_tests:domain_agents(Ns)).
 
 commit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).

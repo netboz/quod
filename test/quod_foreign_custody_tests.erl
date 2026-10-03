@@ -21,7 +21,7 @@ callerless_custody_wait_and_other_identity_progress_test_() ->
     peer_test(queue, ordinary).
 
 suspended_session_survives_custody_sweep_test_() ->
-    peer_test(session, ordinary).
+    [peer_test(session, Order) || Order <- [follow_first, exact_first]].
 
 read_only_admission_and_custody_revalidation_test_() ->
     [peer_test(discovery, Mode) || Mode <- [valid, corrupt, repaired]].
@@ -73,7 +73,7 @@ run_case({Case, Mode}, Root) ->
     case Case of
         restart -> restart_case(Root, Mode);
         queue -> queue_case(Root);
-        session -> session_case(Root);
+        session -> session_case(Root, Mode);
         discovery -> discovery_case(Root, Mode);
         release -> release_case(Root, Mode);
         registry_outage -> registry_outage_case(Root);
@@ -229,7 +229,7 @@ queue_case(Root) ->
     ?assertNot(maps:is_key(identity(Missing), gen_server:call(Owner, test_lifecycle_state))),
     stop_owner(Owner), ok.
 
-session_case(Root) ->
+session_case(Root, Order) ->
     Fixture = fixture(), Identity = identity(Fixture),
     Owner = start_owner(Root, fetch(Fixture)),
     %% Ready reads deliberately do not claim mutation custody anymore. Seed
@@ -247,13 +247,32 @@ session_case(Root) ->
     ?assertNotEqual(Path, AbandonedPath),
     Holder = holder(Identity),
     trace_owner(Owner),
-    Request = projection_request(Owner, Fixture, 5000),
-    await_park(Owner, Identity),
+    %% A follow replies before scheduling its refresh. Either its writer or
+    %% the exact request may therefore reach custody first; exercise both
+    %% actual orders without assuming registration has already queued work.
+    Barrier = erlang:trace_delivered(Owner),
+    receive {trace_delivered, Owner, Barrier} -> ok
+    after 5000 -> error(follow_trace_barrier_missing) end,
+    drain_follow_wakes(Owner, Identity),
+    {Request, Job} = session_requests(Owner, Fixture, Order),
+    #{active := none, waiting := [Head, Tail]} = lifecycle(Owner, Identity),
+    ?assertMatch(#{ref := Job, wait_reason := custody}, Head),
+    ?assertMatch(#{wait_reason := runnable}, Tail),
+    {Exact, Follow} = case Order of
+        exact_first -> {Head, Tail};
+        follow_first -> {Tail, Head}
+    end,
+    ?assertMatch(#{work := {exact, _, _, _, resolve}, callers := [_]}, Exact),
+    ?assertMatch(#{work := {follow, Identity, _, _}, callers := []}, Follow),
+    ?assertEqual(Holder, quod_reg:where(writer_key(Identity))),
     ?assertEqual(Session, history_field(Owner, Identity, phase_session)),
     ?assert(filelib:is_file(Path)),
     ?assert(filelib:is_file(AbandonedPath)),
     Holder ! stop,
     assert_verified(Request),
+    %% Exact verification may finish before the material follower has swept
+    %% abandoned sessions. Observe that existing writer's completion first.
+    await_done(Owner, maps:get(ref, Follow)),
     ?assertEqual(Path, quod_dtx_phase_index:test_path(
                          history_field(Owner, Identity, phase_session))),
     ?assert(filelib:is_file(Path)),
@@ -273,6 +292,26 @@ session_case(Root) ->
     ?assert(filelib:is_file(quod_dtx_phase_index:test_path(Next))),
     {ok, Resumed} = quod_dtx_phase_index:resume(Next),
     ok = quod_dtx_phase_index:close(Resumed), ok.
+
+%% Await a processed request before adding its sibling: the queue must retain
+%% that custody head regardless of which semantic work arrived first.
+session_requests(Owner, Fixture, follow_first) ->
+    projection_follow(Fixture),
+    {Job, _} = await_denial(Owner),
+    {request(Owner, Fixture, 5000), Job};
+session_requests(Owner, Fixture, exact_first) ->
+    Request = request(Owner, Fixture, 5000),
+    {Job, _} = await_denial(Owner),
+    projection_follow(Fixture),
+    Identity = identity(Fixture),
+    receive {trace, Owner, 'receive', {follow_refresh, Identity, _}} -> ok
+    after 5000 -> error(follow_refresh_not_processed) end,
+    {Request, Job}.
+
+drain_follow_wakes(Owner, Identity) ->
+    receive {trace, Owner, 'receive', {follow_refresh, Identity, _}} ->
+        drain_follow_wakes(Owner, Identity)
+    after 0 -> ok end.
 
 discovery_case(Root, Mode) ->
     Fixture = fixture(), Identity = identity(Fixture),
@@ -623,6 +662,13 @@ request(Owner, F, Timeout) ->
 
 projection_request(Owner, F, Timeout) ->
     projection_follow(F),
+    %% Registration replies before the owner schedules its refresh. Establish
+    %% the follow-before-exact order asserted by await_park using delivery,
+    %% then an owner call that confirms the refresh handler has completed.
+    Identity = identity(F),
+    receive {trace, Owner, 'receive', {follow_refresh, Identity, _}} -> ok
+    after 5000 -> error(follow_refresh_not_delivered) end,
+    _ = lifecycle(Owner, Identity),
     request(Owner, F, Timeout).
 
 projection_follow(F) ->

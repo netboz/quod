@@ -8,48 +8,23 @@ agent_hosted(Instance, NodeRef, Epoch, PublicKey) :-
             [host(NodeRef, Epoch, PublicKey)]),
     findall(K, agent_key(Instance, K, active), [PublicKey]).
 
-state_handler(agent_hosting, [agent_host/4, agent_key/3], [], reconcile_agent_hosting).
-
-reconcile_agent_hosting(Changed) :-
-    agent_hosting_scope(Changed, Scope),
-    (local_node_agent(Node) ->
+%% The runtime supplies the requested resource scope and committed-policy
+%% context. It retains observed predicate dependencies for later invalidation.
+agent_hosting_projection(Requested, Node, Scope, Hosts) :-
+    agent_hosting_scope(Requested, Scope),
+    (Node \= none ->
         agent_hosting_instances(Scope, Node, Instances),
         findall(host(I, Node, E, K),
                 (member(I, Instances), agent_hosted(I, Node, E, K)), Hosts)
-    ; Hosts = []),
-    project_agent_hosts(Scope, Hosts).
+    ; Hosts = []).
 
-agent_hosting_scope(keys(Heads), keys(Instances)) :-
-    findall(I, (member(Head, Heads), agent_hosting_head(Head, I)), Changed),
-    term_variables(Changed, []),
-    !,
-    sort(Changed, Instances).
-agent_hosting_scope(_, all).
-
-agent_hosting_head(agent_host(I, _, _, _), I).
-agent_hosting_head(agent_key(I, _, _), I).
+agent_hosting_scope(agent(Instance), keys([Instance])).
+agent_hosting_scope(all, all).
 
 agent_hosting_instances(keys(Instances), _, Instances).
 agent_hosting_instances(all, Node, Instances) :-
     findall(I, agent_host(I, Node, _, _), Local),
     sort(Local, Instances).
-
-executor_owner_node(agent(Instance), host(NodeRef, Epoch, PublicKey)) :-
-    agent_hosted(Instance, NodeRef, Epoch, PublicKey).
-
-%% Opt-in domain continuation. The selector yields the least eligible binary
-%% key after Cursor and its guarded goal. A pass advances even after refusal or
-%% an unknown outcome; only changed dependencies or reincarnation revisit it.
-%% No pending goal or conversation state is copied into a private work ledger.
-project_next_agent_goal(Instance, Wake, Selector, Budget) :-
-    (agent_work_cursor(Instance, Wake, Cursor) ->
-        Selector =.. Parts,
-        append(Parts, [Cursor, Key, Goal], Arguments),
-        Selection =.. Arguments,
-        (call(Selection) ->
-            project_agent_goal(Instance, work(Key, Goal, Budget))
-        ; project_agent_goal(Instance, none))
-    ; true).
 
 agent_work_after(start, _).
 agent_work_after(after(Previous), Key) :- Key @> Previous.

@@ -602,7 +602,8 @@ conflict_descriptor(Diff, ReadCheck, Effects) ->
     Writes = lists:usort(
                [conflict_functor(erlog_int:functor(Head))
                 || {Operation, {Head, _Body}} <- Diff,
-                   Operation =:= assert orelse Operation =:= retract]),
+                   Operation =:= assert orelse Operation =:= asserta
+                       orelse Operation =:= retract]),
     Custody = lists:usort([quod_effect:target(Effect) || Effect <- Effects]),
     #{reads => Reads, writes => Writes, custody => Custody}.
 

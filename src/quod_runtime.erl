@@ -1,141 +1,46 @@
 -module(quod_runtime).
 -moduledoc """
-Per-namespace runtime projection orchestrator — the P tier of `doc/agent-fipa-plan.md` §4.2/§7/§8.
+Per-ontology owner of hosted actors and ordered live reaction discovery.
 
-D (the committed KB) is the truth; P is this node's *derived working state*, rebuilt from D by
-**state handlers** declared as ordinary stored facts:
+The committed ontology owns reaction rules and desired resources. Matching
+queues ordinary actor goals; it never executes their durable writes itself.
+Resource services accept only a named resource and scope, then select desired
+rows from this owner's retained committed snapshot before installing them.
+Caller overlays, supplied rows and arbitrary callback goals are never used.
 
-    state_handler(Id, WatchedPatterns, Needs, ConvergeGoal)
-
-One recipe per handler: `ConvergeGoal` converges the handler's piece of P from the current
-snapshot. The SAME goal runs everywhere, distinguished only by the appended scope argument:
-`all` at reconcile, `{keys, ChangedHeads}` after a live change — where `ChangedHeads` are the
-full head terms of the requested diff INCLUDING retracted heads (so "nothing in the snapshot
-for key K ⇒ delete P[K]" is expressible). This is a conservative invalidation hint: a
-requested no-op may cause a harmless reread. The reaction slice separately carries the
-canonical reducer's `applied_ops`. A join-shaped handler whose keys don't align with the
-changed heads may legitimately treat the hint as `all`. `Needs` is a list of
-`current(OtherId)` terms ordering handlers after their prerequisites (the onia/bbsvx
-action-pattern shape, hand-rolled); this slice restricts Needs to exactly those ground
-`current/1` edges so the whole graph is validated statically at reconcile — a cycle or
-missing dependency fails loudly up front, never mid-run.
-
-The same reconciliation owns the local ontology-subscription catalogue. An
-ordinary stored `subscribes(TargetNamespace, TargetAnchor)` fact contributes
-one anchored target identity. A founding-authorized `react_on/3` whose Pattern
-is source-qualified with `from(TargetNamespace, TargetAnchor, EventPattern)`
-contributes one event interest for that identity. The first `react_on/3`
-argument is instead the logical owner of the resulting effect; it is not an
-agent type or an event-source selector. Any ontology-defined callable owner
-term is valid when the event pattern binds all of its variables.
-
-Each durable subscription now owns one local consumer reference into the
-node-wide `quod_foreign_log` follower. Multiple hosted ontologies following
-the same anchored target share its certified cache and one fact projection;
-this runtime retains only building/ready/unreachable state and the correlated
-projection revision. It starts no verifier, cache, or second worker pool.
-Local and subscribed reactions are dispatched from the canonical reducer's
-`applied_ops`. Candidate indexes narrow by outer event functor (and exact
-source identity for subscribed events), but the actual match, executor
-resolution, and bound Handler continuation cross into Prolog through
-`erlog_int:unify_prove_body`; this runtime has no parallel unifier or binding
-representation. Initial foreign attachment, rebuild and resnapshot establish
-state only; only later contiguous certified advances enter the ordered tier.
-
-## Who may declare a handler
-
-Runtime declarations are executable — permission to write their facts must not
-be enough to activate them. Until the
-`can_declare_runtime` authorization lands, a declaration is **active only if its complete
-GROUND term is identical to one in the ontology's founding (slot-1) block**. This
-full-term founding match is currently the declaration-execution lock; ordinary
-`can_invoke/4` still governs the write itself but does not grant code-execution
-authority.
-Consequences: later-written declarations are recorded but refused (counted, warned); a
-*retracted* founding declaration (`G∖K`) is a loud, distinct unhealthy — the runtime never
-runs handlers the KB no longer contains; a founding declaration containing a variable is
-refused loudly (a nonground term cannot round-trip through the KB as the same term).
-
-## The ordered tier (live events)
-
-Each live block's transactions arrive as direct `{applied_live, Env, Est}` envelopes carrying
-the block-final snapshot. They queue in height order (bounded; overflow collapses the queue
-into one reconciliation) and drain in batches through the single killable runner. Per block,
-the changed heads first select the watching state handlers via the functor index; those handlers
-AND their transitive dependents are re-converged, in the global converge order — prerequisites
-first regardless of Id term order — each with
-its own watched subset of the changed heads as scope (`all` when a chained-in dependent
-watches none of them). The same runner then preserves transaction and operation
-order while matching canonical applied fact events against active local
-`react_on/3` declarations. When the batch completes through height H,
-`p_height = e_frontier = H` — the namespace-wide P-before-E barrier the effect
-layer reads.
-
-## Failure model
-
-A founding configuration error (cycle / missing dependency / retracted or nonground
-declaration / verified malformed founding block) is a **permanent** unhealthy. An unavailable
-ledger owner leaves founding pending until its registration or a runtime publication edge;
-it does not start a retry clock. An execution failure
-(handler failed/staged D/budget kill, in either the tier or a reconcile) COLLAPSES pending
-work into one reconciliation at the newest snapshot: kill the runner, drop the queue
-(counted), clear P bookkeeping, re-attach, reconcile. Repeated consecutive execution
-failures back off exponentially and, after 5, crash the server deliberately so the
-supervisor path runs — the backoff spacing keeps that from ever tripping `quod_ns`'s
-restart intensity. A ready edge arriving mid-reconcile is retried immediately after it —
-including after a FAILED reconcile, where the newer edge is exactly the retry needed.
-
-After the tier completes a batch, the floor is raised to the processed height (nothing
-below is needed any more), so KB history never accumulates behind an idle pin. At a replay
-edge the runtime kills and reaps every snapshot reader before detaching the Prolog pin;
-history is then free to prune throughout the replay without invalidating an active reader.
-
-Supervised LAST in `m:quod_ns`'s `rest_for_one` chain: any restart of `quod_prolog` (or a
-later sibling) restarts this runtime, whose re-attach then re-pins against the fresh KB —
-closing the one-way attach monitor — while a runtime crash restarts nothing else.
-
-Settled observers use the same lifecycle: a verified contiguous feed block is a live event;
-an anti-entropy gap is one replay interval followed by reconciliation. Validators and
-observers therefore maintain current P without reconstructing best-effort effects from gaps.
+One bounded worker serializes catalog discovery, ordered events and resource
+selection. Real owner notifications wake affected resources and pending work;
+recovery restores current obligations without replaying historical reactions.
+The event frontier records processed canonical input, not completion of goals
+or of every local resource. Consumers wait for their actual resource owner.
 """.
 
 -behaviour(gen_server).
 
--include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 
 -export([start_link/2, stats/1, effect_frontier/1,
-         enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1,
-         project_agents/4, project_agent_observers/4, agent_request/6,
-         project_agent_work/5, agents/1]).
+         reconcile_now/1, reconcile_resource/5,
+         project_agents/3, project_agent_observers/3, agent_request/6,
+         agents/1, reaction_agents/2, catalog_after/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
-%% the pure planning + handler-selection core — driven directly by eunit
--export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4,
-         test_read_founding/2, plan_runtime_catalog/2, alpha_normalize/1,
-         test_run_events/6, test_drain_observations/3]).
+%% Pure catalogue planning and the production ordered fold.
+-export([plan_runtime_catalog/1, alpha_normalize/1,
+         test_run_events/4, test_drain_observations/4, test_recovery_pending/2]).
 -endif.
 
 -define(RECONCILE_BUDGET_MS, 30000).
 -define(EVENT_BUDGET_MS, 1000).
 -define(EVENT_BUDGET_CAP_MS, 60000).      %% ceiling on a whole batch's runner budget
--define(HEAVY_BUDGET_MS, 30000).
 -define(MAX_AGENT_PENDING, 16).
 -define(MAX_AGENT_REQUEST_BYTES, 65536).
 -define(MAX_AGENT_PENDING_BYTES, 1048576).
 -define(MAX_HOSTED_AGENTS, 1024).
 -define(MAX_EXEC_FAILURES, 5).            %% then crash deliberately: the supervisor path runs
 -define(DEFAULT_MAX_QUEUED_EVENTS, 1024). %% >= 4 max-size blocks of per-tx envelopes
--define(DEFAULT_MAX_HEAVY_WORKERS, 8).    %% global concurrent resource-worker cap
--define(DEFAULT_MAX_HEAVY_PENDING, 1024). %% distinct queued resources, coalescing included
--define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
-
-%% raw declaration fields — UNVALIDATED wire/KB terms until validate/2 has passed them
--record(handler, {id :: term(),
-                  watch :: term(),
-                  needs :: term(),
-                  goal :: term()}).
 
 -record(s, {ns :: binary(),
             config :: map(),
@@ -143,15 +48,8 @@ observers therefore maintain current P without reconstructing best-effort effect
                             | live | {unhealthy, term()},
             est = undefined :: tuple() | undefined,   %% attached snapshot handle
             height = 0 :: non_neg_integer(),          %% its height (the reconcile floor)
-            handlers = #{} :: #{term() => #handler{}},
-            order = [] :: [term()],                   %% converge order (deps first)
-            index = #{} :: #{tuple() => [term()]},    %% changed-head functor => state-handler ids
-            dependents = #{} :: #{term() => [term()]},%% Id => ids that Need it (reverse edges)
-            %% Cached slot-1 declarations. Reactions retain exact compiled
-            %% clauses because their intentional variables require
-            %% alpha-normalized full-clause authority checks.
-            founding = unknown :: unknown | {ok, map(), map()},
-            ledger_monitor :: reference(),
+            binding = none :: none | map(),
+            prolog_monitor :: reference(),
             subscriptions = [] :: [{binary(), binary()}],
             reactions = [] :: [tuple()],
             reaction_index = #{} :: #{tuple() => [tuple()]},
@@ -168,55 +66,41 @@ observers therefore maintain current P without reconstructing best-effort effect
             source_attach_token = none :: none | reference(),
             source_attempts = 0 :: non_neg_integer(),
             foreign_log_monitor = none :: none | reference(),
-            %% ONE killable runner at a time — a reconcile or an ordered-tier event batch
-            runner = none :: none | {reconcile | events, pid(), reference(), reference(),
+            %% One killable reader at a time: catalogue, event matching or resource selection.
+            runner = none :: none | {reconcile | events | resource, pid(), reference(), reference(),
                                      reference()},
+            resource_waiter = none,
+            recovery_pending = none,
+            resource_basis = #{} :: map(),
+            resource_failures = #{} :: map(),
+            resource_owners = #{} :: #{reference() => {quod_reg:key(), pid() | undefined}},
+            node_identity = undefined :: term(),
             pending_edge = none :: none | term(),     %% a ready edge that arrived mid-reconcile
             last_recovery = undefined :: term(),      %% dedup: reconcile once per edge id
             %% The one ordered tier carries local apply envelopes and subscribed
-            %% certified advances in arrival order. Local entries converge P
-            %% before dispatch; remote entries enter the same reaction helper.
+            %% certified advances in arrival order. Resource hints share this queue,
+            %% while their dependencies use actual installation notifications.
             queue = [] :: [tuple()],                  %% REVERSED work items
             queue_len = 0 :: non_neg_integer(),
-            physical_turn = false :: boolean(),
+            owned_turn = false :: boolean(),
             %% Follow acknowledgements owned by the current event runner. They
             %% are released on success, collapse, replay, or termination, so a
-            %% dead handler can never wedge the shared follower.
+            %% dead reader can never wedge the shared follower.
             event_acks = [] :: [{reference(), reference()}],
             p_height = 0 :: non_neg_integer(),        %% ordered tier completed through here
-            e_frontier = 0 :: non_neg_integer(),      %% the P-before-E barrier (Slice 3 E reads)
+            e_frontier = 0 :: non_neg_integer(),      %% canonical input released to the existing effect owner
             exec_failures = 0 :: non_neg_integer(),   %% consecutive execution failures (backoff)
             reconciles = 0 :: non_neg_integer(),
             reconcile_failures = 0 :: non_neg_integer(),
             collapses = 0 :: non_neg_integer(),       %% queue overflows + execution collapses
             dropped_events = 0 :: non_neg_integer(),
-            rejected_dynamic = 0 :: non_neg_integer(),
             rejected_subscriptions = 0 :: non_neg_integer(),
             events_seen = 0 :: non_neg_integer(),     %% direct applied_live received
             reaction_candidates = 0 :: non_neg_integer(),
             reaction_matches = 0 :: non_neg_integer(),
             reactions_executed = 0 :: non_neg_integer(),
-            reaction_inert = 0 :: non_neg_integer(),
             reaction_failures = 0 :: non_neg_integer(),
-            %% heavy-worker framework (§8): queue-fed per-resource workers OUTSIDE the
-            %% ordered pipeline. One COALESCED pending slot per resource (jobs are
-            %% full-rebuild-idempotent in this slice, so a newer job supersedes a queued one);
-            %% workers run against the NEWEST attached snapshot (converging to at-least-Rev),
-            %% so only RUNNING workers pin history (at their captured est height).
-            heavy_pending = #{} :: #{term() => {non_neg_integer(), term()}},  %% Res => {Rev, Job}
-            heavy_order = [] :: [term()],                    %% FIFO distinct-resource order
-            heavy_running = #{} :: #{term() => {pid(), reference(), reference(),
-                                                reference(), non_neg_integer(), non_neg_integer()}},
-                                   %% Res => {Pid, MRef, TRef, JobRef, Rev, EstHeight}
-            revisions = #{} :: #{term() => non_neg_integer()},   %% Res => installed rev
-            blocked_revisions = #{} :: #{term() => non_neg_integer()},
-            waiters = #{} :: #{reference() => {gen_server:from(), term(), non_neg_integer(),
-                                               reference()}},    %% WRef => {From,Res,Rev,TRef}
-            superseded = 0 :: non_neg_integer(),
-            heavy_rejected = 0 :: non_neg_integer(),
-            heavy_failures = 0 :: non_neg_integer(),
-            observer_handler = undefined, observer = none,
-            agent_handler = undefined, agent_refresh = false,
+            observer = none,
             agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
             agent_work_subscribed = false,
@@ -231,36 +115,36 @@ observers therefore maintain current P without reconstructing best-effort effect
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_runtime, Ns}), ?MODULE, {Ns, Config}, []).
 
--doc "Install hosted children from the current projection runner only.".
--spec project_agents(binary(), term(), all | {keys, [term()]}, [term()]) ->
-          ok | {blocked, capacity} | {error, term()}.
-project_agents(Ns, Handler, Scope, Hosts) ->
-    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agents, Handler, Scope, Hosts}, infinity).
+%% These installation calls are private to the current owned selector worker.
+project_agents(Ns, Scope, Hosts) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agents, Scope, Hosts}, infinity).
 
--spec project_agent_observers(binary(), term(), all | {keys, [term()]}, [term()]) ->
-          ok | {blocked, capacity} | {error, term()}.
-project_agent_observers(Ns, Handler, Scope, Rows) ->
+project_agent_observers(Ns, Scope, Rows) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agent_observers, Scope, Rows}, infinity).
+
+%% Ordinary goals request convergence; only the resource owner selects rows.
+reconcile_resource(Ns, MinHeight, Resource, Scope, Deadline) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
-                    {project_agent_observers, Handler, Scope, Rows}, infinity).
+                    {reconcile_resource, MinHeight, Resource, Scope, Deadline}, infinity).
 
 -doc "Queue a bounded live request for the executor selected by the current reaction.".
 -spec agent_request(binary(), non_neg_integer(), term(), read | execute, term(),
-                    pos_integer() | {expires, pos_integer()}) ->
+                    pos_integer() | {expires, pos_integer()} |
+                    {expires, pos_integer(), integer()}) ->
           ok | {error, term()}.
 agent_request(Ns, Height, Executor, Mode, Goal, Budget) ->
-    {Expires, Remaining} = case Budget of
-        {expires, Expiry} -> {Expiry, Expiry - quod_time:now_ms()};
-        Timeout -> {quod_time:now_ms() + Timeout, Timeout}
+    Mono = quod_time:mono_ms(), Now = quod_time:now_ms(),
+    {Expires, Deadline} = case Budget of
+        {expires, Expiry, Original} -> {Expiry, min(Original, Mono + Expiry - Now)};
+        {expires, Expiry} -> {Expiry, Mono + Expiry - Now};
+        Timeout -> {Now + Timeout, Mono + Timeout}
     end,
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
-      {agent_request, Height, Executor, Mode, Goal,
-       {Expires, quod_time:mono_ms() + Remaining}}, infinity).
+      {agent_request, Height, Executor, Mode, Goal, {Expires, Deadline}}, infinity).
 
-%% The projection runner selects domain work in Prolog. Only its cursor and
-%% outstanding queue reference live here; the ontology remains the work source.
-project_agent_work(Ns, Handler, Height, Instance, Step) ->
+project_agent_work(Ns, Height, Instance, Step) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
-      {project_agent_work, Handler, Height, Instance, Step}, infinity).
+                   {project_agent_work, Height, Instance, Step}, infinity).
 
 -doc "Return current hosted process references, owned by this runtime incarnation.".
 -spec agents(binary()) -> {pid(), [map()]}.
@@ -272,7 +156,7 @@ stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_runtime, Ns}), get_stats, 1000)
     catch _:_ -> #{} end.
 
--doc "Return the ordered P-before-E frontier used to release direct effects.".
+-doc "Return processed canonical input height for the existing effect owner.".
 -spec effect_frontier(binary()) -> {ok, non_neg_integer()} | {error, unavailable}.
 effect_frontier(Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
     case quod_reg:where({quod_runtime, Ns}) of
@@ -285,41 +169,14 @@ effect_frontier(Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
 effect_frontier(_Ns) ->
     {error, unavailable}.
 
--doc """
-Queue heavy work for `Resource` at requested revision `Rev` (the enqueueing event's height).
-Called synchronously by the `enqueue_projection/2` bridge so queue/size backpressure is loud:
-the runtime coalesces a newer job for one resource, bounds distinct pending resources, and
-bounds the encoded job size before retaining it.
-""".
--spec enqueue_heavy(binary(), term(), non_neg_integer(), term()) ->
-          ok | {error, overloaded | oversized | unavailable}.
-enqueue_heavy(Ns, Resource, Rev, Job) ->
-    try gen_server:call(quod_reg:via({quod_runtime, Ns}),
-                        {heavy_enqueue, Resource, Rev, Job}, 5000)
-    catch exit:_ -> {error, unavailable} end.
-
--doc "The installed revision for `Resource` (0 before any job completed).".
--spec revision(binary(), term()) -> non_neg_integer().
-revision(Ns, Resource) ->
-    try gen_server:call(quod_reg:via({quod_runtime, Ns}), {revision, Resource}, 1000)
-    catch _:_ -> 0 end.
-
--doc "Wake the existing runtime reconciler after local projection authority changes.".
+-doc "Observe current resource owners; unchanged readiness does not repeat selection.".
 reconcile_now(Ns) ->
     gen_server:cast(quod_reg:via({quod_runtime, Ns}), reconcile_now).
 
--doc """
-Block until `Resource`'s installed revision reaches `Rev` — the per-resource release gate a
-heavy-dependent effect uses instead of the namespace-wide P-before-E frontier. Returns
-`{error, unhealthy}` when the runtime is permanently unhealthy (the revision can no longer
-install), `{error, timeout}` after `TimeoutMs`.
-""".
--spec await_revision(binary(), term(), non_neg_integer(), pos_integer()) ->
-          ok | {error, timeout | unhealthy}.
-await_revision(Ns, Resource, Rev, TimeoutMs) ->
-    try gen_server:call(quod_reg:via({quod_runtime, Ns}),
-                        {await_revision, Resource, Rev, TimeoutMs}, infinity)
-    catch exit:_ -> {error, unhealthy} end.
+%% Only the matching worker may borrow current actor bindings.
+-spec reaction_agents(binary(), domain | {recovery, pid(), pos_integer(), map()}) -> [map()].
+reaction_agents(Ns, Audience) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {reaction_agents, Audience}, infinity).
 
 %%%===================================================================
 %%% gen_server
@@ -333,8 +190,10 @@ init({Ns, Config}) ->
     %% attach answer lands in our mailbox, so the boot race has no window.
     true = quod_reg:subscribe({runtime, Ns}),
     true = quod_reg:subscribe({node_actor, node}),
-    LedgerMonitor = quod_reg:monitor_name({quod_simplex, Ns}, follow),
-    {ok, #s{ns = Ns, config = Config, ledger_monitor = LedgerMonitor},
+    PrologMonitor = quod_reg:monitor_name({quod_prolog, Ns}, follow),
+    Owners = monitor_resource_owners(Ns),
+    {ok, #s{ns = Ns, config = Config, prolog_monitor = PrologMonitor,
+            resource_owners = Owners, node_identity = quod_node_actor:principal()},
      {continue, try_attach}}.
 
 %% The restart-while-ready case: a runtime-only restart sees no ready edge (the KB is already
@@ -343,68 +202,130 @@ init({Ns, Config}) ->
 %% `not_ready` cheaply once the call is served, and the ready edge does the rest.
 handle_continue(try_attach, S = #s{mode = booting}) ->
     case safe_attach(S#s.ns) of
-        {ok, Est, H}       -> {noreply, start_reconcile(boot, Est, H, S)};
+        {ok, Est, H, Binding} -> {noreply, start_reconcile(boot, Est, H, S#s{binding = Binding})};
         {error, not_ready} -> {noreply, S}
     end;
 handle_continue(try_attach, S) ->
     {noreply, S}.
 
-handle_call({project_agent_observers, Handler, Scope, Rows}, {Caller, _},
-            S = #s{runner = {_, Caller, _, _, _}, observer_handler = Owner,
-                   observer = Existing, config = Config})
-  when Handler =/= undefined, (Owner =:= undefined orelse Owner =:= Handler) ->
+handle_call({reconcile_resource, MinHeight, Resource, Scope, Deadline}, From, S = #s{mode = live}) ->
+    case lists:member(Resource, [agent_hosts, agent_observers, node_ontologies,
+                                effect_custody, agent_work, agent_custody])
+         andalso valid_resource_scope(Resource, Scope, S)
+         andalso is_integer(MinHeight) andalso MinHeight >= 0
+         andalso quod_wire_term:is_ground(Scope) andalso is_integer(Deadline)
+         andalso Deadline > quod_time:mono_ms() of
+        true ->
+            case S#s.queue_len < max_queued_events(S) of
+                true ->
+                    {Caller, _} = From,
+                    Monitor = monitor(process, Caller, [{tag, resource_caller_down}]),
+                    Item = {resource, MinHeight, Resource, Scope, Deadline, From, Monitor},
+                    {noreply, maybe_run_events(S#s{queue = [Item | S#s.queue],
+                                                   queue_len = S#s.queue_len + 1})};
+                %% The refused goal is not replayed. Capacity loss of a
+                %% committed-state service still owes normal readiness, just
+                %% like canonical input overflow; recover from current truth.
+                false -> {reply, {error, overloaded}, overflow_collapse(S)}
+            end;
+        false -> {reply, {error, invalid_resource_request}, S}
+    end;
+handle_call({reconcile_resource, _, _, _, _}, _From, S) ->
+    {reply, {error, not_ready}, S};
+handle_call({project_agent_observers, all, []}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, observer = none}) ->
+    {reply, ok, S};
+handle_call({project_agent_observers, Scope, Rows}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, observer = Existing, config = Config}) ->
     Observer = case Existing of
         none -> quod_agent_observer:new(maps:get(node_id, Config));
         _ -> Existing
     end,
     case quod_agent_observer:project(Scope, Rows, Observer) of
         {ok, Installed} ->
-            {reply, ok, install_observer(Observer, Installed, Handler, Scope, [], S)};
+            {reply, ok, install_observer(Observer, Installed, Scope, [], S)};
         {blocked, capacity, Installed, Refused} ->
-            {reply, {blocked, capacity},
-                install_observer(Observer, Installed, Handler, Scope, Refused, S)};
+            {reply, {blocked, capacity}, install_observer(Observer, Installed, Scope, Refused, S)};
         {error, _} = Error ->
             case Existing of none -> quod_agent_observer:stop(Observer); _ -> ok end,
             {reply, Error, S}
     end;
-handle_call({project_agent_observers, Handler, _, _}, {Caller, _},
-            S = #s{runner = {_, Caller, _, _, _}, observer_handler = Owner})
-  when Owner =/= undefined, Owner =/= Handler ->
-    {reply, {error, {conflicting_agent_observer_owner, Owner, Handler}}, S};
-handle_call({project_agent_observers, _, _, _}, _From, S) ->
-    {reply, {error, stale_observer_projection}, S};
+handle_call({project_agent_observers, _, _}, _From, S) ->
+    {reply, {error, stale_resource_owner}, S};
+handle_call({resource_selected, Key, Basis}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}}) ->
+    %% Canonical input may have arrived while the worker read its pinned view.
+    %% Record dependencies before installation so the next applied delta also
+    %% invalidates a result racing this check.
+    Next = case Key of
+        agent_recovery -> S;
+        agent_custody -> S;
+        _ ->
+            Kept = case {Key, S#s.resource_waiter} of
+                {{agent_work, _}, _} ->
+                    maps:merge(maps:get(Key, S#s.resource_basis, #{}), Basis);
+                {_, {{internal, _}, _}} -> Basis;
+                _ -> maps:merge(maps:get(Key, S#s.resource_basis, #{}), Basis)
+            end,
+            S#s{resource_basis = (S#s.resource_basis)#{Key => Kept}}
+    end,
+    Checked = case Key of
+        {agent_work, _} -> maps:get(Key, Next#s.resource_basis);
+        _ -> Basis
+    end,
+    Changes = queued_resource_changes(S#s.queue, S#s.height),
+    case map_size(Changes) > 0 andalso quod_resource_basis:affected(Checked, Changes) of
+        true when Key =:= agent_recovery; Key =:= agent_custody ->
+            {reply, {error, selection_superseded}, Next};
+        true -> {reply, {error, selection_superseded}, queue_resource_key(Key, changed, Next)};
+        false -> {reply, ok, Next}
+    end;
+handle_call({resource_selected, _, _}, _From, S) ->
+    {reply, {error, stale_resource_owner}, S};
+handle_call({deliver_recovery, Batch, Event, Metadata = #{deadline := Deadline}, Expiry}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, recovery_pending = none,
+                   observer = Observer, binding = #{identity := Identity}}) ->
+    Node = maps:get(observer, Metadata),
+    {agent_instance_ref, NodeNs, _, _} = Node,
+    Mono = quod_time:mono_ms(),
+    Bound = min(Deadline, Mono + Expiry - quod_time:now_ms()),
+    case {quod_agent_observer:current(Batch, Observer), local_node_reference(),
+          quod_reg:where({quod_runtime, NodeNs}), Bound > Mono} of
+        {true, Node, Owner, true} when is_pid(Owner) ->
+            Token = make_ref(), Monitor = monitor(process, Owner, [{tag, recovery_owner_down}]),
+            Timer = erlang:start_timer(Bound, self(), {recovery_expired, Token}, [{abs, true}]),
+            Evidence = Metadata#{deadline => Bound, evidence => maps:without([bindings], Batch)},
+            Owner ! {owned_recovery, self(), Identity, Token, Event, Evidence, Expiry},
+            {reply, ok, S#s{recovery_pending = {Owner, Token, Monitor, Timer}}};
+        _ -> {reply, {error, stale_observation}, S}
+    end;
+handle_call({deliver_recovery, _, _, _, _}, _From, S) ->
+    {reply, {error, stale_resource_owner}, S};
 handle_call(agents, _From, S) ->
     {reply, {self(), [maps:with([binding, pid], A) || A = #{stopping := false} <- maps:values(S#s.agents)]}, S};
-handle_call({project_agents, Handler, Scope, Hosts}, From = {Caller, _},
-            S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner,
-                   founding = {ok, #{identity := Identity}, _}})
-  when Handler =/= undefined, (Owner =:= undefined orelse Owner =:= Handler) ->
+handle_call({reaction_agents, Audience}, {Caller, _},
+            S = #s{runner = {events, Caller, _, _, _},
+                   binding = #{request_timeout_ms := Timeout}}) ->
+    {Bindings, Next} = audience_bindings(Audience, S),
+    {reply, [B#{request_timeout_ms => Timeout} || B <- Bindings], Next};
+handle_call({reaction_agents, _}, _From, S) -> {reply, [], S};
+handle_call({project_agents, Scope, Hosts}, From = {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
     case agent_projection(Identity, Scope, Hosts, S) of
         {ok, Slots, Desired} ->
-            Base = S#s{agent_handler = Handler,
-                        agent_capacity_blocked = Scope =/= all andalso S#s.agent_capacity_blocked},
-            Installed = install_agents(Slots, Desired, Base),
+            Installed = install_agents(Slots, Desired,
+                         S#s{agent_capacity_blocked = Scope =/= all andalso S#s.agent_capacity_blocked}),
             Reply = case Installed#s.agent_capacity_refusals > S#s.agent_capacity_refusals of
-                        true -> {blocked, capacity};
-                        false -> ok
-                    end,
-            Next = case S#s.agent_refresh of
-                       true -> queue_agent_reconcile(Installed#s{agent_refresh = false});
-                       false -> Installed
-                   end,
-            case agent_retirements(Slots, Next#s.agents) of
+                true -> {blocked, capacity}; false -> ok end,
+            case agent_retirements(Slots, Installed#s.agents) of
                 Waiting when map_size(Waiting) > 0 ->
-                    {noreply, Next#s{agent_projection_waiter = {From, Waiting, Reply}}};
-                _ -> {reply, Reply, Next}
+                    {noreply, Installed#s{agent_projection_waiter = {From, Waiting, Reply}}};
+                _ -> {reply, Reply, Installed}
             end;
         {error, _} = Error -> {reply, Error, S}
     end;
-handle_call({project_agents, Handler, _, _}, {Caller, _},
-            S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner})
-  when Owner =/= undefined, Owner =/= Handler ->
-    {reply, {error, {conflicting_agent_projection_owner, Owner, Handler}}, S};
-handle_call({project_agents, _, _, _}, _From, S) ->
-    {reply, {error, stale_projection}, S};
+handle_call({project_agents, _, _}, _From, S) ->
+    {reply, {error, stale_resource_owner}, S};
 handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
             {Caller, _}, S = #s{runner = {events, Caller, _, _, _}}) ->
     case request_executor(Executor, S) of
@@ -417,18 +338,16 @@ handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
     end;
 handle_call({agent_request, _, _, _, _, _}, _From, S) ->
     {reply, {error, stale_executor}, S};
-handle_call({project_agent_work, Handler, H, Instance, Step}, {Caller, _},
-            S = #s{runner = {_, Caller, _, _, _}}) when Handler =/= undefined ->
-    {Reply, Next} = project_work(Handler, H, {agent, Instance}, Step, S),
+handle_call({project_agent_work, H, Instance, Step}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}}) ->
+    {Reply, Next} = project_work(H, {agent, Instance}, Step, S),
     {reply, Reply, Next};
-handle_call({project_agent_work, _, _, _, _}, _From, S) ->
+handle_call({project_agent_work, _, _, _}, _From, S) ->
     {reply, {error, stale_projection}, S};
 handle_call(get_stats, _From, S) ->
     {reply, maps:merge(quod_agent_observer:stats(S#s.observer),
              #{mode => mode_tag(S#s.mode), height => S#s.height,
-              founding_ready => S#s.founding =/= unknown,
               runner_active => S#s.runner =/= none,
-              handlers_active => map_size(S#s.handlers),
               subscriptions_active => length(S#s.subscriptions),
               reactions_active => length(S#s.reactions),
               source_targets_active => map_size(S#s.source_interests),
@@ -458,117 +377,37 @@ handle_call(get_stats, _From, S) ->
               agent_work_blocked => agent_work_count(blocked, S),
               collapses => S#s.collapses,
               dropped_events => S#s.dropped_events,
-              rejected_dynamic => S#s.rejected_dynamic,
               rejected_subscriptions => S#s.rejected_subscriptions,
               events_seen => S#s.events_seen,
               reaction_candidates => S#s.reaction_candidates,
               reaction_matches => S#s.reaction_matches,
               reactions_executed => S#s.reactions_executed,
-              reaction_inert => S#s.reaction_inert,
               reaction_failures => S#s.reaction_failures,
-              heavy_pending => map_size(S#s.heavy_pending),
-              heavy_running => map_size(S#s.heavy_running),
-              heavy_superseded => S#s.superseded,
-              heavy_rejected => S#s.heavy_rejected,
-              heavy_failures => S#s.heavy_failures,
-              waiters => map_size(S#s.waiters)}), S};
+              resource_dependencies => map_size(S#s.resource_basis),
+              resource_failures => S#s.resource_failures}), S};
 handle_call(effect_frontier, _From, S) ->
     {reply, {ok, S#s.e_frontier}, S};
-handle_call({revision, Resource}, _From, S) ->
-    {reply, effective_revision(Resource, S), S};
-handle_call({await_revision, Resource, Rev, TimeoutMs}, From, S) ->
-    case effective_revision(Resource, S) >= Rev of
-        true  -> {reply, ok, S};
-        false ->
-            case S#s.mode of
-                {unhealthy, R} ->
-                    case config_error(R) of
-                        %% permanent: the revision can never install
-                        true  -> {reply, {error, unhealthy}, S};
-                        %% transient collapse/backoff: the retry reconcile re-enqueues
-                        false -> {noreply, park_waiter(From, Resource, Rev, TimeoutMs, S)}
-                    end;
-                _ ->
-                    {noreply, park_waiter(From, Resource, Rev, TimeoutMs, S)}
-            end
-    end;
-handle_call({heavy_enqueue, Resource, Rev, Job}, From, S = #s{mode = live}) ->
-    handle_heavy_enqueue(Resource, Rev, Job, From, S);
-handle_call({heavy_enqueue, Resource, Rev, Job}, From,
-            S = #s{mode = {reconciling, _Id}}) ->
-    handle_heavy_enqueue(Resource, Rev, Job, From, S);
-handle_call({heavy_enqueue, _Resource, _Rev, _Job}, _From, S) ->
-    {reply, {error, unavailable}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
-handle_heavy_enqueue(Resource, Rev, Job, _From, S) ->
-    case validate_heavy_enqueue(Resource, Job, S) of
-        ok ->
-            case queue_heavy(Resource, Rev, Job, S) of
-                {ok, S1} -> {reply, ok, pump_heavy(S1)};
-                full -> {reply, {error, overloaded},
-                         S#s{heavy_rejected = S#s.heavy_rejected + 1}}
-            end;
-        oversized ->
-            {reply, {error, oversized}, S#s{heavy_rejected = S#s.heavy_rejected + 1}}
-    end.
-
-handle_cast({founding_captured, Ref, Binding, Founding},
-            S = #s{runner = {reconcile, _Pid, _MRef, Ref, _TRef}}) ->
-    %% The same runner sends this before declaration discovery or executing a
-    %% handler. Cache immutable founding authority, and distinguish a capture
-    %% budget kill from the existing handler execution-failure policy.
-    case quod_simplex:history_view_live(Binding) of
-        true -> {noreply, S#s{founding = {ok, Binding, Founding}}};
-        false -> {noreply, S}
-    end;
-handle_cast({founding_captured, _StaleRef, _Binding, _Founding}, S) ->
-    {noreply, S};
 handle_cast({runner_done, Ref, Outcome}, S = #s{runner = {Kind, _Pid, MRef, Ref, TRef}}) ->
     _ = erlang:cancel_timer(TRef),
     erlang:demonitor(MRef, [flush]),
     S1 = S#s{runner = none},
     case Kind of
         reconcile -> {noreply, reconcile_finished(Outcome, S1)};
+        resource -> {noreply, resource_finished(Outcome, S1)};
         events    -> {noreply, events_finished(Outcome, S1)}
     end;
 handle_cast({runner_done, _StaleRef, _Outcome}, S) ->
     {noreply, S};
-handle_cast({heavy_done, Resource, Ref, Outcome}, S) ->
-    case maps:get(Resource, S#s.heavy_running, undefined) of
-        {_Pid, MRef, TRef, Ref, _Rev, EstH} ->
-            _ = erlang:cancel_timer(TRef),
-            erlang:demonitor(MRef, [flush]),
-            S1 = S#s{heavy_running = maps:remove(Resource, S#s.heavy_running)},
-            case Outcome of
-                ok ->
-                    %% A full-rebuild job reads EstH, so its installed output is current through
-                    %% that captured height, not merely through the older trigger revision.
-                    NewRev = max(maps:get(Resource, S1#s.revisions, 0), EstH),
-                    Blocked1 = clear_blocked(Resource, NewRev, S1#s.blocked_revisions),
-                    S2 = release_ready_waiters(
-                           S1#s{revisions = (S1#s.revisions)#{Resource => NewRev},
-                                blocked_revisions = Blocked1}),
-                    %% floor may lift now that this worker's snapshot is released
-                    {noreply, floor_raise(pump_heavy(S2))};
-                {error, Reason} ->
-                    {noreply, heavy_failed(Resource, Reason, S1)}
-            end;
-        _ ->
-            {noreply, S}   %% stale report from a killed/superseded worker
-    end;
-handle_cast(reconcile_now, S = #s{runner = {_, _, _, _, _}}) ->
-    {noreply, S#s{pending_edge = {projection, make_ref()}}};
 handle_cast(reconcile_now, S) ->
-    {noreply, replace_snapshot_and_reconcile({projection, make_ref()}, S)};
+    {noreply, owner_wake(refresh_resource_owners(S))};
 handle_cast(_Msg, S) -> {noreply, S}.
 
 %% A ready edge: the KB finished a rebuild (Id = RecoveryId, or `boot` for the quiet first
 %% ready transition). Reconcile exactly once per edge; a `boot` edge counts only while booting.
 handle_info({replay_ready, boot, _H}, S = #s{mode = booting}) ->
     {noreply, replace_snapshot_and_reconcile(boot, S)};
-handle_info({replay_ready, boot, _H}, S = #s{founding = unknown}) ->
-    {noreply, founding_wake(S)};
 handle_info({replay_ready, boot, _H}, S) ->
     {noreply, S};
 handle_info({replay_ready, Id, _H}, S = #s{last_recovery = Id}) ->
@@ -593,10 +432,10 @@ handle_info({source_follow_attach, Token},
      run_source_attach(S0#s{source_attach_token = none})};
 handle_info({source_follow_attach, _StaleToken}, S) ->
     {noreply, S};
-handle_info({gproc, registered, MRef, _Name}, S = #s{ledger_monitor = MRef}) ->
-    {noreply, founding_wake(S)};
-handle_info({gproc, unreg, MRef, _Name}, S = #s{ledger_monitor = MRef}) ->
-    {noreply, founding_pending(S)};
+handle_info({gproc, registered, MRef, _Name}, S = #s{prolog_monitor = MRef}) ->
+    {noreply, owner_wake(S)};
+handle_info({gproc, unreg, MRef, _Name}, S = #s{prolog_monitor = MRef}) ->
+    {noreply, owner_pending(S)};
 handle_info(
   {gproc, registered, MRef, _Name},
   S = #s{foreign_log_monitor = MRef}) ->
@@ -605,57 +444,78 @@ handle_info(
   {gproc, unreg, MRef, _Name},
   S = #s{foreign_log_monitor = MRef}) ->
     {noreply, foreign_log_down(S)};
+handle_info({gproc, Status, Ref, _Name}, S = #s{resource_owners = Owners})
+  when (Status =:= registered orelse Status =:= unreg), is_map_key(Ref, Owners) ->
+    {noreply, refresh_node_identity(refresh_resource_owner(Ref, S))};
 %% The direct post-commit envelope (est-carrying): the ordered tier's input. Enqueue in
 %% arrival (= height) order; overflow collapses to one reconciliation at the newest snapshot.
-handle_info({applied_live, Env, Est}, S0 = #s{mode = live}) ->
-    S = S0#s{events_seen = S0#s.events_seen + 1},
-    case S#s.queue_len >= max_queued_events(S) of
-        true ->
-            {noreply, overflow_collapse(S)};
-        false ->
-            S1 = S#s{queue = [{local, Env, Est} | S#s.queue],
-                      queue_len = S#s.queue_len + 1},
-            {noreply, maybe_run_events(S1)}
-    end;
+handle_info({runtime_snapshot_advanced, Owner, H, Est},
+            S = #s{binding = #{owner := Owner}, height = Before}) when is_integer(H), H > Before ->
+    {noreply, enqueue_committed({snapshot, H, Est}, S)};
+handle_info({runtime_snapshot_advanced, _Owner, _H, _Est}, S) ->
+    {noreply, S};
+handle_info({applied_live, Env, Est}, S = #s{mode = live}) ->
+    {noreply, enqueue_committed({local, Env, Est}, S#s{events_seen = S#s.events_seen + 1})};
 handle_info({applied_live, Env, Est}, S = #s{mode = {reconciling, _}}) ->
-    %% committed after the reconcile snapshot was taken: drain (or drop as stale) afterwards.
-    %% Overflow: the dropped events' state is NOT in the running reconcile's snapshot, so a
-    %% follow-up reconciliation must be queued — unless a real ready edge is already parked
-    %% (it reconciles at an even newer snapshot, superseding ours).
-    S1 = S#s{events_seen = S#s.events_seen + 1},
-    case S1#s.queue_len >= max_queued_events(S1) of
-        true ->
-            Pending = case S1#s.pending_edge of
-                          none -> {collapse, make_ref()};
-                          %% Founding readiness alone is discarded after a
-                          %% successful capture; dropped post-snapshot work
-                          %% needs the stronger fresh-snapshot obligation.
-                          {founding, _} -> {collapse, make_ref()};
-                          Id   -> Id
-                      end,
-            {noreply, drop_queue(S1#s{pending_edge = Pending,
-                                      collapses = S1#s.collapses + 1})};
-        false ->
-            {noreply, S1#s{queue = [{local, Env, Est} | S1#s.queue],
-                           queue_len = S1#s.queue_len + 1}}
+    {noreply, enqueue_committed({local, Env, Est}, S#s{events_seen = S#s.events_seen + 1})};
+handle_info({applied_live, Env, _Est}, S = #s{mode = {unhealthy, _}}) ->
+    Next = S#s{events_seen = S#s.events_seen + 1,
+               dropped_events = S#s.dropped_events + 1},
+    case maps:get(runtime_catalog, Env, keep) of
+        keep -> {noreply, Next};
+        _ -> {noreply, replace_snapshot_and_reconcile({catalog, make_ref()}, Next)}
     end;
 handle_info({applied_live, _Env, _Est}, S) ->
     %% booting/replaying/unhealthy: the next reconcile rebuilds from a newer snapshot anyway
-    {noreply, founding_wake(S#s{events_seen = S#s.events_seen + 1,
+    {noreply, owner_wake(S#s{events_seen = S#s.events_seen + 1,
                                dropped_events = S#s.dropped_events + 1})};
 %% Property copies (est-free applied/rejected): the explorer's feed, not ours — the direct
 %% 3-tuple above is our only event channel (the double-delivery contract). While
-%% founding is unavailable, a publication is also a genuine readiness wake.
-handle_info({applied_live, _Env}, S) -> {noreply, founding_wake(S)};
+%% the owner is unavailable, a publication is also a genuine readiness wake.
+handle_info({applied_live, _Env}, S) -> {noreply, owner_wake(S)};
 handle_info({rejected_live, _Env}, S) -> {noreply, S};
 handle_info({projection_advanced, _Owner, _H}, S) ->
-    {noreply, founding_wake(S)};
+    {noreply, owner_wake(S)};
 handle_info({node_actor_installed, Owner, Principal}, S) when is_pid(Owner) ->
     case {quod_reg:where({namespace_manager, node}), quod_node_actor:principal()} of
         {Owner, Principal} ->
-            {noreply, queue_observer_reconcile(queue_agent_reconcile(refresh_node_executor(S)))};
+            {noreply, refresh_resource_owners(S)};
         _ -> {noreply, S}
     end;
+handle_info({node_hosting_invalidated, Owner}, S) when is_pid(Owner) ->
+    %% A changed system projection can invalidate node hosting at the same
+    %% ontology height. This explicit owner notice is not duplicate readiness.
+    case quod_reg:where({namespace_manager, node}) of
+        Owner -> {noreply, wake_node_projection(S)};
+        _ -> {noreply, S}
+    end;
+handle_info({owned_recovery, Source, {Ns, Anchor}, Token, Event,
+             Metadata = #{target := {agent_instance_ref, Ns, Anchor, _},
+                          observer := {agent_instance_ref, NodeNs, _, _} = Node,
+                          deadline := Deadline}, Expiry}, S) ->
+    %% Only the current source owner can deliver this private observation. No
+    %% Prolog term, remote publication or editable selector creates this envelope.
+    case quod_reg:where({quod_runtime, Ns}) =:= Source andalso
+         S#s.ns =:= NodeNs andalso local_node_reference() =:= Node andalso
+         Expiry > quod_time:now_ms() andalso Deadline > quod_time:mono_ms() andalso
+         lists:member(mode_tag(S#s.mode), [booting, reconciling, live]) andalso
+         S#s.queue_len < max_queued_events(S) of
+        true ->
+            Item = {owned_recovery, Source, Token, Event, Metadata, Expiry},
+            {noreply, maybe_run_events(S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1})};
+        false -> Source ! {recovery_consumed, self(), Token}, {noreply, S}
+    end;
+handle_info({recovery_consumed, Owner, Token},
+            S = #s{recovery_pending = {Owner, Token, _, _}}) ->
+    {noreply, maybe_run_events(clear_recovery_pending(S))};
+handle_info({recovery_owner_down, Monitor, process, Owner, _},
+            S = #s{recovery_pending = {Owner, _, Monitor, _}}) ->
+    {noreply, maybe_run_events(clear_recovery_pending(S))};
+handle_info({timeout, Timer, {recovery_expired, Token}},
+            S = #s{recovery_pending = {_, Token, _, Timer}}) ->
+    %% The original deadline releases only this unsent-evidence cursor. It
+    %% neither cancels an admitted operation nor authorizes resubmission.
+    {noreply, maybe_run_events(clear_recovery_pending(S))};
 handle_info({agent_work_custody, Owner, Token, Pending}, S) when is_map(Pending) ->
     Next = maps:fold(fun(Slot, #{stopping := false,
                          work := Work = #{custody_owner := Owner0,
@@ -699,11 +559,6 @@ handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
     end;
 handle_info({{agent_down, Instance}, Monitor, process, Pid, _Reason}, S) ->
     {noreply, maybe_run_events(agent_down(Instance, Pid, Monitor, S))};
-handle_info({'DOWN', MRef, process, Pid, killed},
-            S = #s{founding = unknown,
-                   runner = {reconcile, Pid, MRef, _Ref, TRef}}) ->
-    _ = erlang:cancel_timer(TRef),
-    {noreply, reconcile_finished({pending, founding_unavailable}, S#s{runner = none})};
 handle_info({'DOWN', MRef, process, Pid, Reason},
             S = #s{runner = {Kind, Pid, MRef, _Ref, TRef}}) ->
     %% runner died without reporting (crash or budget kill)
@@ -711,37 +566,19 @@ handle_info({'DOWN', MRef, process, Pid, Reason},
     S1 = S#s{runner = none},
     case Kind of
         reconcile -> {noreply, reconcile_finished({error, {runner_down, Reason}}, S1)};
+        resource -> {noreply, resource_finished({interrupted, {error, {resource_worker_down, Reason}}}, S1)};
         events    -> {noreply, events_finished({error, {runner_down, Reason}}, S1)}
     end;
+handle_info({resource_caller_down, Monitor, process, _Caller, _},
+            S = #s{resource_waiter = {_From, Monitor}, runner = {resource, Pid, _, _, _}}) ->
+    exit(Pid, kill),
+    {noreply, S};
+handle_info({resource_caller_down, Monitor, process, _Caller, _}, S) ->
+    {noreply, retain_queue(fun({resource, _, _, _, _, _, M}) -> M =/= Monitor;
+                              (_) -> true end, S)};
 handle_info({runner_kill, Ref}, S = #s{runner = {_Kind, Pid, _MRef, Ref, _TRef}}) ->
     exit(Pid, kill),   %% the DOWN above reports the failure
     {noreply, S};
-%% a heavy worker died without reporting (crash or budget kill)
-handle_info({'DOWN', MRef, process, Pid, Reason}, S = #s{heavy_running = Running})
-        when map_size(Running) > 0 ->
-    case [{Res, T} || {Res, {P, M, _, _, _, _} = T} <- maps:to_list(Running),
-                      P =:= Pid, M =:= MRef] of
-        [{Resource, {_P, _M, TRef, _Ref, _Rev, _EstH}}] ->
-            _ = erlang:cancel_timer(TRef),
-            S1 = S#s{heavy_running = maps:remove(Resource, Running)},
-            {noreply, heavy_failed(Resource, {worker_down, Reason}, S1)};
-        [] ->
-            {noreply, S}
-    end;
-handle_info({heavy_kill, Resource, Ref}, S) ->
-    case maps:get(Resource, S#s.heavy_running, undefined) of
-        {Pid, _M, _T, Ref, _Rev, _EstH} -> exit(Pid, kill);   %% the DOWN reports it
-        _                               -> ok
-    end,
-    {noreply, S};
-handle_info({waiter_timeout, WRef}, S = #s{waiters = Waiters}) ->
-    case maps:take(WRef, Waiters) of
-        {{From, _Res, _Rev, _TRef}, Rest} ->
-            gen_server:reply(From, {error, timeout}),
-            {noreply, S#s{waiters = Rest}};
-        error ->
-            {noreply, S}
-    end;
 handle_info({collapse_retry, Ref}, S = #s{last_recovery = {collapse, Ref}}) ->
     {noreply, attach_and_reconcile({collapse, make_ref()}, S)};
 handle_info({'EXIT', _Worker, _Reason}, S) ->
@@ -757,7 +594,10 @@ handle_info(_Info, S) -> {noreply, S}.
 %% snapshot pin is released out from under it.
 terminate(_Reason, S) ->
     _ = stop_source_views(kill_runner(S)),
-    ok = quod_reg:demonitor_name({quod_simplex, S#s.ns}, S#s.ledger_monitor).
+    maps:foreach(fun(Ref, {Key, _Owner}) ->
+        ok = quod_reg:demonitor_name(Key, Ref)
+    end, S#s.resource_owners),
+    ok = quod_reg:demonitor_name({quod_prolog, S#s.ns}, S#s.prolog_monitor).
 
 %%%===================================================================
 %%% reconciliation
@@ -765,8 +605,8 @@ terminate(_Reason, S) ->
 
 attach_and_reconcile(Id, S) ->
     case safe_attach(S#s.ns) of
-        {ok, Est, H} ->
-            start_reconcile(Id, Est, H, S);
+        {ok, Est, H, Binding} ->
+            start_reconcile(Id, Est, H, S#s{binding = Binding});
         {error, not_ready} ->
             %% raced a new rebuild — we are again awaiting a ready edge, and its arrival
             %% (clauses above) will retry; reflect that instead of a stale mode
@@ -774,10 +614,14 @@ attach_and_reconcile(Id, S) ->
     end.
 
 %% A ready edge replaces the snapshot generation. Quiesce every reader first,
-%% including heavy workers: replay_started normally does this earlier, but the
+%% replay_started normally does this earlier, but the
 %% ready boundary is independently safe if a start notification was delayed or
 %% lost. Awaiting every DOWN before attach prevents the new MVCC pin from
 %% invalidating an old worker's view.
+replace_snapshot_and_reconcile(Id, S = #s{mode = booting, est = undefined, runner = none}) ->
+    %% There is no previous reader to retire. Preserve evidence received by
+    %% this incarnation while its first committed snapshot was unavailable.
+    attach_and_reconcile(Id, S#s{pending_edge = none});
 replace_snapshot_and_reconcile(Id, S) ->
     attach_and_reconcile(
       Id, (kill_runner(S))#s{pending_edge = none}).
@@ -790,89 +634,40 @@ safe_attach(Ns) ->
     catch exit:_ -> {error, not_ready}
     end.
 
-%% The WHOLE pipeline — founding read, snapshot findall, gate, validation, converge runs —
-%% executes in the killable runner: everything after the attach is bounded by the budget, so
-%% writer-controlled declaration volume can never stall this server. Queued envelopes are
-%% NOT dropped here: those above the snapshot height still carry fresh state (drained after).
-start_reconcile(Id, Est, H, S0 = #s{ns = Ns, founding = Cached}) ->
+%% Snapshot discovery, validation and convergence run in the bounded worker.
+%% Reconciliation reads current clauses, never the ledger or a founding catalogue.
+start_reconcile(Id, Est, H, S0 = #s{ns = Ns, binding = Binding}) ->
     S = S0#s{est = Est, height = H, last_recovery = Id, pending_edge = none,
-             mode = {reconciling, Id}},
+             mode = {reconciling, Id}, resource_basis = #{}, resource_failures = #{}},
     Budget = application:get_env(quod, runtime_reconcile_budget_ms, ?RECONCILE_BUDGET_MS),
     spawn_runner(reconcile, Budget,
-                 fun(Deadline, Report) ->
-                     run_reconcile(Ns, Cached, Est, H, Deadline, Report)
-                 end, S).
+                 fun(_Deadline) -> run_reconcile(Ns, Binding, Est, H) end, S).
 
 spawn_runner(Kind, Budget, Fun, S) ->
     Server = self(),
     Ref = make_ref(),
     Deadline = erlang:monotonic_time(millisecond) + Budget,
     {Pid, MRef} = spawn_opt(fun() ->
-                                        Report = fun(Binding, Founding) ->
-                                            gen_server:cast(Server,
-                                              {founding_captured, Ref, Binding, Founding})
-                                        end,
-                                        gen_server:cast(Server,
-                                          {runner_done, Ref, Fun(Deadline, Report)})
-                                end, [link, monitor]),
+        gen_server:cast(Server, {runner_done, Ref, Fun(Deadline)})
+    end, [link, monitor]),
     TRef = erlang:send_after(max(0, Deadline - erlang:monotonic_time(millisecond)),
-                             self(), {runner_kill, Ref}),
+                            self(), {runner_kill, Ref}),
     S#s{runner = {Kind, Pid, MRef, Ref, TRef}}.
 
-%% Founding capture spends the same original budget as the rest of this
-%% reconcile, including owner mailbox wait. No independent read timeout.
-run_reconcile(Ns, Cached, Est, H, Deadline, Report) ->
-    try
-        {Binding, Founding} =
-            case Cached of
-                {ok, Bc, Fc} ->
-                    case quod_simplex:history_view_live(Bc) of
-                        true -> {Bc, Fc};
-                        false -> throw(founding_unavailable)
-                    end;
-                unknown  ->
-                    case read_founding(Ns, Deadline) of
-                        {ok, Br, Fr} -> Report(Br, Fr), {Br, Fr};
-                        pending     -> throw(founding_unavailable);
-                        {error, R0}  -> throw({founding_read_failed, R0})
-                    end
-            end,
-        Stored = case stored_declarations(Est) of
-                     {ok, K}         -> K;
-                     {error, R1}     -> throw({discovery_failed, R1})
-                 end,
-        StoredCatalog = case stored_runtime_catalog(Est) of
-                            {ok, C}         -> C;
-                            {error, R2}     -> throw({discovery_failed, R2})
-                        end,
-        case plan_runtime(Est, Founding, Stored, StoredCatalog) of
-            {ok, Plan = #{handlers := Hs, order := Order}} ->
-                lists:foreach(fun(Id) ->
-                                      #handler{goal = Goal} = maps:get(Id, Hs),
-                                      converge(Ns, Est, H, Id, Goal, all)
-                              end, Order),
-                {ok, Binding, Plan};
-            {error, R3} ->
-                throw(R3)
-        end
-    catch
-        throw:founding_unavailable -> {pending, founding_unavailable};
-        throw:R -> {error, R}
+run_reconcile(_Ns, Binding, Est, _H) ->
+    case stored_runtime_catalog(Est) of
+        {ok, Catalog} ->
+            case plan_runtime_catalog(Catalog) of
+                {ok, Plan} -> {ok, Binding, Plan};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
     end.
 
 reconcile_finished({ok, Binding, Plan}, S) ->
-    case quod_simplex:history_view_live(Binding) of
+    case binding_live(Binding) of
         true -> reconcile_publish(Plan, S);
-        false -> reconcile_finished({pending, founding_unavailable}, S)
-    end;
-reconcile_finished({pending, founding_unavailable}, S0) ->
-    %% Keep an edge that crossed this failed capture. A failed attempt itself
-    %% never schedules another attempt or enters handler collapse/backoff.
-    Pending = S0#s.pending_edge,
-    S = founding_pending(S0),
-    case Pending of
-        none -> S;
-        Id -> replace_snapshot_and_reconcile(Id, S)
+        false -> owner_pending(S)
     end;
 reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
     S1 = S0#s{reconcile_failures = S0#s.reconcile_failures + 1},
@@ -890,77 +685,99 @@ reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
             replace_snapshot_and_reconcile(Id, S1)
     end.
 
-reconcile_publish(
-                    Plan = #{handlers := Hs, order := Order, index := Index,
-                             dependents := Dependents},
-                    S0 = #s{height = H}) ->
-    Base = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
-                p_height = H, e_frontier = H,
-                reconciles = S0#s.reconciles + 1,
+reconcile_publish(Plan, S0 = #s{height = H}) ->
+    Base = S0#s{p_height = H, e_frontier = H, reconciles = S0#s.reconciles + 1,
                 exec_failures = 0},
-    %% An initial boot/owner/publication wake only retries an unavailable
-    %% capture. Successful founding already consumed that readiness edge;
-    %% direct live envelopes remain queued normally, without double delivery.
-    S1 = install_catalog_update(Plan,
-           case Base#s.pending_edge of
-               {founding, _} -> Base#s{pending_edge = none};
-               _ -> Base
-           end),
+    S1 = install_catalog_update(Plan, Base),
     _ = reconcile_direct_effects(),
     case S1#s.pending_edge of
-        none -> maybe_run_events(drop_stale_queue(
-                                   pump_heavy(release_ready_waiters(release_hosting(S1#s{mode = live})))));
-        Id   -> replace_snapshot_and_reconcile(Id, S1)
+        none -> queue_ready(ontology, all, drop_stale_queue(release_hosting(S1#s{mode = live})));
+        Id -> replace_snapshot_and_reconcile(Id, S1)
     end.
 
-founding_wake(S = #s{founding = unknown, mode = booting}) ->
-    replace_snapshot_and_reconcile({founding, make_ref()}, S);
-founding_wake(S = #s{founding = unknown, runner = {reconcile, _, _, _, _},
-                     pending_edge = none}) ->
-    S#s{pending_edge = {founding, make_ref()}};
-founding_wake(S) -> S.
+owner_wake(S = #s{mode = booting}) ->
+    replace_snapshot_and_reconcile({owner, make_ref()}, S);
+owner_wake(S) -> S.
 
-founding_pending(S0) ->
+%% Only independently supervised resource owners need replacement monitors.
+%% The namespace simplex already fate-shares with Prolog/runtime through
+%% rest_for_one; that restart also reconstructs each finite agent-work pass.
+monitor_resource_owners(Ns) ->
+    Keys = [{namespace_manager, node}] ++
+        case Ns of <<"quod:root">> -> [{quod_effect_journal, node}]; _ -> [] end,
+    maps:from_list([begin
+        Ref = quod_reg:monitor_name(Key, follow),
+        {Ref, {Key, quod_reg:where(Key)}}
+    end || Key <- Keys]).
+
+refresh_resource_owners(S) ->
+    Next = lists:foldl(fun refresh_resource_owner/2, S, maps:keys(S#s.resource_owners)),
+    refresh_node_identity(Next).
+
+refresh_resource_owner(Ref, S = #s{resource_owners = Owners}) ->
+    {Key, Before} = maps:get(Ref, Owners),
+    case quod_reg:where(Key) of
+        Before -> S;
+        Owner ->
+            Next = S#s{resource_owners = Owners#{Ref => {Key, Owner}}},
+            case is_pid(Owner) andalso S#s.mode =:= live of
+                false -> Next;
+                true ->
+                    case Key of
+                        {namespace_manager, node} -> wake_node_projection(Next);
+                        {quod_effect_journal, node} -> queue_ready(effect_custody, all, Next)
+                    end
+            end
+    end.
+
+refresh_node_identity(S = #s{node_identity = Before}) ->
+    case quod_node_actor:principal() of
+        %% A reaction can install the node queue before its identity notice is
+        %% processed. Deduplication must still reconcile that owned handle.
+        Before when S#s.mode =:= live -> refresh_node_executor(S);
+        Before -> S;
+        Principal ->
+            Next = S#s{node_identity = Principal},
+            case S#s.mode of
+                live -> wake_node_projection(queue_observer_reconcile(
+                          queue_agent_reconcile(refresh_node_executor(Next))));
+                _ -> Next
+            end
+    end.
+
+wake_node_projection(S = #s{mode = live}) ->
+    case node_scope(local_node_reference(), S) of
+        true -> queue_ready(node_ontologies, all, S);
+        false -> S
+    end;
+wake_node_projection(S) -> S.
+
+owner_pending(S0) ->
     S = kill_runner(stop_source_views(S0)),
     ok = quod_prolog:runtime_detach(S#s.ns),
-    drop_queue(S#s{mode = booting, founding = unknown, pending_edge = none,
+    drop_queue(S#s{mode = booting, binding = none, pending_edge = none,
                    last_recovery = undefined,
-                   est = undefined, handlers = #{}, order = [], index = #{},
-                   dependents = #{}}).
+                   est = undefined}).
+
+binding_live(#{owner := Owner, identity := {Ns, _}}) ->
+    Owner =:= quod_reg:where({quod_prolog, Ns}) andalso is_process_alive(Owner);
+binding_live(_) -> false.
 
 reconcile_direct_effects() ->
     quod_effect_journal:reconcile().
 
-%% Founding configuration errors are permanent (only new founding content or a code fix can
-%% change them); execution failures are transient and go through collapse + backoff.
-config_error({missing_founding, _})     -> true;
-config_error({nonground_founding, _})   -> true;
-config_error({duplicate_handler_id, _}) -> true;
-config_error({invalid_declaration, _})  -> true;
-config_error({invalid_founding_reaction, _}) -> true;
-config_error({missing_founding_reaction, _}) -> true;
+%% Malformed current declarations fail loudly; execution failures retain the
+%% existing collapse and backoff policy.
+config_error({invalid_reaction, _}) -> true;
 config_error(invalid_runtime_catalog) -> true;
-config_error({missing_dependency, _, _})-> true;
-config_error({handler_cycle, _})        -> true;
-config_error({handler_error, _, {erlog, {agent_projection_failed,
-              {conflicting_agent_projection_owner, _, _}}}}) -> true;
-config_error({handler_error, _, {erlog, {agent_observer_projection_failed,
-              {conflicting_agent_observer_owner, _, _}}}}) -> true;
-config_error({founding_read_failed, _}) -> true;
 config_error(_)                         -> false.
 
 unhealthy(Reason, S = #s{ns = Ns}) ->
-    %% PERMANENT (config) unhealthy — no revision can install any more. QUIESCE fully: kill the
-    %% tier runner AND every heavy worker + clear their pending (kill_runner), so nothing keeps
-    %% installing revisions or pinning snapshots in a terminally-dead runtime, then fail waiters.
+    %% Malformed declarations cannot dispatch work. Stop the owned reader and
+    %% resources before releasing queued callers and subscriptions.
     logger:error("quod_runtime[~s]: unhealthy: ~0p", [Ns, Reason]),
     S1 = stop_source_views(kill_runner(S)),
-    fail_waiters(drop_queue(S1#s{mode = {unhealthy, Reason}})).
-
-park_waiter(From, Resource, Rev, TimeoutMs, S) ->
-    WRef = make_ref(),
-    TRef = erlang:send_after(TimeoutMs, self(), {waiter_timeout, WRef}),
-    S#s{waiters = (S#s.waiters)#{WRef => {From, Resource, Rev, TRef}}}.
+    drop_queue(S1#s{mode = {unhealthy, Reason}}).
 
 mode_tag(M) when is_atom(M) -> M;
 mode_tag(M)                 -> element(1, M).
@@ -969,42 +786,206 @@ mode_tag(M)                 -> element(1, M).
 %%% the ordered tier — live event batches
 %%%===================================================================
 
-maybe_run_events(
-  S = #s{mode = live, runner = none, queue = Q})
-  when Q =/= [] ->
+%% Canonical transactions and their block-final snapshot advances share one
+%% ordered input. A control-only block changes no reactions or declarations,
+%% but its height must release readers awaiting that committed snapshot.
+enqueue_committed(Item, S = #s{mode = live}) ->
+    case S#s.queue_len < max_queued_events(S) of
+        true -> maybe_run_events(S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1});
+        false -> overflow_collapse(S)
+    end;
+enqueue_committed(Item, S = #s{mode = {reconciling, _}}) ->
+    case S#s.queue_len < max_queued_events(S) of
+        true -> S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1};
+        false ->
+            Pending = case S#s.pending_edge of none -> {collapse, make_ref()}; Id -> Id end,
+            drop_queue(S#s{pending_edge = Pending, collapses = S#s.collapses + 1})
+    end;
+enqueue_committed(_Item, S) -> S.
+
+maybe_run_events(S = #s{mode = live, runner = none, queue = Q}) when Q =/= [] ->
     {Items, Remaining, Turn, Dropped} = ready_work(lists:reverse(Q), S),
     Pending = S#s{queue = lists:reverse(Remaining), queue_len = length(Remaining),
-                 physical_turn = Turn, dropped_events = S#s.dropped_events + Dropped},
+                 owned_turn = Turn, dropped_events = S#s.dropped_events + Dropped},
     case Items of
         [] -> Pending;
-        _ -> start_event_batch(Items, Pending)
+        [{recovery_selection, Batch, Event, Expiry} | Rest] ->
+            #{identity := Identity, request_timeout_ms := Timeout} = S#s.binding,
+            Mono = quod_time:mono_ms(), Now = quod_time:now_ms(),
+            Ceiling = min(Expiry, Now + Timeout),
+            Deadline = Mono + max(0, Ceiling - Now),
+            Scope = {Identity, Batch, Event, Ceiling, Deadline},
+            Request = {resource, S#s.height, agent_recovery, Scope, Deadline,
+                       {internal, agent_recovery}, none},
+            start_resource(Request, prepend_ready_work(Rest, Pending));
+        [{recovery_done, Source, Token} | Rest] ->
+            Source ! {recovery_consumed, self(), Token},
+            maybe_run_events(prepend_ready_work(Rest, Pending));
+        [{resource, _, _, _, _, _, _} = Request | Rest] ->
+            start_resource(Request, prepend_ready_work(Rest, Pending));
+        [{resource_cursor, Requests, Notify} | Rest] ->
+            drain_resource_cursor(Requests, Notify, prepend_ready_work(Rest, Pending));
+        _ ->
+            {Events, Tail} = lists:splitwith(fun(Item) -> not resource_work(Item) end, Items),
+            start_event_batch(Events, prepend_ready_work(Tail, Pending))
     end;
 maybe_run_events(S) -> S.
+
+prepend_ready_work(Items, S) ->
+    S#s{queue = S#s.queue ++ lists:reverse(Items), queue_len = S#s.queue_len + length(Items)}.
+
+resource_work({resource, _, _, _, _, _, _}) -> true;
+resource_work({resource_cursor, _, _}) -> true;
+resource_work(_) -> false.
+
+%% A cursor occupies one ordered queue slot, independent of actor population.
+%% Move its remainder behind already queued input after selecting one resource:
+%% newer canonical changes must progress before repeatedly superseding a reader.
+drain_resource_cursor(Requests, Notify, S = #s{height = H}) ->
+    case next_resource(maps:iterator(Requests), H) of
+        {Key, {MinHeight, Wake, Deadline}} ->
+            Remaining = maps:remove(Key, Requests),
+            Next = case map_size(Remaining) =:= 0 andalso not Notify of
+                true -> S;
+                false -> S#s{queue = [{resource_cursor, Remaining, Notify} | S#s.queue],
+                              queue_len = S#s.queue_len + 1}
+            end,
+            {Resource, Scope} = resource_scope(Key, Wake),
+            start_resource({resource, MinHeight, Resource, Scope, Deadline,
+                            {internal, Key}, none}, Next);
+        none when map_size(Requests) =:= 0, Notify ->
+            %% Return the compacted notice to ordinary eligibility scheduling;
+            %% resource work itself never grants an actor or bypasses capacity.
+            maybe_run_events(prepend_ready_work([{observed, {ready, ontology, all}}], S))
+    end.
+
+next_resource(Iterator, Height) ->
+    case maps:next(Iterator) of
+        {Key, {MinHeight, _, _} = Request, _Rest} when MinHeight =< Height ->
+            {Key, Request};
+        {_, _, Rest} -> next_resource(Rest, Height);
+        none -> none
+    end.
+
+resource_scope({agent_work, Instance}, Wake) -> {agent_work, {Instance, Wake}};
+resource_scope(Resource, _) -> {Resource, all}.
+
+start_resource({resource, _Min, Resource, Scope, Deadline, From, Monitor},
+               S = #s{ns = Ns, height = H, est = Est}) ->
+    Budget = min(Deadline - quod_time:mono_ms(),
+                 application:get_env(quod, runtime_reconcile_budget_ms, ?RECONCILE_BUDGET_MS)),
+    case Budget > 0 of
+        false -> resource_finished({interrupted, {error, deadline_exceeded}},
+                                    S#s{resource_waiter = {From, Monitor}});
+        true -> spawn_runner(resource, Budget,
+                  fun(_) -> run_resource(Ns, H, Est, Resource, Scope, Deadline, From) end,
+                  S#s{resource_waiter = {From, Monitor}})
+    end.
+
+%% A terminated or unstarted selector may never report its reads. Retain a
+%% conservative dependency for persistent consumers until the next committed
+%% change selects again. Occurrence-bound recovery and custody are never replayed.
+resource_finished({interrupted, Reply}, S = #s{resource_waiter = {From, _}}) ->
+    Basis = case From of
+        {internal, Key} when Key =:= agent_hosts; Key =:= agent_observers;
+                             Key =:= node_ontologies; Key =:= effect_custody;
+                             is_tuple(Key), tuple_size(Key) =:= 2,
+                             element(1, Key) =:= agent_work ->
+            (S#s.resource_basis)#{Key => quod_resource_basis:unknown()};
+        _ -> S#s.resource_basis
+    end,
+    resource_finished(Reply, S#s{resource_basis = Basis});
+resource_finished(Reply, S0 = #s{resource_waiter = {From, Monitor}}) ->
+    reply_resource(From, Monitor, Reply),
+    S = case From of
+        {internal, Key} ->
+            Failures = case Reply of
+                ok -> maps:remove(Key, S0#s.resource_failures);
+                {error, selection_superseded} -> S0#s.resource_failures;
+                _ -> (S0#s.resource_failures)#{Key => Reply}
+            end,
+            S0#s{resource_failures = Failures};
+        _ -> S0
+    end,
+    next_after_runner(release_hosting(S#s{resource_waiter = none, agent_projection_waiter = none}));
+resource_finished(_Reply, S) -> next_after_runner(S).
 
 %% Physical evidence waits for actual executor capacity. Committed advances
 %% continue while it waits, so its eventual Prolog proof sees current policy.
 %% Only one captured assignment is released per batch; completion, not a timer,
 %% wakes the remainder. All work still uses the same ordered runner and matcher.
 ready_work(Items, S) ->
-    {Ordinary, Physical} = lists:partition(fun({observed_host, _}) -> false;
-                                           (_) -> true end, Items),
-    case {Ordinary, Physical, S#s.physical_turn, physical_capacity(S)} of
+    {Ready, Waiting} = lists:partition(
+        fun({resource, MinHeight, _, _, _, _, _}) -> MinHeight =< S#s.height;
+           ({observed_host, _}) -> S#s.recovery_pending =:= none;
+           ({resource_cursor, Requests, Notify}) ->
+               (map_size(Requests) =:= 0 andalso Notify) orelse
+                   next_resource(maps:iterator(Requests), S#s.height) =/= none;
+           (_) -> true end, Items),
+    {Run, Rest, Turn, Dropped} = ready_events(Ready, S),
+    {Run, Waiting ++ Rest, Turn, Dropped}.
+
+ready_events(Items, S) ->
+    {Ordinary, Owned} = lists:partition(fun(Item) -> not owned_notice(Item) end, Items),
+    case {Ordinary, Owned, S#s.owned_turn, owned_capacity(S)} of
         {[_|_], [_|_], true, true} ->
-            case take_host_observation(Physical, S#s.observer, quod_time:now_ms(), 0) of
-                {[], [], Dropped} -> {Ordinary, [], false, Dropped};
-                {Selected, Rest, Dropped} -> {Selected, Ordinary ++ Rest, false, Dropped}
+            {Selected, Rest, Dropped} = take_owned_notice(Owned, S, 0),
+            case Selected of
+                [] -> {Ordinary, Rest, false, Dropped};
+                _ -> {Selected, Ordinary ++ Rest, false, Dropped}
             end;
-        {[_|_], _, _, _} -> {Ordinary, Physical, Physical =/= [], 0};
+        {[_|_], _, _, _} -> {Ordinary, Owned, Owned =/= [], 0};
         {[], _, _, true} ->
-            {Selected, Rest, Dropped} = take_host_observation(Physical, S#s.observer, quod_time:now_ms(), 0),
+            {Selected, Rest, Dropped} = take_owned_notice(Owned, S, 0),
             {Selected, Rest, false, Dropped};
-        {[], _, _, false} -> {[], Physical, true, 0}
+        {[], _, _, false} -> {[], Owned, true, 0}
     end.
 
-physical_capacity(S) ->
+owned_notice({observed_host, _}) -> true;
+owned_notice({owned_recovery, _, _, _, _, _}) -> true;
+owned_notice({recovery_done, _, _}) -> true;
+owned_notice({observed, _}) -> true;
+owned_notice({owned_notice, _, _, _}) -> true;
+owned_notice(_) -> false.
+
+%% One current-state/owner observation keeps a cursor over its reaction clauses
+%% in the existing queue. A single candidate needs at most one node queue slot;
+%% actual completion releases the next candidate, with canonical input free to
+%% progress while that slot is occupied. No accepted goal is submitted again.
+take_owned_notice([], _S, Dropped) -> {[], [], Dropped};
+take_owned_notice([{owned_notice, Event, Audience, [Clause | More]} | Rest], _S, Dropped) ->
+    Tail = case More of [] -> Rest; _ -> [{owned_notice, Event, Audience, More} | Rest] end,
+    {[{owned_reaction, Event, Audience, Clause}], Tail, Dropped};
+take_owned_notice([{owned_notice, _, _, []} | Rest], S, Dropped) ->
+    take_owned_notice(Rest, S, Dropped);
+take_owned_notice([{observed, Event} | Rest], S, Dropped) ->
+    Clauses = maps:get({observed, 1}, S#s.reaction_index, []),
+    take_owned_notice([{owned_notice, {observed, Event}, domain, Clauses} | Rest], S, Dropped);
+take_owned_notice([{owned_recovery, Source, Token, Event, Metadata, Expiry} | Rest], S, Dropped) ->
+    Clauses = maps:get({observed, 1}, S#s.reaction_index, []),
+    Done = {recovery_done, Source, Token},
+    case recovery_current(Source, Metadata, Expiry, S) of
+        true ->
+            Audience = {recovery, Source, Expiry, Metadata#{event => Event}},
+            take_owned_notice([{owned_notice, {observed, Event}, Audience, Clauses}, Done | Rest], S, Dropped);
+        false -> {[Done], Rest, Dropped + 1}
+    end;
+take_owned_notice([{recovery_done, _, _} = Done | Rest], _S, Dropped) ->
+    {[Done], Rest, Dropped};
+take_owned_notice([{observed_host, Batch} = Item | Rest], S, Dropped) ->
+    case take_host_observation([Item], S#s.observer, quod_time:now_ms(), 0) of
+        {[], [], Count} -> take_owned_notice(Rest, S, Dropped + Count);
+        {[{observed, Event, Expiry}], Remaining, Count} ->
+            {[{recovery_selection, Batch, Event, Expiry}], Rest ++ Remaining, Dropped + Count}
+    end.
+
+owned_capacity(S) ->
     NodeAvailable = case maps:get(node, S#s.agents, none) of
         none -> true;
-        #{pending := Pending, stopping := false} -> map_size(Pending) < ?MAX_AGENT_PENDING;
+        %% The node queue is sequential. Retain the next observation
+        %% in this owner's cursor until completion; pre-filling its queue lets
+        %% captured work displace the committed resource reads it depends on.
+        #{pending := Pending, stopping := false} -> map_size(Pending) =:= 0;
         _ -> false
     end,
     NodeAvailable andalso
@@ -1022,161 +1003,123 @@ take_host_observation([{observed_host, Batch} | Rest], Observer, Now, Dropped) -
         true ->
             case quod_agent_observer:next(Batch) of
                 done -> take_host_observation(Rest, Observer, Now, Dropped);
-                {Event, #{bindings := []}} -> {[{observed, Event}], Rest, Dropped};
-                {Event, Next} -> {[{observed, Event}], Rest ++ [{observed_host, Next}], Dropped}
+                {Event, #{bindings := []}} -> {[owned_observation(Event)], Rest, Dropped};
+                {Event, Next} -> {[owned_observation(Event)], Rest ++ [{observed_host, Next}], Dropped}
             end
     end.
 
+owned_observation(Event = {agent_host_observed, _, _, _, _, _, _, _, _, _, _, Expiry}) ->
+    {observed, Event, Expiry}.
+
 -ifdef(TEST).
-%% Exercise admission and its actual counter update without a running handler
+%% Exercise the consumer cursor and drop accounting without a running reader
 %% or a wall-clock wait. Contact currency still uses the real directory owner.
-test_drain_observations(Items, Observer, PhysicalTurn) ->
-    S = maybe_run_events(#s{mode = live, queue = lists:reverse(Items),
-        queue_len = length(Items), observer = Observer, physical_turn = PhysicalTurn}),
-    {lists:reverse(S#s.queue), S#s.dropped_events}.
+test_drain_observations(Items, Observer, Plan, OwnedTurn) ->
+    {Selected, Remaining, _Turn, Dropped} = ready_work(Items,
+      #s{observer = Observer, reaction_index = maps:get(reaction_index, Plan),
+         owned_turn = OwnedTurn}),
+    {Selected, Remaining, Dropped}.
+
+test_recovery_pending(Pending, reset) ->
+    (kill_runner(#s{recovery_pending = Pending}))#s.recovery_pending;
+test_recovery_pending(Pending, Message) ->
+    {noreply, Next} = handle_info(Message, #s{recovery_pending = Pending}),
+    Next#s.recovery_pending.
 -endif.
 
-start_event_batch(Items, S = #s{handlers = Hs, reaction_index = ReactionIndex}) ->
-    Work = coalesce_work_items(Items),
-    RefreshCatalog = catalog_changed(Work),
-    HasRemote = lists:any(fun is_remote_work/1, Work),
-    case {map_size(Hs), map_size(ReactionIndex), RefreshCatalog, HasRemote} of
-        {0, 0, false, false} ->
-            %% no handlers: the tier is trivially complete through the batch tip
-            {Tip, TipEst} = work_tip(Work, S#s.height, S#s.est),
-            Effects = work_effects(Work),
-            S1 = S#s{est = TipEst, height = Tip,
-                     p_height = Tip, e_frontier = Tip},
-            release_direct_effects(Effects),
-            floor_raise(pump_heavy(release_ready_waiters(S1)));
-        _ ->
-            %% budget = one per-event allowance per block, CAPPED — a wedged goal in a huge
-            %% batch must not hold the single runner (and the KB floor) for minutes; the cap's
-            %% kill collapses to a reconcile, which rebuilds correctly.
-            Per = application:get_env(quod, runtime_event_budget_ms, ?EVENT_BUDGET_MS),
-            Cap = application:get_env(quod, runtime_event_budget_cap_ms, ?EVENT_BUDGET_CAP_MS),
-            Budget = min(max(1, length(Work)) * Per, Cap),
-            #s{ns = Ns, config = Config, order = Order, index = Index,
-               dependents = Deps, handlers = Handlers,
-               reaction_index = Reactions, source_interests = SourceInterests,
-               subscriptions = Subscriptions, founding = FoundingCache} = S,
-            Founding = case FoundingCache of
-                           {ok, _Binding, F} -> F;
-                           unknown -> empty_founding()
-                       end,
-            Self = maps:get(node_id, Config),
-            Acks = event_ack_refs(Items),
-            spawn_runner(
-              events, Budget,
-              fun(_Deadline, _Report) -> run_events(
-                         Ns, Work, Handlers, Order, Index, Deps,
-                         Reactions, SourceInterests,
-                         maps:from_keys(Subscriptions, true),
-                         Self, Founding, S#s.height, S#s.est)
-              end,
-              S#s{event_acks = Acks})
-    end.
+start_event_batch(Items, S) ->
+    Work = work_items(Items),
+    Per = application:get_env(quod, runtime_event_budget_ms, ?EVENT_BUDGET_MS),
+    Cap = application:get_env(quod, runtime_event_budget_cap_ms, ?EVENT_BUDGET_CAP_MS),
+    Budget = min(max(1, work_budget_units(Work)) * Per, Cap),
+    #s{ns = Ns, reaction_index = Reactions,
+       source_interests = SourceInterests, subscriptions = Subscriptions} = S,
+    spawn_runner(events, Budget,
+      fun(_Deadline) -> run_events(Ns, Work, Reactions, SourceInterests,
+                         maps:from_keys(Subscriptions, true), S#s.height, S#s.est)
+      end, S#s{event_acks = event_ack_refs(Items)}).
 
-%% One local block retains two deliberately different views of its transactions:
-%% requested heads are unioned for state invalidation, while canonical applied
-%% operations remain in exact transaction/operation order for reactions.
-coalesce_work_items(Batch) ->
-    Folded =
-        lists:foldl(
-          fun({local, Env, Est}, Acc) ->
-                  H = maps:get(height, Env, 0),
-                  Heads = changed_heads(Env),
-                  Events = quod_runtime_predicates:diff_to_events(
-                             maps:get(applied_ops, Env, [])),
-                  Effects = maps:get(effects, Env, []),
-                  case Acc of
-                      [{local, H, _E0, H0, O0, E0} | Rest] ->
-                          [{local, H, Est, H0 ++ Heads, O0 ++ Events,
-                            E0 ++ Effects} | Rest];
-                      _ -> [{local, H, Est, Heads, Events, Effects} | Acc]
-                  end
-             ;({observed, _Event} = Item, Acc) -> [Item | Acc]
-             ;({reconcile, _Heads} = Item, Acc) -> [Item | Acc]
-             ;({agent_work, _, _} = Item, Acc) -> [Item | Acc]
-             ;({remote, _FollowRef, _NoticeRef, _Identity, _Publications} = Item,
-               Acc) ->
-                  [Item | Acc]
-          end, [], Batch),
-    lists:reverse(
-      [case Item of
-           {local, H, Est, Heads, Events, Effects} ->
-               {local, H, Est, lists:usort(Heads), Events, Effects};
-           {remote, _, _, _, _} -> Item;
-           {observed, _} -> Item;
-           {reconcile, _} -> Item
-           ;{agent_work, _, _} -> Item
-       end || Item <- Folded]).
+%% Keep transaction boundaries and their exact post-transaction catalogue.
+%% The snapshot remains block-final; eligibility proofs use that snapshot.
+work_items(Batch) ->
+    coalesce_changed_heads(lists:map(
+      fun({local, Env, Est}) ->
+              {local, maps:get(height, Env, 0), Est, changed_heads(Env),
+               quod_runtime_predicates:diff_to_events(maps:get(applied_ops, Env, [])),
+               maps:get(effects, Env, []), maps:get(runtime_catalog, Env, keep)};
+         (Item) -> Item
+      end, Batch)).
 
-is_remote_work({remote, _, _, _, _}) -> true;
-is_remote_work(_) -> false.
+%% A block-final snapshot needs one convergence per contiguous local group.
+%% Keep every transaction's events and post-transaction declarations intact.
+coalesce_changed_heads([{local, H, Est, Heads, Events, Effects, Catalog} | Rest]) ->
+    {SameBlock, Tail} = lists:splitwith(
+        fun({local, NextH, _, _, _, _, _}) -> NextH =:= H;
+           (_) -> false end, Rest),
+    AllHeads = lists:usort(Heads ++ lists:append(
+        [Hs || {local, _, _, Hs, _, _, _} <- SameBlock])),
+    [{local, H, Est, AllHeads, Events, Effects, Catalog} |
+     [{local, NH, NE, [], EV, EF, C} || {local, NH, NE, _, EV, EF, C} <- SameBlock]]
+    ++ coalesce_changed_heads(Tail);
+coalesce_changed_heads([Item | Rest]) -> [Item | coalesce_changed_heads(Rest)];
+coalesce_changed_heads([]) -> [].
 
-work_tip(Work, Height0, Est0) ->
-    lists:foldl(
-      fun({local, Height, Est, _Heads, _Events, _Effects}, _Acc) ->
-              {Height, Est};
-         (_, Acc) -> Acc
-      end, {Height0, Est0}, Work).
+work_budget_units(Work) ->
+    {Count, _} = lists:foldl(
+        fun({local, H, _, _, _, _, _}, {N, {local, H}}) -> {N, {local, H}};
+           ({local, H, _, _, _, _, _}, {N, _}) -> {N + 1, {local, H}};
+           (_, {N, _}) -> {N + 1, other}
+        end, {0, none}, Work),
+    Count.
 
 work_effects(Work) ->
     [{Height, Effects}
-     || {local, Height, _Est, _Heads, _Events, Effects} <- Work,
+     || {local, Height, _Est, _Heads, _Events, Effects, _Catalog} <- Work,
         Effects =/= []].
+
+work_changes(Work) ->
+    lists:usort(lists:append([Heads || {local, _, _, Heads, _, _, _} <- Work])).
+
+queue_changes([], S) -> S;
+queue_changes(Heads, S = #s{queue = Q}) ->
+    {Existing, Other} = lists:partition(fun({observed, {ontology_changed, _}}) -> true;
+                                         (_) -> false end, Q),
+    Merged = lists:usort(Heads ++ lists:append([Hs || {observed, {ontology_changed, Hs}} <- Existing])),
+    Item = {observed, {ontology_changed, Merged}},
+    case length(Other) < max_queued_events(S) of
+        true -> S#s{queue = [Item | Other], queue_len = length(Other) + 1};
+        false -> resource_notice_overflow(S)
+    end.
 
 event_ack_refs(Items) ->
     [{FollowRef, NoticeRef}
      || {remote, FollowRef, NoticeRef, _Identity, _Publications} <- Items].
 
-%% Runner body (event batch): per BLOCK, validate any catalogue change, run the
-%% invalidated handlers in converge order, then dispatch canonical reactions.
-%% A removed founding reaction is therefore refused before it can run from the
-%% same block's other applied operations.
-run_events(Ns, Work, Handlers, Order, Index, Deps,
-           Reactions, SourceInterests, Subscriptions,
-           Self, Founding, Height0, Est0) ->
+%% Dispatch T with the preceding catalogue, then activate T's exact committed
+%% declarations for later transactions, including another T at the same height.
+run_events(Ns, Work, Reactions, SourceInterests, Subscriptions,
+           Height0, Est0) ->
     try
         {Tip, TipEst, ReactionStats, _FinalReactionIndex,
          _FinalSourceInterests, _FinalSubscriptions, CatalogUpdate} =
             lists:foldl(
-              fun({local, H, Est, Heads, Events, _Effects},
+              fun({local, H, Est, _Heads, Events, _Effects, After},
                   {_PrevH, _PrevEst, Stats0, Reactions0, Sources0,
                    Subscriptions0, Catalog0}) ->
-                      {Reactions1, Sources1, Subscriptions1, Catalog1} =
-                          refresh_runtime_catalog(
-                            Heads, Est, Founding, Reactions0, Sources0,
-                            Subscriptions0, Catalog0),
-                      converge_changed(Ns, Est, H, Heads, Handlers, Order, Index, Deps),
                       Stats1 = dispatch_local_reactions(
-                                 Ns, H, Est, Self, Events, Reactions1, Stats0),
+                                 Ns, H, Est, Events, Reactions0, Stats0),
+                      {Reactions1, Sources1, Subscriptions1, Catalog1} =
+                          advance_runtime_catalog(
+                            After, Reactions0, Sources0, Subscriptions0, Catalog0),
                       {H, Est, Stats1, Reactions1, Sources1,
                        Subscriptions1, Catalog1};
-                 ({observed, Event},
-                  {H, Est, Stats0, Reactions0, Sources0,
-                   Subscriptions0, Catalog0}) ->
-                      %% Transient owner observations are not applied ledger
-                      %% events. They use the same Prolog matcher and explicit
-                      %% executor; any durable consequence needs signed ingress.
-                      Observation = {observed, Event},
-                      Candidates = maps:get({observed, 1}, Reactions0, []),
-                      Stats1 = dispatch_reaction_candidates(
-                                 Ns, H, Est, Self, Observation, Candidates, Stats0),
-                      {H, Est, Stats1, Reactions0, Sources0,
-                       Subscriptions0, Catalog0};
-                 ({reconcile, Handler}, {H, Est, _, _, _, _, _} = Acc) ->
-                      Run = transitive_closure([Handler], Deps),
-                      lists:foreach(fun(Id) ->
-                          #handler{goal = Goal} = maps:get(Id, Handlers),
-                          converge(Ns, Est, H, Id, Goal, all)
-                      end, [Id || Id <- Order, lists:member(Id, Run)]),
-                      Acc;
-                 ({agent_work, Handler, Instance}, {H, Est, _, _, _, _, _} = Acc) ->
-                      #handler{goal = Goal} = maps:get(Handler, Handlers),
-                      converge(Ns, Est, H, Handler, Goal, {agent_work, Instance}),
-                      Acc;
+                 ({snapshot, H, Est},
+                  {_PrevH, _PrevEst, Stats, Reactions0, Sources0, Subscriptions0, Catalog0}) ->
+                      {H, Est, Stats, Reactions0, Sources0, Subscriptions0, Catalog0};
+                 ({owned_reaction, Event, Audience, Clause},
+                  {H, Est, Stats0, Reactions0, Sources0, Subscriptions0, Catalog0}) ->
+                      Stats1 = dispatch_candidates(Ns, H, Est, Audience, Event, [Clause], Stats0),
+                      {H, Est, Stats1, Reactions0, Sources0, Subscriptions0, Catalog0};
                  ({remote, _FollowRef, _NoticeRef, Identity, Publications},
                   {H, Est, Stats0, Reactions0, Sources0,
                    Subscriptions0, Catalog0}) ->
@@ -1184,7 +1127,7 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
                           case maps:is_key(Identity, Subscriptions0) of
                               true ->
                                   dispatch_remote_reactions(
-                                    Ns, H, Est, Self, Identity, Publications,
+                                    Ns, H, Est, Identity, Publications,
                                     Sources0, Stats0);
                               false ->
                                   reaction_stat(dropped, Stats0)
@@ -1195,134 +1138,114 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
               {Height0, Est0, empty_reaction_stats(), Reactions,
                SourceInterests, Subscriptions, keep}, Work),
         {ok, Tip, TipEst, work_effects(Work), CatalogUpdate,
-         ReactionStats}
+         ReactionStats, work_changes(Work)}
     catch throw:R -> {error, R}
     end.
 
-converge_changed(Ns, Est, H, Heads, Handlers, Order, Index, Deps) ->
-    {Run, Scopes} = event_plan(Heads, Index, Order, Deps),
-    lists:foreach(fun(Id) ->
-        #handler{goal = Goal} = maps:get(Id, Handlers),
-        converge(Ns, Est, H, Id, Goal, maps:get(Id, Scopes))
-    end, Run).
-
 -ifdef(TEST).
 %% Drive the real ordered fold without a gen_server race. This is deliberately
-%% narrower than run_events/13: tests supply the already-derived catalogue and
+%% narrower than run_events/7: tests supply the already-derived catalogue and
 %% cannot invent an alternative dispatch path.
-test_run_events(Work, Plan, Self, FoundingReactions, Height0, Est0) ->
+test_run_events(Work, Plan, Height0, Est0) ->
     run_events(
-      <<"runtime:test">>, Work, #{}, [], #{}, #{},
+      <<"runtime:test">>, Work,
       maps:get(reaction_index, Plan), maps:get(source_interests, Plan),
-      maps:from_keys(maps:get(subscriptions, Plan), true), Self,
-      #{handlers => [], reactions => FoundingReactions}, Height0, Est0).
+      maps:from_keys(maps:get(subscriptions, Plan), true),
+      Height0, Est0).
 -endif.
 
-refresh_runtime_catalog(Heads, Est, Founding, ReactionIndex, SourceInterests,
-                        Subscriptions, CatalogUpdate) ->
-    case lists:any(fun catalog_head/1, Heads) of
-        false ->
-            {ReactionIndex, SourceInterests, Subscriptions, CatalogUpdate};
-        true ->
-            case stored_runtime_catalog(Est) of
-                {ok, StoredCatalog} ->
-                    case plan_runtime_catalog(
-                           maps:get(reactions, Founding, []), StoredCatalog) of
-                        {ok, Plan} ->
-                            {maps:get(reaction_index, Plan),
-                             maps:get(source_interests, Plan),
-                             maps:from_keys(
-                               maps:get(subscriptions, Plan), true),
-                             Plan};
-                        {error, Reason} ->
-                            throw(Reason)
-                    end;
-                {error, Reason} ->
-                    throw({discovery_failed, Reason})
-            end
-    end.
+advance_runtime_catalog(keep, ReactionIndex, SourceInterests, Subscriptions, CatalogUpdate) ->
+    {ReactionIndex, SourceInterests, Subscriptions, CatalogUpdate};
+advance_runtime_catalog({ok, StoredCatalog}, _, _, _, _) ->
+    case plan_runtime_catalog(StoredCatalog) of
+        {ok, Plan} ->
+            {maps:get(reaction_index, Plan), maps:get(source_interests, Plan),
+             maps:from_keys(maps:get(subscriptions, Plan), true), Plan};
+        {error, Reason} -> throw(Reason)
+    end;
+advance_runtime_catalog({error, Reason}, _, _, _, _) ->
+    throw({discovery_failed, Reason}).
 
 empty_reaction_stats() ->
     #{candidates => 0, matches => 0, executed => 0,
-      inert => 0, failures => 0, dropped => 0}.
+      failures => 0, dropped => 0}.
 
-dispatch_local_reactions(_Ns, _Height, _Est, _Self, [], _Index, Stats) ->
+dispatch_local_reactions(_Ns, _Height, _Est, [], _Index, Stats) ->
     Stats;
-dispatch_local_reactions(Ns, Height, Est, Self, [{observed, _} | Rest], Index, Stats0) ->
+dispatch_local_reactions(Ns, Height, Est, [{observed, _} | Rest], Index, Stats0) ->
     %% Committed user content cannot mint local owner evidence and borrow a
     %% node observer's signing authority. Only the observed tier unwraps this
     %% reserved outer vocabulary into the common Prolog matcher.
-    dispatch_local_reactions(Ns, Height, Est, Self, Rest, Index,
+    dispatch_local_reactions(Ns, Height, Est, Rest, Index,
                              reaction_stat(dropped, Stats0));
-dispatch_local_reactions(Ns, Height, Est, Self, [Event | Rest], Index, Stats0) ->
+dispatch_local_reactions(Ns, Height, Est, [Event | Rest], Index, Stats0) ->
     Candidates = maps:get(functor_key(Event), Index, []),
-    Stats1 = dispatch_reaction_candidates(
-               Ns, Height, Est, Self, Event, Candidates, Stats0),
-    dispatch_local_reactions(Ns, Height, Est, Self, Rest, Index, Stats1).
+    Stats1 = dispatch_candidates(
+               Ns, Height, Est, domain, Event, Candidates, Stats0),
+    dispatch_local_reactions(Ns, Height, Est, Rest, Index, Stats1).
 
-dispatch_remote_reactions(_Ns, _Height, _Est, _Self, _Identity, [],
+dispatch_remote_reactions(_Ns, _Height, _Est, _Identity, [],
                           _SourceInterests, Stats) ->
     Stats;
-dispatch_remote_reactions(Ns, Height, Est, Self, Identity,
+dispatch_remote_reactions(Ns, Height, Est, Identity,
                           [{_SourceHeight, AppliedOps} | Rest],
                           SourceInterests, Stats0) ->
     Index = maps:get(Identity, SourceInterests, #{}),
     Stats1 = lists:foldl(
                fun(Event, Acc) ->
                        Candidates = maps:get(functor_key(Event), Index, []),
-                       dispatch_reaction_candidates(
-                         Ns, Height, Est, Self,
+                       dispatch_candidates(
+                         Ns, Height, Est, domain,
                          source_event(Identity, Event), Candidates, Acc)
                end, Stats0,
                quod_runtime_predicates:diff_to_events(AppliedOps)),
     dispatch_remote_reactions(
-      Ns, Height, Est, Self, Identity, Rest, SourceInterests, Stats1).
+      Ns, Height, Est, Identity, Rest, SourceInterests, Stats1).
+
+functor_key(Head) when is_atom(Head) -> {Head, 0};
+functor_key(Head) when is_tuple(Head) -> {element(1, Head), tuple_size(Head) - 1}.
 
 source_event({TargetNs, Anchor}, Event) ->
     {from, TargetNs, Anchor, Event}.
 
 %% Local and subscribed occurrences enter this one continuation. Erlang only
-%% narrows the candidate list; unification, executor ownership and Handler
-%% execution remain the single Prolog path in quod_runtime_predicates.
-dispatch_reaction_candidates(Ns, Height, Est, Self, Event, Candidates, Stats0) ->
-    lists:foldl(
-      fun(Reaction, Acc0) ->
-              Acc1 = reaction_stat(candidates, Acc0),
-              Started = erlang:monotonic_time(microsecond),
-              Result = quod_runtime_predicates:run_reaction(
-                         Ns, Height, Self, Reaction, Event, Est),
-              Elapsed = erlang:monotonic_time(microsecond) - Started,
-              ok = quod_metrics:observe_runtime_reaction(Ns, Result, Elapsed),
-              case Result of
-                  unmatched -> Acc1;
-                  executed ->
-                      reaction_stat(executed, reaction_stat(matches, Acc1));
-                  {inert, _Reason} ->
-                      reaction_stat(inert, reaction_stat(matches, Acc1));
-                  {failed, _Reason} ->
-                      reaction_stat(failures, reaction_stat(matches, Acc1))
-              end
-      end, Stats0, Candidates).
+%% narrows candidates; unification and goal selection stay in Prolog.
+
+dispatch_candidates(Ns, Height, Est, Audience, Event, Candidates, Stats0) ->
+    Agents = case Candidates of [] -> []; _ -> reaction_agents(Ns, Audience) end,
+    lists:foldl(fun(Reaction, Acc0) ->
+        lists:foldl(fun(Owner, Acc) ->
+            dispatch_reaction(Ns, Height, Est, Owner, Event, Reaction, Acc)
+        end, Acc0, Agents)
+    end, Stats0, Candidates).
+
+dispatch_reaction(Ns, Height, Est, Owner, Event, Reaction, Acc0) ->
+    Acc1 = reaction_stat(candidates, Acc0),
+    Started = erlang:monotonic_time(microsecond),
+    Result = quod_runtime_predicates:run_reaction(
+               Ns, Height, Owner, Reaction, Event, Est),
+    Elapsed = erlang:monotonic_time(microsecond) - Started,
+    ok = quod_metrics:observe_runtime_reaction(Ns, Result, Elapsed),
+    case Result of
+        unmatched -> Acc1;
+        executed ->
+            reaction_stat(executed, reaction_stat(matches, Acc1));
+        {failed, _Reason} ->
+            reaction_stat(failures, reaction_stat(matches, Acc1))
+    end.
 
 reaction_stat(Key, Stats) ->
     maps:update_with(Key, fun(N) -> N + 1 end, 1, Stats).
 
-catalog_changed(Work) ->
-    lists:any(
-      fun({local, _H, _Est, Heads, _Events, _Effects}) ->
-              lists:any(fun catalog_head/1, Heads);
-         (_) -> false
-      end, Work).
-
 catalog_head({subscribes, _, _}) -> true;
-catalog_head({react_on, _, _, _}) -> true;
+catalog_head({react_on, _, _}) -> true;
 catalog_head(_) -> false.
 
 %% The full dereferenced head terms of the envelope's diff — INCLUDING retracted heads, so
 %% per-key convergence can observe removals (nothing in the snapshot for key K ⇒ delete P[K]).
 changed_heads(Env) ->
     [Head || {Kind, {Head, _Body}} <- maps:get(diff, Env, []),
-             Kind =:= assert orelse Kind =:= retract].
+             Kind =:= assert orelse Kind =:= asserta orelse Kind =:= retract].
 
 release_direct_effects(HeightEffects) ->
     lists:foreach(
@@ -1331,46 +1254,8 @@ release_direct_effects(HeightEffects) ->
       end, HeightEffects),
     ok.
 
-%% Pure: which handlers must run for these changed heads, in what order, with what scope.
-%% Matched handlers AND their transitive dependents run (a dependent whose watch didn't fire
-%% still reads its prerequisite's P output, so its piece must be re-converged); order is the
-%% GLOBAL converge order filtered to the run set — prerequisites first regardless of Id term
-%% order. Scope per handler: its own watched subset of the heads, else `all` (a chained-in
-%% dependent or a join-shaped handler treats the hint as no narrowing).
-event_plan(Heads, Index, Order, Dependents) ->
-    Matched = lists:usort(
-                lists:append([maps:get(functor_key(H), Index, []) || H <- Heads])),
-    Run0 = transitive_closure(Matched, Dependents),
-    Run = [Id || Id <- Order, lists:member(Id, Run0)],
-    Scopes = maps:from_list(
-               [{Id, scope_for(Id, Heads, Index)} || Id <- Run]),
-    {Run, Scopes}.
-
-functor_key(Head) when is_atom(Head)  -> {Head, 0};
-functor_key(Head) when is_tuple(Head) -> {element(1, Head), tuple_size(Head) - 1}.
-
-transitive_closure(Ids, Dependents) ->
-    close(Ids, sets:from_list(Ids), Dependents).
-
-close([], Seen, _Dependents) -> sets:to_list(Seen);
-close([Id | Rest], Seen, Dependents) ->
-    New = [D || D <- maps:get(Id, Dependents, []), not sets:is_element(D, Seen)],
-    close(New ++ Rest,
-          lists:foldl(fun sets:add_element/2, Seen, New),
-          Dependents).
-
-scope_for(Id, Heads, Index) ->
-    Watched = [H || H <- Heads, lists:member(Id, maps:get(functor_key(H), Index, []))],
-    case Watched of
-        [] -> all;
-        _  -> {keys, Watched}
-    end.
-
-events_finished(
-  {ok, Tip, TipEst, Effects, CatalogUpdate, ReactionStats},
-  S0 = #s{mode = live}) ->
-    %% advance est/height to the batch tip so heavy workers (started here) and the floor track
-    %% the head; p_height/e_frontier are the P-before-E barrier
+events_finished({ok, Tip, TipEst, Effects, CatalogUpdate, ReactionStats, Changes},
+                S0 = #s{mode = live}) ->
     S = install_catalog_update(CatalogUpdate, S0),
     S1 = S#s{est = TipEst, height = Tip,
              p_height = max(S#s.p_height, Tip),
@@ -1382,15 +1267,14 @@ events_finished(
                  S#s.reaction_matches + maps:get(matches, ReactionStats),
              reactions_executed =
                  S#s.reactions_executed + maps:get(executed, ReactionStats),
-             reaction_inert =
-                 S#s.reaction_inert + maps:get(inert, ReactionStats),
              reaction_failures =
                  S#s.reaction_failures + maps:get(failures, ReactionStats),
              dropped_events =
                  S#s.dropped_events + maps:get(dropped, ReactionStats)},
     release_direct_effects(Effects),
     S2 = release_hosting(release_event_acks(S1)),
-    next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S2))));
+    ResourceChanges = resource_changes(Changes, Tip > S0#s.height),
+    next_after_runner(floor_raise(queue_changes(Changes, invalidate_resources(ResourceChanges, S2))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
 
@@ -1399,20 +1283,15 @@ install_catalog_update(keep, S) ->
 install_catalog_update(
   #{subscriptions := Subscriptions, reactions := Reactions,
     reaction_index := ReactionIndex,
-    source_interests := SourceInterests, rejected_dynamic := RejectedDynamic,
+    source_interests := SourceInterests,
     rejected_subscriptions := RejectedSubscriptions},
   S = #s{ns = Ns}) ->
-    RejectedDynamic =:= 0 orelse
-        logger:warning("quod_runtime[~s]: ~b non-founding runtime declaration(s) "
-                       "refused (no can_declare_runtime authorization yet)",
-                       [Ns, RejectedDynamic]),
     RejectedSubscriptions =:= 0 orelse
         logger:warning("quod_runtime[~s]: ~b malformed subscribes/2 clause(s) ignored",
                        [Ns, RejectedSubscriptions]),
     S1 = S#s{subscriptions = Subscriptions, reactions = Reactions,
              reaction_index = ReactionIndex,
              source_interests = SourceInterests,
-             rejected_dynamic = S#s.rejected_dynamic + RejectedDynamic,
              rejected_subscriptions =
                  S#s.rejected_subscriptions + RejectedSubscriptions},
     reconcile_source_views(Subscriptions, S1).
@@ -1749,30 +1628,30 @@ execution_failure(Reason, S0 = #s{ns = Ns}) ->
             S#s{mode = {unhealthy, Reason}, last_recovery = {collapse, Ref}}
     end.
 
+clear_recovery_pending(S = #s{recovery_pending = none}) -> S;
+clear_recovery_pending(S = #s{recovery_pending = {_, _, Monitor, Timer}}) ->
+    demonitor(Monitor, [flush]),
+    _ = erlang:cancel_timer(Timer),
+    S#s{recovery_pending = none}.
+
 kill_runner(S00) ->
-    S0 = #s{heavy_running = Running} = drop_observations(stop_observer(stop_agents(S00))),
-    %% collapse kills EVERY in-flight worker — tier runner AND heavy workers [DA M7]: their
-    %% stale writes must not land after the clear, and the reconcile's converge goals
-    %% re-enqueue heavy jobs, so revision barriers still resolve.
-    RunnerWorkers = case S0#s.runner of
-                        none -> [];
-                        {_Kind, Pid, MRef, _Ref, TRef} ->
-                            _ = erlang:cancel_timer(TRef),
-                            [{Pid, MRef}]
-                    end,
-    HeavyWorkers = maps:fold(
-                     fun(_Res, {P, M, T, _R, _Rev, _EH}, Acc) ->
-                             _ = erlang:cancel_timer(T),
-                             [{P, M} | Acc]
-                     end, [], Running),
-    Workers = RunnerWorkers ++ HeavyWorkers,
+    S0 = drop_observations(stop_observer(stop_agents(clear_recovery_pending(S00)))),
+    Workers = case S0#s.runner of
+        none -> [];
+        {_Kind, Pid, MRef, _Ref, TRef} ->
+            _ = erlang:cancel_timer(TRef),
+            [{Pid, MRef}]
+    end,
     lists:foreach(fun({Pid, _MRef}) -> exit(Pid, kill) end, Workers),
-    %% `exit(Pid, kill)` and a later Prolog pin detach/replace target different processes;
-    %% there is no cross-recipient signal ordering. Wait for every DOWN here so no worker can
-    %% still read the old snapshot when the pin moves. This runs only on replay/failure/stop.
+    %% Await the reader before moving its retained MVCC floor.
     await_worker_downs(maps:from_list([{MRef, true} || {_Pid, MRef} <- Workers])),
-    release_event_acks(
-      S0#s{runner = none, heavy_running = #{}, heavy_pending = #{}, heavy_order = []}).
+    Cleared = case S0#s.resource_waiter of
+        {From, Monitor} ->
+            reply_resource(From, Monitor, {error, runtime_recovering}),
+            S0#s{resource_waiter = none};
+        none -> S0
+    end,
+    release_event_acks(Cleared#s{runner = none}).
 
 await_worker_downs(Pending) when map_size(Pending) =:= 0 -> ok;
 await_worker_downs(Pending) ->
@@ -1790,7 +1669,7 @@ begin_replay(Id, S0) ->
 
 %% Queue overflow is BACKPRESSURE, not a fault: collapse to a reconciliation (kill the runner,
 %% drop the queue, rebuild from the newest snapshot) but do NOT touch `exec_failures` and log at
-%% notice — otherwise a load spike looks identical to a handler crash in the logs/metrics and
+%% notice — otherwise a load spike looks identical to a reader crash in the logs/metrics and
 %% could (over enough distinct spikes) approach the deliberate-crash valve. Counted in
 %% `collapses` so sustained overload is still visible.
 overflow_collapse(S0 = #s{ns = Ns}) ->
@@ -1825,20 +1704,53 @@ request_executor({node, Key}, S) ->
     end;
 request_executor(_, S) -> {error, stale_executor, S}.
 
-node_executor_binding(Key, #s{founding = {ok, #{identity := Source}, _}}) ->
-    case {quod_node_actor:principal(), application:get_env(quod, node_pubkey)} of
-        {{ok, Principal}, {ok, Key}} ->
-            {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
-            {ok, #{reference => NodeRef, public_key => Key, epoch => 0, source => Source}};
+node_executor_binding(Key, #s{binding = #{identity := {Ns, Anchor} = Source}, config = Config}) ->
+    case {maps:get(node_id, Config), quod_node_actor:principal()} of
+        {Key, {ok, Principal}} when is_binary(Key), byte_size(Key) =:= 32 ->
+            case quod_agent_ref:materialize_principal(Principal) of
+                {ok, {agent_instance_ref, Ns, Anchor, _} = Ref} ->
+                    {ok, #{reference => Ref, credential => node, public_key => Key,
+                           epoch => 0, source => Source}};
+                _ -> error
+            end;
         _ -> error
     end;
 node_executor_binding(_, _) -> error.
 
-refresh_node_executor(S) ->
+%% An ontology can select only its hosted actors and, in its exact own scope,
+%% the installed logical node. Event origin never supplies another authority.
+audience_bindings(domain, S = #s{config = Config}) ->
+    Hosted = [B || {{agent, _}, #{binding := B, stopping := false}} <- maps:to_list(S#s.agents)],
+    case request_executor({node, maps:get(node_id, Config)}, S) of
+        {ok, node, #{binding := Binding}, Next} -> {[Binding | Hosted], Next};
+        {error, _, Next} -> {Hosted, Next}
+    end;
+audience_bindings({recovery, Source, Expiry, Metadata}, S) ->
+    case recovery_current(Source, Metadata, Expiry, S) of
+        true ->
+            {Bindings, Next} = audience_bindings(domain, S),
+            Node = maps:get(observer, Metadata),
+            {[B#{request_expiry => Expiry, recovery => Metadata}
+              || B = #{credential := node, reference := Ref} <- Bindings, Ref =:= Node], Next};
+        false -> {[], S}
+    end.
+
+recovery_current(Source, #{target := {agent_instance_ref, Ns, _, _}, observer := Node,
+                           deadline := Deadline, evidence := #{observer := Node} = Evidence}, Expiry, S) ->
+    Expiry > quod_time:now_ms() andalso Deadline > quod_time:mono_ms() andalso node_scope(Node, S) andalso
+    quod_reg:where({quod_runtime, Ns}) =:= Source andalso
+    quod_agent_observer:evidence_current(Evidence);
+recovery_current(_, _, _, _) -> false.
+
+node_scope({agent_instance_ref, Ns, Anchor, _} = Node,
+           #s{binding = #{identity := {Ns, Anchor}}}) -> local_node_reference() =:= Node;
+node_scope(_, _) -> false.
+
+refresh_node_executor(S = #s{config = Config}) ->
     case maps:is_key(node, S#s.agents) of
         false -> S;
         true ->
-            Key = application:get_env(quod, node_pubkey, undefined),
+            Key = maps:get(node_id, Config),
             Desired = case node_executor_binding(Key, S) of
                 {ok, Binding} -> #{node => Binding};
                 error -> #{}
@@ -1942,18 +1854,20 @@ enqueue_agent_request(Slot, Agent = #{pid := Pid, pending := Pending}, H, Reques
 %% request advances the pass too: completion is a wake, never a retry trigger.
 %% Only a changed watched projection or a new hosted incarnation grants a new
 %% pass. None of this progress is durable or evidence about a signed operation.
-project_work(Handler, H, Slot, Step, S) ->
+%% Selection reads belong to the entire pass, including its idle result. Only
+%% starting a new pass retires them; capacity and completion continue the pass.
+project_work(H, Slot, Step, S) ->
     case maps:get(Slot, S#s.agents, none) of
         Agent = #{stopping := false} ->
             case maps:get(work, Agent, none) of
                 none when is_tuple(Step), element(1, Step) =:= cursor ->
-                    Work = #{handler => Handler, height => H, cursor => start,
+                    Work = #{height => H, cursor => start,
                              prior => all, dirty => false,
                              custody_owner => quod_reg:where({quod_simplex, S#s.ns})},
-                    {skip, query_agent_work_custody(Slot, Agent, Work, S)};
+                    {skip, query_agent_work_custody(Slot, Agent, Work,
+                                                     clear_agent_work_basis(Slot, S))};
                 none -> {{error, invalid_agent_work}, S};
-                Work = #{handler := Handler} -> project_work_step(Step, H, Slot, Work, S);
-                #{handler := Other} -> {{error, {conflicting_agent_work_owner, Other, Handler}}, S}
+                Work -> project_work_step(Step, H, Slot, Work, S)
             end;
         _ -> {skip, S}
     end.
@@ -1975,23 +1889,24 @@ query_agent_work_custody(Slot, #{binding := #{reference := Ref}}, Work, S) ->
                     S#s{agent_work_subscribed = true}).
 
 project_work_step({cursor, Wake}, H, Slot, Work0, S) ->
-    Work = case Wake of
-               changed -> refresh_agent_work(H, Work0);
-               continue -> Work0
-           end,
+    {Work, Current} = case Wake of
+                          changed -> refresh_agent_work(H, Slot, Work0, S);
+                          continue -> {Work0, S}
+                      end,
     case maps:get(status, Work) of
         Status when Status =:= ready; Status =:= blocked ->
-            case agent_work_capacity(Slot, S) of
+            case agent_work_capacity(Slot, Current) of
                 true -> {{ok, maps:get(cursor, Work)},
-                         put_agent_work(Slot, Work#{status => ready}, S)};
-                false -> {skip, put_agent_work(Slot, Work#{status => blocked}, S)}
+                         put_agent_work(Slot, Work#{status => ready}, Current)};
+                false -> {skip, put_agent_work(Slot, Work#{status => blocked}, Current)}
             end;
-        _ -> {skip, put_agent_work(Slot, Work, S)}
+        _ -> {skip, put_agent_work(Slot, Work, Current)}
     end;
 project_work_step(none, _H, Slot, Work = #{status := ready, dirty := Dirty}, S) ->
     case Dirty of
         true ->
-            Next = put_agent_work(Slot, Work#{cursor => start, dirty => false}, S),
+            Next = put_agent_work(Slot, Work#{cursor => start, dirty => false},
+                                  clear_agent_work_basis(Slot, S)),
             {ok, queue_agent_work(Slot, Work, Next)};
         false -> {ok, put_agent_work(Slot, Work#{status => idle}, S)}
     end;
@@ -2011,12 +1926,17 @@ project_work_step({work, Key, Goal, Budget}, H, Slot,
     end;
 project_work_step(_, _, _, _, S) -> {{error, invalid_agent_work}, S}.
 
-refresh_agent_work(H, Work = #{height := Before, status := Status}) when H > Before ->
+refresh_agent_work(H, Slot, Work = #{height := Before, status := Status}, S)
+  when is_integer(H), H > Before ->
     case Status of
-        idle -> Work#{height => H, cursor => start, status => ready, dirty => false};
-        _ -> Work#{height => H, dirty => true}
+        idle -> {Work#{height => H, cursor => start, status => ready, dirty => false},
+                 clear_agent_work_basis(Slot, S)};
+        _ -> {Work#{height => H, dirty => true}, S}
     end;
-refresh_agent_work(_, Work) -> Work.
+refresh_agent_work(_, _, Work, S) -> {Work, S}.
+
+clear_agent_work_basis(Slot, S) ->
+    S#s{resource_basis = maps:remove(work_resource_key(Slot), S#s.resource_basis)}.
 
 put_agent_work(Slot, Work, S = #s{agents = Agents}) ->
     S#s{agents = Agents#{Slot => (maps:get(Slot, Agents))#{work => Work}}}.
@@ -2048,12 +1968,8 @@ wake_work_capacity(S) ->
                  (_, _, Acc) -> Acc
               end, S, S#s.agents).
 
-queue_agent_work({agent, Instance}, #{handler := Handler}, S) ->
-    Item = {agent_work, Handler, Instance},
-    case lists:member(Item, S#s.queue) of
-        true -> S;
-        false -> S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1}
-    end.
+queue_agent_work({agent, Instance}, _Work, S) ->
+    queue_ready(agent_work, {agent_work, Instance}, S).
 
 start_agent(Instance, Binding, S) ->
     {ok, Pid} = quod_agent:start(self(), Instance, Binding),
@@ -2086,7 +2002,11 @@ release_hosting(S = #s{hosting_dirty = Dirty, agents = Agents, e_frontier = H}) 
             _ -> ok
         end
     end, Dirty),
-    S#s{hosting_dirty = #{}}.
+    Cleared = S#s{hosting_dirty = #{}},
+    Installed = [Instance || {{agent, Instance} = Slot, installed} <- maps:to_list(Dirty),
+                            #{stopping := false} <- [maps:get(Slot, Agents, none)]],
+    lists:foldl(fun(Instance, Acc) -> queue_ready(agent_work, {agent_work, Instance}, Acc) end,
+                Cleared, Installed).
 
 stop_agent(Agent = #{pid := Pid, stopping := false}, Next) ->
     Pid ! {agent_stop, self()},
@@ -2098,13 +2018,18 @@ stop_agents(S) ->
     S#s{agents = Agents, hosting_dirty = #{}, agent_projection_waiter = none,
         agent_capacity_blocked = false}.
 
+work_resource_key({agent, Instance}) -> {agent_work, Instance};
+work_resource_key(node) -> node.
+
 agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
     case maps:get(Instance, Agents, none) of
         Agent = #{pid := Pid, monitor := Monitor, pending := Pending} ->
             S1 = S#s{agents = maps:remove(Instance, Agents),
                       agent_slots = S#s.agent_slots - agent_slot_count(Instance),
                       agent_pending_bytes = S#s.agent_pending_bytes - lists:sum(maps:values(Pending)),
-                      hosting_dirty = maps:remove(Instance, S#s.hosting_dirty)},
+                      hosting_dirty = maps:remove(Instance, S#s.hosting_dirty),
+                      resource_basis = maps:remove(work_resource_key(Instance), S#s.resource_basis),
+                      resource_failures = maps:remove(work_resource_key(Instance), S#s.resource_failures)},
             Result = case Agent of
                 #{stopping := true, successor := none} -> S1;
                 #{stopping := true, successor := Binding} ->
@@ -2115,8 +2040,8 @@ agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
                     end;
                 #{stopping := false} ->
                     case Instance of
-                        node -> S1;
-                        {agent, _} -> queue_agent_reconcile(
+                        node -> queue_ready(ontology, all, S1);
+                        {agent, I} -> queue_ready(agent_hosts, {agent, I},
                                         observe_agent_down(maps:get(binding, Agent), S1))
                     end
             end,
@@ -2129,7 +2054,7 @@ agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
         _ -> S
     end.
 
-install_observer(Old, Installed, Handler, Scope, Refused, S) ->
+install_observer(Old, Installed, Scope, Refused, S) ->
     Clean = maps:filter(fun({observer, I}, _) ->
                             Scope =/= all andalso not lists:member(I, element(2, Scope));
                           (_, _) -> true
@@ -2142,7 +2067,7 @@ install_observer(Old, Installed, Handler, Scope, Refused, S) ->
         true -> Dirty;
         false -> Dirty#{observer_capacity => {observation_status, Status}}
     end,
-    Next = S#s{observer = Installed, observer_handler = Handler, hosting_dirty = Notices},
+    Next = S#s{observer = Installed, hosting_dirty = Notices},
     case quod_agent_observer:capacity_released(Old, Installed) of
         true -> queue_observer_reconcile(Next);
         false -> Next
@@ -2187,12 +2112,27 @@ replace_host_observation(Host, Batch, [Item | Rest]) ->
 admit_observation(Item, S = #s{queue = Queue, queue_len = Count}) ->
     case Count < max_queued_events(S) of
         true -> S#s{queue = [Item | Queue], queue_len = Count + 1};
-        false -> S#s{dropped_events = S#s.dropped_events + 1}
+        false ->
+            case Item of
+                {observed, {ready, _, _}} -> resource_notice_overflow(S);
+                _ -> S#s{dropped_events = S#s.dropped_events + 1}
+            end
     end.
 
-queue_observer_reconcile(S = #s{observer_handler = undefined}) -> S;
-queue_observer_reconcile(S = #s{observer_handler = Handler}) ->
-    queue_handler_reconcile(Handler, S).
+%% Scoped readiness notifications collapse into the same ordered resource
+%% cursor. Its pending typed requests and original bounds survive compaction,
+%% even when the queue budget has room for only one item.
+resource_notice_overflow(S) ->
+    Keep = [Item || Item <- S#s.queue, not resource_notice(Item)],
+    queue_resource_cursor(#{}, true, S#s{queue = Keep, queue_len = length(Keep)}).
+
+resource_notice({observed, {ready, _, _}}) -> true;
+resource_notice({observed, {ontology_changed, _}}) -> true;
+resource_notice({owned_notice, {observed, {ready, _, _}}, domain, _}) -> true;
+resource_notice({owned_notice, {observed, {ontology_changed, _}}, domain, _}) -> true;
+resource_notice(_) -> false.
+
+queue_observer_reconcile(S) -> queue_ready(agent_observers, all, S).
 
 observe_agent_down(#{reference := Ref, epoch := Epoch, public_key := Key}, S) ->
     Event = {agent_process_down, Ref, Epoch, Key, crypto:strong_rand_bytes(32)},
@@ -2213,163 +2153,101 @@ finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting
             S#s{agent_projection_waiter = none}
     end.
 
-%% Keep readiness edges even before the first projection identifies its owner.
-%% Lifecycle refreshes target the owning handler, never a domain fact schema.
-queue_agent_reconcile(S = #s{agent_handler = undefined}) ->
-    S#s{agent_refresh = true};
-queue_agent_reconcile(S = #s{agent_handler = Handler}) ->
-    queue_handler_reconcile(Handler, S).
+%% Readiness names an owned resource, never a declaration or callback goal.
+queue_agent_reconcile(S) -> queue_ready(agent_hosts, all, S).
 
-queue_handler_reconcile(Handler, S) ->
-    Item = {reconcile, Handler},
+queue_ready(Resource, Scope, S0) ->
+    S = schedule_resource_notice(Resource, Scope, S0),
+    Event = {ready, Resource, Scope},
+    Item = {observed, Event},
     case lists:member(Item, S#s.queue) of
-        true -> S;
-        false -> maybe_run_events(S#s{queue = [Item | S#s.queue],
-                                       queue_len = S#s.queue_len + 1})
+        true -> maybe_run_events(S);
+        false -> queue_observations([Event], S)
     end.
 
-%%%===================================================================
-%%% heavy-worker framework (§8 — framework only, no product worker yet)
-%%%===================================================================
+schedule_resource_notice(ontology, all, S) ->
+    Keys = [agent_hosts, agent_observers, node_ontologies, effect_custody] ++
+           [{agent_work, I} || {{agent, I}, #{stopping := false}} <- maps:to_list(S#s.agents)],
+    queue_resource_keys(Keys, changed, S);
+schedule_resource_notice(agent_work, {agent_work, I}, S) ->
+    queue_resource_key({agent_work, I}, continue, S);
+schedule_resource_notice(Resource, _Scope, S) -> queue_resource_key(Resource, changed, S).
 
-%% Start queued jobs up to the global cap, one per resource. Started ONLY when the tier is
-%% idle (`mode = live, runner = none`): the server's `est`/`height` are the batch/reconcile
-%% tip exactly then, so a job — whose requested `Rev` is its enqueueing event's height —
-%% always runs against a snapshot AT OR NEWER than `Rev` (during a running batch, `est` still
-%% lags at the pre-batch height, which would converge the wrong snapshot and install a bogus
-%% revision). A job's captured snapshot is pinned by `floor_raise` while it runs.
-pump_heavy(S = #s{mode = live, runner = none, est = Est,
-                  heavy_pending = Pending, heavy_order = Order,
-                  heavy_running = Running})
-  when map_size(Pending) > 0, Est =/= undefined ->
-    Cap = max_heavy_workers(S),
-    Startable = [Res || Res <- Order, not is_map_key(Res, Running)],
-    lists:foldl(fun(Res, Acc) ->
-                        case map_size(Acc#s.heavy_running) < Cap of
-                            true  -> start_heavy(Res, Acc);
-                            false -> Acc
-                        end
-                end, S, Startable);
-pump_heavy(S) -> S.   %% booting/reconciling/replaying/unhealthy, or a tier runner is active
+queue_resource_key(Key, Wake, S) -> queue_resource_keys([Key], Wake, S).
 
-%% A heavy job failed or its worker died — ISOLATED from the ordered tier (the plan's guarantee
-%% that a slow/failing heavy worker cannot delay namespace events). Drop the resource's pending
-%% job (the handler re-enqueues on its next matching event, so this cannot tight-loop), mark its
-%% revision blocked, lift the floor, and keep the tier running. The frontier cannot release that
-%% resource's waiters until a later successful full rebuild clears the blocked revision.
-heavy_failed(Resource, Reason, S = #s{ns = Ns}) ->
-    logger:warning("quod_runtime[~s]: heavy job for ~0p failed (~0p) — dropped; the namespace "
-                   "tier is unaffected", [Ns, Resource, Reason]),
-    FailedRev = S#s.height,
-    Blocked = maps:update_with(Resource, fun(Old) -> max(Old, FailedRev) end,
-                               FailedRev, S#s.blocked_revisions),
-    S1 = S#s{heavy_pending = maps:remove(Resource, S#s.heavy_pending),
-             heavy_order = lists:delete(Resource, S#s.heavy_order),
-             blocked_revisions = Blocked,
-             heavy_failures = S#s.heavy_failures + 1},
-    floor_raise(pump_heavy(S1)).
+queue_resource_keys([], _Wake, S) -> S;
+queue_resource_keys(Keys, Wake, S = #s{height = H}) ->
+    Deadline = quod_time:mono_ms() +
+        application:get_env(quod, runtime_reconcile_budget_ms, ?RECONCILE_BUDGET_MS),
+    queue_resource_cursor(maps:from_keys(Keys, {H, Wake, Deadline}), false, S).
 
-start_heavy(Resource, S = #s{ns = Ns, est = Est, height = EstH,
-                              heavy_order = Order}) ->
-    {{Rev, Job}, Pending} = maps:take(Resource, S#s.heavy_pending),
-    Server = self(),
-    Ref = make_ref(),
-    Budget = application:get_env(quod, runtime_heavy_budget_ms, ?HEAVY_BUDGET_MS),
-    {Pid, MRef} =
-        spawn_opt(
-          fun() ->
-                  Outcome = try heavy_job(Ns, Est, EstH, Resource, Rev, Job)
-                            catch throw:R -> {error, R}
-                            end,
-                  gen_server:cast(Server, {heavy_done, Resource, Ref, Outcome})
-          end, [link, monitor]),
-    TRef = erlang:send_after(Budget, self(), {heavy_kill, Resource, Ref}),
-    S#s{heavy_pending = Pending, heavy_order = lists:delete(Resource, Order),
-        heavy_running = (S#s.heavy_running)#{Resource => {Pid, MRef, TRef, Ref, Rev, EstH}}}.
-
-%% The job is a complete Prolog goal (no scope appended), proved under a projection context
-%% identifying the resource; like a handler, it may not stage D.
-heavy_job(Ns, Est, EstH, Resource, _Rev, Job) ->
-    Ctx = quod_predicates:projection_context(Ns, EstH, {heavy, Resource}),
-    case quod_prolog:prove_est(Job, quod_predicates:set_context(Est, Ctx)) of
-        {ok, _B, [], _RS}     -> ok;
-        {ok, _B, Staged, _RS} -> throw({job_staged_d, Resource, Staged});
-        fail                  -> throw({job_failed, Resource});
-        {error, Reason}       -> throw({job_error, Resource, Reason})
-    end.
-
-release_ready_waiters(S = #s{waiters = Waiters}) ->
-    Released = [WRef || WRef := {_From, Res, WRev, _TRef} <- Waiters,
-                        effective_revision(Res, S) >= WRev],
-    lists:foldl(fun(WRef, Acc) ->
-                        {{From, _Res, _WRev, TRef}, Rest} = maps:take(WRef, Acc#s.waiters),
-                        _ = erlang:cancel_timer(TRef),
-                        gen_server:reply(From, ok),
-                        Acc#s{waiters = Rest}
-                end, S, Released).
-
-%% Permanent unhealthy: no revision can install any more — fail every waiter now.
-fail_waiters(S = #s{waiters = Waiters}) ->
-    maps:foreach(fun(_WRef, {From, _Res, _Rev, TRef}) ->
-                         _ = erlang:cancel_timer(TRef),
-                         gen_server:reply(From, {error, unhealthy})
-                 end, Waiters),
-    S#s{waiters = #{}}.
-
-max_heavy_workers(#s{config = Config}) ->
-    maps:get(runtime_max_heavy_workers, Config,
-             application:get_env(quod, runtime_max_heavy_workers,
-                                 ?DEFAULT_MAX_HEAVY_WORKERS)).
-
-max_heavy_pending(#s{config = Config}) ->
-    maps:get(runtime_max_heavy_pending, Config,
-             application:get_env(quod, runtime_max_heavy_pending,
-                                 ?DEFAULT_MAX_HEAVY_PENDING)).
-
-max_heavy_job_bytes(#s{config = Config}) ->
-    maps:get(runtime_max_heavy_job_bytes, Config,
-             application:get_env(quod, runtime_max_heavy_job_bytes,
-                                 ?DEFAULT_MAX_HEAVY_JOB_BYTES)).
-
-validate_heavy_enqueue(Resource, Job, S) ->
-    try byte_size(term_to_binary({Resource, Job}, [deterministic])) =< max_heavy_job_bytes(S) of
-        true  -> ok;
-        false -> oversized
-    catch _:_ -> oversized
-    end.
-
-queue_heavy(Resource, Rev, Job, S = #s{heavy_pending = Pending}) ->
-    case maps:is_key(Resource, Pending) of
-        true ->
-            {ok, S#s{heavy_pending = Pending#{Resource => {Rev, Job}},
-                     superseded = S#s.superseded + 1}};
+queue_resource_cursor(Added, Notify, S = #s{queue = Q, queue_len = Count}) ->
+    case lists:keyfind(resource_cursor, 1, Q) of
+        {resource_cursor, Existing, WasNotify} ->
+            Requests = maps:merge_with(fun merge_resource_wake/3, Existing, Added),
+            Cursor = {resource_cursor, Requests, Notify orelse WasNotify},
+            S#s{queue = lists:keyreplace(resource_cursor, 1, Q, Cursor)};
         false ->
-            case map_size(Pending) < max_heavy_pending(S) of
-                true ->
-                    {ok, S#s{heavy_pending = Pending#{Resource => {Rev, Job}},
-                             heavy_order = S#s.heavy_order ++ [Resource]}};
+            Limit = max_queued_events(S),
+            case Count < Limit of
+                true -> S#s{queue = [{resource_cursor, Added, Notify} | Q],
+                             queue_len = Count + 1};
+                false when Limit =:= 0 -> unhealthy({resource_notice_capacity, 0}, S);
                 false ->
-                    full
+                    Keep = [Item || Item <- Q, not resource_notice(Item)],
+                    case length(Keep) < Count of
+                        true -> queue_resource_cursor(Added, true,
+                                  S#s{queue = Keep, queue_len = length(Keep)});
+                        %% Canonical input/caller requests occupy every slot.
+                        %% The existing lifecycle restores current obligations;
+                        %% it never replays an occurrence or a submitted goal.
+                        false -> overflow_collapse(S)
+                    end
             end
     end.
 
-%% A resource is current through the namespace frontier when no job for it is outstanding.
-%% A failed job blocks that inference until a later full-rebuild job succeeds at/after it.
-effective_revision(Resource, S) ->
-    Installed = maps:get(Resource, S#s.revisions, 0),
-    Outstanding = maps:is_key(Resource, S#s.heavy_pending)
-                  orelse maps:is_key(Resource, S#s.heavy_running),
-    Blocked = maps:get(Resource, S#s.blocked_revisions, none),
-    case Outstanding orelse Blocked =/= none of
-        true  -> Installed;
-        false -> max(Installed, S#s.e_frontier)
-    end.
+merge_resource_wake(_Key, {OldHeight, OldWake, OldDeadline}, {Height, Wake, Deadline}) ->
+    MergedWake = case OldWake =:= changed orelse Wake =:= changed of
+        true -> changed;
+        false -> continue
+    end,
+    {max(OldHeight, Height), MergedWake, min(OldDeadline, Deadline)}.
 
-clear_blocked(Resource, NewRev, Blocked) ->
-    case maps:get(Resource, Blocked, none) of
-        Rev when is_integer(Rev), Rev =< NewRev -> maps:remove(Resource, Blocked);
-        _ -> Blocked
-    end.
+resource_key(agent_work, {Instance, _}) -> {agent_work, Instance};
+resource_key(Resource, _) -> Resource.
+
+resource_changes(Heads, HeightAdvanced) ->
+    %% Enumeration observes predicate membership as well as the definitions
+    %% whose types it inspected. Context can advance without either changing.
+    Keys = case Heads of
+        [] -> [];
+        _ -> [predicate_registry | [{fact, functor_key(H)} || H <- Heads]]
+    end,
+    maps:from_keys(case HeightAdvanced of
+        true -> [{input, committed_height} | Keys];
+        false -> Keys
+    end, true).
+
+queued_resource_changes(Queue, Height) ->
+    Advanced = lists:any(fun({local, Env, _}) -> maps:get(height, Env, 0) > Height;
+                            ({snapshot, H, _}) -> H > Height;
+                            (_) -> false end, Queue),
+    resource_changes(lists:append([changed_heads(Env) || {local, Env, _} <- Queue]), Advanced).
+
+invalidate_resources(Changes, S) when map_size(Changes) =:= 0 -> S;
+invalidate_resources(Changes, S) ->
+    Keys = maps:fold(fun(Key, Basis, Acc) ->
+        case quod_resource_basis:affected(Basis, Changes) of
+            true -> [Key | Acc];
+            false -> Acc
+        end
+    end, [], S#s.resource_basis),
+    queue_resource_keys(Keys, changed, S).
+
+reply_resource({internal, _}, none, _) -> ok;
+reply_resource(From, Monitor, Reply) ->
+    demonitor(Monitor, [flush]),
+    gen_server:reply(From, Reply).
 
 drop_queue(S) -> retain_queue(fun(_) -> false end, S).
 
@@ -2378,12 +2256,18 @@ drop_queue(S) -> retain_queue(fun(_) -> false end, S).
 %% and must survive the later height-based queue trimming.
 drop_observations(S) ->
     retain_queue(fun({observed, _}) -> false;
+                    ({observed, _, _}) -> false;
                     ({observed_host, _}) -> false;
+                    ({owned_recovery, _, _, _, _, _}) -> false;
+                    ({recovery_done, _, _}) -> false;
+                    ({owned_notice, _, _, _}) -> false;
+                    ({resource_cursor, _, _}) -> false;
                     (_) -> true end, S).
 
 %% Only local envelopes at or below H are already represented in the snapshot.
 drop_stale_queue(S = #s{height = H}) ->
     retain_queue(fun({local, Env, _Est}) -> maps:get(height, Env, 0) > H;
+                    ({snapshot, NextH, _Est}) -> NextH > H;
                     (_) -> true end, S).
 
 drop_source_queue(Identity, S) ->
@@ -2401,6 +2285,11 @@ release_queue_acks(Items) ->
     lists:foreach(
       fun({remote, FollowRef, NoticeRef, _Identity, _Publications}) ->
               ok = quod_foreign_log:ack(FollowRef, NoticeRef);
+         ({owned_recovery, Source, Token, _, _, _}) ->
+             Source ! {recovery_consumed, self(), Token};
+         ({recovery_done, Source, Token}) -> Source ! {recovery_consumed, self(), Token};
+         ({resource, _, _, _, _, From, Monitor}) ->
+             reply_resource(From, Monitor, {error, runtime_recovering});
          (_) -> ok
       end, Items),
     ok.
@@ -2412,14 +2301,11 @@ release_event_acks(S = #s{event_acks = Acks}) ->
       end, Acks),
     S#s{event_acks = []}.
 
-%% Raise the KB history floor to the oldest snapshot still READ by anything we own: the
-%% freshest processed height, held down by any RUNNING heavy worker's captured est height.
+%% The serialized reader has completed before its retained MVCC floor moves.
 %% The cast is monotone server-side, so a stale/duplicate raise is harmless.
 floor_raise(S = #s{height = 0}) -> S;
-floor_raise(S = #s{ns = Ns, height = H, heavy_running = Running}) ->
-    Target = lists:min([H | [EstH || {_P, _M, _T, _R, _Rev, EstH}
-                                         <- maps:values(Running)]]),
-    ok = quod_prolog:runtime_floor(Ns, Target),
+floor_raise(S = #s{ns = Ns, height = H}) ->
+    ok = quod_prolog:runtime_floor(Ns, H),
     S.
 
 max_queued_events(#s{config = Config}) ->
@@ -2427,164 +2313,209 @@ max_queued_events(#s{config = Config}) ->
              application:get_env(quod, runtime_max_queued_events,
                                  ?DEFAULT_MAX_QUEUED_EVENTS)).
 
-%%%===================================================================
-%%% one handler converge (shared by reconcile + the tier)
-%%%===================================================================
+%%% Resource selection runs to completion before touching the real owner.
 
-%% Scope `all` or {keys, Heads}, under a projection context on the frozen snapshot.
-%% A non-empty staged overlay is a violation: a projection may not write D.
-converge(Ns, Est, H, Id, Goal, Scope) ->
-    Ctx = quod_predicates:projection_context(Ns, H, Id),
-    case quod_prolog:prove_est(with_scope(Goal, Scope),
-                               quod_predicates:set_context(Est, Ctx)) of
-        {ok, _Bindings, [], _ReadSet}     -> ok;
-        {ok, _Bindings, Staged, _ReadSet} -> throw({handler_staged_d, Id, Staged});
-        fail                              -> throw({handler_failed, Id});
-        {error, Reason}                   -> throw({handler_error, Id, Reason})
-    end.
+valid_resource_scope(agent_custody,
+                     {{agent_instance_ref, Ns, Anchor, _}, Epoch, Observer},
+                     #s{binding = #{identity := {Ns, Anchor}}}) ->
+    is_integer(Epoch) andalso Epoch > 0 andalso Observer =:= local_node_reference();
+valid_resource_scope(agent_custody, _, _) -> false;
+valid_resource_scope(_, _, _) -> true.
 
-%%%===================================================================
-%%% discovery — the founding set (slot 1) and the stored set (snapshot)
-%%%===================================================================
-
-%% The verified owner grants byte availability before Prolog is ready, so
-%% root-first replay cannot wait on itself. An empty committed prefix or an
-%% unavailable incarnation stays uncached and waits for a genuine owner/KB
-%% edge. Only a present, verified malformed founding entry is terminal.
-read_founding(Ns, Deadline) ->
-    case quod_simplex:history_view(Ns, committed, Deadline) of
-        {ok, #{slot := 0}} -> pending;
-        {ok, View = #{snapshot := Snapshot}} ->
-            Result = case quod_ledger_store:open_ro_snapshot(Snapshot) of
-                {ok, Store} ->
-                    try quod_ledger_store:read_at(Store, 1) of
-                        {ok, Entry} ->
-                            #entry{data = Data} = quod_ledger:entry_view(Entry),
-                            founding_payload(Data);
-                        not_found -> {error, missing_genesis}
-                    catch
-                        error:{corrupt_entry, _, _} = Reason -> {error, Reason}
-                    after quod_ledger_store:close(Store)
-                    end;
-                {error, _Unavailable} -> pending
+run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
+    case (Caller =:= internal orelse is_process_alive(Caller)) andalso Deadline > quod_time:mono_ms() of
+        false -> {interrupted, {error, deadline_exceeded}};
+        true ->
+            Key = resource_key(Resource, Scope),
+            {Outcome, Basis} = quod_resource_basis:capture(Est,
+                fun(Observed) -> select_resource_description(Ns, H, Observed, Resource, Scope) end),
+            Selected = case Outcome of
+                {error, {throw, Reason, _Stack}} -> {error, Reason};
+                _ -> Outcome
             end,
-            case quod_simplex:history_view_live(View)
-                 andalso erlang:monotonic_time(millisecond) < Deadline of
-                false -> pending;
-                true ->
-                    case Result of
-                        {ok, Founding} ->
-                            {ok, maps:with([owner, identity], View), Founding};
-                        _ -> Result
-                    end
+            Admission = case {Resource, Selected} of
+                {agent_work, inactive} -> ok;
+                _ -> gen_server:call(quod_reg:via({quod_runtime, Ns}),
+                                      {resource_selected, Key, Basis}, infinity)
+            end,
+            case Admission of
+                ok ->
+                    case Deadline > quod_time:mono_ms() of
+                        true -> install_resource(Ns, H, Selected);
+                        false -> {error, deadline_exceeded}
+                    end;
+                Error -> Error
+            end
+    end.
+
+select_resource_description(Ns, H, Est, agent_hosts, Changed) ->
+    Goal = {agent_hosting_projection, Changed, local_node_reference(), {'Scope'}, {'Rows'}},
+    case optional_selection(Ns, H, Est, Goal) of
+        absent -> {agent_hosts, all, []};
+        #{'Scope' := Scope, 'Rows' := Rows} -> {agent_hosts, Scope, Rows}
+    end;
+select_resource_description(Ns, H, Est, agent_observers, Changed) ->
+    Goal = {agent_observation_projection, Changed, local_node_reference(), {'Scope'}, {'Rows'}},
+    case optional_selection(Ns, H, Est, Goal) of
+        absent -> {agent_observers, all, []};
+        #{'Scope' := Scope, 'Rows' := Rows} -> {agent_observers, Scope, Rows}
+    end;
+select_resource_description(Ns, H, Est, node_ontologies, _Scope) ->
+    case local_node_reference() of
+        {agent_instance_ref, Ns, _, _} ->
+            Goal = {node_ontology_hosting_projection, {'Hosts'}, {'Contacts'}},
+            case optional_selection(Ns, H, Est, Goal) of
+                absent -> {node_ontologies, [], []};
+                #{'Hosts' := Hosts, 'Contacts' := Contacts} -> {node_ontologies, Hosts, Contacts}
             end;
-        {error, _Unavailable} -> pending
-    end.
-
-%% Slot 1 defines the ontology's founding truth and is necessarily one content
-%% batch. A DTX control, carrier, or malformed value at genesis is corruption, not
-%% an empty set of declarations.
-founding_payload(Data) ->
-    case quod_ledger:classify(Data) of
-        {content, Txs} -> {ok, founding_runtime(Txs)};
-        {controls, _Controls} -> {error, invalid_genesis_payload};
-        empty -> {error, invalid_genesis_payload};
-        invalid -> {error, invalid_genesis_payload}
-    end.
-
--ifdef(TEST).
-test_read_founding(Ns, Deadline) -> read_founding(Ns, Deadline).
--endif.
-
-empty_founding() -> #{handlers => [], reactions => []}.
-
-founding_runtime(Txs) ->
-    #{handlers => founding_heads(Txs),
-      reactions => founding_clauses(Txs, {react_on, 3})}.
-
-founding_clauses(Txs, Functor) ->
-    [Clause || #transaction{diff = Diff} <- Txs,
-               {assert, {Head, _Body} = Clause} <- Diff,
-               erlog_int:functor(Head) =:= Functor].
-
-%% The state_handler heads asserted by the founding block's transactions (full terms).
-founding_heads(Txs) ->
-    [Head || #transaction{diff = Diff} <- Txs,
-             {assert, {Head, _Body}} <- Diff,
-             is_declaration(Head)].
-
-is_declaration(Head) ->
-    is_tuple(Head) andalso tuple_size(Head) =:= 5
-        andalso element(1, Head) =:= state_handler.
-
-%% Every state_handler/4 solution in the snapshot, as full declaration terms.
-stored_declarations(Est) ->
-    Tpl  = {d, {'I'}, {'W'}, {'N'}, {'G'}},
-    Goal = {findall, Tpl, {state_handler, {'I'}, {'W'}, {'N'}, {'G'}}, {'L'}},
-    case quod_prolog:prove_est(Goal, Est) of
-        {ok, Bindings, _Staged, _ReadSet} ->
-            L = maps:get('L', Bindings, []),
-            {ok, [{state_handler, I, W, N, G} || {d, I, W, N, G} <- L]};
-        fail            -> {ok, []};
-        {error, Reason} -> {error, Reason}
-    end.
-
-%% Exact clauses, not proved solutions. A rule which happens to derive a
-%% subscribes/2 or react_on/3 answer is application logic, not a runtime
-%% declaration, and must not silently become one.
-stored_runtime_catalog(Est) ->
-    case {quod_diff:interpreted_clauses(Est, {subscribes, 2}),
-          quod_diff:interpreted_clauses(Est, {react_on, 3})} of
-        {{ok, Subscriptions}, {ok, Reactions}} ->
-            {ok, #{subscriptions => Subscriptions, reactions => Reactions}};
-        {{error, Reason}, _} ->
-            {error, {{subscribes, 2}, Reason}};
-        {_, {error, Reason}} ->
-            {error, {{react_on, 3}, Reason}}
-    end.
-
-plan_runtime(Est, Founding, StoredHandlers, StoredCatalog) ->
-    case plan_handlers(Est, maps:get(handlers, Founding, []), StoredHandlers) of
-        {ok, HandlerPlan} ->
-            case plan_runtime_catalog(
-                   maps:get(reactions, Founding, []), StoredCatalog) of
-                {ok, CatalogPlan} ->
-                    Rejected = maps:get(rejected_dynamic, HandlerPlan)
-                               + maps:get(rejected_dynamic, CatalogPlan),
-                    {ok, (maps:merge(HandlerPlan, CatalogPlan))#{
-                           rejected_dynamic => Rejected}};
-                {error, _} = Error -> Error
+        _ -> inactive
+    end;
+select_resource_description(<<"quod:root">> = Ns, H, Est, effect_custody, all) ->
+    Goal = {findall, {'C'}, {effect_custody_capacity, {'C'}}, {'Capacities'}},
+    case select_resource(Ns, H, Est, Goal) of
+        #{'Capacities' := [Capacity]}
+          when is_integer(Capacity), Capacity >= 0; Capacity =:= unlimited ->
+            {effect_custody, Capacity};
+        _ -> {error, invalid_effect_custody_capacity}
+    end;
+select_resource_description(_, _, _, effect_custody, _) -> inactive;
+select_resource_description(Ns, H, Est, agent_work, {Instance, Wake}) ->
+    case project_agent_work(Ns, H, Instance, {cursor, Wake}) of
+        {ok, Cursor} ->
+            Goal = {agent_work_goal, Instance, Cursor, {'Key'}, {'Goal'}, {'Budget'}},
+            case select_resource(Ns, H, Est, Goal) of
+                fail -> {agent_work, Instance, none};
+                #{'Key' := Key, 'Goal' := WorkGoal, 'Budget' := Budget} ->
+                    {agent_work, Instance, {work, Key, WorkGoal, Budget}}
             end;
+        skip -> inactive;
         {error, _} = Error -> Error
+    end;
+select_resource_description(Ns, H, Est, agent_recovery,
+          {{Ns, Anchor}, Batch,
+           {agent_host_observed, _, Observer, I, Host, Epoch, Expected, Round,
+            Observation, Kind, At, _Validity}, Ceiling, Deadline}) ->
+    Goal = {agent_recovery_data, Observer, I, Host, Epoch, Expected, Round,
+            Kind, At, Ceiling, {'Data'}},
+    case select_resource(Ns, H, Est, Goal) of
+        fail -> inactive;
+        #{'Data' := {recovery, Sequence, Expiry, Preparation}}
+          when is_integer(Sequence), Sequence > 0, is_integer(Expiry),
+               Expiry > At, Expiry =< Ceiling,
+               (Preparation =:= none orelse Preparation =:= required) ->
+            Target = {agent_instance_ref, Ns, Anchor, I},
+            Report = {observation, Sequence, Observation, Expiry},
+            Event = {agent_recovery_ready, Observer, Target, Host, Epoch,
+                     Expected, Round, Report, Kind, Preparation},
+            Metadata = #{target => Target, epoch => Epoch, observer => Observer,
+                         deadline => Deadline - (Ceiling - Expiry)},
+            {agent_recovery, Batch, Event, Metadata, Expiry};
+        _ -> {error, invalid_recovery_data}
+    end;
+select_resource_description(Ns, H, Est, agent_custody,
+                            {{agent_instance_ref, Ns, _Anchor, I}, Epoch, Observer}) ->
+    %% Exact identity and assignment are verified from the committed snapshot.
+    Goal = {',', {agent_hosted, I, {'Host'}, Epoch, {'_'}},
+                 {can_prepare_agent_key, Observer, I, {'Host'}, Epoch}},
+    case select_resource(Ns, H, Est, Goal) of
+        fail -> {error, preparation_not_authorized};
+        _ -> authorized
+    end;
+select_resource_description(_, _, _, _, _) -> {error, invalid_resource_request}.
+
+install_resource(Ns, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
+install_resource(Ns, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
+install_resource(Ns, H, {node_ontologies, Hosts, Contacts}) ->
+    quod_node_actor:hosting_projection(Ns, H, all, Hosts, Contacts);
+install_resource(_, _, {effect_custody, Capacity}) -> quod_effect_journal:configure_capacity(Capacity);
+install_resource(Ns, H, {agent_work, Instance, Step}) -> resource_result(project_agent_work(Ns, H, Instance, Step));
+install_resource(Ns, _, {agent_recovery, Batch, Event, Metadata, Expiry}) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}),
+                    {deliver_recovery, Batch, Event, Metadata, Expiry}, infinity);
+install_resource(_, _, authorized) -> ok;
+install_resource(_, _, inactive) -> ok;
+install_resource(_, _, {error, _} = Error) -> Error.
+
+optional_selection(Ns, H, Est = #est{db = #db{mod = M, ref = R}}, Goal) ->
+    %% Canonical removal leaves an empty interpreted procedure; both forms
+    %% lack a selector definition. A defined selector whose body fails is an
+    %% error instead. This semantic read retains the missing functor dependency.
+    case M:get_procedure(R, functor_key(Goal)) of
+        undefined -> absent;
+        {clauses, []} -> absent;
+        _ -> required_selection(Ns, H, Est, Goal)
     end.
 
+local_node_reference() ->
+    case quod_node_actor:principal() of
+        {ok, Principal} ->
+            {ok, Node} = quod_agent_ref:materialize_principal(Principal), Node;
+        _ -> none
+    end.
+
+%% The current committed program supplies the selector; there is no caller
+%% overlay and no governed bridge can perform I/O during row selection.
+select_resource(Ns, H, Est, Goal) ->
+    Context = quod_predicates:policy_verdict_context(Ns, H),
+    case quod_proof_session:run_first(Goal, quod_predicates:set_context(Est, Context),
+                                      #{read_set => true, read_only => true}) of
+        {ok, Bindings, [], _ReadSet} -> Bindings;
+        {fail, _} -> fail;
+        {error, Reason} -> throw({resource_selection_failed, Reason})
+    end.
+
+required_selection(Ns, H, Est, Goal) ->
+    case select_resource(Ns, H, Est, Goal) of
+        fail -> throw({resource_selection_failed, {no_solution, functor_key(Goal)}});
+        Bindings -> Bindings
+    end.
+
+resource_result(ok) -> ok;
+resource_result({blocked, capacity}) -> ok;
+resource_result({error, _} = Error) -> Error.
+
 %%%===================================================================
-%%% subscription/reaction catalogue + the founding gate (pure)
+%%% discovery — current stored declarations
 %%%===================================================================
 
-%% A deterministic catalogue derived from one committed snapshot. It owns no
-%% process, route, verifier, delivery state, or event matcher. Alpha
-%% normalization establishes declaration identity only; live matching and the
-%% Handler continuation belong to the ordered tier and
-%% erlog_int:unify_prove_body.
-plan_runtime_catalog(FoundingReactions, StoredCatalog)
-  when is_list(FoundingReactions), is_map(StoredCatalog) ->
-    case plan_reactions(FoundingReactions,
-                        maps:get(reactions, StoredCatalog, [])) of
-        {ok, Reactions, SourceInterests, RejectedDynamic} ->
+%% Capture after the canonical reducer, while this exact transaction's state
+%% is still available. Unchanged transactions do no catalogue reads.
+catalog_after(Est, AppliedOps) ->
+    case lists:any(fun({Op, {Head, _}})
+                        when Op =:= assert; Op =:= asserta; Op =:= retract ->
+                           catalog_head(Head);
+                      (_) -> false
+                   end, AppliedOps) of
+        true -> stored_runtime_catalog(Est);
+        false -> keep
+    end.
+
+%% Capture ordered reaction heads and guards as source clauses.
+%% Durable subscribes/2 declarations retain their stored-fact contract.
+stored_runtime_catalog(Est) ->
+    case quod_diff:interpreted_clauses(Est, {subscribes, 2}) of
+        {ok, Subscriptions} ->
+            Authored = quod_erlog_db_local_prove:wrap_state(Est),
+            {_Tags, Reactions} = quod_common_primitives:authored_clauses({react_on, 2}, Authored),
+            {ok, #{subscriptions => Subscriptions, reactions => Reactions}};
+        {error, Reason} -> {error, {{subscribes, 2}, Reason}}
+    end.
+
+%% The stored clause order is the reaction order. Declaration writes have
+%% already passed the ordinary ontology admission policy.
+plan_runtime_catalog(StoredCatalog) when is_map(StoredCatalog) ->
+    case plan_reactions(maps:get(reactions, StoredCatalog, []), []) of
+        {ok, Reactions} ->
             {Subscriptions, RejectedSubscriptions} =
                 plan_subscriptions(maps:get(subscriptions, StoredCatalog, [])),
             {ok, #{subscriptions => Subscriptions,
                    reactions => Reactions,
                    reaction_index => local_reaction_index(Reactions),
-                   source_interests => SourceInterests,
-                   rejected_dynamic => RejectedDynamic,
+                   source_interests => source_interest_index(Reactions),
                    rejected_subscriptions => RejectedSubscriptions}};
-        {error, _} = Error ->
-            Error
+        {error, _} = Error -> Error
     end;
-plan_runtime_catalog(_FoundingReactions, _StoredCatalog) ->
-    {error, invalid_runtime_catalog}.
+plan_runtime_catalog(_) -> {error, invalid_runtime_catalog}.
 
 plan_subscriptions(Clauses) when is_list(Clauses) ->
     {Targets, Rejected} =
@@ -2616,78 +2547,22 @@ valid_subscription_clause(
 valid_subscription_clause(_) ->
     error.
 
-plan_reactions(Founding, Stored) when is_list(Founding), is_list(Stored) ->
-    case canonical_founding_reactions(Founding, #{}) of
-        {ok, FoundingByKey} ->
-            {StoredByKey, InvalidStored} = canonical_stored_reactions(Stored, #{}, 0),
-            Missing = lists:sort(
-                        [Key || Key <- maps:keys(FoundingByKey),
-                                not is_map_key(Key, StoredByKey)]),
-            case Missing of
-                [] ->
-                    Dynamic = [Key || Key <- maps:keys(StoredByKey),
-                                      not is_map_key(Key, FoundingByKey)],
-                    Active = lists:sort([maps:get(Key, FoundingByKey)
-                                         || Key <- maps:keys(FoundingByKey)]),
-                    {ok, Active, source_interest_index(Active),
-                     length(Dynamic) + InvalidStored};
-                _ ->
-                    {error, {missing_founding_reaction, Missing}}
-            end;
-        {error, _} = Error ->
-            Error
-    end;
-plan_reactions(_Founding, _Stored) ->
-    {error, invalid_runtime_catalog}.
-
-canonical_founding_reactions([Clause | Rest], Acc) ->
+plan_reactions([Clause | Rest], Acc) ->
     Canonical = alpha_normalize(Clause),
     case valid_reaction_clause(Canonical) of
-        {ok, _Source} ->
-            canonical_founding_reactions(Rest, Acc#{Canonical => reaction_head(Canonical)});
-        error ->
-            {error, {invalid_founding_reaction, Canonical}}
+        {ok, _Source} -> plan_reactions(Rest, [reaction_head(Canonical) | Acc]);
+        error -> {error, {invalid_reaction, Canonical}}
     end;
-canonical_founding_reactions([], Acc) ->
-    {ok, Acc}.
+plan_reactions([], Acc) -> {ok, lists:reverse(Acc)};
+plan_reactions(_, _) -> {error, invalid_runtime_catalog}.
 
-canonical_stored_reactions([Clause | Rest], Acc, Invalid) ->
-    Canonical = alpha_normalize(Clause),
-    case valid_reaction_clause(Canonical) of
-        {ok, _Source} ->
-            canonical_stored_reactions(Rest, Acc#{Canonical => true}, Invalid);
-        error ->
-            case inert_reaction_rule(Canonical) of
-                true  -> canonical_stored_reactions(Rest, Acc, Invalid);
-                false -> canonical_stored_reactions(Rest, Acc, Invalid + 1)
-            end
-    end;
-canonical_stored_reactions([], Acc, Invalid) ->
-    {Acc, Invalid}.
+reaction_head({':-', {react_on, _, _}, _} = Clause) -> Clause.
 
-inert_reaction_rule(
-  {{react_on, _Executor, _Pattern, _Handler}, {Goals, _HasCut}})
-  when is_list(Goals), Goals =/= [] ->
-    true;
-inert_reaction_rule(_) ->
-    false.
-
-reaction_head({Head, _Body}) -> Head.
-
-valid_reaction_clause(
-  {{react_on, Executor, Pattern, Handler} = Head, {[], false}}) ->
-    case {reaction_pattern(Pattern), valid_callable(Executor),
-          valid_callable(Handler), bounded_term(Head)} of
-        {{ok, Source, EventPattern}, true, true, true} ->
-            PatternVars = variable_set(EventPattern),
-            UsedVars = maps:merge(variable_set(Executor), variable_set(Handler)),
-            case lists:all(fun(V) -> is_map_key(V, PatternVars) end,
-                           maps:keys(UsedVars)) of
-                true  -> {ok, Source};
-                false -> error
-            end;
-        _ ->
-            error
+valid_reaction_clause({':-', {react_on, Pattern, Goal}, Guard} = Clause) ->
+    case {reaction_pattern(Pattern), valid_goal_template(Goal),
+          valid_callable(Guard), bounded_term(Clause)} of
+        {{ok, Source, _}, true, true, true} -> {ok, Source};
+        _ -> error
     end;
 valid_reaction_clause(_) ->
     error.
@@ -2709,6 +2584,9 @@ valid_event_pattern({Kind, FactPattern}) when Kind =:= assert; Kind =:= retract 
 valid_event_pattern(EventPattern) ->
     quod_diff:valid_event_pattern(EventPattern).
 
+valid_goal_template({_Variable}) -> true;
+valid_goal_template(Goal) -> valid_callable(Goal).
+
 valid_callable(Term) when is_atom(Term) -> true;
 valid_callable(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
     is_atom(element(1, Term));
@@ -2721,44 +2599,37 @@ bounded_term(Term) ->
     end.
 
 source_interest_index(Reactions) ->
-    Reversed =
-        lists:foldl(
-          fun({react_on, _Executor,
-              {from, Ns, <<_:256>> = Anchor, EventPattern}, _Handler} = Reaction,
-              Index) ->
-                  Target = {Ns, Anchor},
-                  Key = functor_key(EventPattern),
-                  TargetIndex = maps:get(Target, Index, #{}),
-                  Updated = maps:update_with(
-                              Key, fun(Existing) -> [Reaction | Existing] end,
-                              [Reaction], TargetIndex),
-                  Index#{Target => Updated};
-             (_LocalReaction, Index) ->
-                  Index
-          end, #{}, Reactions),
-    maps:map(
-      fun(_Target, TargetIndex) ->
-              maps:map(
-                fun(_Key, Candidates) -> lists:reverse(Candidates) end,
-                TargetIndex)
-      end, Reversed).
+    Reversed = lists:foldl(fun(Reaction, Index) ->
+        case reaction_event_pattern(Reaction) of
+            {from, Ns, Anchor, EventPattern} ->
+                Target = {Ns, Anchor}, Key = functor_key(EventPattern),
+                TargetIndex = maps:get(Target, Index, #{}),
+                Updated = maps:update_with(Key, fun(L) -> [Reaction | L] end,
+                                           [Reaction], TargetIndex),
+                Index#{Target => Updated};
+            _ -> Index
+        end
+    end, #{}, Reactions),
+    maps:map(fun(_Target, Index) -> reverse_reaction_index(Index) end, Reversed).
 
 local_reaction_index(Reactions) ->
-    Reversed =
-        lists:foldl(
-          fun({react_on, _Executor, {from, _, _, _}, _Handler}, Index) ->
-                  Index;
-             ({react_on, _Executor, EventPattern, _Handler} = Reaction, Index) ->
-                  Key = functor_key(EventPattern),
-                  maps:update_with(Key, fun(Existing) -> [Reaction | Existing] end,
-                                   [Reaction], Index)
-          end, #{}, Reactions),
-    maps:map(fun(_Key, Candidates) -> lists:reverse(Candidates) end, Reversed).
+    reverse_reaction_index(lists:foldl(fun(Reaction, Index) ->
+        case reaction_event_pattern(Reaction) of
+            {from, _, _, _} -> Index;
+            Pattern ->
+                maps:update_with(functor_key(Pattern), fun(L) -> [Reaction | L] end,
+                                 [Reaction], Index)
+        end
+    end, #{}, Reactions)).
+
+reverse_reaction_index(Index) ->
+    maps:map(fun(_Key, Candidates) -> lists:reverse(Candidates) end, Index).
+
+reaction_event_pattern({':-', {react_on, Pattern, _}, _}) -> Pattern.
 
 %% Alpha-normalize Erlog variables by first occurrence. Stored clauses use
-%% one-tuples (`{0}`, `{1}`, ...); founding and snapshot reads may allocate
-%% different ids for the same declaration, so process-local ids can never be
-%% authority. Anonymous `_` is treated as a fresh variable at every occurrence.
+%% one-tuples (`{0}`, `{1}`, ...). Canonicalizing those names preserves sharing
+%% within each clause. Anonymous `_` is fresh at every occurrence.
 alpha_normalize(Term) ->
     {Normalized, _Vars, _Next} = alpha_normalize(Term, #{}, 0),
     Normalized.
@@ -2788,157 +2659,3 @@ alpha_list([Item | Rest], Vars, Next) ->
     {[Item1 | Rest1], Vars2, Next2};
 alpha_list([], Vars, Next) ->
     {[], Vars, Next}.
-
-variable_set(Term) -> variable_set(Term, #{}).
-
-variable_set({Var}, Acc) -> Acc#{Var => true};
-variable_set(Term, Acc) when is_tuple(Term) ->
-    lists:foldl(fun variable_set/2, Acc, tuple_to_list(Term));
-variable_set([Head | Tail], Acc) ->
-    variable_set(Tail, variable_set(Head, Acc));
-variable_set(_Term, Acc) -> Acc.
-
-%%%===================================================================
-%%% handler validation and ordering (pure)
-%%%===================================================================
-
-%% plan_handlers(FoundingHeads, StoredHeads) -> {ok, Plan} | {error, Reason}.
-%% Active = stored ∩ founding by FULL-TERM equality (name-only matching would let any writer
-%% swap a founding handler's body under the same id — the C2 backdoor). Stored-but-not-founding
-%% is refused + counted (healthy). Founding-but-not-stored (a retracted founding declaration)
-%% is a distinct loud config error, as is a NONGROUND founding declaration — findall renames
-%% variables, so a nonground term can never match itself and would misreport as retracted.
--ifdef(TEST).
-plan_handlers(Founding, Stored) ->
-    Est = quod_committed_projection:new_est(),
-    try plan_handlers(Est, Founding, Stored)
-    after
-        #est{db = #db{ref = Ref}} = Est,
-        quod_erlog_db_mvcc:delete(Ref)
-    end.
--endif.
-
-plan_handlers(Est, Founding, Stored) ->
-    case [D || D <- Founding, erlog:vars_in(D) =/= []] of
-        []        -> plan_ground(Est, Founding, Stored);
-        Nonground -> {error, {nonground_founding, Nonground}}
-    end.
-
-plan_ground(Est, Founding, Stored) ->
-    FSet     = maps:from_keys(Founding, true),
-    SSet     = maps:from_keys(Stored, true),
-    Active   = [D || D <- Stored, is_map_key(D, FSet)],
-    Rejected = length(Stored) - length(Active),
-    case [D || D <- Founding, not is_map_key(D, SSet)] of
-        []      -> validate(Est, Active, Rejected);
-        Missing -> {error, {missing_founding, Missing}}
-    end.
-
-validate(Est, Decls, Rejected) ->
-    Hs = [#handler{id = I, watch = W, needs = N, goal = G}
-          || {state_handler, I, W, N, G} <- Decls],
-    Ids = [H#handler.id || H <- Hs],
-    case Ids -- lists:usort(Ids) of
-        []  ->
-            case first_invalid(Est, Hs, Ids) of
-                none            -> order(Hs, Rejected);
-                {error, Reason} -> {error, Reason}
-            end;
-        Dup -> {error, {duplicate_handler_id, lists:usort(Dup)}}
-    end.
-
-first_invalid(_Est, [], _Ids) -> none;
-first_invalid(Est, [#handler{id = Id, watch = W, needs = N, goal = G} | Rest], Ids) ->
-    case valid_watch(W) andalso is_list(N) andalso valid_goal(Est, G) of
-        false -> {error, {invalid_declaration, Id}};
-        true  ->
-            case [X || X <- N, not valid_need(X, Ids)] of
-                []  -> first_invalid(Est, Rest, Ids);
-                Bad -> {error, {missing_dependency, Id, Bad}}
-            end
-    end.
-
-%% Watch = a list of F/A functor indicators (the erlog term {'/', F, A}).
-valid_watch(W) when is_list(W) ->
-    lists:all(fun({'/', F, A}) -> is_atom(F) andalso is_integer(A) andalso A >= 0;
-                 (_)           -> false
-              end, W);
-valid_watch(_) -> false.
-
-%% Slice-2 Needs: ground current(Id) over DECLARED handlers only. Arbitrary condition goals
-%% are deliberately refused — under the KB's silent-fail semantics a typo'd condition is
-%% indistinguishable from a false one, and data-dependent conditions would diverge across
-%% nodes reconciling at different heights.
-valid_need({current, Id}, Ids) -> lists:member(Id, Ids);
-valid_need(_, _Ids)            -> false.
-
-%% The ConvergeGoal is invoked with the scope argument APPENDED (declared arity N runs as
-%% N+1 — this erlog has no call/2). If the invoked functor is governed, its class must be
-%% projection/query; the dynamic class matrix stays the real fail-closed boundary.
-valid_goal(Est, G) ->
-    case functor_of(G) of
-        {F, A} when is_atom(F) ->
-            case quod_predicates:class(Est, {F, A + 1}) of
-                undefined  -> true;         %% ordinary content predicate
-                projection -> true;
-                query      -> true;
-                _          -> false         %% staging/effect can never be a projection goal
-            end;
-        _ -> false
-    end.
-
-functor_of(G) when is_atom(G)                            -> {G, 0};
-functor_of(G) when is_tuple(G), is_atom(element(1, G)),
-                   tuple_size(G) > 1                     -> {element(1, G), tuple_size(G) - 1};
-functor_of(_)                                            -> error.
-
-%% Append the scope argument to a ConvergeGoal term (atom or compound).
-with_scope(G, Scope) when is_atom(G) -> {G, Scope};
-with_scope(G, Scope)                 -> erlang:append_element(G, Scope).
-
-%% Kahn over the current/1 edges, ready set kept sorted by Id term order — the converge
-%% sequence is identical on every node. Any leftover = a cycle. Deps are usort'ed: a
-%% duplicated Need entry is harmless authoring noise, not a second edge (lists:delete
-%% removes one occurrence, so an un-usort'ed duplicate would masquerade as a cycle).
-order(Hs, Rejected) ->
-    ById = maps:from_list([{H#handler.id, H} || H <- Hs]),
-    Deps = #{H#handler.id => lists:usort([Id || {current, Id} <- H#handler.needs])
-             || H <- Hs},
-    case kahn(Deps, []) of
-        {ok, Order} ->
-            {ok, #{handlers => ById, order => Order,
-                   index => watch_index(Hs), dependents => reverse_edges(Deps),
-                   rejected_dynamic => Rejected}};
-        {error, Cyclic} ->
-            {error, {handler_cycle, Cyclic}}
-    end.
-
-kahn(Deps, Acc) when map_size(Deps) =:= 0 -> {ok, lists:reverse(Acc)};
-kahn(Deps, Acc) ->
-    case lists:sort([Id || Id := Ds <- Deps, Ds =:= []]) of
-        [] -> {error, lists:sort(maps:keys(Deps))};
-        [Next | _] ->
-            Deps1 = maps:map(fun(_Id, Ds) -> lists:delete(Next, Ds) end,
-                             maps:remove(Next, Deps)),
-            kahn(Deps1, [Next | Acc])
-    end.
-
-%% Id => the ids that Need it (the tier's dependent-invalidation walk).
-reverse_edges(Deps) ->
-    maps:fold(fun(Id, Ds, Acc) ->
-                      lists:foldl(fun(D, A) ->
-                                          maps:update_with(D, fun(L) -> [Id | L] end,
-                                                           [Id], A)
-                                  end, Acc, Ds)
-              end, #{}, Deps).
-
-%% Functor => [HandlerId] over the watch patterns (the tier's event-matching index; list
-%% order is irrelevant — matching unions the hits and runs them in converge order).
-watch_index(Hs) ->
-    lists:foldl(
-      fun(#handler{id = Id, watch = W}, Index) ->
-              lists:foldl(
-                fun({'/', F, A}, Ix) ->
-                        maps:update_with({F, A}, fun(L) -> [Id | L] end, [Id], Ix)
-                end, Index, W)
-      end, #{}, Hs).

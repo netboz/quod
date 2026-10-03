@@ -178,20 +178,20 @@ reaction_latency_uses_only_bounded_result_labels_test() ->
         ok = quod_metrics:declare(<<"kp_testnode">>),
         ok = quod_metrics:observe_runtime_reaction(Ns, executed, 1000000),
         ok = quod_metrics:observe_runtime_reaction(
-               Ns, {inert, attacker_controlled_reason}, 2000000),
+               Ns, unmatched, 2000000),
         ok = quod_metrics:observe_runtime_reaction(
-               Ns, {failed, {arbitrary, payload}}, 3000000),
+               Ns, {failed, {arbitrary, attacker_controlled_reason}}, 3000000),
         {_, Executed} = prometheus_histogram:value(
                           quod_runtime_reaction_seconds,
                           [Ns, <<"executed">>]),
-        {_, Inert} = prometheus_histogram:value(
+        {_, Unmatched} = prometheus_histogram:value(
                        quod_runtime_reaction_seconds,
-                       [Ns, <<"inert">>]),
+                       [Ns, <<"unmatched">>]),
         {_, Failed} = prometheus_histogram:value(
                         quod_runtime_reaction_seconds,
                         [Ns, <<"failed">>]),
         ?assertEqual(1.0, Executed),
-        ?assertEqual(2.0, Inert),
+        ?assertEqual(2.0, Unmatched),
         ?assertEqual(3.0, Failed),
         ?assertEqual(
            undefined,

@@ -4,6 +4,9 @@ Committed events belong to the ontology substrate, hosted execution to the
 agent substrate, and conversation state to FIPA or other domain ontologies.
 Hosted execution and automatic recovery reuse ordinary ontology actions,
 reactions, node execution and transaction coordination.
+The ownership correction described here is implemented in the working tree.
+Stored-policy migration and coordinated activation remain deployment
+prerequisites; validation evidence is in `WORK-IN-PROGRESS.md`.
 
 ## Publication and reactions
 
@@ -11,28 +14,34 @@ reactions, node execution and transaction coordination.
 assert `Term` into the ontology's fact set. The committed history retains the
 occurrence, subject to the history's retention rules.
 
-A subscriber declares the exact source identity at founding:
+A subscriber declares the exact source identity and an ordinary reaction:
 
 ```prolog
 subscribes(SourceNamespace, SourceAnchor).
-react_on(agent(receiver),
-         from(SourceNamespace, SourceAnchor, request(Id)),
-         submit_agent_goal(receiver, execute, record_reply(Id), 5000)).
+react_on(from(SourceNamespace, SourceAnchor, request(Id)), record_reply(Id)) :-
+    me(agent_instance_ref(_, _, receiver)).
 ```
 
 `SourceNamespace` and `SourceAnchor` above stand for fixed values in the actual
 declaration. `Id` is a variable: the existing reaction matcher unifies the
-event with the pattern and passes that binding into the handler. Handlers run
-through normal Prolog `call/1`, including its control and cut semantics.
+event with the pattern and passes that binding into the goal. Its eligibility
+body runs once per originating clause and locally hosted actor, using ordinary
+Prolog control and cut semantics. Source-clause and event variables are
+standardized apart; nonground asserted clause-head events cannot capture the
+declaration's variables. `instance_of(Class, Instance)` with `isa(Class, Parent)`
+selects eligible instances without executing the same clause twice through a
+diamond. The catalogue enumerates local declarations, not remote inherited code.
 
-The reaction frame cannot stage facts. `submit_agent_goal/4` queues a bounded
-request for the selected hosted incarnation. That process obtains a governed
+Eligibility is read-only and grants no authenticated proof authority. The
+bound goal enters the selected incarnation's existing queue and obtains a governed
 signature and enters the ordinary signed-goal ingress. The consequence becomes
 durable only when its ordinary ontology transaction commits. A queue admission
-or a reaction match is not a committed acknowledgement.
+or a reaction match is not a committed acknowledgement. Bindings belong to
+agents in that exact containing ontology. The verified logical node is available
+only in its own ontology; no event selects a physical-node fallback.
 
-The timeout is converted to an absolute deadline when the runtime admits the
-request. Work waiting in the queue does not receive a fresh deadline. The
+The owner's `proof_timeout_ms` becomes one absolute deadline when matching
+starts. Work waiting in the queue does not receive a fresh deadline. The
 runtime admits at most sixteen outstanding requests per hosted process, at most
 64 KiB of encoded terms per request, and 1 MiB across that ontology runtime's
 hosted request queues. These are not physical-node-wide queue limits.
@@ -46,9 +55,10 @@ it does not assert that a submitted write failed or authorize resubmission.
 
 ## Opt-in guarded domain continuation
 
-A founding projection may explicitly continue transactionally guarded domain
-steps using `project_next_agent_goal/4` from `agent_instance.pl`. The ontology
-selects one eligible goal and a monotonically increasing binary work key. The
+Agent installation and relevant dependency changes continue guarded domain steps
+through the existing work owner. It reads the committed
+`agent_work_goal/5` selector for one eligible goal and a monotonically increasing
+binary work key. The
 existing runtime agent row retains a volatile pass cursor and outstanding
 request reference; the existing queue and worker retain signing, admission,
 deadline and installed-frontier guarantees. No second executor or durable work
@@ -63,11 +73,12 @@ notify this path, covering their responsibility handoff. Requests in the new
 pass cannot replenish this finite recovery wait set. Owner loss follows the
 existing runtime reset and hosting lifecycle.
 
-The projection bridges `agent_work_cursor/3` and `project_agent_goal/2` are
-available only in a founding projection context. One handler owns each hosted
-instance's work cursor. Completion and capacity release wake that handler for
-the affected instance with scope `agent_work(Instance)`; ordinary changed heads
-and startup use the existing scopes. A completion wake advances the current
+The existing runtime owns each hosted instance's work cursor. Callers supply an
+instance and wake reason, never rows or arbitrary selector goals. Completion and
+capacity release publish scoped readiness; committed dependency changes and
+startup use the same typed resource-selection path. An absent selector or opt-in
+retains its read dependency so later policy changes can enable work. A completion
+wake advances the current
 pass even when the operation failed or remains unknown. It cannot, by itself,
 start another pass. Watched state changes and replacement hosting provide the
 separate dependency/lifecycle edges needed to revisit unfinished work.
@@ -90,31 +101,46 @@ the epoch, activates a previously unused key, and revokes the old key, including
 assignment back to the same node. The containing ontology supplies assignment
 policy, signing grants and an entry ACL; the shared rules grant none implicitly.
 
-One founding state handler derives the local hosting projection. Ordinary
-changes carry only the affected instance keys; startup and identity changes use
-full reconciliation. Nonground changed heads also require a full projection. Its
-`local_node_agent/1` observation selects this node's installed identity; that
-observation is not committed authorization evidence. The runtime independently
-filters locality and bounds the number of local children. It remembers the
-projection's owning handler so child failure and identity changes can rerun the
-same handler and its dependents without encoding domain fact names in Erlang.
+The existing typed resource worker derives local hosting from committed
+`agent_hosting_projection/4` rules. It captures actual predicate dependencies,
+including helper, failed and absent reads; relevant changes invalidate that
+selection. Explicit instance-scoped requests remain scoped, while startup and
+identity changes request a full projection. The owner supplies this node's
+installed logical identity to the selector; that observation is not committed
+authorization evidence. Selection runs under restricted `policy_verdict`: no
+writes, signing, foreign proofs or runtime I/O. The runtime independently filters
+locality and applies its existing resource admission. Child failure and identity
+changes publish scoped readiness; restoration requires no agent to sign a goal.
 Capacity refusal preserves existing children and publishes an explicit refused
 binding with the installed projection. The runtime retains no second desired
-inventory. Actual slot release wakes the same projection handler to reconsider
+inventory. Actual slot release wakes the same resource owner to reconsider
 committed assignments. The child cap defaults to 1,024 per ontology runtime;
 the node executor does not consume a hosted-agent slot.
 Set this cap with `node.runtime_max_hosted_agents` in HOCON (0–1,024).
+
+The same selection lifecycle restores host observations from their containing
+ontology, hosting/contacts from the installed node's exact ontology, custody
+capacity from configured root, and pending work from each agent's containing
+ontology. Root capacity does not wait for a logical node to exist. The shared
+observation collector retains local resource dependencies separately from
+transaction read tokens and consensus selection semantics, including explicit
+reflection, predicate enumeration and captured errors. An absent optional
+selector deactivates its capability; successful empty output withdraws resources
+in that scope. Required-selection failure remains an error, never an installed
+empty answer. Idle work is normal. The owner rejects obsolete selections and
+wakes only affected consumers; unchanged notices need no history reads or writes.
 
 `quod_runtime` owns the children. Replacing a binding stops the old child and
 its request worker before installing the replacement. Teardown is asynchronous:
 the runtime keeps processing its mailbox while the projection runner waits for
 the exact old child to terminate. A later projection replaces pending successor
 intent; it does not create an overlapping local incarnation. A successful ordered
-batch releases queued requests only after its installed projection frontier.
+batch releases queued requests after its processed-input frontier; resource
+consumers wait for their actual installed-resource notification.
 Failed batches, replay and runtime replacement discard unreleased work.
 Children monitor their runtime; each request worker belongs to its child.
 
-Runtime reconciliation, reaction and heavy projection workers belong to their
+Runtime catalogue, reaction-matching and resource-selection workers belong to their
 runtime owner's lifetime. Links terminate them when that owner is killed;
 monitors retain normal result/failure correlation. Supervised shutdown runs the
 existing cleanup before the runtime exits. A blocked worker cannot survive its
@@ -201,10 +227,10 @@ threshold and exact prepared-key policy as convergence.
 
 The recovery composition reports and reassigns in one signed
 transaction when its prerequisites exist. The reporting event then describes
-that transaction; it must not submit a second takeover. A state handler can
-project committed state and identify outstanding work, but cannot commit a
-takeover itself. `current_request_expiry/1` requires verified signed-request
-context and is unavailable to unsigned projection work. It is also forbidden
+that transaction; it must not submit a second takeover. A resource selector can
+identify committed obligations, but cannot commit a takeover itself.
+`current_request_expiry/1` reads verified signed-request metadata or the
+owner-captured matching expiry. It is forbidden
 in a `policy_verdict` context. Recovery authorization and convergence belong
 in ordinary action proofs. A later action supplying a missing prerequisite
 must run the same convergence rule within its own transaction.
@@ -225,8 +251,10 @@ in the vault. `prepare_agent_and_converge/5` installs that state and calls the
 same convergence rule used by `report_agent_and_converge/6`.
 
 For automatic preparation, an eligible destination must also be an authorized
-recovery observer. On a new negative physical observation, its Prolog reaction
-chooses whether custody preparation is needed. The resulting signed
+recovery observer. On a new negative physical observation, the affected
+ontology's restricted `agent_recovery_data/10` selection decides whether custody
+preparation is needed. Its typed result reaches the node's own trusted reaction.
+The resulting signed
 `report_agent_observation_with_custody/8` first installs the candidate key, then
 records the report and converges. It does not converge between preparation and
 reporting. An explicit `unavailable(Reason)` result records only the report,
@@ -285,44 +313,71 @@ epoch; it clears reports, not that custody promise. Local collection of merely
 unpublished staged keys cannot delete a committed candidate. Candidate facts
 are cleared on assignment change, and private custody cleanup remains governed.
 
-A founding recovery policy must also define resolution for false alarms and
+A recovery policy must also define resolution for false alarms and
 vanished observers. Without a resolution grant the substrate cannot close the
 round. Fresh authorized reports may still converge within that current round;
 absence of a resolution rule does not itself invalidate their threshold proof.
 
 ## Explicit node execution
 
-A founding reaction may select `node(NodeKey)` and call
-`submit_node_goal(Mode, Goal, AbsoluteExpiry)`. This explicit execution role
-uses the same bounded queue, child lifecycle and request worker as hosted
-agent execution. The runtime captures the containing ontology's exact founding
-identity and the installed node principal/key; a changed node binding retires
-the old executor. An agent-selected reaction cannot substitute node authority.
+The verified installed node pointer supplies its logical `agent_instance_ref/3`
+binding only to its own exact ontology. It needs no ordinary `agent_host/4` row.
+Its own reactions enter the existing signed agent queue; the runtime rechecks
+node identity and key before signing. Foreign catalogues never borrow this
+binding, and resource restoration has no physical-node proof queue.
 
-The signed request enters the node ontology as
-`node_authorized_goal(SourceNamespace, SourceAnchor, Goal)`. The ordinary
-Prolog rule in `priv/ontologies/node_execution.pl` proves
+For recovery, the affected ontology selects data under restricted committed
+policy: exact target, assignment, expected/current round, sequence, observation,
+kind, expiry and preparation requirement. The existing owner delivers
+`observed(agent_recovery_ready(...))` with private authenticated metadata and
+compact producer/contact evidence to the node's scope, without copying the
+observation batch's instance bindings. The node's handler calls
+`recovery_observation/1` and `me/1` before
+constructing a report. A public event with the same term fails the metadata
+check. The node does not accept executable goals supplied by that selection.
+
+The trusted Prolog handler constructs
+`node_authorized_goal(SourceNamespace, SourceAnchor, Goal)` around a known
+report operation. The runtime submits the node-local goal unchanged, without
+automatically wrapping foreign reactions. The ordinary Prolog rule proves
 `can_execute_for(SourceNamespace, SourceAnchor, Goal)` there, then executes
 the foreign goal with an exact source-identity guard. Grant, guard and
 consequence share one transaction. The source ontology's ordinary entry ACL
-also applies. No grant is supplied by hosting or by loading this rule.
+also applies. No grant is supplied by hosting or by loading this rule. A permitted
+operation is not a sandbox around its editable implementation.
+
+`S::Goal` preserves the authenticated actor. Existing `can_invoke/4` receives
+that actor and the active ontology call path. Elevated node grants require direct
+context: `[NodeNamespace]` for the node's own handler or direct call to a target;
+`[S, NodeNamespace]` and `[C, S, NodeNamespace]` do not gain those privileges.
+Every successful alternative must enforce the restriction, including hosting
+and root's public creation admission. Independent non-node delegation remains
+ordinary policy. Namespace path entries are not anchored code identities;
+exact principal/target checks and trusted editors of the node's own behavior
+remain necessary. No agent delegation chain is introduced.
 
 Commit-time `can_invoke/4` bodies use ordinary Prolog; external predicates are
 unavailable there, including `current_ontology_identity/2`. An ACL can match
 the anchored guard in the requested goal as a term. Bind its exact namespace
 and anchor in the policy rather than executing the guard inside the ACL body.
 
-`submit_node_prepared_goal(Instance, OldEpoch, Result, GoalTemplate,
-AbsoluteExpiry)` is a reaction-class bridge for destination custody. It requires
-exactly one distinct unbound variable in the template, identical to `Result`.
-The source ontology supplies the full anchored instance reference. The selected
-node worker checks that source binding, prepares its vault slot under the same
+`prepare_agent_custody(TargetRef, OldEpoch, Result)` describes deferred preparation
+during eligibility and performs no I/O. The ordinary reaction goal must contain
+exactly one distinct unbound variable, identical to `Result`.
+`limit_reaction_expiry/1` can narrow the maximum captured by the authenticated
+observation producer. `TargetRef` is the full anchored reference from the owned
+observation, not an instance interpreted in the node's behavior scope.
+`current_request_expiry/1`, preparation, expiry narrowing and authenticated
+observation matching use the universal runtime bridge. Backtracking discards
+abandoned metadata through ordinary proof variables. The worker checks target
+identity, current assignment, node identity and custody eligibility in restricted
+committed policy before preparing its vault slot under the same
 absolute deadline, and uses Erlog term binding to replace `Result` with
 `prepared(PublicKey)` or `unavailable(Reason)`. It signs and submits the resulting
-ground goal once through the same queue and ingress as `submit_node_goal/3`.
+ground goal once through the same queue and signed ingress.
 Preparation neither runs inside a query/proof nor blocks the reaction runner.
 
-Node requests from all runtimes enter the installed node ontology, whose existing
+All such node requests enter the installed node ontology, whose existing
 proof owner limits active proofs and post-proof waiters separately (default 64
 each). This reuses shared admission; it does not bound aggregate pre-proof
 vault/signing work or all runtime queues across the physical node.
@@ -337,12 +392,13 @@ exception payload. Intentional retirement, replay and runtime teardown do not
 report an unexpected exit. A normal hosting reconciliation still reconstructs
 the local process from committed state.
 
-`react_on/3` unifies the observation just as it matches other terms. The term
+`react_on/2` unifies the observation just as it matches other terms. The term
 is not an applied diff and is not asserted. A durable response still requires
-an explicitly authorized signed goal through the ordinary worker. Observations
+an ordinary authorized goal through the existing queue. Observations
 are volatile; reset discards those from the previous incarnation. New inputs
-arriving during reconciliation use the same bounded queue and wait for its
-projection barrier. They are not a recovery log.
+arriving during attachment use the same bounded queue and wait for its committed
+baseline. Resource installation has its own owner notifications; there is no
+barrier waiting for every reaction. These inputs are not a recovery log.
 Remote host-loss observation is separate from local child failure.
 
 ## Stable custody preparation
@@ -368,10 +424,10 @@ the previous operation's uncertain outcome never triggers another submission.
 
 ## Physical-host observation
 
-The optional `agent_recovery_policy.pl` founding handler projects observer
-watches from committed local host, key, round and observer facts. Changed-head
-scopes select affected instances. Custom policy derived from other facts must
-include those support heads in its founding handler. The runtime owns the
+The optional `agent_recovery_policy.pl` supplies the committed
+`agent_observation_projection/4` selector over host, key, round and observer facts.
+Recorded read dependencies also cover custom helpers; no handwritten notice/head
+list is required. The runtime owns the
 subscriptions; `quod_agent_observer` has no process, evaluator or work queue.
 Two instances watching the same physical host share the transport's probe.
 
@@ -439,22 +495,29 @@ application-owner monitor retains the exact wire reference and closes it
 asynchronously on retirement, so transport keepalives cannot preserve an orphaned
 application connection after its owner dies.
 
-The transient `observed/1` wrapper is reserved to this owner-input tier. A
-committed `trigger_event(observed(...))` payload cannot invoke its privileged
-local handler. The normal reaction matcher still performs all unification and
-executor selection after the source distinction is enforced.
+The transient owner-input tier carries authenticated metadata separately from
+the visible `observed/1` term. A committed `trigger_event(observed(...))` payload
+has no such metadata and cannot pass `recovery_observation/1`. The normal matcher
+still performs event unification and own-scope actor selection.
 
 One physical occurrence captures the affected instances' old epochs and rounds.
 The runtime retains that bounded immutable batch in its existing ordered work,
-admitting one instance through the normal matcher as node-executor capacity is
-available. Committed state changes continue to run while this work waits.
-Admission rechecks the contact owner/generation and observation expiry. Newer
+selecting typed recovery data for the affected instances through the existing
+worker and delivering it to the node's own matcher and queue. Committed state
+changes continue to run while this work waits.
+Before each recovery reaction candidate, the node runtime rechecks the source
+runtime owner, transport incarnation, directory-contact owner/generation, exact
+installed node reference, wall-clock expiry and monotonic deadline through local
+owner reads. Valid receipts arriving before the node's first committed attachment
+are retained in that incarnation's bounded queue and checked again when consumed.
+The first attachment does not discard them as old-runtime work; replacement and
+replay still discard obsolete observations. Newer
 physical evidence replaces unsent evidence and preserves the remaining instances'
 turn. This reduces wake/queue fan-out; it does not combine distinct instances'
 authorized durable transactions. For A affected instances and T reporting
 observers, one observation round can require A × T signed reporting transactions,
-with eligible reassignment included in those transactions. Each runtime's node
-worker processes one request at a time. Sharing a physical probe therefore does
+with eligible reassignment included in those transactions. The node's existing
+queue processes one request at a time. Sharing a physical probe therefore does
 not promise constant-time recovery as the instance count grows; capacity and
 time to the last recovered instance require measurement for each deployment.
 
@@ -465,7 +528,7 @@ Both are positive integers in the HOCON `node` block.
 Existing subscriptions take precedence over additions; a refused replacement
 still withdraws its superseded host/epoch. Refusal and installed-status notices
 share the successful hosting-projection publication boundary. A real capacity
-release wakes the same Prolog handler, without retaining refused desired rows.
+release wakes the same resource owner, without retaining refused desired rows.
 
 Transport contact admission defaults to 4,096 physical peers, configurable by
 `peer_observation_limit`. Tracked route interest is installed before acquiring
@@ -479,15 +542,25 @@ configuration-free application path validates the same application-env values
 against the same schema. Runtime capacities remain per ontology; the transport
 limit is shared across the node.
 
-The reaction supplies a ground `report_agent_observation/7`, or its custody
+The node's authenticated recovery reaction constructs `report_agent_observation/7`, or its custody
 continuation that the worker grounds before signing, with expected
 round `none` or `current(Round)`. Establishing the first round, recording the
 report and any eligible reassignment share one signed transaction. A competing
 round never silently adopts the old observation; its projection needs new
-physical evidence. The report's expiry is bounded by the physical completion
-time plus sixty seconds and by a live authorized supporting subset when one is
-available. Expired or unauthorized reports do not veto renewal. The ordinary
+physical evidence. Before policy selection, the owner captures the existing
+request allowance and bounds it by observation validity. Both the absolute
+monotonic deadline and signed wall-clock expiry travel with the handoff. Policy
+may further narrow expiry using a live authorized supporting subset; conversion
+from wall-clock time may shorten, but never extend, the retained monotonic bound.
+Selection, delivery, queueing, custody and signing never renew it; request and
+report expiry are identical. Expired or unauthorized reports do not veto renewal. The ordinary
 signed proof rechecks sequence, exact assignment, grants and report support.
+
+The source releases its receipt cursor when the destination consumes the evidence,
+dies, or reaches the retained deadline; reset also cleans up its monitor and
+one-shot timer. Deadline expiry frees only unsent evidence. It does not retry a
+report, cancel admitted work or resolve an unknown operation. A late receipt or
+timer must match that exact cursor before changing it.
 
 These subscriptions and observations are volatile. A lost reaction is not
 replayed. Later independent physical observations can produce different signed
@@ -503,6 +576,11 @@ uncertain operation was never admitted. There is no private replay journal or
 renewed deadline. Complete multi-node failover acceptance remains required by
 the generic-hosting completion plan; timing-based placement preferences are a
 separate domain policy.
+
+Existing installations need the targeted stored-policy migration and coordinated
+cold runtime activation in `event-reaction-refinement-plan.md` §8. Updating these
+source templates does not change their committed program, authorize live edits,
+rewrite a founding manifest or permit a data wipe.
 
 ## Request timing
 

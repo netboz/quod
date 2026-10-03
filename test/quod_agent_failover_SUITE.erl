@@ -18,7 +18,7 @@ without failback.
          uncertain_claim_recovers_after_target_restart/1]).
 -export([hold_claim_admission/3, begin_uncertain_claim/1,
          release_claim_and_await_expiry/3]).
--export([bind_node/2, submit_node/1, await_goal/3, await_agent/3,
+-export([bind_node/2, submit_node/1, await_goal/3, await_agent/3, await_observer/2, await_process_down/2,
          resumed_work/4, restart_runtime/2, diagnostics/0,
          operation_diagnostics/2,
          await_node_principal/2, assert_old_key_fenced/2]).
@@ -61,8 +61,7 @@ init_per_testcase(TestCase, Config0) ->
         {OldRuntime, OldChild, _} = call(Old, ?MODULE, await_agent, [AgentRef, 1, 10000]),
         lists:foreach(fun(N) ->
             ok = call(N, quod_ct, await_applied, [?NS, InitialHeight, 30000]),
-            ok = call(N, quod_runtime, await_revision,
-                      [?NS, agent_observation, InitialHeight, 10000]),
+            ok = call(N, ?MODULE, await_observer, [InitialHeight, 10000]),
             ?assertMatch(#{mode := live, collapses := 0}, call(N, quod_runtime, stats, [?NS]))
         end, Observers),
         [{nodes, Nodes}, {observers, Observers}, {eligible, Eligible},
@@ -287,8 +286,12 @@ exercise_recovery(Config, Fault) ->
         end,
         assert_replicated([Returned], RestartHeight, NewHost, NewKey, OldKey,
                           [after_recovery, after_runtime_restart]),
-        ok = call(Returned, quod_runtime, await_revision,
-                  [?NS, agent_hosting, RestartHeight, 10000]),
+        case Fault of
+            {suspended, _} ->
+                ok = call(Returned, ?MODULE, await_process_down,
+                          [?config(old_child, Config), 10000]);
+            stopped -> ok
+        end,
         {_, ReturnedChildren} = call(Returned, quod_runtime, agents, [?NS]),
         ?assertEqual([], [B || #{binding := #{reference := R} = B} <- ReturnedChildren,
                               R =:= AgentRef]),
@@ -307,8 +310,6 @@ exercise_recovery(Config, Fault) ->
         All = [Returned | Survivors],
         assert_replicated(All, FinalHeight, NewHost, NewKey, OldKey, work_values()),
         lists:foreach(fun(N) ->
-            ok = call(N, quod_runtime, await_revision,
-                      [?NS, agent_hosting, FinalHeight, 10000]),
             ?assertMatch(#{mode := live, collapses := 0, reconcile_failures := 0},
                          call(N, quod_runtime, stats, [?NS])),
             ?assertMatch(#{role := validator}, call(N, quod_simplex, status, [?NS])),
@@ -535,7 +536,7 @@ agent_policy(Old, Observers, Eligible, Administrator) ->
     SigningRights = [begin
         {ok, Text} = quod_client_goal_parser:format({record_recovered_work, V}),
         Request = {agent_goal_v1, {'_'}, {agent_instance_ref, ?NS, {'_'}, actor},
-                   {'_'}, {'_'}, {'_'}, {'_'}, execute, 2, Text},
+                   {'_'}, {'_'}, {'_'}, {'_'}, execute, 3, Text},
         {':-', {can_request_agent_signature, Principal, actor, Request},
          {eligible_agent_host, actor, Principal}}
     end || V <- work_values()],
@@ -557,8 +558,8 @@ agent_policy(Old, Observers, Eligible, Administrator) ->
         {':-', {can_invoke, {record_recovered_work, Value},
                  {agent_instance_ref, ?NS, {'Anchor'}, actor}, {'_'}, ?NS},
          {current_ontology_identity, ?NS, {'Anchor'}}},
-        {react_on, {agent, actor}, {resume_work, Value},
-         {submit_agent_goal, actor, execute, {record_recovered_work, Value}, 15000}},
+        {':-', {react_on, {resume_work, Value}, {record_recovered_work, Value}},
+         {me, {agent_instance_ref, ?NS, {'_'}, actor}}},
         {':-', {record_recovered_work, Value}, conjunction([
             {agent_domain_state, actor, before_loss},
             {'\\+', {recovered_work, Value}}, {assertz, {recovered_work, Value}}])}].
@@ -725,6 +726,27 @@ await_agent(Ref = {agent_instance_ref, Ns, _, _}, Epoch, Timeout) ->
             after Timeout -> error({agent_not_installed, Ref, Epoch, quod_runtime:stats(Ns)}) end
         end
     after quod_reg:unsubscribe({agent_hosting, Ns}) end.
+
+%% Subscribe before the installed-state snapshot. The real observer owner
+%% publishes after changing its watch set; no handler revision is fabricated.
+await_observer(Height, Timeout) ->
+    true = quod_reg:subscribe({agent_hosting, ?NS}),
+    try
+        Owner = quod_reg:where({quod_runtime, ?NS}),
+        case gen_server:call(Owner, get_stats) of
+            #{observed_agent_instances := 1, e_frontier := H} when H >= Height -> ok;
+            _ -> receive
+                {agent_observation_installed, Owner,
+                 #{observed_agent_instances := 1}, H} when H >= Height -> ok
+            after Timeout -> error({observation_not_installed, quod_runtime:stats(?NS)}) end
+        end
+    after quod_reg:unsubscribe({agent_hosting, ?NS}) end.
+
+await_process_down(Pid, Timeout) ->
+    Monitor = monitor(process, Pid),
+    try receive {'DOWN', Monitor, process, Pid, _} -> ok
+        after Timeout -> error({stale_agent_survived, Pid}) end
+    after demonitor(Monitor, [flush]) end.
 
 resumed_work(Ref = {agent_instance_ref, Ns, Anchor, _}, Runtime, Child, Value) ->
     true = quod_reg:subscribe({agent, Ref}),

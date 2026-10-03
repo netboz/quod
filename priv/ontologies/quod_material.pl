@@ -8,7 +8,7 @@ can_join(_, _, Key) :- peer_ready(Key).
 
 material_query(isa(_, _)).
 material_query(material_class(_)).
-material_query(most_specific_materials(_, _, _)).
+material_query(most_specific_classes(_, _, _)).
 material_query(property_unit(_, _)).
 material_query(material_property(_, _, _, _, _)).
 material_query(property_in(_, _, _, _, _, _)).
@@ -29,22 +29,10 @@ isa(steel, metal).
 isa(bronze, metal).
 
 %% `isa/2` has the shared transitive Web Ontology semantics. The material
-%% ontology declares only its taxonomy and material-specific selection policy.
+%% ontology declares only its taxonomy and material properties.
 material_class(Class) :-
     findall(C, isa(C, _), Raw), sort(Raw, Classes), member(Class, Classes),
     isa(Class, material).
-
-%% Resolve a collection of candidate classes in one scoped proof. Callers
-%% retain their recipe associations; this ontology owns taxonomy traversal.
-most_specific_materials(Material, Candidates, Selected) :-
-    term_variables(Candidates, []), sort(Candidates, Classes),
-    findall(Class, (member(Class, Classes), isa(Material, Class)), RawApplicable),
-    sort(RawApplicable, Applicable),
-    findall(Class, (member(Class, Applicable),
-                   \+ more_specific_material(Class, Applicable)), RawSelected),
-    sort(RawSelected, Selected).
-more_specific_material(Class, Classes) :-
-    member(Other, Classes), Other \== Class, isa(Other, Class).
 
 property_unit(density, <<"kg/m3">>).
 property_unit(temperature, <<"K">>).

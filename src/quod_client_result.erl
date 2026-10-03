@@ -4,7 +4,9 @@ One closed, bounded signed-client proof result shared by local HTTP execution
 and the node-to-node signed-goal endpoint.
 
 Engine bindings are converted once to the signed request's binary variable
-names and encoded with `quod_durable_term`. Failure stacks reuse the existing
+names and encoded with the shared canonical binding codec. The complete reply
+owns the byte allowance; transient reads do not consume a durable-result budget.
+Failure stacks reuse the existing
 bounded failure-reason codec. The transport therefore never carries arbitrary
 Erlang result terms, and the HTTP layer has only one renderer regardless of
 where the proof ran.
@@ -14,6 +16,7 @@ where the proof ran.
 -include("quod_proof_limits.hrl").
 
 -export([normalize/2, normalize_error/1, encode/1, decode/1,
+         decode_binding/1,
          observe_outcome_unknown/3, report_outcome_unknown/3,
          http_normalized/2, http_error/1, binding_json/1, outcome_ref_json/1]).
 -export_type([result/0]).
@@ -51,6 +54,7 @@ where the proof ran.
 normalize(Evidence, Raw) ->
     case normalize_unbounded(Evidence, Raw) of
         {ok, Result} -> bounded(Result);
+        {error, result_too_large} = Error -> Error;
         error -> {error, proof_unavailable}
     end.
 
@@ -109,15 +113,15 @@ normalize_unbounded(Evidence, {ok, Bindings, Height})
        Height =< ?MAX_UINT64 ->
     case encode_bindings(Evidence, Bindings) of
         {ok, Blobs} -> {ok, {answers, Height, Blobs}};
-        error -> error
+        Error -> Error
     end;
 normalize_unbounded(Evidence,
                     {solution, <<_:256>> = CursorId, Bindings, Height})
   when is_map(Bindings), is_integer(Height), Height >= 0,
        Height =< ?MAX_UINT64 ->
-    case encode_binding(Evidence, Bindings) of
+    case encode_binding(Evidence, Bindings, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES) of
         {ok, Blob} -> {ok, {solution, CursorId, Height, Blob}};
-        error -> error
+        Error -> Error
     end;
 normalize_unbounded(_Evidence, {ok, stopped}) ->
     {ok, stopped};
@@ -133,6 +137,7 @@ normalize_unbounded(Evidence, {ok, Bindings, Outcome})
     case {encode_bindings(Evidence, Bindings), normalize_outcome(Outcome)} of
         {{ok, Blobs}, {ok, PublicOutcome}} ->
             {ok, {committed, Blobs, PublicOutcome}};
+        {{error, result_too_large} = Error, {ok, _}} -> Error;
         _ ->
             error
     end;
@@ -154,34 +159,34 @@ bounded(Result) ->
     end.
 
 encode_bindings(Evidence, Bindings) ->
-    encode_bindings(Evidence, Bindings, 0, []).
+    encode_bindings(Evidence, Bindings, 0, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, []).
 
-encode_bindings(_Evidence, [], _Count, Acc) ->
+encode_bindings(_Evidence, [], _Count, _Remaining, Acc) ->
     {ok, lists:reverse(Acc)};
-encode_bindings(_Evidence, [_ | _], Count, _Acc)
+encode_bindings(_Evidence, [_ | _], Count, _Remaining, _Acc)
   when Count >= ?QUOD_MAX_ANSWERS_PER_INVOCATION ->
     error;
-encode_bindings(Evidence, [Bindings | Rest], Count, Acc) ->
-    case encode_binding(Evidence, Bindings) of
+encode_bindings(Evidence, [Bindings | Rest], Count, Remaining, Acc) ->
+    case encode_binding(Evidence, Bindings, Remaining) of
         {ok, Blob} ->
-            encode_bindings(Evidence, Rest, Count + 1, [Blob | Acc]);
-        error ->
-            error
+            encode_bindings(Evidence, Rest, Count + 1, Remaining - byte_size(Blob), [Blob | Acc]);
+        Error -> Error
     end;
-encode_bindings(_Evidence, _Bindings, _Count, _Acc) ->
+encode_bindings(_Evidence, _Bindings, _Count, _Remaining, _Acc) ->
     error.
 
-encode_binding(Evidence, Bindings) when is_map(Bindings) ->
+encode_binding(Evidence, Bindings, Remaining) when is_map(Bindings) ->
     case quod_client_goal:named_bindings(Evidence, Bindings) of
         {ok, Named} ->
-            case quod_durable_term:encode_result(Named) of
+            case quod_wire_term:encode_bindings(Named, Remaining) of
                 {ok, Blob} -> {ok, Blob};
+                {error, too_large} -> {error, result_too_large};
                 {error, _} -> error
             end;
         {error, _} ->
             error
     end;
-encode_binding(_Evidence, _Bindings) ->
+encode_binding(_Evidence, _Bindings, _Remaining) ->
     error.
 
 normalize_outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
@@ -220,6 +225,7 @@ public_error(invalid_action) -> invalid_action;
 public_error(non_backtrackable_action) -> non_backtrackable_action;
 public_error(conflict_retry) -> conflict_retry;
 public_error(result_too_large) -> result_too_large;
+public_error({too_large, result}) -> result_too_large;
 public_error(independent_requires_signed_request) -> independent_requires_signed_request;
 public_error(independent_nesting) -> independent_nesting;
 public_error(independent_mixed_writes) -> independent_mixed_writes;
@@ -231,15 +237,14 @@ public_error(_Reason) -> proof_unavailable.
           {ok, binary()} |
           {error, result_too_large | invalid_result}.
 encode(Result) ->
-    case valid_result(Result) of
+    Blob = term_to_binary(Result, [deterministic]),
+    case byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
+        false -> {error, result_too_large};
         true ->
-            Blob = term_to_binary(Result, [deterministic]),
-            case byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
+            case valid_result(Result) of
                 true -> {ok, Blob};
-                false -> {error, result_too_large}
-            end;
-        false ->
-            {error, invalid_result}
+                false -> {error, invalid_result}
+            end
     end.
 
 -doc "Decode, revalidate, and require canonical normalized-result bytes.".
@@ -291,7 +296,7 @@ valid_binding_blobs([Blob | Rest], Count)
 valid_binding_blobs(_, _Count) -> false.
 
 valid_binding_blob(Blob) ->
-    case quod_durable_term:decode_result(Blob) of
+    case decode_binding(Blob) of
         {ok, _Pairs} -> true;
         {error, _} -> false
     end.
@@ -429,7 +434,7 @@ http_error({error, proof_unavailable}) ->
     {503, #{error => proof_unavailable}}.
 
 render_bindings(Blobs) ->
-    [binding_json(decoded_binding(Blob)) || Blob <- Blobs].
+    [begin {ok, Pairs} = decode_binding(Blob), binding_json(Pairs) end || Blob <- Blobs].
 
 -doc "Render verified named bindings identically for live and recovered results.".
 -spec binding_json([{binary(), term()}]) -> #{binary() => binary()}.
@@ -437,9 +442,11 @@ binding_json(Pairs) ->
     maps:from_list([{Name, quod_client_goal_parser:value_text(Value)}
                    || {Name, Value} <- Pairs]).
 
-decoded_binding(Blob) ->
-    {ok, Pairs} = quod_durable_term:decode_result(Blob),
-    Pairs.
+-doc "Decode one named binding already carried by the bounded client reply.".
+-spec decode_binding(term()) ->
+          {ok, [{binary(), term()}]} | {error, bad_term | invalid_result | too_large}.
+decode_binding(Blob) ->
+    quod_wire_term:decode_bindings(Blob, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES).
 
 committed_json(Ref = {transaction, _, _, _}) -> outcome_ref_json(Ref);
 committed_json({group_outcome, Ref, Height, Slots}) ->

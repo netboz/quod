@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { SessionControls } from './Session'
+import { fromB64url, b64url } from '../../client/src/key-provider.js'
 import { accountReference } from '../../client/src/accounts.js'
 import { useSignedSession } from './session-context'
 import { ConsoleWorkspace } from './Console'
-import { compound, renderTerm, variable } from '../../client/src/prolog-term.js'
+import { PrologEditor } from './PrologEditor'
+import { atom, compound, renderTerm, variable } from '../../client/src/prolog-term.js'
 import { signedGoal, readSystemOntologies } from '../../client/src/signed-client.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
 import { readLensView } from '../../client/src/lens.js'
-import { anchoredGoal, readPersonalLobby, readDeviceMenu, readProofView, singleBinding } from '../../client/src/world.js'
-import type { MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
+import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm, codeForm,
+  readEntityEidolons, readEidolonWorkspace, singleBinding } from '../../client/src/world.js'
+import type { EidolonChoice, EidolonWorkspace, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
 
 export default function World() {
@@ -23,11 +26,15 @@ export default function World() {
   const [view, setView] = useState('lobby')
   const [missingLobby, setMissingLobby] = useState(false)
   const [mode, setMode] = useState('playing')
+  const [modes, setModes] = useState<string[]>([])
+  const [catalogue, setCatalogue] = useState<{ namespace: string; anchor: string }[]>([])
   const [revision, setRevision] = useState(0)
   const [licenceCheck, setLicenceCheck] = useState<{ identity: SignedIdentity; reason: string | null } | null>(null)
   const [selected, setSelected] = useState<Subject | null>(null)
   const [menu, setMenu] = useState<{ subject: Subject; entries: MenuEntry[] } | null>(null)
-  const [workspace, setWorkspace] = useState<{ key: string; view: ProofView } | null>(null)
+  const [eidolons, setEidolons] = useState<{ subject: Subject; choices: EidolonChoice[] } | null>(null)
+  const [workspace, setWorkspace] = useState<
+    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace } | null>(null)
   const [focused, setFocused] = useState(false)
   const pick = useRef(setSelected)
   pick.current = setSelected
@@ -44,8 +51,10 @@ export default function World() {
   useEffect(() => {
     let active = true
     setLicenceCheck(null)
+    setCatalogue([])
     if (identity) {
       void readSystemOntologies(identity).then(ontologies => {
+        if (active) setCatalogue(ontologies)
         // This menu entry opens the authored licence lens over licence data.
         const installed = ['quod:lens', 'quod:licence'].every(namespace =>
           ontologies.some(ontology => ontology.namespace === namespace))
@@ -105,6 +114,7 @@ export default function World() {
           const result = await readPersonalLobby(identity, agent, mode)
           if (!active) return
           setMarks(result?.marks ?? [])
+          setModes(result?.modes ?? [])
           setMissingLobby(result === null)
           setStatus(result
             ? 'Your personal lobby. Select the console to see its actions.'
@@ -127,41 +137,62 @@ export default function World() {
   useEffect(() => {
     let active = true
     setMenu(null)
+    setEidolons(null)
     if (identity && agent && selected) {
       const subject = selected
-      void readDeviceMenu(identity, agent, subject).then(entries => {
+      if (subject.kind === 'ontology') setMenu({ subject, entries: [] })
+      else void readDeviceMenu(identity, agent, subject).then(entries => {
         if (active) setMenu({ subject, entries })
       }).catch(error => { if (active) { setMenu({ subject, entries: [] }); setStatus(`Could not read the actions: ${String(error)}`) } })
+      void readEntityEidolons(identity, agent, subject).then(choices => {
+        if (active) setEidolons({ subject, choices })
+      }).catch(error => { if (active) { setEidolons({ subject, choices: [] }); setStatus(`Could not read the eidolons: ${String(error)}`) } })
     }
     return () => { active = false }
   }, [identity, agent, selected])
 
   const openWorkspace = async (entry: MenuEntry) => {
-    if (entry.view !== 'proof_console') {
-      setStatus(`This client cannot open ${entry.view}.`)
-      return
-    }
     if (!identity || !agent || !selected?.anchor) return
     const requestContext = context.current
-    const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}`
+    const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}:${entry.view}`
     if (workspace?.key === key) {
       setFocused(true)
       return
     }
     try {
       const goal = anchoredGoal({ namespace: selected.ontology, anchor: selected.anchor },
-        compound('lobby_workspace', [selected.entity, variable('View')]))
+        compound('lobby_workspace', [selected.entity, atom(entry.view), variable('View')]))
       const reply = await signedGoal(identity, { mode: 'read', agent, goal })
-      const form = readProofView(singleBinding(reply, 'View'))
+      const form = proofForm(readGuiView(singleBinding(reply, 'View')))
       const current = context.current
       if (current.identity !== requestContext.identity || current.agent !== requestContext.agent ||
           current.selected !== requestContext.selected) return
-      setWorkspace({ key, view: form })
+      setWorkspace({ kind: 'proof', key, view: form })
       setFocused(true)
     } catch (error) {
       const current = context.current
       if (current.identity === requestContext.identity && current.agent === requestContext.agent &&
           current.selected === requestContext.selected) setStatus(`Could not open the console: ${String(error)}`)
+    }
+  }
+
+  const openEidolon = async (choice: EidolonChoice) => {
+    if (!identity || !agent || !selected?.anchor) return
+    const requestContext = context.current
+    const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}:${choice.recipe.name}`
+    if (workspace?.key === key) { setFocused(true); return }
+    try {
+      const code = await readEidolonWorkspace(identity, agent, selected, choice)
+      codeForm(code.view) // Refuse an unsupported semantic form before replacing the open draft.
+      const current = context.current
+      if (current.identity !== requestContext.identity || current.agent !== requestContext.agent ||
+          current.selected !== requestContext.selected) return
+      setWorkspace({ kind: 'code', key, code })
+      setFocused(true)
+    } catch (error) {
+      const current = context.current
+      if (current.identity === requestContext.identity && current.agent === requestContext.agent &&
+          current.selected === requestContext.selected) setStatus(`Could not open this eidolon: ${String(error)}`)
     }
   }
 
@@ -177,6 +208,15 @@ export default function World() {
   const selectedAccount = account && account.namespace === agent?.namespace &&
     account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
   const devices = marks.filter(mark => mark.depicts?.anchor)
+  const ontologies = new Map(catalogue.map(ref => [ref.namespace + ':' + ref.anchor, ref]))
+  if (agent) {
+    const ref = { namespace: agent.namespace, anchor: typeof agent.anchor === 'string' ? agent.anchor : b64url(agent.anchor) }
+    ontologies.set(ref.namespace + ':' + ref.anchor, ref)
+  }
+  for (const { depicts } of devices) if (depicts?.anchor) {
+    const ref = { namespace: depicts.ontology, anchor: b64url(depicts.anchor) }
+    ontologies.set(ref.namespace + ':' + ref.anchor, ref)
+  }
   return <div className="world-shell">
     <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" tabIndex={0} />
     {navigationActive && <div className="world-crosshair" aria-hidden="true" />}
@@ -208,7 +248,7 @@ export default function World() {
           </option>
         </select></label>
         {view === 'lobby' && <label>Eidolon <select aria-label="Eidolon" value={mode} onChange={event => setMode(event.target.value)}>
-          <option value="playing">Playing</option><option value="edition">Structure</option>
+          {modes.map(purpose => <option key={purpose} value={purpose}>{purpose}</option>)}
         </select></label>}
         <button onClick={() => setRevision(n => n + 1)} disabled={!identity || !agent}>Refresh view</button>
         {missingLobby && selectedAccount &&
@@ -222,14 +262,32 @@ export default function World() {
       {devices.length > 0 && <div className="world-devices" aria-label="Devices">
         {devices.map(device => <button key={device.id} onClick={() => setSelected(device.depicts)}>{device.id}</button>)}
       </div>}
-      {selected && <div className="world-menu" aria-label="Device actions">
+      {identity && agent && <label>Ontology browser <select aria-label="Ontology browser" value="" onChange={event => {
+        const ref = ontologies.get(event.target.value)
+        if (ref) setSelected({ kind: 'ontology', ontology: ref.namespace, anchor: fromB64url(ref.anchor), entity: atom('ontology') })
+      }}>
+        <option value="" disabled>Choose an ontology</option>
+        {[...ontologies.entries()].map(([key, ref]) => <option key={key} value={key}>{ref.namespace}</option>)}
+      </select></label>}
+      {selected && <div className="world-menu" aria-label="Selected target">
+        <p>{selected.ontology} · {renderTerm(selected.entity)}</p>
+        {eidolons?.subject === selected && eidolons.choices.length > 0 && <label>Eidolon <select
+          aria-label="Selected entity eidolon" value="" onChange={event => {
+            const choice = eidolons.choices[Number(event.target.value)]
+            if (choice) void openEidolon(choice)
+          }}>
+          <option value="" disabled>Choose an eidolon</option>
+          {eidolons.choices.map((choice, index) => <option key={index} value={index}>{choice.purpose} · {choice.style}</option>)}
+        </select></label>}
         {selectedMenu === null ? <p>Reading actions…</p> : selectedMenu.length === 0 ? <p>No available actions.</p> : selectedMenu.map(entry =>
           <button key={entry.id} onClick={() => void openWorkspace(entry)}>{entry.label}</button>)}
         <button onClick={() => setSelected(null)}>Dismiss</button>
       </div>}
     </section>
     {workspace && <section className="world-workspace" hidden={!focused || immersive} aria-label="Focused console">
-      <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} scene={scene} visible={focused} />
+      {workspace.kind === 'proof'
+        ? <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} scene={scene} visible={focused} />
+        : <PrologEditor workspace={workspace.code} onClose={() => setFocused(false)} scene={scene} visible={focused} />}
     </section>}
   </div>
 }

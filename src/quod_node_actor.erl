@@ -16,7 +16,7 @@ ACL evaluator, signer, route, or cache.
 -export([test_normalize_projection/3]).
 -endif.
 
--spec creation_options(binary(), binary(), 1 | 2, <<_:256>>) ->
+-spec creation_options(binary(), binary(), 1 | 2 | 3, <<_:256>>) ->
           {ok, [term()]} | {error, term()}.
 creation_options(Namespace, InstanceText, ParserVersion,
                  <<_:256>> = PublicKey)
@@ -32,7 +32,7 @@ creation_options(Namespace, InstanceText, ParserVersion,
 creation_options(_Namespace, _InstanceText, _ParserVersion, _PublicKey) ->
     {error, invalid_node_actor}.
 
--spec reference(binary(), <<_:256>>, binary(), 1 | 2) ->
+-spec reference(binary(), <<_:256>>, binary(), 1 | 2 | 3) ->
           {ok, binary()} | {error, term()}.
 reference(Namespace, <<_:256>> = Anchor, InstanceText, ParserVersion) ->
     case quod_agent_ref:from_text(
@@ -45,7 +45,7 @@ reference(Namespace, <<_:256>> = Anchor, InstanceText, ParserVersion) ->
 Bind this node to an already-created ordinary ontology after verifying its
 exact durable identity.  Creation itself remains the root action.
 """.
--spec bind(binary(), <<_:256>>, binary(), 1 | 2) ->
+-spec bind(binary(), <<_:256>>, binary(), 1 | 2 | 3) ->
           {ok, {agent, binary()}} | {error, term()}.
 bind(Namespace, Anchor, InstanceText, ParserVersion) ->
     case {application:get_env(quod, identity_dir),
@@ -104,11 +104,11 @@ signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry, Expected)
             case {Expected =:= current orelse Expected =:= {Ref, PublicKey},
                   quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
                 {true, {ok, InstanceText}, {ok, GoalText}} ->
-                    %% The canonical formatter emits version-2 binary terms.
+                    %% The canonical formatter targets the current signed grammar.
                     Request = #{network_identity => Network, agent_namespace => Ns,
                       agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
                       signing_public_key => PublicKey, operation_id => Operation,
-                      not_after_ms => Expiry, mode => Mode, parser_version => 2,
+                      not_after_ms => Expiry, mode => Mode, parser_version => 3,
                       goal_text => GoalText},
                     case quod_client_goal:encode(Request) of
                         {ok, Bytes} -> {ok, Bytes, quod_identity:sign(Bytes, Signer)};
@@ -139,10 +139,9 @@ hosting_projection(Namespace, Height, Scope, Hosts0, Contacts0)
                     end;
                 _ -> {error, node_actor_context_mismatch}
             end;
-        %% A freshly created node actor runs its immutable founding handler
-        %% before the local pointer can be bound. It has no authority to
-        %% project yet, so leave the previous projection untouched.
-        _ -> ok
+        %% Identity readiness will wake the owning runtime. An unavailable
+        %% governing identity is not a successfully installed projection.
+        _ -> {error, node_actor_unavailable}
     end;
 hosting_projection(_, _, _, _, _) ->
     {error, malformed_node_hosting_projection}.

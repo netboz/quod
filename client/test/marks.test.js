@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 
+import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
 import { readTerm, readList } from '../src/prolog-read.js'
 import { readMarks } from '../src/marks.js'
 import { diagnosisGoal, viewGoal } from '../src/lens.js'
@@ -115,15 +116,17 @@ test('the reader accepts what the renderer writes and nothing more', () => {
   assert.equal(readTerm("'quod:licence'").value, 'quod:licence')
   assert.deepEqual(readTerm('<<"a \\"quoted\\" name">>').value, new TextEncoder().encode('a "quoted" name'))
   assert.equal(readList('[a, b, c]').length, 3)
-  for (const bad of ['[a, b', 'f(a', 'f(a,)', '[a|b]', '<<"open', 'a b', '', '??']) {
+  for (const bad of ['[a, b', 'f(a', 'f(a,)', '<<"open', 'a b', '', '??']) {
     assert.throws(() => readTerm(bad), undefined, `${bad} was accepted`)
+  }
+  for (const bad of ['[a|b]', '[f([a|Tail])]', '[V0]']) {
+    assert.throws(() => readList(bad), undefined, `${bad} was accepted as a projection`)
   }
 })
 
-test('the reader is bounded', () => {
-  assert.throws(() => readTerm('f('.repeat(40) + 'a' + ')'.repeat(40)),
-                /deeply nested/)
-  assert.throws(() => readTerm('x'.repeat(70000)), /too large/)
+test('the reader enforces the shared structural-depth boundary', () => {
+  const outside = PROLOG_TERM_LIMITS.depth + 1
+  assert.throws(() => readTerm('f('.repeat(outside) + 'a' + ')'.repeat(outside)), /deeply nested/)
 })
 
 test('the lens is asked by its flat binary name, with the dot the grammar needs',

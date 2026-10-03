@@ -60,18 +60,23 @@ proposal, but does not itself confer ownership or durable proof of node death.
 Resolve the exact use of `quod:node` / `quod:agent` policy and host-capacity
 admission before activation. Ordinary authorized Prolog policy updates use the
 existing system histories. A required change to locked founding declarations
-or a pinned predicate manifest requires a reviewed succession; no silent
+or the immutable predicate-module registration list requires a reviewed succession; no silent
 mutation of founding authority or re-founding. Record the chosen route before
-making the corresponding production changes. Freeze shared external-predicate
-contracts before founding production agent ontologies: changing a pinned module
-in the second commit can otherwise require another succession. The two commits
-need not have an intervening deployment or ontology founding.
+making the corresponding production changes. Replacing an existing module's
+implementation uses the cold coordinated release contract in
+`ontology-actor-architecture.md` §3; its founding digest is provenance rather
+than a lifetime implementation lock.
 
 ### Ontology-driven recovery
 
-Erlang reports lifecycle observations; Prolog decides the response. A bounded
-worker submits an ordinary signed `report_agent_observation/7` composition to the exact
-containing ontology, under an explicitly authorized observer node principal.
+Erlang reports lifecycle observations; Prolog decides the response. The affected
+ontology's worker selects `agent_recovery_data/10` under restricted committed
+policy and delivers typed data to the observer node's own behavior scope.
+Its trusted handler authenticates the private metadata with
+`recovery_observation/1`, constructs a permitted report and submits it through
+the existing signed queue. `node_authorized_goal/3` checks permission and the
+exact containing ontology before the report operation runs. Foreign reaction
+catalogues supply no node-authorized goals.
 The runtime must not inject an applied event, mutate the KB directly or wait
 on network submission in its mailbox. Use the existing ingress and commit path.
 
@@ -108,9 +113,9 @@ hosting continues to follow the committed assignment projection.
 
 If a prerequisite is missing, the report remains current state. The ordinary
 action supplying that prerequisite must invoke the same convergence rule in
-its own transaction. A state_handler may project obligations on startup/rebuild,
-but cannot perform a signed proof or commit assignment itself. Any work it
-identifies must enter through the existing signed ingress under an explicit
+its own transaction. Existing owners restore resources and committed obligations
+through typed selectors on startup/rebuild; pure selection cannot commit assignment. Work
+they identify enters the existing signed ingress under an explicit
 surviving-principal grant. A missing outcome never permits resubmitting an
 uncertain operation.
 
@@ -158,12 +163,16 @@ takeover before committing to a deployment's recovery-time objective.
 
 ## 2. Finish the shared runtime and reaction integration
 
-`quod_runtime` remains the sole lifecycle owner. Its founding Prolog handler
-derives which instances run locally. Children start, stop or change incarnation
+`quod_runtime` remains the sole lifecycle owner. Its committed Prolog selectors
+derive which instances run locally. Children start, stop or change incarnation
 when that committed projection changes, and reconstruct from it after restart.
 Use existing scoped gproc notices, monitors and the ordered projection tier.
-Consume changed-head scopes in Prolog to reconcile affected instances, including
-explicit withdrawals; reserve full snapshots for boot/rebuild/identity changes.
+Retain observed predicate dependencies, including helpers, absent/failed reads,
+explicit reflection and captured errors. Relevant changes invalidate the
+affected selection; no handwritten list of policy heads is required. Explicit
+instance requests retain their scope; startup and identity changes select all.
+Reject obsolete in-flight selections before installing them as current. A
+required-selection error does not withdraw resources as an empty answer.
 Monitored asynchronous teardown preserves projection-before-effects and
 replacement fencing while the runtime remains responsive.
 
@@ -176,8 +185,11 @@ an active certified contact again. Neither condition grants assignment authority
 The host must publish at least one discoverable ontology hosting row in its
 certified advertisement; agents and private ontologies alone supply no contact.
 A surviving authorized node principal submits reporting and placement
-requests through shared signed ingress; neither an absent agent nor a projection
-handler can use the reaction-only submit_agent_goal path. Keep bounded proposal
+requests through shared signed ingress; an absent agent cannot supply that
+identity. The node binding is available only in its exact own ontology. Ordinary
+reactions use their owning actor's existing queue; none receives physical-node
+authority. Existing `can_invoke/4` checks restrict every elevated node grant to
+direct calling context, retaining one principal through foreign calls. Keep bounded proposal
 workers under the existing lifecycle owner. Protocol failure detection is permitted; readiness polling
 and a new independent election/consensus service are not introduced.
 
@@ -219,14 +231,16 @@ ready. The deployment must retain ontology availability and commit quorum after
 the execution host fails; merely naming another eligible node is insufficient.
 
 Publication remains `trigger_event(Term)`. Subscription remains anchored
-`subscribes/2`; `react_on/3` performs Prolog unification, executor selection and
-normal handler control flow. The selected hosted incarnation submits ordinary
+`subscribes/2`; `react_on/2` performs Prolog unification and owner eligibility
+through `me/1` and ordinary class rules. The selected incarnation submits ordinary
 signed goals through the existing authorization/commit/outcome path. Release
-work only after the relevant projection batch succeeds.
+work after canonical input is processed; resource consumers also wait for their
+actual installed-resource notification.
 
 Keep the current bounded queues and original monotonic deadline alongside signed
 wall-clock expiry. A physical-host occurrence carries captured instance bindings;
-the existing ordered runtime work admits them as executor capacity becomes free,
+the existing ordered runtime work selects validated data and admits it to the
+node's own matcher and signed queue as capacity becomes free,
 without creating one queued reaction per instance at observation time. Each
 instance still requires its own authorized ontology consequence. Runtime queue
 and child caps are per ontology. The shared node-ontology proof owner supplies
@@ -238,12 +252,15 @@ Observation admission similarly preserves existing subscriptions and publishes
 capacity refusals after successful projection. Runtime limits default to 4,096
 instances and 1 MiB of watch rows; the transport's configurable contact limit
 defaults to 4,096 physical peers. Actual capacity release wakes the existing
-owner/handler rather than starting a polling loop or retaining refused desired
+resource owner rather than starting a polling loop or retaining refused desired
 state.
 
 The node worker prepares custody under the original deadline, binds the sole
 result variable and submits one ground ordinary signed goal. Prolog explicitly
 chooses whether unavailable custody permits a report without preparation.
+The target is the full anchored reference from the authenticated observation,
+not an instance interpreted in the node's ontology. Report and signed-request
+expiry are identical; selection, delivery and queueing never renew them.
 Local vault custody is independent of its HTTPS provider. Preparation is stable
 for the exact agent reference and old epoch, including after vault restart;
 this stability is not durable custody of an unadmitted signed request.
@@ -254,6 +271,12 @@ physical-host recovery guarantee.
 Keep one authoritative implementation. Remove
 superseded candidate code and reconcile the documentation with this scope,
 preserving user-owned edits and pinned prefixes.
+
+The ownership correction and its stored-policy migration inventory are defined
+in `event-reaction-refinement-plan.md`. Existing histories require targeted
+authorized edits after the coordinated cold runtime release, preserving unrelated
+reaction/ACL clauses, identities, keys and pending outcomes. Source-template
+changes alone are not deployment. Integration and release validation remain open.
 
 ## 3. Prove the complete lifecycle, then release
 

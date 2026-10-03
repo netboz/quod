@@ -89,7 +89,7 @@ test('signed goal bytes match the Erlang browser fixture', () => {
       '000e71756f643a676f616c2d74657374' +
       '0000000000000000000000000000000000000000000000000000000000000020' +
       '0000001268756d616e5f7573657228616c696365292e' +
-      '0102000001a3185c5000000000136173736572747a287361766564286f6b29292e',
+      '0103000001a3185c5000000000136173736572747a287361766564286f6b29292e',
   )
 })
 
@@ -293,11 +293,16 @@ test('cursor Accept persists the original request before an uncertain reply', as
     const open = await signedGoal(identity, signedCursor(), { journal })
     assert.equal(open.cursor, 'cursor-lost-accept')
     assert.deepEqual(await journal.list(), [])
+    let operationId
     await assert.rejects(
       signedCursorCommand(identity, open.cursor, 'accept'),
-      error => error.outcomeUnknown === true,
+      error => {
+        operationId = error.operationId
+        return error.outcomeUnknown === true
+      },
     )
     const [pending] = await journal.list()
+    assert.equal(operationId, pending.id)
     assert.equal(pending.signing_key, b64urlForTest(identity.provider.publicKey))
     assert.equal(typeof pending.request, 'string')
     assert.equal(typeof pending.signature, 'string')
@@ -311,6 +316,91 @@ test('cursor Accept persists the original request before an uncertain reply', as
     const [resolved] = await resolveSignedOperations(identity, { journal })
     assert.equal(resolved.reply.status, 'committed')
     assert.deepEqual(await journal.list(), [])
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+for (const [failure, response] of [
+  ['lost response body', () => ({ ok: true, status: 200, json: async () => { throw new TypeError('body lost') } })],
+  ['broken JSON', () => new Response('{', { status: 200 })],
+  ['missing write result', () => jsonResponse(200, {})],
+  ['null response', () => jsonResponse(200, null)],
+  ['unrecognized write result', () => jsonResponse(200, { result: 'other' })],
+  ['empty gateway failure', () => new Response('', { status: 502 })],
+]) {
+  test(`cursor Accept retains its exact request after ${failure}`, async () => {
+    const previousFetch = globalThis.fetch
+    const identity = signedIdentity(), journal = memoryOperationJournal()
+    const calls = []
+    globalThis.fetch = async url => {
+      calls.push(url)
+      return calls.length === 1
+        ? jsonResponse(200, { result: 'solution', cursor: 'body-loss', bindings: {} })
+        : response()
+    }
+    try {
+      const open = await signedGoal(identity, signedCursor(), { journal })
+      let operationId
+      await assert.rejects(signedCursorCommand(identity, open.cursor, 'accept'), error => {
+        operationId = error.operationId
+        return error.outcomeUnknown === true
+      })
+      const [row] = await journal.list()
+      assert.equal(row.id, operationId)
+      assert.equal(calls.length, 2)
+      globalThis.fetch = async (url, init) => {
+        assert.equal(url, '/api/goals/outcomes')
+        const body = JSON.parse(init.body)
+        assert.equal(body.request, row.request)
+        assert.equal(body.signature, row.signature)
+        return jsonResponse(200, { result: 'operation_outcome', status: 'committed', terminal: true })
+      }
+      await resolveSignedOperations(identity, { journal, operationId })
+      assert.deepEqual(await journal.list(), [])
+    } finally { globalThis.fetch = previousFetch }
+  })
+}
+
+test('pending cursor Accept identifies its journal row and resolution never submits another request', async () => {
+  const previousFetch = globalThis.fetch
+  const journal = memoryOperationJournal()
+  const identity = signedIdentity()
+  const ref = { ns: 'quod:agent-test', anchor: Buffer.from(u256(0x10)).toString('hex'),
+    coordinator: '12'.repeat(32), coordinator_admission: '34'.repeat(32), group_id: '56'.repeat(32) }
+  // A separate unfinished write must remain untouched when resolving this edit.
+  await signedGoal(identity, signedWrite(), { journal,
+    post: async () => ({ result: 'pending', ...ref }) })
+  const [unrelated] = await journal.list()
+  globalThis.fetch = async url => {
+    if (url === '/api/goals/cursors') return jsonResponse(200, {
+      result: 'solution', cursor: 'cursor-pending-edit', bindings: {},
+    })
+    assert.equal(url, '/api/goals/cursors/cursor-pending-edit/accept')
+    return jsonResponse(202, { result: 'pending', ...ref, group_id: '78'.repeat(32) })
+  }
+  try {
+    const open = await signedGoal(identity, signedCursor(), { journal })
+    const accepted = await signedCursorCommand(identity, open.cursor, 'accept')
+    const stored = (await journal.list()).find(row => row.id !== unrelated.id)
+    assert.equal(accepted.operationId, stored.id)
+    let lookups = 0
+    const results = await resolveSignedOperations(identity, { journal,
+      operationId: accepted.operationId,
+      post: async (url, body) => {
+        lookups += 1
+        assert.equal(url, '/api/goals/outcomes')
+        assert.equal(body.request, stored.request)
+        assert.equal(body.signature, stored.signature)
+        assert.deepEqual(body.outcome_ref, stored.outcome_ref)
+        return { result: 'group_outcome', ...stored.outcome_ref,
+          status: 'committed', terminal: true }
+      },
+    })
+    assert.equal(lookups, 1)
+    assert.equal(results.length, 1)
+    assert.equal(results[0].reply.status, 'committed')
+    assert.deepEqual(await journal.list(), [unrelated])
   } finally {
     globalThis.fetch = previousFetch
   }

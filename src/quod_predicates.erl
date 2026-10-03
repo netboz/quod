@@ -26,12 +26,11 @@ The typed **external-predicate contract** and the per-run **execution context**
 
 2. **Classes.** Each governed external predicate declares a class:
 
-   | class | may read runtime | may stage D | may mutate P | may perform E |
-   |---|---|---|---|---|
-   | `query`      | yes | no  | no  | no  |
-   | `staging`    | yes | yes | no  | no  |
-   | `projection` | yes | no  | yes | no  |
-   | `reaction`   | yes | no  | no  | yes |
+   | class | role |
+   |---|---|
+   | `query` | Read context, state or governed runtime services. |
+   | `staging` | Stage durable operations in an ordinary proof. |
+   | `reaction` | Bind request metadata while matching eligibility. |
 
    Governed predicates register through `load/1`, which routes them via
    `dispatch/3`. Before delegating to the real handler, `dispatch/3` checks the
@@ -48,8 +47,8 @@ The typed **external-predicate contract** and the per-run **execution context**
 The context *kinds* are `proof` (a normal client proof or staged write),
 `verdict` (a committee membership re-proof — strictly local),
 `policy_verdict` (a strictly local authorization re-proof with every governed
-bridge disabled), `projection` (a runtime P handler, §8), and `reaction` (one
-post-commit `react_on/3` continuation).
+bridge disabled), and `reaction` (read-only matching of one `react_on/2`
+declaration). Its selected goal subsequently uses an ordinary `proof` context.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -67,8 +66,7 @@ post-commit `react_on/3` continuation).
          policy_verdict_context/2, reaction_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
-         with_chain/2, with_executor/2, ctx_executor/1, ctx_handler/1]).
--export([projection_context/3]).
+         with_chain/2, with_executor/2, ctx_executor/1]).
 %% class metadata (also drives dispatch)
 -export([class/2, allowed/2]).
 
@@ -87,13 +85,10 @@ post-commit `react_on/3` continuation).
                height  = 0 :: non_neg_integer(),
                subject = undefined :: term(),
                chain   = [] :: [quod_proof_context:identity()],
-               %% the executing state_handler in a `projection` context;
-               %% `undefined` elsewhere.
-               id      = undefined :: term(),
                executor = undefined :: term()}).
 
--type kind()  :: proof | verdict | policy_verdict | projection | reaction.
--type class() :: query | staging | projection | reaction.
+-type kind()  :: proof | verdict | policy_verdict | reaction.
+-type class() :: query | staging | reaction.
 -type dependency() :: none | proof_bound | committed_snapshot | live_observation.
 -type ctx()   :: #qctx{} | undefined.
 -export_type([kind/0, class/0, ctx/0]).
@@ -123,7 +118,7 @@ load_modules(Est, Modules) when is_list(Modules) ->
               end
       end, Est, Modules).
 
--doc "Build the immutable genesis manifest for Quod-owned predicate modules.".
+-doc "Record selected module names and their founding BEAM digests as immutable provenance.".
 -spec module_manifest([module()]) ->
           {ok, module_manifest()} | {error, term()}.
 module_manifest(Modules) when is_list(Modules) ->
@@ -149,7 +144,7 @@ module_manifest_entries([Module | Rest], Acc) ->
         {error, _} = Error -> Error
     end.
 
--doc "Validate one committed manifest against the exact local BEAM files.".
+-doc "Validate the declared names against the installed release; founding digests are provenance.".
 -spec valid_manifest(term()) ->
           {ok, [module()]} | {error, term()}.
 valid_manifest(Manifest) when is_list(Manifest) ->
@@ -168,19 +163,13 @@ valid_manifest_shape(_) -> false.
 
 validate_manifest_entries([], Acc) ->
     {ok, lists:reverse(Acc)};
-validate_manifest_entries([{Module, ExpectedDigest} | Rest], Acc) ->
+validate_manifest_entries([{Module, _FoundingDigest} | Rest], Acc) ->
     case predicate_module_beam(Module) of
-        {ok, Beam} ->
-            case crypto:hash(sha256, Beam) of
-                ExpectedDigest ->
-                    validate_manifest_entries(Rest, [Module | Acc]);
-                _ ->
-                    {error, {predicate_module_digest_mismatch, Module}}
-            end;
+        {ok, _Beam} -> validate_manifest_entries(Rest, [Module | Acc]);
         {error, _} = Error -> Error
     end.
 
--doc "Load only modules whose local code matches the committed genesis manifest.".
+-doc "Load declared modules from the installed coordinated release into this engine.".
 -spec load_manifest(tuple(), module_manifest()) ->
           {ok, tuple()} | {error, term()}.
 load_manifest(Est, Manifest) ->
@@ -196,7 +185,10 @@ load_manifest_modules(Est, [Module | Rest]) ->
         {error, _} = Error -> Error
     end.
 
-%% Loading is the only point where committed module code is executed.  Keep
+%% A cold coordinated release replaces native code and rebuilds every registry.
+%% The single durable manifest shape is unchanged; its digest records founding
+%% provenance, not a lifetime implementation lock or hot-update authority.
+%% Loading is the only point where declared module code is executed. Keep
 %% that dependency boundary typed: a missing module, failed on_load, false
 %% marker, or failing load/1 makes this ontology unavailable and is reported by
 %% its projection owner. Common protocol modules call the same helper through
@@ -292,15 +284,14 @@ register(Est, Functor, Class, Module, Function) ->
 Register a bridge with its dependency contract. Proof-bound queries derive
 only engine-authenticated context; committed-snapshot queries capture all reads
 through the ordinary MVCC dependency machinery. Live observations cannot
-authorize a durable diff. This declaration belongs to the audited pinned module,
+authorize a durable diff. This declaration belongs to the audited release module,
 not to caller-supplied Prolog data.
 """.
 -spec register(tuple(), {atom(), arity()}, class(), dependency(), module(), atom()) -> tuple().
 register(#est{db = Db0, fs = Fs0} = Est, {Name, Arity} = Functor,
          Class, Dependency, Module, Function)
   when is_atom(Name), is_integer(Arity), Arity >= 0,
-       (Class =:= query orelse Class =:= staging orelse
-        Class =:= projection orelse Class =:= reaction),
+       (Class =:= query orelse Class =:= staging orelse Class =:= reaction),
        ((Class =:= query andalso
          (Dependency =:= proof_bound orelse Dependency =:= committed_snapshot
           orelse Dependency =:= live_observation)) orelse
@@ -395,8 +386,8 @@ class(Est, Functor) ->
 -doc """
 Whether a predicate of `Class` may run in a context of `Kind` (the matrix in the
 module doc). `query` reads everywhere except a deterministic policy verdict;
-`staging` writes only inside a `proof`; `projection` runs only in its own
-context.
+`staging` writes only inside a `proof`; `reaction` binds private request metadata
+only while matching a reaction declaration.
 """.
 -spec allowed(class(), kind() | undefined) -> boolean().
 allowed(_Class,     undefined)   -> false;
@@ -404,8 +395,6 @@ allowed(query,      policy_verdict) -> false;
 allowed(query,      _Kind)       -> true;
 allowed(staging,    proof)       -> true;
 allowed(staging,    _Kind)       -> false;
-allowed(projection, projection)  -> true;
-allowed(projection, _Kind)       -> false;
 allowed(reaction,   reaction)    -> true;
 allowed(reaction,   _Kind)       -> false.
 
@@ -457,17 +446,7 @@ policy_verdict_context(Ns, Height) ->
     #qctx{kind = policy_verdict, ns = Ns, height = Height,
           subject = undefined}.
 
--doc """
-A `projection` context: a `m:quod_runtime` handler converging its piece of P against the
-frozen snapshot at `Height`. `HandlerId` identifies the executing declaration (readable by
-content via `current_prolog_flag`, like every context field — forge-resistant, not secret).
-""".
--spec projection_context(binary() | undefined, non_neg_integer(), term()) -> #qctx{}.
-projection_context(Ns, Height, HandlerId) ->
-    #qctx{kind = projection, ns = Ns, height = Height, subject = undefined,
-          id = HandlerId}.
-
--doc "A post-commit reaction continuation over the frozen block snapshot.".
+-doc "Read-only reaction eligibility over a committed snapshot.".
 -spec reaction_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 reaction_context(Ns, Height) ->
     #qctx{kind = reaction, ns = Ns, height = Height, subject = undefined}.
@@ -482,10 +461,6 @@ with_chain(undefined, _Chain) ->
 -doc "Bind the executor selected by the existing reaction continuation.".
 -spec with_executor(ctx(), term()) -> ctx().
 with_executor(Ctx = #qctx{kind = reaction}, Executor) -> Ctx#qctx{executor = Executor}.
-
--spec ctx_handler(ctx()) -> term().
-ctx_handler(#qctx{kind = projection, id = Id}) -> Id;
-ctx_handler(_) -> undefined.
 
 -spec ctx_executor(ctx()) -> term().
 ctx_executor(#qctx{executor = Executor}) -> Executor;

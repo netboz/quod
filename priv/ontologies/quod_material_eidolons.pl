@@ -18,16 +18,18 @@ surface_recipe(marble, solid, marble, Surface) :- textured_surface(floor_tiles_0
 surface_recipe(metal, solid, metal, surface(<<"#919DA0">>,1000,350,0,[])).
 surface_recipe(bronze, solid, bronze, surface(<<"#AE8051">>,1000,400,0,[])).
 
-%% A more specific material class wins. Incomparable alternatives or two
-%% recipes at the same specificity have no unique answer; order cannot decide.
+%% Enumerate every most-specific recipe. Incomparable alternatives or two
+%% recipes at the same specificity remain choices for the consuming world.
 class_eidolon(Material, playing, Style, recipe(Ns, Anchor, Recipe)) :-
     material_vocabulary(MaterialNs, MaterialAnchor),
+    findall(S, surface_recipe(_, S, _, _), RawStyles),
+    sort(RawStyles, Styles), member(Style, Styles),
     findall(candidate(Class, Id), surface_recipe(Class, Style, Id, _), Candidates),
     findall(Class, member(candidate(Class, _), Candidates), Classes),
     MaterialNs::(current_ontology_identity(MaterialNs, MaterialAnchor),
-                 most_specific_materials(Material, Classes, Selected)),
+                 most_specific_classes([Material], Classes, Selected)),
     findall(Id, (member(candidate(Class, Id), Candidates), member(Class, Selected)), Ids),
-    sort(Ids, [Recipe]), current_ontology_identity(Ns, Anchor).
+    sort(Ids, Recipes), member(Recipe, Recipes), current_ontology_identity(Ns, Anchor).
 
 eidolon(Recipe, material(Material), Surface) :-
     surface_recipe(Class, _, Recipe, Surface), material_vocabulary(Ns, Anchor),

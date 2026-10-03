@@ -183,11 +183,8 @@ attribute(Culture, pool, pool(Culture, Kind, Gender)) :-
 select(Culture, Kind, Gender, Own, Source) :-
     pool(Own, Kind, Gender, Source),
     (   var(Culture) -> Culture = Own
-    ;   within(Own, Culture)
+    ;   once(isa(Own, Culture))
     ).
-
-within(Culture, Culture).
-within(Culture, Wider) :- isa(Culture, Between), within(Between, Wider).
 
 pool_size(_, _, _, recipe(Recipe), N) :- size(Recipe, N).
 pool_size(Culture, Kind, Gender, listed, N) :-

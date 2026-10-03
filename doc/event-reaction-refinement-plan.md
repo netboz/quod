@@ -1,621 +1,462 @@
-# Events, reactions, and restart reconstruction — plan
+# Events, reactions, and recovery
 
-**Status:** Slice 0 document/comment alignment, Slice 1 local reactions, Slice
-2 subscribed reactions, and Slice 3 `trigger_event/1` with its
-V9/V5/plan-V6 format generation are complete, committed, and deployed. Their
-full local gates and final adversarial reviews passed. Slices 4--5 remain
-planning only.
+Status: implemented in the working tree. Stored-policy migration and coordinated
+activation remain deployment prerequisites. The contracts below replace the
+unsafe physical-node reaction dispatch and reaction-driven resource restoration.
+Validation evidence is recorded in `WORK-IN-PROGRESS.md`.
+Existing installations need explicit updates of their stored declarations;
+changing a source file does not rewrite an ontology's history.
 
-This plan refines the event sections of `agent-fipa-plan.md`,
-`minimal-agent-delivery-plan.md`, and `ontology-subscription-plan.md`.
-`inter-ontology.md` remains authoritative for `::`, ACL, OCC, DTX, and outcome
-recovery.
+`inter-ontology.md` governs proof, authorization, transactions and recovery.
+`ontology-actor-architecture.md` governs identity and hosting.
+`prolog-editing-plan.md` records the live-code-editing contract.
 
-The design is deliberately small. BBS/BBSvx already established the useful
-core:
+## 1. One reaction concept
 
-```text
-committed transaction
-    -> the existing reducer reports the operations it actually applied
-    -> convert each applied operation to an event
-    -> unify the event with react_on clauses
-    -> call each matching handler with the resulting bindings
-```
-
-Quod keeps that model and adds only the correctness it already requires:
-certified remote history, no historical reaction replay, and deterministic
-restart reconstruction.
-
-## 1. What Quod already has
-
-Quod already publishes one `applied_live` message after applying a committed
-transaction. `quod_committed_projection` already reports both the requested
-`diff` and the ordered `applied_ops` returned by
-`quod_diff:apply_ops_report/2`. `quod_runtime` already receives the live
-publication and runs its local state-convergence tier. The current publication
-still exposes the requested diff; Slice 1 carries the already-computed
-`applied_ops` across that boundary as well, rather than deriving them again.
-
-Quod also:
-
-- stores and validates founding `react_on/3` declarations;
-- follows subscribed ontologies through certified `quod_foreign_log` history;
-- materializes their published facts locally; and
-- distinguishes live application from replay.
-
-Slices 1 and 2 provide the short connection between those pieces: turn each
-newly applied operation into an event, unify it with `react_on/3`, and call the
-bound handler. Remote certified history obtains the same `applied_ops` from the
-same committed-state reducer and enters the same function after its
-reaction-free baseline.
-
-## 2. One event list: the applied operations
-
-There is no second event envelope or event store. The event source is the
-transaction's ordered `applied_ops`: the subset of its signed diff which the
-existing canonical reducer says actually changed the published projection.
-This distinction is load-bearing. Asserting a fact already present, or
-retracting an absent fact, is a committed no-op and must not manufacture a
-change notification.
-
-One shared, process-free `diff_to_events(AppliedOps)` function performs the
-only conversion:
-
-| applied operation | reaction event |
-|---|---|
-| assert plain fact `Fact` | `assert(Fact)` |
-| retract plain fact `Fact` | `retract(Fact)` |
-| `{event, Term}` | `Term` |
-
-`asserta` and `assertz` both become `assert`. Rule changes are not silently
-presented as plain-fact events. The reducer preserves transaction order while
-omitting no-ops. Reaction code consumes that result; it does not inspect the
-final snapshot or implement another reducer.
-
-Rejected transactions, aborted DTX groups, genesis replay, and consensus
-control records produce no reaction event. A committed DTX participant exposes
-its diff exactly once when `Finalize(commit)` publishes that participant's
-facts.
-
-### Explicit events
-
-The existing BBSvx idea is retained:
+A reaction is an ordinary Prolog goal owned by an agent:
 
 ```prolog
-trigger_event(Term)
+react_on(assert(task_ready(Agent, Task)), handle_task(Task)) :-
+    me(agent_instance_ref(_, _, Agent)),
+    instance_of(ConcreteClass, Agent),
+    isa(ConcreteClass, task_worker).
 ```
 
-During a proof, this staging-class external predicate, owned by the shared
-`quod_transaction_predicates` module, dereferences `Term`, requires it to be a
-ground callable Prolog term valid on the normal bounded wire, and stages
-`{event, Term}` in the proof overlay. It does not call a handler immediately.
-The canonical `quod_diff` reducer reports every valid explicit event as applied
-while making no fact mutation, so recurring identical explicit events are not
-deduplicated.
-
-The three runtime event wrappers are reserved. `trigger_event/1` refuses
-`assert(_)`, `retract(_)`, and `from(_,_,_)`: an explicit signal must not
-pretend that a fact changed or that it came from a certified remote ontology.
-The same `quod_diff` validation owner governs staging, durable diff validation,
-and reaction-pattern admission; there is no parser-only convention. The
-reserved wrappers have different roles at that boundary: `assert/1`,
-`retract/1`, and `from/3` remain valid outer reaction-pattern structure for
-fact and certified-remote publications, but they are refused as explicit-event
-payloads and as bare explicit-event patterns.
-
-Quod's proof overlay is a final-state differ, not a chronological journal of
-every Erlog database call. In particular, it must reorder `asserta` operations
-to preserve Prolog clause order and erase a staged assertion which is retracted
-before sealing. Slice 3 does not introduce a second mutation model merely to
-invent chronology that the durable diff never had. The exact ordering rule is:
-
-1. the existing canonical net fact diff is retained byte-for-byte and in its
-   existing order;
-2. explicit events follow those fact operations, in `trigger_event/1` call
-   order; and
-3. the resulting single list is the signed diff and the reducer's apply order.
-
-The overlay therefore gains only one rollback-safe occurrence accumulator,
-owned by the existing differ and included in its checkpoints/revisions.
-`get_local_changes/1` remains the sole extraction API and returns
-`FactOps ++ EventOps`. There is no transaction `events` field, event store,
-event owner, or alternative sealing path. This rule also means every reaction
-sees the transaction's final committed snapshot before either fact-derived or
-explicit events run.
-
-If the transaction commits, the event is signed, audited, delivered to
-subscribers with that diff, and dispatched in that canonical order. If the
-transaction fails or is rejected, it disappears with the rest of the staged
-diff. A transaction containing only `{event, Term}` is material and therefore
-still enters the ledger.
-
-Adding the `{event, Term}` diff operation changes the canonical transaction,
-validation, DTX, and history formats. It belongs to a separately reviewed
-format-break slice followed by a coordinated clean re-found. Existing
-assert/retract reactions can be completed before it.
-
-## 3. One `react_on` dispatcher
-
-The declaration stays:
-
-```prolog
-react_on(Executor, Pattern, Handler).
-```
-
-`Executor` owns the resulting work. It is not the event source and it is not
-restricted to one class. Variables shared by `Pattern`, `Executor`, and
-`Handler` receive the values produced by the event match.
-
-Local patterns match an event directly:
-
-```prolog
-react_on(agent(Agent),
-         assert(task_ready(Agent, Task)),
-         notify_agent(Agent, Task)).
-
-react_on(node(Node),
-         alarm(Service, Reason),
-         notify_operator(Node, Service, Reason)).
-```
-
-A remote source is represented only by the existing exact wrapper:
-
-```prolog
-react_on(agent(Agent),
-         from(SourceNamespace, SourceAnchor,
-              assert(task_ready(Agent, Task))),
-         notify_agent(Agent, Task)).
-```
-
-`quod_runtime` may use the source and outer event functor to avoid considering
-unrelated clauses. The actual match must use `erlog_int:unify_prove_body`.
-That one operation installs the variable bindings and continues the selected
-handler. Erlang must not implement another matcher, wildcard syntax, binding
-map, or typed callback catalogue.
-
-The handler is ordinary trusted Prolog code. Erlang external predicates remain
-the governed bridge to local processes and the outside world. Slice 1 adds one
-`reaction` execution context and one `reaction` external-predicate class to the
-existing `quod_predicates` dispatcher; there is no second registry. The exact
-matrix is:
-
-| external-predicate class | reaction context |
-|---|---|
-| `query` | allowed |
-| `reaction` | allowed |
-| `staging` | refused |
-| `projection` | refused |
-
-Reaction-class bridges are refused in proof, verdict, policy-verdict, and
-projection contexts, so they cannot perform outward work before commit. The
-reaction runs on a read-only frame, and any Prolog body which nevertheless
-stages D fails loudly. If it needs a new durable change, the resolved acting
-agent submits an ordinary signed goal through the existing `can_invoke/4`,
-proof, OCC/DTX, consensus, and outcome path.
-
-Until generic agent signing exists, there is no node-only substitute for that
-durable-goal path.
-
-## 4. Exact local order
-
-For one newly committed block:
-
-1. `quod_prolog` applies the facts and publishes the block-final snapshot.
-2. `quod_runtime` brings rebuildable local state up to date through the
-   existing `state_handler/4` goals.
-3. For each applied transaction in commit order, `diff_to_events` receives its
-   canonical ordered `applied_ops` and returns the corresponding events.
-4. The single reaction dispatcher unifies each event with active
-   `react_on/3` clauses and calls the bound handlers.
-5. Executor resolution allows only the unique current owner host to perform
-   the observable work.
-
-Local derived state is therefore current before a reaction can inspect it.
-`quod_prolog` does not wait for reaction handlers and consensus receives no new
-callback.
-
-## 5. Why restart reconstruction is separate
-
-`react_on` responds to a new occurrence. It cannot by itself restore a process
-after restart because the fact requesting that process may have been committed
-days earlier.
-
-The existing declaration remains narrowly responsible for this job:
-
-```prolog
-state_handler(Id, WatchedPatterns, Needs, ConvergeGoal).
-```
-
-The same `ConvergeGoal` receives changed keys after a live transaction and
-`all` after replay or restart. It reads current committed truth and makes the
-local process/index/timer state agree with it. It does not match application
-events or send application notifications.
-
-For ontology hosting, for example, a node ontology may contain:
-
-```prolog
-hosts_ontology(NodeRef, Namespace, Anchor, Visibility).
-```
-
-One state handler watches this fact. Its one convergence goal ensures the
-ontology is running when the fact exists and stopped when it does not. The same
-goal handles the live assertion, live retraction, and node restart. This can
-replace a separate durable namespace-manager restart-intent store; it does not
-require a duplicate `react_on` rule.
-
-Thus there are two ordered phases, but no duplicated job:
-
-- state convergence answers **what must be running now?**;
-- `react_on` answers **what should happen because this new event occurred?**
-
-## 6. Subscribed ontologies use the same dispatcher
-
-An ontology subscribes to an ontology, not to a predicate:
-
-```prolog
-subscribes(TargetNamespace, TargetAnchor).
-```
-
-Each physical node hosting subscriber A follows target B through the existing
-shared `quod_foreign_log` verifier and materializer. On first attachment,
-restart, cache rebuild, or gap repair, it reconstructs B's current certified
-projection but fires no historical reactions.
-
-After that baseline is ready, every newly certified contiguous B transaction
-is folded by the existing canonical materializer. Its ordered `applied_ops`
-enter the same `diff_to_events` function. The same reaction dispatcher receives
-each event as
-`from(BNamespace, BAnchor, Event)`.
-
-There is no special remote matcher and no trusted raw push. A B host may wake
-the follower or send an existing certified page, but A accepts the diff only
-after the normal history verification. All A hosts can therefore reconstruct
-the same certified view. Executor resolution ensures that only the current
-logical owner performs each observable reaction.
-
-The first implementation sends/follows the published certified diff and lets
-A's `react_on` clauses select relevant events. It adds no durable
-predicate-level subscription and no target-side pattern registry. If measured
-traffic later justifies filtering, a B-side Prolog publication/filter rule may
-reduce what B sends, but it must remain an optimization around the same
-certified history and subscriber-side match.
-
-## 7. Chaining and cycles
-
-Subscriptions do not forward events automatically. If C changes, B may react
-to C. A sees a new B event only if B then commits its own fact or explicit
-event and A subscribes to B.
-
-This makes Finger -> Hand -> Arm -> Body -> Avatar explicit at every semantic
-step. Circular subscriptions are allowed and are inert by themselves. If
-application reactions create a transaction cycle, their event/cause id and
-ordinary handled facts must terminate that application cycle.
-
-## 8. Replay and reliability
-
-Boot, recovery replay, foreign cache reconstruction, and resnapshot update D
-and P but execute no old `react_on` handlers. Only transactions observed after
-the live baseline produce best-effort reactions.
-
-A crash after commit but before a best-effort handler runs may lose that
-reaction. Work which must survive uses existing durable custody:
-
-- a committed effect descriptor and the effect journal;
-- outbox/inbox facts; or
-- a signed goal with a stable operation reference.
-
-`react_on` may wake such work quickly; it is never its only durable record.
-
-## 9. Authorization remains singular
-
-No event ACL is added:
-
-- A's ordinary `can_invoke/4` controls writing/removing its `subscribes/2`;
-- B's ordinary `can_invoke/4` controls whether A may establish/renew delivery;
-- declaration authority controls which stored `react_on/3` and
-  `state_handler/4` clauses execute;
-- committed facts resolve the unique Executor owner; and
-- every durable consequence goes through the ordinary signed-goal ACL.
-
-The existing founding-only declaration gate remains until the reviewed
-`can_declare_runtime` policy lands. There is no exception for node, agent,
-subscription, or lifecycle handlers.
-
-## 10. Exact keep, refactor, and delete map
-
-### Keep
-
-- `applied_live` and the `live | replay` distinction;
-- `quod_diff:apply_ops_report/2` and the committed projection's `applied_ops`
-  as the sole change/event source;
-- `quod_runtime` as the one P-then-reaction owner;
-- the one-goal `state_handler/4` live/restart convergence contract;
-- `react_on(Executor, Pattern, Handler)`;
-- `erlog_int:unify_prove_body` as the only matcher and binding boundary;
-- `quod_foreign_log` as the only certified foreign-history owner;
-- `quod_feed`, certified catch-up pages, `subscribes/2`, directory routing,
-  `can_invoke/4`, effect journal, signed goals, OCC, DTX, consensus, and
-  outcome recovery.
-
-### Refactor
-
-- add one shared `diff_to_events` helper used by local and foreign dispatch;
-- carry the existing projection result's `applied_ops` through `applied_live`
-  instead of reapplying or inspecting the raw diff in the runtime;
-- extend the existing runtime worker from state convergence to ordered
-  state-convergence-then-reaction dispatch;
-- execute the bound Handler as a Prolog continuation instead of translating it
-  to a closed Erlang effect type;
-- expose newly certified foreign diffs from the existing follower while
-  keeping initial/rebuild/resnapshot notices reaction-free;
-- later make node and agent hosting facts converge through state handlers and
-  remove duplicate restart-intent authority.
-
-### Delete or never add
-
-- a second event envelope or event store;
-- a separate transaction `events` field;
-- raw event broadcast to every agent process;
-- a second event bus, ACL, matcher, unifier, executor, verifier, or cache;
-- a typed Erlang reaction callback catalogue;
-- historical reaction replay;
-- a special node lifecycle reaction path;
-- routes, endpoints, or queues in durable subscription facts;
-- forwarding shims for deleted lifecycle/reaction paths.
-
-## 11. Performance rules
-
-- Candidate indexing uses only source and outer functor; Prolog performs the
-  match.
-- State convergence remains once per block; reactions preserve transaction and
-  operation order.
-- Network and cache work stays asynchronous and message-driven. No sleep,
-  `wait_until`, or synchronous remote call runs in `quod_runtime`.
-- A configurable bounded live queue may drop best-effort reactions and
-  resnapshot P under overload. It cannot lose effect-journal or outbox custody.
-- There is no hard-coded limit on the number of ontologies or subscriptions.
-  Inactive identities keep disposable certified cache on disk and may retain
-  one bounded current projection already verified by the running owner.
-  Ledger and phase-index handles, channels, and workers exist only while used;
-  the closed derived phase session may remain beside the disk cache. Restart
-  requires one full verification before in-memory reuse.
-- Per-message validation and operator-configured resource budgets protect a
-  node without changing ontology semantics.
-
-Metrics and dashboard panels land with their owning implementation: event
-batches, candidate/match/handler counts, handler failures, best-effort drops,
-resnapshots, state-convergence latency, reaction latency, and certified-source
-lag. The hosted namespace uses Quod's existing per-namespace label; arbitrary
-target identities, executor values, event terms, and failure payloads never
-become metric labels.
-
-## 12. Reviewable implementation slices
-
-### Slice 0 — align documents
-
-**Status: complete, committed, and deployed.**
-
-- Make the simple applied-ops -> unify -> handler pipeline identical in the agent,
-  subscription, content-layer, and node-hosting documents.
-- Remove the planned typed reaction-effect catalogue and target-side pattern
-  registry.
-- Correct every statement implying that Quod needs another event envelope or
-  another state reducer.
-- Change no runtime behavior; source comments may be corrected with the docs.
-
-### Slice 1 — local assert/retract reactions
-
-**Status: complete, committed, and deployed; compile, xref, Dialyzer, focused
-EUnit, and full EUnit were green at delivery.**
-
-- Add the shared `diff_to_events` helper for existing fact operations and feed
-  it the `applied_ops` already returned by `quod_committed_projection`.
-- Complete `react_on/3` indexing, `unify_prove_body`, executor resolution,
-  reaction context, and asynchronous handler execution in `quod_runtime`.
-- Add the one `reaction` predicate class and its exact context matrix to the
-  existing predicate dispatcher.
-- Until generic agent hosting exists, resolve only executors which the local
-  committed ontology proves belong to this node, together with the node's own
-  identity. Unresolvable or ambiguous executors are inert and counted; no
-  node-only fallback is allowed.
-- Preserve state-before-reaction and exact order.
-- Delete replaced dormant typed-dispatch code/documentation.
-- No format change.
-
-### Slice 2 — subscribed reactions
-
-**Status: complete, committed, and deployed; production compile, xref,
-Dialyzer, focused EUnit, and full EUnit were green at delivery.**
-
-- Expose the canonical materializer's newly certified contiguous `applied_ops`
-  from the existing foreign follower.
-- Treat first attachment/rebuild/resnapshot as a reaction-free baseline.
-- Dispatch later remote events through the exact Slice-1 helper with the
-  `from/3` source wrapper.
-- Add no target-side registration or authorization path: pull following uses
-  only already reachable certified history. Any later cooperative push or
-  wake-up must enter through the target's existing ACL and may add no second
-  registration authority.
-
-`ontology-subscription-plan.md` retains the implemented subscription catalogue
-and certified-follow contract and points its remaining reaction work here.
-
-### Slice 3 — `trigger_event/1` (implemented and deployed)
-
-#### One staging path
-
-- Extend `quod_erlog_db_local_prove` itself with a rollback-safe
-  `event_ops_rev` field and one `stage_event/2` operation. Its existing
-  checkpoint, restore, immutable revision, dirty check, and
-  `get_local_changes/1` path own the new occurrences. Fact staging and fact
-  extraction are not rewritten and no second proof/session field is added.
-- Register `trigger_event/1` as `staging` through the existing
-  `quod_predicates:register/5` dispatcher from
-  `quod_transaction_predicates:load/1`. Keep `transaction/1` as the existing
-  interpreter control predicate; do not create a second transaction module or
-  let `trigger_event/1` bypass the context matrix.
-- Dereference once, validate once through the shared event-term validator,
-  then call `stage_event/2`. `stage_event/2` obeys the overlay's existing
-  `read_only` guard just like every fact mutator, so the first attempted
-  mutation is refused at the owning boundary. Checkpoint-enabled alternatives,
-  `transaction/1` rollback, proof savepoints, and cursor alternatives restore
-  the same overlay revision and therefore remove the event naturally. Ordinary
-  non-transactional Erlog backtracking retains staged mutations exactly as it
-  already retains staged assertions. A reaction reaches the existing
-  staging-class refusal before it can stage anything.
-
-#### One operation grammar and reducer
-
-- Extend `op()` and `quod_diff:valid_ops/1` with `{event, Term}`. Move the
-  generic ground-term walker from `quod_predicates` to `quod_wire_term` and
-  reuse it rather than adding another groundness implementation.
-- Let `quod_diff` own the shared explicit-event term and pattern rules. A
-  concrete event is ground, callable, bounded, and not one of the reserved
-  wrappers. A reaction event-pattern may contain variables, but a bare
-  explicit-event pattern still cannot impersonate the reserved fact or remote
-  wrappers. `quod_runtime` reuses that pattern check while continuing to
-  accept those wrappers as its outer fact/remote pattern structure.
-- `apply_ops_report/2` returns every valid `{event, Term}` in `applied_ops`
-  without changing the Erlog database. It never deduplicates explicit events.
-  `diff_to_events/1` maps the operation to `Term` and the already-shared local
-  and subscribed dispatch path does the rest.
-- Fact-only helpers take their fail-safe direction explicitly: head extraction,
-  functor touches, membership detection, and catalogue invalidation skip
-  events, while `assertion_only` rejects them so genesis cannot contain an
-  event occurrence. Replace the permissive `{_Kind, {Head, Body}}` matches in
-  `quod_committed_projection:changed_heads/1`,
-  `quod_runtime:changed_heads/1`, and
-  `quod_commit_validation:diff_touches_membership/1` with exact fact-operation
-  matches. Audit `quod_simplex:touches_committee/1` and every other exhaustive
-  consumer the same way. In particular, a callable tuple-shaped event payload
-  must never be mistaken for a `{Head, Body}` clause.
-- An event-only diff is material through the existing `local_changes`, plan,
-  transaction, submission, OCC, DTX, history, and outcome machinery. Existing
-  plan operation counts and byte/count bounds include events; no new semantic
-  or population limit is introduced.
-
-#### Exact format break
-
-The data structures stay the same; only their accepted operation alphabet
-changes. The owners which cryptographically identify that alphabet change
-together:
-
-| owner | current | Slice-3 value | reason |
-|---|---:|---:|---|
-| transaction signature tuple | V8 | V9 | validators must reject a signer using the old diff grammar |
-| semantic transaction id | V4 | V5 | the semantic material grammar now includes occurrences |
-| signed DTX plan domain | V5 | V6 | a target plan may now carry event operations |
-
-DTX control, manifest, attestation, certified-reference, scope-wire, ledger
-entry, outcome, client-goal parser, and genesis-id versions do not change:
-they either bind the new plan/transaction digest opaquely or never interpret
-the diff grammar. Add old-version rejection vectors for transaction V8 and
-keyed plan V5, update the semantic-ID V4 golden vectors to V5, and state
-explicitly that unsigned plans are an in-VM test facility rather than a
-versioned network authority. Delete no-longer-current golden constants and do
-not retain decoders or forwarding shims. Replace the signing journal's private
-V8 tuple inspection with one shared current-transaction metadata decoder, so
-the journal cannot drift from `quod_transaction` on the next format change.
-
-This code must not be deployed on the existing anchor. It may land and be
-tested before generic actor identity, but production activation waits until
-that format work is also complete. Both changes receive one coordinated clean
-re-found; no intermediate event-only network is founded.
-
-#### Presentation and closure
-
-- Extend Explorer's one operation renderer and TypeScript discriminated union
-  with an `event` row containing `prolog_text(Term)`, never
-  `clause_text(Term)`. Event-only transactions show a non-empty operation list
-  but `root_facts_changed = false`; make both the backend computation in
-  `quod_explorer_http` and the live-feed derivation in `ui/src/store.ts`
-  fact-operation-aware. Give the current TypeScript `unknown` operation arm a
-  real fail-closed purpose or delete it, then rebuild the committed Explorer
-  assets from source.
-- Update `transaction-signatures.md`, distributed-proof format references,
-  content/event docs, moduledocs, types, comments, and golden vectors in the
-  same slice. Sweep all assert/retract-exhaustive consumers and every literal
-  V8/V4/plan-V5 reference. Delete stale wording rather than documenting two
-  generations.
-- Existing reaction counters and latency metrics already observe explicit
-  events through the common dispatcher. The existing diff-operation metric
-  already counts them. Add no duplicate event metric or dashboard panel unless
-  measurement shows a distinct operational question.
-
-### Slice 4 — hosting projections (implemented by automatic-route recovery Slice 2)
-
-This is the sole hosting-projection implementation. The minimal agent vertical
-in `agent-fipa-plan.md` consumes it, and later node/FIPA lifecycle slices add
-policy above it rather than adding another hosting owner.
-
-- Desired ontology hosting is the ordinary `hosts_ontology/4` fact in the
-  dedicated node actor ontology; exact private contacts are
-  `knows_ontology_host/4` facts there.
-- The genesis-pinned `node_ontology_hosting` state handler uses one projection
-  bridge for live changes and restart restoration.
-- Lifecycle effects remain one-time custody. The obsolete namespace desired
-  store and its callbacks/tests are deleted; the namespace manager now owns
-  only the root/system/node projection and one mutation lane.
-- Do not change root creation, consensus, directory routing, or signed goals.
-- Treat `generic-agent-identity-plan.md` and then
-  `node-instance-identity-plan.md` as the gates for the exact identity,
-  ownership, and hosting fact shapes.
-
-### Slice 5 — load and recovery acceptance
-
-- Test local, remote, chained, circular, DTX, restart, cache wipe, slow
-  subscriber, executor movement, and uncertainty cases.
-- Run mixed consensus + subscription + signed-agent load with three- and
-  four-ontology chains while monitoring errors, warnings, memory, drops, and
-  latency.
-- Set operator defaults from measurements and introduce no semantic population
-  limit.
-
-Each slice receives adversarial review before the next begins.
-
-## 13. Required tests
-
-1. `assert(task_ready(bob, t1))` binds variables in Executor and Handler through
-   `unify_prove_body` and calls the handler once.
-2. Canonical fact operations run first in their existing net-diff order;
-   explicit events follow in `trigger_event/1` call order. An identical
-   assertion and an absent retraction produce no reaction; recurring identical
-   explicit events each produce one reaction.
-3. Multiple transactions in one block converge state once but dispatch every
-   event in commit order.
-4. Replay, restart, cache rebuild, and resnapshot restore state and call zero
-   historical handlers.
-5. A hosting fact starts locally, restart restores it, and retraction stops it
-   through the same convergence goal.
-6. Every A host verifies the same B diff; only the unique executor host
-   performs observable work.
-7. Wrong anchor, forged page, outsider, missing entry, and stale committee data
-   dispatch nothing.
-8. A subscribed diff and the same local diff produce identical Prolog matches
-   and bindings apart from the explicit `from/3` source wrapper.
-9. DTX publishes each participant diff once at committed Finalize. A dedicated
-   event-only participant case proves publication at committed Finalize and
-   silence on abort.
-10. `trigger_event/1` rejects variables, non-callable or oversized terms, bad
-    wire terms, and the reserved `assert/1`, `retract/1`, and `from/3` wrappers;
-    rejected transactions dispatch nothing and old format versions fail
-    closed.
-11. An event-only transaction is signed, committed, visible in Explorer, and
-    remotely verifiable.
-12. A reaction calling `trigger_event/1` receives the existing staging-class
-    `context_violation`; it cannot stage D or bypass the signed-goal ACL.
-13. A dynamically asserted non-founding `react_on/3` remains inert at actual
-    execution, not only during catalogue planning.
-14. An unresolvable or ambiguous Executor performs no observable work and is
-    counted.
-15. Circular subscriptions alone emit nothing; application event cycles stop
-    through committed cause/handled facts.
-16. Queue overload affects only best-effort reactions, resnapshots state, and
-    leaves durable effect/outbox work recoverable.
-17. Compile, xref, Dialyzer, full EUnit, focused CT, UI builds, diff check, and
-    the hardware load matrix pass at their owning slices.
-18. A `trigger_event/1` reached only in a failed alternative or a rolled-back
-    `transaction/1` leaves no event in the sealed diff; successful alternatives
-    preserve occurrence order.
-19. A callable two-tuple event payload appears in no changed-head set, state
-    hint, catalogue refresh, or membership verdict.
+The head's two arguments are the event pattern and goal. The clause body
+selects the owning agent and conditions. `me/1` observes the current owned
+actor during matching; during the submitted goal it observes the authenticated
+principal. An event's author never becomes the reaction's principal.
+Class eligibility uses ordinary Prolog relations, including transitive `isa/2`.
+Each originating clause executes at most once per event and owned agent even
+when its guard has several successful inheritance paths. Different clauses may
+all match. Stored clause order is retained; term sorting is not execution order.
+
+The existing runtime matches a pattern through Erlog unification on its
+committed view. Shared variables bind the goal. Matching and eligibility are
+read-only and grant no proof authority. The resulting goal enters that actor's
+existing request queue, normal proof and `can_invoke/4` checks. It may stage
+ordinary writes, use actions and commit across ontologies through existing
+transactions. There is no special submission predicate or second executor.
+A failed guard prepares no key and submits no request.
+
+Ordinary reactions receive current hosted-agent bindings for their exact
+containing ontology, independently of event origin. No eligible agent means
+no submitted goal; several eligible agents may each react. They share that
+ontology's editable program, not isolated per-agent code. The catalogue reads
+locally authored `react_on/2` clauses; class eligibility does not automatically
+enumerate remote inherited reaction declarations.
+
+Only the current local host owns an ordinary agent's queue. Its epoch, active
+key and exact ontology reference are rechecked before signing. The logical node
+receives a binding only in its own behavior scope, from the existing verified
+node pointer and signer; it needs no artificial `agent_host/4` row. Neither
+local readiness nor host observations grant node authority to another ontology's
+catalogue. Neither dispatch path selects a physical-node audience or automatically
+executes a foreign reaction as the logical node. Bootstrap restores typed resources
+through their existing owners as described below, without arbitrary goals.
+
+## 2. Events come from canonical application
+
+The source is the reducer's ordered `applied_ops`, not a requested diff or an
+announcement that consensus has committed something not yet applied.
+
+| Applied operation | Public event |
+| --- | --- |
+| Append a plain fact (`assert`) | `assert(Fact)` |
+| Prepend a plain fact (`asserta`) | `assert(Fact)` |
+| Remove a plain fact | `retract(Fact)` |
+| Explicit `{event, Term}` | `Term` |
+
+An already-present assertion or absent retraction changes nothing and emits
+no fact event. Rule changes are not disguised as plain-fact assertions.
+The runtime receives their changed heads for current-state recovery and their
+catalog changes from the same canonical application.
+
+`trigger_event(Term)` stages a ground occurrence in the normal diff without
+asserting a message fact. Explicit identical occurrences are not deduplicated.
+The shared validation owner rejects reserved `assert/1`, `retract/1` and
+`from/3` wrappers as explicit payloads. A user-authored term also cannot become
+an owner-authenticated runtime notice merely by resembling one.
+
+The overlay is a final-state differ. It preserves clause ordering through
+explicit prepend operations, removes cancelled staged writes, then appends
+explicit events in `trigger_event/1` call order. It does not claim to preserve
+the chronology of every intermediate `assert` and `retract` call. There is one
+signed operation list and one canonical reducer, not another event log.
+Rejected or aborted transactions emit nothing. DTX participants publish their
+consequence once through ordinary final application.
+
+## 3. Live declaration changes
+
+`react_on/2` and subscription declarations are ordinary editable Prolog code.
+There is no founding comparison, per-declaration authority database or
+`can_declare_runtime` permission. Existing invocation and write authority govern
+the editing goal before its changes can take effect.
+
+For transaction T:
+
+1. Match its events with the declaration catalog installed before T.
+2. Install T's catalog change for subsequent transactions.
+3. Process T+1 using that catalog, including when both are in the same block.
+
+The canonical apply path supplies transaction boundaries and catalog changes.
+Unchanged transactions do not rebuild the catalog or read history. A removed
+reaction cannot match later events, but removal does not cancel already matched
+or submitted work. Adding a reaction and emitting an event in the same
+transaction does not retroactively activate the new reaction for that event.
+
+Matching a notification does not acquire a historical proof snapshot. The
+queued goal executes on its ordinary current snapshot, with the usual read-set
+conflict checks. Matched values are carried forward; the surrounding world may
+have changed. There is no global execution order across independent actors or
+ontologies.
+
+## 4. Restore resources through existing owners
+
+Replaying history restores ontology state; it does not rerun old occurrences.
+Initial attachment, owner restart and relevant committed changes drive the same
+existing typed resource worker. It evaluates fixed committed Prolog selectors
+directly, without selecting an editable goal to execute as the physical node.
+Starting an agent cannot require that agent to be running already.
+
+| Governing scope | Current Prolog selector | Existing owner |
+| --- | --- | --- |
+| Exact containing ontology | `agent_hosting_projection/4` | Runtime's hosted agents |
+| Exact containing ontology | `agent_observation_projection/4` | Host observer |
+| Installed node's exact ontology | `node_ontology_hosting_projection/2` | Node actor, namespace manager and directory |
+| Configured root identity | `effect_custody_capacity/1` | Effect journal |
+| Hosted agent's exact containing ontology | `agent_work_goal/5` | Existing work cursor and that agent's signed queue |
+
+Selection uses the existing restricted `policy_verdict` context over a committed
+snapshot. It cannot write, sign, call foreign ontologies or perform runtime I/O.
+Installation validates governing identity and resource scope; selecting rows never
+grants access to another resource owner. Placement, eligibility and budgets remain
+Prolog policy. An absent optional selector is inactive, with its absence retained
+as a dependency. A successful empty inventory may remove resources within its
+scope. Failure of a required selector remains visible, never an installed empty
+inventory or proof of readiness. No eligible work is a normal idle result;
+invalid or ambiguous custody capacity is an error. Root-owned capacity can be
+restored before the logical node exists.
+
+`agent_work_goal/5` may return a goal because it enters the selected agent's own
+signed queue. At agent installation and relevant invalidation, the existing work
+owner evaluates this generic selector, including when it or its opt-in policy
+is absent. FIPA needs no Erlang-specific discovery or second inventory. Retain
+its finite cursor and snapshot of earlier custody references; new attempts must
+not replenish their own recovery wait set.
+
+Readiness comes from actual installation, owner reattachment, custody changes
+or queue capacity. Notices identify exact scope and owner incarnation. Preserve
+subscription/snapshot ordering, cancellation and absolute deadlines; stale or
+duplicate notices are harmless. Coalesce current-state invalidations in the
+existing ordered work without replaying events or resubmitting uncertain goals.
+
+### 4.1 Retain observed dependencies
+
+`quod_observation:capture/3` supplies the shared observation collector used by
+`quod_selection_basis` and `quod_resource_basis`. The latter classifies local
+resource dependencies separately from consensus selection; consensus semantics
+remain unchanged. Each resource consumer retains
+only compact dependencies for its actual lifetime, not a copied KB or evaluator.
+Local invalidation metadata remains distinct from transaction read tokens.
+
+For `agent_work_goal/5`, retain the union of dependencies from every selection in
+the current finite work pass, including its terminal idle selection. A later
+cursor step must not discard a helper read by an earlier step. Check this whole
+basis before admitting a selection. Retire it only when a new pass or agent
+incarnation starts; completion, capacity and custody notifications continue the
+same pass. The new pass captures its own basis, so obsolete helpers no longer
+wake the agent once that pass becomes idle.
+
+Capture reads across success, empty answers, failure, negation and backtracking,
+including helper definitions, absent predicates, explicit `current_predicate/1`
+and `predicate_property/2`, and predicate enumeration. MVCC already emits a
+`predicate_registry` observation; reuse that support and invalidate membership
+on relevant additions/removals. Do not pass a registry marker through the
+predicate/arity-only transaction read-set filter or change internal type checks
+into transaction reads. Initial precision is at predicate granularity.
+
+Unknown native observations require sound classification or conservative
+invalidation, never silent omission. Classify ordinary pure operations so the
+normal selector path does not become an unconditional rebuild on every unrelated
+commit. Resource selection captures execution errors as explicit outcomes inside
+the collection boundary, preserving their diagnostic meaning and reads through
+cleanup. A failed selection never installs an empty inventory.
+
+If a persistent resource worker dies without returning, or its queued deadline
+expires before selection, retain a conservative parent dependency. The next
+committed change can select current policy; the full consumer selection replaces
+that fence with its reported basis and restores selective invalidation. For work,
+replacement waits for a new pass, preserving earlier steps' dependencies. Captured
+policy failures and exceptions keep their observed dependencies. This neither
+retries on a timer nor preserves an
+occurrence-bound recovery or custody request for replay.
+
+Account for commits occurring during selection before publishing an answer as
+current. Track committed height advances independently of changed predicates,
+both in queued input before installation and after input processing. A rejected
+transaction or control-only block can advance height without changing facts.
+Such advances invalidate context-dependent or conservatively classified consumers;
+precise predicate-only consumers remain asleep. Duplicate heights do not create
+an advance. Relevant changes wake the affected consumer; unchanged notices do not
+repeat selection, installation, history reads or disk writes. Owner-incarnation
+changes use the same restoration path and invalidate obsolete in-flight results.
+
+### 4.2 The affected ontology supplies recovery data
+
+The existing worker in affected ontology S evaluates `agent_recovery_data/10`
+from `agent_recovery_policy.pl` in the restricted context. This is the one Prolog
+calculation of report sequence, expiry and preparation need. Reaction guards
+cannot query another ontology; they do not perform that selection in N's scope.
+
+The temporary result describes the full target `agent_instance_ref/3`, expected
+assignment, expected/current recovery round, report sequence, expiry and whether
+custody preparation is needed. It contains no executable goal. Authenticated
+inputs include the observer, target identity, original host/epoch, observation
+identity and kind, producer incarnation, observation time and validity bound.
+The runtime binds the answer to that owned observation; editable selector code
+cannot replace those inputs, widen validity or retarget preparation. Pass verified
+inputs explicitly; do not reintroduce live bridges into the restricted selector.
+
+Capture the existing request-timeout allowance before selection and bound it by
+observation validity. Retain both signed wall-clock expiry and the original
+absolute monotonic deadline through selection, delivery, node matching, queueing,
+preparation and signing. Policy may narrow either allowance; recomputing remaining
+wall-clock time can only shorten the monotonic bound, never renew it. Report
+expiry and signed request expiry must be identical, as `report_agent_failure`
+requires. An expired or superseded selection is not silently rebased onto another
+assignment, sequence or round. It cannot authorize another attempt at an unknown
+operation; a fresh observation retains the existing recovery rules.
+
+Deliver the validated data to logical node N's own behavior scope through existing
+owner messages as `observed(agent_recovery_ready(...))`. Its trusted handler
+calls `recovery_observation/1` to unify that data with the runtime's private,
+authenticated observation metadata. An identical public event term lacks that
+metadata and cannot activate the recovery handler. `me/1` alone does not prove
+the event's source. The handler constructs `report_agent_observation/7`
+or `report_agent_observation_with_custody/8` and uses the existing signed queue and
+`node_authorized_goal/3`. Use `prepare_agent_and_converge/5` only for an explicit
+preparation workflow. The runtime submits N's selected local goal unchanged;
+only trusted Prolog constructs the wrapper around a permitted foreign operation.
+
+The private handoff carries compact producer/contact evidence, not another copy
+of the batch's instance bindings. Before each recovery reaction candidate, the
+node runtime rechecks the current source-runtime owner, transport incarnation,
+directory-contact owner/generation, exact installed node reference and both time
+bounds. These are local owner checks, not a new proof or network query. Valid
+receipts received during this node-runtime incarnation's first attachment remain
+in its existing bounded queue until the committed baseline is available, then
+undergo the same checks. Restart/replay never restores an old receipt.
+
+The source's receipt cursor has a one-shot timer at the retained deadline.
+Consumption, destination-owner death or reset releases its monitor and timer;
+expiry releases only that unsent-evidence cursor. It neither retries a report nor
+cancels an admitted request or changes an uncertain operation's recovery owner.
+Stale receipts and timer messages cannot release a different cursor.
+
+The final transaction rechecks S's assignment, permissions, report sequence and
+expiry; report, candidate publication and convergence stay one transition.
+Thresholds, candidate ranking, epoch advancement and old-key revocation retain
+their existing Prolog actions. A failure observation is evidence for policy, not
+proof of physical death; recovery requires surviving ontology availability and
+commit quorum.
+
+### 4.3 Generic reaction metadata belongs to the runtime bridge
+
+`current_request_expiry/1`, `limit_reaction_expiry/1`, `prepare_agent_custody/3`
+and `recovery_observation/1` belong to the existing universal
+`quod_runtime_predicates` bridge, with no duplicate agent-module registrations.
+`current_request_expiry/1` exposes authenticated proof metadata outside matching;
+the other three require reaction context. Hidden variables retain ordinary
+cut/backtracking behavior. `recovery_observation/1` authenticates the complete
+selected event against its private metadata; it does not accept a caller's
+assertion that an observation is genuine.
+
+`prepare_agent_custody(TargetRef, OldEpoch, Result)` takes the full anchored
+reference, not an instance inferred from the matching ontology. Validate it
+against the owned observation and current logical-node binding. Matching only
+describes preparation; it neither prepares custody nor releases a signature.
+The existing node worker validates custody eligibility in the restricted
+committed-policy context with explicit inputs, then invokes the existing vault
+under the original deadline. Keep current-node checks, stable preparation and
+the ordinary final transaction's assignment checks. A read-only proof alone is
+not a sufficient restriction for eligibility: governed queries may sign.
+
+Signing, active-key checks and vault operations retain their existing owners
+and governed bridges. Moving only generic metadata avoids adding an agent module
+to the node's immutable founding manifest. Verify registry loading and replay
+with the existing manifest during the coordinated release; do not retain duplicate
+registrations or a fallback to source-derived target identity.
+
+### 4.4 Node privileges require a direct calling context
+
+N keeps one authenticated principal throughout its proof. `S::Goal` changes the
+ontology, not the actor. Restrict privileges granted specifically to N using the
+existing `can_invoke(Goal, Principal, CallChain, TargetNamespace)` policy.
+
+| Call | Required policy |
+| --- | --- |
+| N's own handler in its ontology O_N | Permit its authorized operations with direct context `[O_N]`. |
+| N calls a recovery operation in S | N constructs the request; `can_execute_for/3`, S's entry policy and action prerequisites authorize it. |
+| N calls privileged target T directly | Require T's explicit grant to N's exact anchored identity and direct context `[O_N]`. |
+| S calls O_N or T while acting as N | Do not grant node privileges through `[S, O_N]`. |
+| S calls intermediary C, then T | Do not grant node privileges through `[C, S, O_N]`. |
+| S returns a term | Treat it as data, never arbitrary code to execute after returning. |
+
+N's handlers, operation-construction helpers and their editors are trusted.
+The initial policy permits no privileged foreign-helper exception. The active
+path is not permanent provenance and ACLs do not guard every local helper.
+Namespace-only path entries cannot establish trusted code incarnations; exact
+principal/target checks remain required, and an anchor does not freeze editable
+code. Inherited/shared definitions executed with privileges need the same editor
+trust; no copied ontologies or new class-authorization lattice are introduced.
+
+Restrict every successful alternative, not just one blanket clause:
+
+- Node self permission, `host_ontology/4` entry and self-hosting permission,
+  plus `request_ontology_hosting/5` entry and both policy branches.
+- Root physical-node and administrator grants, public `create_ontology/3` entry,
+  and physical-node, creator-agent and delegated `can_create_ontology/3` rules.
+- Signature-release permission and any other target granting N privileges.
+  Preserve exact signing scope, current assignment/key and explicit grants.
+
+Root creation needs its contextual check at admission: `can_create_ontology/3`
+does not receive the path, and public entry must not bypass the restriction.
+Keep independently authorized public, non-node hosting and signup requests.
+Distinguish physical `node(Key)` grants from logical node references; deleting
+the unsafe reaction path does not require indiscriminate changes to bootstrap
+or consensus policy.
+
+Retain `node_authorized_goal/3` and its in-proof `can_execute_for/3` plus exact
+source guard. It is not a sandbox around the permitted foreign implementation.
+The node's own handler chooses the request; a foreign-only top-level signed goal
+does not automatically consult the origin ACL. ACL bodies stay local and pure,
+with existing committed dependencies and admission reproof.
+
+## 5. Progress and resource readiness are distinct
+
+The existing `effect_frontier/1` reports that canonical input has been processed
+and its reaction work scheduled. It does not certify that every resource or
+ordinary reaction goal has finished. The effect journal's create/join recovery
+uses this existing input-progress boundary and its own committed postconditions
+and prepared custody.
+
+Waiting for every node reaction to finish before advancing that frontier would
+deadlock: a reaction can commit a create/join action which itself waits for the
+journal to pass the new frontier. Consumers that need an installed hosted agent,
+contact projection or pending-work prerequisite wait for that actual owner's
+notification instead. A later unrelated event cannot certify a failed resource
+as installed. No shared state owner blocks on network I/O.
+
+## 6. Subscriptions and reliability
+
+Certified remote application uses the same event conversion, under the existing
+`from(SourceNamespace, SourceAnchor, Event)` wrapper. The first materialized
+baseline restores state without replaying occurrences. Later verified live
+changes enter the subscriber's own current reaction catalog; publisher-side
+callbacks or copied reaction knowledge bases are unnecessary.
+
+Live reactions are notifications, not a durable event queue. Work that must
+survive a crash is represented by domain facts or existing transaction/effect
+custody. Internal FIPA state and receiver consequences use existing atomic
+transactions. `fipa-pending-continuation-plan.md` defines the narrow authorized
+policy for continuing a guarded pending conversation; it is not permission to
+resubmit arbitrary unknown operations. External FIPA transport remains separate.
+
+## 7. Verification and cost
+
+Required checks cover live addition/change/removal, same-block activation,
+clause order, inherited eligibility without duplicate firing, actual actor ACLs,
+failed transactions, owner death, replay boundaries and host/key changes.
+Readiness tests synchronize on real owner installation and cancellation, not
+sleeps or sent-message traces. Unknown writes retain their exact outcome path.
+
+Repeated unchanged reads/reconciliation must perform no history fold, projection
+rebuild, ledger writes or syncs. Runtime input, active queues and existing worker
+budgets remain governed by current resource policy. New language or editor work
+does not authorize arbitrary queue ceilings, extended deadlines or weaker
+consensus checks. Release evidence belongs in the work handoff and issue #9;
+these invariants describe the correction target rather than a run diary.
+
+## 8. Implementation and deployment sequence
+
+1. Correct reaction ownership and the recovery-data contract in `quod_runtime`,
+   `quod_runtime_predicates`, `quod_agent` and the existing Prolog policies.
+   Promote the retained physical-node reproduction into a regression; cover both
+   dispatch paths, zero/multiple actors, foreign helpers, callbacks, third targets,
+   intermediary paths and every alternative hosting/creation grant. Verify normal
+   direct node operations, non-node signup and hosted-agent signing still work.
+2. Reuse dependency collection and direct typed restoration through the existing
+   owners. Test absent, empty, failed and reflective selections; exception reads;
+   policy changes during selection; root before node; owner restart; exact anchors
+   and equal instance names in different ontologies. Bind recovery data to the
+   authentic observation and test expiry equality across selection and queueing.
+3. Integrate failover and finite FIPA continuation, then remove superseded physical
+   dispatch branches, restoration reactions, manual head lists and registrations.
+   Retain their still-valid tests on the replacement path. Measure unchanged
+   repetitions through real owners for history reads, installation and disk I/O;
+   verify actual updates and stale epoch/key rejection. Run focused tests first,
+   then the required clean sequential gates on a frozen resulting tree.
+
+Use the existing reaction, runtime, selection-basis, hosting, custody, node-actor
+and failover suites. Preserve consensus observation behavior with its current
+controls, and retain failed-run evidence and user-owned work.
+
+Do not implement the actor document's future `subject/3` delegation model or
+change reaction timing as part of this correction. Ordinary calls retain one
+principal; FIPA acceptance and
+conversation rules remain Prolog policy above generic Quod. Preserve the approved
+guarded continuation exception and normal admission/revocation semantics.
+
+### Stored-policy migration and cold activation
+
+The source templates are founding inputs. Existing histories keep their stored
+program until ordinary authorized editing transactions replace selected clauses.
+Prepare a migration for each exact namespace and genesis anchor, including
+customized definitions and any installed grants absent from the bundled sources.
+This inventory is a review checklist, not permission to edit a live ledger:
+
+| Governing identity | Definitions to compare and update |
+| --- | --- |
+| Each affected containing ontology | `agent_hosting_projection/4` and its scope helpers; `agent_observation_projection/4`; `agent_recovery_data/10` and report-selection helpers. Retain assignment, key, report, candidate and action-policy facts. |
+| Each installed logical node's exact ontology | Direct-context `can_invoke/4` alternatives and `node_hosting_context/3`; `node_ontology_hosting_projection/2`; the authenticated recovery `react_on/2` clause and `node_recovery_goal/9`; narrowly scoped `can_execute_for/3`. Retain `node_authorized_goal/3`, node identity, keys, hosting and contact facts. |
+| Configured root identity | `can_invoke/4`, `root_public_goal/1`, `root_creation_context/3` and `root_direct_context/3`; retain capacity policy and ordinary creation prerequisites. Check every physical-node, administrator, creator and delegated alternative. |
+| Opted-in agent ontologies | The FIPA clause of `agent_work_goal/5` and its existing finite continuation helpers. Preserve other domains' clauses, opt-in facts, conversations and pending-operation references. |
+| Other privileged targets | Every installed grant to the exact logical node principal, including signing entries. Apply the direct-context restriction to elevated grants while preserving independently authorized non-node callers. |
+
+Remove only identified obsolete restoration declarations: the five old
+`state_handler/4` duties, or their physical-node `react_on/2` replacements;
+their dedicated `can_invoke/4` grants; manual notice/head-list helpers; and the
+foreign host-observation reaction/goal constructor replaced by recovery data.
+These predicates can contain unrelated user clauses. Never abolish all
+`react_on/2`, `can_invoke/4`, `state_handler/4` or `agent_work_goal/5` clauses to
+replace one component. Compare the complete ordered before/after definition,
+replace only the approved clauses through the shared exact-edit path, and retain
+unrelated clauses and their order. A baseline conflict requires a newly inspected
+plan, not an overwrite or a blind retry.
+
+Activation order is:
+
+1. Inspect and prepare exact-baseline edits under each ontology's existing edit
+   authority. Rehearse against retained histories and existing native manifests;
+   source templates and a successful fresh genesis do not verify an upgrade.
+2. Stop public ingress and quiesce admitted work where practical. Use the
+   coordinated cold release in `ontology-actor-architecture.md`: stop every old
+   validator, proof engine and runtime consumer before any new artifact joins.
+   Retain all ledgers, anchors, keys and uncertain operation identities.
+3. Restart on the same supported artifact and verify replay and universal bridge
+   registration, including `recovery_observation/1`, against existing manifests.
+   Keep ordinary traffic closed. Before enabling automatic recovery for a target,
+   commit its direct-context grants and the node's trusted handler; install the
+   affected ontology's typed selectors and recovery data in the same authorized
+   maintenance sequence. Remove each superseded declaration with its replacement.
+4. Read back the ordered definitions through normal proofs, verify intended
+   resources and refusal controls, and resolve each migration's actual outcome.
+   Related edits use one existing atomic transaction where required, including
+   across ontologies. Resolve an unknown write by its original reference; never
+   resubmit it. Reopen traffic only after the applicable release and retained-state
+   acceptance checks pass.
+
+No live migration is automatic. There is no wipe, re-founding, manifest rewrite,
+rolling mixed-runtime interval or new migration executor. If a new native module
+is actually required, its reviewed succession route must be settled separately.

@@ -7,7 +7,6 @@ Facts are observed by MVCC and flags/native execution by Erlog. Failure,
 negation and rollback never erase reads. Only the compact key set survives
 on the existing selection row; no KB, process or second cache is retained.
 """.
--include_lib("erlog/src/erlog_int.hrl").
 -export([capture/2, note/2, affected/2, role_changes/2]).
 -ifdef(TEST).
 -export([reservation_keys/1]).
@@ -17,22 +16,12 @@ on the existing selection row; no KB, process or second cache is retained.
 
 -doc "Observe the complete evaluation, disposing its collector on every exit.".
 -spec capture(tuple(), fun((tuple()) -> T)) -> {T, basis()}.
-capture(Est = #est{db = Db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}, Evaluate) ->
-    Observations = ets:new(selection_observations, [set, private]),
-    Sink = fun(Event) ->
-        true = ets:insert(Observations, [{Key} || Key <- dependency_keys(Event)]), ok
-    end,
-    Observed = erlog_int:set_observation_sink(Sink,
-                 Est#est{db = Db#db{ref = quod_erlog_db_mvcc:observe(Sink, Ref)}}),
-    try
-        Result = Evaluate(Observed),
-        {Result, maps:from_list([{Key, true} || {Key} <- ets:tab2list(Observations)])}
-    after ets:delete(Observations) end.
+capture(Est, Evaluate) ->
+    quod_observation:capture(Est, fun dependency_keys/1, Evaluate).
 
 -doc "Record a non-interpreter input at its existing read boundary.".
 -spec note(term(), tuple()) -> ok.
-note(_, #est{observation_sink = none}) -> ok;
-note(Event, #est{observation_sink = Sink}) -> ok = Sink(Event).
+note(Event, Est) -> quod_observation:note(Event, Est).
 
 dependency_keys({fact, Functor}) -> [{fact, Functor}];
 dependency_keys({request, Key}) -> [{request, Key}];

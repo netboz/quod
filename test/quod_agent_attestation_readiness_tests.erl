@@ -337,7 +337,7 @@ apply_facts(Ns, Slot, Ops) ->
 
 key_proof(C = #{ns := Ns, fixture := F}) ->
     Access = open_access(C),
-    {ok, Est, Height} = quod_prolog:attach_runtime(Ns),
+    {ok, Est, Height, _} = quod_prolog:attach_runtime(Ns),
     Session = quod_proof_session:start(Est, #{read_set => false, read_only => true,
         scope_id => <<92:128>>, access_guard => Access}),
     try

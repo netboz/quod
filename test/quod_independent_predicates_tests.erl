@@ -149,7 +149,8 @@ check(Goal, Selected, Mask, Facts) ->
     end).
 
 facts(#est{db = #db{ref = Ov}}) ->
-    lists:sort([H || {assert, {H, _}} <- quod_erlog_db_local_prove:get_local_changes(Ov)]).
+    lists:sort([H || {Kind, {H, _}} <- quod_erlog_db_local_prove:get_local_changes(Ov),
+                     Kind =:= assert orelse Kind =:= asserta]).
 
 changes(#est{db = #db{ref = Ov}}) -> quod_erlog_db_local_prove:get_local_changes(Ov).
 

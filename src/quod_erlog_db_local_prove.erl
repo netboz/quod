@@ -35,7 +35,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          successful_independent/1, accept_independent/2, provenance/1,
          revision/1, replace_revision/2,
          live_transaction_tokens/1,
-         committed_state/1, checkpoint/1, restore/2,
+         committed_state/1, authored_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, stage_event/2, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
@@ -428,6 +428,12 @@ committed_state(
            fail_reasons_truncated = false, fail_boundaries = 0,
            checkpoint_depth = 0}.
 
+-doc "Use the same staged view and read dependencies without generated following clauses.".
+-spec authored_state(tuple()) -> tuple().
+authored_state(#est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St) ->
+    ensure_access(Ov),
+    St#est{db = Db#db{ref = Ov#lp{follow_disabled = true}}}.
+
 -doc "Capture the wrapped overlay's staged writes and assertion-order cursor in O(1).".
 -spec checkpoint(tuple()) -> checkpoint().
 checkpoint(
@@ -522,8 +528,11 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
                    true  -> [{retract, {H, B}} || {_T, H, B} <- committed_clauses(M, R, F)];
                    false -> [{retract, {H, B}} || {_Tag, {H, B}} <- maps:to_list(Ret)]
                end,
-    Asserts = [{assert, {H, B}} || {_T, H, B} <- A ++ lists:reverse(ZR)],
-    Retracts ++ Asserts.
+    %% A is already in final clause order. Apply front insertions oldest first
+    %% so repeated prepend preserves that order ahead of committed clauses.
+    Front = [{asserta, {H, B}} || {_T, H, B} <- lists:reverse(A)],
+    Tail = [{assert, {H, B}} || {_T, H, B} <- lists:reverse(ZR)],
+    Retracts ++ Front ++ Tail.
 
 -doc "The read-set: `#{ {Functor,Arity} => version-token }` of what the proof read.".
 -spec get_read_set(#lp{}) -> map().

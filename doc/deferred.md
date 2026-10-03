@@ -318,23 +318,14 @@ stages, not carried forward:
   work reuses normal
   transactions/DTX and does not change the consensus algorithm. The concrete
   capability vocabulary for delegation remains deferred.
-- **Runtime (P tier, agents Slice 2) — remaining follow-ups.** (1) *Validator-side
-  declaration authorization*: `can_declare_runtime/3` is still conceptual — activation is gated
-  solely by the full-term founding-block match in `quod_runtime`; the committee judging a
-  declaration before commit (and lifting the founding-only restriction) lands with the
-  authorization work after signing-based authz exists. (2) *Conditional Needs*:
-  `state_handler` Needs are restricted to
-  ground `current/1` edges; arbitrary condition goals return only with explicit skip-vs-error
-  semantics and per-node re-arming (silent-fail + height-divergence hazards, DA2 C-B).
-  (3) *Erlang heavy-job kinds + non-coalescable jobs*: heavy jobs are Prolog goals against the
-  newest snapshot, always coalescable; per-worker declarations arrive with the first real
-  worker (world/mesh, client-world-direction.md). (4) *Founding read cost*:
-  the former `open_ro` rescan to read slot 1 is removed in the uncommitted
-  Performance Roadmap Phase-1A cut: runtime borrows the live Simplex owner's
-  immutable indexed snapshot and reads slot 1 exactly. Owner unavailability
-  remains pending on registration/publication edges, not a disk fallback.
-  Cold ontology restart without a live owner remains in the later certified
-  snapshot/compaction work.
+- **Editable reactions and resource recovery — integration in progress.**
+  `prolog-editing-plan.md` replaces founding-only declarations and the handler
+  graph with editable `react_on/2`, ordinary authenticated goals and existing
+  resource owners. The previous proposed `can_declare_runtime` layer and generic
+  heavy-work scheduler are dropped. Cold startup still reconstructs canonical
+  ontology state; ordinary reads and reaction catalogue refresh do not read
+  founding history. Release acceptance and existing-declaration migration remain
+  open; this entry is not a deployment claim.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
   0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
   per-message redrive (Slice B) + dial-tick retransmit to refill, but had no member-side *bulk* catch-up, and
@@ -638,7 +629,7 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 - **Explicit ontology subscriptions.** The former P4 "read-set is
   subscription" proposal is retired. Read-set tokens remain proof-local OCC
   dependencies. Long-lived following is one durable subscriber-owned ontology
-  fact. Source-qualified `react_on/3` declarations select newly applied events
+  fact. Source-qualified `react_on/2` declarations select newly applied events
   locally in the subscriber; they are not copied into a target-side pattern
   registry. The local projection is certified by the existing continuous
   `quod_foreign_log` follow; reaction slices are in

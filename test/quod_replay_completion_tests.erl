@@ -216,18 +216,27 @@ exercise(prolog_restart, F) ->
     gen_statem:cast(owner(F), {prolog_ready, Old, 3, []}),
     owner_barrier(F),
     ?assertMatch({error, {ontology_rebuilding, _}}, proof_access(F)),
-    {ok, _} = quod_runtime:start_link(namespace(F), #{}),
+    {ok, _} = quod_runtime:start_link(namespace(F), maps:get(config, F)),
     complete_member(F, 3),
     wait_live(F, 3),
     wait_ack(F),
     ?assertMatch({ok, _}, proof_access(F));
 exercise(snapshot_reader_reaped, F) ->
     Ns = namespace(F),
-    ok = quod_runtime:enqueue_heavy(Ns, reader, 1, {slow, 20000000}),
-    ok = quod_ct:wait_until(fun() -> maps:get(heavy_running, stats(F)) =:= 1 end),
+    Parent = self(), CallToken = make_ref(),
+    {Requester, RequestMonitor} = spawn_monitor(fun() ->
+        Reply = quod_runtime:reconcile_resource(Ns, 1, agent_hosts, reader,
+                                                quod_time:mono_ms() + 10000),
+        Parent ! {CallToken, Reply}
+    end),
     Rt = runtime_pid(F),
-    Running = record_get(quod_runtime, heavy_running, sys:get_state(Rt)),
-    [{Worker, _, _, _, _, _}] = maps:values(Running),
+    ok = quod_ct:wait_until(fun() ->
+        case record_get(quod_runtime, runner, sys:get_state(Rt)) of
+            {resource, _, _, _, _} -> true;
+            _ -> false
+        end
+    end),
+    {resource, Worker, _, _, _} = record_get(quod_runtime, runner, sys:get_state(Rt)),
     Mon = monitor(process, Worker),
     ReaderMFAs = [{quod_prolog, runtime_detach, 1}, {quod_prolog, attach_runtime, 1}],
     [erlang:trace_pattern(MFA, true, [local]) || MFA <- ReaderMFAs],
@@ -243,7 +252,10 @@ exercise(snapshot_reader_reaped, F) ->
         ?assertEqual(none, prolog_field(F, runtime_pin)),
         complete_member(F, 3),
         assert_closed(F, 3),
-        ?assertEqual(0, maps:get(heavy_running, stats(F))),
+        receive {CallToken, Reply} -> ?assertEqual({error, runtime_recovering}, Reply)
+        after 2000 -> error(resource_request_not_released) end,
+        receive {'DOWN', RequestMonitor, process, Requester, normal} -> ok
+        after 2000 -> error(resource_requester_survived_replay) end,
         %% Same-VM strict monotonic trace timestamps order the actual exit
         %% and API calls; cross-process message arrival is not the oracle.
         Times = reader_trace(erlang:trace_delivered(all), Rt, Worker, #{}),
@@ -307,7 +319,8 @@ with_fixture(Fun) ->
     Terms = [{founding_marker, true}, {slow, 0},
              {':-', {slow, {'N'}},
               {',', {'>', {'N'}, 0},
-               {',', {is, {'N1'}, {'-', {'N'}, 1}}, {slow, {'N1'}}}}}],
+               {',', {is, {'N1'}, {'-', {'N'}, 1}}, {slow, {'N1'}}}}},
+             {':-', {agent_hosting_projection, reader, {'Node'}, all, []}, {slow, 20000000}}],
     Config = #{node_id => Pub, identity => Identity, data_dir => Dir,
                mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)},
     {ok, Owner} = gen_statem:start_link(
@@ -317,7 +330,7 @@ with_fixture(Fun) ->
           config => Config, dir => Dir},
     try
         {ok, _} = quod_prolog:start_link(Ns, Config),
-        {ok, _} = quod_runtime:start_link(Ns, #{}),
+        {ok, _} = quod_runtime:start_link(Ns, Config),
         wait_live(F, 1),
         wait_ack(F),
         true = quod_reg:subscribe({runtime, Ns}),
@@ -491,7 +504,7 @@ restart_prolog_unconfirmed(F) ->
     ok = gen_server:stop(prolog_pid(F)),
     {ok, _} = quod_prolog:start_link(namespace(F), maps:get(config, F)),
     barrier(F),
-    {ok, _} = quod_runtime:start_link(namespace(F), #{}),
+    {ok, _} = quod_runtime:start_link(namespace(F), maps:get(config, F)),
     _ = lifecycle(),
     _ = trace_calls(F),
     ok.

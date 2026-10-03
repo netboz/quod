@@ -6,6 +6,151 @@
 
 -export([init/1, callback_mode/0, handle_event/4]).
 
+native_execution_uses_ordinary_acl_and_commit_test_() ->
+    {timeout, 60, fun() -> quod_agent_hosting_tests:with_host(
+      fun(#{namespace := Ns, identity := #{pubkey := Key}}) ->
+          Principal = {node, Key},
+          Allowed = {',', {me, Principal}, {assertz, native_committed}},
+          lists:foreach(fun(Goal) ->
+              ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
+                {assertz, {can_invoke, Goal, Principal, {'_'}, Ns}}))
+          end, [Allowed, native_committed, native_refused]),
+          %% Remove the native founding grant to exercise its ordinary ACL.
+          ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
+                        {retract, {can_invoke, {'_'}, {'_'}, [], {'_'}}})),
+          ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, Allowed)),
+          ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, native_committed)),
+          ?assertMatch({fail, _}, quod_prolog:execute(Ns, {assertz, native_refused})),
+          ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, native_refused))
+      end) end}.
+
+native_engine_loss_before_checkpoint_is_not_an_unknown_operation_test_() ->
+    {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        Parent = self(), Tag = make_ref(),
+        _Caller = spawn(fun() -> Parent ! {Tag, quod_prolog:execute(Ns, test_local_wait)} end),
+        Worker = native_waiting(),
+        Monitor = monitor(process, Worker),
+        exit(Engine, kill),
+        receive {Tag, Result} ->
+            ?assertEqual({error, {ontology_unavailable, Ns}}, Result)
+        after 5000 -> error(native_engine_loss_not_reported) end,
+        receive {'DOWN', Monitor, process, Worker, _} -> ok
+        after 5000 -> error(orphaned_native_proof) end
+    end) end}.
+
+native_async_execute_rejects_a_replaced_target_test_() ->
+    {timeout, 60, fun() -> quod_agent_hosting_tests:with_host(fun(#{namespace := Ns}) ->
+        Call = make_ref(),
+        {ok, Engine} = quod_prolog:execute_async(
+                         {Ns, <<99:256>>}, {assertz, wrong_incarnation},
+                         self(), Call, quod_time:mono_ms() + 5000),
+        receive {quod_proof_reply, Engine, Call, Result} ->
+            ?assertEqual({error, wrong_genesis_anchor}, Result)
+        after 5000 -> error(stale_native_target_not_refused) end,
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, wrong_incarnation))
+    end) end}.
+
+native_engine_loss_after_checkpoint_retains_the_actual_operation_test_() ->
+    {timeout, 60, fun() -> quod_agent_hosting_tests:with_host(fun(#{namespace := Ns}) ->
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        Simplex = quod_reg:where({quod_simplex, Ns}),
+        Parent = self(), Tag = make_ref(),
+        Pause = fun(State, {in, {'$gen_call', {_Worker, _},
+                      {checkpoint_and_release_proof_snapshot, _, Checkpoint}}}, _) ->
+                        Parent ! {checkpoint_ready, Tag, Checkpoint},
+                        receive {release_checkpoint, Tag} -> State end;
+                   (State, _, _) -> State end,
+        Caller = spawn(fun() ->
+            receive start ->
+                Parent ! {Tag, quod_prolog:execute(Ns, {assertz, checkpointed_native_write})}
+            end
+        end),
+        Trace = trace:session_create(native_checkpoint, self(), []),
+        trace:function(Trace, {quod_prolog, await_public_proof, 5}, true, [local]),
+        trace:process(Trace, Caller, true, [call]),
+        ok = sys:install(Engine, {Pause, none}),
+        try
+            Caller ! start,
+            Checkpoint = receive {checkpoint_ready, Tag, Actual} -> Actual
+                         after 5000 -> error(native_proof_did_not_checkpoint) end,
+            ok = sys:suspend(Simplex),
+            Engine ! {release_checkpoint, Tag},
+            %% The recursive wait with this reference proves the native caller
+            %% retained its checkpoint, rather than merely receiving a send.
+            receive
+                {trace, Caller, call,
+                 {quod_prolog, await_public_proof, [Engine, _, _, Ns, Checkpoint]}} -> ok
+            after 5000 -> error(native_caller_did_not_retain_checkpoint) end,
+            exit(Engine, kill),
+            receive {Tag, Result} ->
+                ?assertEqual({error, {outcome_unknown, Checkpoint}}, Result)
+            after 5000 -> error(native_unknown_outcome_not_reported) end
+        after
+            Engine ! {release_checkpoint, Tag},
+            sys:resume(Simplex),
+            trace:session_destroy(Trace),
+            case is_process_alive(Engine) of true -> sys:remove(Engine, Pause); false -> ok end,
+            exit(Caller, kill)
+        end
+    end) end}.
+
+native_caller_loss_cancels_its_proof_without_stopping_the_engine_test_() ->
+    {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        Caller = spawn(fun() ->
+            quod_prolog:execute(Ns, {',', test_local_wait, {assertz, cancelled_native_write}})
+        end),
+        try
+            Worker = native_waiting(),
+            Monitor = monitor(process, Worker),
+            exit(Caller, kill),
+            receive {'DOWN', Monitor, process, Worker, _} -> ok
+            after 5000 -> error(orphaned_cancelled_native_proof) end,
+            ?assert(is_process_alive(Engine)),
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, cancelled_native_write))
+        after exit(Caller, kill) end
+    end) end}.
+
+with_native_barrier(Fun) ->
+    quod_agent_hosting_tests:with_host(fun(#{namespace := Ns}) ->
+        true = quod_reg:reg({host_test, local_proof}),
+        try Fun(Ns)
+        after gproc:unreg(quod_reg:name({host_test, local_proof})) end
+    end).
+
+native_waiting() ->
+    receive {local_proof_waiting, Worker} -> Worker
+    after 5000 -> error(native_proof_not_started) end.
+
+owned_async_execute_preserves_absolute_deadline_test_() ->
+    {timeout, 30, fun() -> quod_agent_hosting_tests:with_host(fun(#{namespace := Ns, reference := Ref}) ->
+        Target = {Ns, element(3, Ref)},
+        Expired = make_ref(),
+        {ok, Engine} = quod_prolog:execute_async(Target, {assertz, expired_request},
+                                 self(), Expired, quod_time:mono_ms() - 1),
+        receive {quod_proof_reply, Engine, Expired, Result} ->
+                    ?assertEqual({error, deadline_exceeded}, Result)
+        after 5000 -> error(expired_request_not_refused) end,
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_request)),
+        true = quod_reg:reg({host_test, local_proof}),
+        try
+            Call = make_ref(),
+            Deadline = quod_time:mono_ms() + 1000,
+            Goal = {',', test_local_wait, {assertz, expired_during_proof}},
+            {ok, Engine} = quod_prolog:execute_async(Target, Goal, self(), Call, Deadline),
+            Worker = receive {local_proof_waiting, Pid} -> Pid
+                     after 5000 -> error(async_proof_not_started) end,
+            Monitor = monitor(process, Worker),
+            receive {quod_proof_reply, Engine, Call, Reply} ->
+                ?assertMatch({error, {proof_limit_exceeded, Ns}}, Reply)
+            after 5000 -> error(absolute_deadline_not_enforced) end,
+            receive {'DOWN', Monitor, process, Worker, _} -> ok
+            after 1000 -> error(deadline_left_live_reader) end,
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_during_proof))
+        after gproc:unreg(quod_reg:name({host_test, local_proof})) end
+    end) end}.
+
 %%%===================================================================
 %%% fixtures
 %%%===================================================================
@@ -52,7 +197,7 @@ mark_ready_acknowledges_from_the_handling_engine_test() ->
         after 1000 ->
             error(no_ready_ack)
         end,
-        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns))
+        ?assertMatch({ok, _, 0, _}, quod_prolog:attach_runtime(Ns))
     after
         case is_process_alive(Pid) of
             true -> gen_server:stop(Pid);
@@ -1103,7 +1248,7 @@ t_explicit_failure_reason_and_internal_bare_fail({Ns, _}) ->
         ?assertEqual(
            {fail, [{blocked, bob}, {impossible_to_link, bob}]},
            quod_prolog:prove(Ns, {blocked, bob})),
-        {ok, Est, 1} = quod_prolog:attach_runtime(Ns),
+        {ok, Est, 1, _} = quod_prolog:attach_runtime(Ns),
         ?assertEqual(fail, quod_prolog:prove_est({blocked, bob}, Est)),
         quod_prolog:runtime_detach(Ns)
     end.
@@ -1913,10 +2058,12 @@ t_attach_refused_until_ready({_Ns, _}) ->
         Fresh = <<"attach:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
         {ok, Pid} = quod_prolog:start_link(
                       Fresh, #{node_id => {"127.0.0.1", 5000},
-                               outcome_backend => memory}),
+                               proof_timeout_ms => 1234, outcome_backend => memory}),
         ?assertEqual({error, not_ready}, quod_prolog:attach_runtime(Fresh)),
         ok = quod_prolog:mark_ready(Fresh),
-        ?assertMatch({ok, _Est, 0}, quod_prolog:attach_runtime(Fresh)),
+        ?assertMatch({ok, _Est, 0,
+                      #{owner := Pid, identity := {Fresh, _}, request_timeout_ms := 1234}},
+                     quod_prolog:attach_runtime(Fresh)),
         gen_server:stop(Pid)
     end.
 
@@ -1925,7 +2072,7 @@ t_attach_refused_until_ready({_Ns, _}) ->
 t_direct_envelope_carries_committed_snapshot({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
-        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        ?assertMatch({ok, _, 0, _}, quod_prolog:attach_runtime(Ns)),
         ok = ab(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
         {Env, Est} = receive {applied_live, E, S} -> {E, S}
                      after 1000 -> erlang:error(no_direct_envelope) end,
@@ -1942,7 +2089,7 @@ t_direct_envelope_carries_committed_snapshot({Ns, _}) ->
 t_reject_not_direct_sent({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
-        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        ?assertMatch({ok, _, 0, _}, quod_prolog:attach_runtime(Ns)),
         ok = ab(Ns, 1, batch(change(Ns, diff_for({widget, z}), #{{widget, 1} => {present, 12345}}))),
         ?assertMatch({rejected_live, _}, recv_rt(rejected_live)),
         receive {applied_live, _, _} = M -> erlang:error({unexpected_direct, M})
@@ -1953,7 +2100,7 @@ t_reject_not_direct_sent({Ns, _}) ->
 %% raise lets the next commit prune it.
 t_floor_pins_and_raises({Ns, _}) ->
     fun() ->
-        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        ?assertMatch({ok, _, 0, _}, quod_prolog:attach_runtime(Ns)),
         [ok = ab(Ns, N, batch(change(Ns, diff_for({counter, N}), #{})))
          || N <- [1, 2, 3]],
         H1 = hist(Ns),
@@ -1974,7 +2121,7 @@ t_runtime_down_clears_floor({Ns, _}) ->
                        Parent ! {attached, quod_prolog:attach_runtime(Ns)},
                        receive stop -> ok end
                    end),
-        receive {attached, {ok, _, 0}} -> ok
+        receive {attached, {ok, _, 0, _}} -> ok
         after 1000 -> erlang:error(attach_failed) end,
         [ok = ab(Ns, N, batch(change(Ns, diff_for({counter, N}), #{})))
          || N <- [1, 2]],

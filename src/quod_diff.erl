@@ -15,6 +15,7 @@ Pure helpers over the committed erlog database for the content layer.
 - `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
   normalizing legal source-form bodies to Erlog's durable compiled form, with
   content-identity dedup (asserting an identical fact is a no-op; retract is by content).
+  `assert` appends and `asserta` prepends; neither moves an existing clause.
 - `apply_ops_preserving_policy/2` — build that same immutable post-diff state and,
   only when the diff touches `{can_invoke,4}`, require the final state to retain
   at least one interpreted policy clause.
@@ -169,7 +170,8 @@ interpreted_clauses(_Est, _Functor) ->
 %%% internals
 %%%===================================================================
 
-valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
+valid_op({Kind, {Head, Body}})
+  when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
     callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
 valid_op({event, Term}) ->
     valid_event(Term);
@@ -261,15 +263,20 @@ valid_tuple_args(Term, Index, Size) ->
     valid_stored_term(element(Index, Term))
         andalso valid_tuple_args(Term, Index + 1, Size).
 
-apply_op(M, R, {assert, Clause}) ->
+apply_op(M, R, {Kind, Clause}) when Kind =:= assert; Kind =:= asserta ->
     {H, B} = normalize_clause(Clause),
     F = functor(H),
     case clause_present(M, R, F, H, B) of
         true  -> {R, unchanged};                       %% content dedup: no-op
-        false -> case M:assertz_clause(R, F, H, B) of
-                     {ok, R1} -> {R1, changed};
-                     error    -> {R, unchanged}
-                 end
+        false ->
+            Inserted = case Kind of
+                           assert -> M:assertz_clause(R, F, H, B);
+                           asserta -> M:asserta_clause(R, F, H, B)
+                       end,
+            case Inserted of
+                {ok, R1} -> {R1, changed};
+                error -> {R, unchanged}
+            end
     end;
 apply_op(M, R, {retract, Clause}) ->
     {H, B} = normalize_clause(Clause),
@@ -284,7 +291,8 @@ apply_op(M, R, {retract, Clause}) ->
 apply_op(_M, R, {event, _Term}) ->
     {R, changed}.
 
-normalize_op({Kind, Clause}) when Kind =:= assert; Kind =:= retract ->
+normalize_op({Kind, Clause})
+  when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
     {Kind, normalize_clause(Clause)};
 normalize_op({event, Term}) ->
     {event, Term}.
@@ -314,8 +322,9 @@ find_tag(M, R, F, H, B) ->
 -spec touches_functor(list(), {term(), arity()}) -> boolean().
 touches_functor(Ops, Functor) when is_list(Ops) ->
     lists:any(
-      fun({assert, {Head, _Body}}) -> functor(Head) =:= Functor;
-         ({retract, {Head, _Body}}) -> functor(Head) =:= Functor;
+      fun({Kind, {Head, _Body}})
+            when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
+              functor(Head) =:= Functor;
          (_) -> false
       end, Ops).
 

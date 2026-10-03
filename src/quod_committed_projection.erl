@@ -306,11 +306,17 @@ commit_transaction(Change, Index, Prior, Diff, AppliedOps, Projection0) ->
     case record_terminal(Change, Index, committed, Prior, Projection0) of
         {ok, Projection1} ->
             {ok, Projection1,
-             #{status => applied, change => Change, height => Index,
+             runtime_result(#{status => applied, change => Change, height => Index,
                diff => Diff, applied_ops => AppliedOps,
-               changed_heads => changed_heads(AppliedOps)},
+               changed_heads => changed_heads(AppliedOps)}, Projection1),
              #{applies => 1, rejects => 0, conflicts => 0}};
         {error, _} = Error -> Error
+    end.
+
+runtime_result(Result = #{applied_ops := AppliedOps}, #projection{est = Est}) ->
+    case quod_runtime:catalog_after(Est, AppliedOps) of
+        keep -> Result;
+        Catalog -> Result#{runtime_catalog => Catalog}
     end.
 
 reject_transaction(Change, Index, Prior, Reason, Projection0) ->
@@ -442,9 +448,9 @@ apply_reduced_dtx_batch(
                                         none -> DeferredAcks0;
                                         _ -> [DeferredAck | DeferredAcks0]
                                     end,
-                    ResultItem = publication_item(
+                    ResultItem = runtime_result(publication_item(
                                    Control, Publication, AppliedOps,
-                                   DeferredAck, Delta),
+                                   DeferredAck, Delta), Projection1),
                     apply_reduced_dtx_batch(
                       Rest, Index, Floor,
                       Projection1#projection{outcomes = Outcomes1},
@@ -588,7 +594,7 @@ add_stats(A, B) ->
 changed_heads(AppliedOps) ->
     stable_unique(
       [Head || {Kind, {Head, _Body}} <- AppliedOps,
-               Kind =:= assert orelse Kind =:= retract], #{}, []).
+               Kind =:= assert orelse Kind =:= asserta orelse Kind =:= retract], #{}, []).
 
 stable_unique([], _Seen, Rev) ->
     lists:reverse(Rev);

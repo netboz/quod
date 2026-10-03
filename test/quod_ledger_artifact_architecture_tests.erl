@@ -73,7 +73,11 @@ reviewed_sites() ->
      {{quod_simplex, commit_finality, 2}, {call, quod_ledger_store, append, 2}},
      {{quod_simplex, apply_catchup_window, 3}, {call, quod_ledger_store, append, 2}},
      {{quod_foreign_log, persist_verified_group, 6}, {call, quod_ledger_store, batch_append, 2}},
-     {{quod_predicates, dispatch, 3}, dynamic_dispatch}].
+     {{quod_predicates, dispatch, 3}, dynamic_dispatch},
+     %% Exact clause deletion preserves Erlog's existing registered retraction
+     %% hook. Its MFA comes from the engine's hook table, not edited source;
+     %% the hook stages the ordinary mutation and does not access the ledger.
+     {{quod_common_primitives, retract_exact_1, 3}, dynamic_dispatch}].
 
 source_root() ->
     Source = proplists:get_value(source, ?MODULE:module_info(compile)),

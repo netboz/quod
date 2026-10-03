@@ -1,21 +1,18 @@
 -module(quod_runtime_tests).
+-export([quod_predicate_module/0, load/1, test_resource_snapshot/3]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 -import(quod_ct, [rp/2, diff_for/1, change/2, batch/1, wait_until/1, wait_until/2]).
 
 %%%===================================================================
-%%% Slice 2: quod_runtime — the founding gate + ordering (pure core), the
+%%% quod_runtime — current declarations and transaction ordering (pure core), the
 %%% attach/reconcile lifecycle against a bare kb, and the real founded-namespace
-%%% acceptance paths (plan resilient-frolicking-valley, Increment 2).
+%%% acceptance paths, shared subscriptions and owned resource lifecycles.
 %%%===================================================================
 
-%% a declaration term; Goal defaults to the registered projection stub
-d(Id, Needs)       -> d(Id, Needs, projection_noop).
-d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
-
-reaction_clause(Executor, Pattern, Handler) ->
-    {{react_on, Executor, Pattern, Handler}, {[], false}}.
+reaction_clause(Pattern, Goal) ->
+    {':-', {react_on, Pattern, Goal}, true}.
 
 subscription_clause(Ns, Anchor) ->
     {{subscribes, Ns, Anchor}, {[], false}}.
@@ -24,323 +21,24 @@ ae(Ns, Index, Data, Origin) ->
     quod_prolog:apply_entry(
       Ns, quod_ct:committed_entry(Ns, Index, Data), Origin).
 
-%% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
-%% other unbound variable, because a queue entry must be stable and fully ground.
-anonymous_projection_argument_refused_test() ->
-    ?assertNot(quod_wire_term:is_ground({'_'})),
-    ?assertNot(quod_wire_term:is_ground({job, {'_'}})),
-    ?assertNot(quod_wire_term:is_ground([resource, {'X'}])),
-    ?assert(quod_wire_term:is_ground({job, [resource, 1]})).
-
 applied_fact_and_explicit_operations_are_reaction_events_test() ->
     Ops = [{assert, {{fact, 1}, {[], false}}},
+           {asserta, {{front, 1}, {[], false}}},
            {retract, {{gone, 2}, {[], false}}},
            {assert, {{rule, {0}}, {[{other, {0}}], false}}},
            {event, {alarm, disk}},
            {event, {alarm, disk}}],
     ?assertEqual(
-       [{assert, {fact, 1}}, {retract, {gone, 2}},
+       [{assert, {fact, 1}}, {assert, {front, 1}}, {retract, {gone, 2}},
         {alarm, disk}, {alarm, disk}],
        quod_runtime_predicates:diff_to_events(Ops)).
 
-reaction_unification_continues_the_bound_handler_test() ->
-    with_reaction_est(
-      fun(Est) ->
-              Self = <<1:256>>,
-              Reaction =
-                  {react_on, {node, Self},
-                   {assert, {task_ready, {'Agent'}, {'Task'}}},
-                   {member, {pair, {'Agent'}, {'Task'}},
-                    [{pair, alice, t1}]}},
-              ?assertEqual(
-                 executed,
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 7, Self, Reaction,
-                   {assert, {task_ready, alice, t1}}, Est)),
-              ?assertEqual(
-                 {failed, handler_failed},
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 7, Self, Reaction,
-                   {assert, {task_ready, bob, t2}}, Est)),
-              ?assertEqual(
-                 unmatched,
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 7, Self, Reaction,
-                   {retract, {task_ready, alice, t1}}, Est)),
-              %% An ontology with no ownership rule at all is the ordinary
-              %% unresolved case, not an Erlog error or a local fallback.
-              ?assertEqual(
-                 {inert, unresolved_executor},
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 7, Self,
-                   {react_on, {agent, alice}, {assert, ping},
-                    {member, alice, [alice]}},
-                   {assert, ping}, Est))
-      end).
-
-explicit_event_unification_continues_the_bound_handler_test() ->
-    with_reaction_est(
-      fun(Est) ->
-              Self = <<5:256>>,
-              Reaction =
-                  {react_on, {node, Self},
-                   {alarm, {'Device'}, {'Level'}},
-                   {member, {pair, {'Device'}, {'Level'}},
-                    [{pair, disk, critical}]}},
-              ?assertEqual(
-                 executed,
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:event">>, 10, Self, Reaction,
-                   {alarm, disk, critical}, Est)),
-              ?assertEqual(
-                 unmatched,
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:event">>, 10, Self, Reaction,
-                   {assert, {alarm, disk, critical}}, Est))
-      end).
-
-reaction_handler_uses_normal_prolog_control_test() ->
-    with_reaction_est(fun(Est) ->
-        Self = <<12:256>>,
-        Run = fun(Handler) -> quod_runtime_predicates:run_reaction(
-          <<"reaction:control">>, 1, Self,
-          {react_on, {node, Self}, {value, {'X'}}, Handler}, {value, bound}, Est) end,
-        ?assertEqual(executed, Run(true)),
-        ?assertEqual(executed, Run({',', {'=', {'X'}, bound}, true})),
-        ?assertEqual(executed, Run({';', fail, {'=', {'X'}, bound}})),
-        ?assertEqual({failed, handler_failed}, Run({';', {',', '!', fail}, true}))
-    end).
-
-reaction_executor_must_resolve_uniquely_to_this_node_test() ->
-    Self = <<2:256>>,
-    Other = <<3:256>>,
-    Terms =
-        [{executor_owner_node, {worker, alice}, Self},
-         {executor_owner_node, {worker, disputed}, Self},
-         {executor_owner_node, {worker, disputed}, Other}],
-    with_reaction_est(
-      Terms,
-      fun(Est) ->
-              R = fun(Agent) ->
-                          {react_on, {worker, Agent},
-                           {assert, {wake, Agent}},
-                           {member, Agent, [alice]}}
-                  end,
-              ?assertEqual(
-                 executed,
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 8, Self, R(alice),
-                   {assert, {wake, alice}}, Est)),
-              ?assertEqual(
-                 {inert, unresolved_executor},
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 8, Self, R(missing),
-                   {assert, {wake, missing}}, Est)),
-              ?assertEqual(
-                 {inert, ambiguous_executor},
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 8, Self, R(disputed),
-                   {assert, {wake, disputed}}, Est))
-      end).
-
-agent_reaction_requires_exact_local_incarnation_test() ->
-    Node = {agent_instance_ref, <<"node">>, <<31:256>>, physical_node},
-    Remote = setelement(2, Node, <<"remote-node">>),
-    {ok, Blob} = quod_wire_term:encode_canonical(Node),
-    Saved = application:get_env(quod, node_actor_principal),
-    application:set_env(quod, node_actor_principal, {agent, Blob}),
-    Terms = [{executor_owner_node, {agent, local}, {host, Node, 2, <<32:256>>}},
-             {executor_owner_node, {agent, remote}, {host, Remote, 2, <<32:256>>}},
-             {executor_owner_node, {agent, raw}, <<33:256>>},
-             {executor_owner_node, {agent, ambiguous}, {host, Node, 1, <<32:256>>}},
-             {executor_owner_node, {agent, ambiguous}, {host, Node, 2, <<34:256>>}}],
-    try with_reaction_est(Terms, fun(Est) ->
-        Run = fun(I) -> quod_runtime_predicates:run_reaction(
-                  <<"reaction:agent">>, 1, <<33:256>>,
-                  {react_on, {agent, I}, wake, true}, wake, Est) end,
-        ?assertEqual(executed, Run(local)),
-        ?assertEqual({inert, remote_executor}, Run(remote)),
-        ?assertEqual({inert, malformed_executor_owners}, Run(raw)),
-        ?assertEqual({inert, ambiguous_executor}, Run(ambiguous)),
-        ?assertEqual({inert, unresolved_executor}, Run(missing)),
-        application:unset_env(quod, node_actor_principal),
-        ?assertEqual({inert, unresolved_executor}, Run(local))
-    end)
-    after
-        case Saved of
-            undefined -> application:unset_env(quod, node_actor_principal);
-            {ok, Value} -> application:set_env(quod, node_actor_principal, Value)
-        end
-    end.
-
-reaction_handler_cannot_stage_d_test() ->
-    with_reaction_est(
-      fun(Est) ->
-              Self = <<4:256>>,
-              Reaction =
-                  {react_on, {node, Self}, {assert, ping},
-                   {assertz, forbidden}},
-              ?assertMatch(
-                 {failed, {handler_staged_d, [_]}},
-                 quod_runtime_predicates:run_reaction(
-                   <<"reaction:test">>, 9, Self, Reaction,
-                   {assert, ping}, Est))
-      end).
-
-reaction_context_matrix_test() ->
-    ?assert(quod_predicates:allowed(query, reaction)),
-    ?assert(quod_predicates:allowed(reaction, reaction)),
-    ?assertNot(quod_predicates:allowed(staging, reaction)),
-    ?assertNot(quod_predicates:allowed(projection, reaction)),
-    ?assertNot(quod_predicates:allowed(reaction, proof)),
-    ?assertNot(quod_predicates:allowed(reaction, verdict)),
-    ?assertNot(quod_predicates:allowed(reaction, policy_verdict)),
-    ?assertNot(quod_predicates:allowed(reaction, projection)).
-
-%%%===================================================================
-%%% pure core: plan_handlers/2
-%%%===================================================================
-
-%% independent handlers order by Id term order — identical on every node
-order_deterministic_test() ->
-    G = [d(c, []), d(a, []), d(b, [])],
-    {ok, #{order := Order}} = quod_runtime:plan_handlers(G, G),
-    ?assertEqual([a, b, c], Order),
-    {ok, #{order := Order2}} = quod_runtime:plan_handlers(G, lists:reverse(G)),
-    ?assertEqual(Order, Order2).
-
-%% a dependent whose Id sorts FIRST still runs after its prerequisite
-chain_beats_term_order_test() ->
-    G = [d(a_routes, [{current, z_list}]), d(z_list, [])],
-    {ok, #{order := Order}} = quod_runtime:plan_handlers(G, G),
-    ?assertEqual([z_list, a_routes], Order).
-
-cycle_is_config_error_test() ->
-    G = [d(a, [{current, b}]), d(b, [{current, a}])],
-    ?assertMatch({error, {handler_cycle, [a, b]}}, quod_runtime:plan_handlers(G, G)).
-
-missing_dependency_is_config_error_test() ->
-    G = [d(a, [{current, ghost}])],
-    ?assertMatch({error, {missing_dependency, a, [{current, ghost}]}},
-                 quod_runtime:plan_handlers(G, G)).
-
-%% a Need that is not a ground current/1 term is refused (conditions are deferred)
-condition_need_refused_test() ->
-    G = [d(a, [{watched, 1}])],
-    ?assertMatch({error, {missing_dependency, a, _}}, quod_runtime:plan_handlers(G, G)).
-
-%% a duplicated Need entry is authoring noise, not a second edge — must NOT masquerade
-%% as a cycle (review regression: lists:delete removes one occurrence per Kahn pass)
-duplicate_need_is_not_a_cycle_test() ->
-    G = [d(a, []), d(b, [{current, a}, {current, a}])],
-    {ok, #{order := Order}} = quod_runtime:plan_handlers(G, G),
-    ?assertEqual([a, b], Order).
-
-%% a founding declaration containing a variable can never round-trip the KB as the same term
-%% (findall renames vars) — refused loudly instead of misreporting missing_founding
-nonground_founding_refused_test() ->
-    G = [{state_handler, a, [{'/', w, 1}], [], {goal, {'X'}}}],
-    ?assertMatch({error, {nonground_founding, _}}, quod_runtime:plan_handlers(G, G)).
-
-%% stored-but-not-founding: refused + counted, the rest activates
-dynamic_declaration_rejected_test() ->
-    Founding = [d(a, [])],
-    Stored   = [d(a, []), d(evil, [])],
-    {ok, #{handlers := Hs, rejected_dynamic := 1}} =
-        quod_runtime:plan_handlers(Founding, Stored),
-    ?assertEqual([a], maps:keys(Hs)).
-
-%% same Id, different body: the swap is NOT activated (full-term match) and the missing
-%% founding term makes it a loud config error — the C2 backdoor becomes unhealthy, not code-exec
-same_id_different_body_test() ->
-    Founding = [d(a, [], projection_noop)],
-    Stored   = [d(a, [], {evil_goal, payload})],
-    ?assertMatch({error, {missing_founding, _}},
-                 quod_runtime:plan_handlers(Founding, Stored)).
-
-%% a retracted founding declaration is a distinct loud error
-retracted_founding_test() ->
-    ?assertMatch({error, {missing_founding, _}},
-                 quod_runtime:plan_handlers([d(a, [])], [])).
-
-duplicate_id_test() ->
-    G = [d(a, [], projection_noop), {state_handler, a, [], [], other_goal}],
-    ?assertMatch({error, {duplicate_handler_id, [a]}}, quod_runtime:plan_handlers(G, G)).
-
-%% a ConvergeGoal whose invoked functor is a governed staging/effect predicate is refused
-%% statically (the dynamic class matrix remains the real boundary)
-goal_class_gate_test() ->
-    Bad = [d(a, [], {admit, x, y})],          %% invoked as admit/3 = staging
-    ?assertMatch({error, {invalid_declaration, a}}, quod_runtime:plan_handlers(Bad, Bad)),
-    Good = [d(a, [], projection_noop)],       %% invoked as projection_noop/1 = projection
-    ?assertMatch({ok, _}, quod_runtime:plan_handlers(Good, Good)).
-
-invalid_watch_test() ->
-    Bad = [{state_handler, a, [nonsense], [], projection_noop}],
-    ?assertMatch({error, {invalid_declaration, a}}, quod_runtime:plan_handlers(Bad, Bad)).
-
-with_scope_test() ->
-    ?assertEqual({projection_noop, all}, quod_runtime:with_scope(projection_noop, all)),
-    ?assertEqual({f, 1, all}, quod_runtime:with_scope({f, 1}, all)).
-
-%%%===================================================================
-%%% pure tier core: event_plan/4 (Inc 3)
-%%%===================================================================
-
-%% fixture: z_list watches w/1; a_routes watches r/1 and Needs current(z_list)
-tier_fixture() ->
-    G = [d2(z_list, [{'/', w, 1}], []),
-         d2(a_routes, [{'/', r, 1}], [{current, z_list}])],
-    {ok, #{order := Order, index := Index, dependents := Deps}} =
-        quod_runtime:plan_handlers(G, G),
-    {Order, Index, Deps}.
-
-d2(Id, Watch, Needs) -> {state_handler, Id, Watch, Needs, projection_noop}.
-
-%% DA2 C-A regression: the dependent (a_routes, which sorts FIRST) is chained in on its
-%% prerequisite's event and runs AFTER it, in the global converge order
-inverted_order_dependent_pair_test() ->
-    {Order, Index, Deps} = tier_fixture(),
-    ?assertEqual([z_list, a_routes], Order),
-    {Run, Scopes} = quod_runtime:event_plan([{w, x}], Index, Order, Deps),
-    ?assertEqual([z_list, a_routes], Run),
-    %% the matched handler gets its watched subset; the chained-in dependent gets `all`
-    ?assertEqual({keys, [{w, x}]}, maps:get(z_list, Scopes)),
-    ?assertEqual(all, maps:get(a_routes, Scopes)).
-
-%% a head only the dependent watches runs the dependent alone, with its subset as scope —
-%% retracted heads ride the same list (scope carries full head terms, DA2 M-D)
-dependent_only_event_test() ->
-    {Order, Index, Deps} = tier_fixture(),
-    {Run, Scopes} = quod_runtime:event_plan([{r, dest1}, {r, dest2}], Index, Order, Deps),
-    ?assertEqual([a_routes], Run),
-    ?assertEqual({keys, [{r, dest1}, {r, dest2}]}, maps:get(a_routes, Scopes)).
-
-unmatched_event_runs_nothing_test() ->
-    {Order, Index, Deps} = tier_fixture(),
-    ?assertEqual({[], #{}}, quod_runtime:event_plan([{unwatched, 1}], Index, Order, Deps)).
-
-%% only 5-tuple state_handler asserts in the founding block count
-founding_heads_test() ->
-    Tx = #transaction{tx_id = <<"g">>, origin = {<<"x">>, <<0:256>>},
-                      diff = [{assert, {d(a, []), {[], false}}},
-                              {assert, {{other, fact}, {[], false}}},
-                              {retract, {d(b, []), {[], false}}}],
-                      read_check = #{}, author = <<0:256>>, sig = none},
-    ?assertEqual([d(a, [])], quod_runtime:founding_heads([Tx])).
-
-%%%===================================================================
-%%% ontology-subscription Slice 1: pure local catalogue
-%%%===================================================================
-
 alpha_normalization_preserves_reaction_bindings_test() ->
     A = reaction_clause(
-          {agent, {name_a}},
           {from, <<"target">>, <<1:256>>,
            {assert, {pose, {name_a}, {value_a}}}},
           {notify, {name_a}, {value_a}}),
     B = reaction_clause(
-          {agent, {17}},
           {from, <<"target">>, <<1:256>>,
            {assert, {pose, {17}, {42}}}},
           {notify, {17}, {42}}),
@@ -357,7 +55,7 @@ subscription_catalog_accepts_only_exact_anchored_facts_test() ->
                     {{subscribes, invalid_namespace, Anchor}, {[], false}},
                     {{subscribes, Ns, <<1, 2, 3>>}, {[], false}}],
                reactions => []},
-    {ok, Plan} = quod_runtime:plan_runtime_catalog([], Stored),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(Stored),
     ?assertEqual([{Ns, Anchor}], maps:get(subscriptions, Plan)),
     %% The body-bearing clause is an ordinary inert rule, not malformed
     %% runtime configuration. Only the two malformed fact heads are counted.
@@ -369,8 +67,7 @@ subscription_rule_is_neutral_application_logic_test() ->
     Anchor = <<13:256>>,
     Rule = {{subscribes, Ns, Anchor},
             {[{subscription_enabled, Ns, Anchor}], false}},
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [], #{subscriptions => [Rule], reactions => []}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => [Rule], reactions => []}),
     ?assertEqual([], maps:get(subscriptions, Plan)),
     ?assertEqual(0, maps:get(rejected_subscriptions, Plan)).
 
@@ -379,428 +76,118 @@ large_subscription_catalog_keeps_every_exact_identity_test() ->
         [subscription_clause(
            <<"target:", (integer_to_binary(I))/binary>>, <<I:256>>)
          || I <- lists:seq(1, 1000)],
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [], #{subscriptions => Clauses, reactions => []}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => Clauses, reactions => []}),
     ?assertEqual(1000, length(maps:get(subscriptions, Plan))),
     ?assertEqual(0, maps:get(rejected_subscriptions, Plan)).
 
-founding_source_reaction_is_alpha_matched_and_indexed_test() ->
+source_reaction_is_alpha_normalized_and_indexed_test() ->
     Ns = <<"target">>,
     Anchor = <<3:256>>,
-    Founding = reaction_clause(
-                 {agent, {agent_name}},
-                 {from, Ns, Anchor,
-                  {assert, {pose, {agent_name}, {pose_value}}}},
-                 {notify, {agent_name}, {pose_value}}),
     Stored = reaction_clause(
-               {agent, {51}},
                {from, Ns, Anchor, {assert, {pose, {51}, {72}}}},
                {notify, {51}, {72}}),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [Founding], #{subscriptions => [], reactions => [Stored]}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => [], reactions => [Stored]}),
     [Canonical] = maps:get(reactions, Plan),
     TargetIndex = maps:get({Ns, Anchor}, maps:get(source_interests, Plan)),
     ?assertEqual([Canonical], maps:get({assert, 1}, TargetIndex)),
-    ?assertEqual(0, maps:get(rejected_dynamic, Plan)).
-
-%% Executor is a logical single-owner term, not an agent class. The catalogue
-%% accepts any callable ontology vocabulary whose variables are supplied by
-%% the event pattern; later execution resolves that bound term to one host.
-non_agent_executor_is_alpha_matched_and_indexed_test() ->
-    Ns = <<"target">>,
-    Anchor = <<12:256>>,
-    Founding = reaction_clause(
-                 {service, {service_name}},
-                 {from, Ns, Anchor,
-                  {assert, {service_ready, {service_name}, {payload}}}},
-                 {refresh_service, {service_name}, {payload}}),
-    Stored = reaction_clause(
-               {service, {81}},
-               {from, Ns, Anchor,
-                {assert, {service_ready, {81}, {93}}}},
-               {refresh_service, {81}, {93}}),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [Founding], #{subscriptions => [], reactions => [Stored]}),
-    [Canonical] = maps:get(reactions, Plan),
-    ?assertMatch({react_on, {service, _}, _, _}, Canonical),
-    TargetIndex = maps:get({Ns, Anchor}, maps:get(source_interests, Plan)),
-    ?assertEqual([Canonical], maps:get({assert, 1}, TargetIndex)).
-
-%% A bare variable is not a logical owner. It cannot select one effect host,
-%% even if an unrelated event variable happens to be bound.
-bare_variable_executor_is_refused_test() ->
-    Bad = reaction_clause(
-            {executor},
-            {assert, {service_ready, {executor}}},
-            {refresh_service, {executor}}),
-    ?assertMatch(
-       {error, {invalid_founding_reaction, _}},
-       quod_runtime:plan_runtime_catalog(
-         [Bad], #{subscriptions => [], reactions => [Bad]})).
+    ?assert(is_map(Plan)).
 
 local_reaction_has_no_remote_source_interest_test() ->
     Reaction = reaction_clause(
-                 {service, {service_name}},
                  {assert, {service_ready, {service_name}, {payload}}},
                  {refresh_service, {service_name}, {payload}}),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [Reaction],
-                   #{subscriptions => [], reactions => [Reaction]}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => [], reactions => [Reaction]}),
     ?assertEqual(1, length(maps:get(reactions, Plan))),
     ?assertEqual(#{}, maps:get(source_interests, Plan)).
 
 explicit_event_reaction_is_a_local_catalogue_entry_test() ->
     Reaction = reaction_clause(
-                 {service, {service_name}},
                  {alarm, {service_name}, {severity}},
                  {notify, {service_name}, {severity}}),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [Reaction],
-                   #{subscriptions => [], reactions => [Reaction]}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => [], reactions => [Reaction]}),
     ?assertEqual(1, length(maps:get(reactions, Plan))),
     ?assertEqual(#{}, maps:get(source_interests, Plan)),
     Reserved = reaction_clause(
-                 {service, one}, {from, one, two, three}, {notify, one}),
+                 {from, one, two, three}, {notify, one}),
     ?assertMatch(
-       {error, {invalid_founding_reaction, _}},
-       quod_runtime:plan_runtime_catalog(
-         [Reserved], #{subscriptions => [], reactions => [Reserved]})).
+       {error, {invalid_reaction, _}},
+       quod_runtime:plan_runtime_catalog(#{subscriptions => [], reactions => [Reserved]})).
 
-reaction_rule_is_neutral_application_logic_test() ->
-    Head = {react_on,
-            {service, {service_name}},
-            {assert, {service_ready, {service_name}}},
-            {refresh_service, {service_name}}},
-    Rule = {Head, {[{reaction_enabled, {service_name}}], false}},
+current_reaction_preserves_authored_order_test() ->
+    First = reaction_clause(ping, z_first),
+    Second = reaction_clause(ping, a_second),
     {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [], #{subscriptions => [], reactions => [Rule]}),
-    ?assertEqual([], maps:get(reactions, Plan)),
-    ?assertEqual(0, maps:get(rejected_dynamic, Plan)).
+      #{subscriptions => [], reactions => [First, Second]}),
+    ?assertEqual([First, Second], maps:get(reactions, Plan)),
+    ?assertEqual(maps:get(reactions, Plan), maps:get({ping, 0}, maps:get(reaction_index, Plan))).
 
-dynamic_reaction_is_inert_and_counted_test() ->
-    Ns = <<"target">>,
-    Anchor = <<4:256>>,
-    Dynamic = reaction_clause(
-                {agent, {0}},
-                {from, Ns, Anchor, {assert, {pose, {0}, {1}}}},
-                {notify, {0}, {1}}),
+ordinary_reaction_keeps_its_guard_and_variable_sharing_test() ->
+    Clause = {':-', {react_on, {wake, {'Value'}}, {act, {'Me'}, {'Value'}}},
+              {',', {me, {'Me'}}, {instance_of, worker, {'Me'}}}},
     {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [], #{subscriptions => [], reactions => [Dynamic]}),
-    ?assertEqual([], maps:get(reactions, Plan)),
-    ?assertEqual(#{}, maps:get(source_interests, Plan)),
-    ?assertEqual(1, maps:get(rejected_dynamic, Plan)).
+                   #{subscriptions => [], reactions => [Clause]}),
+    [Stored] = maps:get(reactions, Plan),
+    ?assertEqual(quod_runtime:alpha_normalize(Clause), Stored),
+    ?assertEqual([Stored], maps:get({wake, 1}, maps:get(reaction_index, Plan))).
 
-reaction_effect_cannot_introduce_unbound_variables_test() ->
-    Ns = <<"target">>,
-    Anchor = <<5:256>>,
-    Bad = reaction_clause(
-            {agent, {0}},
-            {from, Ns, Anchor, {assert, {pose, {0}}}},
-            {notify, {0}, {not_bound_by_pattern}}),
-    ?assertMatch(
-       {error, {invalid_founding_reaction, _}},
-       quod_runtime:plan_runtime_catalog(
-         [Bad], #{subscriptions => [], reactions => [Bad]})).
+reaction_goal_may_bind_its_own_result_variables_test() ->
+    Clause = reaction_clause(ping, {record_identity, {'Identity'}}),
+    ?assertMatch({ok, #{reactions := [_]}},
+                 quod_runtime:plan_runtime_catalog(#{reactions => [Clause]})).
 
-reaction_rule_cannot_impersonate_a_founding_fact_test() ->
-    Ns = <<"target">>,
-    Anchor = <<6:256>>,
-    Fact = reaction_clause(
-             {agent, {0}},
-             {from, Ns, Anchor, {assert, {pose, {0}}}},
-             {notify, {0}}),
-    {Head, _FactBody} = Fact,
-    Rule = {Head, {[{call, true}], false}},
-    ?assertMatch(
-       {error, {missing_founding_reaction, _}},
-       quod_runtime:plan_runtime_catalog(
-         [Fact], #{subscriptions => [], reactions => [Rule]})).
+removed_reaction_is_absent_from_current_catalog_test() ->
+    ?assertMatch({ok, #{reactions := []}},
+                 quod_runtime:plan_runtime_catalog(#{subscriptions => [], reactions => []})).
 
-retracted_founding_reaction_is_loud_test() ->
-    Ns = <<"target">>,
-    Anchor = <<7:256>>,
-    Fact = reaction_clause(
-             {agent, {0}},
-             {from, Ns, Anchor, {assert, {pose, {0}}}},
-             {notify, {0}}),
-    ?assertMatch(
-       {error, {missing_founding_reaction, _}},
-       quod_runtime:plan_runtime_catalog(
-         [Fact], #{subscriptions => [], reactions => []})).
-
-%% Genesis is ontology content. Empty protocol carriers cannot be ledger
-%% entries; a shape-valid control batch is still not founding content.
-non_content_founding_payload_is_rejected_test() ->
-    [?assertEqual({error, bad_block},
-                  quod_ledger:new_block({genesis, 0}, none, 1, Payload, 0))
-        || Payload <- [empty, {batch, []}]],
-    assert_bad_founding(quod_ct:atomic_resolve_payload()).
-
-assert_bad_founding(Data) ->
-    {ok, _} = application:ensure_all_started(gproc),
-    U = integer_to_list(erlang:unique_integer([positive])),
-    Dir = filename:join("/tmp", "quod_rt_bad_genesis_" ++ U),
-    Ns = list_to_binary("rtbad:" ++ U),
-    try
-        Entry = quod_ct:committed_entry(Ns, 1, Data),
-        Owner = start_founding_source(Ns, Dir, [Entry], ready),
+transaction_catalog_changes_are_ordered_inside_one_block_test_() ->
+    {timeout, 30, fun() ->
+        F = {Ns, _, _} = setup_bare(),
         try
-            ?assertEqual(
-               {error, invalid_genesis_payload},
-               quod_runtime:test_read_founding(
-                 Ns, erlang:monotonic_time(millisecond) + 5000))
-        after stop_founding_source(Owner)
-        end
-    after
-        _ = file:del_dir_r(Dir)
-    end.
-
-%%%===================================================================
-%%% lifecycle against a bare kb and an owned, non-handler founding entry
-%%%===================================================================
-
-%% The engine is already ready before runtime starts. A missing owner cannot
-%% turn an empty founding guess into a permanently live or unhealthy runtime;
-%% its later registration, with no new commit, supplies the only wake.
-missing_founding_owner_registration_wakes_runtime_test() ->
-    with_founding_runtime(absent, fun(#{ns := Ns, dir := Dir}) ->
-        ok = wait_founding_pending(Ns),
-        Owner = start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], ready),
-        try
-            _ = expect_founding_capture(Owner),
-            ok = wait_runtime_live(Ns),
-            ?assertEqual(0, maps:get(reconcile_failures, quod_runtime:stats(Ns)))
-        after stop_founding_source(Owner)
-        end
-    end).
-
-same_founding_owner_publication_wakes_pending_runtime_test() ->
-    with_founding_runtime(unavailable, fun(#{ns := Ns, owner := Owner}) ->
-        _ = expect_founding_capture(Owner),
-        ok = wait_founding_pending(Ns),
-        assert_no_founding_capture(Owner),
-        set_founding_mode(Owner, ready),
-        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
-        _ = expect_founding_capture(Owner),
-        ok = wait_runtime_live(Ns),
-        ?assertEqual(0, maps:get(collapses, quod_runtime:stats(Ns)))
-    end).
-
-%% The publication is consumed while the first real capture remains blocked.
-%% Its not-ready response must use that one parked edge, not lose it or create
-%% an idle retry. A successful capture does not replay the notification again.
-founding_publication_crossing_failed_capture_is_not_lost_test() ->
-    with_founding_runtime({hold, unavailable},
-      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
-        {_Worker, _Deadline, Token} = expect_founding_capture(Owner),
-        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
-        _ = gen_server:call(Runtime, get_stats),
-        Owner ! {release_founding_capture, Token},
-        _ = expect_founding_capture(Owner),
-        ok = wait_runtime_live(Ns),
-        assert_no_founding_capture(Owner),
-        ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
-      end).
-
-%% Merely starting a reconcile does not consume its recovery ID if founding
-%% was unavailable. A later delivery of that exact ready edge must still be
-%% able to reconcile; it is not a duplicate of completed work.
-pending_founding_does_not_deduplicate_unfinished_recovery_test() ->
-    with_founding_runtime(unavailable,
-      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
-        _ = expect_founding_capture(Owner),
-        ok = wait_founding_pending(Ns),
-        Recovery = make_ref(),
-        Runtime ! {replay_ready, Recovery, 0},
-        _ = expect_founding_capture(Owner),
-        ok = wait_founding_pending(Ns),
-        set_founding_mode(Owner, ready),
-        Runtime ! {replay_ready, Recovery, 0},
-        _ = expect_founding_capture(Owner),
-        ok = wait_runtime_live(Ns),
-        ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
-      end).
-
-%% Real apply publication parks a founding-only wake before its direct
-%% envelope overflows the queue. That weak wake cannot replace the fresh
-%% snapshot needed for work dropped while the old snapshot was pinned.
-founding_wake_cannot_hide_post_snapshot_overflow_test() ->
-    with_founding_runtime({hold, ready}, #{runtime_max_queued_events => 1},
-      fun(#{ns := Ns, owner := Owner}) ->
-        {_Worker, _Deadline, Token} = expect_founding_capture(Owner),
-        ?assertEqual(0, maps:get(height, quod_runtime:stats(Ns))),
-        ok = ae(Ns, 1, batch(change(Ns, diff_for({during_founding, 1}))), live),
-        ok = ae(Ns, 2, batch(change(Ns, diff_for({during_founding, 2}))), live),
-        ?assertEqual(2, quod_prolog:applied(Ns)),
-        ok = wait_stats(Ns,
-               fun(#{mode := reconciling, runner_active := true,
-                     founding_ready := false, collapses := 1,
-                     events_seen := 2, queue_len := 0}) -> true;
-                  (_) -> false end),
-        Owner ! {release_founding_capture, Token},
-        ok = wait_stats(Ns,
-               fun(#{mode := live, runner_active := false}) -> true;
-                  (_) -> false end),
-        Stats = quod_runtime:stats(Ns),
-        ?assertEqual(2, maps:get(reconciles, Stats)),
-        ?assertEqual(2, maps:get(height, Stats)),
-        ?assertEqual(2, maps:get(p_height, Stats)),
-        ?assertEqual(2, maps:get(e_frontier, Stats)),
-        ?assertEqual(1, maps:get(dropped_events, Stats)),
-        assert_no_founding_capture(Owner)
-      end).
-
-%% A quiet same-PID owner may stay busy beyond the retired one-second reader
-%% cutoff. The already-owned reconcile budget is the sole bound.
-busy_founding_owner_uses_original_reconcile_budget_test_() ->
-    {timeout, 10, fun() ->
-        with_reconcile_budget(4000, fun() ->
-            with_founding_runtime({hold, ready},
-              fun(#{ns := Ns, owner := Owner}) ->
-                {Worker, Deadline, Token} = expect_founding_capture(Owner),
-                receive after 1100 -> ok end,
-                ?assert(is_process_alive(Worker)),
-                ?assert(Deadline > erlang:monotonic_time(millisecond)),
-                Owner ! {release_founding_capture, Token},
-                ok = wait_runtime_live(Ns),
-                assert_no_founding_capture(Owner)
-              end)
-        end)
+            ok = quod_prolog:mark_ready(Ns),
+            ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+            Reaction = {react_on, {ping, {'Value'}},
+                        {member, {'Value'}, [two, three]}},
+            [Assert] = diff_for(Reaction),
+            {assert, Clause} = Assert,
+            Transactions = [change(Ns, [Assert, {event, {ping, one}}]),
+                            change(Ns, [{event, {ping, two}}]),
+                            change(Ns, [{retract, Clause}, {event, {ping, three}}]),
+                            change(Ns, [{event, {ping, four}}])],
+            true = quod_reg:subscribe({runtime, Ns}),
+            trace_dispatch(Ns),
+            ok = ae(Ns, 1, {batch, Transactions}, live),
+            [await_route(Ns, {ping, Value}, Count)
+             || {Value, Count} <- [{one, 0}, {two, 1}, {three, 1}, {four, 0}]],
+            ok = wait_stats(Ns,
+                fun(#{mode := live, reaction_candidates := 0, reactions_executed := 0,
+                      reaction_failures := 0, reactions_active := 0,
+                      events_seen := 4, e_frontier := 1,
+                      runner_active := false, queue_len := 0}) -> true;
+                   (_) -> false end),
+            Catalogs = [receive {applied_live, #{ns := Ns, runtime_catalog := C}} -> C
+                        after 1000 -> error(missing_transaction_envelope) end
+                        || _ <- Transactions],
+            ?assertMatch([{ok, #{reactions := [_]}}, keep,
+                          {ok, #{reactions := []}}, keep], Catalogs),
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {react_on, {'_'}, {'_'}}))
+        after quod_reg:unsubscribe({runtime, Ns}), cleanup_bare(F) end
     end}.
 
-expired_founding_capture_waits_for_event_without_collapse_test() ->
-    with_reconcile_budget(100, fun() ->
-        with_founding_runtime({hold, ready},
-          fun(#{ns := Ns, owner := Owner}) ->
-            {Worker, _Deadline, Token} = expect_founding_capture(Owner),
-            MRef = erlang:monitor(process, Worker),
-            receive {'DOWN', MRef, process, Worker, _} -> ok
-            after 2000 -> error(capture_outlived_reconcile)
-            end,
-            ok = wait_founding_pending(Ns),
-            Owner ! {release_founding_capture, Token},
-            set_founding_mode(Owner, ready),
-            assert_no_founding_capture(Owner),
-            ?assertEqual(0, maps:get(collapses, quod_runtime:stats(Ns))),
-            ?assertEqual(0, maps:get(reconcile_failures, quod_runtime:stats(Ns))),
-            _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
-            _ = expect_founding_capture(Owner),
-            ok = wait_runtime_live(Ns)
-          end)
-    end).
-
-founding_owner_replacement_cancels_old_capture_and_wakes_test() ->
-    with_founding_runtime({hold, ready},
-      fun(#{ns := Ns, dir := Dir, owner := OldOwner}) ->
-        {Worker, _Deadline, _Token} = expect_founding_capture(OldOwner),
-        MRef = erlang:monitor(process, Worker),
-        stop_founding_source(OldOwner),
-        receive {'DOWN', MRef, process, Worker, _} -> ok
-        after 2000 -> error(old_founding_reader_survived)
-        end,
-        ok = wait_founding_pending(Ns),
-        ?assertEqual(0, maps:get(reconciles, quod_runtime:stats(Ns))),
-        Owner = start_founding_source(Ns, Dir, [], ready),
+correcting_a_malformed_reaction_recovers_the_runtime_test_() ->
+    {timeout, 30, fun() ->
+        F = {Ns, _, _} = setup_bare(),
         try
-            _ = expect_founding_capture(Owner),
-            ok = wait_runtime_live(Ns),
-            ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
-        after stop_founding_source(Owner)
-        end
-      end).
-
-cached_founding_is_invalidated_on_owner_replacement_test() ->
-    with_founding_runtime(ready, fun(#{ns := Ns, dir := Dir, owner := OldOwner}) ->
-        _ = expect_founding_capture(OldOwner),
-        ok = wait_runtime_live(Ns),
-        stop_founding_source(OldOwner),
-        ok = wait_founding_pending(Ns),
-        Owner = start_founding_source(Ns, Dir, [], ready),
-        try
-            _ = expect_founding_capture(Owner),
-            ok = wait_stats(Ns, fun(#{mode := live, reconciles := 2}) -> true;
-                                   (_) -> false end),
-            assert_no_founding_capture(Owner)
-        after stop_founding_source(Owner)
-        end
-    end).
-
-%% Force the completed result to precede the owner's unregistration notice in
-%% runtime's mailbox. Publication must inspect the captured owner itself, not
-%% rely on eventually consuming that monitor callback.
-founding_result_cannot_publish_after_source_death_test() ->
-    with_founding_runtime({hold, ready},
-      fun(#{ns := Ns, dir := Dir, owner := OldOwner, runtime := Runtime}) ->
-        {Worker, _Deadline, Token} = expect_founding_capture(OldOwner),
-        ok = sys:suspend(Runtime),
-        try
-            MRef = erlang:monitor(process, Worker),
-            OldOwner ! {release_founding_capture, Token},
-            receive {'DOWN', MRef, process, Worker, normal} -> ok
-            after 2000 -> error(founding_result_not_completed)
-            end,
-            stop_founding_source(OldOwner)
-        after sys:resume(Runtime)
-        end,
-        ok = wait_founding_pending(Ns),
-        ?assertEqual(0, maps:get(reconciles, quod_runtime:stats(Ns))),
-        Owner = start_founding_source(Ns, Dir, [], ready),
-        try
-            _ = expect_founding_capture(Owner),
-            ok = wait_runtime_live(Ns)
-        after stop_founding_source(Owner)
-        end
-      end).
-
-verified_malformed_founding_is_unhealthy_not_pending_test() ->
-    with_founding_runtime(malformed, fun(#{ns := Ns, owner := Owner}) ->
-        _ = expect_founding_capture(Owner),
-        ok = wait_stats(Ns, fun(#{mode := unhealthy, reconcile_failures := 1,
-                                 reconciles := 0}) -> true;
-                               (_) -> false end),
-        assert_no_founding_capture(Owner)
-    end).
-
-empty_committed_founding_prefix_stays_pending_until_publication_test() ->
-    with_founding_runtime(empty, fun(#{ns := Ns, owner := Owner}) ->
-        _ = expect_founding_capture(Owner),
-        ok = wait_founding_pending(Ns),
-        Owner ! {append_founding, bare_founding_entry(Ns), self()},
-        receive {founding_appended, Owner} -> ok
-        after 2000 -> error(founding_not_appended)
-        end,
-        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
-        _ = expect_founding_capture(Owner),
-        ok = wait_runtime_live(Ns)
-    end).
-
-runtime_founding_uses_one_snapshot_and_exact_slot_without_full_open_test() ->
-    with_founding_runtime({hold, ready},
-      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
-        {Worker, _Deadline, Token} = expect_founding_capture(Owner),
-        MFAs = [{quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
-                {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},
-                {quod_ledger_store, open_ro_snapshot, 1},
-                {quod_ledger_store, read_at, 2}],
-        lists:foreach(fun(MFA) -> 1 = erlang:trace_pattern(MFA, true, []) end, MFAs),
-        1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
-        1 = erlang:trace(Runtime, true, [call, set_on_spawn, {tracer, self()}]),
-        try
-            Owner ! {release_founding_capture, Token},
-            ok = wait_runtime_live(Ns),
-            quod_runtime:reconcile_now(Ns),
-            ok = wait_stats(Ns, fun(#{mode := live, reconciles := 2}) -> true;
-                                   (_) -> false end),
-            TraceRef = erlang:trace_delivered(all),
-            ?assertEqual(#{scans => 0, snapshots => 1, slots => [1]},
-                         founding_trace_counts(TraceRef,
-                           #{scans => 0, snapshots => 0, slots => []})),
-            assert_no_founding_capture(Owner)
-        after
-            _ = erlang:trace(Runtime, false, [call, set_on_spawn]),
-            lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, false, []) end, MFAs)
-        end
-      end).
+            ok = quod_prolog:mark_ready(Ns),
+            ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+            [Bad] = diff_for({react_on, {'UnboundPattern'}, true}),
+            {assert, Clause} = Bad,
+            ok = ae(Ns, 1, batch(change(Ns, [Bad])), live),
+            ok = wait_stats(Ns, fun(#{mode := unhealthy}) -> true; (_) -> false end),
+            ok = ae(Ns, 2, batch(change(Ns, [{retract, Clause}])), live),
+            ok = wait_stats(Ns, fun(#{mode := live, height := 2, reactions_active := 0}) -> true;
+                                   (_) -> false end)
+        after cleanup_bare(F) end
+    end}.
 
 setup_bare() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -808,16 +195,13 @@ setup_bare() ->
     {ok, Kb} = quod_prolog:start_link(
                  Ns, #{node_id => {"127.0.0.1", 5000},
                        outcome_backend => memory}),
-    Dir = temp_runtime_dir("quod_rt_bare"),
-    Owner = start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], ready),
-    {ok, Rt} = quod_runtime:start_link(Ns, #{}),
-    {Ns, Kb, Rt, Owner, Dir}.
+    {ok, Rt} = quod_runtime:start_link(Ns, #{node_id => <<82:256>>}),
+    {Ns, Kb, Rt}.
 
-cleanup_bare({_Ns, Kb, Rt, Owner, Dir}) ->
+cleanup_bare({_Ns, Kb, Rt}) ->
+    stop_dispatch_trace(Rt),
     [case is_process_alive(P) of true -> gen_server:stop(P); false -> ok end
      || P <- [Rt, Kb]],
-    stop_founding_source(Owner),
-    _ = file:del_dir_r(Dir),
     ok.
 
 bare_lifecycle_test_() ->
@@ -828,25 +212,21 @@ bare_lifecycle_test_() ->
       || T <- [fun t_boot_edge_reconciles_to_live/1,
                fun t_restart_reattaches_while_ready/1,
                fun t_direct_envelopes_counted/1,
-               fun t_replay_cycle_reconciles_and_rejects_dynamic/1,
-               fun t_frontier_follows_and_no_history_leak/1,
-               fun t_no_job_resource_follows_frontier/1,
-               fun t_failed_job_blocks_frontier/1,
-               fun t_heavy_queue_is_bounded/1,
-               fun t_overflow_collapses_and_converges/1]]}.
+               fun t_replay_cycle_reconciles_current_declarations/1,
+               fun t_frontier_follows_and_no_history_leak/1]]}.
 
-%% booting until the kb's ready edge, then attach + reconcile (zero handlers) => live
-t_boot_edge_reconciles_to_live({Ns, _Kb, _Rt, _Owner, _Dir}) ->
+%% Booting until the KB ready edge, then install current declarations.
+t_boot_edge_reconciles_to_live({Ns, _Kb, _Rt}) ->
     fun() ->
         ?assertEqual(booting, maps:get(mode, quod_runtime:stats(Ns))),
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := live, reconciles := R}) -> R >= 1;
                                (_) -> false end),
-        ?assertEqual(0, maps:get(handlers_active, quod_runtime:stats(Ns)))
+        ?assertEqual(0, maps:get(reactions_active, quod_runtime:stats(Ns)))
     end.
 
 %% a runtime-only restart re-attaches via the handle_continue probe (no ready edge comes)
-t_restart_reattaches_while_ready({Ns, Kb, Rt, _Owner, _Dir}) ->
+t_restart_reattaches_while_ready({Ns, Kb, Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -861,7 +241,7 @@ t_restart_reattaches_while_ready({Ns, Kb, Rt, _Owner, _Dir}) ->
     end.
 
 %% live commits reach the attached runtime as direct est-carrying envelopes
-t_direct_envelopes_counted({Ns, _Kb, _Rt, _Owner, _Dir}) ->
+t_direct_envelopes_counted({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -870,25 +250,25 @@ t_direct_envelopes_counted({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     end.
 
 %% a replay run re-triggers reconciliation on its ready edge — EXACTLY once per edge — and a
-%% dynamically-written declaration is discovered there and refused (counted), staying live
-t_replay_cycle_reconciles_and_rejects_dynamic({Ns, _Kb, _Rt, _Owner, _Dir}) ->
+%% dynamically-written declaration is discovered and activated from current state
+t_replay_cycle_reconciles_current_declarations({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        Dyn = d(sneaky, []),
+        Dyn = {react_on, {wake, {'Value'}}, {remember, {'Value'}}},
         ok = ae(Ns, 1, batch(change(Ns, diff_for(Dyn))), live),
         %% open a replay run and close it with a live block: replay_ready fires
         ok = ae(Ns, 2, batch(change(Ns, diff_for({r, 2}))), replay),
         ok = ae(Ns, 3, batch(change(Ns, diff_for({r, 3}))), live),
-        ok = wait_stats(Ns, fun(#{reconciles := R, rejected_dynamic := D, mode := M}) ->
-                                R =:= 2 andalso D >= 1 andalso M =:= live;
+        ok = wait_stats(Ns, fun(#{reconciles := R, reactions_active := D, mode := M}) ->
+                                R =:= 2 andalso D =:= 1 andalso M =:= live;
                                (_) -> false end)
     end.
 
-%% Inc 3: with zero handlers the tier is trivially complete — the frontier follows every
+%% With no matching reactions the frontier follows every
 %% live commit, and (the review's leak regression) the floor follows too: KB history never
 %% accumulates behind the runtime's pin
-t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt, _Owner, _Dir}) ->
+t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -909,76 +289,25 @@ t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt, _Owner, _Dir}) ->
                         end)
     end.
 
-%% A resource with no pending work needs no synthetic no-op job for every block: its derived
-%% state is current through the ordered tier's frontier, and revision waiters release there.
-t_no_job_resource_follows_frontier({Ns, _Kb, _Rt, _Owner, _Dir}) ->
-    fun() ->
-        ok = quod_prolog:mark_ready(Ns),
-        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
-        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
-        ?assertEqual(1, quod_runtime:revision(Ns, untouched_resource)),
-        ?assertEqual(ok, quod_runtime:await_revision(Ns, untouched_resource, 1, 100))
-    end.
-
-%% A failed full rebuild is explicit missing work. Later unrelated events must not make its
-%% revision barrier look satisfied; a successful rebuild clears the block and catches up.
-t_failed_job_blocks_frontier({Ns, _Kb, _Rt, _Owner, _Dir}) ->
-    fun() ->
-        ok = quod_prolog:mark_ready(Ns),
-        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
-        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
-        ok = quod_runtime:enqueue_heavy(Ns, broken_resource, 1, definitely_missing_goal),
-        ok = wait_stats(Ns, fun(#{heavy_failures := N}) -> N >= 1; (_) -> false end),
-        ok = ae(Ns, 2, batch(change(Ns, diff_for({ping, 2}))), live),
-        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 2; (_) -> false end),
-        ?assertEqual({error, timeout},
-                     quod_runtime:await_revision(Ns, broken_resource, 2, 25)),
-        ok = quod_runtime:enqueue_heavy(Ns, broken_resource, 2, true),
-        ?assertEqual(ok, quod_runtime:await_revision(Ns, broken_resource, 2, 5000)),
-        ?assert(quod_runtime:revision(Ns, broken_resource) >= 2)
-    end.
-
-%% Pending resources and retained job terms are independently bounded. Updating the one
-%% admitted resource coalesces in place and does not consume another queue slot.
-t_heavy_queue_is_bounded({Ns, _Kb, Rt, _Owner, _Dir}) ->
-    fun() ->
-        ok = gen_server:stop(Rt),
-        {ok, Rt2} = quod_runtime:start_link(
-                      Ns, #{runtime_max_heavy_workers => 0,
-                            runtime_max_heavy_pending => 1,
-                            runtime_max_heavy_job_bytes => 1024}),
-        ok = quod_prolog:mark_ready(Ns),
-        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = quod_runtime:enqueue_heavy(Ns, resource_a, 1, first),
-        ok = quod_runtime:enqueue_heavy(Ns, resource_a, 2, replacement),
-        ?assertEqual({error, overloaded},
-                     quod_runtime:enqueue_heavy(Ns, resource_b, 1, small)),
-        ?assertEqual({error, oversized},
-                     quod_runtime:enqueue_heavy(Ns, resource_a, 3, <<0:16384>>)),
-        #{heavy_pending := 1, heavy_running := 0, heavy_superseded := 1,
-          heavy_rejected := 2} = quod_runtime:stats(Ns),
-        ok = gen_server:stop(Rt2)
-    end.
-
-%% Inc 3: a zero-capacity queue makes every envelope overflow — each collapses to a fresh
-%% reconciliation and the runtime still converges to the applied height
-t_overflow_collapses_and_converges({Ns, _Kb, Rt, _Owner, _Dir}) ->
-    fun() ->
-        ok = gen_server:stop(Rt),
-        {ok, Rt2} = quod_runtime:start_link(Ns, #{runtime_max_queued_events => 0}),
-        ok = quod_prolog:mark_ready(Ns),
-        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
-        ok = wait_stats(Ns, fun(#{collapses := C, reconciles := R, height := H, mode := M}) ->
-                                C >= 1 andalso R >= 2 andalso H >= 1 andalso M =:= live;
-                               (_) -> false end),
-        ok = gen_server:stop(Rt2)
-    end.
+zero_resource_notice_capacity_fails_once_test_() ->
+    {timeout, 30, fun() ->
+        {Ns, Kb, Old} = setup_bare(),
+        ok = gen_server:stop(Old),
+        {ok, Runtime} = quod_runtime:start_link(Ns, #{runtime_max_queued_events => 0}),
+        try
+            ok = quod_prolog:mark_ready(Ns),
+            ok = wait_stats(Ns, fun(#{mode := unhealthy, reconciles := 1}) -> true;
+                                   (_) -> false end),
+            ok = ae(Ns, 1, batch(change(Ns, diff_for({still_committed, yes}))), live),
+            ok = wait_stats(Ns, fun(#{mode := unhealthy, events_seen := Seen,
+                                     reconciles := 1, runner_active := false, queue_len := 0}) ->
+                                       Seen >= 1; (_) -> false end),
+            ?assertEqual(1, quod_prolog:applied(Ns))
+        after cleanup_bare({Ns, Kb, Runtime}) end
+    end}.
 
 %%%===================================================================
-%%% founded namespace: the real slot-1 gate end-to-end (quod_ns, mode=create)
+%%% real namespace acceptance (quod_ns, mode=create)
 %%%===================================================================
 
 setup_founded(GenesisTerms) ->
@@ -998,7 +327,9 @@ setup_founded(GenesisTerms) ->
     unlink(Sup),
     {Dir, Ns, Sup}.
 
-setup_founded_terms(Terms) ->
+setup_founded_terms(Terms) -> setup_founded_terms(Terms, #{}).
+
+setup_founded_terms(Terms, ExtraConfig) ->
     {ok, _} = application:ensure_all_started(gproc),
     U   = integer_to_list(erlang:unique_integer([positive])),
     Dir = filename:join("/tmp", "quod_rt_terms_" ++ U),
@@ -1007,8 +338,8 @@ setup_founded_terms(Terms) ->
     {Pub, Seed} = quod_identity:generate(),
     Key = quod_identity:key_term({Pub, Seed}),
     Id  = #{pubkey => Pub, key => Key},
-    Cfg = #{node_id => Pub, identity => Id, data_dir => Dir,
-            mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)},
+    Cfg = maps:merge(#{node_id => Pub, identity => Id, data_dir => Dir,
+            mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)}, ExtraConfig),
     {ok, Sup} = quod_ns:start_link(Ns, Cfg),
     unlink(Sup),
     {Dir, Ns, Sup}.
@@ -1047,6 +378,7 @@ setup_founded_terms_on_node_with_identity(TermsFun, Identity) ->
     {Dir, Ns, Sup}.
 
 cleanup_founded({Dir, Ns, _Sup}) ->
+    stop_dispatch_trace(quod_reg:where({quod_runtime, Ns})),
     case quod_reg:where({quod_ns, Ns}) of
         undefined -> ok;
         Pid -> Ref = monitor(process, Pid),
@@ -1058,19 +390,6 @@ cleanup_founded({Dir, Ns, _Sup}) ->
 
 restore_env(Key, {ok, Value}) -> application:set_env(quod, Key, Value);
 restore_env(Key, undefined) -> application:unset_env(quod, Key).
-
-%% two founded handlers with an ordering edge activate at boot
-founded_handlers_active_test_() ->
-    {timeout, 60, fun() ->
-    F = setup_founded(<<"state_handler(z_list, [watched/1], [], projection_noop).\n"
-                        "state_handler(a_routes, [watched/1], [current(z_list)], "
-                        "projection_noop).\n">>),
-    {_, Ns, _} = F,
-    try
-        ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 2;
-                               (_) -> false end)
-    after cleanup_founded(F) end
-    end}.
 
 %% subscriptions are ordinary D: the normal prove/transaction/apply path changes the
 %% runtime's local catalogue. No subscription-specific consensus record or executor exists.
@@ -1240,9 +559,9 @@ local_subscription_reaches_one_shared_ready_projection_test_() ->
     end}.
 
 %% Baseline materialization is state only. Only a later contiguous certified
-%% advance becomes an occurrence, and it enters the same Prolog continuation
-%% as a local reaction with the source wrapper available for unification.
-subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
+%% advance selects the matching authored clause, with its exact source wrapper.
+%% These unhosted fixtures may route candidates but cannot borrow node authority.
+subscribed_reaction_routes_live_certified_advance_once_test_() ->
     {timeout, 90, fun() ->
     Target = setup_founded_terms([{remote_ping, old}]),
     {_, TargetNs, _} = Target,
@@ -1250,9 +569,9 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
     ForeignDir = temp_runtime_dir("foreign-reaction"),
     {ForeignOwner, OwnForeignOwner} = ensure_foreign_owner(ForeignDir),
     Subscriber = setup_founded_terms_with_identity(
-                   fun(Self) ->
+                   fun(_Self) ->
                            [{subscribes, TargetNs, Anchor},
-                            {react_on, {node, Self},
+                            {react_on,
                              {from, TargetNs, Anchor,
                               {assert, {remote_ping, {'Value'}}}},
                              {member, {'Value'},
@@ -1280,14 +599,19 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
         ForgedStats = quod_runtime:stats(SubscriberNs),
         ?assertEqual(0, maps:get(reaction_candidates, ForgedStats)),
         ?assertEqual(0, maps:get(reactions_executed, ForgedStats)),
-        %% The old fact was folded into the certified baseline and did not fire.
+        %% Inspect the real dispatcher without inventing a hosted principal.
+        %% Signed execution of these candidates is covered by agent_reaction_tests.
+        trace_dispatch(SubscriberNs),
         ?assertMatch({ok, _, _}, rp(TargetNs, {assertz, {remote_ping, fresh}})),
+        await_route(SubscriberNs, {from, TargetNs, Anchor, {assert, {remote_ping, fresh}}}, 1),
+        await_source_processed(SubscriberNs),
         ok = wait_stats(
                SubscriberNs,
-               fun(#{reaction_candidates := 1, reaction_matches := 1,
-                     reactions_executed := 1, reaction_failures := 0}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0, reaction_failures := 0}) -> true;
                   (_) -> false
                end),
+        assert_no_route(SubscriberNs),
         %% The canonical reducer suppresses this duplicate; the follower cannot
         %% manufacture a second occurrence from the requested diff.
         #{follow_entries := FollowedBefore} = quod_foreign_log:stats(),
@@ -1300,9 +624,11 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
                            _ -> false
                        end
                end),
+        await_source_processed(SubscriberNs),
+        assert_no_route(SubscriberNs),
         Stats = quod_runtime:stats(SubscriberNs),
-        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
-        ?assertEqual(1, maps:get(reactions_executed, Stats)),
+        ?assertEqual(0, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(0, maps:get(reactions_executed, Stats)),
 
         %% A runtime restart reattaches to the current certified projection as
         %% a state baseline. It must not replay the already observed event.
@@ -1319,13 +645,18 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
                                        _ -> false
                                    end
                end),
+        trace_dispatch(SubscriberNs),
+        assert_no_route(SubscriberNs),
         ?assertMatch(
            {ok, _, _},
            rp(TargetNs, {assertz, {remote_ping, fresh_after_restart}})),
+        await_route(SubscriberNs, {from, TargetNs, Anchor,
+                                  {assert, {remote_ping, fresh_after_restart}}}, 1),
+        await_source_processed(SubscriberNs),
         ok = wait_stats(
                SubscriberNs,
-               fun(#{reaction_candidates := 1, reaction_matches := 1,
-                     reactions_executed := 1}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0}) -> true;
                   (_) -> false
                end),
 
@@ -1343,19 +674,23 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
                    SubscriberNs,
                    fun(#{source_views_ready := 1,
                          source_attempts := Attempts,
-                         reaction_candidates := 1,
-                         reactions_executed := 1})
+                         reaction_candidates := 0,
+                         reactions_executed := 0})
                          when Attempts > AttemptsBeforeRebuild -> true;
                       (_) -> false
                    end),
+            trace_dispatch(SubscriberNs),
             ?assertMatch(
                {ok, _, _},
                rp(TargetNs,
                   {assertz, {remote_ping, fresh_after_cache_rebuild}})),
+            await_route(SubscriberNs, {from, TargetNs, Anchor,
+                                      {assert, {remote_ping, fresh_after_cache_rebuild}}}, 1),
+            await_source_processed(SubscriberNs),
             ok = wait_stats(
                    SubscriberNs,
-                   fun(#{reaction_candidates := 2, reaction_matches := 2,
-                         reactions_executed := 2}) -> true;
+                   fun(#{reaction_candidates := 0, reaction_matches := 0,
+                         reactions_executed := 0}) -> true;
                       (_) -> false
                    end)
         after
@@ -1376,53 +711,32 @@ subscription_retraction_precedes_later_queued_remote_reaction_test() ->
     TargetNs = <<"private:queued-target">>,
     Anchor = <<81:256>>,
     Identity = {TargetNs, Anchor},
-    Self = <<82:256>>,
     Reaction =
-        {react_on, {node, Self},
+        {react_on,
          {from, TargetNs, Anchor, {assert, {remote_ping, {'Value'}}}},
          {member, {'Value'}, [must_not_run]}},
     ReactionClause = reaction_clause(
-                       {node, Self}, element(3, Reaction), element(4, Reaction)),
+                       element(2, Reaction), element(3, Reaction)),
     SubscriptionClause = subscription_clause(TargetNs, Anchor),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [ReactionClause],
-                   #{subscriptions => [SubscriptionClause],
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(#{subscriptions => [SubscriptionClause],
                      reactions => [ReactionClause]}),
     with_reaction_est(
       [Reaction],
       fun(EstAfterRetraction) ->
               Work =
                   [{local, 2, EstAfterRetraction,
-                    [{subscribes, TargetNs, Anchor}], [], []},
+                    [{subscribes, TargetNs, Anchor}], [], [],
+                    {ok, #{subscriptions => [], reactions => [ReactionClause]}}},
                    {remote, make_ref(), make_ref(), Identity,
                     [{2, [{assert,
                            {{remote_ping, must_not_run}, {[], false}}}]}]}],
               ?assertMatch(
                  {ok, 2, _, [], #{subscriptions := []},
-                  #{candidates := 0, executed := 0, dropped := 1}},
+                  #{candidates := 0, executed := 0, dropped := 1}, _},
                  quod_runtime:test_run_events(
-                   Work, Plan, Self, [ReactionClause], 1,
+                   Work, Plan, 1,
                    EstAfterRetraction))
       end).
-
-transient_observation_uses_reaction_unification_test() ->
-    Self = <<83:256>>,
-    Pattern = {observed, {host_loss, {'Instance'}, {'Epoch'}}},
-    Goal = {',', {'=', {'Instance'}, worker}, {'=', {'Epoch'}, 7}},
-    Reaction = {react_on, {node, Self}, Pattern, Goal},
-    Clause = reaction_clause({node, Self}, Pattern, Goal),
-    {ok, Plan} = quod_runtime:plan_runtime_catalog(
-                   [Clause], #{subscriptions => [], reactions => [Clause]}),
-    with_reaction_est([Reaction], fun(Est) ->
-        %% A committed payload cannot impersonate an owner observation. Only
-        %% the explicit observation tier may invoke this privileged handler.
-        Work = [{local, 2, Est, [], [{observed, {host_loss, worker, 7}}], []},
-                {observed, {host_loss, worker, 7}}],
-        ?assertMatch({ok, 2, _, [], keep,
-                      #{candidates := 1, matches := 1, executed := 1}},
-                     quod_runtime:test_run_events(
-                       Work, Plan, Self, [Clause], 1, Est))
-    end).
 
 %% A participant's event-only plan becomes visible only through atomic Resolve.
 %% Vote and Complete are silent; the certified follower
@@ -1453,9 +767,9 @@ subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
     ForeignDir = temp_runtime_dir("foreign-reaction-dtx"),
     {ForeignOwner, OwnForeignOwner} = ensure_foreign_owner(ForeignDir),
     Subscriber = setup_founded_terms_on_node_with_identity(
-                   fun(Self) ->
+                   fun(_Self) ->
                            [{subscribes, TargetNs, Anchor},
-                            {react_on, {node, Self},
+                            {react_on,
                              {from, TargetNs, Anchor,
                               {dtx_remote_ping, {'Value'}}},
                              {member, {'Value'}, [committed_once]}}]
@@ -1469,6 +783,7 @@ subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
                      reactions_executed := 0}) -> true;
                   (_) -> false
                end),
+        trace_dispatch(SubscriberNs),
         Goal =
             {',', {trigger_event, {dtx_remote_ping, committed_once}},
              {'::', OtherNs,
@@ -1477,10 +792,13 @@ subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
            {ok, [_],
             #{ref := {group, _, _, _, _, _}, participant_slots := [_, _]}},
            rp(TargetNs, Goal)),
+        await_route(SubscriberNs, {from, TargetNs, Anchor, {dtx_remote_ping, committed_once}}, 1),
+        await_source_processed(SubscriberNs),
+        assert_no_route(SubscriberNs),
         ok = wait_stats(
                SubscriberNs,
-               fun(#{reaction_candidates := 1, reaction_matches := 1,
-                     reactions_executed := 1, reaction_failures := 0}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0, reaction_failures := 0}) -> true;
                   (_) -> false
                end),
         ?assertMatch({fail, _}, quod_prolog:prove(
@@ -1489,8 +807,8 @@ subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
         ?assertMatch({ok, _, _}, rp(OtherNs,
                                      {dtx_other_marker, committed_once})),
         Stats = quod_runtime:stats(SubscriberNs),
-        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
-        ?assertEqual(1, maps:get(reactions_executed, Stats))
+        ?assertEqual(0, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(0, maps:get(reactions_executed, Stats))
     after
         cleanup_founded(Subscriber),
         cleanup_founded(Other),
@@ -1531,7 +849,7 @@ subscription_reconciles_after_runtime_restart_test_() ->
     after cleanup_founded(F) end
     end}.
 
-%% A founding variable-bearing reaction survives different Erlog variable ids because the
+%% A stored variable-bearing reaction survives different Erlog variable ids because the
 %% one declaration gate compares alpha-normalized exact clauses. An interest alone does not
 %% create a follow; the durable subscribes/2 fact remains independently required.
 founding_source_reaction_compiles_locally_test_() ->
@@ -1539,7 +857,7 @@ founding_source_reaction_compiles_locally_test_() ->
     TargetNs = <<"private:events">>,
     Anchor = <<9:256>>,
     Reaction =
-        {react_on, {agent, {'Agent'}},
+        {react_on,
          {from, TargetNs, Anchor, {assert, {pose, {'Agent'}, {'Value'}}}},
          {notify, {'Agent'}, {'Value'}}},
     F = setup_founded_terms([Reaction]),
@@ -1558,12 +876,12 @@ founding_source_reaction_compiles_locally_test_() ->
     after cleanup_founded(F) end
     end}.
 
-local_reaction_uses_applied_ops_and_runs_once_test_() ->
+local_reaction_routes_only_applied_ops_test_() ->
     {timeout, 60, fun() ->
     F = setup_founded_terms_with_identity(
-          fun(Self) ->
+          fun(_Self) ->
                   [{':-', {reaction_accept, one}, {reaction_ping, one}},
-                   {react_on, {node, Self},
+                   {react_on,
                     {assert, {reaction_ping, {'Value'}}},
                     {reaction_accept, {'Value'}}}]
           end),
@@ -1575,11 +893,13 @@ local_reaction_uses_applied_ops_and_runs_once_test_() ->
                      reactions_executed := 0}) -> true;
                   (_) -> false
                end),
+        trace_dispatch(Ns),
         ?assertMatch({ok, _, _}, rp(Ns, {assertz, {reaction_ping, one}})),
+        await_route(Ns, {assert, {reaction_ping, one}}, 1),
         ok = wait_stats(
                Ns,
-               fun(#{reaction_candidates := 1, reaction_matches := 1,
-                     reactions_executed := 1, reaction_failures := 0}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0, reaction_failures := 0}) -> true;
                   (_) -> false
                end),
         %% Both transactions commit, but the canonical reducer reports no
@@ -1591,17 +911,19 @@ local_reaction_uses_applied_ops_and_runs_once_test_() ->
                fun(#{e_frontier := Frontier}) -> Frontier >= Applied;
                   (_) -> false
                end),
+        assert_no_route(Ns),
         Stats = quod_runtime:stats(Ns),
-        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
-        ?assertEqual(1, maps:get(reactions_executed, Stats)),
-        %% A second applied fact matches the pattern, but its bound handler
-        %% fails. The best-effort failure is counted and cannot make P unhealthy.
+        ?assertEqual(0, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(0, maps:get(reactions_executed, Stats)),
+        %% A second occurrence is routed too, but this ontology has no hosted
+        %% agent. Domain events must not borrow the physical node authority.
         ?assertMatch({ok, _, _}, rp(Ns, {assertz, {reaction_ping, two}})),
+        await_route(Ns, {assert, {reaction_ping, two}}, 1),
         ok = wait_stats(
                Ns,
-               fun(#{mode := live, reaction_candidates := 2,
-                     reaction_matches := 2, reactions_executed := 1,
-                     reaction_failures := 1}) -> true;
+               fun(#{mode := live, reaction_candidates := 0,
+                     reaction_matches := 0, reactions_executed := 0,
+                     reaction_failures := 0}) -> true;
                   (_) -> false
                end)
     after cleanup_founded(F) end
@@ -1610,8 +932,8 @@ local_reaction_uses_applied_ops_and_runs_once_test_() ->
 local_explicit_event_repeats_without_mutating_facts_test_() ->
     {timeout, 60, fun() ->
     F = setup_founded_terms_with_identity(
-          fun(Self) ->
-                  [{react_on, {node, Self},
+          fun(_Self) ->
+                  [{react_on,
                     {alarm, {'Level'}},
                     {member, {'Level'}, [critical]}}]
           end),
@@ -1623,33 +945,36 @@ local_explicit_event_repeats_without_mutating_facts_test_() ->
                      reactions_executed := 0}) -> true;
                   (_) -> false
                end),
+        trace_dispatch(Ns),
         ?assertMatch({ok, _, _}, rp(Ns, {trigger_event, {alarm, critical}})),
+        await_route(Ns, {alarm, critical}, 1),
         ok = wait_stats(
                Ns,
-               fun(#{reaction_candidates := 1, reaction_matches := 1,
-                     reactions_executed := 1}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0}) -> true;
                   (_) -> false
                end),
+        trace_dispatch(Ns),
         ?assertMatch({ok, _, _}, rp(Ns, {trigger_event, {alarm, critical}})),
+        await_route(Ns, {alarm, critical}, 1),
         ok = wait_stats(
                Ns,
-               fun(#{reaction_candidates := 2, reaction_matches := 2,
-                     reactions_executed := 2}) -> true;
+               fun(#{reaction_candidates := 0, reaction_matches := 0,
+                     reactions_executed := 0}) -> true;
                   (_) -> false
                end),
         ?assertMatch({fail, _}, quod_prolog:prove(Ns, {alarm, critical}))
     after cleanup_founded(F) end
     end}.
 
-removed_founding_reaction_is_rejected_before_same_block_dispatch_test_() ->
+reaction_removal_takes_effect_after_its_transaction_test_() ->
     {timeout, 60, fun() ->
     Reaction =
-        {react_on, reaction_worker,
+        {react_on,
          {assert, {reaction_ping, one}}, reaction_accept},
     F = setup_founded_terms_with_identity(
-          fun(Self) ->
+          fun(_Self) ->
                   [reaction_accept,
-                   {executor_owner_node, reaction_worker, Self},
                    Reaction]
           end),
     {_, Ns, _} = F,
@@ -1660,15 +985,15 @@ removed_founding_reaction_is_rejected_before_same_block_dispatch_test_() ->
                      reactions_executed := 0}) -> true;
                   (_) -> false
                end),
-        %% The committed snapshot no longer authorizes the founding reaction.
-        %% Validate that snapshot before dispatching the other applied event in
-        %% this same transaction; the removed handler must never run once.
+        %% T matches its events before its declaration removal becomes active.
         Goal = {',', {retract, Reaction},
                      {assertz, {reaction_ping, one}}},
+        trace_dispatch(Ns),
         ?assertMatch({ok, _, _}, rp(Ns, Goal)),
+        await_route(Ns, {assert, {reaction_ping, one}}, 1),
         ok = wait_stats(
                Ns,
-               fun(#{mode := unhealthy, reactions_executed := 0}) -> true;
+               fun(#{mode := live, reactions_active := 0, reactions_executed := 0}) -> true;
                   (_) -> false
                end)
     after cleanup_founded(F) end
@@ -1693,16 +1018,18 @@ derived_subscription_answer_is_not_runtime_vocabulary_test_() ->
     after cleanup_founded(F) end
     end}.
 
-%% A later writable reaction fact remains durable content but is inert until the one
-%% can_declare_runtime authority exists. There is no reaction-only authorization shortcut.
-dynamic_source_reaction_stays_inert_test_() ->
-    {timeout, 60, fun() ->
+%% Later committed declarations activate under the ordinary ontology authority.
+%% Trace measurements run in fresh EUnit processes: suite callers may retain
+%% unrelated earlier trace messages. The observed functions and zero-IO checks
+%% remain the same for both isolated measurement fixtures.
+dynamic_source_reaction_activates_test_() ->
+    {spawn, {timeout, 60, fun() ->
     F = setup_founded(<<>>),
-    {_, Ns, _} = F,
+    {_, Ns, Sup} = F,
     TargetNs = <<"private:dynamic-reaction">>,
     Anchor = <<11:256>>,
     Reaction =
-        {react_on, {agent, {'Agent'}},
+        {react_on,
          {from, TargetNs, Anchor, {assert, {pose, {'Agent'}}}},
          {notify, {'Agent'}}},
     try
@@ -1710,414 +1037,328 @@ dynamic_source_reaction_stays_inert_test_() ->
         ?assertMatch({ok, _, _}, rp(Ns, {assertz, Reaction})),
         ok = wait_stats(
                Ns,
-               fun(#{mode := live, reactions_active := 0,
-                     source_interests_active := 0,
-                     rejected_dynamic := Rejected}) -> Rejected >= 1;
+               fun(#{mode := live, reactions_active := 1,
+                     source_interests_active := 1}) -> true;
                   (_) -> false
-               end)
-    after cleanup_founded(F) end
-    end}.
-
-%% a founding cycle marks the runtime unhealthy — loudly, permanently — while the kb
-%% itself keeps serving (a P config error must not take D down)
-founding_cycle_unhealthy_test_() ->
-    {timeout, 60, fun() ->
-    F = setup_founded(<<"state_handler(a, [watched/1], [current(b)], projection_noop).\n"
-                        "state_handler(b, [watched/1], [current(a)], projection_noop).\n">>),
-    {_, Ns, _} = F,
-    try
-        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= unhealthy end),
-        ?assertEqual(0, maps:get(handlers_active, quod_runtime:stats(Ns))),
-        ?assertMatch({ok, _, _}, rp(Ns, {assertz, {still, alive}}))
-    after cleanup_founded(F) end
-    end}.
-
-%% the acceptance bullet: restarting the runtime reconstructs P without replaying the kb —
-%% under the real supervisor, killing the runtime restarts it (and the endpoints after it)
-%% but leaves quod_prolog untouched at the same height
-runtime_restart_no_kb_replay_test_() ->
-    {timeout, 60, fun() ->
-    F = setup_founded(<<"state_handler(idx, [watched/1], [], projection_noop).\n">>),
-    {_, Ns, _} = F,
-    try
-        ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
-                               (_) -> false end),
-        Kb = quod_reg:where({quod_prolog, Ns}),
-        Rt = quod_reg:where({quod_runtime, Ns}),
-        Applied = quod_prolog:applied(Ns),
-        ok = gen_server:stop(Rt),
-        ok = wait_until(fun() ->
-                            case quod_reg:where({quod_runtime, Ns}) of
-                                undefined -> false;
-                                Rt        -> false;   %% still the old pid
-                                _New      -> maps:get(mode, quod_runtime:stats(Ns), x)
-                                                 =:= live
-                            end
-                        end),
-        ?assertEqual(Kb, quod_reg:where({quod_prolog, Ns})),
-        ?assertEqual(Applied, quod_prolog:applied(Ns)),
-        ?assertEqual(1, maps:get(handlers_active, quod_runtime:stats(Ns)))
-    after cleanup_founded(F) end
-    end}.
-
-%% Inc 3 end-to-end: a founded watching handler + a real consensus write — the tier runs it
-%% and the P-before-E frontier advances to the committed height
-founded_live_tier_advances_frontier_test_() ->
-    {timeout, 60, fun() ->
-        F = setup_founded(<<"state_handler(pinger, [ping/1], [], projection_noop).\n">>),
-        {_, Ns, _} = F,
+               end),
+        %% A runtime restart restores current declarations, including edits
+        %% after genesis, without a ledger read or a historical reaction.
+        Runtime = quod_reg:where({quod_runtime, Ns}),
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        Height = quod_prolog:applied(Ns),
+        MFAs = [{quod_simplex, history_view, 3},
+                {quod_ledger_store, open_ro_snapshot, 1},
+                {quod_ledger_store, read_at, 2},
+                {file, sync, 1}, {file, datasync, 1}],
+        [erlang:trace_pattern(MFA, true, [local]) || MFA <- MFAs],
+        _ = erlang:trace(Sup, true, [call, set_on_spawn]),
         try
-            ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
+            ok = gen_server:stop(Runtime),
+            ok = wait_until(fun() ->
+                New = quod_reg:where({quod_runtime, Ns}),
+                New =/= undefined andalso New =/= Runtime andalso
+                maps:get(mode, quod_runtime:stats(Ns), booting) =:= live
+            end),
+            ?assertMatch(#{reactions_active := 1, source_interests_active := 1,
+                           reactions_executed := 0}, quod_runtime:stats(Ns)),
+            ?assertEqual(Engine, quod_reg:where({quod_prolog, Ns})),
+            ?assertEqual(Height, quod_prolog:applied(Ns)),
+            Reconciles = maps:get(reconciles, quod_runtime:stats(Ns)),
+            quod_runtime:reconcile_now(Ns),
+            ok = wait_stats(Ns, fun(#{mode := live, queue_len := 0, runner_active := false}) -> true;
                                    (_) -> false end),
-            H0 = maps:get(e_frontier, quod_runtime:stats(Ns)),
-            ?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, 1}})),
-            ok = wait_stats(Ns, fun(#{e_frontier := E, p_height := P, mode := live}) ->
-                                    E > H0 andalso P =:= E;
-                                   (_) -> false end)
-        after cleanup_founded(F) end
-    end}.
-
-%% Inc 3: a founded handler whose goal STAGES a D write is a violation — execution failure,
-%% collapse, and (still failing) unhealthy with the failure counted; the kb itself stays up
-founded_staged_d_violation_test_() ->
-    {timeout, 60, fun() ->
-        F = setup_founded(<<"stager(_Scope) :- assertz(oops).\n"
-                            "state_handler(bad, [w/1], [], stager).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{reconcile_failures := RF, collapses := C}) ->
-                                    RF >= 1 andalso C >= 1;
-                                   (_) -> false end),
-            ?assertMatch({ok, _, _}, rp(Ns, {assertz, {kb, alive}}))
-        after cleanup_founded(F) end
-    end}.
-
-%%%===================================================================
-%%% Inc 4: the heavy-worker framework (acceptance bullet 4)
-%%%===================================================================
-
-%% A founded handler pumps heavy work per event; a deliberately SLOW (but in-budget) job
-%% must not delay later namespace events (the frontier keeps advancing while it runs), and
-%% its dependent output — await_revision — is released only when its revision installs.
-heavy_worker_does_not_delay_events_test_() ->
-    {timeout, 120, fun() ->
-        %% Deliberately slow work that remains inside the production 30-second budget;
-        %% pump enqueues it per converge run.
-        F = setup_founded(<<"slow(0).\n"
-                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n"
-                            "pump(_Scope) :- enqueue_projection(res1, slow(500000)).\n"
-                            "state_handler(pumper, [ping/1], [], pump).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
-                                   (_) -> false end),
-            %% boot reconcile already pumped a job at the reconcile height
-            H0 = maps:get(height, quod_runtime:stats(Ns)),
-            %% while the slow job runs, ordinary writes keep advancing the frontier
-            ?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, 1}})),
-            ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E > H0; (_) -> false end),
-            H1 = maps:get(e_frontier, quod_runtime:stats(Ns)),
-            %% Wait for the event-triggered rebuild, not merely the older boot job. This leaves
-            %% no snapshot reader behind and proves the barrier reaches the live event revision.
-            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, H1, 60000)),
-            ?assert(quod_runtime:revision(Ns, res1) >= H1)
-        after cleanup_founded(F) end
-    end}.
-
-%% Coalescing: burst writes while a worker runs — queued jobs supersede each other (counted),
-%% per-resource order holds (never two workers for one resource), and the final revision
-%% converges to the newest requested one.
-heavy_coalesce_and_converge_test_() ->
-    {timeout, 120, fun() ->
-        F = setup_founded(<<"slow(0).\n"
-                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n"
-                            "pump(_Scope) :- enqueue_projection(res1, slow(500000)).\n"
-                            "state_handler(pumper, [ping/1], [], pump).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
-                                   (_) -> false end),
-            [?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, N}})) || N <- [1, 2, 3]],
-            HTop = quod_prolog:applied(Ns),
-            ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E >= HTop; (_) -> false end),
-            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, HTop, 60000)),
-            #{heavy_superseded := Sup, heavy_running := Run} = quod_runtime:stats(Ns),
-            ?assert(Sup >= 0),           %% supersede is timing-dependent; never negative
-            ?assert(Run =< 1)            %% never two workers for one resource
-        after cleanup_founded(F) end
-    end}.
-
-%% Inc-3/4 review regression (H2): a heavy job that FAILS must be isolated — it must NOT
-%% collapse the ordered tier or loop. The tier keeps advancing; heavy_failures counts up while
-%% collapses/reconciles do NOT run away.
-heavy_failure_isolated_from_tier_test_() ->
-    {timeout, 120, fun() ->
-        %% boom/1 always throws (undefined predicate under unknown=>fail => fail => job_failed)
-        F = setup_founded(<<"pump(_Scope) :- enqueue_projection(res_bad, boom(1)).\n"
-                            "state_handler(pumper, [ping/1], [], pump).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
-                                   (_) -> false end),
-            %% boot reconcile pumped a job that fails; a few live writes keep the tier moving
-            [?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, N}})) || N <- [1, 2, 3]],
-            ok = wait_stats(Ns, fun(#{heavy_failures := HF}) -> HF >= 1; (_) -> false end),
-            #{mode := M, e_frontier := E, reconciles := R} = quod_runtime:stats(Ns),
-            ?assertEqual(live, M),                 %% tier NOT collapsed to unhealthy
-            ?assert(E >= 1),                       %% tier advanced despite the failing job
-            ?assert(R < 10)                        %% no reconcile runaway loop
-        after cleanup_founded(F) end
-    end}.
-
-%% Inc-3/4 review regression (H1): a heavy job triggered by a live event must run against a
-%% snapshot AT OR NEWER than its requested revision — never the stale pre-batch one. The job
-%% proves a fact that only exists at its trigger height; if it ran against the lagging snapshot
-%% the proof would fail (job_failed) and no revision would install.
-heavy_job_sees_trigger_height_snapshot_test_() ->
-    {timeout, 120, fun() ->
-        %% the job asserts marker(H) into P only if ping(_) is already visible in the snapshot;
-        %% projection_noop can't observe, so instead the job REQUIRES the triggering fact and
-        %% fails if absent — success (revision install) proves it saw the fresh snapshot
-        F = setup_founded(<<"pump(_Scope) :- enqueue_projection(res_ok, needs_ping).\n"
-                            "needs_ping :- ping(_).\n"
-                            "state_handler(pumper, [ping/1], [], pump).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
-                                   (_) -> false end),
-            ?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, 1}})),
-            HTrig = maps:get(height, quod_runtime:stats(Ns)),
-            %% the job needs ping/1, which exists only from HTrig on; reaching revision HTrig
-            %% requires the job enqueued at HTrig to have run against the HTrig snapshot (the
-            %% fix). The boot-height job runs against a pre-ping snapshot and fails — that is
-            %% correct, and could only install a LOWER revision, never HTrig.
-            ?assertEqual(ok, quod_runtime:await_revision(Ns, res_ok, HTrig, 60000)),
-            ?assert(quod_runtime:revision(Ns, res_ok) >= HTrig)
-        after cleanup_founded(F) end
-    end}.
-
-%% Replay cannot move the MVCC pin while a projection is still reading its old snapshot.
-%% The runtime kills and reaps the worker first, detaches, then reconciles from the replay tip.
-replay_quiesces_snapshot_readers_test_() ->
-    {timeout, 120, fun() ->
-        F = setup_founded(<<"slow(0).\n"
-                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
-            H0 = quod_prolog:applied(Ns),
-            R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
-            ok = quod_runtime:enqueue_heavy(Ns, slow_resource, H0, {slow, 20000000}),
-            ok = wait_stats(Ns, fun(#{heavy_running := N}) -> N =:= 1; (_) -> false end),
-            ok = ae(
-                   Ns, H0 + 1, batch(change(Ns, diff_for({during_replay, 1}))), replay),
-            ok = quod_prolog:mark_ready(Ns),
-            ok = wait_stats(Ns, fun(#{mode := live, height := H, reconciles := R,
-                                      heavy_running := Running}) ->
-                                    H =:= H0 + 1 andalso R > R0 andalso Running =:= 0;
-                               (_) -> false
-                               end),
-            ?assert(is_pid(quod_reg:where({quod_prolog, Ns}))),
-            ?assertEqual(H0 + 1, quod_prolog:applied(Ns))
-        after cleanup_founded(F) end
-    end}.
-
-%% A ready boundary is independently safe. replay_started normally arrives
-%% first, but a delayed start must not let re-attach move the MVCC pin while an
-%% old heavy reader remains alive.
-ready_without_started_quiesces_snapshot_readers_test_() ->
-    {timeout, 120, fun() ->
-        F = setup_founded(<<"slow(0).\n"
-                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n">>),
-        {_, Ns, _} = F,
-        try
-            ok = wait_stats(
-                   Ns,
-                   fun(#{mode := live}) -> true;
-                      (_) -> false
-                   end),
-            H = quod_prolog:applied(Ns),
-            R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
-            ok = quod_runtime:enqueue_heavy(
-                   Ns, defensive_ready, H, {slow, 20000000}),
-            ok = wait_stats(
-                   Ns,
-                   fun(#{heavy_running := 1}) -> true;
-                      (_) -> false
-                   end),
-            Runtime = quod_reg:where({quod_runtime, Ns}),
-            Runtime ! {replay_ready, {synthetic, make_ref()}, H},
-            ok = wait_stats(
-                   Ns,
-                   fun(#{mode := live, reconciles := R,
-                         heavy_running := 0}) ->
-                           R > R0;
-                      (_) -> false
-                   end)
+            ?assertEqual(Reconciles, maps:get(reconciles, quod_runtime:stats(Ns))),
+            Barrier = erlang:trace_delivered(all),
+            receive {trace_delivered, all, Barrier} -> ok
+            after 1000 -> error(missing_runtime_trace_barrier) end,
+            receive
+                {trace, _, call, {M, Function, Args}} ->
+                    error({unexpected_runtime_io, {M, Function, length(Args)}})
+            after 0 -> ok end
         after
-            cleanup_founded(F)
+            _ = erlang:trace(Sup, false, [call, set_on_spawn]),
+            [erlang:trace_pattern(MFA, false, [local]) || MFA <- MFAs]
         end
+    after cleanup_founded(F) end
+    end}}.
+
+%%% Owned resource requests select only the retained committed snapshot.
+
+resource_minimum_height_advances_without_material_events_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        H = quod_prolog:applied(Ns),
+        Before = quod_runtime:stats(Ns),
+        {Caller, Ref} = resource_request(Ns, H + 1, read),
+        %% A stale-incarnation or already-consumed progress notice cannot
+        %% replace the reader's snapshot, even while a newer height is needed.
+        Runtime = quod_reg:where({quod_runtime, Ns}),
+        Runtime ! {runtime_snapshot_advanced, self(), H + 10, invalid_snapshot},
+        Runtime ! {runtime_snapshot_advanced, quod_reg:where({quod_prolog, Ns}), H, invalid_snapshot},
+        ?assertEqual(H, maps:get(height, quod_runtime:stats(Ns))),
+        %% A rejected write advances the canonical read floor with no applied
+        %% domain occurrence. DTX control-only blocks have this same boundary.
+        Stale = quod_ct:change(Ns, diff_for(must_not_apply),
+                               #{{resource_value, 1} => never_present}),
+        ok = ae(Ns, H + 1, batch(Stale), live),
+        {_, Height, initial} = resource_snapshot(),
+        ?assertEqual(H + 1, Height),
+        ?assertEqual(ok, resource_reply(Caller, Ref)),
+        After = quod_runtime:stats(Ns),
+        [ ?assertEqual(maps:get(Key, Before), maps:get(Key, After))
+          || Key <- [events_seen, reaction_candidates, reactions_executed, reconciles] ]
+    end) end}.
+
+resource_minimum_height_and_unchanged_repeats_test_() ->
+    {spawn, {timeout, 60, fun() -> with_resource_fixture(fun(Ns, Sup) ->
+        H = quod_prolog:applied(Ns),
+        {Caller, Ref} = resource_request(Ns, H + 1, read),
+        ok = wait_stats(Ns, fun(#{queue_len := N}) -> N >= 1; (_) -> false end),
+        receive {resource_snapshot, _, _, _} -> error(selected_before_required_commit)
+        after 0 -> ok end,
+        ?assertMatch({ok, _, _}, rp(Ns, {',', {retract, {resource_value, initial}},
+                                            {assertz, {resource_value, updated}}})),
+        {_, Height, updated} = resource_snapshot(),
+        ?assert(Height >= H + 1),
+        ?assertEqual(ok, resource_reply(Caller, Ref)),
+        Runtime = quod_reg:where({quod_runtime, Ns}),
+        MFAs = [{quod_simplex, history_view, 3}, {quod_ledger_store, open_ro_snapshot, 1},
+                {quod_ledger_store, read_at, 2}, {file, sync, 1}, {file, datasync, 1}],
+        [erlang:trace_pattern(MFA, true, [local]) || MFA <- MFAs],
+        erlang:trace(Runtime, true, [call, set_on_spawn]),
+        erlang:trace(Sup, true, [call, set_on_spawn]),
+        try
+            [begin
+                {P, R} = resource_request(Ns, Height, read),
+                {_, Height, updated} = resource_snapshot(),
+                ?assertEqual(ok, resource_reply(P, R))
+             end || _ <- lists:seq(1, 3)],
+            Barrier = erlang:trace_delivered(all),
+            receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_barrier) end,
+            receive {trace, _, call, MFA} -> error({unchanged_resource_io, MFA})
+            after 0 -> ok end
+        after
+            erlang:trace(Runtime, false, [call, set_on_spawn]),
+            erlang:trace(Sup, false, [call, set_on_spawn]),
+            [erlang:trace_pattern(MFA, false, [local]) || MFA <- MFAs]
+        end
+    end) end}}.
+
+failed_resource_is_not_installed_by_later_events_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        H = quod_prolog:applied(Ns),
+        ?assertMatch({error, {resource_selection_failed, _}},
+                     quod_runtime:reconcile_resource(Ns, H, agent_hosts, fail,
+                                                     quod_time:mono_ms() + 5000)),
+        ?assertMatch({error, {resource_selection_failed, _}},
+                     quod_runtime:reconcile_resource(Ns, H, agent_hosts, write,
+                                                     quod_time:mono_ms() + 5000)),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, illegal_selector_write)),
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, unrelated})),
+        ok = wait_stats(Ns, fun(#{height := Height, runner_active := false, queue_len := 0}) ->
+                                    Height > H; (_) -> false end),
+        ?assertMatch({_, []}, quod_runtime:agents(Ns)),
+        ?assertEqual({error, stale_resource_owner}, quod_runtime:project_agents(Ns, all, [])),
+        {Caller, Ref} = resource_request(Ns, H + 1, read),
+        {_, _, initial} = resource_snapshot(),
+        ?assertEqual(ok, resource_reply(Caller, Ref))
+    end) end}.
+
+resource_caller_death_reaps_its_reader_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        {Caller, Ref} = resource_request(Ns, quod_prolog:applied(Ns), block),
+        {Reader, _, initial} = resource_snapshot(),
+        Monitor = monitor(process, Reader),
+        exit(Caller, kill),
+        await_reader_down(Monitor, Reader),
+        receive {'DOWN', Ref, process, Caller, killed} -> ok after 5000 -> error(caller_alive) end,
+        ok = wait_stats(Ns, fun(#{runner_active := false, queue_len := 0}) -> true; (_) -> false end)
+    end) end}.
+
+runtime_owner_death_reaps_reader_and_recovers_current_state_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        Runtime = quod_reg:where({quod_runtime, Ns}),
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        {Caller, Ref} = resource_request(Ns, quod_prolog:applied(Ns), block),
+        {Reader, _, initial} = resource_snapshot(),
+        Monitor = monitor(process, Reader),
+        ok = gen_server:stop(Runtime),
+        await_reader_down(Monitor, Reader),
+        ?assertEqual({error, runtime_recovering}, resource_reply(Caller, Ref)),
+        ok = wait_until(fun() ->
+            New = quod_reg:where({quod_runtime, Ns}),
+            is_pid(New) andalso New =/= Runtime andalso
+            maps:get(mode, quod_runtime:stats(Ns), booting) =:= live
+        end),
+        ?assertEqual(Engine, quod_reg:where({quod_prolog, Ns})),
+        {Next, NextRef} = resource_request(Ns, quod_prolog:applied(Ns), read),
+        {_, _, initial} = resource_snapshot(),
+        ?assertEqual(ok, resource_reply(Next, NextRef))
+    end) end}.
+
+replay_quiesces_resource_snapshot_reader_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        H = quod_prolog:applied(Ns),
+        {Caller, Ref} = resource_request(Ns, H, block),
+        {Reader, H, initial} = resource_snapshot(),
+        Monitor = monitor(process, Reader),
+        ok = ae(Ns, H + 1, batch(change(Ns, diff_for({during_replay, 1}))), replay),
+        ok = quod_prolog:mark_ready(Ns),
+        await_reader_down(Monitor, Reader),
+        ?assertEqual({error, runtime_recovering}, resource_reply(Caller, Ref)),
+        ok = wait_stats(Ns, fun(#{mode := live, height := Height, runner_active := false}) ->
+                                   Height =:= H + 1; (_) -> false end),
+        ?assertEqual(H + 1, quod_prolog:applied(Ns))
+    end) end}.
+
+ready_boundary_waits_for_resource_snapshot_reader_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        H = quod_prolog:applied(Ns),
+        R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
+        {Caller, Ref} = resource_request(Ns, H, block),
+        {Reader, H, initial} = resource_snapshot(),
+        Monitor = monitor(process, Reader),
+        quod_reg:where({quod_runtime, Ns}) ! {replay_ready, {boundary, make_ref()}, H},
+        %% This call is processed after the ready message. The old reader still
+        %% pins its snapshot; replacement cannot occur until it finishes.
+        ?assertEqual(R0, maps:get(reconciles, quod_runtime:stats(Ns))),
+        ?assert(is_process_alive(Reader)),
+        Reader ! release,
+        ?assertEqual(ok, resource_reply(Caller, Ref)),
+        await_reader_down(Monitor, Reader),
+        ok = wait_stats(Ns, fun(#{mode := live, reconciles := R}) -> R > R0; (_) -> false end)
+    end) end}.
+
+resource_admission_overflow_retains_committed_readiness_test_() ->
+    {timeout, 60, fun() ->
+        Ready = {':-', {agent_hosting_projection, all, {'Node'}, all, []},
+                 {',', resource_recovery_enabled,
+                  {agent_hosting_projection, read, {'Node'}, all, []}}},
+        with_resource_fixture(fun(Ns, _Sup) ->
+            H = quod_prolog:applied(Ns),
+            Runtime = quod_reg:where({quod_runtime, Ns}),
+            Before = quod_runtime:stats(Ns),
+            {Caller, Ref} = resource_request(Ns, H, block),
+            {Reader, H, initial} = resource_snapshot(),
+            Monitor = monitor(process, Reader),
+            1 = erlang:trace(Runtime, true, ['receive']),
+            try
+                Diff = [{retract, {{resource_value, initial}, {[], false}}}] ++
+                       diff_for({resource_value, updated}) ++ diff_for(resource_recovery_enabled),
+                ok = ae(Ns, H + 1, batch(change(Ns, Diff)), live),
+                receive
+                    {trace, Runtime, 'receive', {runtime_snapshot_advanced, _, NextH, _}}
+                      when NextH =:= H + 1 -> ok
+                after 5000 -> error(committed_snapshot_not_delivered) end,
+                %% The receive trace plus this call joins processing of both
+                %% the transaction and its final snapshot; capacity is exact.
+                ?assertMatch(#{queue_len := 2, collapses := 0}, quod_runtime:stats(Ns)),
+                ?assertEqual({error, overloaded}, quod_runtime:reconcile_resource(
+                    Ns, H + 1, agent_hosts, read, quod_time:mono_ms() + 5000)),
+                await_reader_down(Monitor, Reader),
+                ?assertEqual({error, runtime_recovering}, resource_reply(Caller, Ref)),
+                %% No manual retry: the typed worker selects current committed
+                %% resources directly after overflow recovery.
+                {_, RestoredH, updated} = resource_snapshot(),
+                ?assertEqual(H + 1, RestoredH),
+                After = quod_runtime:stats(Ns),
+                ?assertEqual(maps:get(reconciles, Before) + 1, maps:get(reconciles, After)),
+                ?assertEqual(maps:get(events_seen, Before) + 1, maps:get(events_seen, After))
+            after erlang:trace(Runtime, false, ['receive']) end
+        end, #{runtime_max_queued_events => 2,
+               external_predicate_modules => [quod_agent_predicates]}, [Ready])
     end}.
+
+resource_queue_overflow_recovers_current_state_test_() ->
+    {timeout, 60, fun() -> with_resource_fixture(fun(Ns, _Sup) ->
+        H = quod_prolog:applied(Ns),
+        R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
+        {Caller, Ref} = resource_request(Ns, H, block),
+        {Reader, H, initial} = resource_snapshot(),
+        Monitor = monitor(process, Reader),
+        Transactions = [change(Ns, diff_for({overflow_marker, N})) || N <- [one, two]],
+        ok = ae(Ns, H + 1, {batch, Transactions}, live),
+        await_reader_down(Monitor, Reader),
+        ?assertEqual({error, runtime_recovering}, resource_reply(Caller, Ref)),
+        ok = wait_stats(Ns, fun(#{mode := live, height := Height, reconciles := R,
+                                 collapses := C, runner_active := false, queue_len := 0}) ->
+                                   Height =:= H + 1 andalso R > R0 andalso C >= 1;
+                              (_) -> false end),
+        ?assertMatch({ok, [#{'Markers' := [one, two]}], _}, quod_prolog:prove_ro(
+          Ns, {findall, {'Marker'}, {overflow_marker, {'Marker'}}, {'Markers'}})),
+        {Next, NextRef} = resource_request(Ns, H + 1, read),
+        {_, _, initial} = resource_snapshot(),
+        ?assertEqual(ok, resource_reply(Next, NextRef))
+    end, #{runtime_max_queued_events => 1}) end}.
+
+%% A raw native fixture predicate is solely a deterministic scheduling probe.
+%% It is not a governed bridge and is never present in deployed ontologies.
+quod_predicate_module() -> true.
+load(Est = #est{db = Db}) ->
+    Est#est{db = erlog_int:add_compiled_proc({test_resource_snapshot, 2},
+                                            ?MODULE, test_resource_snapshot, Db)}.
+
+test_resource_snapshot({test_resource_snapshot, Mode0, Value0}, Next, Est) ->
+    Mode = erlog_int:dderef(Mode0, Est#est.bs),
+    Value = erlog_int:dderef(Value0, Est#est.bs),
+    Height = quod_predicates:ctx_height(quod_predicates:context(Est)),
+    quod_reg:where({runtime_test, resource_reader}) ! {resource_snapshot, self(), Height, Value},
+    case Mode of block -> receive release -> ok end; read -> ok end,
+    erlog_int:prove_body(Next, Est).
+
+with_resource_fixture(Fun) -> with_resource_fixture(Fun, #{}).
+
+with_resource_fixture(Fun, Config) -> with_resource_fixture(Fun, Config, []).
+
+with_resource_fixture(Fun, Config, ExtraTerms) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    true = quod_reg:reg({runtime_test, resource_reader}),
+    BeamPath = filename:join(filename:dirname(code:which(quod_predicates)),
+                             atom_to_list(?MODULE) ++ ".beam"),
+    {ok, _} = file:copy(code:which(?MODULE), BeamPath),
+    Terms = [{resource_value, initial},
+             {':-', {agent_hosting_projection, {'Mode'}, {'Node'}, all, []},
+              {',', {member, {'Mode'}, [read, block]},
+               {',', {resource_value, {'Value'}}, {test_resource_snapshot, {'Mode'}, {'Value'}}}}},
+             {':-', {agent_hosting_projection, write, {'Node'}, all, []},
+              {assertz, illegal_selector_write}}],
+    Modules = [?MODULE | maps:get(external_predicate_modules, Config, [])],
+    F = {_, Ns, Sup} = setup_founded_terms(Terms ++ ExtraTerms,
+                                           Config#{external_predicate_modules => Modules}),
+    try
+        ok = wait_stats(Ns, fun(#{mode := live, runner_active := false, queue_len := 0}) -> true;
+                               (_) -> false end),
+        Fun(Ns, Sup)
+    after
+        cleanup_founded(F),
+        gproc:unreg(quod_reg:name({runtime_test, resource_reader})),
+        file:delete(BeamPath)
+    end.
+
+resource_request(Ns, Height, Scope) ->
+    Parent = self(),
+    spawn_monitor(fun() ->
+        Reply = quod_runtime:reconcile_resource(Ns, Height, agent_hosts, Scope,
+                                                quod_time:mono_ms() + 10000),
+        Parent ! {resource_reply, self(), Reply}
+    end).
+
+resource_snapshot() ->
+    receive {resource_snapshot, Reader, Height, Value} -> {Reader, Height, Value}
+    after 5000 -> error(resource_selector_not_started) end.
+
+resource_reply(Caller, Ref) ->
+    receive {resource_reply, Caller, Reply} ->
+        receive {'DOWN', Ref, process, Caller, normal} -> Reply
+        after 5000 -> error(resource_caller_not_finished) end
+    after 5000 -> error(resource_request_not_finished) end.
+
+await_reader_down(Monitor, Reader) ->
+    receive {'DOWN', Monitor, process, Reader, _} -> ok
+    after 5000 -> error(resource_reader_not_reaped) end.
 
 %%%===================================================================
 %%% helpers
 %%%===================================================================
-
-bare_founding_entry(Ns) ->
-    Tx = #transaction{tx_id = <<"runtime-founding">>, origin = {Ns, <<0:256>>},
-                      author = <<"runtime-fixture">>, read_check = #{},
-                      diff = diff_for({founding_marker, true})},
-    quod_ct:committed_entry(Ns, 1, batch(Tx)).
-
-with_founding_runtime(Mode, Fun) ->
-    with_founding_runtime(Mode, #{}, Fun).
-
-with_founding_runtime(Mode, RuntimeConfig, Fun) ->
-    {ok, _} = application:ensure_all_started(gproc),
-    Ns = <<"rt-owned:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    Dir = temp_runtime_dir("quod_rt_owned"),
-    {ok, Kb} = quod_prolog:start_link(
-                 Ns, #{node_id => {"127.0.0.1", 5000}, outcome_backend => memory}),
-    Owner = case Mode of
-        absent -> undefined;
-        empty -> start_founding_source(Ns, Dir, [], ready);
-        malformed -> start_founding_source(Ns, Dir,
-            [quod_ct:committed_entry(Ns, 1, quod_ct:atomic_resolve_payload())], ready);
-        _ -> start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], Mode)
-    end,
-    try
-        ok = quod_prolog:mark_ready(Ns),
-        _ = quod_prolog:applied(Ns),
-        {ok, Runtime} = quod_runtime:start_link(Ns, RuntimeConfig),
-        try Fun(#{ns => Ns, dir => Dir, owner => Owner, runtime => Runtime})
-        after gen_server:stop(Runtime)
-        end
-    after
-        gen_server:stop(Kb),
-        stop_founding_source(Owner),
-        _ = file:del_dir_r(Dir)
-    end.
-
-with_reconcile_budget(Budget, Fun) ->
-    Previous = application:get_env(quod, runtime_reconcile_budget_ms),
-    application:set_env(quod, runtime_reconcile_budget_ms, Budget),
-    try Fun()
-    after
-        case Previous of
-            undefined -> application:unset_env(quod, runtime_reconcile_budget_ms);
-            {ok, Value} -> application:set_env(quod, runtime_reconcile_budget_ms, Value)
-        end
-    end.
-
-wait_founding_pending(Ns) ->
-    wait_stats(Ns, fun(#{mode := booting, founding_ready := false,
-                         runner_active := false}) -> true;
-                      (_) -> false end).
-
-wait_runtime_live(Ns) ->
-    wait_stats(Ns, fun(#{mode := live, founding_ready := true}) -> true;
-                      (_) -> false end).
-
-start_founding_source(Ns, Dir, Entries, Mode) ->
-    Observer = self(),
-    {Owner, MRef} = spawn_monitor(fun() ->
-        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
-        {ok, Store} = quod_ledger_store:append(Store0, {none, Entries}),
-        try
-            true = quod_reg:reg({quod_simplex, Ns}),
-            Observer ! {founding_source_ready, self()},
-            founding_source_loop(Ns, Store, Mode, Observer)
-        catch throw:stop_founding_source -> ok
-        after quod_ledger_store:close(Store)
-        end
-    end),
-    receive
-        {founding_source_ready, Owner} -> erlang:demonitor(MRef, [flush]), Owner;
-        {'DOWN', MRef, process, Owner, Reason} -> error({founding_source_failed, Reason})
-    after 3000 -> exit(Owner, kill), error(founding_source_not_ready)
-    end.
-
-founding_source_loop(Ns, Store, Mode, Observer) ->
-    receive
-        {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
-            Token = make_ref(),
-            Observer ! {founding_capture, self(), element(1, From), Deadline, Token},
-            ReplyMode = case Mode of
-                {hold, AfterHold} ->
-                    receive
-                        {release_founding_capture, Token} -> AfterHold;
-                        stop -> throw(stop_founding_source)
-                    end;
-                Other -> Other
-            end,
-            Reply = case ReplyMode of
-                unavailable -> {error, not_ready};
-                ready ->
-                    %% The actual owner constructor enforces identity, lifetime,
-                    %% prefix and deadline; this fixture grants no fake pathname.
-                    State = quod_simplex:test_state(
-                              #{ns => Ns, genesis_hash => <<0:256>>, store => Store,
-                                slot => quod_ledger_store:last(Store), last_applied => 0,
-                                sync => ready, prolog_ready => false}),
-                    quod_simplex:test_local_history_view(
-                      Identity, Requirement, Deadline, State)
-            end,
-            gen:reply(From, Reply),
-            NextMode = case Mode of {hold, _} -> ready; _ -> Mode end,
-            founding_source_loop(Ns, Store, NextMode, Observer);
-        {set_founding_mode, NewMode, Caller} ->
-            Caller ! {founding_mode_set, self()},
-            founding_source_loop(Ns, Store, NewMode, Observer);
-        {append_founding, Entry, Caller} ->
-            {ok, Store1} = quod_ledger_store:append(Store, {none, [Entry]}),
-            Caller ! {founding_appended, self()},
-            founding_source_loop(Ns, Store1, Mode, Observer);
-        stop -> ok;
-        _Other -> founding_source_loop(Ns, Store, Mode, Observer)
-    end.
-
-set_founding_mode(Owner, Mode) ->
-    Owner ! {set_founding_mode, Mode, self()},
-    receive {founding_mode_set, Owner} -> ok
-    after 2000 -> error(founding_mode_not_set)
-    end.
-
-expect_founding_capture(Owner) ->
-    receive
-        {founding_capture, Owner, Worker, Deadline, Token} -> {Worker, Deadline, Token}
-    after 2000 -> error(founding_capture_not_started)
-    end.
-
-assert_no_founding_capture(Owner) ->
-    receive {founding_capture, Owner, _, _, _} -> error(unexpected_founding_retry)
-    after 100 -> ok
-    end.
-
-stop_founding_source(undefined) -> ok;
-stop_founding_source(Owner) ->
-    MRef = erlang:monitor(process, Owner),
-    Owner ! stop,
-    receive {'DOWN', MRef, process, Owner, _Reason} -> ok
-    after 2000 -> exit(Owner, kill),
-                  receive {'DOWN', MRef, process, Owner, _} -> ok end
-    end.
-
-founding_trace_counts(TraceRef, Counts) ->
-    receive
-        {trace, _Pid, call, {quod_ledger_store, F, _Args}}
-          when F =:= open; F =:= open_ro ->
-            founding_trace_counts(TraceRef, Counts#{scans := maps:get(scans, Counts) + 1});
-        {trace, _Pid, call, {quod_ledger_store, open_ro_snapshot, [_Snapshot]}} ->
-            founding_trace_counts(TraceRef,
-              Counts#{snapshots := maps:get(snapshots, Counts) + 1});
-        {trace, _Pid, call, {quod_ledger_store, read_at, [_Store, Slot]}} ->
-            founding_trace_counts(TraceRef, Counts#{slots := [Slot | maps:get(slots, Counts)]});
-        {trace_delivered, all, TraceRef} -> Counts
-    after 2000 -> error(founding_trace_not_delivered)
-    end.
-
-with_reaction_est(Fun) ->
-    with_reaction_est([], Fun).
 
 with_reaction_est(Terms, Fun) ->
     Est0 = quod_committed_projection:new_est(),
@@ -2173,3 +1414,60 @@ temp_runtime_dir(Label) ->
       "/tmp",
       Label ++ "_" ++
           integer_to_list(erlang:unique_integer([positive, monotonic]))).
+
+%% Trace the existing dispatcher, not a substitute actor. These catalogue tests
+%% have no hosted agent and explicitly verify that domain events get no node authority.
+trace_dispatch(Ns) ->
+    erlang:trace_pattern({quod_runtime, dispatch_candidates, 7}, true, [local]),
+    erlang:trace_pattern({quod_foreign_log, ack, 2}, true, [local]),
+    case quod_reg:where({quod_ns, Ns}) of
+        Sup when is_pid(Sup) -> erlang:trace(Sup, true, [call, set_on_spawn]);
+        _ -> ok
+    end,
+    erlang:trace(quod_reg:where({quod_runtime, Ns}), true, [call, set_on_spawn]),
+    Barrier = erlang:trace_delivered(all),
+    receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_barrier) end,
+    drain_source_acks().
+
+drain_source_acks() ->
+    receive {trace, _, call, {quod_foreign_log, ack, _}} -> drain_source_acks()
+    after 0 -> ok end.
+
+await_route(Ns, Event, Count) ->
+    receive
+        {trace, _, call, {quod_runtime, dispatch_candidates,
+                         [Ns, _, _, _, Event, Candidates, _]}} ->
+            ?assertEqual(Count, length(Candidates))
+    after 5000 -> error({missing_routed_event, Ns, Event})
+    end.
+
+await_source_processed(Ns) ->
+    Runtime = quod_reg:where({quod_runtime, Ns}),
+    receive {trace, Runtime, call, {quod_foreign_log, ack, [_, _]}} -> ok
+    after 5000 -> error(source_notice_not_processed) end.
+
+assert_no_route(Ns) ->
+    Barrier = erlang:trace_delivered(all),
+    receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_barrier) end,
+    receive
+        {trace, _, call, {quod_runtime, dispatch_candidates,
+                         [Ns, _, _, _, Event, [_|_], _]}} ->
+            error({duplicate_routed_event, Event})
+    after 0 -> ok end.
+
+stop_dispatch_trace(Pid) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> erlang:trace(Pid, false, [call, set_on_spawn]);
+        false -> ok
+    end,
+    erlang:trace_pattern({quod_runtime, dispatch_candidates, 7}, false, [local]),
+    erlang:trace_pattern({quod_foreign_log, ack, 2}, false, [local]),
+    Barrier = erlang:trace_delivered(all),
+    receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_barrier) end,
+    drain_dispatch_traces().
+
+drain_dispatch_traces() ->
+    receive
+        {trace, _, call, {quod_runtime, dispatch_candidates, _}} -> drain_dispatch_traces();
+        {trace, _, call, {quod_foreign_log, ack, _}} -> drain_dispatch_traces()
+    after 0 -> ok end.

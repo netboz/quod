@@ -145,7 +145,7 @@ committee_size(Est) -> length(admitted_pubkeys(Est)).
 -doc "Whether a diff is exactly one well-formed committee membership operation.".
 -spec membership_diff(term()) -> boolean().
 membership_diff([{Kind, {{peer_admitted, Id, _Host, _Port, Pubkey}, _Body}}])
-  when (Kind =:= assert orelse Kind =:= retract),
+  when (Kind =:= assert orelse Kind =:= asserta orelse Kind =:= retract),
        is_binary(Pubkey), Id =:= Pubkey ->
     true;
 membership_diff(_Diff) ->

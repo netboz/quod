@@ -809,13 +809,13 @@ result_json(Durable) ->
       [{Name, prolog_text(Value)}
        || {Name, Value} <- Durable]).
 
-op_json({assert, Clause})  -> #{op => assert,  clause => clause_text(Clause)};
-op_json({retract, Clause}) -> #{op => retract, clause => clause_text(Clause)};
+op_json({Kind, Clause}) when Kind =:= assert; Kind =:= asserta; Kind =:= retract ->
+    #{op => Kind, clause => clause_text(Clause)};
 op_json({event, Term})     -> #{op => event, term => prolog_text(Term)}.
 
 fact_op_count(Diff) ->
     length([ok || {Kind, {_Head, _Body}} <- Diff,
-                  Kind =:= assert orelse Kind =:= retract]).
+                  Kind =:= assert orelse Kind =:= asserta orelse Kind =:= retract]).
 
 %% A stored clause body is erlog's COMPILED `{Goals, HasCut}` form (`well_form_body`): a plain
 %% fact compiles to `{[], _}` and renders as its head alone; a rule's goal list renders as the

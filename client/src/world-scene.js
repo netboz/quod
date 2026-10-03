@@ -14,7 +14,7 @@ import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { PALETTE } from './palette.js'
 import { paintMarks, clearMarks } from './scene.js'
 import { createRenderResources } from './render-resources.js'
-import { createProofPanel } from './proof-panel.js'
+import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
 import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
 
@@ -150,7 +150,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   const resize = () => engine.resize()
   function showWorkspace() {
     if (workspace && immersive) {
-      panel ??= createProofPanel(scene)
+      panel ??= createWorkspacePanel(scene)
       panel.update(workspace, true)
     } else if (panel) {
       panel.dispose()

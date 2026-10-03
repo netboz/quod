@@ -17,7 +17,8 @@ creation_options_are_ordinary_ontology_content_test() ->
     ?assert(is_binary(Policy)),
     {ok, PolicyTerms} = erlog_io:read_string_terms(binary_to_list(Policy)),
     ?assert(lists:any(fun is_node_acl/1, PolicyTerms)),
-    ?assert(lists:any(fun is_hosting_handler/1, PolicyTerms)).
+    ?assert(lists:any(fun is_hosting_projection/1, PolicyTerms)),
+    ?assert(lists:any(fun is_recovery_reaction/1, PolicyTerms)).
 
 node_actor_creation_goal_fits_the_shared_proof_bounds_test() ->
     Namespace = <<"quod:node-actor-0">>,
@@ -175,8 +176,11 @@ is_node_acl(
          {node_instance_reference, {'Principal'}}}}) -> true;
 is_node_acl(_) -> false.
 
-is_hosting_handler(
-  {state_handler, node_ontology_hosting,
-   [{'/', hosts_ontology, 4}, {'/', knows_ontology_host, 4}], [],
-   reconcile_node_ontology_hosting}) -> true;
-is_hosting_handler(_) -> false.
+is_hosting_projection(
+  {':-', {node_ontology_hosting_projection, _, _}, _}) -> true;
+is_hosting_projection(_) -> false.
+
+is_recovery_reaction(
+  {':-', {react_on, {observed,
+    {agent_recovery_ready, _, _, _, _, _, _, _, _, _}}, _}, _}) -> true;
+is_recovery_reaction(_) -> false.

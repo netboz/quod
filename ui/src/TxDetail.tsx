@@ -347,21 +347,21 @@ function DiffSection({ diff, status, loading }: { diff: Op[]; status: TxStatus; 
                 'font-bold ' +
                 (!applied
                   ? 'text-gray'
-                  : op.op === 'assert'
+                  : op.op === 'assert' || op.op === 'asserta'
                     ? 'text-olive'
                     : op.op === 'event'
                       ? 'text-teal-light'
                       : 'text-rose')
               }
             >
-              {op.op === 'assert' ? '+' : op.op === 'retract' ? '−' : '•'}
+              {op.op === 'asserta' ? '↑+' : op.op === 'assert' ? '+' : op.op === 'retract' ? '−' : '•'}
             </span>
             <span
               className={
                 'break-all ' +
                 (!applied
                   ? 'text-gray'
-                  : op.op === 'assert'
+                  : op.op === 'assert' || op.op === 'asserta'
                     ? 'text-olive'
                     : op.op === 'event'
                       ? 'text-teal-light'

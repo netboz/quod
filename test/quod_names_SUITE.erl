@@ -241,15 +241,19 @@ creator_narrows_the_policy(Config) ->
     ?assertMatch({ok, _, _}, Policy(Write, {node, TargetPub}, [])),
     ?assertMatch({ok, _, _}, Policy(Write, anonymous, [])),
     %% Another ontology reads the tables and draws; it still cannot write.
-    %% The orc male pool is a recipe; its tag reaches the asker as a symbol,
-    %% since the asker's own vocabulary has no such atom.
-    ?assertMatch({ok, [#{'S' := {{'$quod_symbol', <<"recipe">>}, _}}], _},
+    %% Compare the recipe's wire value: the shared eidolon vocabulary may
+    %% already know its symbols, independently of the remote naming policy.
+    {ok, [#{'S' := Recipe}], _} = quod_ct:peer_prove(
+        Asker, ?ASKER_NS,
+        {'::', ?NAMES, {pool, <<"orc">>, <<"personal">>, <<"male">>, {'S'}}}),
+    ?assertEqual(quod_wire_term:encode({recipe, {concat,
+                     [{element, <<"vile_medium">>}, {element, <<"vile_medium">>}]}}),
+                 quod_wire_term:encode(Recipe)),
+    %% isa/2 is reflexive and transitive. Test the permitted ancestor read,
+    %% independently of which valid answer an unbound query returns first.
+    ?assertMatch({ok, [#{}], _},
                  quod_ct:peer_prove(
-                   Asker, ?ASKER_NS,
-                   {'::', ?NAMES, {pool, <<"orc">>, <<"personal">>, <<"male">>, {'S'}}})),
-    ?assertMatch({ok, [#{'W' := <<"vile">>}], _},
-                 quod_ct:peer_prove(
-                   Asker, ?ASKER_NS, {'::', ?NAMES, {isa, <<"orc">>, {'W'}}})),
+                   Asker, ?ASKER_NS, {'::', ?NAMES, {isa, <<"orc">>, <<"vile">>}})),
     ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
                  quod_ct:peer_prove(Asker, ?ASKER_NS, {remote_label, policy, {'N'}})),
     ?assertNotMatch({ok, _, _},

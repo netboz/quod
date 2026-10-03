@@ -789,7 +789,8 @@ validate_prepared_membership(Diff, #context{est = Est}) ->
     end.
 
 exact_membership_parent(
-  [{assert, {{peer_admitted, _Id, _Host, _Port, Pubkey}, _Body}}], Est) ->
+  [{Kind, {{peer_admitted, _Id, _Host, _Port, Pubkey}, _Body}}], Est)
+  when Kind =:= assert; Kind =:= asserta ->
     not lists:member(
           Pubkey, quod_committee_predicates:admitted_pubkeys(Est));
 exact_membership_parent(
@@ -802,7 +803,7 @@ exact_membership_parent(_Diff, _Est) ->
 diff_touches_membership(Diff) ->
     lists:any(
       fun({Kind, {{peer_admitted, _, _, _, _}, _Body}})
-            when Kind =:= assert; Kind =:= retract -> true;
+            when Kind =:= assert; Kind =:= asserta; Kind =:= retract -> true;
          (_) -> false
       end, Diff).
 
@@ -819,8 +820,9 @@ membership_verdict({claim, _Slot}, #transaction{}, _Context) ->
     valid.
 
 membership_diff_verdict(
-  [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],
-  #context{target = {Ns, _Anchor}, applied = Applied, est = Est}) ->
+  [{Kind, {{peer_admitted, Pk, H, P, Pk}, _B}}],
+  #context{target = {Ns, _Anchor}, applied = Applied, est = Est})
+  when Kind =:= assert; Kind =:= asserta ->
     case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
         true ->
             {invalid, already_admitted};

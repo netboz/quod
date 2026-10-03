@@ -404,8 +404,7 @@ repeated_observation_keeps_support_stable_without_losing_new_work_test() ->
     Report = {agent_failure_report, actor, Old, 1, Round, Observer,
               {observation, 1, hash(45), Expiry}, suspected_unreachable},
     Candidate = {agent_candidate_key, actor, Old, 1, Observer, hash(7)},
-    Facts = [{local_node_agent, Observer},
-             {agent_host, actor, Old, 1, hash(6)}, {agent_key, actor, hash(6), active},
+    Facts = [{agent_host, actor, Old, 1, hash(6)}, {agent_key, actor, hash(6), active},
              {agent_recovery_round, actor, Old, 1, Round},
              {agent_recovery_observer, actor, Observer},
              {eligible_agent_host, actor, Observer}, {agent_recovery_threshold, actor, 2}],
@@ -413,12 +412,8 @@ repeated_observation_keeps_support_stable_without_losing_new_work_test() ->
                                                   "ontologies/agent_instance.pl")),
     {ok, Policy} = file:read_file(filename:join(code:priv_dir(quod),
                                                 "ontologies/agent_recovery_policy.pl")),
-    %% Exercise the actual reaction's decision and binding. These interpreted
-    %% leaves record its external submission boundary; custody and signed ingress
-    %% are exercised separately by quod_agent_custody_tests and the QUIC suite.
-    Leaves = <<"submit_node_goal(execute,G,E) :- assertz(submitted(plain(G,E))).\n"
-               "submit_node_prepared_goal(I,H,P,G,E) :- P=unavailable(test_vault), "
-               "assertz(submitted(prepared(I,H,G,E))).\n">>,
+    %% Exercise the real pure guard and its bound request. Actual deferred
+    %% custody and signed admission are tested through the queue and QUIC seam.
     Cases = [{[Report, Candidate], suspected_unreachable, Now, 2, none},
              {[Report, Candidate], suspected_unreachable, Expiry, 2, plain},
              {[Report, Candidate], reachable, Now, 2, plain},
@@ -427,26 +422,24 @@ repeated_observation_keeps_support_stable_without_losing_new_work_test() ->
               suspected_unreachable, Now, 0, ambiguous},
              {[setelement(5, Report, hash(48)), Candidate], suspected_unreachable, Now, 1, plain}],
     lists:foreach(fun({Rows, Kind, At, Sequence, Wanted}) ->
-        St = quod_ct:action_overlay(iolist_to_binary([Instance, Policy, Leaves]), [], Facts ++ Rows),
         Maximum = At + 60000,
-        Goal = {react_agent_host_observation, Observer, actor, Old, 1, {current, Round},
-                Round, hash(46), Kind, At, Maximum},
+        St0 = quod_ct:action_overlay(iolist_to_binary([Instance, Policy]),
+                                    [quod_agent_predicates], Facts ++ Rows),
+        St = quod_predicates:set_context(St0,
+                quod_predicates:policy_verdict_context(<<"source">>, 1)),
+        Goal = {agent_recovery_data, Observer, actor, Old, 1, {current, Round},
+                 Round, Kind, At, Maximum, {'Data'}},
         {Status, Final} = erlog_int:prove_goal(Goal, St),
-        ExpectedStatus = case Wanted of ambiguous -> fail; _ -> succeed end,
+        ExpectedStatus = case Wanted of ambiguous -> fail; none -> fail; _ -> succeed end,
         ?assertEqual(ExpectedStatus, Status),
-        Entry = {report_agent_observation, actor, Old, 1, {current, Round}, Round,
-                 {observation, Sequence, hash(46), Maximum}, Kind},
-        Submitted = case Wanted of
-            none -> [];
-            ambiguous -> [];
-            plain -> [{plain, Entry, Maximum}];
-            prepared ->
-                Prepared = list_to_tuple([report_agent_observation_with_custody |
-                                         tl(tuple_to_list(Entry))] ++ [{unavailable, test_vault}]),
-                [{prepared, actor, 1, Prepared, Maximum}]
-        end,
-        ?assertMatch({succeed, _}, erlog_int:prove_goal(
-          {findall, {'S'}, {submitted, {'S'}}, Submitted}, Final))
+        case Wanted of
+            none -> ok;
+            ambiguous -> ok;
+            _ ->
+                Preparation = case Wanted of plain -> none; prepared -> required end,
+                ?assertEqual({recovery, Sequence, Maximum, Preparation},
+                              erlog_int:dderef({'Data'}, Final#est.bs))
+        end
     end, Cases).
 
 observation_expiry_uses_live_authorized_subset_test() ->

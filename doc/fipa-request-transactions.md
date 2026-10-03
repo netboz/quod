@@ -58,14 +58,13 @@ the initiator's waiting state and uses `::` to call the receiver's
 state and stages `fipa_request_received(Instance, Id, Sender, Action)` as an event.
 The selector includes an exact genesis-identity check inside the target scope.
 
-A founding reaction can use the existing unification and hosted submission
+A reaction can use the existing unification and hosted submission
 when automatic pending-work continuation is not enabled:
 
 ```prolog
-react_on(agent(receiver),
-         fipa_request_received(receiver, Id, Sender, Action),
-         submit_agent_goal(receiver, execute,
-                           fipa_fulfil_request(receiver, Id), 5000)).
+react_on(fipa_request_received(receiver, Id, Sender, Action),
+         fipa_fulfil_request(receiver, Id)) :-
+    me(agent_instance_ref(_, _, receiver)).
 ```
 
 `fipa_fulfil_request/2` requires the participant's own authenticated principal.
@@ -98,12 +97,12 @@ same wall-clock instant.
 
 For automatic continuation, explicitly supply
 `fipa_request_continuation(Instance, BudgetMs)`, retaining the existing entry ACL
-and signing grants. Without that policy fact, the Request state handler selects
-no work. The handler depends on hosting,
-selects pending work in Prolog and uses the same bounded request queue. Omit a
-reaction that separately submits the same completion. The handler watches current
-conversation and opt-in policy changes; domain-specific readiness dependencies
-must be included in its founding declaration.
+and signing grants. Without that policy fact, the committed Request work selector chooses
+no work. The owning reactions wait for hosting, select pending work in Prolog
+and use the same bounded request queue. Omit a reaction that separately submits
+the same completion. Ordinary notice rules watch current conversation and
+opt-in policy changes; include domain-specific readiness dependencies in those
+rules.
 
 Restoring `pending` does not prove that an earlier operation was never submitted.
 The approved exception permits a **distinct guarded domain attempt**, whose

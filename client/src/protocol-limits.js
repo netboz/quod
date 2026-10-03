@@ -24,3 +24,7 @@ const encoder = new TextEncoder()
 export function utf8ByteLength(value) {
   return encoder.encode(value).length
 }
+
+// include/quod_term_limits.hrl owns the shared structural-depth contract.
+// Lists count nested elements and tails, not each link in their spine.
+export const PROLOG_TERM_LIMITS = Object.freeze({ depth: 64 })

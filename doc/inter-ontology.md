@@ -301,7 +301,7 @@ the subscriber's ledger establishes the ontology relationship. Its hosting
 runtime now maintains a shared certificate-verified local foreign projection
 through the existing `quod_foreign_log` cache and verifier. The event path
 converts the canonical reducer's newly applied operations and matches
-source-qualified `react_on/3` locally in the subscriber. The first
+source-qualified `react_on/2` locally in the subscriber. The first
 implementation installs no target-side pattern registry. The target stores no
 duplicate durable row, and routes remain local directory P-state.
 
@@ -566,9 +566,8 @@ the coordinated clean re-found and hardware activation of this hard break.
   are implemented. Explicit events are implemented in the current working
   tree; hardware acceptance remains in `event-reaction-refinement-plan.md`.
   Section 5 explains why none of it is inferred from dead per-ask state.
-- **The source-qualified `react_on/3` pattern grammar.** It is frozen and
-  locally validated in `ontology-subscription-plan.md` Slice 1, not inferred
-  from OCC granularity. Source-side publication filtering is deferred until
+- **The source-qualified `react_on/2` pattern grammar.** It is defined by
+  `event-reaction-refinement-plan.md`, not inferred from OCC granularity. Source-side publication filtering is deferred until
   certified follow fan-out is measured.
 - **Ontology-creation authorization** (`X:*` ownership enforcement). Node
   signing is already live; authenticated origin-agent identity and the

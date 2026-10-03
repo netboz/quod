@@ -325,13 +325,18 @@ missing_network_identity_splits_check_from_committed_claim_test() ->
         ok = quod_outcome:close(Outcomes)
     end.
 
-membership_validation_contract_is_owned_here_test() ->
+membership_validation_contract_is_owned_here_test_() ->
+    [{atom_to_list(Kind), fun() -> membership_validation_contract(Kind) end}
+     || Kind <- [assert, asserta]].
+
+membership_validation_contract(Kind) ->
     Ns = <<"quod:commit-membership">>,
     Anchor = <<223:256>>,
     Candidate = <<224:256>>,
     Host = "member.example",
     Port = 14567,
-    Assert = membership_assert(Candidate, Host, Port),
+    [{assert, Clause}] = membership_assert(Candidate, Host, Port),
+    Assert = [{Kind, Clause}],
     CanJoin = {can_join, Ns, [Host, Port], Candidate},
     with_context(
       Ns, Anchor, [CanJoin],

@@ -1,58 +1,134 @@
 -module(quod_runtime_predicates).
 -moduledoc """
-Governed Erlog bridges for `m:quod_runtime`.
+Ordinary reactions match an event and local owner eligibility once in a read-only
+committed snapshot. The actual bound goal enters the owner's existing queue and
+ordinary authorization path. Matching grants no authenticated proof authority.
 
-`enqueue_projection(Resource, Job)` is a `projection`-class predicate a
-state handler calls to push heavy rebuild work into the existing supervised,
-per-resource worker tier. The event height becomes the requested revision;
-success installs that revision and releases `quod_runtime:await_revision/4`
-callers.
+The universal `current_ontology_identity/2` query reads the exact executing
+scope from engine-owned proof context, without a live lookup or authority grant.
 
-The private `$quod_reaction_*` predicates form one Erlog continuation for a
-local or subscribed reaction: `erlog_int:unify_prove_body/4` binds the event pattern, ordinary
-Prolog resolves the executor's unique node, and the bound Handler runs in the
-same read-only frame. They are registered with the existing predicate
-dispatcher under class `reaction`; they are not another registry or matcher.
-
-`Job` is a complete Prolog goal (no scope appended), proved under a projection
-context against the newest pinned snapshot when its worker starts. Enqueue is
-synchronous and bounded: an oversized job or full pending-resource queue fails
-the state handler loudly instead of retaining unbounded work.
+Request expiry and optional custody preparation are private match metadata.
+Their variables belong to the Erlog proof, so failed alternatives discard them;
+no native preparation or submission occurs while eligibility is being proved.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
 -export([quod_predicate_module/0, load/1, diff_to_events/1, run_reaction/6,
-         projection_noop_1/3, enqueue_projection_2/3,
-         reaction_dispatch_6/3, reaction_owner_4/3,
-         reaction_complete_1/3]).
+         me/3, current_ontology_identity/3, scope_identity/1,
+         current_request_expiry/3, limit_reaction_expiry/3, prepare_agent_custody/3,
+         recovery_observation/3,
+         reaction_match_5/3, reaction_result_2/3, reaction_metadata/1, request_resource/4]).
 
 quod_predicate_module() -> true.
 
--spec load(tuple()) -> tuple().
-load(Est0) ->
-    Est1 = quod_predicates:register(
-             Est0, {projection_noop, 1}, projection,
-             ?MODULE, projection_noop_1),
-    Est2 = quod_predicates:register(
-      Est1, {enqueue_projection, 2}, projection,
-      ?MODULE, enqueue_projection_2),
-    Est3 = quod_predicates:register(
-             Est2, {'$quod_reaction_dispatch', 6}, reaction,
-             ?MODULE, reaction_dispatch_6),
-    Est4 = quod_predicates:register(
-             Est3, {'$quod_reaction_owner', 4}, reaction,
-             ?MODULE, reaction_owner_4),
-    quod_predicates:register(
-      Est4, {'$quod_reaction_complete', 1}, reaction,
-      ?MODULE, reaction_complete_1).
+load(Est) ->
+    Actor = quod_predicates:register(Est, {me, 1}, query, proof_bound, ?MODULE, me),
+    Identity = quod_predicates:register(Actor, {current_ontology_identity, 2}, query,
+                                        proof_bound, ?MODULE, current_ontology_identity),
+    Expiry = quod_predicates:register(Identity, {current_request_expiry, 1}, query,
+                                      proof_bound, ?MODULE, current_request_expiry),
+    Limit = quod_predicates:register(Expiry, {limit_reaction_expiry, 1}, reaction,
+                                     ?MODULE, limit_reaction_expiry),
+    Preparation = quod_predicates:register(Limit, {prepare_agent_custody, 3}, reaction,
+                                           ?MODULE, prepare_agent_custody),
+    Observation = quod_predicates:register(Preparation, {recovery_observation, 1}, reaction,
+                                             ?MODULE, recovery_observation),
+    Match = quod_predicates:register(Observation, {'$quod_reaction_match', 5}, reaction,
+                                     ?MODULE, reaction_match_5),
+    quod_predicates:register(Match, {'$quod_reaction_result', 2}, reaction,
+                             ?MODULE, reaction_result_2).
+
+-doc "The selected actor during reaction discovery, otherwise the authenticated proof principal.".
+me({me, Actor}, Next, St) ->
+    Context = quod_predicates:context(St),
+    case {quod_predicates:ctx_kind(Context), quod_predicates:ctx_executor(Context)} of
+        {reaction, {actor, Reference, _Metadata}} ->
+            erlog_int:unify_prove_body(Actor, Reference, Next, St);
+        _ ->
+            quod_ontology_predicates:current_principal_predicate(
+              {current_principal, Actor}, Next, St)
+    end.
+
+-doc "Bind the exact identity of the executing proof scope without a live lookup.".
+-spec current_ontology_identity(term(), term(), tuple()) -> term().
+current_ontology_identity({current_ontology_identity, Namespace, Anchor}, Next, St) ->
+    case scope_identity(St) of
+        {ok, {Ns, Hash}} ->
+            erlog_int:unify_prove_body([Namespace, Anchor], [Ns, Hash], Next, St);
+        error -> erlog_int:fail(St)
+    end.
+
+scope_identity(St) ->
+    Context = quod_predicates:context(St),
+    case {quod_predicates:ctx_ns(Context), quod_predicates:ctx_chain(Context)} of
+        {Ns, [{Ns, <<_:256>> = Hash} | _]} when is_binary(Ns), byte_size(Ns) > 0 ->
+            {ok, {Ns, Hash}};
+        _ -> error
+    end.
+
+-doc "Bind verified request metadata; no live clock observation enters the proof.".
+current_request_expiry({current_request_expiry, Expiry}, Next, St) ->
+    Bound = case reaction_metadata(St) of
+        {ok, #{ceiling := Upper, expiry_variable := Variable}} ->
+            case erlog_int:deref(Variable, St#est.bs) of
+                {_} -> {ok, Upper};
+                Narrowed -> {ok, Narrowed}
+            end;
+        _ ->
+            case quod_scope_session:request_expiry() of
+                error -> quod_proof_context:request_expiry();
+                ScopeExpiry -> ScopeExpiry
+            end
+    end,
+    case Bound of
+        {ok, Value} -> erlog_int:unify_prove_body(Expiry, Value, Next, St);
+        none -> erlog_int:fail(St)
+    end.
+
+-doc "Constrain this match's request expiry within its owner-authenticated upper bound.".
+limit_reaction_expiry({limit_reaction_expiry, Expiry0}, Next, St = #est{bs = Bs}) ->
+    Expiry = erlog_int:dderef(Expiry0, Bs),
+    case reaction_metadata(St) of
+        {ok, #{ceiling := Upper, expiry_variable := Variable}}
+          when is_integer(Expiry), Expiry > 0, Expiry =< Upper ->
+            erlog_int:unify_prove_body(Variable, Expiry, Next, St);
+        _ -> erlog_int:fail(St)
+    end.
+
+%% A public term resembling a notice is not an authenticated observation.
+recovery_observation({recovery_observation, Event}, Next, St) ->
+    case reaction_metadata(St) of
+        {ok, #{mode := {node, Observer, execute},
+               recovery := #{observer := Observer, event := Owned}}} ->
+            erlog_int:unify_prove_body(Event, Owned, Next, St);
+        _ -> erlog_int:fail(St)
+    end.
+
+-doc "Describe custody for the observed anchored agent; matching never opens the vault.".
+prepare_agent_custody({prepare_agent_custody, Target0, Epoch0, Result0}, Next,
+                      St = #est{bs = Bs}) ->
+    [Target, Epoch, Result] = erlog_int:dderef([Target0, Epoch0, Result0], Bs),
+    case {reaction_metadata(St), Target, quod_wire_term:is_ground(Target), Result} of
+        {{ok, #{mode := {node, Observer, execute},
+                recovery := #{target := Target, epoch := Epoch, observer := Observer},
+                preparation_variable := Variable}},
+         {agent_instance_ref, Ns, <<_:256>>, _}, true, {_}}
+          when is_binary(Ns), byte_size(Ns) > 0,
+               is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64) ->
+            Preparation = {custody, Target, Epoch, Result},
+            erlog_int:unify_prove_body(Variable, Preparation, Next, St);
+        _ -> erlog_int:fail(St)
+    end.
 
 -doc "Convert canonical applied operations to ordered reaction events.".
 -spec diff_to_events([op()]) -> [term()].
 diff_to_events(AppliedOps) when is_list(AppliedOps) ->
     lists:filtermap(
-      fun({Kind, {Fact, {[], false}}})
+      fun({asserta, {Fact, {[], false}}}) ->
+              {true, {assert, Fact}};
+         ({Kind, {Fact, {[], false}}})
             when Kind =:= assert; Kind =:= retract ->
               {true, {Kind, Fact}};
          ({event, Term}) ->
@@ -61,144 +137,116 @@ diff_to_events(AppliedOps) when is_list(AppliedOps) ->
               false
       end, AppliedOps).
 
--doc "Unify one event with one active reaction and continue its Handler once.".
--spec run_reaction(binary(), non_neg_integer(), <<_:256>>, tuple(), term(), tuple()) ->
-          executed | unmatched | {inert, term()} | {failed, term()}.
-run_reaction(Ns, Height, <<_:256>> = Self,
-             {react_on, Executor, Pattern, Handler}, Event, Est) ->
-    Ref = make_ref(),
-    Key = reaction_marker_key(Ref),
-    put(Key, unmatched),
-    Goal = {'$quod_reaction_dispatch', Ref, Self,
-            Executor, Pattern, Handler, Event},
-    Ctx = quod_predicates:reaction_context(Ns, Height),
-    {Result, Marker} =
-        try
-            ProofResult = quod_prolog:prove_est(
-                            Goal, quod_predicates:set_context(Est, Ctx)),
-            {ProofResult, get(Key)}
-        after
-            erase(Key)
-        end,
-    reaction_result(Result, Marker).
+-doc "Match one declaration for its current owner and queue its ordinary goal once.".
+-spec run_reaction(binary(), non_neg_integer(), map(), tuple(), term(), tuple()) ->
+          executed | unmatched | {failed, term()}.
+run_reaction(Ns, Height, Binding = #{request_timeout_ms := Timeout},
+             Source, Event0, Est) ->
+    %% A committed clause-head event can itself contain variables. Its scope
+    %% is independent of this declaration, just as two ordinary Prolog clauses
+    %% are standardized apart before unification.
+    {{':-', {react_on, Pattern, Goal}, Guard}, _SourceVariables, NextVariable} =
+        erlog_int:term_instance(Source, 0),
+    {Event, _EventVariables, _Next} = erlog_int:term_instance(Event0, NextVariable),
+    {Actor, Anchor, Executor, Mode} = request_owner(Ns, Binding),
+    ConfiguredExpiry = quod_time:now_ms() + Timeout,
+    UpperExpiry = min(ConfiguredExpiry, maps:get(request_expiry, Binding, ConfiguredExpiry)),
+    Metadata = (maps:with([recovery], Binding))#{
+                 ceiling => UpperExpiry, mode => Mode, source => {Ns, Anchor}},
+    Ctx = quod_predicates:with_chain(
+            quod_predicates:with_executor(
+              quod_predicates:reaction_context(Ns, Height), {actor, Actor, Metadata}),
+            [{Ns, Anchor}]),
+    Match = {'$quod_reaction_match', Pattern, Event, Guard, Goal, {'$ReactionRequest'}},
+    case quod_proof_session:run_first(
+           Match, quod_predicates:set_context(Est, Ctx),
+           #{read_set => true, read_only => true}) of
+        {ok, #{'$ReactionRequest' := {request, BoundGoal, Expiry, Preparation}}, [], _ReadSet}
+          when is_integer(Expiry), Expiry > 0, Expiry =< UpperExpiry ->
+            Work = case Preparation of
+                       none -> BoundGoal;
+                       {custody, Ref, Epoch, Variable} ->
+                           {custody, Ref, Epoch, Variable, BoundGoal}
+                   end,
+            Budget = case maps:get(recovery, Metadata, none) of
+                #{deadline := Deadline} -> {expires, Expiry, Deadline};
+                none -> {expires, Expiry}
+            end,
+            case quod_runtime:agent_request(
+                   Ns, Height, Executor, Mode, Work, Budget) of
+                ok -> executed;
+                {error, Reason} -> {failed, {reaction_submission, Reason}}
+            end;
+        {ok, _, _, _} -> {failed, invalid_reaction_request};
+        {fail, _Reasons} -> unmatched;
+        {error, Reason} -> {failed, {reaction_guard, Reason}}
+    end.
 
-reaction_result({ok, _Bindings, [], _ReadSet}, complete) -> executed;
-reaction_result({ok, _Bindings, Staged, _ReadSet}, _Marker)
-  when Staged =/= [] ->
-    {failed, {handler_staged_d, Staged}};
-reaction_result(fail, unmatched) -> unmatched;
-reaction_result(fail, {inert, Reason}) -> {inert, Reason};
-reaction_result(fail, selected) -> {failed, handler_failed};
-reaction_result({error, Reason}, selected) -> {failed, {handler_error, Reason}};
-reaction_result(Result, Marker) ->
-    {failed, {invalid_reaction_result, Result, Marker}}.
+request_owner(Ns, #{reference := {agent_instance_ref, Ns, Anchor, _} = Actor,
+                    credential := node, public_key := Key}) ->
+    {Actor, Anchor, {node, Key}, {node, Actor, execute}};
+request_owner(Ns, #{reference := {agent_instance_ref, Ns, Anchor, Instance} = Actor,
+                    epoch := Epoch, public_key := Key}) ->
+    {Actor, Anchor, {agent, Instance, Epoch, Key}, execute}.
 
-%% This is the only event matcher. Pattern variables shared by Executor and
-%% Handler are bound before the ownership proof and Handler continuation run.
--spec reaction_dispatch_6(term(), term(), tuple()) -> term().
-reaction_dispatch_6(
-  {'$quod_reaction_dispatch', Ref, Self, Executor, Pattern, Handler, Event},
-  Next, #est{vn = Vn} = St) ->
-    Owner = {Vn},
-    Owners = {Vn + 1},
-    Continue =
-        [{findall, Owner, {executor_owner_node, Executor, Owner}, Owners},
-         {'$quod_reaction_owner', Ref, Self, Executor, Owners},
-         {call, Handler},
-         {'$quod_reaction_complete', Ref} | Next],
+%% Allocate the hidden request variables after the caller's source variables
+%% have been freshened. Ordinary Erlog bindings give metadata the same cut and
+%% backtracking semantics as the selected goal.
+reaction_match_5({'$quod_reaction_match', Pattern, Event, Guard, Goal, Result},
+                 Next, St = #est{vn = Vn}) ->
+    Context = quod_predicates:context(St),
+    {actor, Actor, Metadata} = quod_predicates:ctx_executor(Context),
+    Scoped = Metadata#{expiry_variable => {Vn}, preparation_variable => {Vn + 1}},
+    Ctx = quod_predicates:with_executor(Context, {actor, Actor, Scoped}),
+    Continue = [{call, {once, Guard}}, {'$quod_reaction_result', Goal, Result} | Next],
     erlog_int:unify_prove_body(Pattern, Event, Continue,
-                               St#est{vn = Vn + 2}).
+      quod_predicates:set_context(St#est{vn = Vn + 2}, Ctx)).
 
--spec reaction_owner_4(term(), term(), tuple()) -> term().
-reaction_owner_4(
-  {'$quod_reaction_owner', Ref, Self0, Executor0, Owners0}, Next,
-  #est{bs = Bs} = St) ->
-    Key = reaction_marker_key(Ref),
-    case get(Key) of
-        unmatched ->
-            Self = erlog_int:dderef(Self0, Bs),
-            Executor = erlog_int:dderef(Executor0, Bs),
-            Owners = erlog_int:dderef(Owners0, Bs),
-            case executor_owner(Executor, Self, Owners) of
-                {selected, BoundExecutor} ->
-                    put(Key, selected),
-                    Ctx = quod_predicates:with_executor(quod_predicates:context(St), BoundExecutor),
-                    erlog_int:prove_body(Next, quod_predicates:set_context(St, Ctx));
-                {inert, _Reason} = Inert ->
-                    put(Key, Inert),
-                    erlog_int:fail(St)
+reaction_result_2({'$quod_reaction_result', Goal, Result}, Next, St = #est{bs = Bs}) ->
+    {ok, #{ceiling := Upper, expiry_variable := ExpiryVar,
+           preparation_variable := PreparationVar}} = reaction_metadata(St),
+    Expiry = metadata_value(erlog_int:deref(ExpiryVar, Bs), Upper),
+    Preparation = metadata_value(erlog_int:deref(PreparationVar, Bs), none),
+    case Preparation of
+        {custody, _, _, Variable} ->
+            case quod_agent:valid_preparation_goal(
+                   erlog_int:deref(Variable, Bs), erlog_int:dderef(Goal, Bs)) of
+                true -> erlog_int:unify_prove_body(
+                          Result, {request, Goal, Expiry, Preparation}, Next, St);
+                false -> erlog_int:fail(St)
             end;
-        _ ->
-            erlog_int:fail(St)
+        none -> erlog_int:unify_prove_body(Result, {request, Goal, Expiry, Preparation}, Next, St)
     end.
 
-executor_owner({node, <<_:256>> = Self}, Self, _Owners) -> {selected, {node, Self}};
-executor_owner({node, <<_:256>>}, _Self, _Owners) -> {inert, remote_node};
-executor_owner({agent, Instance}, _Self, [{host, NodeRef, Epoch, <<_:256>> = Key}])
-  when is_integer(Epoch), Epoch > 0 ->
-    case quod_node_actor:principal() of
-        {ok, Principal} ->
-            case quod_agent_ref:materialize_principal(Principal) of
-                {ok, NodeRef} -> {selected, {agent, Instance, Epoch, Key}};
-                _ -> {inert, remote_executor}
-            end;
-        _ -> {inert, unresolved_executor}
-    end;
-executor_owner({agent, _}, _Self, []) -> {inert, unresolved_executor};
-executor_owner({agent, _}, _Self, [_]) -> {inert, malformed_executor_owners};
-executor_owner({agent, _}, _Self, _) -> {inert, ambiguous_executor};
-executor_owner(Executor, Self, Owners) when is_list(Owners) ->
-    case lists:all(
-           fun(Owner) -> is_binary(Owner) andalso byte_size(Owner) =:= 32 end,
-           Owners) of
-        false ->
-            {inert, malformed_executor_owners};
-        true ->
-            case lists:usort(Owners) of
-                [Self] -> {selected, Executor};
-                [] -> {inert, unresolved_executor};
-                [_One] -> {inert, remote_executor};
-                _ -> {inert, ambiguous_executor}
-            end
-    end;
-executor_owner(_Executor, _Self, _Owners) ->
-    {inert, malformed_executor_owners}.
+metadata_value({_Variable}, Default) -> Default;
+metadata_value(Value, _) -> Value.
 
--spec reaction_complete_1(term(), term(), tuple()) -> term().
-reaction_complete_1({'$quod_reaction_complete', Ref}, Next, St) ->
-    Key = reaction_marker_key(Ref),
-    case get(Key) of
-        selected ->
-            put(Key, complete),
-            erlog_int:prove_body(Next, St);
-        _ ->
-            erlog_int:fail(St)
+reaction_metadata(St) ->
+    Context = quod_predicates:context(St),
+    case {quod_predicates:ctx_kind(Context), quod_predicates:ctx_executor(Context)} of
+        {reaction, {actor, _Actor, Metadata}} -> {ok, Metadata};
+        _ -> error
     end.
 
-reaction_marker_key(Ref) -> {?MODULE, reaction, Ref}.
-
--spec projection_noop_1(term(), term(), tuple()) -> term().
-projection_noop_1(_Goal, Next, St) ->
-    erlog_int:prove_body(Next, St).
-
-%% The erlog handler behind the governed `{enqueue_projection, 2}` functor (class
-%% `projection` — dispatchable only from a handler's converge run). Ground both args,
-%% read ns/height from the execution context, hand the runtime the job.
--spec enqueue_projection_2(term(), term(), tuple()) -> term().
-enqueue_projection_2({enqueue_projection, Resource0, Job0}, Next, St) ->
-    Resource = erlog_int:dderef(Resource0, St#est.bs),
-    Job = erlog_int:dderef(Job0, St#est.bs),
-    Ctx = quod_predicates:context(St),
-    Ns = quod_predicates:ctx_ns(Ctx),
-    Height = quod_predicates:ctx_height(Ctx),
-    case quod_wire_term:is_ground({Resource, Job}) of
+request_resource(Kind, Scope0, Next, St = #est{bs = Bs}) ->
+    Context = quod_predicates:context(St),
+    case quod_predicates:ctx_kind(Context) of
+        proof -> ok;
+        Other -> throw({erlog_error, {context_violation, resource_reconciliation, query, Other}})
+    end,
+    Scope = erlog_int:dderef(Scope0, Bs),
+    case quod_wire_term:is_ground(Scope) of
         true ->
-            case quod_runtime:enqueue_heavy(Ns, Resource, Height, Job) of
-                ok ->
-                    erlog_int:prove_body(Next, St);
+            Deadline = case quod_scope_session:remaining_ms() of
+                           {ok, Remaining} -> quod_time:mono_ms() + Remaining;
+                           error -> quod_proof_context:deadline_ms()
+                       end,
+            Ns = quod_predicates:ctx_ns(Context),
+            case quod_runtime:reconcile_resource(
+                   Ns, quod_predicates:ctx_height(Context), Kind, Scope, Deadline) of
+                ok -> erlog_int:prove_body(Next, St);
                 {error, Reason} ->
-                    throw({erlog_error, {projection_enqueue_failed, Resource, Reason}})
+                    throw({erlog_error, {resource_reconciliation_failed, Kind, Reason}})
             end;
-        false ->
-            erlog_int:fail(St)   %% a nonground resource/job is not a schedulable job
+        false -> erlog_int:fail(St)
     end.

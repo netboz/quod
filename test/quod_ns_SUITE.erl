@@ -83,7 +83,7 @@ t_cannot_remove_last(Cfg) ->
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})).   %% still serving proves
 
-%% The consensus gate (Slice A, deferred.md §3 a+c): a RAW membership transaction that bypasses the
+%% The consensus gate (Slice A, doc/outdated/deferred.md §3 a+c): a RAW membership transaction that bypasses the
 %% admit/remove predicates — the Byzantine-submitter path — is rejected at the leader's own append
 %% seam: a retract that would EMPTY the committee (the permanent-wedge attack), a mixed
 %% content+membership diff, and a non-list diff all get {error, bad_change}; the committee is

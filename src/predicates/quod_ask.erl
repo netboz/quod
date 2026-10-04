@@ -1,7 +1,7 @@
 -module(quod_ask).
 -moduledoc """
 The `::` selector — a goal in one ontology proved inside another
-(`doc/inter-ontology.md`). Co-hosted and remote targets use the same reusable
+(`doc/proofs.md`). Co-hosted and remote targets use the same reusable
 proof-scope semantics; location changes only the scope transport.
 
 - **Asking side** — `ask_2/3` is the erlog predicate registered on `{'::' ,2}`. It runs
@@ -17,7 +17,7 @@ proof-scope semantics; location changes only the scope transport.
   authority.
 
 Errors are surfaced as `throw({quod_ask_error, Reason})`, which the proof runner
-turns into the closed, typed catalog in `doc/distributed-proof-plan.md` §5.
+turns into the closed, typed catalog in `doc/outdated/distributed-proof-plan.md` §5.
 Transport or protocol failure never masquerades as ordinary Prolog failure.
 """.
 

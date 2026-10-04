@@ -1,5 +1,5 @@
 %% quod:names — fantasy personal names, generated and recognised from one set
-%% of tables. A system ontology (doc/ontology-actor-architecture.md §2):
+%% of tables. A system ontology (doc/architecture.md):
 %% founded through the ordinary lifecycle, then listed in root as
 %% system_ontology(quod:names, Anchor) so every node carries it. Agents get
 %% their display labels from it.
@@ -139,7 +139,7 @@ draw(Name) :- draw(0, Name).
 draw(Culture, Kind, Gender, Name) :- draw(Culture, Kind, Gender, 0, Name).
 
 %% --- the class view -----------------------------------------------------------
-%% The house vocabulary of doc/inter-ontology.md, derived from the relations
+%% The house vocabulary of doc/proofs.md, derived from the relations
 %% above rather than stored beside them. The culture tree is already isa/2, so
 %% what this adds is the rest: a kind and a gender are things, a pool is the
 %% thing that a culture offers names of some kind for some gender, and its

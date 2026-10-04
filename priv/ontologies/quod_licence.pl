@@ -123,7 +123,7 @@ notice(Work, Part, Licence, What) :-
     obligation(Licence, What).
 
 %% --- the class view -----------------------------------------------------------
-%% The house vocabulary of doc/inter-ontology.md and doc/content-layer-design.md,
+%% The house vocabulary of doc/proofs.md and doc/outdated/content-layer-design.md,
 %% derived from the relations below rather than stored beside them. A family is
 %% a class of licences, a licence is one of its instances, and what a licence
 %% is and asks of you are its attributes. Nothing here holds knowledge of its

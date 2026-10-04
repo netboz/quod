@@ -265,7 +265,7 @@ prefix(<<"n">>, 1, 1000000000).
 prefix(<<"p">>, 1, 1000000000000).
 
 %% --- the class view -----------------------------------------------------------
-%% The house vocabulary of doc/content-layer-design.md, derived from the
+%% The house vocabulary of doc/outdated/content-layer-design.md, derived from the
 %% relations above rather than stored beside them. This is what lets generic
 %% tooling enumerate what is here without knowing unit/5, and lets another
 %% ontology write isa(my_unit, quod:measure::unit) and have the link followed.

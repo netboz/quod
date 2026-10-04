@@ -273,7 +273,7 @@ depicted(Marks, Id, Ontology, Anchor, Thing) :-
     member(mark(Id, _, _, _, _, _, depicts(Ontology, Anchor, Thing)), Marks).
 
 %% --- the class view -----------------------------------------------------------
-%% The house vocabulary of doc/content-layer-design.md, derived from the
+%% The house vocabulary of doc/outdated/content-layer-design.md, derived from the
 %% relations above rather than stored beside them, so the two views cannot
 %% disagree.
 

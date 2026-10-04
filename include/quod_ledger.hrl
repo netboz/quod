@@ -82,7 +82,7 @@
                  claim_view = none :: none | tuple(), %% decode-owned authenticated plans/request; never serialized
                  authentication = none :: none | {binary(), binary(), binary()}}). %% checked author/signature/bytes; never serialized
 
-%% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
+%% --- DispersedSimplex consensus records (doc/outdated/simplex_extended.pdf) ---
 %% Protocol views are era-local and distinct from material ledger indices.
 %% Genesis has the fixed `genesis` era/view 0; its hash derives the first era.
 %% A later era's virtual view-0 root names the preceding terminal membership

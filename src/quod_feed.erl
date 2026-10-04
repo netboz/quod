@@ -871,7 +871,7 @@ fanout(Peers) -> quod_brahms:take_random(?PUSH_FANOUT, lists:usort(Peers)).
 %% A committed entry travels exactly once as the canonical blob owned by
 %% quod_ledger; its decoded record is an endpoint-local view, never a second
 %% wire identity. The split cert/hash/payload verify-before-decode frame
-%% (deferred.md §2) is a later slice.
+%% (doc/outdated/deferred.md §2) is a later slice.
 encode(Ns, {block, Entry}) ->
     {ok, EntryBlob} = quod_ledger:encode_entry(Entry),
     term_to_binary(

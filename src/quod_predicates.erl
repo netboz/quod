@@ -1,7 +1,7 @@
 -module(quod_predicates).
 -moduledoc """
 The typed **external-predicate contract** and the per-run **execution context**
-(`doc/agent-fipa-plan.md` §5). Two jobs, one module:
+(`doc/runtime-and-agents.md`). Two jobs, one module:
 
 1. **Context.** Every proof, deterministic verdict, and selected proof scope runs with
    an execution context — the namespace, the applied height, and the
@@ -79,7 +79,7 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
 %% The execution context threaded through a run. `subject` remains undefined:
 %% authenticated authority is private proof-session state and is passed
 %% explicitly to policy. `chain` is the inter-ontology ask chain
-%% (`doc/inter-ontology.md` §6).
+%% (`doc/proofs.md`).
 -record(qctx, {kind    :: kind(),
                ns      :: binary() | undefined,
                height  = 0 :: non_neg_integer(),

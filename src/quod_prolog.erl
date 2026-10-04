@@ -5,7 +5,7 @@ ontology, serves `prove/2`, and applies committed blocks from `quod_simplex` in 
 order. One `gen_server` per namespace.
 
 - **Every proof runs in its own bounded WORKER process** — the engine never blocks
-  on a proof (doc/inter-ontology.md §4.1). The worker gets a small shared-store snapshot
+  on a proof (doc/proofs.md). The worker gets a small shared-store snapshot
   handle, never the knowledge base. A wedged proof wedges only its worker, which is
   killed after its configured absolute lifetime; its private origin and selected-scope
   overlays die with their bounded workers.
@@ -46,7 +46,7 @@ order. One `gen_server` per namespace.
 Proves are gated until an initial **rebuild** completes (`ready`), so a freshly
 (re)started engine never answers from a half-built kb. The kb is built with the
 erlog flag `unknown = fail`. The runtime projection contract is specified in
-`doc/agent-fipa-plan.md` §7.
+`doc/runtime-and-agents.md`.
 """.
 -behaviour(gen_server).
 -include_lib("erlog/src/erlog_int.hrl").
@@ -293,7 +293,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             signer = none :: quod_identity:signer() | none,
             est       :: tuple(),                 %% committed erlog #est{} (unknown=fail)
             ready     = false :: boolean(),       %% true once the initial rebuild has run
-            %% Runtime lifecycle for the post-apply event layer (doc/agent-fipa-plan.md §7): `live`
+            %% Runtime lifecycle for the post-apply event layer (doc/runtime-and-agents.md): `live`
             %% normally; `{replaying, Id}` while catching up (boot rebuild or a runtime gap-fill), so
             %% replay applies suppress live events and the started/ready boundaries carry a correlating Id.
             runtime_mode = live :: live | {replaying, reference()},
@@ -871,7 +871,7 @@ straight to the parked client here; a forward gap asks `quod_simplex` to re-driv
 
 `Origin` is `live` for a freshly-finalized commit and `replay` for a rebuild/catch-up re-drive.
 It is decided by the `quod_simplex` path that obtained the block, never inferred here: a `live`
-apply publishes the post-apply `applied_live` runtime publication (`doc/agent-fipa-plan.md` §7), a `replay` apply
+apply publishes the post-apply `applied_live` runtime publication (`doc/runtime-and-agents.md`), a `replay` apply
 rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
 -spec apply_entry(binary(), quod_ledger:entry_artifact(), live | replay) -> ok.
@@ -884,7 +884,7 @@ apply_entry(Ns, Entry, Origin) ->
 mark_ready(Ns) -> gen_server:cast(quod_reg:via({quod_prolog, Ns}), mark_ready).
 
 -doc """
-Attach the calling process as this namespace's runtime (`m:quod_runtime`, agent-fipa-plan §7/§8).
+Attach the calling process as this namespace's runtime (`m:quod_runtime`, doc/runtime-and-agents.md).
 
 On success the caller is monitored and becomes the single pinned runtime: every LIVE block's
 post-commit outcome flush sends it `{applied_live, Env, Est}` — `Est` being the committed
@@ -1505,7 +1505,7 @@ handle_cast(mark_ready, S = #s{projection_failure = Reason})
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
     acknowledge_ready(S#s{ready = true, runtime_mode = live});
-%% Quiet-boot ready edge (agent-fipa-plan §7 as-built): a fresh/empty-log boot never opens a
+%% Quiet-boot ready edge (doc/runtime-and-agents.md): a fresh/empty-log boot never opens a
 %% replay run, so without this clause the FIRST ready transition would be unobservable and a
 %% waiting runtime would hang. Guarded on the actual false→true edge — rebuild handshakes
 %% re-cast mark_ready, and an unguarded `boot` edge (a constant, not a RecoveryId) would cost
@@ -6932,7 +6932,7 @@ oldest_snapshot(Current, #s{workers = Workers, agent_attesters = Attesters,
     end.
 
 %%%===================================================================
-%%% post-apply runtime publication layer (doc/agent-fipa-plan.md §7)
+%%% post-apply runtime publication layer (doc/runtime-and-agents.md)
 %%%===================================================================
 %%
 %% The `{runtime, Ns}` property carries these messages for the explorer (`m:quod_explorer_ws`) and any

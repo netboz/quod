@@ -5,7 +5,7 @@
 %% ledger; joining nodes sync it and never re-read this file. Modeled on onia_root.pl.
 
 %% The ACL authority anchor for this network (exactly one). `quod:root` is the
-%% structured name form — `:` reads "belongs-to" (doc/inter-ontology.md §2): the
+%% structured name form — `:` reads "belongs-to" (doc/proofs.md): the
 %% ontology `root`, owned by `quod`.
 acl_sovereign(quod:root).
 

@@ -20,7 +20,7 @@
 -define(QUOD_MAX_PROOF_ANSWER_BYTES, 65536).
 -define(QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 1024).
 
-%% Sealing bounds (distributed-proof-plan §4.2). The transcript charge is taken
+%% Sealing bounds (doc/outdated/distributed-proof-plan.md §4.2). The transcript charge is taken
 %% BEFORE a goal runs; the plan bounds are enforced at seal time and again on
 %% every decode of a plan blob.
 -define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (128 * 1024)).
@@ -49,7 +49,7 @@
 -define(QUOD_MAX_DTX_CONTROL_BYTES,
         (?MAX_BLOCK_BYTES - ?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES)).
 
-%% One node-wide foreign-history owner (distributed-proof-plan §8). Dormant
+%% One node-wide foreign-history owner (doc/outdated/distributed-proof-plan.md §8). Dormant
 %% histories stay as verified disk caches and are opened only when a proof or
 %% follow needs them. Exact monitors, deadlines and byte bounds own live work;
 %% there is no fixed population refusal.

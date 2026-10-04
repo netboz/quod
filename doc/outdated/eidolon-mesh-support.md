@@ -32,14 +32,14 @@ flowchart TD
 
 | Owner | What it does now |
 | --- | --- |
-| [lobby_instance.pl](../priv/ontologies/lobby_instance.pl#L9) | Reads the personal world's instances, sky and placements; invokes pinned recipe and modelling ontologies through `Namespace::(current_ontology_identity(Namespace, Anchor), Goal)`. |
-| [quod_lobby.pl](../priv/ontologies/quod_lobby.pl#L63) | Resolves class associations with explicit ambiguity handling, evaluates `eidolon/3`, composes device parts and material/environment recipes. |
-| [quod_modelling.pl](../priv/ontologies/quod_modelling.pl#L14) | Pure construction: evaluates dimension arithmetic, produces marks, scopes part IDs with `place_model/5`, and derives local alignment with `align/6`. It asserts no generated scene facts. |
-| [quod_rendering.pl](../priv/ontologies/quod_rendering.pl#L76) | Defines seven geometry kinds and a transform group, dimensions, surface/texture semantics, descriptor bounds, distinct occurrence IDs and parent ordering. |
-| [world.js](../client/src/world.js#L22) and [marks.js](../client/src/marks.js#L31) | Obtain ordinary signed projections and decode supported descriptors. Unknown geometry or asset types fail visibly. |
-| [scene.js](../client/src/scene.js#L25) | Maps primitive kinds to Babylon geometry and surfaces to PBR materials; reconciles stable IDs and retains unchanged resources. |
-| [render-resources.js](../client/src/render-resources.js#L5) | Shares fetched bytes by digest and textures by binding, checks SHA-256 before decode, cancels the last consumer's fetch and retires stale completions. |
-| [world-scene.js](../client/src/world-scene.js#L38) | Owns the viewing scene, camera, lighting, picking and XR. Picking walks ancestors to find an anchored depicted entity. |
+| [lobby_instance.pl](../../priv/ontologies/lobby_instance.pl#L9) | Reads the personal world's instances, sky and placements; invokes pinned recipe and modelling ontologies through `Namespace::(current_ontology_identity(Namespace, Anchor), Goal)`. |
+| [quod_lobby.pl](../../priv/ontologies/quod_lobby.pl#L63) | Resolves class associations with explicit ambiguity handling, evaluates `eidolon/3`, composes device parts and material/environment recipes. |
+| [quod_modelling.pl](../../priv/ontologies/quod_modelling.pl#L14) | Pure construction: evaluates dimension arithmetic, produces marks, scopes part IDs with `place_model/5`, and derives local alignment with `align/6`. It asserts no generated scene facts. |
+| [quod_rendering.pl](../../priv/ontologies/quod_rendering.pl#L76) | Defines seven geometry kinds and a transform group, dimensions, surface/texture semantics, descriptor bounds, distinct occurrence IDs and parent ordering. |
+| [world.js](../../client/src/world.js#L22) and [marks.js](../../client/src/marks.js#L31) | Obtain ordinary signed projections and decode supported descriptors. Unknown geometry or asset types fail visibly. |
+| [scene.js](../../client/src/scene.js#L25) | Maps primitive kinds to Babylon geometry and surfaces to PBR materials; reconciles stable IDs and retains unchanged resources. |
+| [render-resources.js](../../client/src/render-resources.js#L5) | Shares fetched bytes by digest and textures by binding, checks SHA-256 before decode, cancels the last consumer's fetch and retires stale completions. |
+| [world-scene.js](../../client/src/world-scene.js#L38) | Owns the viewing scene, camera, lighting, picking and XR. Picking walks ancestors to find an anchored depicted entity. |
 
 The present wire description is:
 
@@ -69,7 +69,7 @@ device recipe caller evaluates locally selected `eidolon(Recipe, device(Entity),
 Parts)` recipes; it is not a general foreign model-library dispatcher. Material
 and environment recipes already demonstrate explicit anchored library calls.
 The per-entity Eidolon selector in
-[World.tsx](../ui/src/World.tsx#L179) currently opens a Prolog
+[World.tsx](../../ui/src/World.tsx#L179) currently opens a Prolog
 workspace, whereas the lobby's playing/edition mode selects its geometry.
 Adding a mesh kind does not automatically make that workspace selector a model
 picker. Start through the existing lobby projection; general per-entity visual
@@ -88,22 +88,22 @@ in this path. Prolog describes the scene; browser JavaScript creates GPU resourc
 
 The Erlang support is the existing proof and runtime infrastructure:
 
-- [quod_ask.erl](../src/predicates/quod_ask.erl) implements scoped
+- [quod_ask.erl](../../src/predicates/quod_ask.erl) implements scoped
   cross-ontology calls and their authorization/proof boundaries.
-- [quod_runtime_predicates.erl](../src/predicates/quod_runtime_predicates.erl#L24)
+- [quod_runtime_predicates.erl](../../src/predicates/quod_runtime_predicates.erl#L24)
   supplies proof-bound `current_ontology_identity/2` and the common reaction bridge.
-- [quod_agent_predicates.erl](../src/predicates/quod_agent_predicates.erl#L21)
+- [quod_agent_predicates.erl](../../src/predicates/quod_agent_predicates.erl#L21)
   exposes the authenticated principal used by relevant ontology policies.
-- [quod_common_primitives.erl](../src/predicates/quod_common_primitives.erl#L21)
+- [quod_common_primitives.erl](../../src/predicates/quod_common_primitives.erl#L21)
   provides pure helpers such as `binary_codes/2`, used for paths and digest syntax.
   This helper is not a live external observation.
-- [quod_predicates.erl](../src/quod_predicates.erl#L27) governs
+- [quod_predicates.erl](../../src/quod_predicates.erl#L27) governs
   external predicate classes and dependencies: proof-bound values, committed
   snapshot reads and live observations have different sealing implications.
 
 The texture files are presently public, packaged application assets. Both
-[quod_client.erl](../src/quod_client.erl#L92) and
-[quod_explorer.erl](../src/quod_explorer.erl#L44) serve them through
+[quod_client.erl](../../src/quod_client.erl#L92) and
+[quod_explorer.erl](../../src/quod_explorer.erl#L44) serve them through
 Cowboy's static asset route. The browser fetches a digest-derived texture path.
 Provenance URLs in recipe libraries are not arbitrary runtime download commands.
 This is not an upload service, durable general blob store or private-asset ACL.
@@ -239,11 +239,11 @@ keyed by digest and relevant import/profile options, retained while any live
 occurrence consumes it. Do not introduce a second mesh asset manager.
 
 The repository pins Babylon core and GUI to 9.18.1 in
-[package.json](../client/package.json). It does not install the
+[package.json](../../client/package.json). It does not install the
 model loader package. Add a matching, pinned glTF loader. The installed core's
-[scene loader types](../client/node_modules/@babylonjs/core/Loading/sceneLoader.d.ts#L284)
+[scene loader types](../../client/node_modules/@babylonjs/core/Loading/sceneLoader.d.ts#L284)
 accept byte views and expose `LoadAssetContainerAsync`; its
-[asset container types](../client/node_modules/@babylonjs/core/assetContainer.d.ts#L214)
+[asset container types](../../client/node_modules/@babylonjs/core/assetContainer.d.ts#L214)
 support instantiation/cloning. Load verified bytes into a retained container
 and realize occurrences under reconciler-owned transform roots. Decoder code
 and any future compression helpers belong to the packaged client release.
@@ -311,8 +311,8 @@ notify only dependent work with the owning incarnation and original deadline.
 Restore pending state through the existing recovery lifecycle, without replaying
 historical completion effects. Ordinary redraws never trigger import or history
 rebuilds. This preserves the action/savepoint and D/P/E contracts in
-[common_predicates.pl](../priv/ontologies/common_predicates.pl#L119),
-[quod_action_predicates.erl](../src/predicates/quod_action_predicates.erl#L5)
+[common_predicates.pl](../../priv/ontologies/common_predicates.pl#L119),
+[quod_action_predicates.erl](../../src/predicates/quod_action_predicates.erl#L5)
 and [event-reaction-refinement-plan.md](event-reaction-refinement-plan.md).
 
 ## Implementation sequence and acceptance

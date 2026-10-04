@@ -11,7 +11,7 @@ changed by committed transactions whose diff asserts/retracts `peer_admitted`
 is the ordered application projection of the same material log. Slot 1 also carries a
 fresh queryable `consensus_incarnation/1` fact, making every re-founding a new
 consensus signature domain. See the approved plan and
-`doc/simplex_extended.pdf` (§2 = the spec).
+`doc/outdated/simplex_extended.pdf` (§2 = the spec).
 
 ## Protocol views and material history
 
@@ -65,8 +65,8 @@ Missing certified bodies use the existing point-to-point recovery path.
 
 Every non-genesis transaction is namespace-bound and Ed25519-signed by its author,
 and every wire transaction is checked before an honest validator votes for it.
-Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
-`doc/finality-round-recovery-plan.md`.
+Historical open-work and hardware acceptance records are in `doc/outdated/deferred.md` and
+`doc/outdated/finality-round-recovery-plan.md`.
 """.
 
 -include("quod_ledger.hrl").
@@ -12884,7 +12884,7 @@ touches_committee(Diff) ->
 %% - Non-empty result: the wedge guard — an empty committee has no leader (`leader/2` → `none`) and
 %%   the namespace could never commit again. The floor is STEPWISE (4→3→2→1 is legal, one
 %%   quorum-endorsed member per block); the hard `3f+1` Byzantine-tolerance floor is deliberately NOT
-%%   enforced (deferred.md §3(c) stays open — it needs a network-target-f concept).
+%%   enforced (doc/outdated/deferred.md §3(c) stays open — it needs a network-target-f concept).
 membership_change_ok(#transaction{diff = Diff}, Vs) ->
     membership_diff_acceptable(Diff, Vs).
 
@@ -15313,7 +15313,7 @@ selects leaders, and receives consensus dissemination. Held deliberately separat
 
 Today epoch length is **1** (every slot is an epoch boundary), so the active set is exactly the current
 facts — this is the **IDENTITY** over `#s.validators`. It exists as the single seam where epoch-frozen
-validators will land (simplex-extended step 1; `doc/deferred.md` §3): every "who votes / leads /
+validators will land (simplex-extended step 1; `doc/outdated/deferred.md` §3): every "who votes / leads /
 disseminates now" read routes through here, every "derive / report / floor-check the facts" read stays on
 `#s.validators`. It is a **landing pad**, not the feature — turning on real epochs still adds an epoch
 snapshot field + boundary detection and rewrites this body to return the set frozen at the epoch's start;

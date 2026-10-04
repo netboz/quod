@@ -9569,7 +9569,7 @@ content_only_catchup_repopulates_verified_validator_routes_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-%% Slice A membership gate (deferred.md §3 a+c): a committee-touching transaction must be EXACTLY ONE
+%% Slice A membership gate (doc/outdated/deferred.md §3 a+c): a committee-touching transaction must be EXACTLY ONE
 %% well-formed `peer_admitted` op that neither empties the committee nor exceeds the validator cap — the
 %% pure shape + bounded floor,
 %% enforced before a node proposes or supports (the KB-side `can_join` verdict is the next slice).

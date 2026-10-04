@@ -1,4 +1,4 @@
-%% animals — a demo knowledge ontology (doc/inter-ontology.md). NOT a system
+%% animals — a demo knowledge ontology (doc/proofs.md). NOT a system
 %% ontology — plain user-level content; the test bed for inter-ontology asks.
 %%
 %% Real content: a small class hierarchy with attributes and diets, following the
@@ -8,7 +8,7 @@
 %% (e.g. pets' `isa(my_dog, animals:dog)`) and ask it questions with `::`
 %% (e.g. `animals::diet(dog, D)`).
 
-%% Invocation is open (same default-open rule as quod:root; see doc/inter-ontology.md §6).
+%% Invocation is open through the broad can_invoke/4 clause below; see doc/proofs.md.
 can_invoke(_Goal, _Principal, _CallChain, _Ns).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 

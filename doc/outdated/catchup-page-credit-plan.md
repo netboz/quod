@@ -31,15 +31,15 @@ The source inventory gives a simpler binding than cross-producer arbitration:
 | foreign-history page | `{directory_pinned, NodeKey, Endpoint}` | node-wide `quod_foreign_log` |
 
 These are distinct keys in `quod_quic`'s one connection map.
-[quod_quic.erl](../src/quod_quic.erl)'s `ensure_conn`,
+[quod_quic.erl](../../src/quod_quic.erl)'s `ensure_conn`,
 `ensure_pinned_conn`, and identified-open handler establish the pools.
-[quod_conn.erl](../src/quod_conn.erl)'s `handle_open` and `handle_send`
+[quod_conn.erl](../../src/quod_conn.erl)'s `handle_open` and `handle_send`
 reuse one outbound link per channel *inside that connection*; peer-opened
 links are not inserted into that outbound cache. The only production page
 producers found by the `blocks_req` send-site sweep are
-[quod_catchup.erl](../src/quod_catchup.erl)'s `drive_binding/2` (after
+[quod_catchup.erl](../../src/quod_catchup.erl)'s `drive_binding/2` (after
 `begin_pull` / `finish_open/4`) and
-[quod_foreign_log.erl](../src/quod_foreign_log.erl)'s `drive_page_binding/2`
+[quod_foreign_log.erl](../../src/quod_foreign_log.erl)'s `drive_page_binding/2`
 (after its `pull_page` handler).
 
 Thus existing concurrent pulls share a producer, not a cross-producer broker.

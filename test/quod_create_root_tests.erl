@@ -178,7 +178,7 @@ start_link_isolated(Ns, NsCfg) ->
     receive {start_result, R} -> R after 5000 -> {error, timeout} end.
 
 %%%===================================================================
-%%% two ontologies on one node (doc/inter-ontology.md step 2)
+%%% two ontologies on one node (doc/outdated/inter-ontology.md step 2)
 %%%
 %%% One node founds BOTH demo ontologies (animals + pets) side by side,
 %%% sharing ONE data_dir (the ledger keeps one subdirectory per namespace).

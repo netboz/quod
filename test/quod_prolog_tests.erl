@@ -1106,7 +1106,7 @@ membership_test_() ->
       fun t_signed_vote_checks_identity_and_source_material_acl/1,
       fun t_lockstep/1]}.
 
-%% Slice 1 increment 2: the post-apply event layer (doc/agent-fipa-plan.md §7) — apply origin drives
+%% Slice 1 increment 2: the post-apply event layer (doc/runtime-and-agents.md) — apply origin drives
 %% the applied_live event and the replay boundaries on the {runtime, Ns} property.
 runtime_event_test_() ->
     {foreach, fun setup/0, fun cleanup/1,

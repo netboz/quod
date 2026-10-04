@@ -7,6 +7,36 @@ Runbook for the non-quod jobs under `deploy/`. Run everything from the repo root
 Nomad has no ACLs: anyone on the LAN who can reach the API can read job specs and
 Nomad variables. Secrets are kept out of the repository, not out of the cluster.
 
+## Stable browser ingress
+
+`deploy/quod-client.nomad` gives one browser origin a fixed host and HTTPS port
+while its Quod allocation changes. It forwards TLS unchanged through Traefik;
+certificates, authentication and application state stay with the selected Quod
+gateway. It exposes no Traefik dashboard or management API and needs no volume.
+
+Supply `job_name`, `datacenter`, `node_id`, `listen_ip`, `https_port`, `backend_service`,
+`backend_tag` and the verified `traefik_image` digest in a deployment-specific
+Nomad variable file. Render with `nomad job run -output -var-file=FILE
+deploy/quod-client.nomad` and review before submitting with Nomad's CAS check.
+Keep fleet-specific addresses, identities and activation receipts outside this
+reusable definition.
+
+The backend tag must select exactly one gateway identity, for example a
+particular task group and allocation index. Add that tag to the backend's
+existing client service registration. Consul health changes update the route
+without restarting the frontend; absent or ambiguous matches remove it.
+Allocation indexes alone are not ownership locks: retain the backend's actual
+volume and identity controls. Do not load-balance independent session/cursor
+owners through this endpoint.
+
+For an existing URL, release its old allocation port and reserve this frontend
+before creating replacement allocations. During maintenance omit backend client
+service registration and disable its listener; enable it only after acceptance.
+Leave the frontend running across later backend replacements. The same scheme,
+host and port preserve browser IndexedDB keys and unresolved-operation journals;
+a redirect to a different origin does not. TCP forwarding shares a network peer
+at Quod, so review any configured per-peer quotas before enabling this topology.
+
 ## Forgejo
 
 | | |

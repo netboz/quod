@@ -1,0 +1,264 @@
+{
+  "last_node_id": 6,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "title": "1. Source \u2014 mask everything to REMOVE",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        340,
+        420
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            2,
+            3
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "roof-source.png",
+        "image"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "JoinImageWithAlpha",
+      "title": "2. Apply removal mask as transparency",
+      "pos": [
+        440,
+        40
+      ],
+      "size": [
+        320,
+        110
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1
+        },
+        {
+          "name": "alpha",
+          "type": "MASK",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "JoinImageWithAlpha"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 3,
+      "type": "MaskToImage",
+      "title": "Mask inspection",
+      "pos": [
+        440,
+        220
+      ],
+      "size": [
+        250,
+        70
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            5
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MaskToImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "SaveImage",
+      "title": "3. Save transparent roof PNG",
+      "pos": [
+        830,
+        40
+      ],
+      "size": [
+        370,
+        430
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 4
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "quod/roof"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "PreviewImage",
+      "title": "Check: white REMOVED / black KEPT",
+      "pos": [
+        440,
+        340
+      ],
+      "size": [
+        330,
+        380
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 5
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "Note",
+      "title": "READ FIRST \u2014 mask direction and limits",
+      "pos": [
+        40,
+        510
+      ],
+      "size": [
+        350,
+        450
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "ROOF CUTOUT \u2014 BUILT-IN NODES ONLY\n\n1. Upload roof-source.png in Load Image.\n2. Right-click Load Image > Open in Mask Editor.\n3. Paint MASK over everything to REMOVE: sky, landscape, floor, basin, text and the interiors of all three openings. Leave the canopy, cream rim and side supports unpainted.\n4. Save the mask back to the node, then Run / Queue.\n5. Mask preview: WHITE = removed, BLACK = kept.\n6. Save Image writes an RGBA PNG to output/quod/roof_*.png.\n\nDo not invert the mask: Join Image with Alpha already converts the removal mask to opacity. Use Mask Pen, not RGB Paint Pen.\n\nThis workflow preserves selected pixels; it does not generate missing roof edges or the hidden back surface. A plain black preview is not proof of transparency: inspect the saved PNG in an alpha-aware viewer."
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      1,
+      "MASK"
+    ],
+    [
+      3,
+      1,
+      1,
+      3,
+      0,
+      "MASK"
+    ],
+    [
+      4,
+      2,
+      0,
+      4,
+      0,
+      "IMAGE"
+    ],
+    [
+      5,
+      3,
+      0,
+      5,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.85,
+      "offset": [
+        30,
+        30
+      ]
+    }
+  },
+  "version": 0.4
+}

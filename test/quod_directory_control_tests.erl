@@ -3,7 +3,7 @@
 -include("quod_ledger.hrl").
 
 renewals_reuse_certified_projection_test_() ->
-    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+    {timeout, 30, fun() -> with_node_generation(257, fun(F, Control, Owner) ->
         trace_projection_work(Owner, true),
         try
             Prime = prime_node_projection(F),
@@ -26,7 +26,7 @@ renewals_reuse_certified_projection_test_() ->
     end) end}.
 
 cold_generation_waits_for_certified_height_test_() ->
-    {timeout, 30, fun() -> with_node_generation(fun(F, Control, Owner) ->
+    {timeout, 30, fun() -> with_node_generation(257, fun(F, Control, Owner) ->
         trace_projection_work(Owner, true),
         try
             submit_node_generation(F, Control, 1),
@@ -172,7 +172,8 @@ new_tip_revocation_refuses_renewal_test_() ->
         Identity = {Ns, _} = maps:get(identity, F),
         Pub = maps:get(pubkey, maps:get(signer, F)),
         {ok, LastBlock} = quod_ledger:block_from_entry(lists:last(maps:get(chain, F))),
-        Withdraw = node_history_entry(F, 258, quod_ledger:block_ref(LastBlock),
+        Tip = LastBlock#block.height + 1,
+        Withdraw = node_history_entry(F, Tip, quod_ledger:block_ref(LastBlock),
                      [{retract, {{agent_key, directory_node, Pub, active}, true}}]),
         true = ets:insert(maps:get(source, F), {chain, maps:get(chain, F) ++ [Withdraw]}),
         true = erlang:suspend_process(Materializer),
@@ -183,8 +184,8 @@ new_tip_revocation_refuses_renewal_test_() ->
         trace_projection_work(Materializer, true),
         try
             Owner ! {quod_message, {Pub, self()}, quod_feed:channel(Ns),
-                     quod_feed:encode(Ns, {digest, 258})},
-            ?assertMatch({ok, #{slot := 258}}, quod_foreign_log:current(
+                     quod_feed:encode(Ns, {digest, Tip})},
+            ?assertMatch({ok, #{slot := Tip}}, quod_foreign_log:current(
                 [{Pub, [{<<"127.0.0.1">>, 19000}]}], Identity, 5000)),
             submit_node_generation(F, Control, 2),
             receive
@@ -247,7 +248,10 @@ await_foreign_consumers(Expected, Deadline) ->
 %% generation validation and directory installation. Only network delivery is
 %% replaced by the existing signed-history source fixture.
 with_node_generation(Fun) ->
-    F = node_generation_fixture(257),
+    with_node_generation(3, Fun).
+
+with_node_generation(Height, Fun) ->
+    F = node_generation_fixture(Height),
     {Ns, _Anchor} = maps:get(identity, F),
     Dir = quod_foreign_log_tests:temp_dir("directory-projection"),
     Source = ets:new(directory_source, [set, public]),

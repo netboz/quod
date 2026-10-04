@@ -296,6 +296,6 @@ bad_signature(Blob) ->
 flip(<<B, Rest/binary>>) -> <<(B bxor 1), Rest/binary>>.
 counted(Fun) ->
     {module, crypto} = code:ensure_loaded(crypto),
-    {Result, {call_count, Rows}} = tprof:profile(Fun, #{type => call_count, report => return,
+    {Result, {call_time, Rows}} = tprof:profile(Fun, #{type => call_time, report => return,
       pattern => [{crypto, verify, 5}], timeout => 30000}),
     {Result, lists:sum([N || {crypto, verify, 5, Ps} <- Rows, {_, N, _} <- Ps])}.

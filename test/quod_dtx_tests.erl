@@ -1273,9 +1273,9 @@ certified_entry_ref_binds_exact_entry_test() ->
                  block_hash = BlockHash, sigs = [{key(250), <<0:512>>}]},
     Entry = quod_ledger:entry(Slot, Block, Cert),
     View = quod_ledger:entry_view(Entry),
-    {{ok, Ref}, {call_count, Counts}} = tprof:profile(fun() ->
+    {{ok, Ref}, {call_time, Counts}} = tprof:profile(fun() ->
         quod_dtx:certified_entry_ref(Target, Entry, Control)
-    end, #{type => call_count, report => return,
+    end, #{type => call_time, report => return,
            pattern => [{quod_ledger, classify, 1}, {quod_identity, verify, 3}]}),
     ?assertEqual([], Counts),
     {ok, Expected} =

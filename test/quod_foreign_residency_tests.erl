@@ -18,11 +18,12 @@ checkpoint_once_per_verified_range(Height) ->
     Owner = quod_foreign_log_tests:start_owner(
         Dir, quod_foreign_log_tests:chain_fetch(Ns, Chain)),
     MFA = {quod_foreign_log, write_checkpoint, 5},
-    SyncMFA = {quod_ledger_store, batch_sync, 1},
+    SyncMFA = {quod_foreign_log, persistence_stage, 2},
     Session = trace:session_create(?MODULE, self(), []),
     try
         1 = trace:function(Session, MFA, true, [local]),
-        1 = trace:function(Session, SyncMFA, true, [local]),
+        1 = trace:function(Session, SyncMFA,
+                           [{[ledger_sync, '_'], [], []}], [local]),
         1 = trace:process(Session, Owner, true, [call, arity, set_on_spawn]),
         ?assertMatch({ok, #{slot := Height}}, quod_foreign_log_tests:prime_projection(
             [{Peer, [{"127.0.0.1", 19000}]}], Identity, Height, 3000)),
@@ -91,7 +92,7 @@ checkpoint_calls(Delivery, {Count, Syncs}) ->
     receive
         {trace, _, call, {quod_foreign_log, write_checkpoint, 5}} ->
             checkpoint_calls(Delivery, {Count + 1, Syncs});
-        {trace, _, call, {quod_ledger_store, batch_sync, 1}} ->
+        {trace, _, call, {quod_foreign_log, persistence_stage, 2}} ->
             checkpoint_calls(Delivery, {Count, Syncs + 1});
         {trace_delivered, all, Delivery} -> {Count, Syncs}
     after 3000 -> error(checkpoint_trace_delivery_missing)

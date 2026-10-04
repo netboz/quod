@@ -123,9 +123,10 @@ direct_proof(Entry) ->
     end.
 
 append_direct_history(Store, Entries) ->
-    lists:foldl(fun(Entry, {ok, Previous}) ->
-        quod_ledger_store:append(Previous, {direct_proof(Entry), [Entry]})
-    end, {ok, Store}, Entries).
+    {ok, Batch} = lists:foldl(fun(Entry, {ok, Pending}) ->
+        quod_ledger_store:batch_append(Pending, {direct_proof(Entry), [Entry]})
+    end, {ok, quod_ledger_store:batch_begin(Store)}, Entries),
+    quod_ledger_store:batch_sync(Batch).
 
 
 %% Assertions inspect one decoded owner-side material object; production has

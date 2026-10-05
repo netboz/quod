@@ -140,8 +140,9 @@ visual-to-physical transform. This leaves physics and visual topology free to
 differ without transferring authority to imported data.
 
 A live native physics query is a real-world observation. It cannot be used
-inside a proof that seals a durable diff. Later observations need an
-authenticated producer binding and an ordinary authorized action/transaction
-through the existing multi-ontology and reaction framework. Private asset
+inside a proof that seals a durable diff. The
+[world physics contract](world.md#authoritative-physics-contract) defines the
+hosted authority, body revisions, pose recovery and authenticated observation
+path through ordinary actions, atomic transactions and reactions. Private asset
 publication likewise requires governed storage and delivery before any recipe
 can safely refer to private bytes.

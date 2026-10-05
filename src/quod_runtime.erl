@@ -100,6 +100,7 @@ or of every local resource. Consumers wait for their actual resource owner.
             reaction_matches = 0 :: non_neg_integer(),
             reactions_executed = 0 :: non_neg_integer(),
             reaction_failures = 0 :: non_neg_integer(),
+            physics = #{}, physics_requests = #{},
             observer = none,
             agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
@@ -210,7 +211,7 @@ handle_continue(try_attach, S) ->
 
 handle_call({reconcile_resource, MinHeight, Resource, Scope, Deadline}, From, S = #s{mode = live}) ->
     case lists:member(Resource, [agent_hosts, agent_observers, node_ontologies,
-                                effect_custody, agent_work, agent_custody])
+                                effect_custody, agent_work, agent_custody, physics_worlds])
          andalso valid_resource_scope(Resource, Scope, S)
          andalso is_integer(MinHeight) andalso MinHeight >= 0
          andalso quod_wire_term:is_ground(Scope) andalso is_integer(Deadline)
@@ -232,6 +233,15 @@ handle_call({reconcile_resource, MinHeight, Resource, Scope, Deadline}, From, S 
     end;
 handle_call({reconcile_resource, _, _, _, _}, _From, S) ->
     {reply, {error, not_ready}, S};
+handle_call({project_physics, Rows}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
+    case quod_physics:projection(Identity, Rows) of
+        {ok, Specs} -> {reply, ok, install_physics(Specs, S)};
+        Error -> {reply, Error, stop_physics(S)}
+    end;
+handle_call({project_physics, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
+handle_call(physics_worlds, _, S) ->
+    {reply, S#s.physics, S};
 handle_call({project_agent_observers, all, []}, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, observer = none}) ->
     {reply, ok, S};
@@ -383,6 +393,7 @@ handle_call(get_stats, _From, S) ->
               reaction_matches => S#s.reaction_matches,
               reactions_executed => S#s.reactions_executed,
               reaction_failures => S#s.reaction_failures,
+              physics_worlds => map_size(S#s.physics),
               resource_dependencies => map_size(S#s.resource_basis),
               resource_failures => S#s.resource_failures}), S};
 handle_call(effect_frontier, _From, S) ->
@@ -542,6 +553,54 @@ handle_info({agent_work_custody_changed, Owner, Groups}, S) ->
                        (_, _, Acc) -> Acc
                     end, S, S#s.agents),
     {noreply, Next};
+handle_info({physics_work, Pid, World, Ref, Kind, Work, Window}, S) ->
+    {noreply, physics_work(Pid, World, Ref, Kind, Work, Window, S)};
+handle_info({physics_selection_applied, Pid, World, Ref}, S) ->
+    case maps:get(World, S#s.physics, none) of
+        #{pid := Pid, selection := {Ref, Sent}, spec := Desired, stopping := false} = Entry ->
+            Next = case Sent =:= Desired of
+                true -> Entry#{selection => none};
+                false -> send_physics_selection(Entry#{selection => none}, Desired)
+            end,
+            {noreply, S#s{physics = (S#s.physics)#{World => Next}}};
+        _ -> {noreply, S}
+    end;
+handle_info({physics_status, Pid, World, Token, Status}, S) ->
+    case maps:get(World, S#s.physics, none) of
+        #{pid := Pid, stopping := false} = Entry ->
+            quod_reg:publish({physics, S#s.ns}, {physics_status, self(), Pid, World, Token, Status}),
+            {noreply, wake_physics(S#s{physics = (S#s.physics)#{World => Entry#{status => Status, token => Token}}})};
+        _ -> {noreply, S}
+    end;
+handle_info({physics_down, Monitor, process, Pid, Reason}, S) ->
+    case [{W,E} || {W,E = #{monitor := M,pid := P}} <- maps:to_list(S#s.physics),
+                    M =:= Monitor, P =:= Pid] of
+        [] -> {noreply,S};
+        [{World,Entry}] ->
+            Removed = case maps:get(stopping,Entry) =:= true orelse
+                           lists:member(Reason,[normal,shutdown,killed]) of
+                true -> maps:remove(World,S#s.physics);
+                false ->
+                    Status = {failed,{owner_down,Reason}},
+                    quod_reg:publish({physics,S#s.ns},
+                        {physics_status,self(),Pid,World,maps:get(token,Entry,none),Status}),
+                    (S#s.physics)#{World => Entry#{stopping => dead, monitor => none,
+                                                  selection => none, status => Status}}
+            end,
+            Requests = maps:filter(fun(_, {Owner, _, _}) -> Owner =/= Pid end, S#s.physics_requests),
+            Next = S#s{physics = Removed, physics_requests = Requests},
+            {noreply, case S#s.mode of
+                live -> maybe_run_events(queue_resource_key(physics_worlds, changed, Next));
+                _ -> Next
+            end}
+    end;
+handle_info({agent_owned_result, _Slot, Actor, Ref, Result}, S) ->
+    case maps:take(Ref, S#s.physics_requests) of
+        {{Pid, ReplyRef, Actor}, Rest} ->
+            Pid ! {physics_result, self(), ReplyRef, Result},
+            {noreply, S#s{physics_requests = Rest}};
+        _ -> {noreply, S}
+    end;
 handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
     case maps:get(Instance, Agents, none) of
         Agent = #{pid := Pid, pending := Pending} ->
@@ -888,7 +947,7 @@ start_resource({resource, _Min, Resource, Scope, Deadline, From, Monitor},
 resource_finished({interrupted, Reply}, S = #s{resource_waiter = {From, _}}) ->
     Basis = case From of
         {internal, Key} when Key =:= agent_hosts; Key =:= agent_observers;
-                             Key =:= node_ontologies; Key =:= effect_custody;
+                             Key =:= node_ontologies; Key =:= effect_custody; Key =:= physics_worlds;
                              is_tuple(Key), tuple_size(Key) =:= 2,
                              element(1, Key) =:= agent_work ->
             (S#s.resource_basis)#{Key => quod_resource_basis:unknown()};
@@ -1635,7 +1694,7 @@ clear_recovery_pending(S = #s{recovery_pending = {_, _, Monitor, Timer}}) ->
     S#s{recovery_pending = none}.
 
 kill_runner(S00) ->
-    S0 = drop_observations(stop_observer(stop_agents(clear_recovery_pending(S00)))),
+    S0 = drop_observations(stop_physics(stop_observer(stop_agents(clear_recovery_pending(S00))))),
     Workers = case S0#s.runner of
         none -> [];
         {_Kind, Pid, MRef, _Ref, TRef} ->
@@ -1959,7 +2018,8 @@ finish_agent_work(Slot, Ref, S) ->
 
 %% Refused work retains only its existing cursor, not another copy of a goal.
 %% A real queue release wakes only projections waiting for that capacity.
-wake_work_capacity(S) ->
+wake_work_capacity(S0) ->
+    S = wake_physics(S0),
     maps:fold(fun(Slot, #{stopping := false, work := Work = #{status := blocked}}, Acc) ->
                       case agent_work_capacity(Slot, Acc) of
                           true -> queue_agent_work(Slot, Work, Acc);
@@ -2002,7 +2062,8 @@ release_hosting(S = #s{hosting_dirty = Dirty, agents = Agents, e_frontier = H}) 
             _ -> ok
         end
     end, Dirty),
-    Cleared = S#s{hosting_dirty = #{}},
+    Woken = case map_size(Dirty) > 0 of true -> wake_physics(S); false -> S end,
+    Cleared = Woken#s{hosting_dirty = #{}},
     Installed = [Instance || {{agent, Instance} = Slot, installed} <- maps:to_list(Dirty),
                             #{stopping := false} <- [maps:get(Slot, Agents, none)]],
     lists:foldl(fun(Instance, Acc) -> queue_ready(agent_work, {agent_work, Instance}, Acc) end,
@@ -2024,7 +2085,8 @@ work_resource_key(node) -> node.
 agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
     case maps:get(Instance, Agents, none) of
         Agent = #{pid := Pid, monitor := Monitor, pending := Pending} ->
-            S1 = S#s{agents = maps:remove(Instance, Agents),
+            Base = retire_actor_physics(Instance, S),
+            S1 = Base#s{agents = maps:remove(Instance, Agents),
                       agent_slots = S#s.agent_slots - agent_slot_count(Instance),
                       agent_pending_bytes = S#s.agent_pending_bytes - lists:sum(maps:values(Pending)),
                       hosting_dirty = maps:remove(Instance, S#s.hosting_dirty),
@@ -2166,7 +2228,7 @@ queue_ready(Resource, Scope, S0) ->
     end.
 
 schedule_resource_notice(ontology, all, S) ->
-    Keys = [agent_hosts, agent_observers, node_ontologies, effect_custody] ++
+    Keys = [agent_hosts, agent_observers, node_ontologies, effect_custody, physics_worlds] ++
            [{agent_work, I} || {{agent, I}, #{stopping := false}} <- maps:to_list(S#s.agents)],
     queue_resource_keys(Keys, changed, S);
 schedule_resource_notice(agent_work, {agent_work, I}, S) ->
@@ -2348,6 +2410,12 @@ run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
             end
     end.
 
+select_resource_description(Ns, H, Est, physics_worlds, _Scope) ->
+    Goal = {physics_projection, local_node_reference(), {'Rows'}},
+    case optional_selection(Ns, H, Est, Goal) of
+        absent -> {physics_worlds, []};
+        #{'Rows' := Rows} -> {physics_worlds, Rows}
+    end;
 select_resource_description(Ns, H, Est, agent_hosts, Changed) ->
     Goal = {agent_hosting_projection, Changed, local_node_reference(), {'Scope'}, {'Rows'}},
     case optional_selection(Ns, H, Est, Goal) of
@@ -2423,6 +2491,8 @@ select_resource_description(Ns, H, Est, agent_custody,
     end;
 select_resource_description(_, _, _, _, _) -> {error, invalid_resource_request}.
 
+install_resource(Ns, _, {physics_worlds, Rows}) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows}, infinity);
 install_resource(Ns, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
 install_resource(Ns, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
 install_resource(Ns, H, {node_ontologies, Hosts, Contacts}) ->
@@ -2659,3 +2729,133 @@ alpha_list([Item | Rest], Vars, Next) ->
     {[Item1 | Rest1], Vars2, Next2};
 alpha_list([], Vars, Next) ->
     {[], Vars, Next}.
+
+%% Retained physics resources share the hosted-resource lifecycle. A retiring
+%% process occupies its slot until DOWN; replacement cannot overlap mutation.
+install_physics(Specs, S) ->
+    Desired = maps:from_list([{maps:get(world, X), X} || X <- Specs]),
+    Existing = maps:filtermap(fun(World, Entry = #{stopping := dead, spec := Old}) ->
+                              case maps:find(World,Desired) of
+                                  {ok,New} ->
+                                      %% Late results from the failed incarnation
+                                      %% do not authorize retrying a crashing input.
+                                      Inputs = [world,authority,epoch,key,limits,dt,gravity,
+                                                structure,bodies,budget],
+                                      Cancelled = maps:get(custody,Old) =/= none andalso
+                                                  maps:get(custody,New) =:= none,
+                                      case maps:with(Inputs,Old) =:= maps:with(Inputs,New)
+                                           andalso not Cancelled of
+                                          true -> {true,Entry#{spec => New}};
+                                          false -> false
+                                      end;
+                                  _ -> false
+                              end;
+                          (_, Entry = #{stopping := true}) -> {true,Entry};
+                          (World, Entry = #{pid := Pid, spec := Old, stopping := Stopping}) ->
+        {true,case maps:find(World, Desired) of
+            {ok, New} when not Stopping ->
+                Keys = [world, authority, epoch, key, limits, dt, gravity],
+                case maps:with(Keys, Old) =:= maps:with(Keys, New) of
+                    true when Old =:= New ->
+                        case maps:get(status, Entry) of
+                            {unavailable, _} -> send_physics_selection(Entry, New);
+                            _ -> Entry
+                        end;
+                    true -> send_physics_selection(Entry#{spec => New}, New);
+                    false -> Pid ! {physics_stop, self()}, Entry#{stopping => true}
+                end;
+            _ -> Pid ! {physics_stop, self()}, Entry#{stopping => true}
+        end}
+    end, S#s.physics),
+    Installed = maps:fold(fun(World, Spec, Acc) ->
+        case maps:is_key(World, Acc) of
+            true -> Acc;
+            false ->
+                {Pid, Stopping} = case quod_physics:start(self(), Spec) of
+                    {ok, NewPid} -> {NewPid, false};
+                    {error, {already_started, PreviousPid}} -> {PreviousPid, true}
+                end,
+                Monitor = monitor(process, Pid, [{tag, physics_down}]),
+                Acc#{World => #{pid => Pid, monitor => Monitor, spec => Spec,
+                               stopping => Stopping, selection => none, status => activating}}
+        end
+    end, Existing, Desired),
+    S#s{physics = Installed}.
+
+stop_physics(S) ->
+    S#s{physics = maps:filtermap(fun(_, #{stopping := dead}) -> false;
+                                   (_, E = #{pid := Pid}) ->
+        Pid ! {physics_stop, self()}, {true,E#{stopping => true}}
+    end, S#s.physics)}.
+
+send_physics_selection(E = #{selection := none, pid := Pid}, Spec) ->
+    Ref = make_ref(), Pid ! {physics_selected, self(), Ref, Spec},
+    E#{selection => {Ref, Spec}};
+send_physics_selection(E, _Spec) -> E.
+
+wake_physics(S) ->
+    S#s{physics = maps:map(fun(_, E = #{pid := Pid, spec := Spec, stopping := false, status := Status})
+                             when Status =:= capacity; Status =:= awaiting_actor ->
+                              case physics_capacity(Spec, S) of
+                                  true -> Pid ! advance, E#{status => activating};
+                                  false -> E
+                              end;
+                            (_, E) -> E end, S#s.physics)}.
+
+physics_work(Pid, World, Ref, Kind, Work, {Expires, Deadline}, S = #s{mode = live}) ->
+    case Deadline > quod_time:mono_ms() andalso Expires > quod_time:now_ms() of
+        true -> physics_admit(Pid,World,Ref,Kind,Work,{Expires,Deadline},S);
+        false ->
+            Error = case Kind of
+                activate -> {activation_not_submitted, deadline_exceeded};
+                resolve -> deadline_exceeded
+            end,
+            Pid ! {physics_result,self(),Ref,{error,Error}}, S
+    end;
+physics_work(_, _, _, _, _, _, S) -> S.
+
+physics_admit(Pid,World,Ref,Kind,Work,{Expires,Deadline},S) ->
+    case maps:get(World, S#s.physics, none) of
+        #{pid := Pid, stopping := false,
+          spec := #{authority := {agent_instance_ref, _, _, I}, epoch := E, key := K}} ->
+            case request_executor({agent, I, E, K}, S) of
+                {ok, Slot, Agent, S1} ->
+                    {Mode, Goal} = case {Kind, Work} of
+                        {activate, {Activation, Store}} -> {{custodied, Store}, Activation};
+                        {resolve, Signed} -> {resolve, Signed}
+                    end,
+                    Request = {Mode, Goal, Expires, Deadline},
+                    case enqueue_agent_request(Slot, Agent, S#s.height, Request, S1) of
+                        {ok, Job, Next} ->
+                            Admitted = Next#s{physics_requests = (Next#s.physics_requests)#{
+                                Job => {Pid, Ref, maps:get(pid, Agent)}}},
+                            %% An in-flight projection/event batch owns its
+                            %% release frontier, including unrelated dirty slots.
+                            case Admitted#s.runner of
+                                none -> release_hosting(Admitted);
+                                _ -> Admitted
+                            end;
+                        {error, Reason} -> Pid ! {physics_result, self(), Ref, {error, Reason}}, S1
+                    end;
+                {error, Reason, Next} -> Pid ! {physics_result, self(), Ref, {error, Reason}}, Next
+            end;
+        _ -> S
+    end.
+
+retire_actor_physics({agent, Instance}, S) ->
+    S#s{physics = maps:filtermap(fun(_, #{stopping := dead,
+                                       spec := #{authority := {agent_instance_ref,_,_,I}}})
+                                       when I =:= Instance -> false;
+                                  (_, E = #{pid := Pid,
+                                      spec := #{authority := {agent_instance_ref, _, _, I}}})
+                               when I =:= Instance ->
+                                  Pid ! {physics_stop, self()}, {true,E#{stopping => true}};
+                            (_, E) -> {true,E} end, S#s.physics)};
+retire_actor_physics(_, S) -> S.
+
+physics_capacity(#{authority := {agent_instance_ref, _, _, I}, epoch := Epoch, key := Key}, S) ->
+    case maps:get({agent, I}, S#s.agents, none) of
+        #{binding := #{epoch := Epoch, public_key := Key}, stopping := false} ->
+            agent_work_capacity({agent, I}, S);
+        _ -> false
+    end.

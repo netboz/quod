@@ -22,7 +22,7 @@ a synchronous call to itself.
          bind_group_effects/3,
          bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
-         dispatch/1, remaining_ms/0, principal/0, request_expiry/0,
+         dispatch/1, remaining_ms/0, principal/0, request_expiry/0, request_binding/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
@@ -1189,6 +1189,13 @@ principal() ->
     case get(?RUNTIME) of
         #runtime{principal = Principal} -> {ok, Principal};
         undefined -> error
+    end.
+
+-doc "Original request binding verified by the scope owner.".
+request_binding() ->
+    case get(?RUNTIME) of
+        #runtime{request_binding = Binding} -> {ok, Binding};
+        _ -> error
     end.
 
 -doc "Signed expiry verified by the scope owner; absent for unsigned scopes.".

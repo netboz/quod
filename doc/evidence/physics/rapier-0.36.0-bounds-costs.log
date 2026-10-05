@@ -1,0 +1,64 @@
+OTP=28 schedulers=2 dirty_cpu=2
+world #{chunks => 0,active_calls => 34,bodies => 2,create_us => 841,
+        idle_call_us => #{max => 52,p50 => 4,p95 => 4,p99 => 5},
+        install_us => 28,joints => 0,max_contacts => 1,
+        query_us => #{max => 40,p50 => 4,p95 => 9,p99 => 11},
+        retire_us => 24,rss_kb_after => 66388,
+        step_including_sample_us => #{max => 76,p50 => 9,p95 => 68,p99 => 76},
+        steps => 500,unchanged_us => 7}
+world #{chunks => 0,active_calls => 34,bodies => 64,create_us => 21,
+        idle_call_us => #{max => 68,p50 => 4,p95 => 6,p99 => 10},
+        install_us => 81,joints => 0,max_contacts => 173,
+        query_us => #{max => 182,p50 => 13,p95 => 34,p99 => 68},
+        retire_us => 80,rss_kb_after => 69860,
+        step_including_sample_us =>
+            #{max => 700,p50 => 174,p95 => 272,p99 => 700},
+        steps => 500,unchanged_us => 24}
+world #{chunks => 0,active_calls => 39,bodies => 256,create_us => 14,
+        idle_call_us => #{max => 201,p50 => 7,p95 => 10,p99 => 15},
+        install_us => 168,joints => 0,max_contacts => 1037,
+        query_us => #{max => 259,p50 => 79,p95 => 148,p99 => 221},
+        retire_us => 477,rss_kb_after => 76524,
+        step_including_sample_us =>
+            #{max => 3700,p50 => 926,p95 => 2174,p99 => 3700},
+        steps => 500,unchanged_us => 98}
+dense_world bodies=64 step_us=#{max => 7333,p50 => 869,p95 => 4960,
+                                p99 => 7333} max_contacts=2016
+owner_kill_through_down_us bodies=256 elapsed=275
+concurrent_world #{chunks => 0,active_calls => 34,bodies => 64,
+                   create_us => 53,
+                   idle_call_us => #{max => 229,p50 => 9,p95 => 42,p99 => 56},
+                   install_us => 137,joints => 0,max_contacts => 173,
+                   query_us => #{max => 581,p50 => 30,p95 => 96,p99 => 249},
+                   retire_us => 114,rss_kb_after => 78980,
+                   step_including_sample_us =>
+                       #{max => 1807,p50 => 296,p95 => 504,p99 => 1807},
+                   steps => 500,unchanged_us => 29}
+concurrent_world #{chunks => 0,active_calls => 34,bodies => 64,
+                   create_us => 14,
+                   idle_call_us => #{max => 282,p50 => 7,p95 => 30,p99 => 54},
+                   install_us => 73,joints => 0,max_contacts => 173,
+                   query_us => #{max => 884,p50 => 33,p95 => 102,p99 => 243},
+                   retire_us => 102,rss_kb_after => 78980,
+                   step_including_sample_us =>
+                       #{max => 853,p50 => 282,p95 => 504,p99 => 853},
+                   steps => 500,unchanged_us => 23}
+concurrent_world #{chunks => 0,active_calls => 34,bodies => 64,
+                   create_us => 30,
+                   idle_call_us => #{max => 558,p50 => 8,p95 => 37,p99 => 67},
+                   install_us => 90,joints => 0,max_contacts => 173,
+                   query_us => #{max => 742,p50 => 31,p95 => 86,p99 => 246},
+                   retire_us => 172,rss_kb_after => 78980,
+                   step_including_sample_us =>
+                       #{max => 988,p50 => 313,p95 => 455,p99 => 988},
+                   steps => 500,unchanged_us => 28}
+concurrent_world #{chunks => 0,active_calls => 34,bodies => 64,
+                   create_us => 41,
+                   idle_call_us => #{max => 284,p50 => 13,p95 => 50,p99 => 67},
+                   install_us => 87,joints => 0,max_contacts => 173,
+                   query_us => #{max => 610,p50 => 30,p95 => 82,p99 => 254},
+                   retire_us => 62,rss_kb_after => 78796,
+                   step_including_sample_us =>
+                       #{max => 1656,p50 => 306,p95 => 470,p99 => 1656},
+                   steps => 500,unchanged_us => 22}
+normal_scheduler_ping_us #{max => 289,p50 => 1,p95 => 2,p99 => 9} samples=31715

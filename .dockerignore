@@ -8,3 +8,6 @@ doc/
 priv/certs/*.pem
 .dockerignore
 Dockerfile
+
+native/*/target/
+priv/native/

@@ -40,7 +40,10 @@ that boundary. The source release version is in [`src/quod.app.src`](src/quod.ap
 
 ## Build and verification
 
-A recent Erlang/OTP and `rebar3` are required. The QUIC stack is pure Erlang.
+A recent Erlang/OTP, `rebar3`, and Rust/Cargo are required. CI and release
+builders use Rust 1.90.0. The build hook compiles the pinned Rapier/Rustler
+[adapter](native/quod_physics/Cargo.toml) with its committed lockfile; the
+release includes the native library. The QUIC stack is pure Erlang.
 The example configuration in [`config/quod.conf`](config/quod.conf) founds
 `quod:root` on first use; a production node receives its exact root anchor
 and persistent data directory from deployment. `QUOD_CONF` selects another

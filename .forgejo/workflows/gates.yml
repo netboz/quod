@@ -25,6 +25,17 @@ jobs:
           restore-keys: |
             rebar3-otp28-
 
+      - name: Restore Cargo cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            /usr/local/cargo/registry
+            native/quod_physics/target
+          key: cargo-rust190-${{ hashFiles('native/quod_physics/Cargo.lock') }}
+
+      - name: native physics
+        run: cargo test --locked --manifest-path native/quod_physics/Cargo.toml
+
       - name: eunit
         run: rebar3 as test eunit
 

@@ -7,7 +7,12 @@
 # Build and push, from the repo root:
 #   docker build -t 192.168.1.11:5000/quod-ci:28 deploy/ci && docker push 192.168.1.11:5000/quod-ci:28
 # Rebuild when ../../Dockerfile moves to a new erlang base, and re-tag accordingly.
+FROM rust:1.90.0-bookworm AS rust-toolchain
 FROM erlang:28
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 ARG DOCKER_VERSION=29.0.0
 ARG CLAUDE_CODE_VERSION=2.1.283

@@ -1,13 +1,18 @@
 # syntax=docker/dockerfile:1
 #
 # quod node — pure-Erlang QUIC (the `quic` library, no NIF, no msquic).
-# Small image, fast build (no C toolchain, no from-source TLS/QUIC compile).
+# Physics is a separately built Rustler NIF; QUIC remains pure Erlang.
 #
 # Build:  docker build -t quod:<version> .
 # Run:    docker run --rm -p 14567:14567/udp -p 14569:14569 quod:<version>
 
 # ---- builder ---------------------------------------------------------------
+FROM rust:1.90.0-bookworm AS rust-toolchain
 FROM erlang:28 AS builder
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 # git only: the erlog dep is a git ref. (quic/gproc are pure Erlang hex deps.)
 RUN apt-get update && apt-get install -y --no-install-recommends git \
@@ -18,6 +23,8 @@ WORKDIR /build
 # Dependency layer — cached until rebar.{config,lock} change. A throwaway app
 # stub lets rebar3 fetch + compile deps without our source.
 COPY rebar.config rebar.lock ./
+COPY native/quod_physics/ native/quod_physics/
+COPY scripts/build-physics.sh scripts/build-physics.sh
 RUN mkdir -p src \
     && printf '{application, quod, [{vsn,"0.0.0"},{registered,[]},{applications,[kernel,stdlib]}]}.\n' \
          > src/quod.app.src \

@@ -1,0 +1,180 @@
+Read-only consultative review reports; not approvals. Tests were run by the parent.
+
+Fable review report: Rapier physics authority/lifecycle (consultative, read-only, NOT an approval). Nothing was built or run; every item is from reading the working tree as of this message and needs confirmation by a run. Line numbers are current.
+
+STATUS OF EARLIER ITEMS
+- Fixed by you: physics_worlds added to the interrupted-selector conservative basis (src/quod_runtime.erl:941). The reworked collapse test (gate retracted before overflow) no longer exercises that path, so the fix has no regression test. Suggest: interrupt the first physics selector after a reconcile, commit a change, assert reselection.
+- Withdrawn: my multi-SAP assertion point (0.26.1 only). Extreme-coordinate behaviour needs a fresh look against BroadPhaseBvh in 0.36.0.
+- Everything below is still present in the tree.
+
+BLOCKING (authority/lifecycle)
+
+B1. Stored activation that nobody submits = permanent wedge, no exit.
+- Actor signs activation, commits it as custody, then submits (src/quod_agent.erl:198-208). The custody write uses a throwaway operation id (line 204) retained nowhere.
+- Three ordinary routes leave custody committed with no live submission: (a) custody commit returns pending/timeout then lands late; (b) worker deadline-killed between the two submits; (c) activation proof fails before inclusion.
+- Then resolve answers operation_pending forever: operation claims are only created at block inclusion (src/quod_commit_validation.erl:397), and absence maps to pending (src/quod_client_goal_ingress.erl:266-269).
+- physics_previous_complete (priv/ontologies/quod_physics.pl:46-47) forbids replacing custody until the generation advances, and only that stored request can advance it. No authorised action clears physics_request. Recovery needs a privileged raw commit.
+- So "pending/unknown fails closed" assumes pending eventually resolves; for (b) and (c) it never does. Durable outcome evidence exists only for included-then-rejected/aborted.
+- Assessment of your question: explicit unavailable on terminal failure is a sound safety posture but not sufficient for the foundation, and terminal-outcome-driven recovery alone cannot close it (no evidence will ever exist for two of the three classes).
+- Minimum I would require (relaxing the "late result cannot overwrite" rule is Yan's ruling):
+  1. One committed supersede action at the SAME generation, comparing exact prior custody (store already compares Prior). Safety is the domain fence: physics_activate requires the exact stored request and retracts physics_run, so whichever of old activation / supersede commits first makes the other fail. Precedent: priv/ontologies/fipa_request.pl:64-68.
+  2. Owner invokes it automatically only when resolve returns a durable rejected/aborted.
+  3. Pending-with-no-claim stays closed; only an explicitly authorised principal may supersede, by policy. No timeout trigger.
+  4. Distinct visible statuses for terminal rejection vs unresolved (both are activation_unresolved today, src/quod_physics.erl:109).
+- Unverified: that OCC rejects an already-sealed old activation after the supersede commits; that a pre-inclusion proof failure leaves no durable row. A test racing old activation against supersede settles the first.
+
+B2. `unresolved` swallows certain failures and has no reliable wake.
+- Catch-all src/quod_physics.erl:109 treats as unknown: deadline_exceeded before anything was sent (runtime admission 2775-2779, or agent pump), signing refusal, a custody store that certainly failed ({custody_unresolved, {ok,_,{normalized,{failed,_}}}}), certified rejected outcome, and a transient failure of the read-only resolve.
+- Only exit is a later physics_selected (lines 40-50, which calls advance/1 directly); plain `advance` is ignored (line 51), and wake_physics only wakes capacity/awaiting_actor.
+- Race: if the selections arrive BEFORE the failed result, nothing wakes it. Concrete case: successor loses to a dead incarnation's still-queued actor job; both selections (custody T1, generation+1) arrive while the successor's own job is pending; its store then fails on expected state -> unresolved forever, though nothing is uncertain.
+- A restart whose single resolve read fails transiently leaves a fully committed world dead.
+- Slow actor install lands here too: the original window is reused after awaiting_actor (lines 53-55, 88-95), expires, returns deadline_exceeded.
+- Suggest: classify certain-unsent / certified-terminal / unknown separately; on a non-committed result re-evaluate once if the spec changed since the request was issued.
+
+B3. physics_admit calls the global release_hosting (src/quod_runtime.erl:2795).
+- It sends agent_release at the OLD e_frontier to every dirty slot and clears hosting_dirty (2034-2057).
+- A reaction request enqueued during a running event batch carries the event height, above that frontier (src/predicates/quod_runtime_predicates.erl:175, quod_runtime.erl:339-343). events_finished then finds nothing dirty (1325) and never releases it; it sits in the actor queue until its deadline.
+- Also publishes agent_installed early for slots started by an in-flight resource runner.
+- Suggest: release only the physics actor's slot.
+
+SHOULD FIX
+
+S1. Restart loops burn generations with no bound. Any abnormal simulator exit requeues selection (quod_runtime.erl:575-586) and commits a fresh store + activation; no backoff or quarantine. A dead incarnation's queued actor job is not cancelled and still commits a generation nobody installs. spec/3 (quod_physics.erl:180-194) does not validate custody/run_token shape, so a malformed fact makes advance/1 crash with function_clause in a tight local loop.
+
+S2. Actor death retires a running world: retire_actor_physics (quod_runtime.erl:2079, 2804) fires on any actor exit, including an unrelated request-worker crash (quod_agent.erl:54). physics-native.md:111 documents actor death as intended; the worker-crash coupling is the part to confirm with Yan.
+
+S3. snapshot returns `unavailable` both for a stale fence and for "no newer frame" (quod_physics.erl:29-34). A sleeping world looks dead to an up-to-date consumer.
+
+S4. Native, version-independent:
+- -on_load returns the load_nif error (src/quod_physics_native.erl:5). In an embedded-mode release a missing/bad library stops the node booting, so optional physics becomes a boot dependency for consensus nodes (I believe relx prod defaults to embedded; not checked). In interactive mode it burns an activation, then quarantines. Check availability before activating.
+- Contact allowance is checked after the step, in sample; work per call is bounded only by body count.
+- One magnitude limit covers position, velocity, density and gravity and reports coordinate_allowance (lib.rs:47, 56, 97-99, 210-213; quod_physics.erl:188). Steel density fails in a 1000 m world.
+- New quarantine check (lib.rs:195-197) correctly fails the world, but returns native_failure, the same atom as a caught panic. A distinct reason would report what actually happened.
+- Destructor thread on the kill path: already acknowledged in physics-native.md.
+
+LOWER
+- agent_hosting_suspended (quod_physics.pl:5) suspends the whole agent if any of its worlds is disabled.
+- Native layer forgets retired body ids; no edit actions ship, so revision discipline is exercised only by raw test commits.
+- Step timer is dt + step cost, rounded to whole ms, plus an off-cadence step on install (quod_physics.erl:127, 143): simulated time drifts from wall time.
+- agent_owned_result duplicates agent_completed and the publish (quod_agent.erl:85-90).
+- Build: every rebar3 compile needs Cargo; a native edit invalidates the Docker dependency layer; CI compiles Rapier twice with no Cargo cache; CI image needs rebuilding.
+
+DOC MISMATCHES (doc/physics-native.md)
+- Line 121 still says Rapier 0.26.1; doc/evidence/physics is empty.
+- Lines 77-78: "both orders wait for matching evidence" holds only for a committed result (see B2).
+- Lines 80-88: describes missing autonomous liveness; the actual state is no exit at all, and it also covers cases where nothing was sent (see B1, B2).
+- Lines 113-116: "cannot loop on the poison definition" is true for typed native errors only (see S1).
+
+HELD UP ON READING
+- A fresh incarnation cannot adopt a dead one's generation (install requires its own token as run_token and generation = previous + 1).
+- A retiring simulator holds its slot until DOWN; selections coalesce to one in flight; the capacity wake is re-checked when status arrives; NIF calls are owner-checked and all dirty.
+
+No approval claim. B1 needs Yan's ruling before gates freeze; B2 and B3 are code defects on my reading.
+
+-----
+
+Fable re-review of your B2/B3/native fixes (consultative, read-only, nothing run, NOT an approval). Read against the current tree.
+
+CONFIRMED ON READING
+- B3: physics_admit defers release when a runner is active (src/quod_runtime.erl:2803-2806). Every runner completion path I traced reaches release_hosting or a collapse (events_finished 1325, resource_finished 960, runner DOWN 612-621, reconcile_publish 744). The new test drives the real admission message during a paused batch; fine as a seam test.
+- B2 main race: the pending tuple now carries the issued custody and re-evaluates once (src/quod_physics.erl:59-74). My original scenario (successor's store loses to a dead incarnation's queued job, selections arrive first) now resolves and re-activates.
+- valid_run/valid_custody reject malformed facts before spawn (quod_physics.erl:231-240). Native stub + available() check happens before any activation (27-30). Equal frame returns {ok, unchanged, _} (32-39). Density/gravity no longer use the coordinate budget; quarantine and non-finite pose report non_finite_state.
+
+RESIDUALS, most important first
+
+R1. activation_not_sent has no wake of its own. A request that expires in the actor queue (quod_physics.erl:128-129) waits for the next physics_selected. With the B3 fix the physics request now also waits for the running batch/selector while its window keeps running, so a selector near the reconcile budget can expire it. The cause is queue starvation, the same class as `capacity`; waking it on actor release (wake_physics, quod_runtime.erl:2770-2777) would be notification-driven, at most one attempt per budget window. Question: what performs the "explicit same-selection reconciliation" in production? If nothing calls it automatically, this is manual recovery.
+
+R2. Re-evaluation compares custody only (quod_physics.erl:69-71). Compare generation and run_token too. Case: successor resolving a foreign custody gets a stale `pending` while the selection carrying generation+1 (same custody term) arrived during that pending resolve. Current == IssuedCustody, so no re-evaluation and no later selection. Narrow window, cheap to close.
+
+R3. Resend on {unavailable,_} with unchanged spec (quod_runtime.erl:2734-2738) re-issues a fresh signed store + activation whenever custody is none, on every physics_worlds selection. Safe by the domain guard. But after an UNCERTAIN custody store it races a second store against the first; if the orphan wins, that is B1 (custody stored, never submitted). So the supersede decision also covers this path. physics-native.md "unchanged reconciliation sends no installation message" now holds only for worlds that are not unavailable; say so.
+
+R4. Native load error is discarded (src/quod_physics_native.erl:8). {failed, native_unavailable} carries no cause, so a node silently without physics is hard to diagnose. Keep the load_nif reason (e.g. persistent_term) and include it in the failure status.
+
+R5. Label accuracy: outcome(activate, {error, deadline_exceeded}) is reported as not sent. quod_prolog also returns a bare {error, deadline_exceeded}; if the signed-goal path can pass that through after admission, the label is wrong. Behaviour stays safe (custody present leads to resolve). Verify, or have the actor tag pre-start expiry distinctly.
+
+R6. Unchanged from the first report: an abnormal simulator exit still commits a new generation on each restart with no backoff (quod_runtime.erl:575-586); a dead incarnation's queued actor job is not cancelled; actor death (including an unrelated request-worker crash, quod_agent.erl:54) retires a running world.
+
+ON THE SUPERSEDE DECISION
+- The contract conflict is real: world.md "If activation is uncertain, resolve that exact operation before proceeding" has no exit for a request that was never submitted or failed before inclusion. Either way world.md needs one amending sentence; without it the documented behaviour is a permanently lost world.
+- {unavailable, {activation_terminal, Status}} (quod_physics.erl:132-134) is now visible, which is the right trigger for the automatic case. A failed activation proof returned synchronously to the submitting incarnation still lands in the catch-all (line 137), with custody stored.
+- Preserving original custody is compatible with the fence: keep the superseded request as a retired fact instead of deleting it. The fence only needs physics_request to stop matching the old bytes.
+- Still unverified by me: that OCC rejects an already-sealed old activation once the supersede commits. Please make that race a test before relying on it.
+
+No approval or gate claim.
+
+-----
+
+Fable review of the cancellation PLAN (consultative, read-only, nothing run, NOT an approval). physics_cancel_activation is not in the tree yet, so this is a review of the design as you described it.
+
+VERDICT ON THE SHAPE
+The plan closes the wedge soundly on reading. Checking current run G and request.previous = G means only a not-yet-committed request can be cancelled; a live world's custody (previous < G) cannot. The fence holds from both sides: physics_activate needs the exact stored request (priv/ontologies/quod_physics.pl:40-41), so a cancelled request cannot activate; and if the activation commits first, physics_run(W, G, _) no longer holds and the cancel fails. Deriving status from run/custody/archive instead of a "sent" flag is right: a flag cannot be made atomic with the send.
+
+GAPS TO CLOSE IN THE IMPLEMENTATION
+
+C1. Make "cancelled" final. physics_store_request (quod_physics.pl:31-36) would accept the exact cancelled bytes again: physics_activation_request only checks they are a valid signed physics_activate(W, G, Token), and store does not check signed expiry. A re-store resurrects the old operation. Add a guard that the request is not in the cancelled archive. This is what makes the archive functional rather than a copy of ledger history.
+
+C2. Cancel must not depend on the physics actor or hosting. The wedge cases include a dead or moved host and a disabled space. So no physics_actor(W) and no agent_hosted in the cancel body; authorisation only through can_cancel_physics_activation.
+
+C3. Keep the simulator from invoking it on its own. If policy grants the authority agent the cancel right, the owner code must use it only on a durable rejected/aborted outcome ({activation_terminal, _}, src/quod_physics.erl:132-134), never on pending, timeout or not-sent. Otherwise it is timeout rejection by another name.
+
+C4. Same-token reuse is already fenced, so retire-on-removal is belt and braces: physics_activate looks up the stored request by Token and G, then current_signed_request compares the executing request's digest, so an old in-flight activation fails against new bytes even with the same token. Retiring is still fine. Note the retired incarnation's queued actor job is not cancelled; its store fails on Prior mismatch, which is harmless.
+
+C5. Goal size. Passing the exact request embeds the signed bytes and signature in the cancel goal text. That is the safest identity; check it against the parser/request limits (include/quod_client_goal_limits.hrl). If it is tight, the request digest is equally exact.
+
+C6. Per-predicate OCC means any write to physics_request invalidates sealed activations for every world in that ontology. Acceptable for one world per ontology; say so in the doc.
+
+A SIMPLIFICATION THE PLAN ENABLES
+When custody.previous < current generation, committed state already certifies the predecessor's activation committed: physics_activate is the only writer of physics_run and it requires the matching stored request; cancel does not touch physics_run. The successor's resolve read (quod_physics.erl:98-99, then 95-97) is therefore redundant in that case. Skipping it removes an actor round-trip from every ordinary restart and removes the activation_resolution_unavailable strand for restarts. Resolve stays meaningful only when previous = G. Your call; it is fewer lines and one fewer failure mode.
+
+ON YAN'S "RESUME" QUESTION
+What he is asking for does not need a status. The recovered owner could redeliver the exact stored signed bytes: same operation id and digest, deduplicated by the existing operation claim, valid only until the signed expiry. That is not a fresh operation and not timeout-driven. Its value is small because expiry equals the request budget, so it only helps fast restarts. It also needs Yan's ruling against "never resubmit uncertain operations". Not required for this slice; cancellation covers the rest.
+
+TESTS I WOULD WANT BEFORE GATES
+1. Sealed stale activation vs cancel, both commit orders (you have this planned).
+2. Cancel refused for: unauthorised principal; custody with previous < G; a request that is not the exact current custody.
+3. Cancel succeeds with the host gone and with the space disabled.
+4. After cancel: successor activates G -> G+1 with a fresh token; exact old bytes submitted again fail; exact old bytes stored again are refused.
+5. Resolve of the cancelled operation stays pending/rejected, and visible status shows cancelled rather than unresolved.
+6. Unchanged reconcile after cancel and after re-activation does no writes.
+
+STILL OPEN FROM THE LAST REPORT
+R1 (activation_not_sent has no wake), R2 (re-evaluation compares custody only), R4 (native load reason discarded), R6 (crash-loop generations, actor-death coupling). solver-bounds-checks is a sound choice with panic=unwind: it turns unchecked indexing into a caught panic and a failed world.
+
+No approval or gate claim.
+
+-----
+
+Fable review of the final recovery deltas (consultative, read-only, nothing built or run, NOT an approval). Read against the current tree.
+
+HEADLINE
+I found no remaining safety blocker on reading. Every path I traced that could double-activate, adopt a dead generation, or activate after cancellation is stopped by the committed fence (exact stored request + physics_run retract + cancelled-bytes guard). What remains is two contract-consistency items, one operability gap, and availability/hardening notes.
+
+CONFIRMED ON READING
+- Cancel (priv/ontologies/quod_physics.pl:55-60): exact custody, current G, policy only, no actor/host/enabled dependency. A live world's custody (previous < G) cannot match. Store refuses archived exact bytes (line 35). The prepared_before_cancellation scenario blocks the old proof after its reads and staged writes and before submission, then asserts generation 1 with a new token; that is the right race and it covers the OCC point I had left unverified.
+- Resolve fingerprint (src/quod_physics.erl:68-79, 89, 124): a resolve reply issued against older generation/run_token/custody is discarded and re-issued. Closes my R2.
+- unresolved + custody none does not re-sign (quod_physics.erl:96). not-submitted is tagged only at prequeue (src/quod_runtime.erl physics_work), actor pump (quod_agent.erl unsent_expiry), sign failure and certain custody failure. Bare deadline stays unknown.
+- Load error retained and reported (quod_physics_native.erl:8-12, quod_physics.erl:29). Unexpected owner exit leaves a dead entry that unchanged selection keeps (quod_runtime.erl physics_down, install_physics). B3 deferral unchanged and correct. Interrupted-first-selector test exercises the real path.
+
+CONTRACT CONSISTENCY (actionable before gates)
+
+1. The "no re-sign after an uncertain custody write" rule is only enforced when custody is none. On the ordinary restart path it is not. State: predecessor custody C (previous < G), resolved = C, successor's activate returns {custody_unresolved, _} -> phase unresolved. Any later physics_selected, including the unchanged-spec resend for {unavailable,_} (quod_runtime.erl install_physics), calls advance/1: clause at quod_physics.erl:96 does not match (custody is not none), the clause at 105-107 matches (resolved = Custody, G > Previous) and calls request_activation. A new store + activation is signed while the earlier store is still uncertain. Safety holds (both stores carry the same Prior; one wins), but it contradicts the rule stated in the comment at 94-95 and in your summary, and activation_delivery_races_test only covers custody none. Either guard this case too (remember that the last activate attempt is uncertain until activation_state changes) or drop the rule for both and rely on the fence. Pick one and test it.
+
+2. "Exact" cancellation is not enforced against an unbound argument. physics_cancel_activation(W, G, Request) with Request or G left as a variable unifies with whatever is pending (quod_physics.pl:57-58). An authorised canceller can then cancel a request other than the one inspected. Require ground arguments, as fipa_receive_done does with term_variables/2 (priv/ontologies/fipa_request.pl:58). One line, plus a refusal test.
+
+OPERABILITY GAP (required to document; small code change optional)
+
+3. unresolved with custody none has no cancel exit. If the worker is deadline-killed during signing or during the custody store and that store never lands, there is nothing to cancel, explicit reconciliation does nothing (quod_physics.erl:96), and the status is the same activation_unresolved shown when cancel does apply. The exits are a lifecycle restart: disable/enable the space, a runtime collapse, actor restart. A restart is safe: if the orphan store lands later, the fresh incarnation's store fails on Prior, it resolves, and cancellation applies. Please (a) give this state its own status so an operator knows cancel is not the tool, and (b) state the exit in physics-native.md. I would also want one test for it.
+
+AVAILABILITY PREFERENCES (not correctness; Yan's call)
+
+4. Capacity/awaiting-actor waits reuse the first window (quod_physics.erl:62-66, 119-122). If the actor takes longer than the budget to install, the wake sends an already-expired window, the runtime answers not-submitted, and the world stays unavailable until an explicit reconcile or a relevant commit. The likely real case is a node restart with several worlds waiting on actors. Note that this window is not any signed request's deadline: nothing was signed while waiting, so a fresh window on wake would not extend an original deadline.
+
+5. A live incarnation whose custody store was reported uncertain but did land knows it never submitted the activation. Today that needs operator cancellation. First delivery of its own stored bytes before signed expiry would unblock it without any resubmission. Not needed for this slice.
+
+HARDENING (no present defect)
+
+6. The dead-entry quarantine releases on any spec change, including the dead owner's own late commits (custody, generation, run_token). A crash before install with an actor job still in flight therefore restarts when that job commits, and a deterministic crash on the result/selection path would loop, one generation per cycle. The simulator's own failed-quarantine releases only on bodies/structure/limits (quod_physics.erl:50-53); using the same rule for dead entries (plus assignment change and cancellation) would close it. unexpected_owner_failure_is_quarantined_test_ only crashes an active world.
+
+7. Minor: the dead-entry status publishes the committed run_token, not the crashed incarnation's token (quod_runtime.erl physics_down); quod_physics:start returning any other {error, _} would crash the runtime on a badmatch in install_physics.
+
+No approval or gate claim. Items 1-3 are the ones I would close or explicitly accept before freezing.

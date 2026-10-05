@@ -15,8 +15,10 @@ agent_hosting_projection(Requested, Node, Scope, Hosts) :-
     (Node \= none ->
         agent_hosting_instances(Scope, Node, Instances),
         findall(host(I, Node, E, K),
-                (member(I, Instances), agent_hosted(I, Node, E, K)), Hosts)
+                (member(I, Instances), agent_hosted(I, Node, E, K), \+ agent_hosting_suspended(I)), Hosts)
     ; Hosts = []).
+
+agent_hosting_suspended(_) :- fail.
 
 agent_hosting_scope(agent(Instance), keys([Instance])).
 agent_hosting_scope(all, all).

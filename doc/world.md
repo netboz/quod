@@ -39,12 +39,14 @@ The current client lives under `client/` and the shared browser shell under
 
 ## Authoritative physics contract
 
-This is the contract for the first shared simulation, not a claim that motion
-is implemented. It supersedes the authority, recovery and observation proposals
+This is the contract for the shared simulation. The implemented first server
+profile is described in [the retained native adapter](physics-native.md); it
+covers optional cuboid simulation and activation/recovery through the runtime. It supersedes the authority, recovery and observation proposals
 in the archived [client/world direction](outdated/client-world-direction.md) and
 [consequence direction](outdated/world-consequence-direction.md). Scene
-projection, synchronization, physics integration, automatic lobby provisioning,
-headset interaction and world editing still require implementation and validation.
+projection, synchronization, general physics interactions, automatic lobby
+provisioning, headset interaction and world editing still require implementation
+and validation.
 The [runtime contract](runtime-and-agents.md) and
 [atomic write contract](multiwrite-architecture.md) remain the substrate.
 
@@ -90,7 +92,15 @@ hosted actor's signed-goal path for activation. Only the replacement simulation
 incarnation may install the resulting fence. It restores current structure and
 recovery state before publishing ready, stepping or emitting observations. If
 activation is uncertain, resolve that exact operation before proceeding. A
-reconciliation with the same live owner and unchanged inputs neither activates
+stored request with no outcome may have never been submitted. An explicit
+Prolog-policy-authorized cancellation may instead revoke that exact pending
+activation atomically: compare its custody and expected generation, retain its
+original signed request as cancelled custody, and remove its permission to
+activate. Cancellation is not a claim that the original operation was rejected
+and must never be inferred from timeout. An old activation and cancellation
+conflict through their ordinary transaction dependencies; whichever commits
+first prevents the other. A successor then activates its own fresh generation.
+A reconciliation with the same live owner and unchanged inputs neither activates
 another generation nor rebuilds the simulation. A generation commits authority;
 only an owner notification certifies installation readiness.
 
@@ -456,31 +466,26 @@ installed consequences and live reactions. The existing owners are
 [outcome resolution](../src/quod_client_goal_ingress.erl) and the
 [multi-ontology transaction path](multiwrite-architecture.md).
 
-The concrete missing bridge is a typed physics resource installation and sample
-handoff: select committed authority, structure, activity intents and budgets;
-read checkpoints and acceptance cursors at recovery; retain one simulation for
-that resource's lifetime; and bind its immutable output to the
-run, installed revisions and owner incarnation before entering the signed-goal
-path. Same-host generation activation and recoverable original-operation binding
-are required parts of that bridge. The hosted actor currently allocates an
-operation ID in disposable request state; its queue is not durable request
-custody. Before enabling non-idempotent consequences, the existing work/custody
-path must retain the original binding so a successor can resolve it even after
-loss of the host's local state. That is an implementation gap, not a guarantee
-already supplied by agent hosting. Existing host-observation authentication is
-a precedent, not an already implemented generic physics API. World predicates
-for authority, revisions, levels, occurrence acceptance and checkpoints still
-need implementation; the notation above does not claim callable signatures.
+The typed `physics_worlds` resource now selects committed authority, baseline
+cuboid structure and policy allowances, and retains one native simulation under
+the runtime. Its own activation uses durable original signed-request custody
+and outcome resolution before installation. Same-host restart commits a fresh
+generation; no successor adopts a dead incarnation's generation. The
+[adapter profile](physics-native.md) describes failure, backpressure and recovery
+boundaries, including unsupported checkpoint/joint declarations.
 
-The runtime's fixed resource kinds need a physics selector/installer. Its owned
-observation support currently authenticates host recovery to a node actor;
-physics needs an exact authority-actor audience, evidence/expiry binding and
-capacity notifications. The existing request-result path must return the sample's
-request reference and outcome to its owner, including explicit unsent-drop
-disposition. Keep samples with the retained simulation and consume them through
-bounded owner notifications; do not flood the shared runtime queue each tick.
-Self-authored checkpoint/cursor writes must not cause simulation reinstallation:
-retain the live resource and process only actual input changes.
+The remaining consequence bridge must select activity intents, restore supported
+checkpoints and acceptance cursors, and hand authenticated immutable observations
+to the exact authority actor. The hosted actor's generic queue is not durable
+request custody. Activation custody now exists, but does not implement durable
+impact-operation custody or occurrence acceptance. Existing host-observation
+authentication remains a precedent for that future sample/expiry binding.
+
+Frames stay in the retained simulation and are pulled with their current fence;
+they do not flood the runtime queue each tick. General agent queries and durable
+contact actions need their own governed observation interfaces. Self-authored
+checkpoint/cursor writes must preserve the same installation invariant: retain
+the live resource and process only actual input changes.
 
 Current parser/request limits are also an integration constraint
 ([goal limits](../include/quod_client_goal_limits.hrl),

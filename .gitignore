@@ -7,3 +7,5 @@ client/node_modules/
 erl_crash.dump
 rebar3.crashdump
 priv/certs/*.pem
+/native/*/target/
+/priv/native/

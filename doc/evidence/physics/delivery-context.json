@@ -1,0 +1,11 @@
+{
+  "base_commit": "6e5f85331f94cc024bb487f6bc47cbc2c76634cb",
+  "source_files": 818,
+  "native_library_sha256": "268609c71ad4e4c498fe9faf1a4dd23832357d430553d32dc1e415cc3bb3004c",
+  "release_image": "sha256:04d9f39fff8923ff17b58b277c1e757af05aca6d69fbda21294a5551228e5a62",
+  "ci_image": "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+  "rust_release_toolchain": "1.90.0",
+  "rust_host_toolchain": "1.99.0",
+  "log_files": 143,
+  "common_test_report_files": 444
+}

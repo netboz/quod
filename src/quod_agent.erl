@@ -67,13 +67,16 @@ pump(S = #s{worker = none, pending = Pending, released = Released}) ->
             {Mode, _, _, Deadline} = Request,
             Ready = S#s{pending = queue:from_list(Rest)},
             case Deadline > quod_time:mono_ms() of
-                false -> pump(complete(Ref, {error, deadline_exceeded},
+                false -> pump(complete(Ref, unsent_expiry(Mode),
                                        report_binding(Mode, S#s.binding), Ready));
                 true -> start_request(Ref, Request, Deadline, QueuedAt, Ready)
             end;
         none -> S
     end;
 pump(S) -> S.
+
+unsent_expiry({custodied, _}) -> {error, {activation_not_submitted, deadline_exceeded}};
+unsent_expiry(_) -> {error, deadline_exceeded}.
 
 take_ready([], _, _) -> none;
 take_ready([Item = {_, Height, _, _} | Rest], Released, Before)
@@ -84,6 +87,7 @@ take_ready([Item | Rest], Released, Before) ->
 
 complete(Ref, Result, Binding, S = #s{owner = Owner, slot = Slot}) ->
     Owner ! {agent_completed, Slot, self(), Ref},
+    Owner ! {agent_owned_result, Slot, self(), Ref, Result},
     quod_reg:publish({agent, maps:get(reference, Binding)},
       {agent_request_finished, Owner, self(), Binding, Ref, Result}),
     S.
@@ -126,6 +130,8 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
                    expired => false, timeout_result => TimeoutResult,
                    report_binding => ReportBinding}}.
 
+request_mode({custodied, _}) -> execute;
+request_mode(resolve) -> read;
 request_mode({node, _, Mode}) -> Mode;
 request_mode(Mode) -> Mode.
 
@@ -190,6 +196,23 @@ current_node(NodeRef, Key) ->
         _ -> false
     end.
 
+invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
+    quod_client_goal_ingress:resolve_operation(Bytes, Signature);
+invoke_live(Slot, Binding, {{custodied, Template}, Goal, Expires}, Operation) ->
+    case sign_request(Slot, Binding, {execute, Goal, Expires}, Operation) of
+        {ok, Bytes, Signature} ->
+            Bs0 = erlog_int:add_binding({'Bytes'}, Bytes, erlog_int:new_bindings()),
+            Bs = erlog_int:add_binding({'Signature'}, Signature, Bs0),
+            Custody = erlog_int:dderef(Template, Bs),
+            case invoke_live(Slot, Binding, {execute, Custody, Expires}, crypto:strong_rand_bytes(32)) of
+                {ok, _, {normalized, {committed, _, _}}} ->
+                    quod_client_goal_ingress:submit(Bytes, Signature);
+                {ok, _, {normalized, {failed, _}}} = Failed ->
+                    {error, {activation_not_submitted, Failed}};
+                Other -> {error, {custody_unresolved, Other}}
+            end;
+        Error -> {error, {activation_not_submitted, Error}}
+    end;
 invoke_live(Slot, Binding, Request, Operation) ->
     case trace_stage(<<"quod.agent.governed_sign">>,
                       fun() -> sign_request(Slot, Binding, Request, Operation) end) of

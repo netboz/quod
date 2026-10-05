@@ -1,0 +1,5 @@
+real owner body 2 {revision, height_metres}: [{1,2.9982969760894775},
+                                              {2,4.998296737670898},
+                                              {1,0.49993059039115906},
+                                              {1,0.49993059039115906}]
+PASS: authored 3m body falls; revision 2 installs at 5m and falls; sleeping body rests on ground near 0.5m.

@@ -15,10 +15,14 @@ load(Est) ->
                               ?MODULE, test_host_barrier),
     WorkQueue = quod_predicates:register(Completion, {test_fill_work_queue, 0}, reaction,
                               ?MODULE, test_fill_work_queue),
-    quod_predicates:register(WorkQueue, {test_fill_agents, 0}, reaction,
-                              ?MODULE, test_fill_agents).
+    Filled = quod_predicates:register(WorkQueue, {test_fill_agents, 0}, reaction,
+                                      ?MODULE, test_fill_agents),
+    %% A raw test-only barrier may pause a read-only resource selector. No
+    %% deployed ontology installs this scheduling probe.
+    Filled#est{db = erlog_int:add_compiled_proc({test_physics_snapshot, 0},
+                                              ?MODULE, test_local_wait, Filled#est.db)}.
 
-test_local_wait(test_local_wait, Next, St) ->
+test_local_wait(Goal, Next, St) when Goal =:= test_local_wait; Goal =:= test_physics_snapshot ->
     quod_reg:where({host_test, local_proof}) ! {local_proof_waiting, self()},
     receive release -> erlog_int:prove_body(Next, St) end.
 test_host_barrier(test_fipa_completion, Next, St) ->
@@ -1508,7 +1512,8 @@ start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
     {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
       #{node_id => maps:get(pubkey, Identity), identity => Identity,
         data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
-        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates, ?MODULE],
+        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates,
+                                       quod_physics_predicates, ?MODULE],
         genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}, BootConfig)),
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,

@@ -1,0 +1,13 @@
+clean_campaign_06=0
+docker_release_build_final_06=0
+packaged_smoke_final_06=1
+packaged_loader_diagnosis_06=0
+packaged_smoke_final_07=0
+optional_embedded_boot_final_06=0
+packaged_costs_final_06=0
+ci_image_build_final_06=0
+ci_toolchain_final_06=0
+atomic_library_install_01=0
+focused_owner_final_11=0
+direct_dialyzer_fix_01=0
+real_owner_pose_observation_06=0

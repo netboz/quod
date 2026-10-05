@@ -14,7 +14,7 @@
 kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
@@ -175,7 +175,7 @@ a_scene_needs_distinct_mark_ids_test() ->
 the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
@@ -248,6 +248,42 @@ pbr_factors_are_bounded_integers_test() ->
         holds({well_formed_mark, setelement(6, box(<<"surface">>),
                                           {surface, <<"#F9C80E">>, 1000, 0, 1000, []})}, St)
     end).
+
+mesh_geometry_is_typed_and_resource_policy_owned_test() ->
+    with_rendering(fun(St) ->
+        Mark = mesh_mark(),
+        holds({well_formed_mark, Mark}, St),
+        Asset = element(4, Mark),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(2, Asset, {asset, <<"wrong">>, <<"model/gltf-binary">>}))}, St),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(3, Asset, <<"unknown-profile">>))}, St),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(4, Asset, {scale, 0}))}, St),
+        SmallFrame = {frame, {aabb, 0, 0, 0, 1, 1, 1},
+                      {pivot, 0, 0, 0}, {front, <<"-z">>}},
+        SmallAsset = setelement(5, Asset, SmallFrame),
+        holds({well_formed_mark, setelement(4, Mark,
+            setelement(4, SmallAsset, {scale, 100000}))}, St),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(4, SmallAsset, {scale, 100001}))}, St),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(5, Asset, {frame, {aabb, 1, 0, 0, 0, 100, 100},
+                                  {pivot, 0, 0, 0}, {front, <<"-z">>}}))}, St),
+        fails({well_formed_mark, setelement(4, Mark,
+            setelement(6, Asset, {resources, 8000001, 1000, 100, 100, 10, 2, 1000}))}, St),
+        fails({well_formed_mark, setelement(6, Mark,
+            {surface, <<"#FFFFFF">>, 0, 1000, 0, []})}, St)
+    end).
+
+mesh_mark() ->
+    {mark, <<"mesh-a">>, <<"mesh">>,
+     {mesh_asset, {asset, binary:copy(<<"a">>, 64), <<"model/gltf-binary">>},
+      <<"gltf2-static-v1">>, {scale, 1000},
+      {frame, {aabb, -400, -100, -800, 1300, 1800, 500},
+       {pivot, 200, 0, -100}, {front, <<"+x">>}},
+      {resources, 8000000, 16000000, 250000, 250000, 1024, 256, 16000000}},
+     {transform, 0, 0, 0, 0, 0, 0}, asset_surfaces, unlabelled, depicts_nothing}.
 
 %% --- helpers ---------------------------------------------------------------
 

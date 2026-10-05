@@ -25,17 +25,21 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
   const next = new Map()
   const retired = []
   for (const mark of marks) {
-    const geometry = JSON.stringify([mark.kind, mark.size])
+    const geometry = mark.kind === 'mesh'
+      ? JSON.stringify([mark.kind, mark.size.digest, mark.size.profile,
+        mark.size.allowed, mark.size.bounds])
+      : JSON.stringify([mark.kind, mark.size])
     let entry = painted.get(mark.id)
     if (entry && entry.geometry !== geometry) {
       retired.push(entry)
       entry = null
     }
     if (!entry) {
-      const node = mark.kind === 'group'
+      const node = mark.kind === 'group' || mark.kind === 'mesh'
         ? new TransformNode(`mark:${mark.id}`, scene)
         : buildGeometry(scene, mark)
       entry = { node, geometry, signature: null, label: null }
+      if (mark.kind === 'mesh') attachModel(scene, entry, mark, resources, onError)
     }
     const signature = JSON.stringify(mark)
     if (entry.signature !== signature) {
@@ -45,6 +49,7 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
         .multiply(Quaternion.RotationAxis(Vector3.Up(), ry * DEGREES))
         .multiply(Quaternion.RotationAxis(Vector3.Right(), rx * DEGREES))
       entry.node.metadata = { markId: mark.id, depicts: mark.depicts }
+      if (mark.kind === 'mesh') updateModelFrame(entry, mark.size)
       if (mark.material && entry.surfaceSignature !== JSON.stringify(mark.material)) {
         applyMaterial(scene, entry, mark, resources, onError)
         entry.surfaceSignature = JSON.stringify(mark.material)
@@ -76,7 +81,46 @@ function disposeEntry(entry) {
   entry.label?.dispose(false, true)
   entry.node.material?.dispose(false, false)
   entry.binding?.release()
+  const model = entry.model
+  entry.model = null
+  entry.instance?.dispose()
+  model?.release()
+  entry.modelFrame?.dispose(false, false)
   entry.node.dispose(true, false)
+}
+
+function attachModel(scene, entry, mark, resources, onError) {
+  if (!resources) throw new Error('mesh assets require a render resource owner')
+  const frame = new TransformNode(`asset-frame:${mark.id}`, scene)
+  frame.parent = entry.node
+  entry.modelFrame = frame
+  const lease = resources.acquireModel(mark.size)
+  entry.model = lease
+  lease.ready.then(container => {
+    if (!container || entry.model !== lease) return
+    const instance = container.instantiateModelsToScene(name => `asset:${mark.id}:${name}`)
+    if (entry.model !== lease) { instance.dispose(); return }
+    for (const root of instance.rootNodes) {
+      // glTF names/extras are presentation data, never an interactive subject.
+      root.getDescendants(false).concat(root).forEach(node => { node.metadata = null })
+      root.parent = frame
+    }
+    entry.instance = instance
+  }).catch(error => {
+    if (entry.model === lease) onError(new Error(`Cannot draw ${mark.id}: ${error.message}`))
+  })
+}
+
+function updateModelFrame(entry, size) {
+  const yaw = { '-z': 0, '+z': Math.PI, '+x': Math.PI / 2,
+    '-x': -Math.PI / 2 }[size.front]
+  entry.modelFrame.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), yaw)
+  entry.modelFrame.scaling.setAll(size.scale)
+  const [x, y, z] = size.pivot
+  entry.modelFrame.position.set(
+    -(Math.cos(yaw) * x + Math.sin(yaw) * z) * size.scale / MM,
+    -y * size.scale / MM,
+    -(-Math.sin(yaw) * x + Math.cos(yaw) * z) * size.scale / MM)
 }
 
 function buildGeometry(scene, { id, kind, size }) {
@@ -199,6 +243,12 @@ function attachLabel(scene, mesh, mark) {
 // The offset is in the mark's own local space, so a mark's own size decides
 // where "above" and "below" are.
 function labelOffset(mark, placement) {
+  if (mark.kind === 'mesh') {
+    const { bounds, pivot, scale } = mark.size
+    if (placement === 'above') return (bounds[4] - pivot[1]) * scale / MM + LABEL_HEIGHT_MM / MM
+    if (placement === 'below') return (bounds[1] - pivot[1]) * scale / MM - LABEL_HEIGHT_MM / MM
+    return ((bounds[1] + bounds[4]) / 2 - pivot[1]) * scale / MM
+  }
   const extent = (mark.size.height ?? mark.size.diameter ?? 0) / MM
   if (placement === 'above') return extent / 2 + LABEL_HEIGHT_MM / MM
   if (placement === 'below') return -(extent / 2 + LABEL_HEIGHT_MM / MM)

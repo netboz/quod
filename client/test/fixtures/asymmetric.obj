@@ -1,0 +1,16 @@
+mtllib asymmetric.mtl
+o red-piece
+v 0.2 0.0 -0.4
+v 1.2 0.0 -0.4
+v 0.4 1.4 0.3
+vt 0.0 0.0
+vt 1.0 0.0
+vt 0.0 1.0
+usemtl red
+f 1/1 2/2 3/3
+o blue-piece
+v -0.3 0.2 0.1
+v 0.5 0.2 0.1
+v 0.0 0.7 0.3
+usemtl blue
+f 4 5 6

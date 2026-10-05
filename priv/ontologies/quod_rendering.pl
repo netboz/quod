@@ -33,10 +33,11 @@
 %% The descriptor:
 %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
 %%     Id        a view-scoped occurrence identity, not a domain name
-%%     Size      [f(Field, Millimetres), ...] in the kind's declared order
+%%     Size      ordered integer-mm fields, or a typed mesh_asset descriptor
 %%     Transform transform(X,Y,Z,RX,RY,RZ) | relative(Parent, transform(...))
-%%     Surface   surface(Colour, Metal, Rough, Emission, Textures)
-%%               Optical factors/repeats are permille; groups use no_surface.
+%%     Material  surface(Colour, Metal, Rough, Emission, Textures) |
+%%               asset_surfaces for meshes | no_surface for groups.
+%%               Optical factors/repeats are permille.
 %%     Label     label(Text, Placement) | unlabelled
 %%     Depicts   depicts(Ontology, Anchor, Entity) | depicts_nothing
 %%               Unanchored depicts(Ontology, Entity) is display-only.
@@ -74,10 +75,9 @@ rendering_query(have_attribute(_, _, _)).
 rendering_query(attribute(_, _, _)).
 
 %% --- the geometries -----------------------------------------------------------
-%% Seven bounded parameterized shapes and a transform group. A kind's fields are
-%% declared once, in order, and a descriptor carries exactly those fields: the
-%% client never has to know that a box's three numbers happen to be width,
-%% height and depth.
+%% Seven bounded parameterized shapes, a transform group and an asset mesh.
+%% Primitive fields are declared once, in order, so the client never has to
+%% know that a box's three numbers happen to be width, height and depth.
 
 mark_kind(<<"box">>).
 mark_kind(<<"sphere">>).
@@ -87,6 +87,7 @@ mark_kind(<<"capsule">>).
 mark_kind(<<"torus">>).
 mark_kind(<<"sky_sphere">>).
 mark_kind(<<"group">>).
+mark_kind(<<"mesh">>).
 
 geometry_field(<<"box">>, 1, <<"width">>).
 geometry_field(<<"box">>, 2, <<"height">>).
@@ -121,6 +122,15 @@ limit(<<"label">>, 24).
 limit(<<"ontology">>, 64).
 limit(<<"extent">>, 100000).
 limit(<<"offset">>, 1000000).
+limit(<<"mesh_scale">>, 100000).
+%% Asset allowances are ontology policy. The client checks measured GLB costs.
+limit(<<"mesh_transfer_bytes">>, 8000000).
+limit(<<"mesh_geometry_bytes">>, 16000000).
+limit(<<"mesh_vertices">>, 250000).
+limit(<<"mesh_triangles">>, 250000).
+limit(<<"mesh_nodes">>, 1024).
+limit(<<"mesh_materials">>, 256).
+limit(<<"mesh_pixels">>, 16000000).
 
 %% --- a descriptor against its schema ------------------------------------------
 
@@ -129,7 +139,7 @@ well_formed_mark(mark(Id, Kind, Size, Transform, Material, Label, Depicts)) :-
     bounded_text(Id, <<"mark_id">>),
     mark_kind(Kind),
     findall(Field, geometry_field(Kind, _, Field), Fields),
-    sized(Fields, Size),
+    geometry(Kind, Fields, Size),
     geometry_constraint(Kind, Size),
     placed(Transform),
     appearance(Kind, Material, Label),
@@ -144,6 +154,39 @@ sized([Field | Fields], [f(Field, Extent) | Rest]) :-
     limit(<<"extent">>, Max),
     Extent =< Max,
     sized(Fields, Rest).
+
+geometry(<<"mesh">>, [],
+         mesh_asset(asset(Digest, <<"model/gltf-binary">>), <<"gltf2-static-v1">>,
+                    scale(Scale), frame(aabb(MinX, MinY, MinZ, MaxX, MaxY, MaxZ),
+                                        pivot(PX, PY, PZ), front(Front)),
+                    resources(Transfer, Geometry, Vertices, Triangles, Nodes, Materials, Pixels))) :-
+    binary_codes(Digest, Bytes), length(Bytes, 64), digest_hex(Bytes),
+    integer(Scale), Scale > 0, limit(<<"mesh_scale">>, MaxScale), Scale =< MaxScale,
+    offset(MinX), offset(MinY), offset(MinZ),
+    offset(MaxX), offset(MaxY), offset(MaxZ),
+    MinX < MaxX, MinY < MaxY, MinZ < MaxZ,
+    offset(PX), offset(PY), offset(PZ),
+    mesh_extent(MinX, MaxX, PX, Scale),
+    mesh_extent(MinY, MaxY, PY, Scale),
+    mesh_extent(MinZ, MaxZ, PZ, Scale),
+    member(Front, [<<"-z">>, <<"+z">>, <<"+x">>, <<"-x">>]),
+    resource(Transfer, <<"mesh_transfer_bytes">>),
+    resource(Geometry, <<"mesh_geometry_bytes">>),
+    resource(Vertices, <<"mesh_vertices">>),
+    resource(Triangles, <<"mesh_triangles">>),
+    resource(Nodes, <<"mesh_nodes">>),
+    resource(Materials, <<"mesh_materials">>),
+    resource(Pixels, <<"mesh_pixels">>).
+geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, sized(Fields, Size).
+
+resource(Allowed, Name) :-
+    integer(Allowed), Allowed > 0, limit(Name, Maximum), Allowed =< Maximum.
+
+mesh_extent(Min, Max, Pivot, Scale) :-
+    limit(<<"extent">>, Maximum), Bound is Maximum * 1000,
+    Span is (Max - Min) * Scale, Span =< Bound,
+    Low is abs((Min - Pivot) * Scale), Low =< Bound,
+    High is abs((Max - Pivot) * Scale), High =< Bound.
 
 %% These two shapes have relationships between their dimensions which field
 %% validation alone cannot express. A capsule's total height contains both
@@ -195,8 +238,11 @@ digest_digit(C) :- C >= 97, C =< 102.
 fraction(N) :- integer(N), N >= 0, N =< 1000.
 
 appearance(<<"group">>, no_surface, Label) :- labelled(Label).
+%% Embedded accepted glTF materials are preserved; source material names never
+%% acquire domain identity or permission.
+appearance(<<"mesh">>, asset_surfaces, Label) :- labelled(Label).
 appearance(Kind, Material, Label) :-
-    Kind \== <<"group">>, surfaced(Material), labelled(Label).
+    Kind \== <<"group">>, Kind \== <<"mesh">>, surfaced(Material), labelled(Label).
 
 %% A colour is written the way a designer writes it: 35 is "#", and the six
 %% digits are upper-case hex so one colour has one spelling.

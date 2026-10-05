@@ -343,7 +343,14 @@ security_headers_present(Port) ->
     {ok, Connection} = connect(Port),
     {200, Headers, _} = quod_ct:https_request(Connection, get, "/health", <<>>),
     ?assertMatch(#{<<"content-security-policy">> := _}, Headers),
+    CSP = maps:get(<<"content-security-policy">>, Headers),
+    ?assertNotEqual(nomatch, binary:match(CSP, <<"img-src 'self' data: blob:">>)),
     ?assertEqual(<<"nosniff">>, maps:get(<<"x-content-type-options">>, Headers)),
+    Digest = <<"ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064">>,
+    Path = binary_to_list(<<"/assets/models/", Digest/binary, ".glb">>),
+    {200, AssetHeaders, ModelBytes} = quod_ct:https_request(Connection, get, Path, <<>>),
+    ?assertEqual(CSP, maps:get(<<"content-security-policy">>, AssetHeaders)),
+    ?assertEqual(Digest, binary:encode_hex(crypto:hash(sha256, ModelBytes), lowercase)),
     close(Connection).
 
 signed_http_parent_is_carried(Port) ->
@@ -432,6 +439,7 @@ cleanup(_Port) ->
 
 routes() ->
     [{'_', [{"/health", quod_client_http, health},
+            {"/assets/[...]", cowboy_static, {priv_dir, quod, "explorer/assets"}},
             {"/api/auth/challenge", quod_client_http, auth_challenge},
             {"/api/auth/complete", quod_client_http, auth_complete},
             {"/api/goals/read", quod_client_http, signed_goal_read},

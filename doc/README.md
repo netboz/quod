@@ -11,6 +11,7 @@ implementation and names each state owner. Follow only the subject you need:
 | Ontology bootstrap, creation and routes | [Lifecycle and routing](lifecycle-and-routing.md) |
 | Projections, events, effects, agents and internal FIPA | [Runtime and agents](runtime-and-agents.md) |
 | Client and simulated-world direction | [World](world.md) |
+| Imported static mesh Eidolons | [Mesh support](eidolon-mesh-support.md) |
 
 The previous 83 Markdown documents, the Simplex PDF and figures are in the
 [archive](outdated/README.md). They are preserved as design, review and measurement

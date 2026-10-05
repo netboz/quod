@@ -165,3 +165,28 @@ test('texture slots carry digest identity and explicit sampling; invalid binding
     textured.replace(`[${texture}]`, `[${texture},${texture}]`),
   ]) assert.throws(() => readMarks(invalid))
 })
+
+test('mesh marks carry typed digest, local frame, scale and asset surfaces', () => {
+  const digest = 'ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064'
+  const size = `mesh_asset(asset(<<"${digest}">>,<<"model/gltf-binary">>),` +
+    '<<"gltf2-static-v1">>,scale(1250),' +
+    'frame(aabb(-400,-100,-800,1300,1800,500),pivot(200,0,-100),front(<<"+x">>)),' +
+    'resources(8000000,16000000,250000,250000,1024,256,16000000))'
+  const mark = `mark(<<"imported">>,<<"mesh">>,${size},` +
+    'transform(10,20,30,0,90,0),asset_surfaces,' +
+    'label(<<"artifact">>,<<"above">>),depicts_nothing)'
+  const [parsed] = readMarks(`[${mark}]`)
+  assert.deepEqual(parsed.size, { digest, profile: 'gltf2-static-v1', scale: 1.25,
+    bounds: [-400, -100, -800, 1300, 1800, 500], pivot: [200, 0, -100],
+    front: '+x', allowed: [8000000, 16000000, 250000, 250000, 1024, 256, 16000000] })
+  assert.equal(parsed.material, null)
+  for (const invalid of [
+    mark.replace(digest, 'bad'),
+    mark.replace('gltf2-static-v1', 'animated-v1'),
+    mark.replace('scale(1250)', 'scale(0)'),
+    mark.replace('aabb(-400,-100,-800,1300,1800,500)',
+      'aabb(1300,-100,-800,-400,1800,500)'),
+    mark.replace('asset_surfaces', 'no_surface'),
+    mark.replace('resources(8000000', 'resources(0'),
+  ]) assert.throws(() => readMarks(`[${invalid}]`))
+})

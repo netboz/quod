@@ -1,0 +1,70 @@
+{
+  "schema": "quod-eidolon-import-v1",
+  "source": {
+    "name": "console.glb",
+    "format": "glb",
+    "digest": "5ce1661849a09e7fe8f0d6e35b6c66efc7fdb65054606ffa1d734e5d20bb4d41",
+    "dependencies": []
+  },
+  "output": {
+    "digest": "2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04",
+    "profile": "gltf2-static-v1",
+    "mediaType": "model/gltf-binary",
+    "bytes": 5357484,
+    "costs": [
+      5357484,
+      1227580,
+      31379,
+      50000,
+      1,
+      1,
+      4194304
+    ],
+    "boundsMm": [
+      -921,
+      -929,
+      -898,
+      881,
+      904,
+      894
+    ],
+    "pivotMm": [
+      0,
+      -929,
+      0
+    ],
+    "front": "-z",
+    "materialSummary": [
+      {
+        "slot": 0,
+        "displayName": null,
+        "baseColorFactor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.9036020036098448,
+        "textured": true
+      }
+    ]
+  },
+  "importer": {
+    "name": "quod-glb-repack",
+    "version": "gltf2-static-v1",
+    "generator": "https://github.com/mikedh/trimesh",
+    "options": {
+      "sourceMetersPerUnit": 1,
+      "acceptMaterialLoss": true,
+      "metallicFactor": 0
+    }
+  },
+  "provenance": {
+    "licence": "user-provided",
+    "source": "local:assets/GLBs/console.glb"
+  },
+  "diagnostics": [
+    "Material 0 metallic factor changed from 1 to 0 by explicit request"
+  ]
+}

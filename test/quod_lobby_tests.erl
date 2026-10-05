@@ -13,7 +13,7 @@ lobby_projection_recovery_test_() ->
             Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
                                     {lobby_view, playing, {0}}}},
             {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Goal),
-            ?assertEqual(18, length(Scene)),
+            ?assertEqual(4, length(Scene)),
             ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>,
                           [{f, <<"diameter">>, 80000}],
                           {transform, 0, 0, 0, 0, 75, 0}, _, unlabelled,
@@ -22,6 +22,17 @@ lobby_projection_recovery_test_() ->
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
                {transform, 0, 0, 0, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
+            ?assertMatch({mark, <<"console/model">>, <<"mesh">>,
+                          {mesh_asset, {asset,
+                              <<"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04">>,
+                              <<"model/gltf-binary">>}, <<"gltf2-static-v1">>,
+                           {scale, 1000},
+                           {frame, {aabb, -921, -929, -898, 881, 904, 894},
+                            {pivot, 0, -929, 0}, {front, <<"-z">>}},
+                           {resources, 5357484, 1227580, 31379, 50000, 1, 1, 4194304}},
+                          {relative, <<"console">>, _}, asset_surfaces,
+                          {label, <<"PROLOG CONSOLE">>, <<"above">>}, depicts_nothing},
+                         lists:keyfind(<<"console/model">>, 2, Scene)),
             %% Expected identity is proved before any scene content is selected.
             ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
                 {',', {current_ontology_identity, Ns, <<0:256>>},
@@ -166,7 +177,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
             receive
                 {first_scene, Caller, Result} ->
                     ?assertMatch({ok, [#{<<"V0">> :=
-                        [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_]}], _}, Result)
+                        [_,_,_,_]}], _}, Result)
             after 5000 -> error(first_scene_timeout)
             end
         after
@@ -221,6 +232,48 @@ modelling_and_material_libraries_test_() ->
                 {place_model, <<"room">>, At, depicts_nothing, A ++ B, {0}}),
             {ok, [#{<<"V0">> := NestedMarks}], _} = Ask(ModelNs, {model, Nested, {0}}),
             ?assert(lists:keymember(<<"room/a/screen">>, 2, NestedMarks)),
+            Mesh = {mesh_asset,
+                {asset, <<"ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064">>,
+                 <<"model/gltf-binary">>}, <<"gltf2-static-v1">>, {scale, 1000},
+                {frame, {aabb, -300, 0, -400, 1200, 1400, 300},
+                 {pivot, 200, 0, -100}, {front, <<"+x">>}},
+                {resources, 8000000, 16000000, 250000, 250000, 1024, 256, 16000000}},
+            {ontology_ref, MeshLobbyNs, MeshLobbyAnchor} = maps:get(lobby, Ctx),
+            Subject = {depicts, MeshLobbyNs, MeshLobbyAnchor, console},
+            MeshParts = [{part, <<"imported">>, Mesh, At, asset_surfaces,
+                          {label, <<"asset">>, <<"above">>}, depicts_nothing}],
+            {ok, [#{<<"V0">> := First}], _} = Ask(ModelNs,
+                {place_model, <<"first">>, {transform, 0, 0, 0, 0, 90, 0},
+                 Subject, MeshParts, {0}}),
+            {ok, [#{<<"V0">> := Second}], _} = Ask(ModelNs,
+                {place_model, <<"second">>, {transform, 2000, 0, 0, 0, 270, 0},
+                 Subject, MeshParts, {0}}),
+            {ok, [#{<<"V0">> := MeshScene}], _} = Ask(ModelNs,
+                {model, First ++ Second, {0}}),
+            ?assertEqual([<<"first">>, <<"first/imported">>, <<"second">>,
+                          <<"second/imported">>],
+                         [element(2, Mark) || Mark <- MeshScene]),
+            ?assertEqual(Subject, element(8, hd(MeshScene))),
+            ?assertEqual(Mesh, element(4, lists:nth(2, MeshScene))),
+            ClassNsMesh = <<"lobby-test-classes">>,
+            ?assertMatch({ok, [#{<<"V0">> := [{recipe, ClassNsMesh, _, imported_artifact_playing}]}], _},
+                Ask(ClassNsMesh, {device_eidolons, [imported_artifact], playing, solid, {0}})),
+            {ok, [#{<<"V0">> := SampleParts}], _} = Ask(ClassNsMesh,
+                {eidolon, imported_artifact_playing, {device, artifact}, {0}}),
+            {ok, [#{<<"V0">> := SamplePlaced}], _} = Ask(ModelNs,
+                {place_model, <<"sample">>, At, Subject, SampleParts, {0}}),
+            ?assertMatch({ok, [#{<<"V0">> := [{mark, <<"sample">>, _, _, _, _, _, _},
+                                             {mark, <<"sample/model">>, <<"mesh">>, _, _,
+                                              asset_surfaces, _, _}]}], _},
+                Ask(ModelNs, {model, SamplePlaced, {0}})),
+            {ok, [#{<<"V0">> := MeshAt}], _} = Ask(ModelNs,
+                {align, Mesh, centre, {box, 1200, 800, 200}, front, 5, {0}}),
+            ?assertEqual({transform, -50, -700, 145, 0, 0, 0}, MeshAt),
+            OtherViewer = Ctx#{instance => <<"human_user(other_agent).">>},
+            ?assertMatch({fail, _}, read(OtherViewer,
+                {'::', MeshLobbyNs,
+                 {',', {current_ontology_identity, MeshLobbyNs, MeshLobbyAnchor},
+                  {lobby_view, playing, {0}}}})),
             MatNs = <<"lobby-test-material">>,
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, wood})),
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, material})),
@@ -261,8 +314,10 @@ modelling_and_material_libraries_test_() ->
             {ok, [#{<<"V0">> := Playing}], _} = Ask(LobbyNs, {lobby_view, playing, {0}}),
             {ok, [#{<<"V0">> := Edition}], _} = Ask(LobbyNs, {lobby_view, edition, {0}}),
             ?assertNotEqual(Playing, Edition),
-            Screen = fun(Marks) -> element(5, lists:keyfind(<<"console/screen">>, 2, Marks)) end,
-            ?assertNotEqual(Screen(Playing), Screen(Edition))
+            ?assertMatch({mark, <<"console/model">>, <<"mesh">>, _, _, _, _, _},
+                         lists:keyfind(<<"console/model">>, 2, Playing)),
+            ?assertMatch({mark, <<"console/screen">>, <<"plane">>, _, _, _, _, _},
+                         lists:keyfind(<<"console/screen">>, 2, Edition))
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -417,13 +472,13 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
                         {transform, 3000, 0, 0, 0, 0, 0}}],
             commit_editor_goal(Ctx, editor_scope(Ns, editor_conjunction([{assertz, T} || T <- Added]))),
             ?assertEqual([<<"PROLOG CONSOLE">>, <<"PROLOG CONSOLE">>], shared_editor_titles(Ctx, Ns)),
-            edit_shared_source(Ctx, ClassNs, {'/', console_layout, 9}, fun(Source) ->
+            edit_shared_source(Ctx, ClassNs, {'/', eidolon, 3}, fun(Source) ->
                 ?assertNotEqual(nomatch, binary:match(Source, <<"PROLOG CONSOLE">>)),
                 binary:replace(Source, <<"PROLOG CONSOLE">>, <<"SHARED REVISION">>, [global])
             end),
             ?assertEqual([<<"SHARED REVISION">>, <<"SHARED REVISION">>], shared_editor_titles(Ctx, Ns)),
             ?assertMatch({ok, [#{<<"V0">> := <<>>}], _},
-                read(Ctx, editor_scope(Ns, {'$quod_predicate_source', {'/', console_layout, 9}, {0}}))),
+                read(Ctx, editor_scope(Ns, {'$quod_predicate_source', {'/', eidolon, 3}, {0}}))),
             edit_shared_source(Ctx, ClassNs, {'/', isa, 2}, fun(Source) ->
                 <<Source/binary, "isa(smart_console, prolog_console).\n">>
             end),
@@ -458,9 +513,14 @@ shared_editor_titles(Ctx, Ns) ->
     ?assertEqual(Heights, maps:map(fun(At, _) -> quod_prolog:applied(At) end,
                                   maps:get(ontologies, Ctx))),
     [begin
+        MeshId = <<Prefix/binary, "/model">>,
+        Id = case lists:keyfind(MeshId, 2, Scene) of
+            false -> <<Prefix/binary, "/top-sign">>;
+            _ -> MeshId
+        end,
         {mark, Id, _, _, _, _, {label, Title, _}, _} = lists:keyfind(Id, 2, Scene),
         Title
-     end || Id <- [<<"console/top-sign">>, <<"console_b/top-sign">>]].
+     end || Prefix <- [<<"console">>, <<"console_b">>]].
 
 large_signed_source_edit_does_not_return_inspection_scratch_test_() ->
     {timeout, 90, fun() ->

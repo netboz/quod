@@ -14,30 +14,25 @@ measures interactions; ontology rules decide their domain meaning and
 durable consequences. Ordinary and immersive clients consume bounded
 projections of the same world state.
 
-## Mesh-backed Eidolons (planned)
+## Mesh-backed Eidolons
 
-The [mesh proposal](outdated/eidolon-mesh-support.md) extends the existing
-class-selected Eidolon recipe, modelling and `mark/7` rendering path; mesh
-rendering is not implemented. A mesh supplies geometry and appearance, not the
-depicted entity or its authority. Keep the entity reference, recipe reference,
-asset digest and view occurrence ID distinct. Start with a public, packaged,
-validated, self-contained static GLB: one selected scene with triangle meshes,
-transform hierarchies and approved PBR materials and embedded images. Animation,
-skins, morphs, cameras, lights, external resources and unapproved extensions
-need later declared capabilities. Imported submeshes inherit the occurrence's
-authorized subject for picking; file metadata cannot create one.
+The implemented [mesh contract](eidolon-mesh-support.md) extends the existing
+class-selected Eidolon recipe, modelling and `mark/7` rendering path. A mesh
+supplies geometry and appearance; the anchored Prolog subject, recipe, asset
+digest and view occurrence remain distinct. The default lobby's Prolog console
+uses a packaged `console.glb` in its playing view while keeping its existing
+subject and actions. The edition view retains its structural recipe.
 
-Convert FBX and other authoring formats into that defined runtime profile with
-a pinned toolchain. Record source and output digests, importer version and
-options, validation profile, diagnostics and licence provenance. Conversion
-stays outside consensus; accepted metadata and coupled appearance consequences
-use the existing atomic transaction path. Prolog policy owns asset budgets;
-runtime and browser checks enforce actual transfer, decode and rendering costs.
-Asset acceptance checks profile conformance, materials and browser Content
-Security Policy behavior. The browser verifies bytes and retains shared decoded
-resources while occurrences use them. An unchanged or transform-only refresh
-must not fetch or decode the same asset again. Private assets would require
-authorized byte delivery: a digest grants no read access.
+The first profile admits public, self-contained static GLB with triangle
+meshes, transform hierarchies, core PBR materials and embedded PNG/JPEG images.
+It rejects animation, skins, morphs, cameras, external resources and extensions
+before loading. Prolog policy owns resource allowances; the client verifies the
+digest and measured use, shares one decoded template, and gives each placement
+its own transform and picking identity. Imported names and metadata cannot
+create subjects or permissions. A pinned offline workflow converts FBX, glTF,
+OBJ, STL and polygon PLY and records conversion diagnostics and provenance.
+Private assets still require authorized byte delivery and publication; a
+digest grants no read access.
 
 A later shared world projection may compose scene transforms and index visual
 bounds. The physics authority owns transient body motion; visual bounds and

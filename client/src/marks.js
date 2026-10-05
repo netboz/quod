@@ -22,6 +22,7 @@ const GEOMETRY = Object.freeze({
   torus: ['diameter', 'thickness'],
   sky_sphere: ['diameter'],
   group: [],
+  mesh: [],
 })
 
 const PLACEMENTS = Object.freeze(['above', 'centre', 'below'])
@@ -52,19 +53,46 @@ function readMark(term) {
   const relative = transform.type === 'compound' && transform.functor === 'relative'
   const [parent, local] = relative ? args(transform, 'relative', 2) : [null, transform]
   const group = name === 'group'
+  const mesh = name === 'mesh'
   if (group && (material.type !== 'atom' || material.value !== 'no_surface')) {
     throw new Error('a group has no surface')
+  }
+  if (mesh && (material.type !== 'atom' || material.value !== 'asset_surfaces')) {
+    throw new Error('a mesh uses its embedded asset surfaces')
   }
   return Object.freeze({
     id: binaryValue(id, 'mark id'),
     kind: name,
-    size: readSize(size, fields, name),
+    size: mesh ? readMesh(size) : readSize(size, fields, name),
     parent: parent === null ? null : binaryValue(parent, 'parent id'),
     transform: readTransform(local),
-    material: group ? null : readMaterial(material),
+    material: group || mesh ? null : readMaterial(material),
     label: readLabel(label),
     depicts: readDepicts(depicts),
   })
+}
+
+function readMesh(term) {
+  const [asset, profile, scale, frame, resources] = args(term, 'mesh_asset', 5)
+  const [hash, mime] = args(asset, 'asset', 2)
+  const digest = binaryValue(hash, 'mesh digest')
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid mesh SHA-256')
+  oneOf(mime, ['model/gltf-binary'], 'mesh media type')
+  oneOf(profile, ['gltf2-static-v1'], 'mesh profile')
+  const [factor] = args(scale, 'scale', 1)
+  const permille = whole(factor, 'mesh scale')
+  if (permille <= 0) throw new Error('invalid mesh scale')
+  const [box, pivot, facing] = args(frame, 'frame', 3)
+  const bounds = args(box, 'aabb', 6).map(n => whole(n, 'asset bound'))
+  if (bounds.some((n, i) => i < 3 && n >= bounds[i + 3])) throw new Error('invalid asset bounds')
+  const origin = args(pivot, 'pivot', 3).map(n => whole(n, 'asset pivot'))
+  const [direction] = args(facing, 'front', 1)
+  const front = oneOf(direction, ['-z', '+z', '+x', '-x'], 'asset front')
+  const allowed = args(resources, 'resources', 7).map(n => whole(n, 'mesh allowance'))
+  if (allowed.some(n => n <= 0)) throw new Error('invalid mesh allowance')
+  return Object.freeze({ digest, profile: 'gltf2-static-v1', scale: permille / 1000,
+    bounds: Object.freeze(bounds), pivot: Object.freeze(origin), front,
+    allowed: Object.freeze(allowed) })
 }
 
 function readSize(term, fields, kind) {

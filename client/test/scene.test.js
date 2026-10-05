@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { readMarks } from '../src/marks.js'
 import { radialIndex } from '../src/world-scene.js'
 import { Ray } from '@babylonjs/core/Culling/ray.js'
@@ -207,5 +209,133 @@ test('textured scene reconciliation retains leases and retires stale completions
     painted = clearMarks(painted)
     assert.deepEqual(events, ['acquire:a', 'acquire:b', 'release:a', 'release:b'])
     assert.equal(node.isDisposed(), true)
+  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
+test('two mesh occurrences keep separate transforms and subjects with one template', async () => {
+  const engine = new NullEngine()
+  const scene = new Scene(engine)
+  scene.useRightHandedSystem = true
+  const digest = 'a'.repeat(64)
+  const asset = `mesh_asset(asset(<<"${digest}">>,<<"model/gltf-binary">>),` +
+    '<<"gltf2-static-v1">>,scale(1000),' +
+    'frame(aabb(-300,0,-400,1200,1400,300),pivot(200,0,-100),front(<<"+x">>)),' +
+    'resources(8000000,16000000,250000,250000,1024,256,16000000))'
+  const anchor = 'x'.repeat(32)
+  const parent = (id, x, yaw) => `mark(<<"${id}">>,<<"group">>,[],` +
+    `transform(${x},0,0,0,${yaw},0),no_surface,unlabelled,` +
+    `depicts(<<"world">>,<<"${anchor}">>,entity(<<"${id}">>)))`
+  const childMark = id => `mark(<<"${id}/asset">>,<<"mesh">>,${asset},` +
+    `relative(<<"${id}">>,transform(0,0,0,0,0,0)),asset_surfaces,` +
+    'unlabelled,depicts_nothing)'
+  const marks = readMarks(`[${parent('one', 0, 90)},${childMark('one')},` +
+    `${parent('two', 2000, 270)},${childMark('two')}]`)
+  let acquired = 0, instances = 0, releases = 0, retired = 0
+  const template = { instantiateModelsToScene() {
+    instances++
+    const root = new TransformNode('untrusted-root', scene)
+    root.metadata = { depicts: { ontology: 'forged' } }
+    const mesh = MeshBuilder.CreateBox('untrusted-mesh', { size: 0.2 }, scene)
+    mesh.parent = root
+    mesh.metadata = { depicts: { ontology: 'forged' } }
+    return { rootNodes: [root], dispose() { retired++; root.dispose(false, false) } }
+  } }
+  const resources = { acquireModel() {
+    acquired++
+    return { ready: Promise.resolve(template), release() { releases++ } }
+  } }
+  let painted = new Map()
+  try {
+    painted = paintMarks(scene, marks, painted, resources)
+    await Promise.resolve()
+    assert.deepEqual([acquired, instances], [2, 2])
+    const one = painted.get('one/asset'), two = painted.get('two/asset')
+    assert.notEqual(one.node, two.node)
+    for (const entry of [one, two]) {
+      const imported = entry.instance.rootNodes[0].getChildren()[0]
+      assert.equal(imported.metadata, null)
+      assert.equal(imported.parent.metadata, null)
+      let node = imported
+      while (node && !node.metadata?.depicts) node = node.parent
+      assert.equal(node, entry.node.parent)
+      // The authored pivot maps to the occurrence origin, even under a
+      // rotated parent and a front-axis correction.
+      const position = Vector3.TransformCoordinates(
+        new Vector3(0.2, 0, -0.1), entry.modelFrame.getWorldMatrix())
+      assert.ok(Vector3.Distance(position, entry.node.getAbsolutePosition()) < 1e-6)
+    }
+    const shifted = marks.map(mark => mark.id === 'two' ?
+      { ...mark, transform: { ...mark.transform, x: 3500 } } : mark)
+    painted = paintMarks(scene, shifted, painted, resources)
+    assert.deepEqual([acquired, instances], [2, 2])
+    assert.equal(painted.get('two/asset').node, two.node)
+    painted = clearMarks(painted)
+    assert.deepEqual([releases, retired], [2, 2])
+  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
+test('model replacement acquires first and ignores a retired late completion', async () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  const events = [], pending = new Map()
+  let instances = 0
+  const template = { instantiateModelsToScene() {
+    instances++
+    const root = new TransformNode('loaded', scene)
+    return { rootNodes: [root], dispose() { root.dispose(false, false) } }
+  } }
+  const resources = { acquireModel(size) {
+    events.push(`acquire:${size.digest}`)
+    let complete
+    const ready = new Promise(resolve => { complete = resolve })
+    pending.set(size.digest, complete)
+    return { ready, release() { events.push(`release:${size.digest}`) } }
+  } }
+  const mark = digest => ({ id: 'item', kind: 'mesh', parent: null,
+    size: { digest, profile: 'gltf2-static-v1', allowed: [100, 100, 1, 1, 1, 1, 1],
+      bounds: [-1, -1, -1, 1, 1, 1], pivot: [0, 0, 0], front: '-z', scale: 1 },
+    transform: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+    material: null, label: null, depicts: null })
+  let painted = new Map()
+  try {
+    painted = paintMarks(scene, [mark('a')], painted, resources)
+    painted = paintMarks(scene, [mark('b')], painted, resources)
+    assert.deepEqual(events, ['acquire:a', 'acquire:b', 'release:a'])
+    pending.get('a')(template)
+    await Promise.resolve()
+    assert.equal(instances, 0)
+    pending.get('b')(template)
+    await Promise.resolve()
+    assert.equal(instances, 1)
+    painted = clearMarks(painted)
+    assert.deepEqual(events, ['acquire:a', 'acquire:b', 'release:a', 'release:b'])
+    assert.equal(scene.transformNodes.length, 0)
+  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
+test('a changed declared mesh bound acquires a fresh verification lease', async () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  const acquired = [], released = []
+  const template = { instantiateModelsToScene() {
+    const root = new TransformNode('loaded', scene)
+    return { rootNodes: [root], dispose() { root.dispose(false, false) } }
+  } }
+  const resources = { acquireModel(size) {
+    acquired.push(size.bounds)
+    return { ready: Promise.resolve(template), release() { released.push(size.bounds) } }
+  } }
+  const mark = bounds => ({ id: 'item', kind: 'mesh', parent: null,
+    size: { digest: 'a'.repeat(64), profile: 'gltf2-static-v1',
+      allowed: [100, 100, 1, 1, 1, 1, 1], bounds,
+      pivot: [0, 0, 0], front: '-z', scale: 1 },
+    transform: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+    material: null, label: null, depicts: null })
+  let painted = new Map()
+  try {
+    painted = paintMarks(scene, [mark([-1, -1, -1, 1, 1, 1])], painted, resources)
+    await Promise.resolve()
+    painted = paintMarks(scene, [mark([-2, -1, -1, 1, 1, 1])], painted, resources)
+    await Promise.resolve()
+    assert.deepEqual(acquired, [[-1, -1, -1, 1, 1, 1], [-2, -1, -1, 1, 1, 1]])
+    assert.deepEqual(released, [[-1, -1, -1, 1, 1, 1]])
   } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
 })

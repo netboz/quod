@@ -61,6 +61,7 @@ lobby_options(Owner,
 isa(lobby, thing).
 isa(device, thing).
 isa(prolog_console, device).
+isa(imported_artifact, device).
 %% Class associations name ordinary, anchored Prolog recipe entry points.
 class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
     isa(Class, Class),
@@ -80,6 +81,7 @@ device_eidolons(Classes, Mode, Style, Recipes) :-
 
 device_eidolon(prolog_console, playing, solid, console_playing).
 device_eidolon(prolog_console, edition, solid, console_edition).
+device_eidolon(imported_artifact, playing, solid, imported_artifact_playing).
 
 lobby_modes(Modes) :-
     findall(Mode, device_eidolon(_, Mode, solid, _), Offered), sort(Offered, Modes).
@@ -135,11 +137,31 @@ material_surface(Material, Surface) :-
     RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
                eidolon(Recipe, material(Material), Surface)).
 
-%% Operational and exploded structure views share physical dimensions, while
-%% their placement and labels express different uses of the same device.
-eidolon(console_playing, device(_), Parts) :- console_parts(playing, Parts).
-eidolon(console_edition, device(_), Parts) :- console_parts(edition, Parts).
-console_parts(Mode,
+%% Playing depicts the packaged console model; edition exposes its structure.
+eidolon(console_playing, device(_),
+    [part(<<"model">>,
+          mesh_asset(asset(<<"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04">>,
+                           <<"model/gltf-binary">>),
+                     <<"gltf2-static-v1">>, scale(1000),
+                     frame(aabb(-921, -929, -898, 881, 904, 894),
+                           pivot(0, -929, 0), front(<<"-z">>)),
+                     resources(5357484, 1227580, 31379, 50000, 1, 1, 4194304)),
+          transform(0, 0, 0, 0, 0, 0), asset_surfaces,
+          label(<<"PROLOG CONSOLE">>, <<"above">>), depicts_nothing)]).
+eidolon(console_edition, device(_), Parts) :- console_parts(Parts).
+%% The packaged public GLB is a sample recipe; the enclosing placed instance
+%% remains the only source of its anchored subject and interaction rights.
+eidolon(imported_artifact_playing, device(_),
+    [part(<<"model">>,
+          mesh_asset(asset(<<"ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064">>,
+                           <<"model/gltf-binary">>),
+                     <<"gltf2-static-v1">>, scale(1000),
+                     frame(aabb(-300, 0, -400, 1200, 1400, 300),
+                           pivot(200, 0, -100), front(<<"+x">>)),
+                     resources(1452, 96, 6, 2, 3, 2, 4)),
+          transform(0, 0, 0, 0, 0, 0), asset_surfaces,
+          label(<<"Imported model">>, <<"above">>), depicts_nothing)]).
+console_parts(
     [part(<<"plinth">>, box(2000, 140, 1000), transform(0, 70, 120, 0, 0, 0),
           Shell, BaseLabel, depicts_nothing),
      part(<<"deck">>, box(1840, 70, 840), transform(0, 175, 80, 0, 0, 0),
@@ -185,14 +207,12 @@ console_parts(Mode,
     Inset = surface(<<"#10191E">>,250,300,40,[]),
     Screen = surface(<<"#071419">>,0,350,120,[]),
     Glow = surface(<<"#F4B942">>,0,350,700,[]),
-    console_layout(Mode, Gap, Title, BaseLabel, SupportLabel, BodyLabel,
+    console_layout(Gap, Title, BaseLabel, SupportLabel, BodyLabel,
                    ScreenLabel, ShelfLabel, ControlLabel),
     modelling_vocabulary(Ns, Anchor),
     Ns::(current_ontology_identity(Ns, Anchor),
          align(plane(1400, 680), centre, box(1540, 810, 90), front, Gap, ScreenAt)).
-console_layout(playing, 5, <<"PROLOG CONSOLE">>, unlabelled, unlabelled,
-               unlabelled, unlabelled, unlabelled, unlabelled).
-console_layout(edition, 350, <<"CONSOLE PARTS">>,
+console_layout(350, <<"CONSOLE PARTS">>,
                label(<<"WEIGHTED BASE">>, <<"above">>),
                label(<<"CENTRAL SUPPORT">>, <<"above">>),
                label(<<"DISPLAY HOUSING">>, <<"above">>),

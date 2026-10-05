@@ -13,14 +13,32 @@ lobby_projection_recovery_test_() ->
             Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
                                     {lobby_view, playing, {0}}}},
             {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Goal),
-            ?assertEqual(4, length(Scene)),
+            ?assertEqual(6, length(Scene)),
+            ?assertMatch({mark, <<"floor">>, <<"mesh">>,
+                          {mesh_asset, {asset,
+                              <<"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f">>, _}, _,
+                           {scale, 1000}, {frame, {aabb, -9000, -450, -9000, 9000, 1000, 9000},
+                            {pivot, 0, 0, 0}, _}, _},
+                          {transform, 0, 0, 0, 0, 0, 0}, asset_surfaces, unlabelled, depicts_nothing},
+                         lists:keyfind(<<"floor">>, 2, Scene)),
+            ?assertMatch({mark, <<"roof">>, <<"group">>, [], _, _, _,
+                          {depicts, Ns, Anchor, personal_roof}}, lists:keyfind(<<"roof">>, 2, Scene)),
+            RoofModel = lists:keyfind(<<"roof/model">>, 2, Scene),
+            ?assertMatch({mark, <<"roof/model">>, <<"mesh">>,
+                          {mesh_asset, {asset,
+                              <<"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121">>, _}, _,
+                           {scale, 1000}, _, _},
+                          {relative, <<"roof">>, _}, asset_surfaces, unlabelled, depicts_nothing}, RoofModel),
+            {ok, [#{<<"V0">> := Edition}], _} = read(Ctx,
+                {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, {lobby_view, edition, {0}}}}),
+            ?assertEqual(RoofModel, lists:keyfind(<<"roof/model">>, 2, Edition)),
             ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>,
                           [{f, <<"diameter">>, 80000}],
                           {transform, 0, 0, 0, 0, 75, 0}, _, unlabelled,
                           {depicts, Ns, Anchor, personal_sky}},
                          lists:keyfind(<<"sky">>, 2, Scene)),
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
-               {transform, 0, 0, 0, 0, 0, 0}, no_surface, unlabelled,
+               {transform, 0, 0, 3850, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
             ?assertMatch({mark, <<"console/model">>, <<"mesh">>,
                           {mesh_asset, {asset,
@@ -177,7 +195,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
             receive
                 {first_scene, Caller, Result} ->
                     ?assertMatch({ok, [#{<<"V0">> :=
-                        [_,_,_,_]}], _}, Result)
+                        [_,_,_,_,_,_]}], _}, Result)
             after 5000 -> error(first_scene_timeout)
             end
         after
@@ -661,7 +679,10 @@ start(Dir, ExtraClassFacts) ->
        {attribute, personal_sky, tint, <<"#FFFFFF">>},
        {instance_of, prolog_console, console},
        {lobby_device, personal_lobby, console},
-       {device_placement, console, <<"console">>, {transform, 0, 0, 0, 0, 0, 0}},
+       {device_placement, console, <<"console">>, {transform, 0, 0, 3850, 0, 0, 0}},
+       {instance_of, lobby_roof, personal_roof},
+       {lobby_device, personal_lobby, personal_roof},
+       {device_placement, personal_roof, <<"roof">>, {transform, 0, 0, 0, 0, 0, 0}},
        {modelling_vocabulary, <<"lobby-test-modelling">>, quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},
        {environment_vocabulary, <<"lobby-test-environment">>, quod_simplex:genesis_hash(<<"lobby-test-environment">>)},
        {gui_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)},

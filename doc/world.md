@@ -14,6 +14,115 @@ measures interactions; ontology rules decide their domain meaning and
 durable consequences. Ordinary and immersive clients consume bounded
 projections of the same world state.
 
+## Application startup
+
+The normal application entry is the TLS client's root URL. Startup first
+establishes the user's identity; it does not present an anonymous lobby.
+The standalone read-only Explorer is a separate surface. This presentation
+contract does not change server authorization or make hiding a control a
+permission check.
+
+### User-visible lifecycle
+
+```mermaid
+flowchart TD
+    Open[Open application] --> Restore[Read the local active key]
+    Restore -->|No usable active key| Entry[Identity entry screen]
+    Restore -->|Active key found| Authenticate[Authenticate with the cluster]
+    Entry -->|Create account| Create[Create a key and register]
+    Entry -->|Unlock or import a key| Authenticate
+    Create --> Recover[Resolve account operations and continue setup]
+    Authenticate --> Recover
+    Recover -->|Authenticated identity and selected agent| Lobby[Open the lobby shell]
+    Recover -->|No account or unresolved setup without an agent| Setup[Registration or pending setup]
+    Setup -->|Explicit registration or outcome check| Recover
+    Authenticate -->|Connection or authentication failure| Error[Entry error with retry]
+    Error -->|Retry with the retained key| Restore
+    Lobby --> Projection[Read the authorized lobby projection]
+    Projection -->|Successful scene read| Ready[Display the personal lobby]
+    Projection -->|Missing, pending or unavailable| Status[Show the actual setup or view status]
+    Ready -->|Sign out| Entry
+```
+
+These are presentation states derived by the existing session and view owners,
+not another persistent state machine. Their display rules are:
+
+| State | Visible interface | Next action |
+| --- | --- | --- |
+| Starting or restoring | Identity card with progress; no registration buttons, lobby canvas, world controls or Explorer link | Complete the local key check, authentication and account recovery |
+| No active identity | Identity card with **Create account**, encrypted-key import, and unlock when a saved encrypted key exists | Explicitly create a key or recover an existing one |
+| Authenticated key without a selected agent | Account registration with that same key | Create the account; disable creation while operations remain unresolved |
+| Pending setup without a selected agent | Pending status and **Check account setup** | Resolve the retained operation; do not submit it again |
+| Entry failure | Actual error and **Try again** | Retry restoration/authentication without replacing the retained key |
+| Authenticated identity and selected agent, entry work finished | Lobby shell, followed by the signed scene projection or its actual error/setup status | Use the lobby when available; otherwise use the existing recovery controls |
+| Signed out | Identity entry screen; lobby unmounted | Explicitly create, unlock or import a key |
+
+The shell's exact current mounting condition is
+`!entering && identity && agent`. It is not proof that a personal lobby has
+been provisioned, that the selected agent is authorized, or that its scene is
+available. Those facts come from signed Prolog queries. A session error after
+this condition is met is displayed in the world status instead of being
+silently treated as a successful lobby load. **Finish account setup** is an
+explicit action for an account whose lobby setup can safely continue; it is
+disabled while an operation remains unresolved.
+
+### Identity and account ownership
+
+The browser owns the local signing key and its operation journal. The key is
+not itself a user account. Authentication binds the session to the cluster's
+network identity; the remembered account is selected for that network and
+contains an exact ontology namespace, genesis anchor and agent instance.
+Local references do not confer authority. Prolog owns signup policy, account
+and lobby creation, hosting and authorization under the existing
+[atomic write contract](multiwrite-architecture.md).
+
+For a first registration, the client creates a key, authenticates it, submits
+the ordinary signed signup action, remembers the committed account, and
+continues with the ordinary signed lobby-provisioning action. If a key is
+already authenticated but lacks an account, registration reuses that key.
+There is no automatic replacement identity or second account on failure.
+
+For an established account, loading the page restores the active key from
+IndexedDB, authenticates it, resolves retained operations and selects the
+account before mounting the lobby. A normal reload of a completed account
+does not submit signup or lobby creation. Resolution of an interrupted signup
+may continue its authorized lobby-creation handoff after the exact parent
+commit is established. The existing operation journal retains that handoff;
+timeouts, missing replies and reconnects never authorize resubmitting an
+unknown original or inventing a rejection.
+
+Automatic return requires the active key to remain usable in the same browser
+profile and origin. A saved encrypted key is a separate recovery mechanism
+and requires its passphrase. Signout clears the active key; it does not delete
+the account, its lobby, or a saved encrypted key. Startup does not poll for
+readiness or bypass identity restoration with a temporary preview identity.
+
+The current key loader returns no active key both when none exists and when
+IndexedDB cannot supply a usable key. The identity entry screen therefore
+means that no usable active key was recovered, not proof that no identity was
+ever stored. Corrupt saved agent references can also fail session initialization;
+the entry card does not yet provide a dedicated repair flow for that case.
+
+### Implementation and verification boundaries
+
+[Session](../ui/src/Session.tsx) owns entry progress, identity recovery and the
+entry card; [App](../ui/src/App.tsx) mounts the lazy world behind that card.
+[Key handling](../client/src/key-provider.js),
+[account setup](../client/src/accounts.js) and the
+[operation journal](../client/src/operation-journal.js) retain their existing
+responsibilities. [World](../ui/src/World.tsx) owns the subsequent projection,
+setup status and console. Saving/exporting a key and other ordinary session
+work must not unmount the lobby merely because `busy` becomes true.
+
+Browser acceptance must cover an empty profile, successful registration,
+delayed restoration without a registration or lobby flash, automatic return
+with the same account, failed-connection retry without key replacement,
+signout, and console use after entry. Count actual signed execute requests:
+an ordinary reload or connection retry of a completed account must create no
+new domain writes. Unknown-operation recovery must additionally preserve the
+original operation identity and distinguish a committed setup handoff from a
+resubmission. Retain execution logs and results separately from this contract.
+
 ## Mesh-backed Eidolons
 
 The implemented [mesh contract](eidolon-mesh-support.md) extends the existing
@@ -44,9 +153,10 @@ profile is described in [the retained native adapter](physics-native.md); it
 covers optional cuboid simulation, activation/recovery and the obstructed-door consequence through the runtime. It supersedes the authority, recovery and observation proposals
 in the archived [client/world direction](outdated/client-world-direction.md) and
 [consequence direction](outdated/world-consequence-direction.md). Scene
-projection, synchronization, general physics interactions, automatic lobby
-provisioning, headset interaction and world editing still require implementation
-and validation.
+streaming for physical bodies, general physics interactions, headset interaction
+and world editing still require implementation and validation. Personal lobby
+provisioning and static scene projection are available through the startup path
+above; they do not establish the physical door interaction's acceptance.
 The [runtime contract](runtime-and-agents.md) and
 [atomic write contract](multiwrite-architecture.md) remain the substrate.
 

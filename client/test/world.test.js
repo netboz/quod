@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { anchoredGoal, readReference, readGuiView, proofForm, codeForm, singleBinding } from '../src/world.js'
+import { anchoredGoal, readReference, readGuiView, proofForm, codeForm, singleBinding, GoalFailure } from '../src/world.js'
 import { atom, compound, variable } from '../src/prolog-term.js'
 
 const FORM = 'form(<<"Console">>,[editor(goal,<<"Goal">>),bindings(results,<<"Bindings">>),button(run,<<"Run">>),button(next,<<"Next">>),button(accept,<<"Accept">>),button(stop,<<"Stop">>),button(resolve,<<"Check saved outcome">>)])'
@@ -46,4 +46,18 @@ test('a partial or ambiguous projection is not a successful view', () => {
     { result: 'ok', bindings: [{ View: FORM }, { View: FORM }] }, { result: 'ok', bindings: [{}] }]) {
     assert.throws(() => singleBinding(reply, 'View'))
   }
+})
+
+test('projection failures preserve explicit access denials without inventing them for other failures', () => {
+  const reasons = ['<<"quod:modelling">>::ontology_eidolons(unbound)', 'not_allowed(<<"quod:modelling">>)']
+  assert.throws(() => singleBinding({ result: 'fail', reasons }, 'Choices'), error =>
+    error instanceof GoalFailure && error.accessDenied && error.reasons === reasons &&
+    error.message === 'This account is not allowed to make this query.')
+  for (const reasons of [undefined, [], ['predicate_failed(ontology_eidolons)'],
+    ['error(not_allowed(<<"quod:modelling">>))'], ['<<"not_allowed(target)">>'], ['malformed(']]) {
+    assert.throws(() => singleBinding({ result: 'fail', reasons }, 'Choices'), error =>
+      error instanceof GoalFailure && !error.accessDenied && error.message === 'The query returned no answer.')
+  }
+  assert.throws(() => singleBinding({ result: 'pending' }, 'Choices'), error => !(error instanceof GoalFailure))
+  assert.throws(() => singleBinding({ result: 'ok', bindings: [] }, 'Choices'), error => !(error instanceof GoalFailure))
 })

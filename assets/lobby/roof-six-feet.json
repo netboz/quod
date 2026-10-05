@@ -1,0 +1,86 @@
+{
+  "schema": "quod-procedural-roof-v1",
+  "units": "metres",
+  "up": "Y",
+  "shape": {
+    "feet": 6,
+    "radius": 5.5,
+    "oculusRadius": 1.4,
+    "height": 5.2,
+    "archHeight": 3.6,
+    "thickness": 0.08,
+    "angularSegments": 288,
+    "radialSegments": 32,
+    "seat": {
+      "radius": 8.75,
+      "height": 1
+    }
+  },
+  "output": {
+    "file": "roof-six-feet.glb",
+    "digest": "e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121",
+    "profile": "gltf2-static-v1",
+    "costs": [
+      942164,
+      940032,
+      20160,
+      38016,
+      1,
+      2,
+      0
+    ],
+    "boundsMm": [
+      -8875,
+      1000,
+      -8852,
+      8875,
+      5250,
+      8852
+    ],
+    "pivotMm": [
+      0,
+      0,
+      0
+    ],
+    "front": "-z"
+  },
+  "checks": {
+    "connectedComponents": 1,
+    "closedManifold": true,
+    "minimumTriangleAreaM2": 0.0015845667692532908,
+    "volumeM3": 23.518493163836215,
+    "maximumSymmetryErrorM": 8.079450271171779e-7,
+    "footTipsM": [
+      [
+        8.75,
+        1,
+        0
+      ],
+      [
+        4.375,
+        1,
+        7.577722072601318
+      ],
+      [
+        -4.375,
+        1,
+        7.577722072601318
+      ],
+      [
+        -8.75,
+        1,
+        1.1030363735841774e-15
+      ],
+      [
+        -4.375,
+        1,
+        -7.577722072601318
+      ],
+      [
+        4.375,
+        1,
+        -7.577722072601318
+      ]
+    ]
+  }
+}

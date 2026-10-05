@@ -44,7 +44,10 @@ lobby_options(Owner,
             attribute(personal_sky, tint, <<"#FFFFFF">>),
             instance_of(prolog_console, console),
             lobby_device(personal_lobby, console),
-            device_placement(console, <<"console">>, transform(0, 0, 0, 0, 0, 0)),
+            device_placement(console, <<"console">>, transform(0, 0, 3850, 0, 0, 0)),
+            instance_of(lobby_roof, personal_roof),
+            lobby_device(personal_lobby, personal_roof),
+            device_placement(personal_roof, <<"roof">>, transform(0, 0, 0, 0, 0, 0)),
             lobby_vocabulary(Namespace, Anchor),
             modelling_vocabulary(ModellingNamespace, ModellingAnchor),
             environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
@@ -62,6 +65,7 @@ isa(lobby, thing).
 isa(device, thing).
 isa(prolog_console, device).
 isa(imported_artifact, device).
+isa(lobby_roof, thing).
 %% Class associations name ordinary, anchored Prolog recipe entry points.
 class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
     isa(Class, Class),
@@ -82,6 +86,8 @@ device_eidolons(Classes, Mode, Style, Recipes) :-
 device_eidolon(prolog_console, playing, solid, console_playing).
 device_eidolon(prolog_console, edition, solid, console_edition).
 device_eidolon(imported_artifact, playing, solid, imported_artifact_playing).
+device_eidolon(lobby_roof, playing, solid, lobby_roof).
+device_eidolon(lobby_roof, edition, solid, lobby_roof).
 
 lobby_modes(Modes) :-
     findall(Mode, device_eidolon(_, Mode, solid, _), Offered), sort(Offered, Modes).
@@ -100,9 +106,14 @@ class_device_menu(prolog_console,
 %% Every placed device is selected by class; repeated instances share recipes.
 lobby_recipe(Mode, lobby(Ns, Anchor, Sky, Devices), [SkyPart, Floor | Parts]) :-
     environment_parts(Mode, Sky, Ns, Anchor, [SkyPart]),
-    material_surface(marble, Stone),
-    Floor = part(<<"floor">>, cylinder(10000, 100), transform(0, -50, 0, 0, 0, 0),
-                 Stone, unlabelled, depicts_nothing),
+    Floor = part(<<"floor">>,
+                 mesh_asset(asset(<<"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f">>,
+                                  <<"model/gltf-binary">>),
+                            <<"gltf2-static-v1">>, scale(1000),
+                            frame(aabb(-9000, -450, -9000, 9000, 1000, 9000),
+                                  pivot(0, 0, 0), front(<<"-z">>)),
+                            resources(1660388, 1658880, 46080, 46080, 1, 2, 1)),
+                 transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing),
     device_parts(Devices, Mode, Ns, Anchor, Parts).
 
 environment_parts(Mode, Sky, Ns, Anchor, Parts) :-
@@ -137,6 +148,16 @@ material_surface(Material, Surface) :-
     RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
                eidolon(Recipe, material(Material), Surface)).
 
+%% Roof and ground are separate appearance assets, not physical body identities.
+eidolon(lobby_roof, device(_),
+    [part(<<"model">>,
+          mesh_asset(asset(<<"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121">>,
+                           <<"model/gltf-binary">>),
+                     <<"gltf2-static-v1">>, scale(1000),
+                     frame(aabb(-8875, 1000, -8852, 8875, 5250, 8852),
+                           pivot(0, 0, 0), front(<<"-z">>)),
+                     resources(942164, 940032, 20160, 38016, 1, 2, 1)),
+          transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing)]).
 %% Playing depicts the packaged console model; edition exposes its structure.
 eidolon(console_playing, device(_),
     [part(<<"model">>,

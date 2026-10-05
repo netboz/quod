@@ -1,0 +1,51 @@
+{
+  "schema": "quod-procedural-ground-v3",
+  "units": "metres",
+  "up": "Y",
+  "shape": {
+    "radius": 9,
+    "openingRadius": 2.2,
+    "innerBorderHeight": 0.2,
+    "outerBorderHeight": 1,
+    "borderCrownRadius": 8.75,
+    "underside": -0.45,
+    "segments": 288,
+    "curveSegments": 8
+  },
+  "output": {
+    "file": "ground.glb",
+    "digest": "6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f",
+    "profile": "gltf2-static-v1",
+    "costs": [
+      1660388,
+      1658880,
+      46080,
+      46080,
+      1,
+      2,
+      0
+    ],
+    "boundsMm": [
+      -9000,
+      -450,
+      -9000,
+      9000,
+      1000,
+      9000
+    ],
+    "pivotMm": [
+      0,
+      0,
+      0
+    ],
+    "front": "-z"
+  },
+  "checks": {
+    "closedManifold": true,
+    "minimumTriangleAreaM2": 0.000745470839144194,
+    "volumeM3": 132.61539016286525,
+    "roofContactErrorM": 3.147045036404946e-17,
+    "walkwayY": 0,
+    "openingDiameterM": 4.4
+  }
+}

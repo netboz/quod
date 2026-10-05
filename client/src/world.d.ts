@@ -10,6 +10,11 @@ export function readGuiView(binding: string): GuiView
 export function formLabels(view: GuiView, expected: Record<string, string>): Record<string, string>
 export function proofForm(view: GuiView): ProofView
 export function codeForm(view: GuiView): CodeView
+export class GoalFailure extends Error {
+  constructor(reasons?: string[])
+  accessDenied: boolean
+  reasons: string[]
+}
 export function singleBinding(reply: Record<string, unknown>, name: string): string
 export function readAgentReference(binding: string): { namespace: string; anchor: string; instanceText: string }
 export function readReference(binding: string): { namespace: string; anchor: Uint8Array }

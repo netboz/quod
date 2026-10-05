@@ -143,7 +143,23 @@ export async function readEidolonWorkspace(identity, agent, subject, choice, opt
   return { target: reference, tools: readReference(renderTerm(tools)), view: readGuiView(renderTerm(form)) }
 }
 
+export class GoalFailure extends Error {
+  constructor(reasons = []) {
+    const accessDenied = Array.isArray(reasons) && reasons.some(reason => {
+      try {
+        const term = readTerm(reason)
+        return term.type === 'compound' && term.functor === 'not_allowed' && term.args.length === 1
+      } catch { return false }
+    })
+    super(accessDenied ? 'This account is not allowed to make this query.' : 'The query returned no answer.')
+    this.name = 'GoalFailure'
+    this.accessDenied = accessDenied
+    this.reasons = reasons
+  }
+}
+
 export function singleBinding(reply, name) {
+  if (reply.result === 'fail') throw new GoalFailure(reply.reasons)
   const committed = reply.result === 'operation_outcome' && reply.status === 'committed' && reply.terminal === true
   if ((reply.result !== 'ok' && !committed) || reply.bindings?.length !== 1 ||
       typeof reply.bindings[0][name] !== 'string') {

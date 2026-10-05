@@ -173,14 +173,16 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       }
       showWorkspace()
     },
-    captureNavigation() { navigation.capture() },
     releaseNavigation() { navigation.release() },
     async immersive() {
       navigation.release()
       if (!xr) {
         await import('@babylonjs/core/XR/webXRDefaultExperience.js')
-        const floor = painted.get('floor')?.node
-        xr = await scene.createDefaultXRExperienceAsync({ floorMeshes: floor ? [floor] : [] })
+        const floor = painted.get('floor')
+        await floor?.model?.ready
+        const floorMeshes = floor ? [floor.node, ...floor.node.getChildMeshes()]
+          .filter(node => node.getTotalVertices?.() > 0) : []
+        xr = await scene.createDefaultXRExperienceAsync({ floorMeshes })
         xr.baseExperience.onStateChangedObservable.add(state => {
           immersive = state === WebXRState.IN_XR
           closeMenu()

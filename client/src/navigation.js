@@ -75,7 +75,6 @@ export function createPointerLock(canvas, {
 
   return {
     active,
-    capture,
     release,
     dispose() {
       if (disposed) return

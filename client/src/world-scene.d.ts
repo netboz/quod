@@ -16,7 +16,6 @@ export type WorldScene = {
   paint(marks: unknown[]): void
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
   setWorkspace(model: WorkspacePanelModel | null): void
-  captureNavigation(): void
   releaseNavigation(): void
   immersive(): Promise<void>
   dispose(): void

@@ -6,10 +6,12 @@ export type SessionState = {
   identity: SignedIdentity | null
   agent: AgentReference | null
   busy: boolean
+  entering: boolean
   saved: boolean
   unresolved: number
   error: string | null
   create: () => Promise<void>
+  restore: () => Promise<void>
   finishSetup: () => Promise<void>
   unlock: () => Promise<void>
   save: () => Promise<void>

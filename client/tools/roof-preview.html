@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quod · lobby roof and ground</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px system-ui, sans-serif; color: #173543; background: #d7dfe3; }
+    canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+    header, footer { position: fixed; left: 24px; right: 24px; padding: 16px 20px; background: #f8fafbed; border: 1px solid #ffffff; border-radius: 14px; }
+    header { top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+    h1 { font-size: 20px; margin: 0 16px 0 0; font-weight: 550; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; }
+    button, a { font: inherit; color: inherit; border: 1px solid #b7c6ce; border-radius: 7px; padding: 7px 12px; background: #fff; text-decoration: none; cursor: pointer; }
+    button:hover, a:hover { background: #edf4f7; }
+    a { margin-left: auto; }
+    footer { bottom: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 13px; }
+    #status { color: #425e6d; }
+  </style>
+</head>
+<body>
+  <canvas id="roof" aria-label="Interactive lobby roof and ground models"></canvas>
+  <header>
+    <h1>Roof & ground</h1>
+    <nav aria-label="Camera views">
+      <button data-view="orbit">Overview</button>
+      <button data-view="front">Front</button>
+      <button data-view="top">Top</button>
+      <button data-view="inside">Underneath</button>
+      <button id="wireframe" aria-pressed="false">Wireframe</button>
+      <button data-asset="roof" aria-pressed="true">Roof</button>
+      <button data-asset="ground" aria-pressed="true">Ground</button>
+    </nav>
+    <a id="download" download="roof-six-feet.glb">Roof GLB</a>
+    <a id="download-ground" download="ground.glb">Ground GLB</a>
+  </header>
+  <footer><span id="status">Loading verified mesh…</span><span>Drag to orbit · scroll to zoom · right-drag to pan</span></footer>
+  <script type="module" src="./roof-preview.js"></script>
+</body>
+</html>

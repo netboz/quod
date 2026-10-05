@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   clearActiveKeyProvider,
@@ -33,6 +33,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const [agents, setAgents] = useState(agentReferences)
   const [agent, setAgent] = useState(activeAgentReference)
   const [busy, setBusy] = useState(false)
+  const [entering, setEntering] = useState(true)
   const [saved, setSaved] = useState(false)
   const [unresolved, setUnresolved] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +46,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (providerPromise: ReturnType<typeof createKeyProvider>, enroll = false) => {
+    setEntering(true)
     setBusy(true)
     setError(null)
     let next: SignedIdentity | null = null
@@ -83,6 +85,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
         }
       }
       setBusy(false)
+      setEntering(false)
     }
   }
 
@@ -101,7 +104,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const create = () => login(createKeyProvider(), true)
+  const create = () => login(identity ? Promise.resolve(identity.provider) : createKeyProvider(), true)
 
   const signOut = async () => {
     if (identity && !saved && !window.confirm(
@@ -125,13 +128,23 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   // Resume the browser's identity before anything is clicked. Reaching the
   // Explorer from the client must not ask anyone to log in a second time.
   const resumed = useRef(false)
+  const restore = async () => {
+    setEntering(true)
+    setError(null)
+    try {
+      const provider = identity?.provider ?? await loadActiveKeyProvider()
+      if (provider) await login(Promise.resolve(provider))
+    } catch (reason) {
+      setError(message(reason))
+    } finally {
+      setEntering(false)
+    }
+  }
+  const restoreOnMount = useEffectEvent(restore)
   useEffect(() => {
     if (resumed.current) return
     resumed.current = true
-    void (async () => {
-      const provider = await loadActiveKeyProvider()
-      if (provider) await login(Promise.resolve(provider))
-    })()
+    void restoreOnMount()
   }, [])
 
   const unlock = async () => {
@@ -221,11 +234,37 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ identity, agent, agents, busy, saved, unresolved, error,
-        create, finishSetup, unlock, save, exportKey, importKey, signOut, addAgent, selectAgent }}>
+      value={{ identity, agent, agents, busy, entering, saved, unresolved, error,
+        create, restore, finishSetup, unlock, save, exportKey, importKey, signOut, addAgent, selectAgent }}>
       {children}
     </SessionContext.Provider>
   )
+}
+
+export function SessionEntry({ children }: { children: ReactNode }) {
+  const session = useSignedSession()
+  if (!session.entering && session.identity && session.agent) return children
+  return <main className="session-entry">
+    <section className="session-card" aria-label="Your identity">
+      <div className="world-brand">quod <span>∴</span></div>
+      <h1>{session.entering ? 'Opening your space…' : 'Welcome to Quod'}</h1>
+      {session.entering ? <p role="status">Preparing your identity and lobby…</p>
+        : session.error ? <>
+          <p role="alert">{session.error}</p>
+          <button onClick={() => void session.restore()}>Try again</button>
+        </> : session.identity ? <>
+          <p>Create your account with this key to enter your personal lobby.</p>
+          <button disabled={session.busy || session.unresolved > 0} onClick={() => void session.create()}>Create account</button>
+          {session.unresolved > 0 && <>
+            <p role="status">Account setup is awaiting confirmation.</p>
+            <button disabled={session.busy} onClick={() => void session.restore()}>Check account setup</button>
+          </>}
+        </> : <>
+          <p>Create your key and account to enter your personal lobby.</p>
+          <SessionControls />
+        </>}
+    </section>
+  </main>
 }
 
 export function SessionControls() {

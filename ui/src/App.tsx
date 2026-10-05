@@ -12,13 +12,13 @@ import { addHistory, mergeBlock, replaceHistory, startWs, useExplorerStore } fro
 import type { LiveControl, LiveLedgerRow, LiveTx } from './store'
 import { TxDetail } from './TxDetail'
 import { TxTable } from './TxTable'
-import { SessionControls } from './Session'
+import { SessionControls, SessionEntry } from './Session'
 
 const World = lazy(() => import('./World'))
 
 export default function App() {
   return document.getElementById('root')?.dataset.surface === 'world'
-    ? <Suspense fallback={<p>Opening your world…</p>}><World /></Suspense>
+    ? <SessionEntry><Suspense fallback={<p role="status">Opening your lobby…</p>}><World /></Suspense></SessionEntry>
     : <Explorer />
 }
 

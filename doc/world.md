@@ -41,7 +41,7 @@ The current client lives under `client/` and the shared browser shell under
 
 This is the contract for the shared simulation. The implemented first server
 profile is described in [the retained native adapter](physics-native.md); it
-covers optional cuboid simulation and activation/recovery through the runtime. It supersedes the authority, recovery and observation proposals
+covers optional cuboid simulation, activation/recovery and the obstructed-door consequence through the runtime. It supersedes the authority, recovery and observation proposals
 in the archived [client/world direction](outdated/client-world-direction.md) and
 [consequence direction](outdated/world-consequence-direction.md). Scene
 projection, synchronization, general physics interactions, automatic lobby
@@ -347,9 +347,10 @@ and latest payload binding; sequences at or below it cannot execute again.
 Gaps identify discarded/unaccepted samples, not permission to fill them later.
 Operation evidence supplies the original result; a cursor alone must not report
 a duplicate as successfully applied. A reused identity with different data is
-rejected. Old run cursors can retire once their fence is closed because that
-fence itself rejects all later submissions; committed history retains audit
-evidence. This avoids an ever-growing in-memory contact receipt inventory.
+rejected. An unsent old-run cursor can retire once its fence is closed.
+Saved signed-request custody still requires exact outcome resolution: closing
+the fence does not establish whether an earlier submission committed. Committed
+history retains audit evidence; no in-memory contact receipt history is needed.
 
 Queue admission, reaction matching, a timeout or a missing result is never a
 commit acknowledgement. After submission, retain the original operation
@@ -419,8 +420,11 @@ production signed action, transaction and resource-owner seams.
    identical delivery cannot repeat damage. Lose a submission reply: resolve
    its original operation; no timeout starts another damage operation.
 5. Collapse the runtime or fail the host: retire the old run and restore the
-   committed blocked/stopped state and checkpoint. A still-pending R waits for
-   a fresh level before resuming; it never assumes an old clear sample survived.
+   committed blocked/stopped state and checkpoint. A still-pending R first
+   resolves any saved signed request, then waits for a fresh level before
+   resuming. A missing terminal outcome, including a request whose proof failed
+   before ordering, requires explicit authorized cancellation; it is not a
+   rejection. Recovery never assumes an old clear sample survived.
    Ledger replay emits no old impacts, sounds or close reactions. Unsubmitted
    impacts may be lost, while committed consequences survive lost live notices.
 
@@ -472,14 +476,16 @@ the runtime. Its own activation uses durable original signed-request custody
 and outcome resolution before installation. Same-host restart commits a fresh
 generation; no successor adopts a dead incarnation's generation. The
 [adapter profile](physics-native.md) describes failure, backpressure and recovery
-boundaries, including unsupported checkpoint/joint declarations.
+boundaries, including the supported vertical hinge/stopped-angle checkpoint and rejection of other joint/checkpoint declarations.
 
-The remaining consequence bridge must select activity intents, restore supported
-checkpoints and acceptance cursors, and hand authenticated immutable observations
-to the exact authority actor. The hosted actor's generic queue is not durable
-request custody. Activation custody now exists, but does not implement durable
-impact-operation custody or occurrence acceptance. Existing host-observation
-authentication remains a precedent for that future sample/expiry binding.
+The door bridge now selects close intents, restores supported stopped-angle
+checkpoints and hands authenticated immutable samples to the exact authority
+actor through the existing event matcher. The actor commits original signed
+request custody before submission. A blocked/closed consequence and checkpoint
+commit atomically; pending outcomes are resolved exactly, and replacement
+requires a server-verified terminal rejection. The hosted actor's queue alone
+is not durable custody. Impact-operation custody and occurrence acceptance
+remain outside this implemented profile.
 
 Frames stay in the retained simulation and are pulled with their current fence;
 they do not flood the runtime queue each tick. General agent queries and durable

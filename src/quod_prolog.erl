@@ -57,7 +57,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          execute/2, execute_async/5, execute_signed/3,
          open_cursor/5, cancel_cursor/3,
          submit_role/4, outcome/1,
-         local_outcome/2, outcome_snapshot/3, dtx_group_state/2,
+         local_outcome/2, outcome_snapshot/3, operation_dependency/4, dtx_group_state/2,
          validate_read_plan/3,
          effect_resolution/4,
          project_pending_votes/2,
@@ -709,6 +709,17 @@ outcome_snapshot(Ns, Ref, TimeoutMs)
 outcome_snapshot(_Ns, _Ref, _TimeoutMs) ->
     {error, bad_outcome_ref}.
 
+%% The proof passes its pinned height; the index owner freezes positive
+%% terminal evidence under the same publication floor as committed state.
+operation_dependency(Ns, Key, Height, TimeoutMs) when TimeoutMs > 0 ->
+    try gen_server:call(quod_reg:via({quod_prolog, Ns}),
+                        {operation_dependency, Key, Height}, TimeoutMs)
+    catch
+        exit:{timeout, _} -> {unavailable, timeout};
+        exit:_ -> {unavailable, ontology_unavailable}
+    end;
+operation_dependency(_, _, _, _) -> {unavailable, timeout}.
+
 -doc "Read exact bounded local DTX history, applied row, and publication floor.".
 -spec dtx_group_state(binary(), <<_:256>>) ->
           {ok, map()} | {error, term()}.
@@ -1184,6 +1195,11 @@ handle_call({outcome, Ref}, _From, S = #s{outcomes = Outcomes0}) ->
              {error, outcome_index_unavailable},
              S#s{outcomes = Outcomes1}}
     end;
+handle_call({operation_dependency, _, _}, _From, S = #s{ready = false}) ->
+    {reply, {unavailable, ontology_rebuilding}, S};
+handle_call({operation_dependency, Key, Height}, _From, S = #s{outcomes = I0}) ->
+    {Reply, I1} = quod_outcome:operation_dependency(I0, Key, Height),
+    {reply, Reply, S#s{outcomes = I1}};
 handle_call({outcome_snapshot, _Ref}, _From,
             S = #s{ready = false, ns = Ns}) ->
     {reply, {error, {ontology_rebuilding, Ns}}, S};
@@ -1233,6 +1249,7 @@ handle_call({validate_read_plan, Plan}, _From,
                             {Ns, Anchor}, Applied, Est, Outcomes, Signer),
                 case quod_commit_validation:read_only_plan(Plan, Context) of
                     ok -> {ok, Applied};
+                    {outcome_error, Reason} -> {error, {outcome_index_unavailable, Reason}};
                     {error, Reason} -> {error, Reason}
                 end;
             undefined ->
@@ -4162,9 +4179,9 @@ proof_request_operation(_Request) ->
 applied_operation(
   {_Key, Digest, OperationRef}, S = #s{outcomes = Outcomes0}) ->
     case quod_outcome:lookup_ref(Outcomes0, OperationRef) of
-        {{ok, #{status := claimed, request_digest := Digest}}, Outcomes1} ->
+        {{ok, #{type := operation, request_digest := Digest}}, Outcomes1} ->
             {{alias, OperationRef}, S#s{outcomes = Outcomes1}};
-        {{ok, #{status := claimed}}, Outcomes1} ->
+        {{ok, #{type := operation}}, Outcomes1} ->
             {conflict, S#s{outcomes = Outcomes1}};
         {not_found, Outcomes1} ->
             {new, S#s{outcomes = Outcomes1}};

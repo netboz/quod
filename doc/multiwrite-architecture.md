@@ -60,3 +60,35 @@ ledger custody, and `quod_foreign_log` owns foreign evidence. The local
 controlling committed transition authorizes its release. Related domain
 changes and receiver consequences belong in one atomic transaction when
 they are one transition, as in the [internal FIPA Request](runtime-and-agents.md).
+
+## Exact terminal outcome reads
+
+`committed_operation_outcome(Bytes, Signature, Status)` reads the current
+scope's exact signed operation through its retained outcome index. It is an
+ordinary-proof query, unavailable to in-owner membership verdicts and reaction
+matching. Positive terminal evidence is captured monotonically before result
+unification; failed alternatives, negation and rollback retain the dependency.
+Missing, pending, unpublished and infrastructure-unavailable results raise an
+error. If caught, their live-bridge marker still prevents sealing a nonempty
+diff; the existing read-only/effect-only boundary is unchanged.
+
+The canonical read set carries atom-free operation keys `{1, AgentBytes, Id}`
+and tokens `{Digest, LocalReference, ClaimHeight, StatusCode, TerminalHeight,
+PublicationHeight}`. Reference tags distinguish local transactions and atomic
+groups; status codes distinguish committed, rejected and aborted. No rejection
+reason or mutable receipt vector is copied. Independent application vectors
+are outside this terminal query's supported result types. Every evidence height
+must fit the sealed base and published parent. A group's publication height is
+Complete's slot, even when its public result reports an earlier Resolve slot.
+
+The same validators check exact evidence during ordinary apply, atomic prepare,
+remote application and read-only certification. Mismatch is the existing OCC
+conflict; storage failure is an outcome error, never a certified refusal.
+Membership diffs cannot carry these dependencies, and agent identity proofs
+continue to fail closed without an outcome context. Immutable terminal reads
+need no mutable predicate reservation, but remain signed, counted and validated.
+
+Existing predicate-only canonical bytes are unchanged. Older binaries reject
+this new read kind; enabling its ontology rules requires compatible validators
+and the applicable founded predicate-module deployment procedure. This change
+does not authorize a deployment, history rewrite or data migration.

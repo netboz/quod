@@ -2,11 +2,12 @@
 
 The authority and lifecycle contract is [world.md](world.md). This first adapter
 supports fixed and dynamic cuboids, authored baseline poses, uniform gravity,
-and coherent pose/contact snapshots. It does not implement joints, checkpoints,
-controls, client transport, general agent queries or durable contact consequences.
-A committed checkpoint or joint declaration makes this profile unavailable;
-it is never silently replaced by an authored baseline. The door slice extends
-this profile through the same resource owner.
+and coherent pose/contact snapshots. Vertical revolute cuboid doors add an
+ordinary close action, mechanical obstruction braking and signed blocked/closed
+consequences with an atomic stopped-angle checkpoint. Client motion transport,
+hot controls, general agent queries and impact occurrences remain outside this
+profile. Unsupported joint/checkpoint declarations fail installation visibly;
+there is no silent baseline fallback.
 
 ## Installation and policy
 
@@ -46,6 +47,83 @@ requirements. The ordinary hosted-agent admission policy still owns actor
 population and request capacity. Body/contact limits are not a hard byte or
 wall-clock allocation guarantee: broad/narrow-phase pairs can grow quadratically
 with the admitted body count. Policy authors must budget aggregate worlds too.
+
+## Door actions and effective definitions
+
+`physics_add_door(World, DoorId, FrameId, Source, Position, ExpectedStructure)`
+requires `can_edit_physics(World, Principal)`. `Source` is either
+`local(Name, Version)` or `class_ref(Namespace, GenesisAnchor, Name, Version)`.
+The latter resolves `physics_door_class/3` through the ordinary authorized
+cross-ontology proof. The action materializes the resulting versioned leaf,
+frame and joint in one world transaction. The retained, local-only selector
+never resolves a shared class. Later class edits do not silently change an
+installed instance.
+
+A class contains `door(FrameBox, LeafBox, Density, BaselineAngleMrad,
+motor(Stiffness, Damping, MaximumTorque, ClosedToleranceMrad))`. The supported
+joint rotates a dynamic cuboid around a fixed frame's vertical axis. Its
+collider is the leaf cuboid; frame/leaf collision is disabled. Each leaf has
+one hinge, bounded by the existing body allowance, without a separate fixed
+joint-count ceiling.
+
+`physics_close_door(World, Door, ExpectedSequence, RequestId)` requires
+`can_close_physics_door/3` and a 32-byte request id. It advances an activity
+sequence and commits `closing(close(Sequence, RequestId))`. The retained owner
+starts the selected motor. Native mechanics brake that hinge on non-frame
+contact or arrival within its closed-angle tolerance; other bodies continue.
+Only Prolog interprets the sample as `blocked(OtherBody)` or `closed`.
+
+`physics_move_body/5` edits an unconnected obstacle with expected body and
+structure revisions. `physics_move_door/5` edits the whole supported joint
+group, advances its revisions, invalidates its checkpoint and cancels an
+active close. Both require `can_edit_physics/2`. `physics_cancel_door/3`,
+authorized by `can_cancel_physics_door/3`, explicitly ends a pending close
+while retaining its original request for exact outcome resolution.
+
+## Observation and consequence
+
+The runtime authenticates the current simulator PID and incarnation before
+matching `react_on(observed(Sample), Goal)` through the existing Prolog event
+matcher. Private `physics_observation/1` metadata is available only there; an
+ordinary event with the same term conveys no simulator authority. A private
+physics request selects a custodied consequence; a generic observed callback
+without signed-request preparation cannot consume it. The selected
+actor signs a goal containing the entire frozen sample: world/activity,
+authority assignment, generation/token, structure and participating body
+revisions, completed-step tick, quantized angle, one bounded contact partner
+(or clear), and its original validity interval.
+
+The actor's existing custody lane first stores those exact signed bytes and
+signature with `physics_store_door_request/5`, then submits
+`physics_finish_door/2`. Grant both entry actions explicitly to the physics
+actor. Prolog checks authority, sample bounds, revisions, current activity and
+exact signed-request binding. One existing transaction replaces closing with
+the finished result, records the compatible stopped-angle checkpoint, and
+emits `physics_door_finished/4`. No durable proof reads live native physics,
+and sealing has no physics exemption.
+
+The checkpoint is an insertion-only restoration input, separate from the
+joint's structural identity. Selecting its own new checkpoint does not reset
+a retained body. A fresh simulator restores the compatible checkpoint or
+baseline, after committing its new run, without replaying the earlier reaction.
+A finished or cancelled activity does not restart its motor.
+
+Required samples use the runtime's existing bounded owned-event cursor and
+actor queue. Refusal retains the unsent sample; actual queue-capacity release
+wakes it. Expired unsent evidence requires another completed native step and
+a new validity interval, never an extension of old signed bytes. A rejected
+request can be replaced only after the ordinary server proof checks the exact
+original operation's immutable, consensus-applied terminal outcome at or
+before the proof's pinned height. The simulator cannot certify rejection.
+Outcome notifications are scoped to that request and retained across a
+concurrent resolution read.
+
+Pending, unknown and failed resolution leave the hinge held with a visible
+observation status. Recovery resolves the original saved request without
+resubmitting it. A saved-but-never-submitted request may remain pending;
+authorized cancellation is its explicit exit. A certainly unsent policy
+refusal is visible and waits for a relevant selection change. There is no
+readiness polling or retry timer, and absence never means an unobstructed door.
 
 ## Owner and recovery
 

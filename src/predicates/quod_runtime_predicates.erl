@@ -17,8 +17,9 @@ no native preparation or submission occurs while eligibility is being proved.
 
 -export([quod_predicate_module/0, load/1, diff_to_events/1, run_reaction/6,
          me/3, current_ontology_identity/3, scope_identity/1,
+         committed_operation_outcome/3,
          current_request_expiry/3, limit_reaction_expiry/3, prepare_agent_custody/3,
-         recovery_observation/3,
+         recovery_observation/3, prepare_signed_request/3,
          reaction_match_5/3, reaction_result_2/3, reaction_metadata/1, request_resource/4]).
 
 quod_predicate_module() -> true.
@@ -27,7 +28,9 @@ load(Est) ->
     Actor = quod_predicates:register(Est, {me, 1}, query, proof_bound, ?MODULE, me),
     Identity = quod_predicates:register(Actor, {current_ontology_identity, 2}, query,
                                         proof_bound, ?MODULE, current_ontology_identity),
-    Expiry = quod_predicates:register(Identity, {current_request_expiry, 1}, query,
+    Outcome = quod_predicates:register(Identity, {committed_operation_outcome, 3}, query,
+                                       committed_snapshot, ?MODULE, committed_operation_outcome),
+    Expiry = quod_predicates:register(Outcome, {current_request_expiry, 1}, query,
                                       proof_bound, ?MODULE, current_request_expiry),
     Limit = quod_predicates:register(Expiry, {limit_reaction_expiry, 1}, reaction,
                                      ?MODULE, limit_reaction_expiry),
@@ -35,7 +38,9 @@ load(Est) ->
                                            ?MODULE, prepare_agent_custody),
     Observation = quod_predicates:register(Preparation, {recovery_observation, 1}, reaction,
                                              ?MODULE, recovery_observation),
-    Match = quod_predicates:register(Observation, {'$quod_reaction_match', 5}, reaction,
+    Signed = quod_predicates:register(Observation, {prepare_signed_request, 3}, reaction,
+                                      ?MODULE, prepare_signed_request),
+    Match = quod_predicates:register(Signed, {'$quod_reaction_match', 5}, reaction,
                                      ?MODULE, reaction_match_5),
     quod_predicates:register(Match, {'$quod_reaction_result', 2}, reaction,
                              ?MODULE, reaction_result_2).
@@ -66,6 +71,46 @@ scope_identity(St) ->
         {Ns, [{Ns, <<_:256>> = Hash} | _]} when is_binary(Ns), byte_size(Ns) > 0 ->
             {ok, {Ns, Hash}};
         _ -> error
+    end.
+
+%% Positive terminal evidence is tracked before unification, so alternatives,
+%% negation and cuts cannot erase a read that influenced the selected answer.
+committed_operation_outcome({committed_operation_outcome, B0, S0, Status}, Next,
+                            St = #est{bs = Bs}) ->
+    Context = quod_predicates:context(St),
+    case quod_predicates:ctx_kind(Context) of
+        proof -> ok;
+        Other -> throw({erlog_error,
+                       {context_violation, committed_operation_outcome, query, Other}})
+    end,
+    [Bytes, Signature] = erlog_int:dderef([B0, S0], Bs),
+    case {scope_identity(St), quod_client_goal:verify(Bytes, Signature)} of
+        {{ok, {Ns, Anchor}},
+         {ok, #{operation_ref := {operation, Ns, Anchor, Agent, Id},
+                request_digest := Digest}}} ->
+            Remaining = case quod_scope_session:remaining_ms() of
+                            {ok, R} -> R;
+                            error -> quod_proof_context:remaining_ms()
+                        end,
+            Key = {1, Agent, Id},
+            case quod_prolog:operation_dependency(
+                   Ns, Key, quod_predicates:ctx_height(Context), Remaining) of
+                {ok, {StoredDigest, _, _, Code, _, _} = Token} ->
+                    ok = quod_erlog_db_local_prove:absorb_read_set(St, #{Key => Token}),
+                    case StoredDigest =:= Digest of
+                        true ->
+                            Value = case Code of 0 -> committed; 1 -> rejected; 2 -> aborted end,
+                            erlog_int:unify_prove_body(Status, Value, Next, St);
+                        false -> erlog_int:fail(St)
+                    end;
+                Unavailable ->
+                    %% A caught error can return an answer, but cannot authorize
+                    %% a diff. Reuse the monotonic live-bridge sealing veto.
+                    ok = quod_erlog_db_local_prove:record_live_bridge(
+                           St, {committed_operation_outcome, 3}),
+                    throw({erlog_error, {operation_outcome_unavailable, Unavailable}})
+            end;
+        _ -> erlog_int:fail(St)
     end.
 
 -doc "Bind verified request metadata; no live clock observation enters the proof.".
@@ -122,6 +167,16 @@ prepare_agent_custody({prepare_agent_custody, Target0, Epoch0, Result0}, Next,
         _ -> erlog_int:fail(St)
     end.
 
+%% The template's two holes remain ordinary proof variables, so failed
+%% candidates and backtracking cannot leak a custody preparation.
+prepare_signed_request({prepare_signed_request, Bytes, Signature, Template}, Next, St = #est{bs = Bs}) ->
+    [B,S,T] = erlog_int:dderef([Bytes,Signature,Template], Bs),
+    case {reaction_metadata(St), quod_agent:valid_signed_preparation(B,S,T)} of
+        {{ok, #{physics := _, preparation_variable := Variable}}, true} ->
+            erlog_int:unify_prove_body(Variable, {signed_store,B,S,T}, Next, St);
+        _ -> erlog_int:fail(St)
+    end.
+
 -doc "Convert canonical applied operations to ordered reaction events.".
 -spec diff_to_events([op()]) -> [term()].
 diff_to_events(AppliedOps) when is_list(AppliedOps) ->
@@ -151,7 +206,7 @@ run_reaction(Ns, Height, Binding = #{request_timeout_ms := Timeout},
     {Actor, Anchor, Executor, Mode} = request_owner(Ns, Binding),
     ConfiguredExpiry = quod_time:now_ms() + Timeout,
     UpperExpiry = min(ConfiguredExpiry, maps:get(request_expiry, Binding, ConfiguredExpiry)),
-    Metadata = (maps:with([recovery], Binding))#{
+    Metadata = (maps:with([recovery,physics], Binding))#{
                  ceiling => UpperExpiry, mode => Mode, source => {Ns, Anchor}},
     Ctx = quod_predicates:with_chain(
             quod_predicates:with_executor(
@@ -163,17 +218,21 @@ run_reaction(Ns, Height, Binding = #{request_timeout_ms := Timeout},
            #{read_set => true, read_only => true}) of
         {ok, #{'$ReactionRequest' := {request, BoundGoal, Expiry, Preparation}}, [], _ReadSet}
           when is_integer(Expiry), Expiry > 0, Expiry =< UpperExpiry ->
-            Work = case Preparation of
-                       none -> BoundGoal;
-                       {custody, Ref, Epoch, Variable} ->
-                           {custody, Ref, Epoch, Variable, BoundGoal}
-                   end,
-            Budget = case maps:get(recovery, Metadata, none) of
+            {RequestMode,Work} = case Preparation of
+                none -> {Mode,BoundGoal};
+                {custody, Ref, Epoch, Variable} -> {Mode,{custody,Ref,Epoch,Variable,BoundGoal}};
+                {signed_store,B,S,T} -> {{custodied,B,S,T},BoundGoal}
+            end,
+            {OwnedMode,BoundMetadata} = case maps:find(physics, Metadata) of
+                {ok, Physics} -> {{owned_physics,Physics,RequestMode},Physics};
+                error -> {RequestMode,maps:get(recovery,Metadata,none)}
+            end,
+            Budget = case BoundMetadata of
                 #{deadline := Deadline} -> {expires, Expiry, Deadline};
                 none -> {expires, Expiry}
             end,
             case quod_runtime:agent_request(
-                   Ns, Height, Executor, Mode, Work, Budget) of
+                   Ns, Height, Executor, OwnedMode, Work, Budget) of
                 ok -> executed;
                 {error, Reason} -> {failed, {reaction_submission, Reason}}
             end;
@@ -204,7 +263,7 @@ reaction_match_5({'$quod_reaction_match', Pattern, Event, Guard, Goal, Result},
 
 reaction_result_2({'$quod_reaction_result', Goal, Result}, Next, St = #est{bs = Bs}) ->
     {ok, #{ceiling := Upper, expiry_variable := ExpiryVar,
-           preparation_variable := PreparationVar}} = reaction_metadata(St),
+           preparation_variable := PreparationVar} = Metadata} = reaction_metadata(St),
     Expiry = metadata_value(erlog_int:deref(ExpiryVar, Bs), Upper),
     Preparation = metadata_value(erlog_int:deref(PreparationVar, Bs), none),
     case Preparation of
@@ -215,6 +274,14 @@ reaction_result_2({'$quod_reaction_result', Goal, Result}, Next, St = #est{bs = 
                           Result, {request, Goal, Expiry, Preparation}, Next, St);
                 false -> erlog_int:fail(St)
             end;
+        {signed_store,B,S,T} ->
+            case quod_agent:valid_signed_preparation(B,S,T) andalso quod_wire_term:is_ground(erlog_int:dderef(Goal,Bs)) of
+                true -> erlog_int:unify_prove_body(Result, {request,Goal,Expiry,Preparation}, Next, St);
+                false -> erlog_int:fail(St)
+            end;
+        %% A private physics request asks for a custodied consequence. An
+        %% unrelated generic observed(_) clause cannot consume that request.
+        none when is_map_key(physics,Metadata) -> erlog_int:fail(St);
         none -> erlog_int:unify_prove_body(Result, {request, Goal, Expiry, Preparation}, Next, St)
     end.
 

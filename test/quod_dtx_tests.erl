@@ -603,6 +603,33 @@ legacy_or_unclassified_transcript_is_rejected_test() ->
 %% the live-bridge gate
 %% ------------------------------------------------------------------
 
+outcome_bridge_refuses_in_owner_contexts_before_reading_test() ->
+    Est = quod_ct:committed_kb([]),
+    [?assertThrow({erlog_error,{context_violation,committed_operation_outcome,query,Kind}},
+        quod_runtime_predicates:committed_operation_outcome(
+            {committed_operation_outcome,invalid,invalid,{'S'}},[],
+            quod_predicates:set_context(Est,Ctx))) ||
+        {Kind,Ctx} <- [{verdict,quod_predicates:verdict_context(?NS,1)},
+                      {reaction,quod_predicates:reaction_context(?NS,1)}]].
+
+outcome_reads_survive_extraction_and_sealing_test() ->
+    {ok, #{blob := Agent}} = quod_agent_ref:from_text(?NS,<<1:256>>,<<"reader.">>,3),
+    Key = {1,Agent,<<2:256>>},
+    Token = {<<3:256>>,{0,<<4:256>>},1,1,1,1},
+    Session = session([]),
+    try
+        {_Id,{solution,_}} = first(Session, true),
+        ok = quod_proof_session:absorb_read_set(Session,#{Key => Token}),
+        ?assertEqual(#{Key => Token},quod_proof_session:read_set(Session)),
+        {ok, Plan} = quod_dtx:seal_session(Session, bind()),
+        ?assertEqual(1,maps:get(read_functors,quod_dtx:core(Plan))),
+        ?assertEqual(#{Key => Token},quod_ct:plan_material(read_check,Plan)),
+        ?assertEqual(#{reads => [],writes => [],custody => []},
+                     maps:get(conflict_descriptor,quod_dtx:core(Plan))),
+        ?assertEqual({error,invalid_read_dependency},
+                     quod_dtx:seal_session(Session,(bind())#{base_height => 0}))
+    after quod_proof_session:stop(Session) end.
+
 material_diff_with_live_bridge_fails_seal_test() ->
     Session = session([]),
     try

@@ -42,6 +42,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          check_operation/3, claim_operation/4,
          check_completion/4, complete_operation/5, unresolved_operations/1,
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
+         operation_dependency/3, validate_dependency/4,
          project_pending_votes/2, dtx_state/1,
          lookup_group/2, group_history/2,
          apply_dtx/2, advance_applied/2, applied_floor/1, changed_requests/1]).
@@ -68,6 +69,61 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          }).
 
 -opaque index() :: #index{}.
+
+%% An exact positive terminal read uses the existing retained index. Neither
+%% local pending admission nor rows surviving a reopen are snapshot evidence.
+%% The token is atom-free and contains only immutable claim/result fields.
+-spec operation_dependency(index(), {1, binary(), <<_:256>>}, non_neg_integer()) ->
+    {{ok, tuple()} | {unavailable, term()} | {outcome_error, term()}, index()}.
+operation_dependency(Index = #index{ns = Ns, anchor = Anchor},
+                     {1, Agent, Id} = Key, Height) ->
+    case lookup_ref(Index, {operation, Ns, Anchor, Agent, Id}) of
+        {{ok, #{request_digest := Digest, outcome_ref := Ref, first_slot := Claim}}, I1} ->
+            case terminal_dependency(I1, Ref) of
+                {{ok, Encoded, Status, Terminal, Published}, I2} ->
+                    Token = {Digest, Encoded, Claim, Status, Terminal, Published},
+                    case Published =< applied_floor(I2) andalso
+                         quod_read_set:at_height(#{Key => Token}, Height) of
+                        true -> {{ok, Token}, I2};
+                        false -> {{unavailable, outside_snapshot}, I2}
+                    end;
+                Other -> Other
+            end;
+        {{error, Reason}, I1} -> {{outcome_error, Reason}, I1};
+        {_, I1} -> {{unavailable, operation_not_published}, I1}
+    end.
+
+terminal_dependency(Index = #index{ns = Ns, anchor = Anchor},
+                    {transaction, Ns, Anchor, Id} = Ref) ->
+    case lookup_ref(Index, Ref) of
+        {{ok, #{status := {committed, H}}}, I1} -> {{ok, {0, Id}, 0, H, H}, I1};
+        {{ok, #{status := {rejected, _, H}}}, I1} -> {{ok, {0, Id}, 1, H, H}, I1};
+        {{error, Reason}, I1} -> {{outcome_error, Reason}, I1};
+        {_, I1} -> {{unavailable, nonterminal}, I1}
+    end;
+terminal_dependency(Index = #index{ns = Ns, anchor = Anchor},
+                    {group, Ns, Anchor, A, B, Id} = Ref) ->
+    case lookup_group(Index, Id) of
+        {{ok, #{ref := Ref, applied := #{verdict := Verdict, slot := H},
+                terminal := #{complete_ref := Complete}}}, I1} ->
+            Status = case Verdict of commit -> 0; abort -> 2 end,
+            {{ok, {1, A, B, Id}, Status, H, ref_slot(Complete)}, I1};
+        {{error, Reason}, I1} -> {{outcome_error, Reason}, I1};
+        {_, I1} -> {{unavailable, nonterminal}, I1}
+    end;
+terminal_dependency(Index, _) -> {{unavailable, unsupported_outcome}, Index}.
+
+%% Unavailable evidence is a deterministic OCC mismatch here. Storage failure
+%% is not: validators must abstain and apply must stop without rejecting a write.
+-spec validate_dependency(index(), {1, binary(), <<_:256>>}, tuple(),
+                          non_neg_integer()) ->
+    ok | {conflict, term()} | {outcome_error, term()}.
+validate_dependency(Index, Key, Expected, Parent) ->
+    case operation_dependency(Index, Key, Parent) of
+        {{ok, Expected}, _} -> ok;
+        {{outcome_error, _} = Error, _} -> Error;
+        _ -> {conflict, Key}
+    end.
 
 -doc "Request identities changed by the pending flush; reads no durable rows.".
 -spec changed_requests(index()) -> [term()].

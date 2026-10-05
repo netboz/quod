@@ -268,6 +268,7 @@ apply_application_transaction(Change, Diff, Index, Prior, Projection, Est) ->
 apply_remote_application(Change, Index, Prior, Projection) ->
     case quod_commit_validation:remote_application(
            Change, validation_context(Projection)) of
+        {outcome_error, Reason} -> {error, {outcome_index_unavailable, Reason}};
         {apply, _EventContext, #{diff := Diff}} ->
             {ok, Est1, AppliedOps} = quod_diff:apply_ops_report(
                                        Projection#projection.est, Diff),
@@ -288,7 +289,9 @@ apply_ordinary_transaction(
   Projection = #projection{
                   est = #est{db = #db{mod = quod_erlog_db_mvcc,
                                       ref = Ref}} = Est}) ->
-    case quod_diff:validate(ReadCheck, Ref) of
+    case quod_diff:validate(ReadCheck, Ref,
+                            {Projection#projection.outcomes, Projection#projection.applied}) of
+        {outcome_error, Reason} -> {error, {outcome_index_unavailable, Reason}};
         ok ->
             case quod_diff:apply_ops_preserving_policy_report(Est, Diff) of
                 {ok, Est1, AppliedOps} ->

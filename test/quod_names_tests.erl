@@ -111,25 +111,30 @@ recognition_test() ->
         fails({name, <<"Ugbash">>, <<"orc">>, <<"personal">>, <<"female">>}, St)
     end).
 
-round_trip_test() ->
-    with_names(fun(St) ->
-        lists:foreach(
-          fun({Culture, Gender}) ->
-                  Count = value({'N'}, {count, Culture, <<"personal">>, Gender, {'N'}}, St),
-                  lists:foreach(
-                    fun(I) ->
-                            Name = value({'N'}, {name_nth, Culture, <<"personal">>,
-                                                 Gender, I, {'N'}}, St),
-                            ?assert(is_binary(Name)),
-                            ?assert(lists:member({Culture, <<"personal">>, Gender},
-                                                 selections(Name, St)),
-                                    {Culture, Gender, I, Name})
-                    end, [0, Count div 2, Count - 1])
-          end,
-          [{<<"orc">>, <<"female">>}, {<<"primitive">>, <<"male">>}, {<<"primitive">>, <<"female">>},
-           {<<"gnome">>, <<"female">>}, {<<"elf">>, <<"male">>}, {<<"faerie">>, <<"female">>}, {<<"siren">>, <<"female">>},
-           {<<"dwarf">>, <<"male">>}])
-    end).
+round_trip_test_() ->
+    %% These are independent name queries, like the ordinal cases above. Share
+    %% only committed source; retain the normal per-query EUnit deadline.
+    {setup, fun() -> names_state(<<>>) end, fun delete_names/1,
+     fun(Committed) ->
+         lists:append([begin
+             Count = with_names_view(Committed, fun(St) ->
+                 value({'N'}, {count, Culture, <<"personal">>, Gender, {'N'}}, St)
+             end),
+             [{lists:flatten(io_lib:format("~s/~s/~p", [Culture, Gender, I])), fun() ->
+                 with_names_view(Committed, fun(St) ->
+                     Name = value({'N'}, {name_nth, Culture, <<"personal">>,
+                                                  Gender, I, {'N'}}, St),
+                     ?assert(is_binary(Name)),
+                     ?assert(lists:member({Culture, <<"personal">>, Gender},
+                                          selections(Name, St)),
+                             {Culture, Gender, I, Name})
+                 end)
+             end} || I <- [0, Count div 2, Count - 1]]
+         end || {Culture, Gender} <-
+           [{<<"orc">>, <<"female">>}, {<<"primitive">>, <<"male">>}, {<<"primitive">>, <<"female">>},
+            {<<"gnome">>, <<"female">>}, {<<"elf">>, <<"male">>}, {<<"faerie">>, <<"female">>}, {<<"siren">>, <<"female">>},
+            {<<"dwarf">>, <<"male">>}]])
+     end}.
 
 recipe_shapes_test() ->
     with_names(fun(St) ->
@@ -220,7 +225,7 @@ draw_test() ->
 %% draw with no salt at all: the proof itself is the entropy. One proof gets
 %% one name and keeps giving that name; another proof draws again. No clock is
 %% consulted, so every node asking the same proof reaches the same answer.
-saltless_draw_test() ->
+saltless_draw_test_() ->
     Run = fun(ProofId) ->
                   with_committed_names(<<>>, fun(Committed, St) ->
                       with_origin(ProofId, fun() ->
@@ -256,13 +261,35 @@ saltless_draw_test() ->
                       end)
                   end)
           end,
-    First = Run(crypto:strong_rand_bytes(32)),
-    Others = [Run(crypto:strong_rand_bytes(32)) || _ <- lists:seq(1, 6)],
-    ?assert(lists:any(fun(Drawn) -> Drawn =/= First end, Others)),
-    %% and outside a proof it draws nothing
-    with_names(fun(St) ->
-        fails({draw, {'N'}}, St),
-        fails({draw, <<"halfling">>, <<"personal">>, <<"male">>, {'N'}}, St)
+    ProofIds = [crypto:strong_rand_bytes(32) || _ <- lists:seq(1, 7)],
+    %% Each proof's full contract has the normal deadline. The separate
+    %% cross-proof check uses the same IDs and retains the variability assertion.
+    [{integer_to_list(I), fun() ->
+         Pair = Run(ProofId),
+         ?assertEqual(Pair, saltless_pair(ProofId))
+     end} || {I, ProofId} <- lists:enumerate(ProofIds)] ++
+    [{"different proofs can draw different names", fun() ->
+         [First | Others] = [saltless_pair(P) || P <- ProofIds],
+         ?assert(lists:any(fun(Drawn) -> Drawn =/= First end, Others))
+     end},
+     {"outside a proof", fun() ->
+         with_names(fun(St) ->
+             fails({draw, {'N'}}, St),
+             fails({draw, <<"halfling">>, <<"personal">>, <<"male">>, {'N'}}, St)
+         end)
+     end}].
+
+saltless_pair(ProofId) ->
+    with_committed_names(<<>>, fun(Committed, _St) ->
+        with_origin(ProofId, fun() ->
+            [Any, Halfling] = [begin
+                {ok, Bindings} = quod_ct:session_prove(
+                    Committed, {origin, test}, proof_ctx(), Goal),
+                maps:get('N', Bindings)
+            end || Goal <- [{draw, {'N'}},
+                            {draw, <<"halfling">>, <<"personal">>, <<"male">>, {'N'}}]],
+            {Any, Halfling}
+        end)
     end).
 
 %% The class view is a projection of the pools, not a second copy of them: a

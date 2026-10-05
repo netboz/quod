@@ -10,7 +10,7 @@ There is no automatic resubmission; domain recovery belongs to ontology rules.
 """.
 -behaviour(gen_server).
 
--export([start/3, valid_preparation_goal/2]).
+-export([start/3, valid_preparation_goal/2, valid_signed_preparation/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(s, {owner, owner_monitor, slot, binding, released = 0,
@@ -75,7 +75,7 @@ pump(S = #s{worker = none, pending = Pending, released = Released}) ->
     end;
 pump(S) -> S.
 
-unsent_expiry({custodied, _}) -> {error, {activation_not_submitted, deadline_exceeded}};
+unsent_expiry({custodied, _, _, _}) -> {error, {request_not_submitted, deadline_exceeded}};
 unsent_expiry(_) -> {error, deadline_exceeded}.
 
 take_ready([], _, _) -> none;
@@ -130,7 +130,7 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
                    expired => false, timeout_result => TimeoutResult,
                    report_binding => ReportBinding}}.
 
-request_mode({custodied, _}) -> execute;
+request_mode({custodied, _, _, _}) -> execute;
 request_mode(resolve) -> read;
 request_mode({node, _, Mode}) -> Mode;
 request_mode(Mode) -> Mode.
@@ -154,6 +154,12 @@ valid_preparation_goal({Name}, Template) ->
     {_Canonical, Variables, _Next} = erlog_int:term_instance(Template, 0),
     case Variables of [{Name, _}] -> true; _ -> false end;
 valid_preparation_goal(_, _) -> false.
+
+valid_signed_preparation({B}, {S}, Template) when B =/= S ->
+    {_Canonical, Variables, _} = erlog_int:term_instance(Template, 0),
+    lists:sort([Name || {Name,_} <- Variables]) =:= lists:sort([B,S]);
+valid_signed_preparation(_,_,_) -> false.
+
 
 prepare_goal_result(Ns, AgentRef, Epoch, NodeRef, Key, Variable, Template, Deadline) ->
     Prepared = prepare_custody(Ns, AgentRef, Epoch, NodeRef, Key, Deadline),
@@ -198,20 +204,20 @@ current_node(NodeRef, Key) ->
 
 invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
     quod_client_goal_ingress:resolve_operation(Bytes, Signature);
-invoke_live(Slot, Binding, {{custodied, Template}, Goal, Expires}, Operation) ->
+invoke_live(Slot, Binding, {{custodied, BytesVar, SignatureVar, Template}, Goal, Expires}, Operation) ->
     case sign_request(Slot, Binding, {execute, Goal, Expires}, Operation) of
         {ok, Bytes, Signature} ->
-            Bs0 = erlog_int:add_binding({'Bytes'}, Bytes, erlog_int:new_bindings()),
-            Bs = erlog_int:add_binding({'Signature'}, Signature, Bs0),
+            Bs0 = erlog_int:add_binding(BytesVar, Bytes, erlog_int:new_bindings()),
+            Bs = erlog_int:add_binding(SignatureVar, Signature, Bs0),
             Custody = erlog_int:dderef(Template, Bs),
             case invoke_live(Slot, Binding, {execute, Custody, Expires}, crypto:strong_rand_bytes(32)) of
                 {ok, _, {normalized, {committed, _, _}}} ->
                     quod_client_goal_ingress:submit(Bytes, Signature);
                 {ok, _, {normalized, {failed, _}}} = Failed ->
-                    {error, {activation_not_submitted, Failed}};
+                    {error, {request_not_submitted, Failed}};
                 Other -> {error, {custody_unresolved, Other}}
             end;
-        Error -> {error, {activation_not_submitted, Error}}
+        Error -> {error, {request_not_submitted, Error}}
     end;
 invoke_live(Slot, Binding, Request, Operation) ->
     case trace_stage(<<"quod.agent.governed_sign">>,

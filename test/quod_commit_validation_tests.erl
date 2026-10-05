@@ -434,6 +434,46 @@ vote_validation_and_materialization_are_owned_here_test() ->
              quod_commit_validation:dtx(Control, 1, check, Context))
       end) end).
 
+read_certificate_validates_terminal_outcome_evidence_test() ->
+    Fixture = valid_vote_fixture(#{goal_text => <<"\\+(missing(ok)).">>}),
+    Target = {Ns,Anchor} = maps:get(participant_target,Fixture),
+    Signer = maps:get(node_identity,Fixture),Pub = maps:get(pubkey,Signer),
+    Plan0 = maps:get(plan,Fixture),
+    [{_,Chain,GoalBlob,_,_,_,_}] = quod_ct:plan_material(transcript,Plan0),
+    {ok,Goal} = quod_durable_term:decode_goal(GoalBlob),
+    {ok,Principal} = quod_agent_ref:materialize_principal(maps:get(principal,Fixture)),
+    Est = quod_ct:committed_kb(quod_ct:signed_agent_facts(Fixture) ++
+        [{can_invoke,Goal,Principal,[N || {N,_} <- tl(Chain)],Ns},
+         {peer_admitted,Pub,"validator",14567,Pub}]),
+    Original = quod_ct:signed_atomic_fixture(#{target => Target}),
+    T = maps:get(transaction,Original),
+    {ok,Claim} = quod_transaction:request_claim(T),
+    {operation,_,_,Agent,Id} = maps:get(operation_ref,Claim),Key = {1,Agent,Id},
+    {ok,I0} = quod_outcome:open(Ns,Anchor,#{outcome_backend => memory}),
+    {new,I1} = quod_outcome:claim_operation(I0,1,Claim,{transaction,Ns,Anchor,T#transaction.tx_id}),
+    {new,Candidate,I2} = quod_outcome:classify(I1,T),
+    {new,_,I3} = quod_outcome:terminal(I2,1,{rejected,conflict_retry},{new,Candidate}),
+    {ok,I4} = quod_outcome:advance_applied(I3,1),{ok,I5} = quod_outcome:flush(I4),
+    {{ok,Token},I6} = quod_outcome:operation_dependency(I5,Key,1),
+    Plan = with_outcome_read(Plan0,Key,Token,Signer),
+    Ctx = quod_commit_validation:new(Target,1,Est,I6,none),
+    ?assertEqual(ok,quod_commit_validation:read_only_plan(Plan,Ctx)),
+    Forged = with_outcome_read(Plan0,Key,setelement(1,Token,<<99:256>>),Signer),
+    ?assertEqual({error,conflict_retry},quod_commit_validation:read_only_plan(Forged,Ctx)),
+    Dir = filename:join("/tmp","quod-outcome-validation-" ++ integer_to_list(erlang:unique_integer([positive]))),
+    {ok,Disk} = quod_outcome:open(Ns,Anchor,#{data_dir => Dir,outcome_backend => disk}),
+    ok = quod_outcome:close(Disk),
+    Broken = quod_commit_validation:new(Target,1,Est,Disk,none),
+    ?assertMatch({outcome_error,_},quod_commit_validation:read_only_plan(Plan,Broken)),
+    ok = quod_outcome:close(I6).
+
+with_outcome_read(Plan,Key,Token,Signer) ->
+    Reads = (quod_ct:plan_material(read_check,Plan))#{Key => Token},
+    {ok,Bytes} = quod_read_set:encode(Reads),
+    Core = (quod_dtx:core(Plan))#{read_check := Bytes,read_functors := map_size(Reads)},
+    Signature = quod_identity:sign(term_to_binary({<<"quod.dtx.plan">>,8,Core},[deterministic]),Signer),
+    {quod_plan,Core,maps:get(pubkey,Signer),Signature}.
+
 read_certificate_refuses_a_stale_read_token_test() ->
     Fixture = valid_vote_fixture(
                 #{goal_text => <<"\\+(missing(ok)).">>}),

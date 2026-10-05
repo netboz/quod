@@ -3,6 +3,48 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+terminal_operation_dependencies_test_() ->
+    [?_test(terminal_operation_dependency(Verdict, Status)) ||
+      {Verdict, Status} <- [{committed, 0}, {{rejected, conflict_retry}, 1}]].
+
+terminal_operation_dependency(Verdict, Status) ->
+    F = quod_ct:signed_atomic_fixture(#{}),
+    {Ns, Anchor} = maps:get(target, F),
+    T = maps:get(transaction, F),
+    {ok, Claim} = quod_transaction:request_claim(T),
+    {operation, Ns, Anchor, Agent, Id} = maps:get(operation_ref, Claim),
+    Key = {1, Agent, Id},
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    ?assertMatch({{unavailable, _}, _}, quod_outcome:operation_dependency(I0, Key, 3)),
+    {new, I1} = quod_outcome:claim_operation(I0, 2, Claim,
+                         {transaction, Ns, Anchor, T#transaction.tx_id}),
+    {new, Candidate, I2} = quod_outcome:classify(I1, T),
+    {new, _, I3} = quod_outcome:terminal(I2, 3, Verdict, {new, Candidate}),
+    ?assertMatch({{unavailable, _}, _}, quod_outcome:operation_dependency(I3, Key, 3)),
+    I4 = publish(publish(publish(I3, 1), 2), 3),
+    ?assertMatch({{unavailable, _}, _}, quod_outcome:operation_dependency(I4, Key, 2)),
+    {{ok, Token}, I5} = quod_outcome:operation_dependency(I4, Key, 3),
+    ?assertEqual({maps:get(digest, Claim), {0,T#transaction.tx_id}, 2,Status,3,3}, Token),
+    ?assertMatch({{ok,Token},_}, quod_outcome:operation_dependency(I5, Key, 20)),
+    ?assertEqual(ok, quod_outcome:validate_dependency(I5, Key, Token, 3)),
+    [?assertEqual({conflict, Key}, quod_outcome:validate_dependency(I5, Key, Bad, 3)) ||
+      Bad <- [setelement(1,Token,<<99:256>>),setelement(2,Token,{0,<<99:256>>}),
+              setelement(3,Token,1),setelement(4,Token,1-Status),
+              setelement(5,Token,2),setelement(6,Token,2)]],
+    ?assertEqual({conflict,Key},quod_diff:validate(#{Key => Token},undefined)),
+    ?assertEqual(ok,quod_diff:validate(#{Key => Token},undefined,{I5,3})),
+    ?assertEqual({conflict,Key},quod_diff:validate(#{Key => Token},undefined,{I5,2})),
+    {ok, Bytes} = quod_read_set:encode(#{{known,1} => static, Key => Token}),
+    {ok, Pairs} = quod_wire_term:decode_canonical(Bytes,100000),
+    ?assert(quod_read_set:valid_pairs(Pairs)),
+    ?assertNot(quod_read_set:valid_pairs(lists:reverse(Pairs))),
+    ?assertNot(quod_read_set:valid_pairs(Pairs ++ Pairs)),
+    ?assertNot(quod_read_set:valid(#{Key => setelement(4,Token,3)})),
+    ?assertNot(quod_read_set:at_height(#{Key => Token},2)),
+    ?assertEqual(#{reads => [], writes => [], custody => []},
+                 quod_dtx:conflict_descriptor([],#{Key => Token},[])),
+    ok = quod_outcome:close(I5).
+
 deterministic_transaction_identity_is_target_anchored_test() ->
     Ns = <<"quod:target">>,
     Anchor = <<1:256>>,
@@ -801,7 +843,12 @@ certified_complete_replay(I0, F) ->
     Resolve = maps:get(Origin, maps:get(resolves, F)),
     Generation = maps:get(generation, F),
     Verdict = maps:get(verdict, F),
-    {I1, #{effects := []}, none} = apply_atomic_phase(publish(I0, 1), Vote),
+    {ok, Claim} = quod_transaction:request_claim(maps:get(transaction,F)),
+    {operation, _, _, Agent, OpId} = maps:get(operation_ref,Claim),
+    Key = {1,Agent,OpId},
+    {ClaimKind, I0a} = quod_outcome:claim_operation(I0,2,Claim,Ref),
+    ?assert(lists:member(ClaimKind,[new,replay])),
+    {I1, #{effects := []}, none} = apply_atomic_phase(publish(I0a, 1), Vote),
     ?assertEqual({ok, #{status => pending, phase => voted, ref => Ref}}, public_group(I1, F)),
     {I2, #{effects := Effects}, Ack} =
         apply_atomic_phase(publish(I1, 2), alternate_phase(Resolve)),
@@ -815,10 +862,13 @@ certified_complete_replay(I0, F) ->
     {I4, _, none} = apply_atomic_phase(I3, maps:get(complete, F)),
     ?assertEqual({ok, #{status => pending, phase => publication, ref => Ref}}, public_group(I4, F)),
     {ok, I5} = quod_outcome:advance_applied(I4, 4),
+    ?assertMatch({{unavailable,_},_},quod_outcome:operation_dependency(I5,Key,4)),
     ?assertEqual(3, quod_outcome:applied_floor(I5)),
     ?assertEqual(public_group(I4, F), public_group(I5, F)),
     {ok, I6} = quod_outcome:flush(I5),
     ?assertEqual(4, quod_outcome:applied_floor(I6)),
+    ?assertMatch({{unavailable,_},_},quod_outcome:operation_dependency(I6,Key,3)),
+    ?assertMatch({{ok,{_,{1,_,_,_},2,_,3,4}},_},quod_outcome:operation_dependency(I6,Key,4)),
     {ok, Public} = public_group(I6, F),
     ?assertEqual(3, maps:get(height, Public)),
     ?assertEqual(maps:get(participant_slots, F), maps:get(participant_slots, Public)),

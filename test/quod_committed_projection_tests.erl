@@ -6,6 +6,32 @@
 
 -import(quod_ct, [change/3, diff_for/1]).
 
+ordinary_apply_rejects_unpublished_outcome_dependency_test() ->
+    {ok,_} = application:ensure_all_started(gproc),
+    Ns = <<"projection:outcome-read">>,Anchor = <<0:256>>,
+    {ok,Outcomes} = quod_outcome:open(Ns,Anchor,#{outcome_backend => memory}),
+    P0 = quod_committed_projection:new({Ns,Anchor},0,
+         quod_committed_projection:new_est(),Outcomes,none),
+    {Author,Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Author,key => quod_identity:key_term({Author,Seed})},
+    Genesis = quod_simplex:test_genesis_tx(#{node_id => <<0:256>>,mode => create,committee => [],
+        genesis_diff => diff_for({can_invoke,{'G'},{'P'},[],{'N'}})},Ns,<<0:256>>,<<1:256>>),
+    {ok,P1,_} = project(1,{batch,[Genesis]},P0),
+    {ok,#{blob := Agent}} = quod_agent_ref:from_text(Ns,Anchor,<<"reader.">>,3),
+    Key = {1,Agent,<<2:256>>},Token = {<<3:256>>,{0,<<4:256>>},1,1,1,1},
+    Tx = signed_change({Ns,Anchor},change(Ns,diff_for({must_not_land,outcome}),#{Key => Token}),Signer),
+    try
+        {ok,P2,#{transactions := [#{status := rejected,reason := conflict_retry}]}} =
+            project(2,{batch,[Tx]},P1),
+        ?assertNot(proves({must_not_land,outcome},P2)),
+        ?assertMatch({{ok,#{status := {rejected,conflict_retry,2}}},_},
+            quod_outcome:lookup_ref(quod_committed_projection:outcomes(P2),
+                                   {transaction,Ns,Anchor,Tx#transaction.tx_id}))
+    after
+        #est{db = #db{ref = Ref}} = quod_committed_projection:est(P1),
+        quod_erlog_db_mvcc:delete(Ref),quod_outcome:close(Outcomes)
+    end.
+
 mixed_content_duplicate_rejection_and_empty_diff_projection_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"projection:",

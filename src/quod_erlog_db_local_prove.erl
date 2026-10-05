@@ -534,7 +534,7 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
     Tail = [{assert, {H, B}} || {_T, H, B} <- lists:reverse(ZR)],
     Retracts ++ Front ++ Tail.
 
--doc "The read-set: `#{ {Functor,Arity} => version-token }` of what the proof read.".
+-doc "The monotonic read set: predicate version tokens and exact terminal operation evidence.".
 -spec get_read_set(#lp{}) -> map().
 get_read_set(#lp{read_ets = ReadEts} = Ov) ->
     ensure_access(Ov),
@@ -543,8 +543,8 @@ get_read_set(#lp{read_ets = ReadEts} = Ov) ->
 read_set(undefined) -> #{};
 read_set(Ets) ->
     maps:from_list(
-      [Entry || {{_Name, Arity}, _Token} = Entry <- ets:tab2list(Ets),
-                is_integer(Arity)]).
+      [Entry || {Key, _Token} = Entry <- ets:tab2list(Ets),
+                quod_read_set:kind(Key) =/= invalid]).
 
 -doc """
 Every recorded dependency — OCC read tokens **and** live-bridge markers — as
@@ -578,7 +578,7 @@ The marker shares the read-set table's lifecycle deliberately: it is monotonic
 across savepoint restores — a discarded alternative still consulted the bridge
 — and `absorb_read_set/2` carries it from a policy sub-proof into the parent
 overlay unchanged. The marker key's second element is a functor tuple, so it
-can never collide with an OCC entry, whose key is `{Name, Arity}`.
+can never collide with a predicate OCC key or a tagged operation-outcome key.
 """.
 -spec record_live_bridge(tuple(), {atom(), arity()}) -> ok.
 record_live_bridge(

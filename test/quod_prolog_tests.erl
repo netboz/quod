@@ -272,6 +272,10 @@ agent_identity_freshness_tracks_the_proved_key_not_ledger_height_test() ->
                               {agent, AgentRef}, SigningKey,
                               {Ns, Anchor}, 1, Session),
         ?assertEqual([{agent_key, 3}], maps:keys(ReadCheck)),
+        OutcomeKey = {1,AgentRef,<<54:256>>},
+        OutcomeToken = {<<55:256>>,{0,<<56:256>>},1,1,1,1},
+        ?assertNot(quod_prolog:test_agent_identity_reads_current(
+                     ReadCheck#{OutcomeKey => OutcomeToken},Est1)),
 
         %% An unrelated committed source claim or content write advances the
         %% ontology without revoking the exact key fact proved above.

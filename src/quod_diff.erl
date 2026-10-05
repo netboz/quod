@@ -9,6 +9,10 @@ Pure helpers over the committed erlog database for the content layer.
   `{conflict, Functor}` for a conflicting predicate. A recorded `staged`
   expectation is rejected outright: it is never a capturable token, and
   accepting it would invert the same-block read-after-write rejection.
+- `validate/3` additionally accepts the owner-held outcome index and published
+  parent. Exact terminal evidence must match at that parent. A storage error
+  remains `outcome_error`, never a conflict. Without this context, `validate/2`
+  fails closed on every outcome dependency.
 - `valid_read_check/1` and `valid_ops/1` — total shape validation for the
   untrusted durable material consumed by both ordinary and distributed
   transactions.
@@ -37,7 +41,7 @@ Pure helpers over the committed erlog database for the content layer.
 
 -export([valid_read_check/1, valid_ops/1,
          valid_event/1, valid_event_pattern/1,
-         validate/2, apply_ops/2, apply_ops_report/2,
+         validate/2, validate/3, apply_ops/2, apply_ops_report/2,
          apply_ops_preserving_policy/2,
          apply_ops_preserving_policy_report/2, has_clause/4,
          interpreted_clauses/2, touches_functor/2]).
@@ -77,17 +81,27 @@ asserts_functor(Diff, Functor) ->
 -doc "`ok` if every predicate in `ReadCheck` still carries the recorded token, else `{conflict, F}` for a conflicting predicate.".
 -spec validate(read_check(), quod_erlog_db_mvcc:ref()) -> ok | {conflict, term()}.
 validate(ReadCheck, Ref) ->
+    validate(ReadCheck, Ref, none).
+
+validate(ReadCheck, Ref, OutcomeContext) ->
     maps:fold(
-      fun(_F, _Exp, {conflict, _} = C) -> C;
+      fun(_F, _Exp, C) when C =/= ok -> C;
          (F, staged, ok) ->
               %% `staged` is never a capturable token; matching it against a
               %% same-block staged write would invert the deterministic
               %% read-after-write rejection into an accept.
               {conflict, F};
          (F, Exp, ok) ->
-              case quod_erlog_db_mvcc:version_token(Ref, F) of
-                  Exp -> ok;
-                  _   -> {conflict, F}
+              case quod_read_set:kind(F) of
+                  predicate ->
+                      case quod_erlog_db_mvcc:version_token(Ref, F) of
+                          Exp -> ok;
+                          _ -> {conflict, F}
+                      end;
+                  operation_outcome when OutcomeContext =/= none ->
+                      {Index, Parent} = OutcomeContext,
+                      quod_outcome:validate_dependency(Index, F, Exp, Parent);
+                  _ -> {conflict, F}
               end
       end, ok, ReadCheck).
 

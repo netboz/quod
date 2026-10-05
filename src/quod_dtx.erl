@@ -210,7 +210,7 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
               Diff, ReadCheck, Effects) ->
     Bridges = quod_proof_session:live_bridges(Session),
     {Transcript, Generation} = quod_proof_session:transcript(Session),
-    case seal_admissible(Diff, ReadCheck, Effects, Bridges) of
+    case seal_bound_reads(Diff, ReadCheck, BaseHeight, Effects, Bridges) of
         ok ->
             case encode_material(
                    Diff, ReadCheck, Effects, Bridges, Transcript) of
@@ -244,6 +244,16 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
             end;
         {error, _} = Error ->
             Error
+    end.
+
+seal_bound_reads(Diff, ReadCheck, BaseHeight, Effects, Bridges) ->
+    Membership = quod_committee_predicates:membership_diff(Diff),
+    HasOutcome = lists:any(fun(K) -> quod_read_set:kind(K) =:= operation_outcome end,
+                           maps:keys(ReadCheck)),
+    case quod_read_set:at_height(ReadCheck, BaseHeight) andalso
+         not (Membership andalso HasOutcome) of
+        true -> seal_admissible(Diff, ReadCheck, Effects, Bridges);
+        false -> {error, invalid_read_dependency}
     end.
 
 encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
@@ -572,8 +582,9 @@ materialize_decoded(Core, Decoded) ->
                          andalso quod_diff:valid_ops(Diff)
                          andalso quod_effect:validate_list(Effects)
                          andalso valid_live_bridges(Bridges)
-                         andalso seal_admissible(
-                                   Diff, ReadCheck, Effects, Bridges) =:= ok
+                         andalso seal_bound_reads(
+                                   Diff, ReadCheck, maps:get(base_height, Core),
+                                   Effects, Bridges) =:= ok
                          andalso valid_transcript(Transcript, 0)
                          andalso conflict_descriptor(
                                    Diff, ReadCheck, Effects) =:=
@@ -598,7 +609,9 @@ materialize_decoded(Core, Decoded) ->
 %% Signed atom-safe conflict keys shared by plan sealing and atomic admission.
 
 conflict_descriptor(Diff, ReadCheck, Effects) ->
-    Reads = lists:sort([conflict_functor(Key) || Key <- maps:keys(ReadCheck)]),
+    true = quod_read_set:valid(ReadCheck),
+    Reads = lists:sort([conflict_functor(Key) || Key <- maps:keys(ReadCheck),
+                          quod_read_set:kind(Key) =:= predicate]),
     Writes = lists:usort(
                [conflict_functor(erlog_int:functor(Head))
                 || {Operation, {Head, _Body}} <- Diff,

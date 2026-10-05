@@ -42,7 +42,10 @@ The typed **external-predicate contract** and the per-run **execution context**
    reads, or live observations. The ordinary registration form conservatively
    records queries as live observations. Audited modules explicitly declare the
    other two dependency contracts through `register/6`; no predicate-name list
-   at the sealing boundary grants them an exception.
+   at the sealing boundary grants them an exception. Committed snapshot reads
+   must capture either MVCC version tokens or immutable terminal-operation
+   evidence in the same monotonic read set. Validators recheck both kinds;
+   class registration alone never substitutes for captured dependencies.
 
 The context *kinds* are `proof` (a normal client proof or staged write),
 `verdict` (a committee membership re-proof — strictly local),
@@ -283,7 +286,8 @@ register(Est, Functor, Class, Module, Function) ->
 -doc """
 Register a bridge with its dependency contract. Proof-bound queries derive
 only engine-authenticated context; committed-snapshot queries capture all reads
-through the ordinary MVCC dependency machinery. Live observations cannot
+through the ordinary read set (MVCC tokens or immutable terminal outcome
+evidence), including foreign certification. Live observations cannot
 authorize a durable diff. This declaration belongs to the audited release module,
 not to caller-supplied Prolog data.
 """.

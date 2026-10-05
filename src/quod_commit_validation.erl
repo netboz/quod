@@ -168,7 +168,7 @@ dtx(Control, BlockTimestamp, Mode, Context0 = #context{target = Target, outcomes
     end.
 
 -doc "Validate one sealed read-only plan through the shared own-plan checks.".
--spec read_only_plan(quod_dtx:plan(), context()) -> ok | {error, term()}.
+-spec read_only_plan(quod_dtx:plan(), context()) -> ok | {error, term()} | {outcome_error, term()}.
 read_only_plan(Plan, Context = #context{target = Target}) ->
     case quod_dtx:verify(Plan) andalso quod_dtx:target(Plan) =:= Target andalso
          quod_dtx:diff_ops(Plan) =:= 0 andalso
@@ -177,6 +177,7 @@ read_only_plan(Plan, Context = #context{target = Target}) ->
         true ->
             case validate_prepared_plan(Plan, Context) of
                 {ok, _Material} -> ok;
+                {outcome_error, _} = Error -> Error;
                 {error, _} = Error -> Error
             end;
         false ->
@@ -205,6 +206,7 @@ validate_content_transactions(
   [#transaction{role = {remote_application, _, _, _}} = Change | Rest],
   Network, BlockTimestamp, Mode, Seen, Context0) ->
     case remote_application(Change, Context0) of
+        {outcome_error, _} = Error -> Error;
         {apply, _EventContext, _Material} ->
             validate_content_transactions(
               Rest, Network, BlockTimestamp, Mode, Seen, Context0);
@@ -415,7 +417,7 @@ transaction_outcome_ref(
 -doc "Evaluate one certified remote application at the target parent.".
 -spec remote_application(#transaction{}, context()) ->
           {apply, map(), map()} | {reject, term()} |
-          {invalid, term()} | abstain.
+          {invalid, term()} | abstain | {outcome_error, term()}.
 remote_application(
   Change = #transaction{
              role = {remote_application, ClaimRef, _OperationRef, _Digest},
@@ -464,6 +466,7 @@ prepared_application_material(Plan, EventContext, Material, Context) ->
                 true ->
                     case validate_prepared_plan_material(Plan, Material, Context) of
                         {ok, Material} -> {ok, EventContext, Material};
+                        {outcome_error, _} = Error -> Error;
                         {error, _} = Error -> Error
                     end;
                 false -> {error, invalid_direct_effect}
@@ -474,6 +477,7 @@ prepared_application_material(Plan, EventContext, Material, Context) ->
 classify_remote_prepared(
   {ok, EventContext, Material}) ->
     {apply, EventContext, Material};
+classify_remote_prepared({outcome_error, _} = Error) -> Error;
 classify_remote_prepared({error, future_base_height}) ->
     abstain;
 classify_remote_prepared({error, Reason}) ->
@@ -653,6 +657,7 @@ own_vote_choice(Plan, #{origin := Origin}, Material,
                                 {refused, Reason} -> {refused, [Reason]}
                             end,
                             {ok, Choice, Context};
+                        {outcome_error, _} = Error -> Error;
                         {error, Reason} -> {ok, {refused, [Reason]}, Context}
                     end;
                 {error, Reason} -> {ok, {refused, [Reason]}, Context}
@@ -714,6 +719,7 @@ validate_prepared_plan_material(Plan,
   Context = #context{est = Est}) ->
     case validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, Context) of
         ok -> {ok, Material};
+        {outcome_error, _} = Error -> Error;
         {error, _} = Error -> Error
     end.
 
@@ -736,8 +742,10 @@ validate_prepared_material(
     end.
 
 validate_prepared_occ(
-  Plan, Diff, ReadCheck, Transcript, Est, Context) ->
-    case quod_diff:validate(ReadCheck, mvcc_ref(Est)) of
+  Plan, Diff, ReadCheck, Transcript, Est,
+  Context = #context{outcomes = Outcomes, applied = Parent}) ->
+    case quod_diff:validate(ReadCheck, mvcc_ref(Est), {Outcomes, Parent}) of
+        {outcome_error, _} = Error -> Error;
         {conflict, _Functor} ->
             {error, conflict_retry};
         ok ->
@@ -810,9 +818,15 @@ diff_touches_membership(Diff) ->
 is_membership_change(Change) ->
     quod_simplex:committee_delta(Change) =/= {[], []}.
 
-membership_verdict(check, #transaction{diff = Diff}, Context) ->
+membership_verdict(Mode, Change = #transaction{read_check = Reads}, Context) ->
+    case lists:any(fun(K) -> quod_read_set:kind(K) =:= operation_outcome end, maps:keys(Reads)) of
+        true -> {invalid, invalid_read_dependency};
+        false -> membership_verdict_checked(Mode, Change, Context)
+    end.
+
+membership_verdict_checked(check, #transaction{diff = Diff}, Context) ->
     membership_diff_verdict(Diff, Context);
-membership_verdict({claim, _Slot}, #transaction{}, _Context) ->
+membership_verdict_checked({claim, _Slot}, #transaction{}, _Context) ->
     %% A certified membership record already passed the pure shape/cap gate
     %% and every supporter's parent-state can_join verdict. Replaying that
     %% live policy would make projection depend on this node's current feed

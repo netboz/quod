@@ -175,7 +175,8 @@ reconcile_now(Ns) ->
     gen_server:cast(quod_reg:via({quod_runtime, Ns}), reconcile_now).
 
 %% Only the matching worker may borrow current actor bindings.
--spec reaction_agents(binary(), domain | {recovery, pid(), pos_integer(), map()}) -> [map()].
+-spec reaction_agents(binary(), domain | {recovery, pid(), pos_integer(), map()} |
+                                  {physics, map()}) -> [map()].
 reaction_agents(Ns, Audience) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}), {reaction_agents, Audience}, infinity).
 
@@ -190,6 +191,7 @@ init({Ns, Config}) ->
     %% Subscribe BEFORE the (deferred) attach attempt: any ready edge published after the
     %% attach answer lands in our mailbox, so the boot race has no window.
     true = quod_reg:subscribe({runtime, Ns}),
+    true = quod_reg:subscribe({quod_prolog, Ns}),
     true = quod_reg:subscribe({node_actor, node}),
     PrologMonitor = quod_reg:monitor_name({quod_prolog, Ns}, follow),
     Owners = monitor_resource_owners(Ns),
@@ -340,9 +342,13 @@ handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
             {Caller, _}, S = #s{runner = {events, Caller, _, _, _}}) ->
     case request_executor(Executor, S) of
         {ok, Slot, Agent, S1} ->
-            case enqueue_agent_request(Slot, Agent, H, {Mode, Goal, Expires, Deadline}, S1) of
-                {ok, _Ref, Next} -> {reply, ok, Next};
-                {error, Reason} -> {reply, {error, Reason}, S1}
+            case reaction_request_mode(Mode, S1) of
+                {ok, QueuedMode, Physics} ->
+                    case enqueue_agent_request(Slot, Agent, H, {QueuedMode,Goal,Expires,Deadline}, S1) of
+                        {ok, Ref, Next} -> {reply, ok, bind_physics_request(Physics,Ref,Agent,Next)};
+                        {error, Reason} -> {reply, {error, Reason}, S1}
+                    end;
+                {error, Reason} -> {reply, {error,Reason},S1}
             end;
         {error, Reason, S1} -> {reply, {error, Reason}, S1}
     end;
@@ -485,6 +491,18 @@ handle_info({applied_live, _Env, _Est}, S) ->
 %% the owner is unavailable, a publication is also a genuine readiness wake.
 handle_info({applied_live, _Env}, S) -> {noreply, owner_wake(S)};
 handle_info({rejected_live, _Env}, S) -> {noreply, S};
+handle_info({projection_advanced, Owner, {H,_Hash}, Changes},
+            S = #s{binding = #{owner := Owner}, mode = live}) ->
+    maps:foreach(fun(_,#{pid := Pid,stopping := false,spec := Spec}) ->
+        maps:foreach(fun(D,#{outcome_key := Key}) ->
+            case maps:is_key(Key,Changes) of
+                true -> Pid ! {physics_outcome_changed,self(),D,Key,H};
+                false -> ok
+            end
+        end,maps:get(doors,Spec,#{}));
+        (_,_) -> ok
+    end,S#s.physics),
+    {noreply,S};
 handle_info({projection_advanced, _Owner, _H}, S) ->
     {noreply, owner_wake(S)};
 handle_info({node_actor_installed, Owner, Principal}, S) when is_pid(Owner) ->
@@ -553,6 +571,22 @@ handle_info({agent_work_custody_changed, Owner, Groups}, S) ->
                        (_, _, Acc) -> Acc
                     end, S, S#s.agents),
     {noreply, Next};
+handle_info({physics_observation, Pid, World, Token, Ref, Sample, {Expiry,Deadline}}, S) ->
+    Metadata = #{owner => Pid, world => World, token => Token, ref => Ref,
+                 event => Sample, expiry => Expiry, deadline => Deadline},
+    case physics_observation_current(Metadata,S) of
+        true ->
+            case S#s.queue_len < max_queued_events(S) of
+                true ->
+                    Item = {owned_physics,Metadata},
+                    {noreply,maybe_run_events(S#s{queue = [Item|S#s.queue],queue_len = S#s.queue_len+1})};
+                false -> Pid ! {physics_result,self(),Ref,{error,busy}}, {noreply,S}
+            end;
+        false -> Pid ! {physics_result,self(),Ref,{error,physics_observation_error(Metadata)}}, {noreply,S}
+    end;
+handle_info({physics_match_finished, Caller, #{owner := Pid, ref := Ref}, Result},
+            S = #s{runner = {events,Caller,_,_,_}}) ->
+    Pid ! {physics_result,self(),Ref,Result}, {noreply,S};
 handle_info({physics_work, Pid, World, Ref, Kind, Work, Window}, S) ->
     {noreply, physics_work(Pid, World, Ref, Kind, Work, Window, S)};
 handle_info({physics_selection_applied, Pid, World, Ref}, S) ->
@@ -569,7 +603,13 @@ handle_info({physics_status, Pid, World, Token, Status}, S) ->
     case maps:get(World, S#s.physics, none) of
         #{pid := Pid, stopping := false} = Entry ->
             quod_reg:publish({physics, S#s.ns}, {physics_status, self(), Pid, World, Token, Status}),
-            {noreply, wake_physics(S#s{physics = (S#s.physics)#{World => Entry#{status => Status, token => Token}}})};
+            Waiting = maps:get(capacity_wait,Entry,false) orelse
+                lists:member(Status,[capacity,awaiting_actor,observation_capacity]),
+            NeedsReconciliation = maps:get(needs_reconciliation,Entry,false) orelse
+                case Status of {unavailable,_} -> true; _ -> false end,
+            {noreply, wake_physics(S#s{physics = (S#s.physics)#{World =>
+                Entry#{status => Status,token => Token,capacity_wait => Waiting,
+                       needs_reconciliation => NeedsReconciliation}}})};
         _ -> {noreply, S}
     end;
 handle_info({physics_down, Monitor, process, Pid, Reason}, S) ->
@@ -633,8 +673,8 @@ handle_info({resource_caller_down, Monitor, process, _Caller, _},
     exit(Pid, kill),
     {noreply, S};
 handle_info({resource_caller_down, Monitor, process, _Caller, _}, S) ->
-    {noreply, retain_queue(fun({resource, _, _, _, _, _, M}) -> M =/= Monitor;
-                              (_) -> true end, S)};
+    {noreply, wake_physics(retain_queue(fun({resource, _, _, _, _, _, M}) -> M =/= Monitor;
+                              (_) -> true end, S))};
 handle_info({runner_kill, Ref}, S = #s{runner = {_Kind, Pid, _MRef, Ref, _TRef}}) ->
     exit(Pid, kill),   %% the DOWN above reports the failure
     {noreply, S};
@@ -864,8 +904,8 @@ enqueue_committed(_Item, S) -> S.
 
 maybe_run_events(S = #s{mode = live, runner = none, queue = Q}) when Q =/= [] ->
     {Items, Remaining, Turn, Dropped} = ready_work(lists:reverse(Q), S),
-    Pending = S#s{queue = lists:reverse(Remaining), queue_len = length(Remaining),
-                 owned_turn = Turn, dropped_events = S#s.dropped_events + Dropped},
+    Pending = wake_physics(S#s{queue = lists:reverse(Remaining), queue_len = length(Remaining),
+                 owned_turn = Turn, dropped_events = S#s.dropped_events + Dropped}),
     case Items of
         [] -> Pending;
         [{recovery_selection, Batch, Event, Expiry} | Rest] ->
@@ -986,20 +1026,25 @@ ready_work(Items, S) ->
 
 ready_events(Items, S) ->
     {Ordinary, Owned} = lists:partition(fun(Item) -> not owned_notice(Item) end, Items),
-    case {Ordinary, Owned, S#s.owned_turn, owned_capacity(S)} of
-        {[_|_], [_|_], true, true} ->
-            {Selected, Rest, Dropped} = take_owned_notice(Owned, S, 0),
+    {Eligible, Waiting} = lists:partition(fun({owned_physics,M}) ->
+        not physics_observation_current(M,S) orelse physics_observation_capacity(M,S);
+        (_) -> owned_capacity(S)
+    end, Owned),
+    {Run,Rest,Turn,Dropped} = case {Ordinary,Eligible,S#s.owned_turn} of
+        {[_|_],[_|_],true} ->
+            {Selected,Tail,Count} = take_owned_notice(Eligible,S,0),
             case Selected of
-                [] -> {Ordinary, Rest, false, Dropped};
-                _ -> {Selected, Ordinary ++ Rest, false, Dropped}
+                [] -> {Ordinary,Tail,false,Count};
+                _ -> {Selected,Ordinary++Tail,false,Count}
             end;
-        {[_|_], _, _, _} -> {Ordinary, Owned, Owned =/= [], 0};
-        {[], _, _, true} ->
-            {Selected, Rest, Dropped} = take_owned_notice(Owned, S, 0),
-            {Selected, Rest, false, Dropped};
-        {[], _, _, false} -> {[], Owned, true, 0}
-    end.
+        {[_|_],_,_} -> {Ordinary,Eligible,Owned =/= [],0};
+        {[],_,_} ->
+            {Selected,Tail,Count} = take_owned_notice(Eligible,S,0),
+            {Selected,Tail,false,Count}
+    end,
+    {Run,Rest++Waiting,Turn,Dropped}.
 
+owned_notice({owned_physics,_}) -> true;
 owned_notice({observed_host, _}) -> true;
 owned_notice({owned_recovery, _, _, _, _, _}) -> true;
 owned_notice({recovery_done, _, _}) -> true;
@@ -1012,6 +1057,9 @@ owned_notice(_) -> false.
 %% actual completion releases the next candidate, with canonical input free to
 %% progress while that slot is occupied. No accepted goal is submitted again.
 take_owned_notice([], _S, Dropped) -> {[], [], Dropped};
+take_owned_notice([{owned_physics,M} | Rest], S, Dropped) ->
+    Clauses = maps:get({observed,1},S#s.reaction_index,[]),
+    {[{physics_reactions,M,Clauses}],Rest,Dropped};
 take_owned_notice([{owned_notice, Event, Audience, [Clause | More]} | Rest], _S, Dropped) ->
     Tail = case More of [] -> Rest; _ -> [{owned_notice, Event, Audience, More} | Rest] end,
     {[{owned_reaction, Event, Audience, Clause}], Tail, Dropped};
@@ -1175,6 +1223,10 @@ run_events(Ns, Work, Reactions, SourceInterests, Subscriptions,
                  ({snapshot, H, Est},
                   {_PrevH, _PrevEst, Stats, Reactions0, Sources0, Subscriptions0, Catalog0}) ->
                       {H, Est, Stats, Reactions0, Sources0, Subscriptions0, Catalog0};
+                 ({physics_reactions, Metadata, Clauses},
+                  {H, Est, Stats0, Reactions0, Sources0, Subscriptions0, Catalog0}) ->
+                      Stats1 = dispatch_physics_reactions(Ns,H,Est,Metadata,Clauses,Stats0),
+                      {H,Est,Stats1,Reactions0,Sources0,Subscriptions0,Catalog0};
                  ({owned_reaction, Event, Audience, Clause},
                   {H, Est, Stats0, Reactions0, Sources0, Subscriptions0, Catalog0}) ->
                       Stats1 = dispatch_candidates(Ns, H, Est, Audience, Event, [Clause], Stats0),
@@ -1291,6 +1343,30 @@ dispatch_reaction(Ns, Height, Est, Owner, Event, Reaction, Acc0) ->
             reaction_stat(executed, reaction_stat(matches, Acc1));
         {failed, _Reason} ->
             reaction_stat(failures, reaction_stat(matches, Acc1))
+    end.
+
+dispatch_physics_reactions(Ns,H,Est,M,Clauses,Stats) ->
+    Result = case reaction_agents(Ns,{physics,M}) of
+        [Binding] -> match_physics_candidates(Ns,H,Est,Binding,M,Clauses);
+        [] -> {failed,physics_observation_error(M)}
+    end,
+    case Result of
+        executed -> reaction_stat(executed,reaction_stat(matches,Stats));
+        _ ->
+            Reply = case Result of
+                unmatched -> {error,unmatched};
+                {failed,{reaction_submission,R}} -> {error,R};
+                {failed,R} -> {error,R}
+            end,
+            quod_reg:where({quod_runtime,Ns}) ! {physics_match_finished,self(),M,Reply},
+            reaction_stat(failures,Stats)
+    end.
+
+match_physics_candidates(_,_,_,_,_,[]) -> unmatched;
+match_physics_candidates(Ns,H,Est,Binding,M,[Clause|Rest]) ->
+    case quod_runtime_predicates:run_reaction(Ns,H,Binding,Clause,{observed,maps:get(event,M)},Est) of
+        unmatched -> match_physics_candidates(Ns,H,Est,Binding,M,Rest);
+        Result -> Result
     end.
 
 reaction_stat(Key, Stats) ->
@@ -1783,6 +1859,14 @@ audience_bindings(domain, S = #s{config = Config}) ->
     case request_executor({node, maps:get(node_id, Config)}, S) of
         {ok, node, #{binding := Binding}, Next} -> {[Binding | Hosted], Next};
         {error, _, Next} -> {Hosted, Next}
+    end;
+audience_bindings({physics,Metadata = #{world := World, expiry := Expiry}}, S) ->
+    case physics_observation_current(Metadata,S) of
+        true ->
+            #{spec := #{authority := {agent_instance_ref,_,_,I}}} = maps:get(World,S#s.physics),
+            #{binding := B} = maps:get({agent,I},S#s.agents),
+            {[B#{request_expiry => Expiry,physics => Metadata}],S};
+        false -> {[],S}
     end;
 audience_bindings({recovery, Source, Expiry, Metadata}, S) ->
     case recovery_current(Source, Metadata, Expiry, S) of
@@ -2757,8 +2841,8 @@ install_physics(Specs, S) ->
                 Keys = [world, authority, epoch, key, limits, dt, gravity],
                 case maps:with(Keys, Old) =:= maps:with(Keys, New) of
                     true when Old =:= New ->
-                        case maps:get(status, Entry) of
-                            {unavailable, _} -> send_physics_selection(Entry, New);
+                        case maps:get(needs_reconciliation, Entry, false) of
+                            true -> send_physics_selection(Entry, New);
                             _ -> Entry
                         end;
                     true -> send_physics_selection(Entry#{spec => New}, New);
@@ -2790,14 +2874,13 @@ stop_physics(S) ->
 
 send_physics_selection(E = #{selection := none, pid := Pid}, Spec) ->
     Ref = make_ref(), Pid ! {physics_selected, self(), Ref, Spec},
-    E#{selection => {Ref, Spec}};
+    E#{selection => {Ref, Spec},needs_reconciliation => false};
 send_physics_selection(E, _Spec) -> E.
 
 wake_physics(S) ->
-    S#s{physics = maps:map(fun(_, E = #{pid := Pid, spec := Spec, stopping := false, status := Status})
-                             when Status =:= capacity; Status =:= awaiting_actor ->
-                              case physics_capacity(Spec, S) of
-                                  true -> Pid ! advance, E#{status => activating};
+    S#s{physics = maps:map(fun(_, E = #{pid := Pid,spec := Spec,stopping := false,capacity_wait := true}) ->
+                              case physics_capacity(Spec, S) andalso S#s.queue_len < max_queued_events(S) of
+                                  true -> Pid ! advance, E#{status => activating,capacity_wait => false};
                                   false -> E
                               end;
                             (_, E) -> E end, S#s.physics)}.
@@ -2807,7 +2890,7 @@ physics_work(Pid, World, Ref, Kind, Work, {Expires, Deadline}, S = #s{mode = liv
         true -> physics_admit(Pid,World,Ref,Kind,Work,{Expires,Deadline},S);
         false ->
             Error = case Kind of
-                activate -> {activation_not_submitted, deadline_exceeded};
+                activate -> {request_not_submitted, deadline_exceeded};
                 resolve -> deadline_exceeded
             end,
             Pid ! {physics_result,self(),Ref,{error,Error}}, S
@@ -2821,7 +2904,7 @@ physics_admit(Pid,World,Ref,Kind,Work,{Expires,Deadline},S) ->
             case request_executor({agent, I, E, K}, S) of
                 {ok, Slot, Agent, S1} ->
                     {Mode, Goal} = case {Kind, Work} of
-                        {activate, {Activation, Store}} -> {{custodied, Store}, Activation};
+                        {activate, {Activation, Store}} -> {{custodied, {'Bytes'}, {'Signature'}, Store}, Activation};
                         {resolve, Signed} -> {resolve, Signed}
                     end,
                     Request = {Mode, Goal, Expires, Deadline},
@@ -2859,3 +2942,40 @@ physics_capacity(#{authority := {agent_instance_ref, _, _, I}, epoch := Epoch, k
             agent_work_capacity({agent, I}, S);
         _ -> false
     end.
+
+physics_observation_current(#{owner := Pid, world := World, token := Token,
+    event := {door_sample,W,_,_,Authority,Epoch,Generation,Token,Structure,_,_,_,_,_,{validity,_,Expiry}},
+    expiry := Expiry, deadline := Deadline}, S) ->
+    case maps:get(World,S#s.physics,none) of
+        #{pid := Pid, token := Token, stopping := false,
+          spec := #{world := {world_ref,_,_,W}, authority := Authority, epoch := Epoch,
+                    generation := Generation, structure := Structure}} ->
+            S#s.mode =:= live andalso Expiry > quod_time:now_ms() andalso
+                Deadline > quod_time:mono_ms();
+        _ -> false
+    end;
+physics_observation_current(_,_) -> false.
+
+physics_observation_error(#{expiry := Expiry,deadline := Deadline}) ->
+    case Expiry =< quod_time:now_ms() orelse Deadline =< quod_time:mono_ms() of
+        true -> expired_observation;
+        false -> stale_observation
+    end.
+
+physics_observation_capacity(#{world := World}, S) ->
+    case maps:get(World,S#s.physics,none) of
+        #{spec := Spec} -> physics_capacity(Spec,S);
+        _ -> false
+    end.
+
+reaction_request_mode({owned_physics,M,Mode}, S) ->
+    case physics_observation_current(M,S) of
+        true -> {ok,Mode,M};
+        false -> {error,physics_observation_error(M)}
+    end;
+reaction_request_mode(Mode,_) -> {ok,Mode,none}.
+
+bind_physics_request(none,_,_,S) -> S;
+bind_physics_request(#{owner := Pid,ref := Ref},Job,Agent,S) ->
+    Pid ! {physics_admitted,self(),Ref},
+    S#s{physics_requests = (S#s.physics_requests)#{Job => {Pid,Ref,maps:get(pid,Agent)}}}.

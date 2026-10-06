@@ -1,6 +1,8 @@
 import type { SignedIdentity, AgentReference } from './signed-client.js'
 export type ProofView = { title: string; goal: string; results: string; run: string; next: string; accept: string; stop: string; resolve: string }
-export type CodeView = { title: string; predicate: string; new_predicate: string; source: string; results: string; run: string; accept: string; stop: string; create: string; resolve: string }
+export type CodeView = { title: string; predicate: string; source: string; editable: boolean;
+  new_predicate?: string; results?: string; run?: string; accept?: string; stop?: string;
+  create?: string; resolve?: string }
 export type GuiView = { title: string; fields: { kind: string; role: string; label: string }[] }
 export type OntologyReference = { namespace: string; anchor: Uint8Array }
 export type EidolonChoice = { purpose: string; style: string; recipe: OntologyReference & { name: string } }

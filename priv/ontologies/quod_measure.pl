@@ -32,6 +32,7 @@ acl_sovereign(quod:measure).
 
 can_invoke(Goal, _Principal, _CallChain, _Ns) :- measure_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- measure_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
@@ -47,6 +48,19 @@ measure_query(isa(_, _)).
 measure_query(instance_of(_, _)).
 measure_query(have_attribute(_, _, _)).
 measure_query(attribute(_, _, _)).
+measure_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(dimension/1).
+public_prolog_predicate(unit/5).
+public_prolog_predicate(prefix/3).
+public_prolog_predicate(signature/2).
+public_prolog_predicate(commensurable/2).
+public_prolog_predicate(convert/4).
+public_prolog_predicate(sum/3).
+public_prolog_predicate(isa/2).
+public_prolog_predicate(instance_of/2).
+public_prolog_predicate(have_attribute/3).
+public_prolog_predicate(attribute/3).
 
 %% --- dimensions ---------------------------------------------------------------
 %% The seven SI base dimensions, plus the two everybody needs and SI leaves out.

@@ -1,8 +1,16 @@
 %% quod:node — node class and node-hosting policy vocabulary.
 acl_sovereign(quod:node).
+can_invoke(Goal, _, _, _) :- node_query(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- node_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
+
+node_query(isa(_, _)).
+node_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(isa/2).
 
 isa(node, agent).
 

@@ -35,6 +35,10 @@ test('the reusable proof form requires each supported semantic role exactly once
 test('forms describe semantic components independently of their workspace name', () => {
   const view = readGuiView('form(<<"Code">>,[choice(predicate,<<"Predicate">>),input(new_predicate,<<"New predicate">>),editor(source,<<"Source">>),bindings(results,<<"Result">>),button(run,<<"Preview">>),button(accept,<<"Save">>),button(stop,<<"Cancel">>),button(create,<<"Add predicate">>),button(resolve,<<"Check saved outcome">>)])')
   assert.equal(codeForm(view).source, 'Source')
+  assert.equal(codeForm(view).editable, true)
+  assert.deepEqual(codeForm(readGuiView('form(<<"Public source">>,[choice(predicate,<<"Predicate">>),editor(source,<<"Source">>)])')), {
+    title: 'Public source', predicate: 'Predicate', source: 'Source', editable: false,
+  })
   assert.throws(() => proofForm(view), /cannot render/)
   const future = readGuiView('form(<<"Future">>,[hologram(model,<<"Model">>)])')
   assert.throws(() => codeForm(future), /cannot render hologram/)

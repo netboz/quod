@@ -31,6 +31,7 @@ export function PrologEditor(props: EditorProps) {
 function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   const { identity, agent } = useSignedSession()
   const view = codeForm(workspace.view)
+  const editable = view.editable
   const proof = useProofCursor(agent?.namespace ?? '', String(agent?.anchor ?? ''), JSON.stringify(['prolog', workspace.target]))
   const [predicates, setPredicates] = useState<PrologTerm[]>([])
   const [selected, setSelected] = useState('')
@@ -96,7 +97,7 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   }, [proof.reply])
 
   const preview = async () => {
-    if (!identity || !agent || !indicator || !draft || pending.current || !proof.canEdit()) return
+    if (!editable || !identity || !agent || !indicator || !draft || pending.current || !proof.canEdit()) return
     pending.current = true
     setLoading(true)
     setError(null)
@@ -111,7 +112,7 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   }
 
   const changeLayout = async (next: string) => {
-    if (locked || !proof.canEdit() || pending.current || !draft) return
+    if (!editable || locked || !proof.canEdit() || pending.current || !draft) return
     if (next === 'text') { setLayout('text'); return }
     if (next !== 'cards') return
     pending.current = true
@@ -127,7 +128,7 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
     finally { pending.current = false; if (live.current) setLoading(false) }
   }
   const changeCards = (action: string, value = '') => {
-    if (locked || !proof.canEdit() || pending.current || !draft?.cards) return
+    if (!editable || locked || !proof.canEdit() || pending.current || !draft?.cards) return
     setDrafts(previous => {
       const current = previous[selected]
       if (!current?.cards) return previous
@@ -145,7 +146,7 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
     if (action === 'move_down') setCardIndex(Math.min(draft.cards.length - 1, cardIndex + 1))
   }
   const createPredicate = () => {
-    if (locked || !proof.canEdit()) return
+    if (!editable || locked || !proof.canEdit()) return
     try {
       const indicator = predicateIndicator(newPredicate)
       const name = formatTerm(indicator)
@@ -161,7 +162,8 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   }
   const edit = (role: string, value: string) => {
     if (pending.current || !proof.canEdit() || loading) return
-    if (role === 'predicate') { setSelected(value); setLayout('text'); setCardIndex(0) }
+    if (role === 'predicate') { setSelected(value); setLayout('text'); setCardIndex(0); return }
+    if (!editable) return
     if (role === 'layout') void changeLayout(value)
     if (role === 'clause') setCardIndex(Number(value))
     if (role === 'head' || role === 'body') changeCards(role, value)
@@ -188,10 +190,13 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
         layout, clause: String(cardIndex), head: card?.head ?? '', body: card?.body ?? '' },
       choices: { layout: [{ value: 'text', label: 'Text' }, { value: 'cards', label: 'Clause cards' }],
         clause: cards.map((card, index) => ({ value: String(index), label: `${index + 1}. ${card.head}` })), predicate: predicates.map(predicate => { const value = formatTerm(predicate); return { value, label: value } }) },
-      locked,
-      enabled: { run: !locked && !!draft, accept: !proof.busy && !!proof.cursor, stop: !proof.busy && !!proof.cursor,
-        create: !locked && !!newPredicate.trim(), resolve: !proof.busy && !!proof.pendingOperation,
-        add_clause: !locked, remove_clause: !locked && !!card, move_up: !locked && cardIndex > 0, move_down: !locked && cardIndex + 1 < cards.length },
+      locked: locked || !editable,
+      enabled: { run: editable && !locked && !!draft, accept: editable && !proof.busy && !!proof.cursor,
+        stop: editable && !proof.busy && !!proof.cursor,
+        create: editable && !locked && !!newPredicate.trim(), resolve: editable && !proof.busy && !!proof.pendingOperation,
+        add_clause: editable && !locked, remove_clause: editable && !locked && !!card,
+        move_up: editable && !locked && cardIndex > 0,
+        move_down: editable && !locked && cardIndex + 1 < cards.length },
       edit,
       invoke: role => { if (role === 'run') void preview(); else if (role === 'create') createPredicate(); else if (role === 'resolve') void proof.resolve(); else if (role === 'accept' || role === 'stop') void proof.command(role);
         else if (['add_clause', 'remove_clause', 'move_up', 'move_down'].includes(role)) changeCards(role) },
@@ -205,19 +210,21 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
         <p className="font-mono text-sm">{workspace.target.namespace}</p></div>
       <button className="rounded-lg border px-4 py-2" onClick={onClose}>Return to lobby</button>
     </header>
-    <p>These are the ontology's stored rules. Shared base rules are included; changing them here changes this ontology only.</p>
+    <p>{editable
+      ? "These are the ontology's stored rules. Shared base rules are included; changing them here changes this ontology only."
+      : 'These public definitions are readable with your current account. Saving changes requires the root administrator.'}</p>
     <label>{view.predicate} <select value={selected} disabled={locked} onChange={event => edit('predicate', event.target.value)}>
       {predicates.map(predicate => { const name = formatTerm(predicate); return <option key={name} value={name}>{name}</option> })}
     </select></label>
-    <label>{view.new_predicate} <input aria-label={view.new_predicate} value={newPredicate} disabled={locked}
+    {editable && <><label>{view.new_predicate} <input aria-label={view.new_predicate} value={newPredicate} disabled={locked}
       onChange={event => edit('new_predicate', event.target.value)} />
       <button disabled={locked || !newPredicate.trim()} onClick={createPredicate}>{view.create}</button></label>
     <label>Code layout <select aria-label="Code layout" value={layout} disabled={locked || !draft}
-      onChange={event => void changeLayout(event.target.value)}><option value="text">Text</option><option value="cards">Clause cards</option></select></label>
+      onChange={event => void changeLayout(event.target.value)}><option value="text">Text</option><option value="cards">Clause cards</option></select></label></>}
     {layout === 'text' ? <label className="flex flex-1 flex-col gap-2">{view.source}
       <textarea aria-label={view.source} value={draft?.source ?? ''} rows={18} spellCheck={false}
         className="min-h-80 w-full rounded-lg border bg-white p-4 font-mono text-sm"
-        disabled={locked || !draft} onChange={event => edit('source', event.target.value)} />
+        disabled={!editable || locked || !draft} onChange={event => edit('source', event.target.value)} />
     </label> : <section aria-label="Clause cards" className="flex flex-col gap-3 rounded-xl border p-4">
       <label>Clause order <select aria-label="Clause order" value={cardIndex} disabled={locked || !cards.length}
         onChange={event => setCardIndex(Number(event.target.value))}>
@@ -234,15 +241,16 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
         <button disabled={locked || cardIndex + 1 >= cards.length} onClick={() => changeCards('move_down')}>Move down</button>
       </div>
     </section>}
-    <div className="flex gap-3">
+    {editable && <><div className="flex gap-3">
       <button disabled={locked || !draft} onClick={() => void preview()}>{view.run}</button>
       <button disabled={proof.busy || !proof.cursor} onClick={() => void proof.command('accept')}>{view.accept}</button>
       <button disabled={proof.busy || !proof.cursor} onClick={() => void proof.command('stop')}>{view.stop}</button>
     </div>
     <p>No changes are saved before {view.accept}. A conflict keeps your draft.</p>
+    </>}
     {error && <p role="alert">{error}</p>}
-    {proof.reply && <pre aria-label={view.results} className="whitespace-pre-wrap break-words">{replyText(proof.reply, proof.solutionNumber)}</pre>}
-    {proof.pendingOperation && <button disabled={proof.busy} onClick={() => void proof.resolve()}>{view.resolve}</button>}
-    {goal && <details><summary>Prolog goal being submitted</summary><pre className="whitespace-pre-wrap break-words">{goal}</pre></details>}
+    {editable && proof.reply && <pre aria-label={view.results} className="whitespace-pre-wrap break-words">{replyText(proof.reply, proof.solutionNumber)}</pre>}
+    {editable && proof.pendingOperation && <button disabled={proof.busy} onClick={() => void proof.resolve()}>{view.resolve}</button>}
+    {editable && goal && <details><summary>Prolog goal being submitted</summary><pre className="whitespace-pre-wrap break-words">{goal}</pre></details>}
   </main>
 }

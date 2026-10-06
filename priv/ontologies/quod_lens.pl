@@ -57,6 +57,8 @@ acl_sovereign(quod:lens).
 
 %% Anyone may look through a lens. Authoring one stays with admitted nodes.
 can_invoke(Goal, _Principal, _CallChain, _Ns) :- lens_query(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- lens_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
@@ -81,6 +83,28 @@ lens_query(isa(_, _)).
 lens_query(instance_of(_, _)).
 lens_query(have_attribute(_, _, _)).
 lens_query(attribute(_, _, _)).
+lens_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(lens/2).
+public_prolog_predicate(lens_subject/3).
+public_prolog_predicate(lens_group/2).
+public_prolog_predicate(lens_measure/3).
+public_prolog_predicate(lens_detail/2).
+public_prolog_predicate(encoding/3).
+public_prolog_predicate(encoding_mark/2).
+public_prolog_predicate(encoding_layout/2).
+public_prolog_predicate(encoding_channel/3).
+public_prolog_predicate(encoding_step/4).
+public_prolog_predicate(requires/2).
+public_prolog_predicate(group_at/2).
+public_prolog_predicate(group_colour/2).
+public_prolog_predicate(limit/2).
+public_prolog_predicate(view/3).
+public_prolog_predicate(diagnosis/3).
+public_prolog_predicate(isa/2).
+public_prolog_predicate(instance_of/2).
+public_prolog_predicate(have_attribute/3).
+public_prolog_predicate(attribute/3).
 
 %% --- the bounds ---------------------------------------------------------------
 %% This ontology's own bounds on what it will produce, not a copy of anyone

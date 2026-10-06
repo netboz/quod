@@ -3,6 +3,7 @@
 acl_sovereign(quod:modelling).
 can_invoke(Goal, _, _, _) :- modelling_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- modelling_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
@@ -10,6 +11,12 @@ modelling_query(model(_, _)).
 modelling_query(shape(_, _, _)).
 modelling_query(align(_, _, _, _, _, _)).
 modelling_query(place_model(_, _, _, _, _)).
+modelling_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(model/2).
+public_prolog_predicate(shape/3).
+public_prolog_predicate(align/6).
+public_prolog_predicate(place_model/5).
 
 %% --- reusable recipe helpers -------------------------------------------------
 %% A recipe proves Parts; model/2 derives a scene without asserting anything.

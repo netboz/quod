@@ -106,10 +106,16 @@ export const proofForm = form => formLabels(form, {
   goal: 'editor', results: 'bindings', run: 'button', next: 'button', accept: 'button', stop: 'button', resolve: 'button',
 })
 
-export const codeForm = form => formLabels(form, {
-  predicate: 'choice', new_predicate: 'input', source: 'editor', results: 'bindings',
-  run: 'button', accept: 'button', stop: 'button', create: 'button', resolve: 'button',
-})
+export const codeForm = form => {
+  const readOnly = form.fields.length === 2 &&
+    form.fields.some(field => field.role === 'predicate' && field.kind === 'choice') &&
+    form.fields.some(field => field.role === 'source' && field.kind === 'editor')
+  if (readOnly) return { ...formLabels(form, { predicate: 'choice', source: 'editor' }), editable: false }
+  return { ...formLabels(form, {
+    predicate: 'choice', new_predicate: 'input', source: 'editor', results: 'bindings',
+    run: 'button', accept: 'button', stop: 'button', create: 'button', resolve: 'button',
+  }), editable: true }
+}
 
 export async function readEntityEidolons(identity, agent, subject, options = {}) {
   const reply = await signedGoal(identity, {

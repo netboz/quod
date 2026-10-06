@@ -23,6 +23,49 @@ ontology_eidolons(Eidolons) :-
             class_eidolon(ontology, Purpose, Style, Recipe), Choices),
     sort(Choices, Eidolons).
 
+%% Public source inspection is opt-in per predicate. These framework helpers
+%% expose only indicators named by the target ontology; owning and root
+%% administrators use the separately authorized full-introspection path.
+public_prolog_predicates(Indicators) :-
+    findall(Indicator, public_prolog_predicate(Indicator), Unsorted),
+    sort(Unsorted, Indicators).
+
+public_prolog_source(Indicator, Source) :-
+    public_prolog_predicate(Indicator),
+    '$quod_predicate_source'(Indicator, Source).
+
+public_source_query(ontology_eidolons(_)).
+public_source_query(entity_eidolons(_, _)).
+public_source_query(public_prolog_predicates(_)).
+public_source_query(public_prolog_source(_, _)).
+
+%% These exact wrapper goals are safe to admit at a system target because the
+%% implementation re-enters root and checks the authenticated principal before
+%% inspecting non-public source or starting a transaction. Intermediate call
+%% chain names are provenance, not authority.
+system_source_query(
+    (current_ontology_identity(_, _), system_prolog_introspection(_, _))).
+system_source_query(
+    (current_ontology_identity(_, _), system_prolog_edit(transaction(_)))).
+
+system_source_administrator :-
+    current_ontology_identity(Namespace, Anchor),
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(
+                    ontology_ref(Namespace, Anchor), editable)).
+
+system_prolog_introspection(predicates, Indicators) :-
+    system_source_administrator,
+    findall(Indicator, current_predicate(Indicator), Unsorted),
+    sort(Unsorted, Indicators).
+system_prolog_introspection(source(Indicator), Source) :-
+    system_source_administrator,
+    '$quod_predicate_source'(Indicator, Source).
+
+system_prolog_edit(transaction(Body)) :-
+    system_source_administrator,
+    transaction(Body).
+
 %% isa(?Subclass, ?Superclass).
 %%
 %% `isa/2` is Quod's Web Ontology subclass relation. Ontologies declare its

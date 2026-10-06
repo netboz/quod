@@ -3,11 +3,16 @@
 acl_sovereign(quod:gui).
 can_invoke(Goal, _, _, _) :- gui_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- gui_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
 gui_query(gui_view(_, _)).
 gui_query(isa(_, _)).
+gui_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(gui_view/2).
+public_prolog_predicate(isa/2).
 
 isa(gui_component, thing).
 isa(container, gui_component).
@@ -35,3 +40,8 @@ gui_view(prolog_editor,
           bindings(results, <<"Edit result">>), button(run, <<"Preview changes">>),
           button(accept, <<"Save changes">>), button(stop, <<"Cancel preview">>), button(create, <<"Add predicate">>),
           button(resolve, <<"Check saved outcome">>)])).
+
+gui_view(prolog_source,
+    form(<<"Prolog source (read only)">>,
+         [choice(predicate, <<"Predicate">>),
+          editor(source, <<"Source code">>)])).

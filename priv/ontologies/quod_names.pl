@@ -59,6 +59,8 @@ acl_sovereign(quod:names).
 %% Anyone may ask the naming questions. Changing tables, recipes or rules stays
 %% with admitted nodes, as in the other system ontologies.
 can_invoke(Goal, _Principal, _CallChain, _Ns) :- naming_query(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- naming_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
@@ -70,6 +72,15 @@ naming_query(draw(_, _, _, _, _)).
 naming_query(draw(_, _, _, _)).
 naming_query(draw(_, _)).
 naming_query(draw(_)).
+naming_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(name/4).
+public_prolog_predicate(count/4).
+public_prolog_predicate(name_nth/5).
+public_prolog_predicate(draw/5).
+public_prolog_predicate(draw/4).
+public_prolog_predicate(draw/2).
+public_prolog_predicate(draw/1).
 
 %% --- public predicates -------------------------------------------------------
 

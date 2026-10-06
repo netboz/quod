@@ -57,6 +57,7 @@ acl_sovereign(quod:rendering).
 can_invoke(Goal, _Principal, _CallChain, _Ns) :- rendering_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _Principal, _CallChain, _Ns) :-
     rendering_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
@@ -73,6 +74,20 @@ rendering_query(isa(_, _)).
 rendering_query(instance_of(_, _)).
 rendering_query(have_attribute(_, _, _)).
 rendering_query(attribute(_, _, _)).
+rendering_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(mark_kind/1).
+public_prolog_predicate(geometry_field/3).
+public_prolog_predicate(placement/1).
+public_prolog_predicate(limit/2).
+public_prolog_predicate(well_formed_mark/1).
+public_prolog_predicate(well_formed_scene/1).
+public_prolog_predicate(depicted/4).
+public_prolog_predicate(depicted/5).
+public_prolog_predicate(isa/2).
+public_prolog_predicate(instance_of/2).
+public_prolog_predicate(have_attribute/3).
+public_prolog_predicate(attribute/3).
 
 %% --- the geometries -----------------------------------------------------------
 %% Seven bounded parameterized shapes, a transform group and an asset mesh.

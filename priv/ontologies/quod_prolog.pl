@@ -3,6 +3,7 @@
 acl_sovereign(quod:prolog).
 can_invoke(Goal, _, _, _) :- prolog_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- prolog_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
@@ -10,18 +11,55 @@ prolog_query(prolog_predicates(_, _)).
 prolog_query(prolog_source(_, _, _)).
 prolog_query(prolog_edit_goal(_, _, _, _, _)).
 prolog_query(prolog_clauses(_, _)).
+prolog_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(prolog_predicates/2).
+public_prolog_predicate(prolog_source/3).
+public_prolog_predicate(prolog_edit_goal/5).
+public_prolog_predicate(prolog_clauses/2).
 
 prolog_clauses(Source, Clauses) :-
     '$quod_program_source'(Clauses, Source).
 
+%% Four authorities in order: a root administrator through root's relay, the
+%% tool's own public declarations, the target's own policy, then the public
+%% declarations of any catalogued system target. That last clause also serves
+%% an administrator whose target does not yet admit the inspection wrapper.
+%% prolog_source/3 follows the same order.
+prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_prolog_predicates(ontology_ref(Namespace, Anchor), Indicators)), !.
+prolog_predicates(ontology_ref(<<"quod:prolog">>, Anchor), Indicators) :-
+    current_ontology_identity(<<"quod:prolog">>, Anchor),
+    !,
+    public_prolog_predicates(Indicators).
 prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
     Namespace::(current_ontology_identity(Namespace, Anchor),
         findall(Indicator, current_predicate(Indicator), Unsorted),
-        sort(Unsorted, Indicators)).
+        sort(Unsorted, Indicators)), !.
+prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(ontology_ref(Namespace, Anchor), _)),
+    !,
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                public_prolog_predicates(Indicators)).
 
 prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source)), !.
+prolog_source(ontology_ref(<<"quod:prolog">>, Anchor), Indicator, Source) :-
+    current_ontology_identity(<<"quod:prolog">>, Anchor),
+    !,
+    public_prolog_source(Indicator, Source).
+prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
     Namespace::(current_ontology_identity(Namespace, Anchor),
-        '$quod_predicate_source'(Indicator, Source)).
+                '$quod_predicate_source'(Indicator, Source)), !.
+prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(ontology_ref(Namespace, Anchor), _)),
+    !,
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                public_prolog_source(Indicator, Source)).
 
 %% Source is data while this goal is compiled. The caller submits the explicit
 %% returned assertz/retract goals through normal signed admission; new callable
@@ -29,10 +67,8 @@ prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
 %% Source checks return no scratch bindings: the durable result must not
 %% duplicate the inspected program. The ordinary transaction composes inside
 %% actions and other transactions with their existing savepoint semantics.
-prolog_edit_goal(ontology_ref(Namespace, Anchor), Indicator,
-                 ExpectedSource, DraftSource,
-                 Namespace::(current_ontology_identity(Namespace, Anchor),
-                             transaction(Body))) :-
+prolog_edit_goal(Target, Indicator, ExpectedSource, DraftSource, Edit) :-
+    Target = ontology_ref(Namespace, Anchor),
     term_variables([Namespace, Anchor, Indicator], []),
     '$quod_program_source'(ExpectedProgram, ExpectedSource),
     '$quod_program_source'(DraftProgram, DraftSource),
@@ -44,7 +80,30 @@ prolog_edit_goal(ontology_ref(Namespace, Anchor), Indicator,
     prolog_changed_suffix(ExpectedEntries, DraftEntries, Remove, Add),
     prolog_edit_tail(Remove, Add, Indicator, CanonicalDraft, Tail),
     Body = (('$quod_predicate_source'(Indicator, CanonicalExpected) -> true ; fail_with_reason(edit_conflict(Indicator))),
-            Tail).
+            Tail),
+    TargetEdit = Namespace::(current_ontology_identity(Namespace, Anchor),
+                             transaction(Body)),
+    prolog_edit_destination(Target, TargetEdit, Edit).
+
+%% Root already authorizes its administrator's exact direct transaction. Keep
+%% that existing path rather than adding a second root self-edit wrapper.
+prolog_edit_destination(
+        ontology_ref(<<"quod:root">>, _), TargetEdit, TargetEdit) :- !.
+prolog_edit_destination(
+        ontology_ref(Namespace, Anchor),
+        Namespace::(current_ontology_identity(Namespace, Anchor),
+                    transaction(Body)),
+        Namespace::(current_ontology_identity(Namespace, Anchor),
+                    system_prolog_edit(transaction(Body)))) :-
+    %% Unit-local and other unanchored compiler uses have no scope in which to
+    %% ask root. They retain the ordinary direct target edit; signed requests
+    %% have a principal and may select this administrator wrapper.
+    current_principal(_),
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(
+                    ontology_ref(Namespace, Anchor), editable)),
+    !.
+prolog_edit_destination(_, TargetEdit, TargetEdit).
 
 %% Compare ground source keys, never unify two clauses to test equality.
 %% The bridge numbers variables independently for each printed clause.

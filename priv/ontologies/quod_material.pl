@@ -3,6 +3,7 @@
 acl_sovereign(quod:material).
 can_invoke(Goal, _, _, _) :- material_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- material_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
@@ -14,6 +15,16 @@ material_query(material_property(_, _, _, _, _)).
 material_query(property_in(_, _, _, _, _, _)).
 material_query(have_attribute(_, _, _)).
 material_query(attribute(_, _, _)).
+material_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(isa/2).
+public_prolog_predicate(material_class/1).
+public_prolog_predicate(most_specific_classes/3).
+public_prolog_predicate(property_unit/2).
+public_prolog_predicate(material_property/5).
+public_prolog_predicate(property_in/6).
+public_prolog_predicate(have_attribute/3).
+public_prolog_predicate(attribute/3).
 
 isa(material, thing).
 isa(wood, material).

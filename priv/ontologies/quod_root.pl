@@ -15,6 +15,8 @@ acl_sovereign(quod:root).
 %% Founding also supplies the local empty-call-chain host entry; signed goals
 %% and cross-ontology callers still enter through these authored rules.
 can_invoke(Goal, _, _, _) :- root_public_goal(Goal).
+can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :-
+    root_public_goal(Goal).
 can_invoke(create_ontology(_, _, _), Principal, Chain, Namespace) :-
     root_creation_context(Principal, Chain, Namespace).
 can_invoke(_, node(Key), Chain, Namespace) :-
@@ -46,11 +48,50 @@ root_public_goal(ontology_creation_policy(_, _)).
 root_public_goal(effect_custody_capacity(_)).
 root_public_goal(peer_admitted(_, _, _, _)).
 root_public_goal(acl_sovereign(_)).
+root_public_goal(system_source_access(_, _)).
+root_public_goal(system_prolog_predicates(_, _)).
+root_public_goal(system_prolog_source(_, _, _)).
 root_public_goal(findall(_, Query, _)) :- root_catalogue_query(Query).
 
 root_catalogue_query(system_ontology(_, _)).
 root_catalogue_query(ontology_creation_policy(_, _)).
 root_catalogue_query(peer_admitted(_, _, _, _)).
+
+%% Root owns the single administrator list. Other system ontologies neither
+%% copy it nor ask another ontology from inside can_invoke/4. These narrow
+%% relays check the authenticated principal here, then enter the exact
+%% catalogued target. That target's narrow wrapper checks the same principal
+%% here again, so intermediate call-chain names never carry authority.
+system_source_access(ontology_ref(Namespace, Anchor), Access) :-
+    system_source_target(Namespace, Anchor),
+    current_principal(Principal),
+    (root_administrator_agent(Principal) -> Access = editable ; Access = read_only).
+
+system_prolog_predicates(ontology_ref(<<"quod:root">>, Anchor), Indicators) :-
+    current_principal(Principal), root_administrator_agent(Principal),
+    current_ontology_identity(<<"quod:root">>, Anchor),
+    findall(Indicator, current_predicate(Indicator), Unsorted),
+    sort(Unsorted, Indicators), !.
+system_prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
+    current_principal(Principal), root_administrator_agent(Principal),
+    system_ontology(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                system_prolog_introspection(predicates, Indicators)).
+
+system_prolog_source(ontology_ref(<<"quod:root">>, Anchor), Indicator, Source) :-
+    current_principal(Principal), root_administrator_agent(Principal),
+    current_ontology_identity(<<"quod:root">>, Anchor),
+    '$quod_predicate_source'(Indicator, Source), !.
+system_prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
+    current_principal(Principal), root_administrator_agent(Principal),
+    system_ontology(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                system_prolog_introspection(source(Indicator), Source)).
+
+system_source_target(<<"quod:root">>, Anchor) :-
+    current_ontology_identity(<<"quod:root">>, Anchor).
+system_source_target(Namespace, Anchor) :-
+    system_ontology(Namespace, Anchor).
 
 %% Root is the one ontology every node starts before it can execute durable
 %% effects, so it owns the node-wide custody capacity without a bootstrap

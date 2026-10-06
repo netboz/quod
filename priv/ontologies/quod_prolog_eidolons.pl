@@ -3,12 +3,18 @@
 acl_sovereign(quod:prolog:eidolons).
 can_invoke(Goal, _, _, _) :- prolog_eidolon_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- prolog_eidolon_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
 prolog_eidolon_query(eidolon(_, _, _)).
 prolog_eidolon_query(class_eidolon(_, _, _, _)).
 prolog_eidolon_query(isa(_, _)).
+prolog_eidolon_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(eidolon/3).
+public_prolog_predicate(class_eidolon/4).
+public_prolog_predicate(isa/2).
 
 isa(prolog_editor, eidolon).
 isa(eidolon, thing).
@@ -19,4 +25,23 @@ eidolon(prolog_editor, subject(Target, Entity),
     Tools = <<"quod:prolog">>, Gui = <<"quod:gui">>,
     quod:root::system_ontology(Tools, ToolsAnchor),
     quod:root::system_ontology(Gui, GuiAnchor),
-    Gui::(current_ontology_identity(Gui, GuiAnchor), gui_view(prolog_editor, View)).
+    prolog_source_view(Target, ViewId),
+    Gui::(current_ontology_identity(Gui, GuiAnchor), gui_view(ViewId, View)).
+
+%% A system administrator is identified by root's one authoritative list.
+%% Owners retain their target's ordinary broad authorization. Everyone else
+%% reaches only the target-authored public read surface.
+prolog_source_view(Target, prolog_editor) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(Target, editable)),
+    !.
+prolog_source_view(ontology_ref(<<"quod:prolog:eidolons">>, Anchor), prolog_source) :-
+    current_ontology_identity(<<"quod:prolog:eidolons">>, Anchor),
+    !.
+prolog_source_view(ontology_ref(Namespace, Anchor), prolog_editor) :-
+    Namespace::current_ontology_identity(Namespace, Anchor),
+    !.
+prolog_source_view(Target, prolog_source) :-
+    quod:root::(current_ontology_identity(<<"quod:root">>, _),
+                system_source_access(Target, read_only)),
+    !.

@@ -4,11 +4,16 @@ acl_sovereign(quod:environment).
 
 can_invoke(Goal, _, _, _) :- environment_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- environment_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
 environment_query(isa(_, _)).
 environment_query(have_attribute(_, _, _)).
+environment_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(isa/2).
+public_prolog_predicate(have_attribute/3).
 
 isa(environment, thing).
 isa(sky_sphere, environment).

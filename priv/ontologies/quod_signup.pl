@@ -47,6 +47,7 @@ signup_principal(agent_instance_ref(Namespace, Anchor, signup(Key)), Key) :-
 can_invoke(Goal, Principal, _, _) :- signup_invocation(Goal, Principal).
 can_invoke((current_ontology_identity(_, _), Goal), Principal, _, _) :-
     signup_invocation(Goal, Principal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 

@@ -7,6 +7,7 @@ implementation and names each state owner. Follow only the subject you need:
 | --- | --- |
 | Consensus, history, signatures and recovery | [Consensus](consensus-signatures.md) |
 | Prolog proofs, authorization and foreign scopes | [Proofs](proofs.md) |
+| Public inspection and protected mutation of system ontologies | [System ontology ACLs](system-ontology-acls.md) |
 | Atomic and independent multi-ontology writes | [Multiwrite](multiwrite-architecture.md) |
 | Ontology bootstrap, creation and routes | [Lifecycle and routing](lifecycle-and-routing.md) |
 | Projections, events, effects, agents and internal FIPA | [Runtime and agents](runtime-and-agents.md) |

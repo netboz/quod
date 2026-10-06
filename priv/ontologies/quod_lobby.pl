@@ -4,6 +4,7 @@ acl_sovereign(quod:lobby).
 
 can_invoke(Goal, _, _, _) :- lobby_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- lobby_query(Goal).
+can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
@@ -16,6 +17,17 @@ lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
 lobby_query(lobby_options(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
+lobby_query(Goal) :- public_source_query(Goal).
+
+public_prolog_predicate(lobby_recipe/3).
+public_prolog_predicate(lobby_modes/1).
+public_prolog_predicate(device_menu/2).
+public_prolog_predicate(device_eidolons/4).
+public_prolog_predicate(isa/2).
+public_prolog_predicate(class_eidolon/4).
+public_prolog_predicate(eidolon/3).
+public_prolog_predicate(lobby_options/2).
+public_prolog_predicate(ontology_creation_allowed/3).
 
 %% A user's editable facts cannot grant names outside its own personal lobby.
 %% The pending requirement is read in the same proof as the prepared creation.

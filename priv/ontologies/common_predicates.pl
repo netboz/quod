@@ -46,7 +46,7 @@ public_source_query(public_prolog_source(_, _)).
 system_source_query(
     (current_ontology_identity(_, _), system_prolog_introspection(_, _))).
 system_source_query(
-    (current_ontology_identity(_, _), system_prolog_edit(transaction(_)))).
+    (current_ontology_identity(_, _), system_prolog_edit, transaction(_))).
 
 system_source_administrator :-
     current_ontology_identity(Namespace, Anchor),
@@ -62,9 +62,7 @@ system_prolog_introspection(source(Indicator), Source) :-
     system_source_administrator,
     '$quod_predicate_source'(Indicator, Source).
 
-system_prolog_edit(transaction(Body)) :-
-    system_source_administrator,
-    transaction(Body).
+system_prolog_edit :- system_source_administrator.
 
 %% isa(?Subclass, ?Superclass).
 %%

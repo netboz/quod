@@ -94,7 +94,8 @@ prolog_edit_destination(
         Namespace::(current_ontology_identity(Namespace, Anchor),
                     transaction(Body)),
         Namespace::(current_ontology_identity(Namespace, Anchor),
-                    system_prolog_edit(transaction(Body)))) :-
+                    system_prolog_edit,
+                    transaction(Body))) :-
     %% Unit-local and other unanchored compiler uses have no scope in which to
     %% ask root. They retain the ordinary direct target edit; signed requests
     %% have a principal and may select this administrator wrapper.

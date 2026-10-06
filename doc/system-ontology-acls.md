@@ -34,10 +34,12 @@ through to that third path and sees the public declarations; the editor view
 stays administrative and a save reports the target's refusal.
 
 The target still checks every entered scope. It admits only exact
-`system_prolog_introspection/2` and `system_prolog_edit/1` wrapper shapes. Each
-wrapper re-enters root and checks the authenticated principal against root's
-administrator fact before reading non-public source or starting a transaction;
-intermediate call-chain names are provenance, never authority. The edit
+`system_prolog_introspection/2` and `(system_prolog_edit, transaction(Body))`
+wrapper shapes. The `system_prolog_edit/0` guard re-enters root and checks the
+authenticated principal against root's administrator fact before the
+transaction can start; the introspection wrapper performs the same check before
+reading non-public source. Intermediate call-chain names are provenance, never
+authority. The edit
 compiler's baseline comparison is retained. Compiling or previewing an edit is
 read-only; the separately signed generated goal must still pass target
 admission and root's principal check.

@@ -638,12 +638,16 @@ verify_system_editor(Ctx, Ns) ->
         _ ->
             ?assertMatch({'::', Ns,
                           {',', Guard,
-                           {system_prolog_edit, {transaction, _}}}}, Edit)
+                           {',', system_prolog_edit, {transaction, _}}}}, Edit)
     end,
     Other = Ctx#{instance => <<"human_user(other_agent).">>},
     ?assertMatch({fail, _}, read(Other, Source)),
     ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Other, execute, Edit)),
-    ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit(Ctx, execute, Edit)),
+    {Owner, CursorId, Evidence} = open_cursor(Ctx, Edit),
+    {ok, Evidence, CursorResult} =
+        quod_client_cursor:command(Owner, CursorId, accept),
+    ?assertMatch({committed, _, _},
+                 quod_client_result:normalize(Evidence, CursorResult)),
     ?assertMatch({ok, [#{<<"V0">> := <<"editor_system_fact(saved) :- true.\n">>}], _},
                  read(Ctx, Source)),
     ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Ctx, execute, Edit)).
@@ -931,20 +935,40 @@ stop_process(Pid) ->
     receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> error(stop_timeout) end.
 
 submit(Ctx, Mode, Goal) ->
+    {Bytes, Signature} = signed_request(Ctx, Mode, Goal),
+    quod_client_goal_ingress:submit(Bytes, Signature).
+
+signed_request(Ctx, Mode, Goal) ->
     {Ns, Anchor} = maps:get(agent, Ctx),
     {Public, _} = KeyPair = maps:get(key_pair, Ctx),
-    %% Returned compiler terms have fresh proof variable IDs. Text entry
-    %% re-numbers those names exactly as every ordinary signed request does.
+    %% Returned compiler terms have fresh proof variable IDs. Current browser
+    %% text entry re-numbers those names through the parser-v3 signed path.
     {Numbered, _, _} = erlog_int:term_instance(Goal, 0),
     {ok, Text} = quod_client_goal_parser:format(Numbered),
     Request = #{network_identity => maps:get(network, Ctx), signing_public_key => Public,
         operation_id => crypto:strong_rand_bytes(32), agent_namespace => Ns,
         agent_genesis_anchor => Anchor, agent_instance_text => maps:get(instance, Ctx, <<"human_user(test_agent).">>),
-        mode => Mode, parser_version => 2, not_after_ms => quod_time:now_ms() + 30000,
+        mode => Mode, parser_version => 3, not_after_ms => quod_time:now_ms() + 30000,
         goal_text => Text},
     {ok, Bytes} = quod_client_goal:encode(Request),
     Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
-    quod_client_goal_ingress:submit(Bytes, Signature).
+    {Bytes, Signature}.
+
+open_cursor(Ctx, Goal) ->
+    {Bytes, Signature} = signed_request(Ctx, cursor, Goal),
+    {ok, Evidence = #{request := #{signing_public_key := SigningKey}}} =
+        quod_client_goal_target:verify_request(Bytes, Signature),
+    {ok, Peer} = application:get_env(quod, node_pubkey),
+    Owner = {session, crypto:strong_rand_bytes(32), SigningKey},
+    CursorId = crypto:strong_rand_bytes(32),
+    {ok, {Evidence, MaterializedGoal, Principal, Owner}} =
+        quod_client_goal_target:prepare_local(
+          Evidence, Peer, Owner, CursorId),
+    ?assertMatch(
+       {ok, Evidence, {normalized, {solution, CursorId, _, _}}},
+       quod_client_goal_target:execute(
+         Evidence, MaterializedGoal, Principal, Owner, CursorId)),
+    {Owner, CursorId, Evidence}.
 
 read(Ctx, Goal) ->
     case submit(Ctx, read, Goal) of

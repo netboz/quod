@@ -6,6 +6,8 @@
 -include_lib("opentelemetry/include/otel_span.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([node_enrollment_remote_custodian/1, enrollment_wait_ready/2,
+         enrollment_wait_complete/0]).
 -export([remote_plain_read_excludes_live_observer/1,
          remote_plain_read_rejects_lying_validator/1,
          remote_scope_solutions/1, remote_scope_trace_parentage/1,
@@ -96,7 +98,168 @@ all() -> [remote_signed_transaction_savepoints,
           remote_bound_effect_recovers_without_activation,
           remote_signed_group_uses_exact_agent_request,
           remote_group_recovers_after_origin_crash,
-          remote_four_scope_chain_recovers_empty_routes].
+          remote_four_scope_chain_recovers_empty_routes,
+          node_enrollment_remote_custodian].
+
+node_enrollment_remote_custodian(Config) ->
+    Source = ?config(asker, Config), Custodian = ?config(target, Config),
+    SourceKey = ?config(asker_pub, Config), HostKey = ?config(target_pub, Config),
+    SourceAddr = {"127.0.0.1", ?ASKER_PORT}, HostAddr = ?config(target_addr, Config),
+    NodeNs = <<"quod:node">>,
+    NodeSource = filename:join(code:priv_dir(quod), "ontologies/quod_node.pl"),
+    NodeDir = filename:join(?config(priv_dir, Config), "enrollment-class"),
+    {ok, _} = peer:call(Source, quod_ns_sup, start_namespace,
+        [NodeNs, #{node_id => SourceKey, mode => create, data_dir => NodeDir,
+                   seed_peers => [], genesis_file => NodeSource,
+                   external_predicate_modules => [quod_ontology_predicates]}]),
+    ok = peer:call(Source, ?MODULE, enrollment_wait_ready, [NodeNs, {isa, node, agent}], 15000),
+    NodeAnchor = peer:call(Source, quod_simplex, genesis_hash, [NodeNs]),
+    start_brahms(Source, NodeNs, SourceAddr, []),
+    {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                 "ontologies/node_execution.pl")),
+    HostNs = <<"node:remote-custodian">>,
+    Options = quod_ct:node_identity_options(HostNs, me, HostKey),
+    {ok, [#{'A' := HostAnchor}], _} = peer:call(Custodian, quod_prolog, execute,
+        [?ROOT_NS, {create_ontology, HostNs, Options, {'A'}}], 30000),
+    ok = peer:call(Custodian, ?MODULE, enrollment_wait_ready,
+        [HostNs, {instance_of, node, me}], 15000),
+    Host = {agent_instance_ref, HostNs, HostAnchor, me},
+    {ok, _, _} = peer:call(Custodian, quod_prolog, execute,
+        [HostNs, {assertz, {ontology_hosting_policy, NodeNs, NodeAnchor}}]),
+    {ok, _, _} = peer:call(Source, quod_prolog, execute, [NodeNs, {transaction, {',',
+        {assertz, {node_identity_template, Template}},
+        {assertz, {node_identity_allocation, HostKey, Host, Host}}}}]),
+    {ok, _, _} = peer:call(Custodian, quod_prolog, execute,
+        [?ROOT_NS, {assertz, {ontology_creation_policy, NodeNs, NodeAnchor}}]),
+    ok = enrollment_route(Source, HostKey, HostAddr,
+        [{?ROOT_NS, ?config(network_id, Config), validator}, {HostNs, HostAnchor, validator}]),
+    ok = enrollment_route(Custodian, SourceKey, SourceAddr, [{NodeNs, NodeAnchor, validator}]),
+    {Public, _} = Pair = quod_identity:generate(),
+    {ok, Instance} = quod_client_goal_parser:format({enrolling, Public}),
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => ?config(network_id, Config),
+        signing_public_key => Public, operation_id => crypto:strong_rand_bytes(32),
+        agent_namespace => NodeNs, agent_genesis_anchor => NodeAnchor,
+        agent_instance_text => Instance, mode => execute, parser_version => 3,
+        not_after_ms => quod_time:now_ms() + 30000, goal_text => <<"enroll_node(Ref).">>}),
+    Sig = quod_identity:sign(Bytes, quod_identity:key_term(Pair)),
+    Result = peer:call(Source, quod_client_goal_ingress, submit, [Bytes, Sig], 60000),
+    case Result of
+        {ok, _, {normalized, {failed, Reasons}}} ->
+            ct:fail({enrollment_failed, quod_wire_term:decode_failure_reasons(Reasons)});
+        _ -> ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result)
+    end,
+    {ok, [#{'Ref' := {agent_instance_ref, Ns, Anchor, me} = Ref}], _} =
+        peer:call(Source, quod_prolog, prove_ro,
+            [NodeNs, {node_identity_allocation, Public, {'Ref'}, Host}]),
+    ?assertMatch({ok, [_], _}, peer:call(Custodian, quod_prolog, prove_ro,
+        [HostNs, {hosts_ontology, Host, Ns, Anchor, discoverable}])),
+    ok = peer:call(Custodian, ?MODULE, enrollment_wait_ready,
+        [Ns, {agent_key, me, Public, active}], 15000),
+    ?assertEqual({error, not_hosted},
+        peer:call(Source, quod_ontology, genesis_anchor, [Ns])),
+    ?assertMatch({ok, [_], _}, peer:call(Source, quod_prolog, prove_ro,
+        [NodeNs, {node_identity_allocation, Public, Ref, Host}])),
+    automatic_joining_node(Config, NodeAnchor, Host).
+
+automatic_joining_node(Config, NodeAnchor,
+                      {agent_instance_ref, HostNs, HostAnchor, me} = Host) ->
+    Custodian = ?config(target, Config), Applicant = ?config(third, Config),
+    HostAddr = ?config(target_addr, Config), NodeNs = <<"quod:node">>,
+    HostDir = filename:join(?config(priv_dir, Config), "custodian-identity"),
+    NodeDir = filename:join(?config(priv_dir, Config), "applicant-identity"),
+    ok = peer:call(Custodian, application, set_env, [quod, identity_dir, HostDir]),
+    {ok, HostBlob} = quod_node_actor:reference(HostNs, HostAnchor, <<"me.">>, 3),
+    {ok, _} = peer:call(Custodian, quod_node_actor, verify, [HostBlob, ?config(target_pub, Config)]),
+    ok = peer:call(Custodian, quod_identity, store_node_actor_pointer, [HostDir, HostBlob]),
+    {ok, #{start := {quod_ns, start_link, [HostNs, HostCfg]}}} =
+        peer:call(Custodian, supervisor, get_childspec,
+            [quod_reg:via({quod_ns_sup, node}), {quod_ns, HostNs}]),
+    HostDataDir = peer:call(Custodian, quod_ledger_store, ledger_dir, [HostCfg]),
+    ok = peer:call(Custodian, application, set_env,
+        [quod, content_data_dir, HostDataDir]),
+    ok = peer:call(Applicant, application, set_env, [quod, content_data_dir, NodeDir]),
+    lists:foreach(fun({Peer, Dir, Contacts}) ->
+        {ok, #{start := {quod_ns, start_link, [?ROOT_NS, RootCfg]}}} =
+            peer:call(Peer, supervisor, get_childspec,
+                [quod_reg:via({quod_ns_sup, node}), {quod_ns, ?ROOT_NS}]),
+        ok = peer:call(Peer, application, set_env,
+            [quod, namespace_static_content, #{?ROOT_NS => RootCfg}]),
+        ok = peer:call(Peer, supervisor, terminate_child,
+            [quod_reg:via({sup, node}), quod_namespace_manager]),
+        {ok, _} = peer:call(Peer, supervisor, restart_child,
+            [quod_reg:via({sup, node}), quod_namespace_manager]),
+        ok = peer:call(Peer, application, set_env, [quod, directory,
+            #{identity_dir => Dir, root_contacts => Contacts}]),
+        ok = peer:call(Peer, supervisor, terminate_child, [quod_reg:via({sup, node}), quod_directory_control]),
+        {ok, _} = peer:call(Peer, supervisor, restart_child, [quod_reg:via({sup, node}), quod_directory_control]),
+        ok = peer:call(Peer, quod_directory_control, start_tracking, [])
+    end, [{Custodian, HostDir, []}, {Applicant, NodeDir, [HostAddr]}]),
+    ok = enrollment_route(Applicant, ?config(asker_pub, Config), {"127.0.0.1", ?ASKER_PORT},
+         [{NodeNs, NodeAnchor, validator}]),
+    {ok, _, _} = peer:call(Custodian, quod_prolog, execute,
+        [?ROOT_NS, {assertz, {system_ontology, NodeNs, NodeAnchor}}]),
+    ok = peer:call(Applicant, application, set_env, [quod, identity_dir, NodeDir]),
+    ok = peer:call(Applicant, ?MODULE, enrollment_wait_complete, [], 60000),
+    {ok, Blob} = peer:call(Applicant, quod_identity, load_node_actor_pointer, [NodeDir]),
+    {ok, #{identity := {Ns, Anchor}, reference := Ref}} = quod_agent_ref:decode(Blob),
+    ?assertMatch(#{role := observer}, peer:call(Applicant, quod_simplex, status, [Ns])),
+    ?assertMatch(#{role := observer}, peer:call(Applicant, quod_simplex, status, [?ROOT_NS])),
+    ?assertMatch({ok, [_], _}, peer:call(Custodian, quod_prolog, prove_ro,
+        [HostNs, {hosts_ontology, Host, Ns, Anchor, discoverable}])),
+    ?assertMatch({ok, [_], _}, peer:call(Applicant, quod_prolog, prove_ro,
+        [Ns, {hosts_ontology, Ref, Ns, Anchor, discoverable}])),
+    {ok, Bytes, Sig} = peer:call(Applicant, quod_node_actor, signed_goal,
+        [read, true, crypto:strong_rand_bytes(32), quod_time:now_ms() + 30000]),
+    ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+        peer:call(Applicant, quod_client_goal_ingress, submit, [Bytes, Sig], 60000)).
+
+enrollment_wait_complete() ->
+    Manager = quod_reg:where({namespace_manager, node}), Parent = self(),
+    Observer = fun(State, {in, {node_enrollment_result, _, Result}}, _) ->
+                       Parent ! {enrollment_progress, Result}, State;
+                  (State, _, _) -> State end,
+    ok = sys:install(Manager, {Observer, enrollment_test}),
+    try
+        ok = quod_namespace_manager:enroll_node(),
+        enrollment_wait_complete(quod_time:mono_ms() + 45000)
+    after sys:remove(Manager, Observer) end.
+
+enrollment_wait_complete(Deadline) ->
+    case maps:get(node_enrollment, quod_namespace_manager:stats()) of
+        complete -> ok;
+        {error, Reason} -> error({enrollment_failed, Reason});
+        _ -> receive
+            {enrollment_progress, _} -> enrollment_wait_complete(Deadline)
+        after max(0, Deadline - quod_time:mono_ms()) ->
+            error({enrollment_incomplete, quod_namespace_manager:stats()})
+        end
+    end.
+
+%% These suite peers retain directory high-water marks across cases. Advance
+%% the synthetic author's epoch even when a preceding recovery case expired
+%% all its routes; never weaken the directory's stale-generation rejection.
+enrollment_route(Peer, Key, Endpoint, Hosted) ->
+    Author = {root_bootstrap, Key, Key},
+    Previous = peer:call(Peer, ets, lookup, [quod_directory_highwater, Author]),
+    Epoch = case Previous of [] -> 1; [{Author, E, _}] -> E + 1 end,
+    {ok, _} = peer:call(Peer, quod_ct, install_directory_generation,
+                        [Key, Endpoint, Hosted, Epoch, 1]),
+    ok.
+
+enrollment_wait_ready(Ns, Goal) ->
+    true = quod_reg:subscribe({runtime, Ns}),
+    try enrollment_wait_ready(Ns, Goal, quod_time:mono_ms() + 10000)
+    after quod_reg:unsubscribe({runtime, Ns}) end.
+
+enrollment_wait_ready(Ns, Goal, Deadline) ->
+    case quod_prolog:prove_ro(Ns, Goal) of
+        {ok, [_], _} -> ok;
+        _ -> receive
+            {proof_ready, {Ns, _}, _, _, _} -> enrollment_wait_ready(Ns, Goal, Deadline);
+            {replay_ready, {Ns, _}, _} -> enrollment_wait_ready(Ns, Goal, Deadline)
+        after max(0, Deadline - quod_time:mono_ms()) -> error({enrollment_not_ready, Ns})
+        end
+    end.
 
 remote_signed_transaction_savepoints(Config) ->
     ok = require_third_route_at_target(Config),

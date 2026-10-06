@@ -32,7 +32,7 @@ itself owns only projection state, ordering, and replies.
 
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
-         start_brahms/2, stop_brahms/1, adopt_node_actor/0,
+         start_brahms/2, stop_brahms/1, adopt_node_actor/0, enroll_node/0,
          project_node_policy/4, hosting_snapshot/0, desired_identity/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
@@ -67,6 +67,10 @@ itself owns only projection state, ordering, and replies.
     system_query = undefined,
     system_dirty = false,
     node_actor = none,
+    enrollment_job = undefined,
+    enrollment_dirty = false,
+    enrollment_status = waiting,
+    enrollment_route = none,
     route_waits = #{},
     system_route_waits = #{},
     node_route_waits = #{},
@@ -110,6 +114,9 @@ desired_identity(Ns) ->
 -doc "Adopt the exact node-actor pointer persisted by the enrollment seam.".
 adopt_node_actor() ->
     gen_server:cast(quod_reg:via(?KEY), adopt_node_actor).
+
+enroll_node() ->
+    gen_server:cast(quod_reg:via(?KEY), enroll_node).
 
 -doc "Install one complete revisioned projection from the local node actor.".
 project_node_policy(Namespace, Height, Scope, Projection) ->
@@ -172,11 +179,15 @@ init([]) ->
     persist_desired(Desired),
     install_node_actor_principal(unavailable),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
+    true = quod_reg:subscribe({runtime, <<"quod:node">>}),
+    true = quod_reg:subscribe({client_auth, node}),
+    true = quod_reg:subscribe({client_goal_router, node}),
     true = quod_reg:subscribe({namespace_topology, node}),
     NsMonitor = quod_reg:monitor_name({quod_ns_sup, node}, follow),
     BrahmsMonitor = quod_reg:monitor_name({quod_brahms_sup, node}, follow),
     self() ! reconcile,
     self() ! refresh_system_catalogue,
+    self() ! enroll_node,
     maybe_subscribe_node_actor(NodeActor),
     {ok, #s{desired = Desired, bootstrap_content = Bootstrap,
             system_content = System, node_actor = NodeActor,
@@ -204,6 +215,7 @@ handle_call(stats, _From,
                 maps:keys(content_projection(Bootstrap, System, Node)), S),
     {reply,
      #{hosting_revision => Revision,
+       node_enrollment => S#s.enrollment_status,
        desired_hosts =>
            #{discoverable => count_host_visibility(discoverable, Desired),
              private => count_host_visibility(private, Desired)},
@@ -340,6 +352,8 @@ started_genesis(Ns, Config) ->
             {error, genesis_unavailable}
     end.
 
+handle_cast(enroll_node, S) ->
+    {noreply, request_enrollment(S)};
 handle_cast(adopt_node_actor, S) ->
     {NodeActor, NodeActorContent} = node_actor_bootstrap(),
     S1 = adopt_node_actor_state(NodeActor, NodeActorContent, S),
@@ -390,7 +404,7 @@ handle_info(
              true -> S0#s{retired_content = #{}};
              false -> S0
          end,
-    {noreply, continue_work(S1)};
+    {noreply, request_enrollment(continue_work(S1))};
 handle_info(
   {mutation_result, Token, {call, From, Result}},
   S = #s{mutation_worker = {_Pid, MRef, Token, {call, From}}}) ->
@@ -425,9 +439,35 @@ handle_info(process_pending_call,
     end;
 handle_info(refresh_system_catalogue, S) ->
     {noreply, start_system_query(S)};
+handle_info(enroll_node, S) ->
+    {noreply, start_enrollment(S)};
+handle_info({client_auth_ready, Owner}, S) ->
+    case whereis(quod_client_auth) =:= Owner of
+        true -> {noreply, request_enrollment(S)};
+        false -> {noreply, S}
+    end;
+handle_info({client_goal_router_ready, Owner}, S) ->
+    case whereis(quod_client_goal_router) =:= Owner of
+        true -> {noreply, request_enrollment(S)};
+        false -> {noreply, S}
+    end;
+handle_info({node_enrollment_result, Token, Result},
+            S = #s{enrollment_job = {_Pid, MRef, Token}}) ->
+    demonitor(MRef, [flush]),
+    S1 = finish_enrollment(Result, S#s{enrollment_job = undefined}),
+    case S1#s.enrollment_dirty of
+        true -> {noreply, request_enrollment(S1#s{enrollment_dirty = false})};
+        false -> {noreply, S1}
+    end;
+handle_info({'DOWN', MRef, process, Pid, Reason},
+            S = #s{enrollment_job = {Pid, MRef, _}}) ->
+    %% The retained request remains uncertain even if its worker dies before
+    %% a response. An owner restart will resolve it, never dispatch it again.
+    {noreply, S#s{enrollment_job = undefined,
+                  enrollment_status = {unresolved, {worker_down, Reason}}}};
 handle_info({replay_ready, _Id, _Height}, S) ->
     self() ! reconcile,
-    {noreply, request_system_refresh(S)};
+    {noreply, request_enrollment(request_system_refresh(S))};
 handle_info({proof_ready, {Ns, Anchor}, Owner, Prolog, _Generation}, S) ->
     %% Replay announces completion before Simplex installs the engine ACK.
     %% Only that installed edge can make a waiting host publishable.
@@ -441,20 +481,24 @@ handle_info({proof_ready, {Ns, Anchor}, Owner, Prolog, _Generation}, S) ->
                      ?ROOT_NS -> request_system_refresh(S);
                      _ -> S
                  end,
-            {noreply, S1};
+            {noreply, request_enrollment(S1)};
         false -> {noreply, S}
     end;
 handle_info({applied_live, Envelope}, S) ->
+    S0 = case enrollment_policy_changed(Envelope, S) of
+        true -> request_enrollment(S);
+        false -> S
+    end,
     case system_catalogue_changed(Envelope) of
         true ->
-            {noreply, request_system_refresh(S)};
-        false -> {noreply, S}
+            {noreply, request_system_refresh(S0)};
+        false -> {noreply, S0}
     end;
 handle_info({namespace_topology, _Namespaces}, S) ->
     %% A lifecycle effect may materialize a ledger after its hosting fact was
     %% committed. The existing topology edge wakes the same reconciler.
     self() ! reconcile,
-    {noreply, S};
+    {noreply, request_enrollment(S)};
 handle_info({directory_route_available, Identity},
             S = #s{route_waits = Waits}) ->
     case maps:get(Identity, Waits, []) of
@@ -468,7 +512,11 @@ handle_info({directory_route_available, Identity},
                      true -> request_system_refresh(S1);
                      false -> S1
                  end,
-            {noreply, S2}
+            S3 = case lists:member(enrollment, Kinds) of
+                true -> request_enrollment(S2);
+                false -> S2
+            end,
+            {noreply, S3}
     end;
 handle_info(
   {system_catalogue_result, Token, Result},
@@ -504,6 +552,10 @@ handle_info(_Info, S) ->
     {noreply, S}.
 
 terminate(_Reason, S) ->
+    case S#s.enrollment_job of
+        {Pid, MRef, _} -> demonitor(MRef, [flush]), exit(Pid, kill);
+        undefined -> ok
+    end,
     stop_mutation(S#s.mutation_worker),
     stop_system_query(S#s.system_query),
     demonitor_supervisor({quod_ns_sup, node}, S#s.ns_monitor),
@@ -511,6 +563,9 @@ terminate(_Reason, S) ->
     unsubscribe_waits(S#s.route_waits, directory_route),
     unsubscribe_waits(S#s.runtime_waits, runtime),
     _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
+    _ = catch quod_reg:unsubscribe({runtime, <<"quod:node">>}),
+    _ = catch quod_reg:unsubscribe({client_auth, node}),
+    _ = catch quod_reg:unsubscribe({client_goal_router, node}),
     _ = catch quod_reg:unsubscribe({namespace_topology, node}),
     _ = unsubscribe_node_actor(S#s.node_actor),
     ok.
@@ -749,9 +804,95 @@ cancel_timer(Ref) when is_reference(Ref) ->
     ok;
 cancel_timer(_) -> ok.
 
+request_enrollment(S = #s{enrollment_status = complete}) -> S;
+request_enrollment(S = #s{enrollment_job = undefined}) ->
+    self() ! enroll_node,
+    S;
+request_enrollment(S) -> S#s{enrollment_dirty = true}.
+
+start_enrollment(S = #s{enrollment_status = complete}) -> S;
+start_enrollment(S = #s{enrollment_job = undefined}) ->
+    case whereis(quod_client_auth) of
+        undefined -> S;
+        _ ->
+            Parent = self(), Token = make_ref(),
+            {Pid, MRef} = spawn_monitor(fun() ->
+                Result = try quod_node_actor:enroll()
+                         catch Class:Reason -> {error, {Class, Reason}} end,
+                Parent ! {node_enrollment_result, Token, Result}
+            end),
+            S#s{enrollment_job = {Pid, MRef, Token}, enrollment_dirty = false}
+    end;
+start_enrollment(S) -> S#s{enrollment_dirty = true}.
+
+finish_enrollment(complete, S) ->
+    {S1, _} = sync_route_wait_sources(S#s{enrollment_route = none}),
+    S1#s{enrollment_status = complete};
+finish_enrollment({submitted, Result}, S) ->
+    request_enrollment(S#s{enrollment_status = {submitted, enrollment_result_kind(Result)}});
+finish_enrollment({refused, Identity}, S) ->
+    {S1, _} = sync_route_wait_sources(S#s{enrollment_route = Identity}),
+    case S#s.enrollment_route =:= Identity of
+        true -> ok;
+        false -> quod_directory:route_needed(Identity)
+    end,
+    S1#s{enrollment_status = refused};
+finish_enrollment({allocated, Blob}, S) ->
+    {Actor, Content} = node_actor_bootstrap(),
+    {ok, #{identity := Identity}} = quod_agent_ref:decode(Blob),
+    Missing = map_size(Content) =:= 0,
+    Route = case Missing of true -> Identity; false -> none end,
+    NewWait = Route =/= none andalso S#s.enrollment_route =/= Route,
+    Changed = Actor =/= S#s.node_actor orelse
+              maps:without([?ROOT_NS], S#s.bootstrap_content) =/= Content,
+    S0 = case Changed of
+        true -> self() ! reconcile, adopt_node_actor_state(Actor, Content, S);
+        false -> S
+    end,
+    {S1, _} = sync_route_wait_sources(S0#s{enrollment_route = Route}),
+    case NewWait of
+        true ->
+            quod_directory:route_needed(Identity),
+            self() ! enroll_node;
+        false -> ok
+    end,
+    S1#s{enrollment_status = case Missing of true -> awaiting_route; false -> awaiting_identity end};
+finish_enrollment({error, Reason}, S) ->
+    case S#s.enrollment_status =:= {error, Reason} of
+        true -> ok;
+        false -> logger:error("quod: node enrollment stopped: ~p", [Reason])
+    end,
+    S#s{enrollment_status = {error, Reason}};
+finish_enrollment({unresolved, _}, S) -> S#s{enrollment_status = unresolved};
+finish_enrollment(Status, S) -> S#s{enrollment_status = Status}.
+
+enrollment_result_kind({ok, _, {normalized, {committed, _, _}}}) -> committed;
+enrollment_result_kind({ok, _, {normalized, {answers, _, _}}}) -> answered;
+enrollment_result_kind(_) -> unresolved.
+
+enrollment_policy_changed(_Envelope, #s{enrollment_status = complete}) -> false;
+enrollment_policy_changed(#{ns := Ns} = Envelope, S) ->
+    Diff = maps:get(diff, Envelope, []),
+    Functors = case {Ns, S#s.node_actor} of
+        {?ROOT_NS, _} -> [{ontology_creation_policy, 2}, {can_create_ontology, 3}, {can_invoke, 4}];
+        {<<"quod:node">>, _} ->
+            [{node_identity_allocation, 3}, {node_identity_template, 1},
+             {open_node_enrollment, 0}, {node_enrollment_window_ms, 1},
+             {enroll_node, 1}, {node_identity_options, 3},
+             {ontology_creation_allowed, 3}, {ontology_hosting_allowed, 5}, {can_invoke, 4}];
+        {Ns, #{namespace := Ns}} -> [{hosts_ontology, 4}, {agent_key, 3}, {can_invoke, 4}];
+        _ -> []
+    end,
+    lists:any(fun(F) -> quod_diff:touches_functor(Diff, F) end, Functors);
+enrollment_policy_changed(_, _) -> false.
+
 node_actor_bootstrap() ->
     case quod_node_actor:bootstrap() of
         none -> {none, #{}};
+        {pending, none} -> {none, #{}};
+        {pending, Blob} ->
+            {ok, #{identity := {Ns, Anchor}}} = quod_agent_ref:decode(Blob),
+            {#{blob => Blob, namespace => Ns, anchor => Anchor}, #{}};
         {ok, Blob, Config} ->
             {ok, #{identity := {Ns, Anchor}}} = quod_agent_ref:decode(Blob),
             {#{blob => Blob, namespace => Ns, anchor => Anchor},
@@ -1074,10 +1215,14 @@ sync_route_wait_sources(S) ->
                  fun(Identity, _True, Acc) ->
                      Acc#{Identity => [system | maps:get(Identity, Acc, [])]}
                  end, #{}, S#s.system_route_waits),
-    Wanted = maps:fold(
+    WithNode = maps:fold(
                fun(Identity, _True, Acc) ->
                    Acc#{Identity => [node | maps:get(Identity, Acc, [])]}
                end, Combined, S#s.node_route_waits),
+    Wanted = case S#s.enrollment_route of
+        none -> WithNode;
+        Identity -> WithNode#{Identity => [enrollment | maps:get(Identity, WithNode, [])]}
+    end,
     sync_waits(directory_route, Wanted, S#s.route_waits, S).
 
 sync_runtime_waits(S = #s{desired = Desired, node_actor = NodeActor}) ->
@@ -1089,7 +1234,7 @@ sync_runtime_waits(S = #s{desired = Desired, node_actor = NodeActor}) ->
     Wanted = maps:from_list(
                [{Ns, replay_ready}
                 || {Ns, Config} <- maps:to_list(Content),
-                   Ns =/= ?ROOT_NS, Ns =/= ActorNs,
+                   Ns =/= ?ROOT_NS, Ns =/= <<"quod:node">>, Ns =/= ActorNs,
                    runtime_wait_required(Ns, Config)]),
     {S1, _Added} = sync_waits(runtime, Wanted, S#s.runtime_waits, S),
     S1.

@@ -32,7 +32,7 @@ relayed announcements only from a current root control peer.
          test_set_pending_link/3, test_validate_peer_proof/1,
          test_set_hosting_snapshot/2, test_set_manager_epoch/1,
          test_expire_generations/0,
-         test_partition_hosted/1, test_validate_described_hosted/1]).
+         test_generation_specs/4, test_validate_described_hosted/1]).
 -endif.
 
 -define(KEY, {directory, control}).
@@ -227,6 +227,7 @@ init(Opts) ->
     Channel = channel(),
     true = quod_reg:subscribe({channel, Channel}),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
+    true = quod_reg:subscribe({node_actor, node}),
     case control_config(Opts) of
         {ok, Cfg} ->
             Base = #s{channel = Channel,
@@ -310,6 +311,9 @@ handle_cast(_Message, S) ->
 
 handle_info(directory_tick, S) ->
     {noreply, directory_tick(S)};
+handle_info({node_actor_installed, Manager, _Principal},
+            S = #s{manager_pid = Manager, tracking = true}) ->
+    {noreply, publish_hosted(S)};
 handle_info(refresh_control_peers, S) ->
     {noreply, maybe_start_peer_query(S)};
 handle_info({replay_ready, _Id, _Height}, S) ->
@@ -406,6 +410,7 @@ terminate(_Reason, S) ->
                 {directory, node}, S#s.directory_ref),
     _ = catch quod_reg:unsubscribe({channel, S#s.channel}),
     _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
+    _ = catch quod_reg:unsubscribe({node_actor, node}),
     _ = [catch quod_reg:unsubscribe({directory_route, Identity})
          || Identity <- maps:keys(S#s.route_demands)],
     ok.
@@ -1205,9 +1210,24 @@ partition_hosted(Hosted) ->
       end, Hosted).
 
 -ifdef(TEST).
-test_partition_hosted(Hosted) -> partition_hosted(Hosted).
+test_generation_specs(RootAuthor, NodeAuthor, RootRows, NodeRows) ->
+    generation_specs(RootAuthor, NodeAuthor, RootRows, NodeRows).
 test_validate_described_hosted(Hosted) -> validate_described_hosted(Hosted).
 -endif.
+
+%% Losing an installed actor's readiness or active key must not restore its
+%% old bootstrap publication. Keep only an empty bootstrap withdrawal until
+%% the exact retained actor is verified again.
+retained_node_identity() ->
+    case application:get_env(quod, identity_dir) of
+        {ok, Dir} ->
+            case quod_identity:load_node_actor_pointer(Dir) of
+                none -> false;
+                {pending, #{reference := none}} -> false;
+                _ -> true
+            end;
+        _ -> false
+    end.
 
 generation_specs(RootRows, NodeRows,
                  #s{self_key = SelfKey, control_peers = Peers}) ->
@@ -1222,8 +1242,20 @@ generation_specs(RootRows, NodeRows,
             {ok, {agent, Blob}} -> {node_actor, Blob};
             _ -> unavailable
         end,
-    case {generation_spec(RootAuthor, RootRows),
-          generation_spec(NodeAuthor, NodeRows)} of
+    generation_specs(RootAuthor, NodeAuthor, RootRows, NodeRows).
+
+generation_specs(RootAuthor, NodeAuthor, RootRows, NodeRows) ->
+    %% Once bound, the node signs its complete eligible set. An empty root
+    %% generation withdraws the former bootstrap claims under their old author.
+    {BootstrapRows, ActorRows} = case NodeAuthor of
+        unavailable -> case retained_node_identity() of
+            true -> {[], []};
+            false -> {RootRows, NodeRows}
+        end;
+        _ -> {[], lists:sort(RootRows ++ NodeRows)}
+    end,
+    case {generation_spec(RootAuthor, BootstrapRows),
+          generation_spec(NodeAuthor, ActorRows)} of
         {{error, _} = Error, _} -> Error;
         {_, {error, _} = Error} -> Error;
         {RootSpec, NodeSpec} ->
@@ -1427,8 +1459,13 @@ validate_remote_generation(Page, ControlPeers, Retain) ->
 system_catalogue() ->
     case quod_system_ontology:catalog() of
         {ok, _Height, Descriptors, _Rejected} ->
-            {ok, [{maps:get(namespace, D), maps:get(anchor, D)}
-                  || D <- Descriptors]};
+            case quod_ontology:network_identity() of
+                {ok, RootAnchor} ->
+                    {ok, [{?ROOT_NS, RootAnchor} |
+                          [{maps:get(namespace, D), maps:get(anchor, D)}
+                           || D <- Descriptors]]};
+                {error, _} = Error -> Error
+            end;
         {error, _} = Error -> Error
     end.
 
@@ -1497,7 +1534,8 @@ node_projection_clauses(FollowRef, Deadline) ->
     case Deadline - quod_time:mono_ms() of
         Remaining when Remaining > 0 ->
             quod_foreign_log:projection_clauses(
-                FollowRef, [{agent_key, 3}, {hosts_ontology, 4}], min(5000, Remaining));
+                FollowRef, [{instance_of, 2}, {agent_key, 3}, {hosts_ontology, 4}],
+                min(5000, Remaining));
         _ -> {error, validation_timeout}
     end.
 

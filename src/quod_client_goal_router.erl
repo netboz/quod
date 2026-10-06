@@ -138,6 +138,7 @@ request_timeout(_Request) -> ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS.
 init([]) ->
     Channel = quod_client_goal_endpoint:channel(),
     true = quod_reg:subscribe({channel, Channel}),
+    quod_reg:publish({client_goal_router, node}, {client_goal_router_ready, self()}),
     {ok, #s{channel = Channel}};
 init({test, OpenFun, ReleaseFun}) ->
     {ok, #s{channel = quod_client_goal_endpoint:channel(),

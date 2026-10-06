@@ -32,6 +32,8 @@ chain, so a self-signed per-node cert authenticates cleanly.
 
 -export([ensure/1, advance_directory_epoch/1,
          load_node_actor_pointer/1, store_node_actor_pointer/2,
+         begin_node_enrollment/3, retain_node_allocation/2,
+         begin_node_activation/3, reject_node_operation/3,
          generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
          sign/2, verify/3, tls_key/1]).
 
@@ -115,7 +117,7 @@ ontology: callers must verify its anchor, node instance and active key before
 using the returned principal.
 """.
 -spec load_node_actor_pointer(file:filename_all()) ->
-          none | {ok, binary()} | {error, term()}.
+          none | {ok, binary()} | {pending, map()} | {error, term()}.
 load_node_actor_pointer(Dir) ->
     Path = filename:join(Dir, ?NODE_ACTOR_FILE),
     case file:read_file(Path) of
@@ -141,7 +143,10 @@ store_node_actor_pointer(Dir, Blob) when is_binary(Blob) ->
                               [deterministic]),
                     quod_file:write_atomic(Path, Bytes, 8#600);
                 {ok, Blob} -> ok;
+                {pending, #{reference := Blob}} ->
+                    write_node_pointer(Dir, {quod_node_actor_pointer, 1, Blob});
                 {ok, _Other} -> {error, node_actor_identity_mismatch};
+                {pending, _} -> {error, node_actor_identity_mismatch};
                 {error, _} = Error -> Error
             end;
         {error, _} ->
@@ -149,6 +154,100 @@ store_node_actor_pointer(Dir, Blob) when is_binary(Blob) ->
     end;
 store_node_actor_pointer(_Dir, _Blob) ->
     {error, invalid_node_actor_pointer}.
+
+%% Pending request custody shares the existing pointer file. A surviving
+%% pending row never grants permission to dispatch the request again.
+begin_node_enrollment(Dir, Bytes, Signature) ->
+    case load_node_actor_pointer(Dir) of
+        none ->
+            store_new_enrollment(Dir, Bytes, Signature);
+        {pending, #{reference := none, rejected := enrollment}} ->
+            store_new_enrollment(Dir, Bytes, Signature);
+        _ -> {error, node_enrollment_already_retained}
+    end.
+
+store_new_enrollment(Dir, Bytes, Signature) ->
+    store_pending_pointer(Dir, #{request => {Bytes, Signature}, reference => none,
+                                activation => none, rejected => none}).
+
+%% Only the worker receiving a definite refusal may record this transition.
+%% A crash before this durable write leaves the old request unresolved.
+reject_node_operation(Dir, Phase, Request) when Phase =:= enrollment; Phase =:= activation ->
+    Field = case Phase of enrollment -> request; activation -> activation end,
+    case load_node_actor_pointer(Dir) of
+        {pending, #{Field := Request} = Pending} ->
+            store_pending_pointer(Dir, Pending#{rejected => Phase});
+        _ -> {error, node_enrollment_request_mismatch}
+    end.
+
+retain_node_allocation(Dir, Blob) ->
+    case load_node_actor_pointer(Dir) of
+        {pending, #{reference := none} = Pending} ->
+            store_pending_pointer(Dir, Pending#{reference => Blob});
+        {pending, #{reference := Blob}} -> ok;
+        {ok, Blob} -> ok;
+        {error, _} = Error -> Error;
+        _ -> {error, node_actor_identity_mismatch}
+    end.
+
+begin_node_activation(Dir, Bytes, Signature) ->
+    case load_node_actor_pointer(Dir) of
+        {pending, #{reference := Blob, activation := none} = Pending} when is_binary(Blob) ->
+            store_pending_pointer(Dir, Pending#{activation => {Bytes, Signature}});
+        {pending, #{reference := Blob, rejected := activation} = Pending} when is_binary(Blob) ->
+            store_pending_pointer(Dir, Pending#{activation => {Bytes, Signature}, rejected => none});
+        {error, _} = Error -> Error;
+        _ -> {error, node_activation_already_retained}
+    end.
+
+store_pending_pointer(Dir, Pending) ->
+    case valid_pending_pointer(Pending) of
+        true -> write_node_pointer(Dir, {quod_node_enrollment, 1, Pending});
+        false -> {error, bad_node_actor_pointer}
+    end.
+
+write_node_pointer(Dir, Value) ->
+    quod_file:write_atomic(filename:join(Dir, ?NODE_ACTOR_FILE),
+                          term_to_binary(Value, [deterministic]), 8#600).
+
+valid_pending_pointer(#{request := Request, reference := Reference, activation := Activation,
+                        rejected := Rejected}) ->
+    case pointer_request(Request) of
+        {ok, #{request := #{mode := execute, signing_public_key := Key,
+                            agent_namespace := <<"quod:node">>,
+                            agent_genesis_anchor := Anchor,
+                            network_identity := Network}} = Evidence} ->
+            pointer_goal(Evidence,
+                {agent_instance_ref, <<"quod:node">>, Anchor, {enrolling, Key}},
+                {enroll_node, {0}}) andalso
+            (Reference =:= none orelse valid_pointer_reference(Reference)) andalso
+            valid_activation(Activation, Reference, Key, Network) andalso
+            (Rejected =:= none orelse
+             (Rejected =:= enrollment andalso Reference =:= none andalso Activation =:= none) orelse
+             (Rejected =:= activation andalso Reference =/= none andalso Activation =/= none));
+        _ -> false
+    end;
+valid_pending_pointer(_) -> false.
+
+pointer_request({Bytes, Signature}) -> quod_client_goal:verify(Bytes, Signature);
+pointer_request(_) -> {error, invalid_request}.
+
+pointer_goal(#{agent_ref_blob := Agent, goal_blob := Goal}, ExpectedRef, ExpectedGoal) ->
+    quod_wire_term:encode_canonical(ExpectedRef) =:= {ok, Agent} andalso
+    quod_durable_term:encode_goal(ExpectedGoal) =:= {ok, Goal}.
+
+valid_activation(none, _, _, _) -> true;
+valid_activation(Request, Reference, Key, Network) ->
+    case {pointer_request(Request), quod_agent_ref:decode(Reference)} of
+        {{ok, #{request := #{mode := execute, signing_public_key := Key,
+                             network_identity := Network}} = Evidence},
+         {ok, #{identity := {Ns, Anchor}, reference := Ref}}} ->
+            pointer_goal(Evidence, Ref, {host_ontology, Ref, Ns, Anchor, discoverable});
+        _ -> false
+    end.
+
+valid_pointer_reference(Blob) ->
+    case quod_agent_ref:decode(Blob) of {ok, _} -> true; _ -> false end.
 
 -doc "Generate a fresh Ed25519 keypair `{PubKey, Seed}` (not persisted).".
 -spec generate() -> keypair().
@@ -282,6 +381,11 @@ read_epoch(Path) ->
 
 decode_node_actor_pointer(Bytes) ->
     try binary_to_term(Bytes, [safe]) of
+        {quod_node_enrollment, 1, Pending} ->
+            case valid_pending_pointer(Pending) of
+                true -> {pending, Pending};
+                false -> {error, bad_node_actor_pointer}
+            end;
         {quod_node_actor_pointer, 1, Blob} when is_binary(Blob) ->
             case quod_agent_ref:decode(Blob) of
                 {ok, _} -> {ok, Blob};

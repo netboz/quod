@@ -128,7 +128,8 @@ node_generation_requires_the_exact_active_key_and_host_facts_test() ->
         quod_agent_ref:decode(Blob),
     Page = page(Author, Pub, Signer, 6, 12, 0, true,
                 [{<<"quod:a">>, anchor(1), validator, node}]),
-    Good = #{{agent_key, 3} =>
+    Good = #{{instance_of, 2} => [{{instance_of, node, Instance}, {[], false}}],
+             {agent_key, 3} =>
                  [{{agent_key, Instance, Pub, active}, {[], false}}],
              {hosts_ontology, 4} =>
                  [{{hosts_ontology, NodeRef, <<"quod:a">>, anchor(1),
@@ -145,7 +146,19 @@ node_generation_requires_the_exact_active_key_and_host_facts_test() ->
     ?assertEqual(
        {error, unauthorized_generation},
        quod_directory_generation:validate_node_projection(
-         Page, Good#{{hosts_ontology, 4} => []})).
+         Page, Good#{{hosts_ontology, 4} => []})),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_node_projection(
+            Page, Good#{{instance_of, 2} => []})),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_node_projection(
+            Page, Good#{{agent_key, 3} => maps:get({agent_key, 3}, Good) ++
+                [{{agent_key, Instance, anchor(55), active}, {[], false}}]})),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_node_projection(
+            Page, Good#{{hosts_ontology, 4} =>
+                [{{hosts_ontology, NodeRef, <<"quod:a">>, anchor(1), private},
+                  {[], false}}]})).
 
 descriptor_sources_are_checked_by_their_committed_owner_test() ->
     {Pub, Seed} = quod_identity:generate(),
@@ -155,24 +168,37 @@ descriptor_sources_are_checked_by_their_committed_owner_test() ->
                  {root_bootstrap, RootAnchor, Pub}, Pub, Signer, 1, 1, 0, true,
                  [{<<"quod:root">>, RootAnchor, validator, bootstrap},
                   {<<"quod:system">>, SystemAnchor, validator, system}]),
-    Catalog = [{<<"quod:system">>, SystemAnchor}],
+    Catalog = [{<<"quod:root">>, RootAnchor}, {<<"quod:system">>, SystemAnchor}],
     ?assertEqual(ok, quod_directory_generation:validate_projection(
                        RootPage, #{}, Catalog)),
     ?assertEqual(
        {error, unauthorized_generation},
        quod_directory_generation:validate_projection(RootPage, #{}, [])),
-    NodePage = page(node_author(72), Pub, Signer, 1, 1, 0, true,
-                    [{<<"quod:root">>, RootAnchor, validator, bootstrap}]),
-    ?assertEqual(
-       {error, unauthorized_generation},
-       quod_directory_generation:validate_projection(NodePage, #{}, Catalog)),
-    NodeSystemPage = page(
-                       node_author(73), Pub, Signer, 1, 1, 0, true,
-                       [{<<"quod:system">>, SystemAnchor, validator, system}]),
-    ?assertEqual(
-       {error, unauthorized_generation},
-       quod_directory_generation:validate_projection(
-         NodeSystemPage, #{}, Catalog)).
+    Author = node_author(72),
+    {node_actor, Blob} = Author,
+    {ok, #{instance := Instance, reference := NodeRef}} = quod_agent_ref:decode(Blob),
+    Facts = #{{instance_of, 2} => [{{instance_of, node, Instance}, {[], false}}],
+              {agent_key, 3} => [{{agent_key, Instance, Pub, active}, {[], false}}],
+              {hosts_ontology, 4} =>
+                [{{hosts_ontology, NodeRef, <<"ordinary">>, anchor(74), discoverable},
+                  {[], false}}]},
+    Rows = [{<<"ordinary">>, anchor(74), observer, node},
+            {<<"quod:root">>, RootAnchor, observer, bootstrap},
+            {<<"quod:system">>, SystemAnchor, validator, system}],
+    NodePage = page(Author, Pub, Signer, 1, 1, 0, true, Rows),
+    ?assertEqual(ok, quod_directory_generation:validate_projection(NodePage, Facts, Catalog)),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_projection(NodePage, Facts,
+            [{<<"quod:root">>, RootAnchor}, {<<"quod:system">>, anchor(75)}])),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_projection(NodePage, Facts,
+            [{<<"quod:root">>, anchor(75)}, {<<"quod:system">>, SystemAnchor}])),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_projection(NodePage,
+            Facts#{{agent_key, 3} => []}, Catalog)),
+    ?assertEqual({error, unauthorized_generation},
+        quod_directory_generation:validate_projection(NodePage,
+            Facts#{{hosts_ontology, 4} => []}, Catalog)).
 
 page(Author, Pub, Signer, Epoch, Generation, Index, Last, Hosted) ->
     {ok, Encoded} = quod_directory_generation:sign(

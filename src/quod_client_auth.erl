@@ -149,7 +149,7 @@ call(Request) ->
 init(Options) ->
     schedule_prune(),
     RateLimits = configured_rate_limits(),
-    {ok, #s{network_id = maps:get(network_id, Options, undefined),
+    S = #s{network_id = maps:get(network_id, Options, undefined),
             node_key = maps:get(node_key, Options, undefined),
             ttl_ms = maps:get(ttl_ms, Options, ?TTL_MS),
             max_challenges = maps:get(max_challenges, Options, ?MAX_CHALLENGES),
@@ -170,7 +170,9 @@ init(Options) ->
             atom_baseline = atom_baseline(Options),
             max_materialized_atoms =
                 maps:get(max_materialized_atoms, Options,
-                         ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)}}.
+                         ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)},
+    quod_reg:publish({client_auth, node}, {client_auth_ready, self()}),
+    {ok, S}.
 
 %% Rate policy is operator-controlled and opt-in. Normal client traffic is
 %% limited only by the existing bounded queues and workers. Tests pass an

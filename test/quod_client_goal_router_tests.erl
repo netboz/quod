@@ -7,6 +7,21 @@
 -define(ENDPOINT, {{127, 0, 0, 1}, 4567}).
 -define(OWNER, {session, <<16#42:256>>, <<16#43:256>>}).
 
+production_owner_publishes_each_router_incarnation_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    true = quod_reg:subscribe({client_goal_router, node}),
+    try
+        [begin
+            {ok, Owner} = quod_client_goal_router:start_link(),
+            try
+                receive {client_goal_router_ready, Owner} -> ok
+                after 1000 -> error(router_readiness_notice_missing)
+                end,
+                ?assertEqual(Owner, whereis(quod_client_goal_router))
+            after gen_server:stop(Owner) end
+         end || _ <- [first, replacement]]
+    after quod_reg:unsubscribe({client_goal_router, node}) end.
+
 cursor_target_states_are_named_before_the_shared_renderer_test() ->
     ?assertEqual(
        {error, cursor_not_found},

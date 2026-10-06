@@ -150,6 +150,53 @@ corrupt_node_actor_pointer_fails_closed_test() ->
         rm_rf(Dir)
     end.
 
+pending_node_pointer_checks_signed_operation_relationships_test() ->
+    Dir = tmp_dir(),
+    {Key, _} = Pair = quod_identity:generate(),
+    Network = <<7:256>>, PolicyAnchor = <<8:256>>,
+    Applicant = {agent_instance_ref, <<"quod:node">>, PolicyAnchor, {enrolling, Key}},
+    Ref = {agent_instance_ref, <<"node:test">>, <<9:256>>, me},
+    {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+    Sign = fun(Agent, Goal, KP) ->
+        {agent_instance_ref, Ns, Anchor, Instance} = Agent,
+        {Pub, _} = KP,
+        {ok, IT} = quod_client_goal_parser:format(Instance),
+        {ok, GT} = quod_client_goal_parser:format(Goal),
+        {ok, Bytes} = quod_client_goal:encode(#{network_identity => Network,
+            signing_public_key => Pub, operation_id => crypto:strong_rand_bytes(32),
+            agent_namespace => Ns, agent_genesis_anchor => Anchor,
+            agent_instance_text => IT, goal_text => GT, mode => execute,
+            parser_version => 3, not_after_ms => 1}),
+        {Bytes, quod_identity:sign(Bytes, quod_identity:key_term(KP))}
+    end,
+    try
+        {Bad, BS} = Sign(Applicant, {assertz, privileged}, Pair),
+        ?assertEqual({error, bad_node_actor_pointer},
+            quod_identity:begin_node_enrollment(Dir, Bad, BS)),
+        {Bytes, Sig} = Sign(Applicant, {enroll_node, {0}}, Pair),
+        ok = quod_identity:begin_node_enrollment(Dir, Bytes, Sig),
+        ?assertEqual({error, node_enrollment_already_retained},
+            quod_identity:begin_node_enrollment(Dir, Bytes, Sig)),
+        ok = quod_identity:retain_node_allocation(Dir, Blob),
+        Goal = {host_ontology, Ref, <<"node:test">>, <<9:256>>, discoverable},
+        {Wrong, WS} = Sign(Ref, Goal, quod_identity:generate()),
+        ?assertEqual({error, bad_node_actor_pointer},
+            quod_identity:begin_node_activation(Dir, Wrong, WS)),
+        {Private, PS} = Sign(Ref, set_private, Pair),
+        ?assertEqual({error, bad_node_actor_pointer},
+            quod_identity:begin_node_activation(Dir, Private, PS)),
+        {Activation, AS} = Sign(Ref, Goal, Pair),
+        ok = quod_identity:begin_node_activation(Dir, Activation, AS),
+        ?assertMatch({pending, #{request := {Bytes, Sig}, reference := Blob,
+                                 activation := {Activation, AS}}},
+            quod_identity:load_node_actor_pointer(Dir)),
+        %% Expiry is not permission to discard or replay retained custody.
+        ?assertEqual({error, node_activation_already_retained},
+            quod_identity:begin_node_activation(Dir, Activation, AS)),
+        ok = quod_identity:store_node_actor_pointer(Dir, Blob),
+        ?assertEqual({ok, Blob}, quod_identity:load_node_actor_pointer(Dir))
+    after rm_rf(Dir) end.
+
 short_format_test() ->
     {Pub, _} = quod_identity:generate(),
     S = quod_identity:short(Pub),

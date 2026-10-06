@@ -120,10 +120,13 @@ validate_node_projection(Page, Clauses) when is_map(Page), is_map(Clauses) ->
                     HostFacts =
                         [{hosts_ontology, NodeRef, Ns, Anchor, discoverable}
                          || {Ns, Anchor, _Role, node} <- hosted(Page)],
-                    case exact_facts([{agent_key, 3}, {hosts_ontology, 4}],
+                    case exact_facts([{instance_of, 2}, {agent_key, 3}, {hosts_ontology, 4}],
                                      Clauses) of
                         {ok, Facts} ->
-                            case lists:member(KeyFact, Facts) andalso
+                            Nodes = [N || {instance_of, node, N} <- Facts],
+                            Keys = [F || {agent_key, I, _, active} = F <- Facts,
+                                         I =:= Instance],
+                            case Nodes =:= [Instance] andalso Keys =:= [KeyFact] andalso
                                  lists:all(
                                    fun(Fact) -> lists:member(Fact, Facts) end,
                                    HostFacts) of
@@ -147,13 +150,7 @@ validate_projection(Page, Clauses, Catalog) when is_list(Catalog) ->
         ok ->
             case author(Page) of
                 {node_actor, _} ->
-                    case lists:any(
-                           fun({_Ns, _Anchor, _Role, Source}) ->
-                               Source =/= node
-                           end, Hosted) of
-                        true -> {error, unauthorized_generation};
-                        false -> validate_node_projection(Page, Clauses)
-                    end;
+                    validate_node_projection(Page, Clauses);
                 {root_bootstrap, RootAnchor, AuthorKey} ->
                     PageKey = node_key(Page),
                     case lists:all(
@@ -174,7 +171,15 @@ validate_catalog_rows(Hosted, Catalog) ->
     case lists:all(
            fun({Ns, Anchor, _Role, system}) ->
                    lists:member({Ns, Anchor}, Catalog);
-              ({_Ns, _Anchor, _Role, _Source}) -> true
+              ({<<"quod:root">>, Anchor, _Role, bootstrap}) ->
+                   lists:member({<<"quod:root">>, Anchor}, Catalog);
+              ({Ns, Anchor, _Role, node}) ->
+                   case lists:keyfind(Ns, 1, Catalog) of
+                       false -> true;
+                       {Ns, Anchor} -> true;
+                       _ -> false
+                   end;
+              (_) -> false
            end, Hosted) of
         true -> ok;
         false -> {error, unauthorized_generation}

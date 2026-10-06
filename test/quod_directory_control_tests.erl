@@ -2,6 +2,29 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+non_control_actor_advertises_pinned_root_through_certified_receiver_test_() ->
+    {timeout, 30, fun() -> with_node_generation(fun(F, Control, _Owner) ->
+        {Ns, Anchor} = maps:get(identity, F),
+        #{control_peers := Peers} = quod_directory_control:test_control_state(),
+        ?assertEqual(#{}, Peers),
+        Hosted = lists:sort([{Ns, Anchor, validator, node},
+                            {<<"quod:root">>, key(254), observer, bootstrap}]),
+        submit_node_generation(F#{hosted => Hosted}, Control, 1),
+        await_generation(F, 1),
+        ?assertMatch({known, [#{genesis_anchor := _}]}, quod_directory:resolve(Ns)),
+        ?assertMatch({known, [#{role := observer}]},
+                     quod_directory:resolve(<<"quod:root">>)),
+        observe_validation_results(Control),
+        Wrong = lists:sort([{Ns, Anchor, validator, node},
+                           {<<"quod:root">>, key(253), observer, bootstrap}]),
+        submit_node_generation(F#{hosted => Wrong}, Control, 2),
+        receive {validation_finished, Result} ->
+            ?assertEqual({error, unauthorized_generation}, Result)
+        after 10000 -> error(validation_timeout)
+        end,
+        await_generation(F, 1)
+    end) end}.
+
 renewals_reuse_certified_projection_test_() ->
     {timeout, 30, fun() -> with_node_generation(257, fun(F, Control, Owner) ->
         trace_projection_work(Owner, true),
@@ -303,7 +326,8 @@ node_generation_fixture(Height) ->
     {ok, Blob} = quod_wire_term:encode_canonical(NodeRef),
     {Entries, _} = lists:mapfoldl(fun(H, Parent) ->
         Terms = case H of
-            2 -> [{agent_key, Instance, Pub, active},
+            2 -> [{instance_of, node, Instance},
+                  {agent_key, Instance, Pub, active},
                   {hosts_ontology, NodeRef, Ns, Anchor, discoverable}];
             _ -> [{directory_history, H}]
         end,
@@ -331,7 +355,7 @@ submit_node_generation(F, Control, Number) ->
     Endpoint = {<<"127.0.0.1">>, 19000},
     {ok, Page} = quod_directory_generation:sign(
         maps:get(author, F), Pub, Endpoint, 1, Number, 0, true,
-        [{Ns, Anchor, validator, node}], maps:get(key, Signer)),
+        maps:get(hosted, F, [{Ns, Anchor, validator, node}]), maps:get(key, Signer)),
     Control ! {quod_message, {{Pub, Endpoint}, self()},
                quod_directory_control:channel(),
                term_to_binary({quod_directory_generation, Page}, [deterministic])}.
@@ -418,13 +442,24 @@ one_generation_wire_rejects_old_shapes_test() ->
          term_to_binary({quod_directory_snapshot, [Page], done},
                         [deterministic]))).
 
-root_system_and_node_rows_use_separate_authorities_test() ->
+enrolled_non_control_node_publishes_its_complete_set_test() ->
     Root = {<<"quod:root">>, key(10), validator, bootstrap},
     System = {<<"quod:system">>, key(11), observer, system},
     Node = {<<"quod:ordinary">>, key(12), validator, node},
-    ?assertEqual({[Root, System], [Node]},
-                 quod_directory_control:test_partition_hosted(
-                   [Root, System, Node])).
+    Author = {node_actor, <<"verified-node-reference">>},
+    ?assertEqual({ok, [{Author, lists:sort([Root, System, Node])}]},
+        quod_directory_control:test_generation_specs(
+            unavailable, Author, [Root, System], [Node])),
+    Bootstrap = {root_bootstrap, key(10), key(1)},
+    ?assertEqual({ok, [{Bootstrap, []}, {Author, lists:sort([Root, System, Node])}]},
+        quod_directory_control:test_generation_specs(
+            Bootstrap, Author, [Root, System], [Node])),
+    ?assertEqual({ok, [{Bootstrap, [Root, System]}]},
+        quod_directory_control:test_generation_specs(
+            Bootstrap, unavailable, [Root, System], [])),
+    ?assertEqual({error, advertisement_author_unavailable},
+        quod_directory_control:test_generation_specs(
+            unavailable, unavailable, [Root, System], [Node])).
 
 multiple_hosted_rows_are_canonicalized_without_crashing_test() ->
     Root = {<<"quod:root">>, key(10), validator, bootstrap},
@@ -434,6 +469,28 @@ multiple_hosted_rows_are_canonicalized_without_crashing_test() ->
     ?assertEqual(
        {ok, lists:sort([Root, System])},
        quod_directory_control:test_validate_described_hosted([Root, System])).
+
+retained_identity_never_reverts_to_bootstrap_publication_test() ->
+    Saved = application:get_env(quod, identity_dir),
+    Dir = filename:join("/tmp", "quod-directory-enrollment-" ++
+        integer_to_list(erlang:unique_integer([positive, monotonic]))),
+    try
+        application:set_env(quod, identity_dir, Dir),
+        {ok, Blob} = quod_wire_term:encode_canonical(
+            {agent_instance_ref, <<"node:retained">>, key(2), me}),
+        ok = quod_identity:store_node_actor_pointer(Dir, Blob),
+        Bootstrap = {root_bootstrap, key(10), key(1)},
+        Root = {<<"quod:root">>, key(10), observer, bootstrap},
+        ?assertEqual({ok, [{Bootstrap, []}]},
+            quod_directory_control:test_generation_specs(
+                Bootstrap, unavailable, [Root], []))
+    after
+        case Saved of
+            undefined -> application:unset_env(quod, identity_dir);
+            {ok, Value} -> application:set_env(quod, identity_dir, Value)
+        end,
+        file:del_dir_r(Dir)
+    end.
 
 root_peer_proof_is_closed_and_exact_test() ->
     K1 = key(1), K2 = key(2),

@@ -820,7 +820,16 @@ local_state_validated(Ns) ->
             end
     end.
 
-validate_initial_terms(Terms) when is_list(Terms) ->
+validate_initial_terms(WireTerms) when is_list(WireTerms) ->
+    %% A remote policy's founding terms are still opaque data until this
+    %% authorized creation boundary. Materialize once before both reserved
+    %% head validation and compilation, under the shared symbol bound.
+    case quod_wire_term:materialize_symbols(WireTerms) of
+        {ok, Terms} -> validate_materialized_terms(Terms);
+        {error, _} = Error -> Error
+    end.
+
+validate_materialized_terms(Terms) ->
     case first_reserved_term(Terms) of
         none ->
             compile_initial_terms(Terms);

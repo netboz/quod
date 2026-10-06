@@ -49,6 +49,9 @@ start(_StartType, _StartArgs) ->
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
     ok = maybe_start_directory_tracking(Content),
+    %% Auth can announce readiness before the remaining supervisor children.
+    %% This distinct barrier also covers routing and directory tracking.
+    ok = quod_namespace_manager:enroll_node(),
     {ok, Sup}.
 
 stop(_State) ->

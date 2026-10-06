@@ -388,6 +388,21 @@ unique_symbol(Prefix) ->
     <<Prefix/binary,
       (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
 
+owner_ready_notice_identifies_each_auth_incarnation_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    true = quod_reg:subscribe({client_auth, node}),
+    try
+        [begin
+            Owner = start_auth(#{}),
+            try
+                receive {client_auth_ready, Owner} -> ok
+                after 1000 -> error(auth_readiness_notice_missing)
+                end,
+                ?assertEqual(Owner, whereis(quod_client_auth))
+            after stop_auth(Owner) end
+         end || _ <- [first, replacement]]
+    after quod_reg:unsubscribe({client_auth, node}) end.
+
 with_auth(Fun) -> with_auth(#{}, Fun).
 
 with_auth(Options, Fun) ->
@@ -397,6 +412,7 @@ with_auth(Options, Fun) ->
     end.
 
 start_auth(Options) ->
+    {ok, _} = application:ensure_all_started(gproc),
     {ok, Pid} = quod_client_auth:start_link(
                   maps:merge(#{network_id => ?NETWORK, node_key => ?NODE,
                                ttl_ms => 60000, max_challenges => 4},

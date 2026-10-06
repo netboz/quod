@@ -3,34 +3,18 @@
 Construction, exact local binding, and verification for this physical node's
 ontology-backed actor identity.
 
-Creation remains the ordinary root `create_ontology/3` action.  This module
-builds its options, stores the one bootstrap pointer through `quod_identity`,
-and verifies the resulting durable facts. It owns no process, lifecycle path,
+Creation remains the ordinary root `create_ontology/3` action under Prolog
+policy. This module signs the request, retains the exact bootstrap pointer
+through `quod_identity`, and verifies the resulting durable facts. It owns no process, lifecycle path,
 ACL evaluator, signer, route, or cache.
 """.
 
--export([creation_options/4, reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
+-export([reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
          hosting_projection/5,
-         bootstrap/0, verify/2]).
+         bootstrap/0, verify/2, enroll/0]).
 -ifdef(TEST).
--export([test_normalize_projection/3]).
+-export([test_normalize_projection/3, test_resolved_retained/5]).
 -endif.
-
--spec creation_options(binary(), binary(), 1 | 2 | 3, <<_:256>>) ->
-          {ok, [term()]} | {error, term()}.
-creation_options(Namespace, InstanceText, ParserVersion,
-                 <<_:256>> = PublicKey)
-  when is_binary(Namespace), is_binary(InstanceText) ->
-    case {quod_ontology:canonical_name(Namespace),
-          quod_client_goal_parser:parse(InstanceText, ParserVersion)} of
-        {{ok, Namespace},
-         {ok, #{goal := InstanceTerm, variables := []}}} ->
-            creation_terms(Namespace, InstanceTerm, PublicKey);
-        _ ->
-            {error, invalid_node_instance}
-    end;
-creation_options(_Namespace, _InstanceText, _ParserVersion, _PublicKey) ->
-    {error, invalid_node_actor}.
 
 -spec reference(binary(), <<_:256>>, binary(), 1 | 2 | 3) ->
           {ok, binary()} | {error, term()}.
@@ -101,21 +85,9 @@ signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry, Expected)
             {ok, {agent_instance_ref, Ns, Anchor, Instance}} =
                 quod_agent_ref:materialize_principal(Principal),
             Ref = {agent_instance_ref, Ns, Anchor, Instance},
-            case {Expected =:= current orelse Expected =:= {Ref, PublicKey},
-                  quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
-                {true, {ok, InstanceText}, {ok, GoalText}} ->
-                    %% The canonical formatter targets the current signed grammar.
-                    Request = #{network_identity => Network, agent_namespace => Ns,
-                      agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
-                      signing_public_key => PublicKey, operation_id => Operation,
-                      not_after_ms => Expiry, mode => Mode, parser_version => 3,
-                      goal_text => GoalText},
-                    case quod_client_goal:encode(Request) of
-                        {ok, Bytes} -> {ok, Bytes, quod_identity:sign(Bytes, Signer)};
-                        {error, _} = Error -> Error
-                    end;
-                {false, _, _} -> {error, stale_node_executor};
-                _ -> {error, invalid_goal}
+            case Expected =:= current orelse Expected =:= {Ref, PublicKey} of
+                true -> sign_goal(Ref, Goal, Network, PublicKey, Signer, Mode, Operation, Expiry);
+                false -> {error, stale_node_executor}
             end;
         _ -> {error, node_identity_unavailable}
     end;
@@ -205,11 +177,13 @@ valid_agent_reference(Ref) ->
 -ifdef(TEST).
 test_normalize_projection(NodeRef, Hosts, Contacts) ->
     normalize_projection(NodeRef, Hosts, Contacts).
+test_resolved_retained(Dir, Phase, Bytes, Sig, Resolution) ->
+    resolved_retained(Dir, Phase, Bytes, Sig, Resolution).
 -endif.
 
 -doc "Load the exact local pointer and build its existing-ledger resume config.".
 -spec bootstrap() ->
-          none | {ok, binary(), map()} | {error, term()}.
+          none | {pending, none | binary()} | {ok, binary(), map()} | {error, term()}.
 bootstrap() ->
     case {application:get_env(quod, identity_dir),
           application:get_env(quod, node_pubkey)} of
@@ -217,9 +191,246 @@ bootstrap() ->
             case quod_identity:load_node_actor_pointer(Dir) of
                 none -> none;
                 {ok, Blob} -> bootstrap_pointer(Blob);
+                {pending, #{request := {Bytes, Sig}, reference := Ref}} ->
+                    case quod_client_goal:verify(Bytes, Sig) of
+                        {ok, #{request := #{signing_public_key := Key,
+                                            network_identity := Network}}} ->
+                            case {application:get_env(quod, node_pubkey),
+                                  quod_ontology:network_identity()} of
+                                {{ok, Key}, {ok, Network}} when Ref =:= none -> {pending, none};
+                                {{ok, Key}, {ok, Network}} -> pending_bootstrap(Ref);
+                                {{ok, Key}, {error, _}} -> {pending, none};
+                                _ -> {error, node_enrollment_request_mismatch}
+                            end;
+                        _ -> {error, node_enrollment_request_mismatch}
+                    end;
                 {error, _} = Error -> Error
             end;
         _ -> none
+    end.
+
+pending_bootstrap(Blob) ->
+    {ok, #{identity := {Ns, Anchor}}} = quod_agent_ref:decode(Blob),
+    case quod_ontology:prepare_host_join(Ns, Anchor, []) of
+        {ok, Config} -> {ok, Blob, Config};
+        {error, unavailable} ->
+            case quod_directory:validator_routes(Ns, Anchor) of
+                {ok, Routes} when Routes =/= [] ->
+                    Seeds = lists:usort([E || #{endpoint := E} <- Routes]),
+                    case quod_ontology:prepare_host_join(Ns, Anchor, Seeds) of
+                        {ok, Config} -> {ok, Blob, Config};
+                        {error, _} = Error -> Error
+                    end;
+                _ -> {pending, Blob}
+            end;
+        {error, _} = Error -> Error
+    end.
+
+%% Called by the namespace manager's monitored worker. Custody is in node.actor,
+%% policy in quod:node, and execution in the existing signed-goal ingress.
+%% There is no request replay here: only the call which creates a custody row
+%% may submit it. Every later call observes the original operation.
+enroll() ->
+    case {application:get_env(quod, identity_dir),
+          application:get_env(quod, node_pubkey), quod_ontology:network_identity()} of
+        {{ok, Dir}, {ok, <<_:256>> = Key}, {ok, Network}} ->
+            case quod_identity:load_node_actor_pointer(Dir) of
+                {ok, _} -> complete;
+                none -> begin_enrollment(Dir, Key, Network);
+                {pending, Pending} -> resume_enrollment(Dir, Key, Network, Pending);
+                {error, _} = Error -> Error
+            end;
+        _ -> waiting
+    end.
+
+begin_enrollment(Dir, Key, Network) ->
+    case enrollment_policy() of
+        {ok, PolicyAnchor, Window} ->
+            case allocated_identity(Key) of
+                absent ->
+                    Ref = {agent_instance_ref, <<"quod:node">>, PolicyAnchor, {enrolling, Key}},
+                    {ok, Bytes, Sig} = sign_identity_goal(Ref, {enroll_node, {0}}, Network, Key, Window),
+                    case quod_identity:begin_node_enrollment(Dir, Bytes, Sig) of
+                        ok ->
+                            submit_retained(Dir, enrollment, Bytes, Sig);
+                        {error, _} = Error -> Error
+                    end;
+                {ok, _} -> {error, node_identity_pointer_missing};
+                {error, _} = Error -> Error;
+                _ -> waiting
+            end;
+        _ -> waiting
+    end.
+
+enrollment_policy() ->
+    case quod_system_ontology:catalog() of
+        {ok, _, Catalog, _} ->
+            case [A || #{namespace := <<"quod:node">>, anchor := A} <- Catalog] of
+                [Anchor] ->
+                    case {quod_simplex:genesis_hash(<<"quod:node">>),
+                          quod_prolog:prove_ro(<<"quod:node">>,
+                            {node_enrollment_parameters, {'Window'}}),
+                          quod_prolog:prove_ro(<<"quod:root">>,
+                            {ontology_creation_policy, <<"quod:node">>, Anchor})} of
+                        {Anchor, {ok, [#{'Window' := Window}], _}, {ok, [_], _}} ->
+                            {ok, Anchor, Window};
+                        _ -> waiting
+                    end;
+                _ -> waiting
+            end;
+        _ -> waiting
+    end.
+
+allocated_identity(Key) ->
+    case quod_prolog:prove_ro(<<"quod:node">>,
+        {findall, {'Ref'}, {node_identity_allocation, Key, {'Ref'}, {'_'}}, {'Rows'}}) of
+        {ok, [#{'Rows' := []}], _} -> absent;
+        {ok, [#{'Rows' := [Ref]}], _} ->
+            case quod_wire_term:encode_canonical(Ref) of
+                {ok, Blob} -> case quod_agent_ref:decode(Blob) of
+                    {ok, _} -> {ok, Blob};
+                    _ -> {error, invalid_node_allocation}
+                end;
+                _ -> {error, invalid_node_allocation}
+            end;
+        {ok, _, _} -> {error, conflicting_node_allocation};
+        _ -> waiting
+    end.
+
+resume_enrollment(Dir, Key, Network,
+                  #{request := {Bytes, Sig}, reference := Reference} = Pending) ->
+    case quod_client_goal:verify(Bytes, Sig) of
+        {ok, #{request := #{network_identity := Network, signing_public_key := Key,
+                           agent_namespace := <<"quod:node">>,
+                           agent_genesis_anchor := PolicyAnchor}}} ->
+            case quod_ontology:genesis_anchor(<<"quod:node">>) of
+                {ok, PolicyAnchor} -> resume_allocation(Dir, Key, Network, Reference, Pending);
+                {ok, _} -> {error, node_enrollment_policy_mismatch};
+                _ -> waiting
+            end;
+        _ -> {error, node_enrollment_request_mismatch}
+    end.
+
+resume_allocation(Dir, Key, Network, none, #{rejected := enrollment}) ->
+    begin_enrollment(Dir, Key, Network);
+resume_allocation(Dir, Key, Network, Reference, #{request := {Bytes, Sig}} = Pending) ->
+    case Reference of
+        none ->
+            %% Resolution never resubmits. A committed allocation can
+            %% become visible before the client completion is delivered.
+            Resolution = quod_client_goal_ingress:resolve_operation(Bytes, Sig),
+            case allocated_identity(Key) of
+                {ok, Blob} ->
+                    case quod_identity:retain_node_allocation(Dir, Blob) of
+                        ok -> {allocated, Blob};
+                        {error, _} = Error -> Error
+                    end;
+                absent -> resolved_retained(Dir, enrollment, Bytes, Sig, Resolution);
+                Result -> Result
+            end;
+        Blob ->
+            case allocated_identity(Key) of
+                {ok, Blob} -> activate_node(Dir, Key, Network, Blob, Pending);
+                {ok, _} -> {error, node_actor_identity_mismatch};
+                absent -> {error, node_allocation_missing};
+                Other -> Other
+            end
+    end.
+
+activate_node(Dir, Key, Network, Blob, #{activation := Activation0, rejected := Rejected}) ->
+    Activation = case Rejected of activation -> none; _ -> Activation0 end,
+    case {principal(), verify(Blob, Key)} of
+        {{ok, {agent, Blob}}, {ok, _}} ->
+            {ok, #{identity := {Ns, Anchor}, reference := Ref}} = quod_agent_ref:decode(Blob),
+            case quod_prolog:prove_ro(Ns, {hosts_ontology, Ref, Ns, Anchor, discoverable}) of
+                {ok, [_], _} ->
+                    case quod_identity:store_node_actor_pointer(Dir, Blob) of
+                        ok -> complete;
+                        {error, _} = Error -> Error
+                    end;
+                _ -> case Activation of
+                    none -> case enrollment_policy() of
+                        {ok, _, Window} ->
+                            Goal = {host_ontology, Ref, Ns, Anchor, discoverable},
+                            {ok, Bytes, Sig} = sign_identity_goal(Ref, Goal, Network, Key, Window),
+                            case quod_identity:begin_node_activation(Dir, Bytes, Sig) of
+                                ok -> submit_retained(Dir, activation, Bytes, Sig);
+                                {error, _} = Error -> Error
+                            end;
+                        _ -> waiting
+                    end;
+                    {Bytes, Sig} ->
+                        resolved_retained(Dir, activation, Bytes, Sig,
+                            quod_client_goal_ingress:resolve_operation(Bytes, Sig))
+                end
+            end;
+        _ -> {allocated, Blob}
+    end.
+
+submit_retained(Dir, Phase, Bytes, Sig) ->
+    Result = quod_client_goal_ingress:submit(Bytes, Sig),
+    case Result of
+        %% Only the first dispatch reaches this branch. These errors precede
+        %% execution; expiry observed later during recovery proves nothing.
+        {error, Reason} when Reason =:= signed_target_unavailable;
+                             Reason =:= signed_goal_unavailable;
+                             Reason =:= node_identity_unavailable;
+                             Reason =:= client_auth_unavailable;
+                             Reason =:= client_goal_busy;
+                             Reason =:= client_goal_rate_limited;
+                             Reason =:= client_symbol_budget_exhausted;
+                             Reason =:= atom_limit;
+                             Reason =:= busy;
+                             Reason =:= rebuilding;
+                             Reason =:= client_cursor_unavailable;
+                             Reason =:= invalid_signature;
+                             Reason =:= invalid_request;
+                             Reason =:= wrong_network;
+                             Reason =:= wrong_target;
+                             Reason =:= expired -> rejected_operation(Dir, Phase, Bytes, Sig);
+        {error, {anchor_conflict, _}} -> rejected_operation(Dir, Phase, Bytes, Sig);
+        {ok, _, {normalized, {failed, _}}} -> rejected_operation(Dir, Phase, Bytes, Sig);
+        {ok, _, {normalized, fail}} -> rejected_operation(Dir, Phase, Bytes, Sig);
+        _ -> {submitted, Result}
+    end.
+
+resolved_retained(Dir, Phase, Bytes, Sig,
+                  {ok, _, {operation_outcome, _, #{status := Status, height := Height}}})
+  when (Status =:= rejected orelse Status =:= aborted), is_integer(Height), Height > 0 ->
+    %% The shared resolver binds the winning claim to these exact signed
+    %% bytes and reads its installed/certified terminal outcome. A selected
+    %% refused attempt, journal error, or absent claim is not this evidence.
+    rejected_operation(Dir, Phase, Bytes, Sig);
+resolved_retained(_Dir, _Phase, _Bytes, _Sig, _Resolution) -> unresolved.
+
+rejected_operation(Dir, Phase, Bytes, Sig) ->
+    case quod_identity:reject_node_operation(Dir, Phase, {Bytes, Sig}) of
+        ok ->
+            {ok, #{request := #{agent_namespace := Ns, agent_genesis_anchor := Anchor}}} =
+                quod_client_goal:verify(Bytes, Sig),
+            {refused, {Ns, Anchor}};
+        {error, _} = Error -> Error
+    end.
+
+sign_identity_goal(Ref, Goal, Network, Key, Window) ->
+    {ok, Signer} = application:get_env(quod, identity_key),
+    sign_goal(Ref, Goal, Network, Key, Signer, execute,
+              crypto:strong_rand_bytes(32), quod_time:now_ms() + Window).
+
+sign_goal({agent_instance_ref, Ns, Anchor, Instance}, Goal, Network, Key,
+          Signer, Mode, Operation, Expiry) ->
+    case {quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
+        {{ok, InstanceText}, {ok, GoalText}} ->
+            Request = #{network_identity => Network, agent_namespace => Ns,
+                        agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
+                        signing_public_key => Key, operation_id => Operation,
+                        not_after_ms => Expiry, mode => Mode,
+                        parser_version => 3, goal_text => GoalText},
+            case quod_client_goal:encode(Request) of
+                {ok, Bytes} -> {ok, Bytes, quod_identity:sign(Bytes, Signer)};
+                {error, _} = Error -> Error
+            end;
+        _ -> {error, invalid_goal}
     end.
 
 bootstrap_pointer(Blob) ->
@@ -277,23 +488,4 @@ verify_facts(Namespace, Instance, PublicKey, Blob) ->
         {fail, _} -> {error, node_actor_instance_mismatch};
         {error, _} = Error -> Error;
         _ -> {error, malformed_node_actor_identity}
-    end.
-
-creation_terms(Namespace, InstanceTerm0, PublicKey) ->
-    ExecutionPath = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
-    case {quod_wire_term:materialize_symbols(InstanceTerm0), file:read_file(ExecutionPath)} of
-        {{ok, InstanceTerm}, {ok, ExecutionPolicy}} ->
-            Terms =
-                [{node_ontology, Namespace},
-                 {instance_of, node, InstanceTerm},
-                 {agent_key, InstanceTerm, PublicKey, active}],
-            {ok, [{terms, Terms},
-                  %% Source is chardata; retain its compact binary form on the
-                  %% public goal and materialize characters only inside the
-                  %% existing lifecycle parser.
-                  {source, ExecutionPolicy},
-                  {external_predicate_modules,
-                   [quod_ontology_predicates]}]};
-        {{error, _}, _} -> {error, invalid_node_instance};
-        {_, {error, _}} -> {error, node_execution_policy_unavailable}
     end.

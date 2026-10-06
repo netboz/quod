@@ -31,6 +31,20 @@ authorization for a system ontology or host assignment.
 `quod_directory` owns replaceable indexes of live routes learned from signed
 node-actor generations and committed private contacts. Addresses are hints;
 the exact ontology anchor and authenticated peer key bind the request.
+An enrolled node signs its complete eligible public set with its verified
+node identity. Root's pinned anchor and committed system catalogue authorize
+exact system descriptors; ordinary descriptors require the author's exact
+committed `hosts_ontology/4` fact with `discoverable` visibility. Neither
+system publication nor ordinary publication grants target ACL rights or
+committee membership. Before a node identity is available, only a root
+control peer may publish the bootstrap/system set. On identity activation it
+publishes an empty bootstrap generation and moves those descriptors into its
+node-authored generation; lost withdrawals remain bounded by the old lease.
+
+Discoverability is the host's publication choice, not evidence of consent by
+the target's owner. A private hosting fact is excluded from public generations,
+but global confidentiality across independently authorized hosts requires an
+explicit target publication policy.
 `quod_quic` owns the server and connection pools, while `quod_conn` and
 `quod_link` own authenticated framed streams. Consensus traffic receives
 priority over bulk transfer. A route change cannot replace a proof,

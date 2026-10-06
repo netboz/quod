@@ -416,6 +416,7 @@ log(_Event, _Config) ->
 setup() ->
     {ok, _} = application:ensure_all_started(ssl),
     {ok, _} = application:ensure_all_started(cowboy),
+    {ok, _} = application:ensure_all_started(gproc),
     Dir = tls_dir(),
     {ok, Tls} = quod_client_tls:ensure(Dir),
     {ok, _} = quod_client_auth:start_link(

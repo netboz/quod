@@ -38,6 +38,15 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
 -export([proof_gate_row/3, https_request/4, https_request/5]).
+-export([node_identity_options/3]).
+
+%% Manually founded legacy identities exercise retained-state migration and
+%% binding. Production enrollment derives its recipe only in quod:node.
+node_identity_options(Namespace, Instance, Key) ->
+    {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_execution.pl")),
+    [{terms, [{node_ontology, Namespace}, {instance_of, node, Instance},
+              {agent_key, Instance, Key, active}]},
+     {source, Source}, {external_predicate_modules, [quod_ontology_predicates]}].
 
 %% Deterministic canonical genesis, signed application and signer for protocol
 %% codec/consensus/archive tests. The caller chooses its namespace.

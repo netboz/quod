@@ -19,6 +19,8 @@ can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :-
     root_public_goal(Goal).
 can_invoke(create_ontology(_, _, _), Principal, Chain, Namespace) :-
     root_creation_context(Principal, Chain, Namespace).
+can_invoke((current_executor_key(_), create_ontology(_, _, _)), Principal, Chain, Namespace) :-
+    root_creation_context(Principal, Chain, Namespace).
 can_invoke(_, node(Key), Chain, Namespace) :-
     root_direct_context(node(Key), Chain, Namespace),
     peer_admitted(Key, _, _, Key).

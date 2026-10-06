@@ -21,6 +21,7 @@ the complete policy path. `ontology_join_state/2` and
          lifecycle_request_predicate/3,
          lifecycle_continuation_predicate/3,
          current_principal_predicate/3,
+         current_executor_key_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3,
          reconcile_effect_custody/3, reconcile_node_ontologies/3]).
@@ -37,6 +38,9 @@ load(Est0) ->
     WithPrincipal = quod_predicates:register(
       Est0, {current_principal, 1}, query, proof_bound,
       ?MODULE, current_principal_predicate),
+    WithExecutor = quod_predicates:register(
+      WithPrincipal, {current_executor_key, 1}, query, proof_bound,
+      ?MODULE, current_executor_key_predicate),
     Entries =
         [{{create_ontology, 3}, staging, lifecycle_request_predicate},
          {{join_ontology, 3}, staging, lifecycle_request_predicate},
@@ -50,7 +54,17 @@ load(Est0) ->
       fun({Functor, Class, Function}, Est) ->
               quod_predicates:register(
                 Est, Functor, Class, ?MODULE, Function)
-      end, WithPrincipal, Entries).
+      end, WithExecutor, Entries).
+
+%% This is the signer already bound to this exact proof scope, not a live
+%% process/endpoint lookup. Direct effects carry the same executor in their
+%% sealed descriptor and validators check it against the transaction author.
+current_executor_key_predicate({current_executor_key, Key}, Next, St) ->
+    case quod_proof_session:signer_from_state(St) of
+        #{pubkey := <<_:256>> = PublicKey} ->
+            erlog_int:unify_prove_body(Key, PublicKey, Next, St);
+        none -> erlog_int:fail(St)
+    end.
 
 -doc "Enter the shared action relation with one opaque proof-local request.".
 -spec lifecycle_request_predicate(term(), term(), tuple()) -> term().

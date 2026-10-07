@@ -187,7 +187,8 @@ was 1,366 seconds. Both clean gates preceded the tests.
 - Whitespace validation passed. Final scope hashes were checked again after
   the campaign; only these evidence records were added or updated afterward.
 
-Implementation and independently checked Fable review are complete. The work
-is uncommitted and ready for review. Retained live-fleet rollout remains unrun;
-no live policy update, ledger refounding or identity replacement occurred.
-The documented strict uncertainty and initial-custodian restrictions remain.
+At the end of this pre-commit campaign, implementation and independently
+checked Fable review were complete, while the commit and live rollout had not
+yet occurred. The subsequent authorized policy update and completed fleet
+rollouts are recorded in [deployment.md](deployment.md). The documented strict
+uncertainty and initial-custodian restrictions remain.

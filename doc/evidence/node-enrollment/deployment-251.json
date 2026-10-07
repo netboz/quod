@@ -1,0 +1,113 @@
+{
+  "source_commit": "16878f5013d6b0709c655567ac536bfb0aaca6a7",
+  "release_commit": "297d44ee359b3efe5eec5d2b08da89568676ac6c",
+  "image": "192.168.1.11:5000/quod:0.7.251@sha256:0b725ef324705c3fc5c1d2fb7541bb32453f91acdf4b23db1c05adc3ec93882f",
+  "nomad_job": "quod",
+  "job_version": 245,
+  "evaluation": "727546d2-14b2-5f24-f6bf-e6f076191f0f",
+  "deployment": "69b8d270-c733-60ca-518a-7348325bf36b",
+  "deployment_status": "successful",
+  "healthy_allocations": 10,
+  "live_acceptance": {
+    "nodes": 10,
+    "version": "0.7.251",
+    "retained_exact_identities_and_pointer_hashes": 9,
+    "newly_enrolled": 1,
+    "endpoint_changes": 10,
+    "root_validators": 1,
+    "verified_self_hosted_identities": 10,
+    "unique_matching_allocations": 10,
+    "root_routes_per_node": 10,
+    "renewal_verified_beyond_lease_ms": 30000,
+    "unchanged_catalogue_anchors": 18,
+    "root_anchor": "9F8CD12738E6223B81F68E2DD6D16A278FEA6B583756777D26A06A3FA6135DD4"
+  },
+  "all_system_and_ordinary_route_checks": true,
+  "signed_public_queries_passed": 10,
+  "ledger_refounding": false,
+  "automatic_uncertain_write_replay": false,
+  "operator_evidence": "/tmp/quod-node-enrollment-deploy-251-20261007",
+  "commands": {
+    "label-release": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/label-release.log",
+      "log_sha256": "e7c1fb40da28c60efa31f4ff7247c7a8ecba860e2a8a487bdfeab91113c7bc58"
+    },
+    "docker-build": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/docker-build.log",
+      "log_sha256": "599c61f79000d6686cfa3f8eeb4544e2abfa454ed3b0d1b5174a569a2d492e38"
+    },
+    "docker-push": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/docker-push.log",
+      "log_sha256": "9a87e9e81e6a8fa8c66409230d833955937019895cb164b0eb5e7530cd0847e7"
+    },
+    "job-plan": {
+      "exit": 1,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/job-plan.log",
+      "log_sha256": "08252265d0234d7f8515a7127d9ec2bea04a1ca04f1b60dc8b18a59b768ebae6",
+      "expected_exit_for_diff": 1
+    },
+    "job-run": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/job-run.log",
+      "log_sha256": "1413c583062d04f97031779c94f14b81e59e704b75aaadbaa377875c9252a3b2"
+    },
+    "deployment-watch": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/deployment-watch.log",
+      "log_sha256": "05e5e5c2cbdbd2cdb655029622e90795da81bdcb24abfc7d2b5b3db6d031cca9"
+    },
+    "pre-rollout": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/pre-rollout.log",
+      "log_sha256": "be49764d091b25a4576e1ec32d43c8bbe472bde9200f577e7478fa732574c1a1"
+    },
+    "pre-rollout-details": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/pre-rollout-details.log",
+      "log_sha256": "14a61f4ed8161fb8676d5d0ae5ac4dee55d22c9101df693be2e872602cc21de3"
+    },
+    "after": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/after.log",
+      "log_sha256": "38154319ef8a088e329708be16298ded2c0dd60408efb0395971eac0146e9f8a"
+    },
+    "after-details": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/after-details.log",
+      "log_sha256": "226be9920978fd569acead31d0e3c973666d73aa3e7ac3ec80db152857531a39"
+    },
+    "after-renewal": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/after-renewal.log",
+      "log_sha256": "38154319ef8a088e329708be16298ded2c0dd60408efb0395971eac0146e9f8a"
+    },
+    "route-acceptance": {
+      "exit": 1,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/route-acceptance.log",
+      "log_sha256": "a0d7bfb0d7e0a84961d65bb2bcd222f65b4dec4f51cfdcc684569b1ba8df4296"
+    },
+    "route-acceptance-02": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/route-acceptance-02.log",
+      "log_sha256": "458bbfb2a0e8bdc618cf7744b2d24c374568bc376fcd71c7db54ba5aa4cf4f01"
+    },
+    "signed-public-queries": {
+      "exit": 1,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/signed-public-queries.log",
+      "log_sha256": "b07044a094fde370dd43918002670ec2c35daf323a8588587ef5cd5454c8a0a1"
+    },
+    "signed-public-queries-02": {
+      "exit": 1,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/signed-public-queries-02.log",
+      "log_sha256": "56f7060d800a126faaa27b91bbbbb1844f26b8175bd7b8bb1c3b757a68cf38cd"
+    },
+    "signed-public-queries-03": {
+      "exit": 0,
+      "log": "/tmp/quod-node-enrollment-deploy-251-20261007/signed-public-queries-03.log",
+      "log_sha256": "96d05f7a5fe709eb0137b2624f40662b20e1b7225b1ff310d8f750d34fe59682"
+    }
+  }
+}

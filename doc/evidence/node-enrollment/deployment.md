@@ -163,4 +163,51 @@ Dialyzer, the production release and diff-check also exited 0. Full log paths,
 true child exits and log digests are in `routing-gates-05.json`. Every frozen
 file hash was rechecked after the run. The production delta is +97/-22 lines
 (net +75), confined to the existing owners and shared evidence verifier.
-The 0.7.251 follow-up rollout and final fleet acceptance remain pending.
+## Version 0.7.251 completed
+
+The follow-up code was committed as `16878f5013d6b0709c655567ac536bfb0aaca6a7`
+and the separate release label as `297d44ee359b3efe5eec5d2b08da89568676ac6c`.
+The labeled production release, Docker build and registry push exited 0.
+The immutable image is
+`192.168.1.11:5000/quod:0.7.251@sha256:0b725ef324705c3fc5c1d2fb7541bb32453f91acdf4b23db1c05adc3ec93882f`.
+
+Nomad's plan changed only four image references; all placements were feasible.
+Plan exit 1 was the expected changed-plan result. Submission used the observed
+JobModifyIndex 824831. Deployment `69b8d270-c733-60ca-518a-7348325bf36b`
+completed successfully: eight home and two cloud allocations healthy, job
+version 245. Existing placement, volumes, templates and policies were retained.
+
+Fresh before/after observations through the running fleet establish:
+
+- All ten physical keys survived. All nine previously bound exact identities
+  and their pointer file hashes stayed identical through ten endpoint changes.
+- The remaining cloud node enrolled automatically. Every runtime reports
+  enrollment complete, an active verified key, self-hosting and exactly one
+  matching committed identity allocation.
+- Every node sees ten exact root routes and all nineteen system routes
+  (eighteen catalogue entries plus root) from the ten physical nodes. Eligible
+  ordinary identity advertisements passed on every node as well.
+- A second capture more than thirty seconds later shows advanced generation
+  numbers, live leases and only the current endpoints. The old claims did not
+  survive the rollout. All ten signed public queries passed through real ingress.
+- The root anchor and all eighteen catalogue anchors are unchanged. Root still
+  has one validator and nine observers. No ledger was refounded and no uncertain
+  operation was automatically replayed. Existing private routing and target ACL
+  checks passed in the complete release integration suite.
+
+The first live signed-read script supplied a named variable to the normalized
+term formatter and was rejected before submission. Its corrected second run
+completed the first node, then failed while serializing a response containing
+Latin-1 display bytes. The third run returns compact Unicode-safe outcomes:
+ten successes, exit 0. These were read-only validation calls, not creation
+replays. The first detailed route capture passed five nodes before remote
+stdout truncated the sixth result; the compact second capture preserved the
+same checks and passed all ten nodes, exit 0. Both failed harness runs are
+retained with their true driver exits.
+
+[deployment-251.json](deployment-251.json) records the immutable artifact,
+commits, scheduler result, acceptance summary and log digests. Full logs and
+before/after receipts are retained in
+`/tmp/quod-node-enrollment-deploy-251-20261007`. The strict unknown-operation
+custody and initial-custodian restrictions documented in the contract still
+apply; the unrelated self-network transport cause was not changed.

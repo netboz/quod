@@ -4,6 +4,28 @@
 
 agent_hosting_suspended(I) :- physics_space(_, disabled, I).
 
+%% A domain supplies one local view and its ordinary principal policy. Marks
+%% name occurrences; only body_pose/2 names their physical source. No live
+%% native state enters a proof or a durable transaction.
+can_view_physics(_, _) :- fail.
+physics_view(_, _) :- fail.
+physics_client_view(simulation_view(world_ref(Ns, Anchor, W),
+        agent_instance_ref(Ns, Anchor, I), Epoch, Generation, Token, Structure, Marks)) :-
+    current_principal(P), physics_space(W, enabled, I), can_view_physics(W, P),
+    physics_view(W, Marks), current_ontology_identity(Ns, Anchor),
+    agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token),
+    Generation > 0, physics_structure(W, Structure),
+    physics_allowances(W, limits(_, MaxPoses, _, _), _, _, _),
+    length(Marks, Count), Count =< MaxPoses,
+    physics_view_bodies(Marks, W, Ns, Anchor, []).
+
+physics_view_bodies([], _, _, _, _).
+physics_view_bodies([mark(Id, _, _, body_pose(B, R), _, _, depicts(Ns, Anchor, Entity)) | Rest],
+                    W, Ns, Anchor, Seen) :-
+    binary_codes(Id, [_ | _]), term_variables(Entity, []), \+ member(Id, Seen),
+    physics_body(W, B, R, _, _, _, _),
+    physics_view_bodies(Rest, W, Ns, Anchor, [Id | Seen]).
+
 physics_projection(Node, Rows) :-
     findall(world(W, I, Epoch, Key, Generation, RunToken, Custody, Structure,
                   Limits, StepUs, Gravity, Bodies, Budget, baseline(Checkpoints, Joints, Doors)),

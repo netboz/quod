@@ -153,7 +153,8 @@ profile is described in [the retained native adapter](physics-native.md); it
 covers optional cuboid simulation, activation/recovery and the obstructed-door consequence through the runtime. It supersedes the authority, recovery and observation proposals
 in the archived [client/world direction](outdated/client-world-direction.md) and
 [consequence direction](outdated/world-consequence-direction.md). Scene
-streaming for physical bodies, general physics interactions, headset interaction
+streaming for physical bodies is available for one local authorized client view;
+remote multi-viewer projections, general physics interactions, headset interaction
 and world editing still require implementation and validation. Personal lobby
 provisioning and static scene projection are available through the startup path
 above; they do not establish the physical door interaction's acceptance.
@@ -597,8 +598,9 @@ requires a server-verified terminal rejection. The hosted actor's queue alone
 is not durable custody. Impact-operation custody and occurrence acceptance
 remain outside this implemented profile.
 
-Frames stay in the retained simulation and are pulled with their current fence;
-they do not flood the runtime queue each tick. General agent queries and durable
+Frames stay in the retained simulation. One local signed view receives bounded
+current poses directly from that owner under their current fence; motion does
+not flood the runtime queue each tick. General agent queries and durable
 contact actions need their own governed observation interfaces. Self-authored
 checkpoint/cursor writes must preserve the same installation invariant: retain
 the live resource and process only actual input changes.

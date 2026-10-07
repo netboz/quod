@@ -41,13 +41,17 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
       entry = { node, geometry, signature: null, label: null }
       if (mark.kind === 'mesh') attachModel(scene, entry, mark, resources, onError)
     }
-    const signature = JSON.stringify(mark)
+    const signature = JSON.stringify(mark, (_, value) => typeof value === 'bigint' ? `${value}n` : value)
     if (entry.signature !== signature) {
-      const { x, y, z, rx, ry, rz } = mark.transform
-      entry.node.position.set(x / MM, y / MM, z / MM)
-      entry.node.rotationQuaternion = Quaternion.RotationAxis(Vector3.Forward(), rz * DEGREES)
-        .multiply(Quaternion.RotationAxis(Vector3.Up(), ry * DEGREES))
-        .multiply(Quaternion.RotationAxis(Vector3.Right(), rx * DEGREES))
+      if (!mark.body) {
+        const { x, y, z, rx, ry, rz } = mark.transform
+        entry.node.position.set(x / MM, y / MM, z / MM)
+        entry.node.rotationQuaternion = Quaternion.RotationAxis(Vector3.Forward(), rz * DEGREES)
+          .multiply(Quaternion.RotationAxis(Vector3.Up(), ry * DEGREES))
+          .multiply(Quaternion.RotationAxis(Vector3.Right(), rx * DEGREES))
+      }
+      if (JSON.stringify(entry.body) !== JSON.stringify(mark.body)) entry.node.setEnabled(!mark.body)
+      entry.body = mark.body
       entry.node.metadata = { markId: mark.id, depicts: mark.depicts }
       if (mark.kind === 'mesh') updateModelFrame(entry, mark.size)
       if (mark.material && entry.surfaceSignature !== JSON.stringify(mark.material)) {
@@ -70,6 +74,19 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
   }
   for (const entry of retired) disposeEntry(entry)
   return next
+}
+
+// Poses use metres and world-space XYZW quaternions. Body-driven occurrences
+// are roots; authored child transforms may still compose beneath those roots.
+export function paintBodyPoses(painted, poses) {
+  for (const entry of painted.values()) {
+    if (!entry.body) continue
+    const pose = poses.get(`${entry.body.id}:${entry.body.revision}`)
+    entry.node.setEnabled(Boolean(pose))
+    if (!pose) continue
+    entry.node.position.set(...pose.position)
+    entry.node.rotationQuaternion = new Quaternion(...pose.rotation)
+  }
 }
 
 export function clearMarks(painted) {

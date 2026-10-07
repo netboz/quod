@@ -51,6 +51,14 @@ function readMark(term) {
   const fields = GEOMETRY[name]
   if (!fields) throw new Error(`this client cannot draw a ${name}`)
   const relative = transform.type === 'compound' && transform.functor === 'relative'
+  const driven = transform.type === 'compound' && transform.functor === 'body_pose'
+  const body = driven ? args(transform, 'body_pose', 2).map((term, index) => {
+    if (term.type !== 'number' || (typeof term.value !== 'bigint' && !Number.isSafeInteger(term.value)) ||
+        BigInt(term.value) < BigInt(index) || BigInt(term.value) > 0xffffffffffffffffn) {
+      throw new Error('invalid body identity or revision')
+    }
+    return String(term.value)
+  }) : null
   const [parent, local] = relative ? args(transform, 'relative', 2) : [null, transform]
   const group = name === 'group'
   const mesh = name === 'mesh'
@@ -65,7 +73,8 @@ function readMark(term) {
     kind: name,
     size: mesh ? readMesh(size) : readSize(size, fields, name),
     parent: parent === null ? null : binaryValue(parent, 'parent id'),
-    transform: readTransform(local),
+    transform: driven ? null : readTransform(local),
+    ...(body ? { body: Object.freeze({ id: body[0], revision: body[1] }) } : {}),
     material: group || mesh ? null : readMaterial(material),
     label: readLabel(label),
     depicts: readDepicts(depicts),

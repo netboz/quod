@@ -4,8 +4,8 @@ The authority and lifecycle contract is [world.md](world.md). This first adapter
 supports fixed and dynamic cuboids, authored baseline poses, uniform gravity,
 and coherent pose/contact snapshots. Vertical revolute cuboid doors add an
 ordinary close action, mechanical obstruction braking and signed blocked/closed
-consequences with an atomic stopped-angle checkpoint. Client motion transport,
-hot controls, general agent queries and impact occurrences remain outside this
+consequences with an atomic stopped-angle checkpoint. One local client view
+can consume current poses. Hot controls, general agent queries and impact occurrences remain outside this
 profile. Unsupported joint/checkpoint declarations fail installation visibly;
 there is no silent baseline fallback.
 
@@ -223,8 +223,65 @@ Frames contain the anchored world/authority/host-epoch/run-generation fence,
 structure revision, incarnation token, completed tick, per-body revisions,
 metre/second units and world coordinate space. The owner snapshot API requires the expected fence/structure. A newer tick
 returns a frame; the same tick returns `unchanged`, including for a sleeping
-world. A stale fence, structure or future tick is unavailable. This is an internal server API, not yet a remotely authorized query
-or contact-proof interface.
+world. A stale fence, structure or future tick is unavailable. This snapshot API
+is internal; the client boundary below governs pose delivery. Neither API
+provides a remotely authorized contact-proof interface.
+
+## One client view
+
+The browser's **Simulation** scene opens `/api/simulation` on the existing TLS
+client listener. This profile requires a local ontology containing the selected
+agent and view, with its simulation authority hosted on this node. It does not
+forward motion across nodes or authorize multiple viewers. A second active
+view receives `view_busy`.
+
+The world ontology defines `physics_view(World, Marks)` and
+`can_view_physics(World, Principal)`, and grants the selected agent ordinary
+`can_invoke` access to `physics_client_view/1`. There is no default view grant.
+Its one signed read is exactly `physics_client_view(View).`; the session,
+signature, agent key and Prolog policy use existing ingress. View data and its
+permission inputs must be local to that ontology in this profile. The body
+projection is not a transferable capability or permission to read contacts.
+
+Each mark is a world-root `mark/7` whose sole transform source is
+`body_pose(BodyId, BodyRevision)`, and whose `depicts/3` names its anchored domain
+entity. The ID remains a view occurrence; several occurrences can share a body.
+The Prolog pose allowance bounds occurrence count. The endpoint checks all
+bindings against the installed simulation frame before exposing the projection.
+It rejects partial or mismatched body sets. Body IDs, revisions, epoch,
+generation, structure, durable height and ticks use decimal strings in JSON,
+including native uint64 values beyond JavaScript's safe integer range.
+
+The client sends `open` with the same `session_id`, base64url signed `request`
+and `signature` fields as ordinary reads. A `projection` reply includes a new
+`view` ID (the signed request digest), `height`, mark text and a complete current
+`frame`. Subsequent `simulation_frame` messages carry that view ID and a frame.
+Schema 1 frames explicitly name world, authority, host epoch, run generation,
+incarnation, structure and tick, with metre positions and world-space XYZW unit
+quaternions. Contacts and velocities are not exposed. The existing reply byte
+encoding limit applies independently of Prolog allocation allowances.
+
+An `ack` containing that view ID and exact last tick releases one delivery
+credit. While it is held, the simulation retains only its current frame; it
+does not enqueue intermediate poses. A sleeping unchanged world sends nothing,
+and repeated acknowledgements neither step nor write files. This credit is
+transport backpressure, not a durable acknowledgement or replay cursor.
+
+The handler subscribes before its read, checks the read height after attachment,
+and invalidates on a subsequent durable advance, replay, structural change,
+owner death or signed-request expiry. `refresh` asks for a new signed projection;
+installation waits use owner notifications. The original signed deadline is
+never extended. Reconnect starts a fresh signed read; the browser's Refresh
+control and online event reopen the stream without readiness polling. A lost
+motion tick needs no read or replay. Old view IDs, fences and non-increasing
+ticks cannot move current occurrences. Appearance refresh retains the engine
+objects and uses the fresh live pose, never the durable baseline. Unavailable
+body poses are hidden, not presented as current. During a refresh the last pose
+remains visible with an explicit stale/refreshing status; old motion is rejected.
+Each namespace commit conservatively costs a new signature, read and watch,
+including door custody/checkpoint commits. A busy namespace can starve motion
+delivery. The signed answer exposes a height rather than a dependency watch;
+narrower invalidation is outside this bounded profile.
 
 Replay, runtime queue collapse, actor death, changed assignment and explicit
 disable retire the current simulator. Replay reconstructs desired resources

@@ -1,0 +1,149 @@
+import { strict as assert } from 'node:assert'
+import { test } from 'node:test'
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
+import { Scene } from '@babylonjs/core/scene.js'
+import { simulationProjection, advanceSimulation, connectSimulation } from '../src/simulation.js'
+import { paintMarks, paintBodyPoses } from '../src/scene.js'
+
+const anchor = 'a'.repeat(32)
+const mark = (body = '10', revision = '2', colour = '#FFFFFF', id = 'door') =>
+  `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,2000),f(<<"height">>,2000),f(<<"depth">>,200)],` +
+  `body_pose(${body},${revision}),surface(<<"${colour}">>,0,900,0,[]),unlabelled,` +
+  `depicts(<<"room">>,<<"${anchor}">>,door(${body})))`
+const sample = (changes = {}) => ({ schema: 1, units: 'metres_seconds', space: 'world',
+  world: 'room', authority: 'actor', epoch: '1', generation: '1', incarnation: 'token',
+  structure: '2', tick: '1', poses: [{ body: '10', revision: '2', position: [0, 1, 0], rotation: [0, 0, 0, 1] }], ...changes })
+const projection = (frame = sample(), marks = `[${mark()}]`, view = 'read1') =>
+  simulationProjection({ type: 'projection', frame, marks, view, height: '4' })
+const motion = (frame, view = 'read1') => ({ type: 'simulation_frame', frame, view })
+
+test('dropped ticks are latest-wins; late, duplicate, foreign and old-incarnation frames cannot move the view', () => {
+  const first = projection()
+  const moved = advanceSimulation(first, motion(sample({ tick: '150', poses: [
+    { body: '10', revision: '2', position: [2, 1, 3], rotation: [0, 0.6, 0, 0.8] },
+  ] })))
+  assert.equal(moved.tick, 150n)
+  for (const change of [{ tick: '149' }, { tick: '150' }, { epoch: '2', tick: '200' },
+    { generation: '2', tick: '200' }, { incarnation: 'other', tick: '200' },
+    { structure: '3', tick: '200' }, { world: 'another', tick: '200' }, { authority: 'other', tick: '200' }]) {
+    assert.equal(advanceSimulation(moved, motion(sample(change))), moved)
+  }
+  assert.equal(advanceSimulation(moved, motion(sample({ tick: '200' }), 'old-read')), moved)
+})
+
+test('appearance refresh retains the live transform; deletion/recreation reusing a mark cannot inherit the old pose', () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  try {
+    let current = projection(sample({ tick: '100', poses: [
+      { body: '10', revision: '2', position: [3, 2, 1], rotation: [0, 0.6, 0, 0.8] },
+    ] }))
+    let painted = paintMarks(scene, current.marks)
+    paintBodyPoses(painted, current.poses)
+    const door = painted.get('door').node
+    const quaternion = door.rotationQuaternion.asArray()
+    current = projection(sample({ tick: '101', poses: [...current.poses.values()] }), `[${mark('10', '2', '#123456')}]`, 'refresh')
+    painted = paintMarks(scene, current.marks, painted)
+    assert.equal(painted.get('door').node, door)
+    assert.deepEqual(door.position.asArray(), [3, 2, 1])
+    assert.deepEqual(door.rotationQuaternion.asArray(), quaternion)
+    paintBodyPoses(painted, current.poses)
+    painted = paintMarks(scene, [], painted)
+    assert.equal(door.isDisposed(), true)
+    const replacement = projection(sample({ structure: '4', tick: '105', poses: [
+      { body: '12', revision: '4', position: [9, 2, 1], rotation: [0, 0, 0, 1] },
+    ] }), `[${mark('12', '4')}]`, 'replacement')
+    painted = paintMarks(scene, replacement.marks, painted)
+    assert.equal(painted.get('door').node.isEnabled(), false)
+    paintBodyPoses(painted, current.poses)
+    assert.equal(painted.get('door').node.isEnabled(), false)
+    paintBodyPoses(painted, replacement.poses)
+    assert.deepEqual(painted.get('door').node.position.asArray(), [9, 2, 1])
+    assert.equal(advanceSimulation(replacement, motion(sample({ tick: '900' }), 'refresh')), replacement)
+  } finally { scene.dispose(); engine.dispose() }
+})
+
+test('restart, authority change and reconnect begin with a fresh current projection', () => {
+  const old = projection(sample({ tick: '900' }))
+  for (const changes of [{ generation: '2', incarnation: 'new' },
+    { authority: 'next-actor', epoch: '2', generation: '3', incarnation: 'new' }, {}]) {
+    const restored = projection(sample({ ...changes, tick: '1' }), undefined, 'new-read')
+    assert.equal(restored.tick, 1n)
+    assert.equal(advanceSimulation(restored, motion(sample({ tick: '901' }), old.view)), restored)
+  }
+})
+
+test('uint64 identities remain exact; a body projection has one complete pose source', () => {
+  const id = '18446744073709551615'
+  const large = projection(sample({ poses: [{ body: id, revision: '2', position: [1, 2, 3], rotation: [0, 0, 0, 1] }] }), `[${mark(id)}]`)
+  assert.equal(large.marks[0].body.id, id)
+  assert.throws(() => projection(sample(), `[${mark('11')}]`), /projection/)
+  assert.throws(() => projection(sample({ poses: [] })), /projection/)
+  assert.throws(() => projection(sample({ poses: [sample().poses[0], sample().poses[0]] })), /body pose/)
+  assert.throws(() => advanceSimulation(large, motion(sample({ tick: '2' }))), /body set/)
+})
+
+test('socket refresh and reconnect sign fresh reads and reject delayed messages from a previous view', async () => {
+  let socket
+  const identity = { networkId: new Uint8Array(32), provider: {
+    publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
+  }, session: { session_id: 'session', expires_ms: Date.now() + 600000 } }
+  const agent = { namespace: 'room', anchor: new Uint8Array(32), instanceText: 'viewer.' }
+  const projections = [], frames = [], statuses = [], refreshes = []
+  class Socket {
+    constructor() { socket = this; this.sent = []; this.waiters = [] }
+    send(json) {
+      const message = JSON.parse(json)
+      const waiter = this.waiters.shift()
+      if (waiter) waiter(message)
+      else this.sent.push(message)
+    }
+    next() { return this.sent.length ? Promise.resolve(this.sent.shift()) : new Promise(resolve => this.waiters.push(resolve)) }
+    receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
+    close() { this.onclose?.() }
+  }
+  const connect = () => connectSimulation(identity, agent, {
+    projection: current => projections.push(current), frame: current => frames.push(current),
+    unavailable: reason => statuses.push(reason),
+    refreshing: () => refreshes.push(true),
+  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation' })
+  const viewId = async request => Buffer.from(await crypto.subtle.digest('SHA-256',
+    Buffer.from(request.request, 'base64url'))).toString('base64url')
+  let stream = connect()
+  socket.onopen()
+  const open = await socket.next(), first = await viewId(open)
+  socket.receive({ type: 'projection', view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
+  assert.deepEqual(await socket.next(), { type: 'ack', view: first, tick: '1' })
+  socket.receive({ type: 'refresh', reason: 'durable_gap' })
+  assert.equal(refreshes.length, 1)
+  assert.equal(statuses.length, 0, 'refresh must keep the painted pose visible')
+  const refresh = await socket.next(), second = await viewId(refresh)
+  assert.notEqual(open.request, refresh.request)
+  socket.receive(motion(sample({ tick: '900' }), first))
+  assert.equal(frames.length, 0)
+  socket.receive({ type: 'projection', view: second, height: '5', marks: `[${mark()}]`, frame: sample({ tick: '5' }) })
+  assert.equal((await socket.next()).view, second)
+  socket.receive(motion(sample({ tick: '12' }), second))
+  assert.equal((await socket.next()).tick, '12')
+  assert.equal(frames.at(-1).tick, 12n)
+  stream.close()
+  stream = connect()
+  socket.onopen()
+  const reconnect = await socket.next(), third = await viewId(reconnect)
+  assert.notEqual(third, second)
+  socket.receive({ type: 'projection', view: second, height: '5', marks: `[${mark()}]`, frame: sample() })
+  assert.equal(projections.length, 2)
+  socket.receive({ type: 'projection', view: third, height: '6', marks: `[${mark()}]`, frame: sample({ generation: '2', incarnation: 'new' }) })
+  assert.equal((await socket.next()).view, third)
+  assert.equal(projections.length, 3)
+  stream.close()
+  // A retired view's asynchronous signer cannot hide its successor's scene.
+  let rejectSign
+  identity.provider.sign = () => new Promise((_, reject) => { rejectSign = reject })
+  stream = connect()
+  const signing = socket.onopen()
+  stream.close()
+  const before = statuses.length
+  rejectSign(new Error('late retired signer failure'))
+  await signing
+  assert.equal(statuses.length, before)
+})

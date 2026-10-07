@@ -35,6 +35,7 @@
 %%     Id        a view-scoped occurrence identity, not a domain name
 %%     Size      ordered integer-mm fields, or a typed mesh_asset descriptor
 %%     Transform transform(X,Y,Z,RX,RY,RZ) | relative(Parent, transform(...))
+%%               | body_pose(BodyId, StructuralRevision) in a simulation view
 %%     Material  surface(Colour, Metal, Rough, Emission, Textures) |
 %%               asset_surfaces for meshes | no_surface for groups.
 %%               Optical factors/repeats are permille.
@@ -213,6 +214,9 @@ geometry_constraint(<<"torus">>, [f(<<"diameter">>, D), f(<<"thickness">>, T)]) 
 geometry_constraint(Kind, _) :-
     mark_kind(Kind), Kind \== <<"capsule">>, Kind \== <<"torus">>.
 
+placed(body_pose(Body, Revision)) :-
+    integer(Body), Body >= 0, Body < 18446744073709551616,
+    integer(Revision), Revision > 0, Revision < 18446744073709551616.
 placed(transform(X, Y, Z, RX, RY, RZ)) :-
     offset(X), offset(Y), offset(Z),
     turn(RX), turn(RY), turn(RZ).
@@ -319,6 +323,7 @@ parent_order([], _Seen).
 parent_order([mark(Id, _, _, At, _, _, _) | Rest], Seen) :-
     available_parent(At, Seen), parent_order(Rest, [Id | Seen]).
 available_parent(transform(_, _, _, _, _, _), _Seen).
+available_parent(body_pose(_, _), _Seen).
 available_parent(relative(Parent, _), Seen) :- member(Parent, Seen).
 
 every_mark([]).

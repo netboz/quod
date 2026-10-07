@@ -13,6 +13,7 @@ import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm
   readEntityEidolons, readEidolonWorkspace, singleBinding, GoalFailure } from '../../client/src/world.js'
 import type { EidolonChoice, EidolonWorkspace, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
+import { connectSimulation } from '../../client/src/simulation.js'
 
 export default function World() {
   const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
@@ -115,6 +116,27 @@ export default function World() {
   useEffect(() => { scene?.paint(marks) }, [scene, marks])
 
   useEffect(() => {
+    if (view !== 'physics' || !scene || !identity || !agent) return
+    const stream = connectSimulation(identity, agent, {
+      projection(current) {
+        scene.simulation(current)
+        setMarks(current.marks)
+        setStatus('Live simulation.')
+      },
+      frame(current) { scene.simulation(current) },
+      refreshing() { setStatus('Refreshing the simulation view; showing its last pose…') },
+      unavailable(reason) { scene.simulation(null); setStatus(reason) },
+    })
+    const online = () => setRevision(value => value + 1)
+    window.addEventListener('online', online)
+    return () => {
+      window.removeEventListener('online', online)
+      stream.close()
+      scene.simulation(null)
+    }
+  }, [view, scene, identity, agent, revision])
+
+  useEffect(() => {
     let active = true
     const previous = projection.current
     const sameScope = previous.identity === identity && previous.agent === agent && previous.view === view
@@ -138,6 +160,7 @@ export default function World() {
       return
     }
     setStatus('Reading the ontology…')
+    if (view === 'physics') return
     const load = async () => {
       try {
         if (view === 'lobby') {
@@ -309,6 +332,7 @@ export default function World() {
         <div className="world-controls">
           <label>Scene <select aria-label="Scene" value={view} onChange={event => setView(event.target.value)}>
             <option value="lobby">Personal lobby</option>
+            <option value="physics">Simulation</option>
             <option value="licence" disabled={licenceUnavailable !== null}>Software licences</option>
           </select></label>
           {view === 'lobby' && <label>Appearance <select aria-label="Appearance" value={mode} onChange={event => setMode(event.target.value)}>

@@ -41,6 +41,192 @@ optional_retained_world_test_() ->
         end)
     end}.
 
+current_view_credit_and_revision_test_() ->
+    {timeout, 60, fun() -> with_world(fun(F = #{namespace := Ns}) ->
+        {Pid, World} = enable(F),
+        #{World := #{spec := Spec}} = worlds(Ns),
+        Expected = #{fence => quod_physics:fence(Spec), structure => 1,
+                     incarnation => maps:get(run_token, Spec)},
+        {ok, Ref, First} = quod_physics:watch(Pid, Expected),
+        ?assertEqual({error, view_busy}, quod_physics:watch(Pid, Expected)),
+        %% Processing the owner's sleeping notice proves many actual steps
+        %% completed while the initial frame held the only delivery credit.
+        receive {physics_status, _, Pid, World, _, sleeping} -> ok
+        after 15000 -> error(world_never_slept) end,
+        _ = gen_server:call(Pid, status),
+        receive {physics_frame, Pid, Ref, _} -> error(uncredited_frame)
+        after 0 -> ok end,
+        quod_physics:ack(Pid, Ref, maps:get(tick, First)),
+        Latest = receive {physics_frame, Pid, Ref, Frame} -> Frame
+                 after 5000 -> error(no_latest_frame) end,
+        ?assert(maps:get(tick, Latest) > maps:get(tick, First)),
+        assert_no_physics_io(fun() ->
+            quod_physics:ack(Pid, Ref, maps:get(tick, Latest)),
+            _ = gen_server:call(Pid, status),
+            receive {physics_frame, Pid, Ref, _} -> error(unchanged_frame)
+            after 0 -> ok end
+        end),
+        commit(Ns, {',', {retract, {physics_structure, room, 1}},
+                        {assertz, {physics_structure, room, 2}}}),
+        receive {physics_refresh, Pid, Ref} -> ok
+        after 5000 -> error(no_revision_invalidation) end,
+        ?assertEqual({error, unavailable}, quod_physics:watch(Pid, Expected)),
+        {ok, Fresh, _} = quod_physics:watch(Pid, Expected#{structure => 2}),
+        quod_physics:unwatch(Pid, Fresh)
+    end) end}.
+
+signed_client_view_lifecycle_test_() ->
+    {timeout, 90, fun() -> with_door(fun(F = #{namespace := Ns, identity := Identity}) ->
+        {Pid, World} = enable(F),
+        Pub = maps:get(pubkey, Identity),
+        commit(Ns, {assertz, {agent_key, viewer, Pub, active}}),
+        Parent = self(),
+        Socket = spawn_link(fun() -> simulation_socket(Parent, #{peer => {127,0,0,1}}) end),
+        try
+            Session = simulation_session(Identity),
+            Open = fun() -> Socket ! {client, simulation_open(F, Session)} end,
+            Open(),
+            First = simulation_reply(Socket, <<"projection">>),
+            FirstFrame = maps:get(<<"frame">>, First),
+            ?assertEqual(1, length(maps:get(<<"poses">>, FirstFrame))),
+            ?assertEqual(<<"10">>, maps:get(<<"body">>, hd(maps:get(<<"poses">>, FirstFrame)))),
+            %% Appearance is a durable view change, never a physical reset.
+            Before = gen_server:call(Pid, status),
+            commit(Ns, {',', {retract, {view_colour, <<"#FFFFFF">>}},
+                            {assertz, {view_colour, <<"#123456">>}}}),
+            _ = simulation_reply(Socket, <<"refresh">>),
+            Open(),
+            Fresh = simulation_reply(Socket, <<"projection">>),
+            ?assertNotEqual(maps:get(<<"view">>, First), maps:get(<<"view">>, Fresh)),
+            ?assertEqual(maps:get(incarnation, Before), maps:get(incarnation, gen_server:call(Pid, status))),
+            ?assertEqual(maps:get(installs, Before), maps:get(installs, gen_server:call(Pid, status))),
+            %% Timer delivery is synchronized with the actual attached state;
+            %% old timer references cannot invalidate a replacement projection.
+            #{timer := AttachedTimer} = simulation_state(Socket),
+            Socket ! {timeout, AttachedTimer, expired},
+            _ = simulation_reply(Socket, <<"refresh">>),
+            Open(), _ = simulation_reply(Socket, <<"projection">>),
+            Socket ! {timeout, AttachedTimer, expired},
+            ?assert(maps:is_key(pid, simulation_state(Socket))),
+            %% Hold installation at its real lifecycle owner while the signed
+            %% read observes a newer committed structure. No sleeps or polling.
+            Runtime = quod_reg:where({quod_runtime, Ns}),
+            ok = sys:suspend(Runtime),
+            try
+                commit(Ns, {',', {retract, {physics_structure,room,2}},
+                                {assertz, {physics_structure,room,3}}}),
+                _ = simulation_reply(Socket, <<"refresh">>),
+                Open(),
+                ?assertEqual(<<"waiting_for_installation">>,
+                    maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
+                #{timer := WaitingTimer} = simulation_state(Socket),
+                Socket ! {timeout, WaitingTimer, waiting_expired},
+                ?assertEqual(<<"expired">>,
+                    maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
+                ?assertEqual(#{peer => {127,0,0,1}}, simulation_state(Socket))
+            after sys:resume(Runtime) end,
+            {Pid, World} = installed(Ns),
+            Open(), _ = simulation_reply(Socket, <<"projection">>),
+            %% The existing signed close moves the real hinge. Its durable
+            %% intent invalidates the view before accepting more current poses.
+            true = quod_reg:subscribe({runtime, Ns}),
+            ?assertMatch({ok,_,{normalized,{committed,_,_}}},
+                door_action(Ns, {physics_close_door,room,10,0,<<81:256>>})),
+            _ = simulation_reply(Socket, <<"refresh">>),
+            await_door(Ns, {close,1,<<81:256>>}, closed),
+            reconcile(Ns),
+            Open(),
+            Closed = simulation_reply(Socket, <<"projection">>),
+            ?assertNotEqual(maps:get(<<"poses">>, FirstFrame),
+                            maps:get(<<"poses">>, maps:get(<<"frame">>, Closed))),
+            %% Owner death invalidates this subscription; the new run cannot
+            %% reuse its token or accept its outstanding acknowledgement.
+            exit(Pid, kill),
+            _ = simulation_reply(Socket, <<"refresh">>),
+            {Next, World} = installed(Ns),
+            ?assertNotEqual(Pid, Next),
+            Open(),
+            Restored = simulation_reply(Socket, <<"projection">>),
+            ?assertNotEqual(maps:get(<<"incarnation">>, FirstFrame),
+                            maps:get(<<"incarnation">>, maps:get(<<"frame">>, Restored))),
+            %% Revocation must go back through ordinary signed proof policy.
+            commit(Ns, {retract, {can_view_physics, room, {'_'}}}),
+            _ = simulation_reply(Socket, <<"refresh">>),
+            Open(),
+            ?assertEqual(<<"view_not_authorized_or_ready">>,
+                         maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
+            commit(Ns, {assertz, {can_view_physics,room,{'_'}}}),
+            commit(Ns, {',', {retract, {physics_allowances,room,{limits,64,64,256,1000000},16667,-9810,10000}},
+                            {assertz, {physics_allowances,room,{limits,1,1,256,1000000},16667,-9810,10000}}}),
+            receive {physics_status,_,_,World,_,{failed,body_allowance}} -> ok
+            after 15000 -> error(no_failed_installation) end,
+            Open(),
+            ?assertEqual(<<"simulation_failed">>,
+                maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>)))
+        after Socket ! stop end
+    end, false, fun(Rules) ->
+        Ns = <<"host-test-agent">>,
+        Marks = [{mark, <<"door">>, <<"box">>,
+                  [{f,<<"width">>,2000},{f,<<"height">>,2000},{f,<<"depth">>,200}],
+                  {body_pose,10,{'R'}}, {surface,{'Colour'},0,900,0,[]}, unlabelled,
+                  {depicts,Ns,{'Anchor'},door}}],
+        Rules ++ [{can_invoke,{physics_client_view,{'_'}},
+                    {agent_instance_ref,Ns,{'_'},viewer},{'_'},Ns},
+                  {can_view_physics,room,{'_'}}, {view_colour,<<"#FFFFFF">>},
+                  {':-', {physics_view,room,Marks},
+                    {',', {current_ontology_identity,Ns,{'Anchor'}},
+                      {',', {view_colour,{'Colour'}},
+                            {physics_body,room,10,{'R'},{'_'},{'_'},{'_'},{'_'}}}}}]
+    end) end}.
+
+simulation_session(Identity = #{pubkey := Pub}) ->
+    Nonce = crypto:strong_rand_bytes(32),
+    {ok, C} = quod_client_auth:issue_challenge(Pub, Nonce, {127,0,0,1}),
+    Id = maps:get(challenge_id, C),
+    {ok, Bytes} = quod_client_auth:challenge_bytes(<<42:256>>, Pub, Id, Pub, Nonce,
+        maps:get(server_nonce, C), maps:get(expires_ms, C)),
+    {ok, #{session_id := Session}} = quod_client_auth:complete_challenge(Id, quod_identity:sign(Bytes, Identity)),
+    Session.
+
+simulation_open(#{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session) ->
+    Request = #{network_identity => <<42:256>>, agent_namespace => Ns,
+        agent_genesis_anchor => Anchor, agent_instance_text => <<"viewer.">>,
+        signing_public_key => maps:get(pubkey, Identity), operation_id => crypto:strong_rand_bytes(32),
+        not_after_ms => quod_time:now_ms()+30000, mode => read, parser_version => 3,
+        goal_text => <<"physics_client_view(View).">>},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Enc = fun(B) -> base64:encode(B, #{mode => urlsafe, padding => false}) end,
+    iolist_to_binary(json:encode(#{type => open, session_id => Enc(Session), request => Enc(Bytes),
+        signature => Enc(quod_identity:sign(Bytes, Identity))})).
+
+simulation_reply(Socket, Type) ->
+    receive
+        {simulation, Socket, #{<<"type">> := Type} = Message} -> Message;
+        {simulation, Socket, Message} -> error({unexpected_simulation_reply, Type, Message})
+    after 10000 -> error({missing_simulation_reply, Type}) end.
+
+simulation_socket(Parent, S) ->
+    receive
+        stop -> quod_client_simulation:terminate(normal, unused, S);
+        {inspect, Ref} -> Parent ! {simulation_state, Ref, S}, simulation_socket(Parent, S);
+        Message ->
+            Result = case Message of
+                {client, Bytes} -> quod_client_simulation:websocket_handle({text, Bytes}, S);
+                _ -> quod_client_simulation:websocket_info(Message, S)
+            end,
+            Next = case Result of
+                {ok, State} -> State;
+                {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
+                Other -> error({invalid_socket_result, Other})
+            end,
+            simulation_socket(Parent, Next)
+    end.
+
+simulation_state(Socket) ->
+    Ref = make_ref(), Socket ! {inspect, Ref},
+    receive {simulation_state, Ref, State} -> State
+    after 5000 -> error(socket_state_unavailable) end.
+
 with_world(Fun) -> with_world(Fun, fun(Rules) -> Rules end).
 with_world(Fun, Transform) ->
     Ns = <<"host-test-agent">>,
@@ -175,6 +361,7 @@ native_failure_does_not_retry_definition_test_() ->
         [reconcile(Ns) || _ <- lists:seq(1, 5)],
         ?assertEqual(Before, gen_server:call(Pid, status)),
         ?assertEqual({error, unavailable}, quod_physics:snapshot(Pid, ignored)),
+        ?assertEqual({error, simulation_failed}, quod_physics:watch(Pid, ignored)),
         commit(Ns, {',', {retract, {physics_allowances, room, {limits,1,1,256,1000000},16667,-9810,10000}},
                           {assertz, {physics_allowances, room, {limits,64,64,256,1000000},16667,-9810,10000}}}),
         {Replacement, _} = installed(Ns),

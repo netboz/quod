@@ -1,6 +1,7 @@
 import type { Subject } from './world.js'
 import type { MenuEntry } from './world.js'
 import type { GuiView } from './world.js'
+import type { SimulationView } from './simulation.js'
 export type WorkspacePanelModel = {
   view: GuiView
   scope: string
@@ -14,6 +15,7 @@ export type WorkspacePanelModel = {
 }
 export type WorldScene = {
   paint(marks: unknown[]): void
+  simulation(view: SimulationView | null): void
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
   setWorkspace(model: WorkspacePanelModel | null): void
   releaseNavigation(): void

@@ -12,7 +12,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import '@babylonjs/core/Culling/ray.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { PALETTE } from './palette.js'
-import { paintMarks, clearMarks } from './scene.js'
+import { paintMarks, clearMarks, paintBodyPoses } from './scene.js'
 import { createRenderResources } from './render-resources.js'
 import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
@@ -70,6 +70,8 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     if (node?.metadata?.depicts?.anchor) onPick(node.metadata.depicts)
   }, PointerEventTypes.POINTERPICK)
   let painted = new Map()
+  let poses = new Map()
+  let simulationMarks = null
   let xr = null
 
   function closeMenu() {
@@ -160,7 +162,18 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   window.addEventListener('resize', resize)
   engine.runRenderLoop(() => scene.render())
   return {
-    paint(marks) { painted = paintMarks(scene, marks, painted, resources, onResourceError) },
+    paint(marks) {
+      painted = paintMarks(scene, marks, painted, resources, onResourceError)
+      paintBodyPoses(painted, poses)
+    },
+    simulation(current) {
+      poses = current?.poses ?? new Map()
+      if (current && current.marks !== simulationMarks) {
+        painted = paintMarks(scene, current.marks, painted, resources, onResourceError)
+      }
+      simulationMarks = current?.marks ?? null
+      paintBodyPoses(painted, poses)
+    },
     setActionMenu(entries, activate) {
       closeMenu()
       menu = { ...menu, entries: [...entries], activate }

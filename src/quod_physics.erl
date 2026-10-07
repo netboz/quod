@@ -6,16 +6,20 @@ signed work. Frames stay here and are pulled through the runtime's current
 fence, rather than flooding its event queue.
 """.
 -behaviour(gen_server).
--export([start/2, snapshot/2, accepts/2, projection/2, fence/1]).
+-export([start/2, snapshot/2, accepts/2, projection/2, fence/1,
+         watch/2, unwatch/2, ack/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -record(s, {owner, monitor, spec, token, native = none, phase = activating,
             pending = none, window = none, resolved = none, uncertain = none, timer = none, tick = 0,
             frame = none, revisions = #{}, controls = #{}, driving = #{}, observations = #{},
-            installs = 0, steps = 0, queries = 0}).
+            installs = 0, steps = 0, queries = 0, viewer = none}).
 
 start(Owner, Spec) ->
     gen_server:start(quod_reg:via({physics_world, maps:get(world, Spec)}), ?MODULE, {Owner, Spec}, []).
 snapshot(Pid, Fence) -> gen_server:call(Pid, {snapshot, Fence}).
+watch(Pid, Expected) -> gen_server:call(Pid, {watch, Expected}).
+unwatch(Pid, Ref) -> Pid ! {physics_unwatch, self(), Ref}, ok.
+ack(Pid, Ref, Tick) -> Pid ! {physics_ack, self(), Ref, Tick}, ok.
 accepts(#{fence := Fence, structure := S, tick := Tick},
         #{fence := Fence, structure := S, tick := Previous}) -> Tick > Previous;
 accepts(_, _) -> false.
@@ -30,6 +34,18 @@ init({Owner, Spec}) ->
         false -> {ok, fail({native_unavailable, quod_physics_native:load_error()}, S)}
     end.
 
+handle_call({watch, Expected}, {Pid, _}, S = #s{phase = active, viewer = none, frame = Frame}) ->
+    case current_projection(Frame, Expected) of
+        true ->
+            Ref = make_ref(), M = monitor(process, Pid),
+            {reply, {ok, Ref, Frame}, S#s{viewer = #{pid => Pid, ref => Ref,
+                monitor => M, expected => Expected, tick => maps:get(tick, Frame), credit => false}}};
+        false -> {reply, {error, unavailable}, S}
+    end;
+handle_call({watch, _}, _, S = #s{viewer = V}) when V =/= none ->
+    {reply, {error, view_busy}, S};
+handle_call({watch, _}, _, S = #s{phase = {failed, _}}) ->
+    {reply, {error, simulation_failed}, S};
 handle_call({snapshot, Expected}, _From, S = #s{phase = active, frame = Frame}) ->
     Reply = case {accepts(Frame, Expected), Frame, Expected} of
         {true, _, _} -> {ok, Frame, counters(S)};
@@ -45,6 +61,13 @@ handle_call(status, _From, S) ->
 handle_call(_, _, S) -> {reply, {error, unavailable}, S}.
 handle_cast(_, S) -> {noreply, S}.
 
+handle_info({physics_ack, Pid, Ref, Tick},
+            S = #s{viewer = #{pid := Pid, ref := Ref, tick := Tick, credit := false} = V}) ->
+    {noreply, deliver_frame(S#s{viewer = V#{credit => true}})};
+handle_info({physics_unwatch, Pid, Ref}, S = #s{viewer = #{pid := Pid, ref := Ref}}) ->
+    {noreply, clear_viewer(S)};
+handle_info({'DOWN', M, process, _, _}, S = #s{viewer = #{monitor := M}}) ->
+    {noreply, clear_viewer(S)};
 handle_info({physics_selected, Owner, Ref, Spec}, S = #s{owner = Owner, spec = Old}) ->
     Owner ! {physics_selection_applied, self(), maps:get(world, Spec), Ref},
     ChangedRun = S#s.phase =:= active andalso fence(Old) =/= fence(Spec),
@@ -198,7 +221,7 @@ install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
                     Updated = Controlled#s{frame = Frame#{structure => maps:get(structure,Spec)}},
                     case maps:get(structure,Frame) =:= maps:get(structure,Spec) of
                         true -> Updated;
-                        false -> notify(installed,Updated)
+                        false -> notify(installed,deliver_frame(Updated))
                     end;
                 _ -> notify(installed,do_step(Controlled#s{installs = S#s.installs +
                     case Changes > 0 of true -> 1; false -> 0 end}))
@@ -253,7 +276,32 @@ publish({_Active, Poses, Contacts}, S = #s{spec = Spec}) ->
               incarnation => S#s.token, tick => S#s.tick,
               poses => [{Id, maps:get(Id, S#s.revisions), world, P, Q, V} || {Id,P,Q,V} <- Poses],
               contacts => [{A,maps:get(A,S#s.revisions),B,maps:get(B,S#s.revisions)} || {A,B} <- Contacts]},
-    S#s{frame = Frame}.
+    deliver_frame(S#s{frame = Frame}).
+
+%% One retained sample and one outstanding delivery, with no motion queue.
+%% A structural/run change revokes the projection even while credit is held.
+deliver_frame(S = #s{viewer = none}) -> S;
+deliver_frame(S = #s{viewer = #{pid := Pid, ref := Ref, expected := Expected,
+                               credit := Credit, tick := Previous} = V, frame = Frame}) ->
+    case current_projection(Frame, Expected) of
+        false -> Pid ! {physics_refresh, self(), Ref}, clear_viewer(S);
+        true ->
+            Tick = maps:get(tick, Frame),
+            case Credit andalso Tick > Previous of
+                true ->
+                    Pid ! {physics_frame, self(), Ref, Frame},
+                    S#s{viewer = V#{credit => false, tick => Tick}};
+                false -> S
+            end
+    end.
+
+current_projection(#{fence := F, structure := R, incarnation := I},
+                   #{fence := F, structure := R, incarnation := I}) -> true;
+current_projection(_, _) -> false.
+
+clear_viewer(S = #s{viewer = #{monitor := M}}) ->
+    demonitor(M, [flush]), S#s{viewer = none};
+clear_viewer(S) -> S.
 
 fence(#{world := W, authority := A, epoch := E, generation := G}) -> {W, A, E, G}.
 notify(installed, S = #s{phase = {failed, _}}) -> S;
@@ -261,7 +309,7 @@ notify(Status, S = #s{owner = Owner, spec = Spec}) ->
     Owner ! {physics_status, self(), maps:get(world, Spec), S#s.token, Status}, S.
 fail(Reason, S) ->
     retire(S),
-    notify({failed, Reason}, S#s{native = none, timer = none, frame = none, phase = {failed, Reason}}).
+    notify({failed, Reason}, deliver_frame(S#s{native = none, timer = none, frame = none, phase = {failed, Reason}})).
 
 native(Fun) -> try Fun() catch error:_ -> {error, native_failure} end.
 retire(#s{native = Resource, timer = Timer}) ->

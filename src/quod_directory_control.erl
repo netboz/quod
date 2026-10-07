@@ -64,6 +64,7 @@ relayed announcements only from a current root control peer.
     pending_links = #{},
     pending_contacts = #{},
     control_links = #{},
+    subscribers = #{},
     peer_query = undefined,
     peer_refresh_pending = false,
     peer_height = undefined,
@@ -149,6 +150,7 @@ test_control_state() ->
       pending_links => S#s.pending_links,
       pending_contacts => S#s.pending_contacts,
       control_links => S#s.control_links,
+      subscribers => S#s.subscribers,
       peer_query => S#s.peer_query,
       peer_height => S#s.peer_height,
       peer_status => S#s.peer_status,
@@ -273,6 +275,7 @@ handle_call(stats, _From, S) ->
               records => map_size(S#s.generations),
               control_peer_count => map_size(S#s.control_peers),
               control_link_count => map_size(S#s.control_links),
+              subscriber_count => map_size(S#s.subscribers),
               control_pending_count => map_size(S#s.pending_links),
               root_contact_count => length(S#s.root_contacts),
               root_contact_pending_count =>
@@ -390,7 +393,7 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
         {matched, S1} ->
             {noreply, S1};
         unmatched ->
-            S1 = handle_control_link_down(Ref, Pid, S),
+            S1 = handle_control_link_down(Ref, Pid, remove_subscriber(Ref, Pid, S)),
             {noreply, handle_follow_response({'DOWN', Ref, process, Pid, Reason}, S1)}
         end
     end;
@@ -562,7 +565,7 @@ reconcile_control_peers(Peers, Height, S) ->
     S0 = S#s{control_peers = Peers,
              peer_height = Height,
              peer_status = ok},
-    S1 = retire_removed_controls(S0),
+    S1 = retire_removed_controls(retire_subscribers_if_revoked(S0)),
     maintain_control_links(S1).
 
 retire_removed_controls(
@@ -998,14 +1001,28 @@ send_control_frame(Frame, SkipKey, S) ->
     send_control_frame(Frame, SkipKey, SkipKey, S).
 
 send_control_frame(Frame, SkipKey1, SkipKey2,
-                   S = #s{control_links = Links}) ->
+                   S = #s{control_links = Links, subscribers = Subscribers}) ->
+    Downstream = case maps:is_key(S#s.self_key, S#s.control_peers) of
+        true -> maps:map(fun(_, {NodeKey, _}) -> NodeKey end, Subscribers);
+        false -> #{}
+    end,
+    DownstreamPeers = maps:from_keys(maps:values(Downstream), true),
+    Recipients = maps:fold(
+      fun(NodeKey, {_Endpoint, LinkPid, _MonitorRef}, Acc) ->
+          %% Prefer the subscriber stream: the receiver pinned this stream
+          %% to our relay key, so it can accept third-party generations too.
+          case maps:is_key(NodeKey, DownstreamPeers) of
+              true -> Acc;
+              false -> Acc#{LinkPid => NodeKey}
+          end
+      end, Downstream, Links),
     maps:foreach(
-      fun(NodeKey, {_Endpoint, LinkPid, _MonitorRef}) ->
+      fun(LinkPid, NodeKey) ->
           case NodeKey =:= SkipKey1 orelse NodeKey =:= SkipKey2 of
               true -> ok;
               false -> quod_link:send(LinkPid, Frame)
           end
-      end, Links),
+      end, Recipients),
     S.
 
 control_link_current(
@@ -1020,7 +1037,8 @@ control_link_current(
 
 cleanup_control_state(
   #s{peer_query = PeerQuery, pending_links = Pending,
-     pending_contacts = Contacts, control_links = Links}) ->
+     pending_contacts = Contacts, control_links = Links, subscribers = Subscribers}) ->
+    maps:foreach(fun(_, {_, Ref}) -> demonitor(Ref, [flush]) end, Subscribers),
     case PeerQuery of
         {Pid, MonitorRef, _Token, TimerRef} ->
             cancel_timer(TimerRef),
@@ -1731,8 +1749,37 @@ inbound(Payload, Source, S) ->
         {generation, SignedPage} ->
             ingest_generation_page(SignedPage, Source, S);
         resync_request ->
-            send_cached_generations(Source, S);
+            %% Subscribe and capture the snapshot in this same owner turn.
+            %% Authenticated consumers gain delivery, never relay authority.
+            send_cached_generations(Source, retain_subscriber(Source, S));
         error -> S
+    end.
+
+retain_subscriber({direct_link, PeerKey, _Endpoint, LinkPid},
+                  S = #s{self_key = SelfKey, control_peers = Peers,
+                         subscribers = Subscribers}) ->
+    %% A link may arrive before the first root proof. Retain its interest,
+    %% but fan-out remains gated on installed root authority.
+    Eligible = maps:is_key(SelfKey, Peers) orelse S#s.peer_height =:= undefined,
+    case Eligible andalso not maps:is_key(LinkPid, Subscribers) of
+        true -> S#s{subscribers = Subscribers#{LinkPid => {PeerKey, monitor(process, LinkPid)}}};
+        false -> S
+    end;
+retain_subscriber(_Source, S) -> S.
+
+remove_subscriber(Ref, Pid, S = #s{subscribers = Subscribers}) ->
+    case maps:find(Pid, Subscribers) of
+        {ok, {_, Ref}} -> S#s{subscribers = maps:remove(Pid, Subscribers)};
+        _ -> S
+    end.
+
+retire_subscribers_if_revoked(S = #s{self_key = SelfKey, control_peers = Peers,
+                                    subscribers = Subscribers}) ->
+    case maps:is_key(SelfKey, Peers) of
+        true -> S;
+        false ->
+            maps:foreach(fun(_, {_, Ref}) -> demonitor(Ref, [flush]) end, Subscribers),
+            S#s{subscribers = #{}}
     end.
 
 source_link_and_key({direct_link, PeerKey, _Endpoint, LinkPid}) ->
@@ -1814,6 +1861,9 @@ serving_identity(#{identity_dir := IdentityDir}) ->
 %%%===================================================================
 
 recover_lifecycle(S) ->
+    %% Incoming streams outlive this owner. Reset after subscribing so peers
+    %% reconnect and register their delivery interests with this incarnation.
+    ok = quod_conn:reset_inbound_channel(S#s.channel),
     arm_tick(S#s.renew_ms),
     maintain_directory_control(
       recover_route_demands(recover_tracking_event(S))).

@@ -7,7 +7,8 @@
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([node_enrollment_remote_custodian/1, enrollment_wait_ready/2,
-         enrollment_wait_complete/0]).
+         enrollment_wait_complete/0, enrollment_wait_generation/3,
+         enrollment_local_evidence_cost/2]).
 -export([remote_plain_read_excludes_live_observer/1,
          remote_plain_read_rejects_lying_validator/1,
          remote_scope_solutions/1, remote_scope_trace_parentage/1,
@@ -159,6 +160,10 @@ node_enrollment_remote_custodian(Config) ->
         peer:call(Source, quod_ontology, genesis_anchor, [Ns])),
     ?assertMatch({ok, [_], _}, peer:call(Source, quod_prolog, prove_ro,
         [NodeNs, {node_identity_allocation, Public, Ref, Host}])),
+    %% No publication or follow has primed this newly created identity yet.
+    Cost = peer:call(Custodian, ?MODULE, enrollment_local_evidence_cost,
+                  [{Ns, Anchor}, [{HostKey, [HostAddr]}]], 20000),
+    ct:pal("Unchanged current reads: ~p", [Cost]),
     automatic_joining_node(Config, NodeAnchor, Host).
 
 automatic_joining_node(Config, NodeAnchor,
@@ -211,7 +216,105 @@ automatic_joining_node(Config, NodeAnchor,
     {ok, Bytes, Sig} = peer:call(Applicant, quod_node_actor, signed_goal,
         [read, true, crypto:strong_rand_bytes(32), quod_time:now_ms() + 30000]),
     ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
-        peer:call(Applicant, quod_client_goal_ingress, submit, [Bytes, Sig], 60000)).
+        peer:call(Applicant, quod_client_goal_ingress, submit, [Bytes, Sig], 60000)),
+    %% The custodian must validate an observer's publication even though its
+    %% own local member is the identity's sole current-tip answerer.
+    ApplicantAuthor = {node_actor, Blob},
+    {ok, First} = peer:call(Custodian, ?MODULE, enrollment_wait_generation,
+                            [ApplicantAuthor, Ref, none], 20000),
+    %% No new resync request: renew on the existing authenticated stream and
+    %% observe the received generation, not a send trace.
+    {ok, _} = peer:call(Custodian, ?MODULE, enrollment_wait_generation,
+                        [ApplicantAuthor, Ref, First], 20000),
+    {ok, HostBlob} = quod_node_actor:reference(HostNs, HostAnchor, <<"me.">>, 3),
+    HostAuthor = {node_actor, HostBlob},
+    {ok, HostFirst} = peer:call(Applicant, ?MODULE, enrollment_wait_generation,
+                              [HostAuthor, Host, none], 20000),
+    {ok, BeforeRestart} = peer:call(Applicant, ?MODULE, enrollment_wait_generation,
+                        [HostAuthor, Host, HostFirst], 20000),
+    HostKey = ?config(target_pub, Config),
+    #{control_links := BeforeLinks} = peer:call(Applicant,
+        quod_directory_control, test_control_state, []),
+    {_, OldLink, _} = maps:get(HostKey, BeforeLinks),
+    %% The transport survives a directory-only restart. Its peer-opened
+    %% streams must reset so the new owner acquires fresh subscriptions.
+    ok = peer:call(Custodian, supervisor, terminate_child,
+        [quod_reg:via({sup, node}), quod_directory_control]),
+    {ok, _} = peer:call(Custodian, supervisor, restart_child,
+        [quod_reg:via({sup, node}), quod_directory_control]),
+    {ok, Recovered} = peer:call(Applicant, ?MODULE, enrollment_wait_generation,
+        [HostAuthor, Host, BeforeRestart], 20000),
+    #{control_links := AfterLinks} = peer:call(Applicant,
+        quod_directory_control, test_control_state, []),
+    {_, NewLink, _} = maps:get(HostKey, AfterLinks),
+    ?assertNotEqual(OldLink, NewLink),
+    #{subscribers := Subscribers} = peer:call(Custodian,
+        quod_directory_control, test_control_state, []),
+    %% The source peer may also subscribe to this root custodian. Require
+    %% exactly one stream per peer, including the restarted applicant link.
+    SubscriberKeys = [Key || {Key, _} <- maps:values(Subscribers)],
+    ApplicantKey = ?config(third_pub, Config),
+    ?assertEqual([ApplicantKey], [Key || Key <- SubscriberKeys, Key =:= ApplicantKey]),
+    ?assertEqual(lists:sort(SubscriberKeys), lists:usort(SubscriberKeys)),
+    ?assertMatch(#{control_link_count := 1},
+        peer:call(Applicant, quod_directory_control, stats, [])),
+    {ok, _} = peer:call(Applicant, ?MODULE, enrollment_wait_generation,
+        [HostAuthor, Host, Recovered], 20000).
+
+enrollment_local_evidence_cost(Identity, Sources) ->
+    Owner = quod_reg:where({foreign_log, node}),
+    Calls = [{quod_foreign_log, fetch_evidence, 9},
+             {quod_foreign_log, resident_current_identity, 3},
+             {quod_ledger_store, open_ro_snapshot, 1},
+             {quod_ledger_store, open, 3}, {quod_ledger_store, open_ro, 3},
+             {quod_ledger_store, fold, 5}, {quod_ledger_store, fold_groups, 3},
+             {quod_ledger_store, batch_sync, 1}, {file, datasync, 1}],
+    lists:foreach(fun(MFA) -> 1 = erlang:trace_pattern(MFA, true, [local]) end, Calls),
+    1 = erlang:trace(Owner, true, [call, set_on_spawn, {tracer, self()}]),
+    try
+        {ok, A} = quod_foreign_log:current(Sources, Identity, 5000),
+        {ok, B} = quod_foreign_log:current(Sources, Identity, 5000),
+        ?assertEqual(maps:get(slot, A), maps:get(slot, B)),
+        Barrier = erlang:trace_delivered(all),
+        receive {trace_delivered, all, Barrier} -> ok after 5000 -> error(trace_timeout) end,
+        Events = enrollment_evidence_events([]),
+        {ok, SelfKey} = application:get_env(quod, node_pubkey),
+        Probes = lists:usort([Pid || {Pid, {quod_foreign_log, fetch_evidence,
+            [_, _, Peer, _, I | _]}} <- Events, Peer =:= SelfKey, I =:= Identity]),
+        ?assert(length(Probes) >= 1),
+        ?assertEqual(2, length([ok || {Pid, {quod_foreign_log, resident_current_identity,
+            [_, I, _]}} <- Events, Pid =:= Owner, I =:= Identity])),
+        Reads = [MFA || {Pid, MFA} <- Events, lists:member(Pid, Probes)],
+        ?assertEqual(length(Probes), length([ok || {quod_ledger_store, open_ro_snapshot, _} <- Reads])),
+        ?assertEqual([], [MFA || {_, {M, F, _} = MFA} <- Events,
+            M =/= quod_foreign_log, {M, F} =/= {quod_ledger_store, open_ro_snapshot}]),
+        #{checks => 2, slot => maps:get(slot, B), local_probes => length(Probes),
+          archive_rebuilds_or_writes => 0}
+    after
+        erlang:trace(Owner, false, [call, set_on_spawn]),
+        lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, false, [local]) end, Calls)
+    end.
+
+enrollment_evidence_events(Acc) ->
+    receive {trace, Pid, call, MFA} -> enrollment_evidence_events([{Pid, MFA} | Acc])
+    after 0 -> Acc end.
+
+enrollment_wait_generation(Author, Ref, After) ->
+    true = quod_reg:subscribe_tracked({node_identity_route, Ref}),
+    try enrollment_wait_generation(Author, Ref, After, quod_time:mono_ms() + 15000)
+    after quod_reg:unsubscribe_tracked({node_identity_route, Ref}) end.
+
+enrollment_wait_generation(Author, Ref, After, Deadline) ->
+    case ets:lookup(quod_directory_highwater, Author) of
+        [{Author, Epoch, Number}] when {Epoch, Number} > After; After =:= none ->
+            {ok, {Epoch, Number}};
+        _ -> receive
+            {node_identity_route_changed, _, Ref} ->
+                enrollment_wait_generation(Author, Ref, After, Deadline)
+        after max(0, Deadline - quod_time:mono_ms()) ->
+            error({generation_not_received, Author, After, quod_directory_control:stats()})
+        end
+    end.
 
 enrollment_wait_complete() ->
     Manager = quod_reg:where({namespace_manager, node}), Parent = self(),

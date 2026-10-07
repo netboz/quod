@@ -441,9 +441,9 @@ with_evidence_archive(F, Fun) ->
 
 consume_evidence_sender(Store, Sender, Receiver, Acc) ->
     {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender),
-    Continuation = case Next of done -> done; _ -> {<<1:128>>, 1} end,
+    End = case Next of done -> done; _ -> more end,
     {ok, Received} = quod_catchup:evidence_accept(Receiver, Parts,
-                                                quod_ledger_store:last(Store), Continuation),
+                                                quod_ledger_store:last(Store), End),
     case Next of
         done -> {ok, Result} = quod_catchup:evidence_result(Received),
                 {Result, lists:append(lists:reverse([Parts | Acc]))};
@@ -480,6 +480,37 @@ era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() 
             Before = quod_dtx_phase_index:stats(I),
             Send = quod_catchup:transfer_open(SourceStore, 2, 2),
             try
+                %% Sparse proofs use the same bounded pages through the local
+                %% byte adapter, whose continuation is not a wire nonce.
+                {ok, _} = application:ensure_all_started(gproc),
+                true = quod_reg:reg({quod_simplex, Ns}),
+                {ok, Reader} = quod_ledger_store:open_ro_snapshot(
+                    quod_ledger_store:snapshot(SourceStore)),
+                {ok, HistoryIndex} = quod_dtx_phase_index:capture(I, 1),
+                {ok, Authority} = quod_simplex:history_authority_advance(Binding, Genesis, none),
+                View = #{owner => self(), identity => Binding,
+                         projection => P#{history_index => HistoryIndex}},
+                Query = {evidence, Era, tip},
+                Deadline = quod_time:mono_ms() + 10000,
+                Fetch = fun(_, _, _, Q, D, Consume) ->
+                    PageResult = quod_foreign_log:local_view_fetch(View, Reader, Q, D, Consume),
+                    ?assertMatch({ok, {ok, _}, 2, _}, PageResult),
+                    PageResult
+                end,
+                try
+                    ?assertMatch({ok, ok, 2, {{local, _}, 1}},
+                        quod_foreign_log:local_view_fetch(View, Reader, Query,
+                            Deadline, fun(_, _, _) -> ok end)),
+                    {ok, Evidence} = quod_foreign_log:fetch_evidence_pages(
+                        self(), make_ref(), {local, Binding}, local, Binding, Query,
+                        quod_catchup:evidence_begin(Binding, Authority, tip), Fetch, Deadline),
+                    ?assertEqual(quod_ledger:encode_entry(Entry),
+                                 quod_ledger:encode_entry(maps:get(entry, Evidence))),
+                    ?assertEqual(Before, quod_dtx_phase_index:stats(I))
+                after
+                    quod_ledger_store:close(Reader),
+                    true = gproc:unreg(quod_reg:name({quod_simplex, Ns}))
+                end,
                 quod_ledger_store:with_proof_stage(filename:join(Dir, "interrupted"), fun(Stage) ->
                     {ok, T} = quod_catchup:transfer_begin(Binding, 2, P, I, wrapped, Stage),
                     {ok, [{group, 2, 2} | Page], More} = quod_catchup:transfer_page(SourceStore, Send),
@@ -601,6 +632,7 @@ era_transfer_wire_binds_credit_request_and_opaque_continuation_test() ->
     end, Terms),
     Bad = [{history_request3, Grant, Req, {continue, Token, 0}},
            {history_request3, Grant, Req, {continue, {disk_offset, 100}, 1}},
+           {history_page3, Grant, Req, [end_group], 100, {{local, sender}, 1}, Next},
            {history_page3, Grant, Req, [end_group], 100, done, Grant},
            {history_page3, Grant, Req, lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 1, end_group),
             100, done, Next},

@@ -41,6 +41,19 @@ control peer may publish the bootstrap/system set. On identity activation it
 publishes an empty bootstrap generation and moves those descriptors into its
 node-authored generation; lost withdrawals remain bounded by the old lease.
 
+An authenticated directory resync subscribes its incoming stream before taking
+the cached snapshot. Current root control peers relay later verified generations
+and withdrawals to those consumers. Stream death removes the subscription;
+loss of the local root control role retires its downstream interests. Delivery
+does not grant the consumer relay authority. Lease ticks renew publications,
+not resync requests. A restarted directory owner resets its peer-opened streams
+so their sources reconnect and subscribe to the new incarnation.
+
+Current-tip confirmation treats the local physical key as one answerer when
+it belongs to the certified committee. Its evidence comes from the existing
+owner's immutable committed archive through the shared proof verifier. Local
+hosting alone cannot supply a quorum, and the original deadline still applies.
+
 Discoverability is the host's publication choice, not evidence of consent by
 the target's owner. A private hosting fact is excluded from public generations,
 but global confidentiality across independently authorized hosts requires an

@@ -274,6 +274,9 @@ with_node_generation(Fun) ->
     with_node_generation(3, Fun).
 
 with_node_generation(Height, Fun) ->
+    with_node_generation(Height, [], Fun).
+
+with_node_generation(Height, RootFacts, Fun) ->
     F = node_generation_fixture(Height),
     {Ns, _Anchor} = maps:get(identity, F),
     Dir = quod_foreign_log_tests:temp_dir("directory-projection"),
@@ -297,7 +300,7 @@ with_node_generation(Height, Fun) ->
                 #{mode => create, node_id => Pub, committee => [],
                   external_predicate_modules => [],
                   genesis_diff => quod_prolog:terms_to_diff(
-                    [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}}])},
+                    [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}} | RootFacts])},
                 <<"quod:root">>, Pub, key(3)),
             ok = quod_prolog:apply_entry(<<"quod:root">>,
                 quod_ct:committed_entry(<<"quod:root">>, 1, {batch, [Genesis]}), live),
@@ -716,6 +719,105 @@ private_target_demand_waits_for_its_host_actor_without_leaking_target_test() ->
                      {TargetNs, TargetAnchor}, maps:get(route_demands, State)))
     end).
 
+directory_subscription_lifetime_test_() ->
+    {timeout, 30, fun() ->
+        Previous = application:get_env(quod, node_pubkey),
+        ok = application:set_env(quod, node_pubkey, key(245)),
+        try with_node_generation(3,
+            [{directory_control_peer, key(245)}, {directory_control_peer, key(246)}],
+            fun(F, Control, _Owner) ->
+            ok = quod_directory_control:test_set_control_peers([key(245), key(246)]),
+            Parent = self(), Link = spawn(fun() -> forwarding_link(Parent) end),
+            Outbound = spawn(fun() -> forwarding_link(Parent, duplicate_delivery) end),
+            Subscribe = fun() ->
+                Control ! {quod_message, {{key(246), {<<"host">>, 14567}}, Link},
+                    quod_directory_control:channel(),
+                    term_to_binary(quod_directory_generation_resync)},
+                _ = quod_directory_control:stats()
+            end,
+            try
+                Subscribe(),
+                First = quod_directory_control:test_control_state(),
+                ?assertEqual(1, map_size(maps:get(subscribers, First))),
+                Subscribe(),
+                ?assertEqual(maps:get(subscribers, First), maps:get(subscribers,
+                    quod_directory_control:test_control_state())),
+                _ = await_control(fun(#{peer_query := Q, peer_height := H}) ->
+                    Q =:= undefined andalso H =:= 1 end),
+                ok = quod_directory_control:test_set_control_link(
+                    key(246), {<<"host">>, 14567}, Outbound),
+                submit_node_generation(F, Control, 1),
+                expect_forwarded_generation(F, 1),
+                %% An empty successor is a withdrawal on the same passive stream.
+                submit_node_generation(F#{hosted => []}, Control, 2),
+                expect_forwarded_generation(F, 2),
+                Barrier = make_ref(),
+                sys:replace_state(Control, fun(State) ->
+                    Outbound ! {barrier, Parent, Barrier}, State end),
+                receive {directory_link_barrier, Barrier} -> ok
+                after 1000 -> error(barrier_timeout) end,
+                assert_no_duplicate_generations(),
+                Link ! stop,
+                _ = await_control(fun(#{subscribers := S}) -> S =:= #{} end),
+                %% Root-role removal retires delivery interests without giving
+                %% subscribers any relay or target authority.
+                Link2 = spawn(fun() -> forwarding_link(Parent) end),
+                try
+                    Control ! {quod_message, {{key(247), {<<"host">>, 14568}}, Link2},
+                        quod_directory_control:channel(),
+                        term_to_binary(quod_directory_generation_resync)},
+                    _ = quod_directory_control:stats(),
+                    ok = quod_directory_control:test_apply_peer_result({ok, 2, #{}}),
+                    ?assertEqual(#{}, maps:get(subscribers,
+                        quod_directory_control:test_control_state())),
+                    Control ! {quod_message, {{key(247), {<<"host">>, 14568}}, Link2},
+                        quod_directory_control:channel(),
+                        term_to_binary(quod_directory_generation_resync)},
+                    ?assertEqual(#{}, maps:get(subscribers,
+                        quod_directory_control:test_control_state())),
+                    Before = make_ref(),
+                    sys:replace_state(Control, fun(State) ->
+                        Link2 ! {barrier, Parent, Before}, State end),
+                    receive {directory_link_barrier, Before} -> ok
+                    after 1000 -> error(barrier_timeout) end,
+                    drain_link_sends(),
+                    submit_node_generation(F, Control, 3),
+                    await_generation(F, 3),
+                    After = make_ref(),
+                    sys:replace_state(Control, fun(State) ->
+                        Link2 ! {barrier, Parent, After}, State end),
+                    receive {directory_link_barrier, After} -> ok
+                    after 1000 -> error(barrier_timeout) end,
+                    receive {directory_link_send, _} -> error(non_control_fanout)
+                    after 0 -> ok end
+                after Link2 ! stop end
+            after Link ! stop, Outbound ! stop end
+        end)
+        after
+            case Previous of
+                {ok, Key} -> application:set_env(quod, node_pubkey, Key);
+                undefined -> application:unset_env(quod, node_pubkey)
+            end,
+            drain_link_sends()
+        end
+    end}.
+
+assert_no_duplicate_generations() ->
+    receive {duplicate_delivery, Frame} ->
+        %% A newly learned route can legitimately request an upstream snapshot.
+        ?assertEqual(quod_directory_generation_resync, binary_to_term(Frame, [safe])),
+        assert_no_duplicate_generations()
+    after 0 -> ok end.
+
+expect_forwarded_generation(F, Number) ->
+    receive {directory_link_send, Frame} ->
+        {quod_directory_generation, Page} = binary_to_term(Frame, [safe]),
+        {ok, Decoded} = quod_directory_generation:decode(Page),
+        ?assertEqual(maps:get(author, F), quod_directory_generation:author(Decoded)),
+        ?assertEqual(Number, quod_directory_generation:generation(Decoded))
+    after 10000 -> error({generation_not_forwarded, quod_directory_control:test_control_state()})
+    end.
+
 lease_renewal_tick_does_not_poll_for_routes_test() ->
     with_directory_and_control(fun() ->
         Owner = self(),
@@ -771,8 +873,12 @@ stop_directory() ->
     end.
 
 forwarding_link(Owner) ->
+    forwarding_link(Owner, directory_link_send).
+
+forwarding_link(Owner, Tag) ->
     receive
-        {send, Frame} -> Owner ! {directory_link_send, Frame}, forwarding_link(Owner);
+        {send, Frame} -> Owner ! {Tag, Frame}, forwarding_link(Owner, Tag);
+        {barrier, Caller, Ref} -> Caller ! {directory_link_barrier, Ref}, forwarding_link(Owner, Tag);
         stop -> ok
     end.
 

@@ -69,6 +69,7 @@ system is introduced.
 -define(LOCAL_READ_GATE(Stage), test_local_read_gate(Stage)).
 -define(WORKER_RESULT_GATE(Ref), test_worker_result_gate(Ref)).
 -export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2,
+         local_view_fetch/5, fetch_evidence_pages/9,
          consume_reference_reply/3,
          open_verified_cache/6, test_replay_cache/4,
          test_install_worker_meta/3, test_install_verified_progress/3,
@@ -761,11 +762,15 @@ local_view_fetch(View, Store, Query, Deadline, Consume) ->
     case quod_simplex:history_view_live(View) andalso Deadline > quod_time:mono_ms() of
             false -> {error, retry};
             true ->
-                Sender = case Query of
-                             {range, From, To} -> quod_catchup:transfer_open(Store, From, To);
-                             {continue, {local, Retained}, 1} -> Retained
-                         end,
-                case quod_catchup:transfer_page(Store, Sender) of
+                Open = case Query of
+                           {continue, {local, Retained}, 1} -> {ok, Retained};
+                           _ -> quod_catchup:open_history_transfer(Store, View, Query)
+                       end,
+                Page = case Open of
+                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender);
+                           {error, _} = Error -> Error
+                       end,
+                case Page of
                     {ok, Parts, Next} ->
                         Continuation = case Next of done -> done; _ -> {{local, Next}, 1} end,
                         Height = quod_ledger_store:last(Store),
@@ -774,7 +779,7 @@ local_view_fetch(View, Store, Query, Deadline, Consume) ->
                             true -> {ok, Consumed, Height, Continuation};
                             false -> {error, retry, Consumed}
                         end;
-                    {error, _} = Error -> Error
+                    {error, _} = PageError -> PageError
                 end
     end.
 
@@ -5503,19 +5508,39 @@ fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, Selectio
     KnownEra = evidence_known_era(Authority),
     Receiver = quod_catchup:evidence_begin(Identity, Authority, Selection),
     Query = {evidence, KnownEra, Selection},
-    quod_peer_route:walk(Endpoints, Deadline,
+    case Fetch =:= undefined andalso application:get_env(quod, node_pubkey) =:= {ok, Peer} of
+        true ->
+            %% Self is one authenticated answerer, not a quorum shortcut. The
+            %% collector still verifies this evidence and counts only members
+            %% of its certified committee under the original deadline.
+            case quod_simplex:history_view(Identity, committed, Deadline) of
+                {ok, #{snapshot := Snapshot} = View} ->
+                    with_local_view_owner(View, fun() ->
+                        with_snapshot_store(Snapshot, element(1, Identity), fun(Store) ->
+                            LocalFetch = fun(_, _, _, Q, D, Consume) ->
+                                local_view_fetch(View, Store, Q, D, Consume)
+                            end,
+                            fetch_evidence_pages(Owner, RequestRef, {local, Identity}, local,
+                                Identity, Query, Receiver, LocalFetch, Deadline)
+                        end)
+                    end);
+                {error, _} -> {error, retry}
+            end;
+        false -> quod_peer_route:walk(Endpoints, Deadline,
       fun(Endpoint, _Remaining) ->
           fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity, Query, Receiver, Fetch, Deadline)
       end,
       fun({ok, _} = Ok, _) -> {done, Ok}; (Error, _) -> {next, Error} end,
-      {error, retry}).
+      {error, retry})
+    end.
 
 evidence_known_era(none) -> genesis;
 evidence_known_era(#{protocol_root := {Era, _, _}}) -> Era.
 
 fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity = {Ns, _}, Query, Receiver, Fetch, Deadline) ->
     Consume = fun(Parts, Height, Continuation) ->
-        quod_catchup:evidence_accept(Receiver, Parts, Height, Continuation)
+        End = case Continuation of done -> done; {_, _} -> more end,
+        quod_catchup:evidence_accept(Receiver, Parts, Height, End)
     end,
     case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, Fetch, Deadline, Consume) of
         {ok, {ok, Next}, _Height, done} -> quod_catchup:evidence_result(Next);

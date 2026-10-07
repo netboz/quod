@@ -1,9 +1,9 @@
 # Node enrollment implementation evidence
 
-This records local implementation and verification, not a production rollout.
-No live ledgers, deployment labels, fleet allocations, or committees were
-changed. Yan authorized refounding if necessary; local retained-state tests
-have not demonstrated that it is necessary. No commit has been made.
+This records local verification before the first implementation commit and
+rollout. No live state was changed during these campaigns. Subsequent commits,
+authorized retained policy activation and fleet results are recorded in
+[deployment.md](deployment.md).
 
 The tracked production delta is +687/-89 lines (net +598); tests are +706/-67
 (net +639). Growth adds the Prolog enrollment recipe and allocation policy,

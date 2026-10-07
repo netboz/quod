@@ -1,0 +1,249 @@
+{
+  "campaign": "/tmp/quod-node-enrollment-routing-20261007/gates-05",
+  "driver_exit": 0,
+  "frozen_scope": "routing-tree-05.json",
+  "eunit_passed": 3766,
+  "eunit_failed": 0,
+  "common_test_passed": 146,
+  "common_test_failed": 0,
+  "gates": [
+    {
+      "gate": "clean-test",
+      "command": [
+        "rebar3",
+        "as",
+        "test",
+        "clean"
+      ],
+      "exit": 0,
+      "seconds": 1.3345832824707031,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/clean-test.log",
+      "log_sha256": "bd26fc2b8f9b12f121f761c7ef024c4c902ff784960abc4a01a25971b045db89"
+    },
+    {
+      "gate": "clean",
+      "command": [
+        "rebar3",
+        "clean"
+      ],
+      "exit": 0,
+      "seconds": 0.3846585750579834,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/clean.log",
+      "log_sha256": "bd26fc2b8f9b12f121f761c7ef024c4c902ff784960abc4a01a25971b045db89"
+    },
+    {
+      "gate": "eunit",
+      "command": [
+        "rebar3",
+        "eunit"
+      ],
+      "exit": 0,
+      "seconds": 597.3221786022186,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/eunit.log",
+      "log_sha256": "690fb3b0ded511a1169c171eff7bfbea60525d09d73a16e88fd1a533e5d713a4"
+    },
+    {
+      "gate": "quod_ask",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_ask_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 100.89062190055847,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_ask.log",
+      "log_sha256": "1a1386d0939741df2e66c7cc82f1ab3ffd1b7e04bd6496865a53377ff472e4ce"
+    },
+    {
+      "gate": "quod_quic",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_quic_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 85.41124701499939,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_quic.log",
+      "log_sha256": "e6c9e5f048527a6d2522123c4c72d57f7bbf0725908f78d3e16f9941860a3fb4"
+    },
+    {
+      "gate": "quod_simplex",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_simplex_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 4.515852451324463,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_simplex.log",
+      "log_sha256": "bfc9b1f0dd10d6a4176c5a2ccd078ee35e1760cb7bdb1b06d31b91c5d5621623"
+    },
+    {
+      "gate": "simplex",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/simplex_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 65.14737010002136,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/simplex.log",
+      "log_sha256": "2617e18baeb907bb961d13b77764ff7d11a9a2dc27165f550e2ced367aea6ec6"
+    },
+    {
+      "gate": "join",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/join_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 23.240798711776733,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/join.log",
+      "log_sha256": "fa8d2ce3084f68b1a7e6e8cbba3c1278993ca8f95aff1236d430007307b388ea"
+    },
+    {
+      "gate": "quod_agent_failover",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_agent_failover_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 228.42923665046692,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_agent_failover.log",
+      "log_sha256": "f25e209f0e229ef22c70720ab90276b7ef85de3dbfdffe79ec19f6ff993fd75f"
+    },
+    {
+      "gate": "quod_read_set",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_read_set_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 46.69818615913391,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_read_set.log",
+      "log_sha256": "4450ae4a27678ab6025fcf5211d8982cc2af3442026c14e05c569cba8393bdbc"
+    },
+    {
+      "gate": "feed",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/feed_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 19.931986331939697,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/feed.log",
+      "log_sha256": "e6ac5fc362964d79361ea175775f04ffeeefa3061243bb62b52202fa6be2e9e6"
+    },
+    {
+      "gate": "growth",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/growth_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 59.98338985443115,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/growth.log",
+      "log_sha256": "a73556a884d5d24764654b91b1eb60495589946b89547f987b43a223670aa592"
+    },
+    {
+      "gate": "quod_ns",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_ns_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 6.792705774307251,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_ns.log",
+      "log_sha256": "a7735e038360dc111f82d5e426ad9b4e4d6ee54a5fb331ba2f79e9b86c14ee5b"
+    },
+    {
+      "gate": "quod_names",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_names_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 35.10756278038025,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_names.log",
+      "log_sha256": "f0f4eeb5ca58cd361c2d967bebbdb1000e2304e7a4a0dc8ba6dddb1e0fd419cd"
+    },
+    {
+      "gate": "quod_peer_capacity",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_peer_capacity_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 9.374434471130371,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_peer_capacity.log",
+      "log_sha256": "b3d1ec9333bd8450e612108895ce4f241f1e4e925eead51fde08fc00586d5683"
+    },
+    {
+      "gate": "quod_peer_observation",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=test/quod_peer_observation_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 19.60309147834778,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/quod_peer_observation.log",
+      "log_sha256": "1c4076c7b194dcbec391cd6385794695870d3df43d1a19123abc6a85e08a139e"
+    },
+    {
+      "gate": "xref",
+      "command": [
+        "rebar3",
+        "xref"
+      ],
+      "exit": 0,
+      "seconds": 11.406507968902588,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/xref.log",
+      "log_sha256": "e0762173d9be99265933aafc61806833637a683b9347a0b8f3bc8a31a64f678f"
+    },
+    {
+      "gate": "dialyzer",
+      "command": [
+        "rebar3",
+        "dialyzer"
+      ],
+      "exit": 0,
+      "seconds": 67.68426465988159,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/dialyzer.log",
+      "log_sha256": "d03771e735297a87ae9b6d228ed0819fbdadf0b75d3cd9e9f8d75b087b4a48cb"
+    },
+    {
+      "gate": "release",
+      "command": [
+        "rebar3",
+        "as",
+        "prod",
+        "release"
+      ],
+      "exit": 0,
+      "seconds": 7.754843473434448,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/release.log",
+      "log_sha256": "e3694a954e41ac79d67fefc6be73f548dfc82336242cfbe3fa05ffa427e51634"
+    },
+    {
+      "gate": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 0.008136749267578125,
+      "log": "/tmp/quod-node-enrollment-routing-20261007/gates-05/diff-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

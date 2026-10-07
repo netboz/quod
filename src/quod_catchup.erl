@@ -37,7 +37,7 @@ identity and the historical certifying committee, never the serving peer.
 -export([start_link/2, contact/1, contacts/2, pull/5, read_blocks/3, stats/1,
          channel/1, encode_frame/2, decode_frame/2,
          finality_begin/3, finality_block/2, verify_finality/4, verify_forward_group/5,
-         transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
+         open_history_transfer/3, transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
          range_begin/7, range_accept/5, range_context/1, range_delta/1,
          evidence_open/4, evidence_begin/3, evidence_accept/4, evidence_result/1,
          catch_up/7]).
@@ -847,15 +847,15 @@ evidence_begin(Identity, Authority, Selection) ->
     #evidence_receiver{identity = Identity, authority = Authority, selection = Selection}.
 
 -doc "Consume bounded authority/claim pages through the shared finality ancestry verifier.".
--spec evidence_accept(term(), [term()], non_neg_integer(), term()) -> {ok, term()} | {error, term()}.
-evidence_accept(R = #evidence_receiver{height = OldHeight, complete = false}, Parts, Height, Continuation)
+-spec evidence_accept(term(), [term()], non_neg_integer(), more | done) -> {ok, term()} | {error, term()}.
+evidence_accept(R = #evidence_receiver{height = OldHeight, complete = false}, Parts, Height, End)
   when is_integer(Height), Height >= 0, (OldHeight =:= none orelse OldHeight =:= Height) ->
-    case valid_transfer_parts(Parts, 0, 0) andalso valid_transfer_continuation(Continuation) of
+    case valid_transfer_parts(Parts, 0, 0) andalso (End =:= more orelse End =:= done) of
         true ->
             case consume_evidence(Parts, R#evidence_receiver{height = Height}, quod_transaction:decode_context()) of
                 {ok, Next = #evidence_receiver{active = none, entry = Entry}, _}
-                  when Continuation =:= done, Entry =/= none -> {ok, Next#evidence_receiver{complete = true}};
-                {ok, _, _} when Continuation =:= done -> {error, incomplete_evidence};
+                  when End =:= done, Entry =/= none -> {ok, Next#evidence_receiver{complete = true}};
+                {ok, _, _} when End =:= done -> {error, incomplete_evidence};
                 {ok, Next, _} -> {ok, Next};
                 {error, _} = Error -> Error
             end;

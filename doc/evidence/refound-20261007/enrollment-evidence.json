@@ -1,0 +1,17 @@
+{
+  "pointer": "stored",
+  "manager": {
+    "desired_hosts": {
+      "private": 0,
+      "discoverable": 2
+    },
+    "hosting_revision": 2,
+    "node_enrollment": "complete",
+    "private_contacts": 0,
+    "route_waits": 0
+  },
+  "hosting_height": 2,
+  "node_anchor": "08BE134132A4D3DFF54938F4E0A7811AED57345775DB52AD5DAEE527049DC0E2",
+  "node_namespace": "node:cd84544835d93cad46b54663a0f275e627eaeaa07a4ea2ce6711c0c61174ee81",
+  "self_hosting": "committed"
+}

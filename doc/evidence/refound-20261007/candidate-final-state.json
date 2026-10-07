@@ -1,0 +1,85 @@
+{
+  "id": "quod-finality-candidate-v6-20260926",
+  "version": 50,
+  "job_modify_index": 827417,
+  "status": "running",
+  "image": "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d",
+  "counts": {
+    "quod-node": 8,
+    "quod-cloud": 0
+  },
+  "running_allocations": [
+    {
+      "ID": "33bf86db-7a74-a97d-656e-36f8e0f71251",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "NodeName": "conrad",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "ad416a12-41f9-cd41-289a-b3d708caa05d",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "NodeName": "corin",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "8dc2fd90-dcbf-e49e-68d7-2966bb955527",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "NodeName": "caton",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "4e539139-5a2d-2ccc-263c-a0156451df62",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "NodeName": "conrad",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "bd89fb7e-85c7-60af-33fa-afd342ff0f25",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "NodeName": "corin",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "43e7a0fa-da7a-a63e-91db-314182894924",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "NodeName": "caton",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "abc90d65-053e-1e74-5301-089f8dd82355",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "NodeName": "conrad",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    },
+    {
+      "ID": "b9845c66-46a5-1016-3992-cda004c45a52",
+      "Name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "NodeName": "corin",
+      "ClientStatus": "running",
+      "DesiredStatus": "run",
+      "Restarts": 0
+    }
+  ]
+}

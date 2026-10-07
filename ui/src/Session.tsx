@@ -30,18 +30,19 @@ import { SessionContext, useSignedSession } from './session-context'
 
 export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<SignedIdentity | null>(null)
-  const [agents, setAgents] = useState(agentReferences)
-  const [agent, setAgent] = useState(activeAgentReference)
+  const [agents, setAgents] = useState<ReturnType<typeof agentReferences>>([])
+  const [agent, setAgent] = useState<ReturnType<typeof activeAgentReference>>(null)
   const [busy, setBusy] = useState(false)
   const [entering, setEntering] = useState(true)
   const [saved, setSaved] = useState(false)
   const [unresolved, setUnresolved] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const onAccount = (reference: AgentReference) => {
-    const selected = saveAgentReference({ ...reference,
+  const onAccount = (reference: AgentReference & { network: string }) => {
+    const selected = saveAgentReference({ network: reference.network,
+      namespace: reference.namespace, instanceText: reference.instanceText,
       anchor: typeof reference.anchor === 'string' ? reference.anchor : b64url(reference.anchor) })
-    setAgents(agentReferences())
+    setAgents(agentReferences(reference.network))
     setAgent(selected)
   }
 
@@ -53,6 +54,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     try {
       assertCrypto()
       next = await authenticateKey(await providerPromise)
+      const network = b64url(next.networkId)
       setIdentity(next)
       if (enroll) setAgent(null)
       // Same identity store as the client page of this origin, so signing in
@@ -66,6 +68,10 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
 
       const account = accountReference(next)
       if (account) onAccount(account)
+      else {
+        setAgents(agentReferences(network))
+        setAgent(activeAgentReference(network))
+      }
       const recovered = await resumeAccounts(next, { onAccount })
       setUnresolved(recovered.unresolved)
       const recoveryError = recovered.results.find(result => result.error)?.error
@@ -206,6 +212,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const addAgent = () => {
+    if (!identity) return
     const namespace = window.prompt('Agent ontology namespace')
     if (namespace === null) return
     const anchor = window.prompt('Agent ontology genesis anchor (base64url)')
@@ -213,8 +220,9 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     const instanceText = window.prompt('Ground agent instance term', 'human_user(me).')
     if (instanceText === null) return
     try {
-      const next = saveAgentReference({ namespace, anchor, instanceText })
-      setAgents(agentReferences())
+      const network = b64url(identity.networkId)
+      const next = saveAgentReference({ network, namespace, anchor, instanceText })
+      setAgents(agentReferences(network))
       setAgent(next)
       setError(null)
     } catch (reason) {
@@ -223,9 +231,11 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const selectAgent = (id: string) => {
+    if (!identity) return
     try {
-      selectAgentReference(id)
-      setAgent(activeAgentReference())
+      const network = b64url(identity.networkId)
+      selectAgentReference(id, network)
+      setAgent(activeAgentReference(network))
       setError(null)
     } catch (reason) {
       setError(message(reason))

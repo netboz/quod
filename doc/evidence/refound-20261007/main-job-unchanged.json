@@ -1,0 +1,21 @@
+{
+  "before": {
+    "version": 246,
+    "job_modify_index": 826727,
+    "image": "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d",
+    "counts": {
+      "quod-node": 8,
+      "quod-cloud": 2
+    }
+  },
+  "after": {
+    "version": 246,
+    "job_modify_index": 826727,
+    "image": "192.168.1.11:5000/quod:0.7.252@sha256:2d7ed2e31d9b38eb88501501b8b7b39a2dc189a5438013d05ba97524839b441d",
+    "counts": {
+      "quod-node": 8,
+      "quod-cloud": 2
+    }
+  },
+  "unchanged": true
+}

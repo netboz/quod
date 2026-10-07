@@ -1,0 +1,7 @@
+{
+  "access": "read_only",
+  "source_bytes": 162,
+  "source_eidolon": true,
+  "model_predicate": true,
+  "admitted_node_private_acl_visible": true
+}

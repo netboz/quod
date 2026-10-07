@@ -1,0 +1,194 @@
+==> 2026-10-07T12:16:30+02:00: Monitoring evaluation "71c74854"
+    2026-10-07T12:16:30+02:00: Evaluation triggered by job "quod-finality-candidate-v6-20260926"
+    2026-10-07T12:16:31+02:00: Evaluation within deployment: "91de89a8"
+    2026-10-07T12:16:31+02:00: Allocation "1b4637ff" created: node "3e390ebd", group "quod-node"
+    2026-10-07T12:16:31+02:00: Evaluation status changed: "pending" -> "complete"
+==> 2026-10-07T12:16:31+02:00: Evaluation "71c74854" finished with status "complete"
+==> 2026-10-07T12:16:31+02:00: Monitoring deployment "91de89a8"
+    
+2026-10-07T12:16:31+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        1       0        0          2026-10-07T12:36:30+02:00
+    
+2026-10-07T12:16:52+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        1       1        0          2026-10-07T12:36:51+02:00
+    
+2026-10-07T12:16:53+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        2       1        0          2026-10-07T12:36:51+02:00
+    
+2026-10-07T12:17:15+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        2       2        0          2026-10-07T12:37:14+02:00
+    
+2026-10-07T12:17:16+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        3       2        0          2026-10-07T12:37:14+02:00
+    
+2026-10-07T12:17:42+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        3       3        0          2026-10-07T12:37:41+02:00
+    
+2026-10-07T12:17:43+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        4       3        0          2026-10-07T12:37:41+02:00
+    
+2026-10-07T12:18:05+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        4       4        0          2026-10-07T12:38:05+02:00
+    
+2026-10-07T12:18:06+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        5       4        0          2026-10-07T12:38:05+02:00
+    
+2026-10-07T12:18:25+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        5       5        0          2026-10-07T12:38:24+02:00
+    
+2026-10-07T12:18:26+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        6       5        0          2026-10-07T12:38:24+02:00
+    
+2026-10-07T12:18:48+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        6       6        0          2026-10-07T12:38:47+02:00
+    
+2026-10-07T12:18:49+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        7       6        0          2026-10-07T12:38:47+02:00
+    
+2026-10-07T12:19:11+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        7       7        0          2026-10-07T12:39:10+02:00
+    
+2026-10-07T12:19:12+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        8       7        0          2026-10-07T12:39:10+02:00
+    
+2026-10-07T12:19:35+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        8       8        0          2026-10-07T12:39:34+02:00
+    
+2026-10-07T12:19:36+02:00
+ID          = 91de89a8
+Job ID      = quod-finality-candidate-v6-20260926
+Job Version = 51
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        8       8        0          2026-10-07T12:39:34+02:00

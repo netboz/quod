@@ -1,0 +1,13 @@
+{
+  "exit": 0,
+  "command": [
+    "docker",
+    "build",
+    "--progress=plain",
+    "--label",
+    "org.opencontainers.image.revision=3a97d47155419a24f038c7425bea2c24ddf1491a",
+    "-t",
+    "192.168.1.11:5000/quod:0.7.253",
+    "/tmp/quod-release-253-20261007/image-context"
+  ]
+}

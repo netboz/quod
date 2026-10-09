@@ -4,6 +4,14 @@ Task `task_1791120421186_fwnpq2`; review requested by Yan, performed with Claude
 Fable, and independently checked. [Review disposition](review-resolution.md)
 records the verified fixes and retained live branches.
 
+[Candidate deployment 0.7.255](deployment-255/README.md) records the verified
+image, one checked-index submission, eight healthy updated allocations,
+recovered state and signed read-only checks. The main job and public source
+hashes were preserved. The archive retains the initial network failure and
+post-submit watcher parsing failure, followed by successful, separately
+labelled campaigns with no repeated submission. The final cluster health
+snapshot records the separate Nomad server membership condition.
+
 The [exact source freeze](clean-08-manifest.json) and
 [gate results](clean-08-PASSED.json) qualify the original feature integration tree. The freeze includes
 the already deployed 0.7.254 ontology-source baseline and movement/control

@@ -1,0 +1,89 @@
+{
+  "utc": "2026-10-09T10:55:52.703185+00:00",
+  "nomad": {
+    "status": 200,
+    "result": {
+      "FailureTolerance": 0,
+      "Healthy": true,
+      "Leader": "7da20515-d742-c72f-9da5-5e02ab503ef3",
+      "Servers": [
+        {
+          "LastContact": "0s",
+          "ID": "7da20515-d742-c72f-9da5-5e02ab503ef3",
+          "Name": "corin.global",
+          "Address": "192.168.1.11:4647",
+          "SerfStatus": "alive",
+          "Version": "1.11.3",
+          "Leader": true,
+          "LastTerm": 35,
+          "LastIndex": 836441,
+          "Healthy": true,
+          "Voter": true,
+          "StableSince": "2026-10-09T10:46:37Z"
+        },
+        {
+          "LastContact": "17.924818ms",
+          "ID": "0e81c54b-bf4c-625e-ab2e-f0d7257a7f58",
+          "Name": "conrad.global",
+          "Address": "192.168.1.10:4647",
+          "SerfStatus": "alive",
+          "Version": "1.11.3",
+          "Leader": false,
+          "LastTerm": 35,
+          "LastIndex": 836441,
+          "Healthy": true,
+          "Voter": true,
+          "StableSince": "2026-10-09T10:46:37Z"
+        }
+      ],
+      "Voters": [
+        "7da20515-d742-c72f-9da5-5e02ab503ef3",
+        "0e81c54b-bf4c-625e-ab2e-f0d7257a7f58"
+      ]
+    }
+  },
+  "caton": {
+    "status": 500,
+    "result": {
+      "server": {
+        "ok": false,
+        "message": "No cluster leader"
+      }
+    }
+  },
+  "consul": {
+    "status": 200,
+    "result": {
+      "Servers": [
+        {
+          "ID": "61860392-70ec-9515-c122-38b93fb5911b",
+          "Node": "corin",
+          "Address": "192.168.1.11:8300",
+          "Leader": false,
+          "ProtocolVersion": "3",
+          "Voter": true,
+          "LastIndex": 5872347
+        },
+        {
+          "ID": "70a63786-bffc-8c10-19e5-6b6bc098ec6d",
+          "Node": "conrad",
+          "Address": "192.168.1.10:8300",
+          "Leader": true,
+          "ProtocolVersion": "3",
+          "Voter": true,
+          "LastIndex": 5872347
+        },
+        {
+          "ID": "b82c4d63-4ae6-b48b-cd5e-7848ad9341a8",
+          "Node": "caton",
+          "Address": "192.168.1.12:8300",
+          "Leader": false,
+          "ProtocolVersion": "3",
+          "Voter": true,
+          "LastIndex": 5872347
+        }
+      ],
+      "Index": 0
+    }
+  }
+}

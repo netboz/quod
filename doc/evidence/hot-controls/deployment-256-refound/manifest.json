@@ -1,0 +1,75 @@
+{
+  "source_commit": "ad46c75aa5f56650d2a6c68086867cadd2d9667f",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4276,
+      "sha256": "293b8587a8f0481fb47bf3f8879f3c91981f7af183e32fb7d0d1b4537c422fd5"
+    },
+    {
+      "path": "deployment-logs.tar.gz",
+      "bytes": 104055,
+      "sha256": "2e023430b8d9ac35f9cf713719478407291073df651163d1d258b9bd6131db17"
+    },
+    {
+      "path": "final-state.json",
+      "bytes": 4522,
+      "sha256": "2053e7ae6175f3f365727e991ce07a50d73ae3b49637fc9eefc7986aaa4d1111"
+    },
+    {
+      "path": "fleet-probe.json",
+      "bytes": 10097,
+      "sha256": "5de0afd76b2f961c48bdf43dc13a3b6529ce4def166c84e2273110ab82164d3e"
+    },
+    {
+      "path": "image-source-manifest.json",
+      "bytes": 41063,
+      "sha256": "53748936a7bbb4e09281c386c58621a84404495ebb048b197c2127c79828bdf9"
+    },
+    {
+      "path": "old-volumes-deleted.json",
+      "bytes": 1899,
+      "sha256": "5f553d19425b8bb5188b878698a5d739753ec94ed40fb3f6587413a00639738d"
+    },
+    {
+      "path": "ontology-anchors.json",
+      "bytes": 1486,
+      "sha256": "3be7209b15b7e9bdd3adf5c230703f2e90c812c72e0a02f71e27314c6683e0e7"
+    },
+    {
+      "path": "refound-final-gate.json",
+      "bytes": 597,
+      "sha256": "dffb10dfb080081a232ca63b9370bc4336a79ff05833b9150e9e6204c22823aa"
+    },
+    {
+      "path": "refound-scope.json",
+      "bytes": 2299,
+      "sha256": "beea81bf7ea5df93195ce188278de9c79693da6ba3c1578f19d5160be9a6a7d7"
+    },
+    {
+      "path": "signed-source-after.json",
+      "bytes": 4643,
+      "sha256": "9b4078d7f221b6dc5d8da435caaf9b0fed35dbee960d577b4644de8063aefee9"
+    },
+    {
+      "path": "signed-source-attempt-01-failed.json",
+      "bytes": 479,
+      "sha256": "adff08fd03fb3fbc1e287611ae3d2105ffe5d2f21f028dee0ff12db8eb579987"
+    },
+    {
+      "path": "signed-source-attempt-02-exit.json",
+      "bytes": 201,
+      "sha256": "e72f486e0c4064e160858d44795fc6308ced07f0abe3647821e2d9ddcb2436e5"
+    },
+    {
+      "path": "verified-image.json",
+      "bytes": 497,
+      "sha256": "ce8064ca2a8326901e36a03e2acebdbb32d21c8e28de9323913a3e2458928da2"
+    },
+    {
+      "path": "volumes-created.json",
+      "bytes": 3555,
+      "sha256": "9363f4c0432e0fafe45a4e05519ce59c78eab5f67066ea932eaf94daa8b9a99a"
+    }
+  ]
+}

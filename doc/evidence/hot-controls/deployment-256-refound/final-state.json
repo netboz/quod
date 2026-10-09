@@ -1,0 +1,142 @@
+{
+  "passed": true,
+  "captured_unix": 1791586507.0050006,
+  "candidate": {
+    "id": "quod-finality-candidate-v6-20260926",
+    "version": 57,
+    "job_modify_index": 838656,
+    "status": "running",
+    "count": 8,
+    "images": [
+      "192.168.1.11:5000/quod:0.7.256@sha256:7cd0ab4b51404f9d013a857d2e3124d532ccfedb7857bb3be5a65777bf48610e"
+    ],
+    "volume_family": "quod-finality-candidate-v6-20260926-refound-20261010-v3"
+  },
+  "deployment": {
+    "id": "82d460e6-edcc-49ee-89bc-d9fb3ab77da3",
+    "status": "successful",
+    "description": "Deployment completed successfully"
+  },
+  "allocations": [
+    {
+      "id": "f3923912-da91-fdda-0588-efc058afdc11",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "node": "conrad",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "403faa3c-71b3-d4a7-ef8e-cb92711151d6",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "node": "corin",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "65866e00-5b6b-2244-50eb-4e66c4e0e4c3",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "node": "caton",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "d811aa20-55dc-ced5-5f7f-2a18cd95e624",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "node": "conrad",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "d2c2b686-1a60-54b1-d35c-a81dc7e80a79",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "node": "corin",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "0c3ad753-8335-6e40-4338-ebdc79ebf51b",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "node": "caton",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "381171ec-4056-10e6-bc26-abcefe529cf5",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "node": "conrad",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    },
+    {
+      "id": "681ae5a7-8ac2-bf35-7cb4-39d0683c6890",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "node": "corin",
+      "client_status": "running",
+      "desired_status": "run",
+      "restarts": 0
+    }
+  ],
+  "fresh_volumes": [
+    {
+      "id": "e4967507-9d52-15bc-2d4a-0e1ab7c666b5",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[0]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "state": "ready"
+    },
+    {
+      "id": "106c71b0-9ced-3080-a30d-bb4e7bd67b3e",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[1]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "state": "ready"
+    },
+    {
+      "id": "549c9743-5c0d-be58-ecf4-96f531b91eb4",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[2]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "state": "ready"
+    },
+    {
+      "id": "4614fe7a-50f3-6373-8b35-03e62075fa1e",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[3]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "state": "ready"
+    },
+    {
+      "id": "a84fffaf-96a9-76f5-d063-07ad2886da83",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[4]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "state": "ready"
+    },
+    {
+      "id": "96f48bd2-60ac-e7f8-af44-c6e24e46a0f1",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[5]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "state": "ready"
+    },
+    {
+      "id": "5946fd4b-2677-9793-ef33-93b2326a08dd",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[6]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "state": "ready"
+    },
+    {
+      "id": "a6526989-2faf-71fb-4d12-06d68f5c9d5f",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261010-v3[7]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "state": "ready"
+    }
+  ],
+  "old_volume_family_matches": [],
+  "main_job": {
+    "version": 246,
+    "job_modify_index": 826727,
+    "canonical_sha256": "fc72c100944279766e24fe445b77c729b791de1c618cc473c61f6ee53b9f7806"
+  }
+}

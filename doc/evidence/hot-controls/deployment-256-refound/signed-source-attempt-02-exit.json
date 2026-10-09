@@ -1,0 +1,7 @@
+{
+  "exit": 0,
+  "started_unix": 1791586443.2588954,
+  "finished_unix": 1791586443.8748002,
+  "fresh_ephemeral_identity": true,
+  "tls_verification": "disabled only for the self-signed LAN endpoint"
+}

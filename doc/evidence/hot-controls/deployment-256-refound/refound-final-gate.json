@@ -1,0 +1,23 @@
+{
+  "rejected": 0,
+  "system_ontologies": 18,
+  "height": 41,
+  "enrollment": {
+    "pointer": "stored",
+    "manager": {
+      "desired_hosts": {
+        "private": 0,
+        "discoverable": 19
+      },
+      "hosting_revision": 19,
+      "node_enrollment": "complete",
+      "private_contacts": 0,
+      "route_waits": 0
+    },
+    "hosting_height": 3,
+    "node_anchor": "586989735DA005F5FECCD2A38D10C8266349905D948F2D299C9423E6B807A3FB",
+    "node_namespace": "node:50ae744ff8fe90f603d7b8bccf03774415d5cf6080dca300b5bfba527babe05a",
+    "self_hosting": "committed"
+  },
+  "all_ready": true
+}

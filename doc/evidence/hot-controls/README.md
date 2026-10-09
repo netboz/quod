@@ -5,7 +5,7 @@ Fable, and independently checked. [Review disposition](review-resolution.md)
 records the verified fixes and retained live branches.
 
 The [exact source freeze](clean-08-manifest.json) and
-[gate results](clean-08-PASSED.json) qualify the current code. The freeze includes
+[gate results](clean-08-PASSED.json) qualify the original feature integration tree. The freeze includes
 the already deployed 0.7.254 ontology-source baseline and movement/control
 prerequisites. The feature-only commit closure independently passed 116
 physics/control tests before the unrelated peer harness correction.
@@ -79,3 +79,15 @@ implements fresh rest evidence and the two reviewed liveness corrections while
 removing the obsolete native wrapper and missing-guard bypass. The larger
 movement/control foundation is a required dependency, separately recorded in
 the commit and source manifest.
+
+The fresh [committed-tree review](review-02-resolution.md) withdrew two
+incorrect findings after independent tracing. Its verified client-refusal
+correction and added same-namespace signed coverage are qualified by
+[clean-09](clean-09-PASSED.json), a fresh complete sequential campaign.
+The [source freeze](clean-09-manifest.json) overlays exactly six task files
+on the previously qualified integration baseline and excludes later
+unrelated workspace changes. All ten gates pass, including 3,795 EUnit
+tests and 146 Common Test cases. [Full logs](review-02-validation-logs.tar.gz)
+retain the client defect reproduction and all failed diagnostic fixtures.
+The [commit delta](commit-delta.json) records source growth including the
+required movement/control foundation, separately from the session delta.

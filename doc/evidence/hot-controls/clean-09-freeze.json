@@ -1,0 +1,17 @@
+{
+  "head": "61ce04b9c3300df3686f72c58fc12675c689afa6",
+  "files": 912,
+  "basis": "verified clean-08 frozen integration tree",
+  "overlay": [
+    "client/src/simulation.js",
+    "client/src/simulation.d.ts",
+    "client/test/simulation.test.js",
+    "ui/src/World.tsx",
+    "test/quod_physics_tests.erl",
+    "doc/physics-native.md"
+  ],
+  "scope": "Fable review correction and same-namespace coverage; later unrelated workspace changes excluded",
+  "erlang_cache": "pinned dependency source only, no BEAMs",
+  "cargo_cache": "release cache; test targets build normally",
+  "derived_outputs": "explorer regenerated from frozen UI/client inputs"
+}

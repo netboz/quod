@@ -80,7 +80,7 @@ export function advanceSimulation(current, message) {
 // Each open signs a fresh read. Disconnect and durable gaps discard all motion
 // acceptance state. Reconnect is explicit (or follows a browser online event),
 // never a readiness polling timer. Expiry refresh is requested by the server.
-export function connectSimulation(identity, agent, { projection, frame, unavailable, refreshing = () => {} }, options = {}) {
+export function connectSimulation(identity, agent, { projection, frame, unavailable, refused = () => {}, refreshing = () => {} }, options = {}) {
   const Socket = options.WebSocket ?? WebSocket
   const url = options.url ?? new URL('/api/simulation', globalThis.location.href)
   if (url instanceof URL) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -127,7 +127,10 @@ export function connectSimulation(identity, agent, { projection, frame, unavaila
     try {
       const reply = await signedGoal(identity, { mode: 'control', agent, goal }, options)
       if (active && epoch === commandEpoch && reply.result !== 'ok') {
-        failed(new Error('Movement was refused. Refresh the simulation to reconnect.'))
+        if (reply.result === 'fail') {
+          discreteSequence = null
+          refused('Movement was refused.')
+        } else failed(new Error('Movement outcome unavailable. Refresh the simulation to reconnect.'))
       }
       return reply.result === 'ok'
     } catch (error) {

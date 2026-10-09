@@ -1946,6 +1946,68 @@ with_door_simulator(SavedCustody,Fun) ->
     end).
 
 
+same_namespace_signed_chair_push_test_() ->
+    {timeout,60,fun() -> with_chair(fun(F = #{namespace := Ns,identity := Identity}) ->
+        {Pid,World} = enable(F),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        Principal = {agent_instance_ref,Ns,Anchor,viewer},
+        commit(Ns,{assertz,{agent_key,viewer,maps:get(pubkey,Identity),active}}),
+        {_,_,_,OldRef,_} = install_test_control(F#{node => Principal},Pid,World,
+            {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]}),
+        quod_physics:unwatch(Pid,OldRef), _ = gen_server:call(Pid,status),
+        commit(Ns,{',',{assertz,{can_view_physics,room,Principal}},
+                       {assertz,{physics_view,room,[]}}}), reconcile(Ns),
+        Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        try
+            Socket ! {client,simulation_open(F,simulation_session(Identity),Principal)},
+            Projection = simulation_reply(Socket,<<"projection">>),
+            #{control := Control} = simulation_state(Socket),
+            #{World := #{spec := Spec}} = worlds(Ns),
+            Frame = {physics_frame,World,maps:get(authority,Spec),maps:get(epoch,Spec),
+                maps:get(generation,Spec),maps:get(run_token,Spec),maps:get(structure,Spec)},
+            Initial = maps:get(<<"frame">>,Projection),
+            Registration = base64:decode(maps:get(<<"registration">>,Initial),#{mode => urlsafe,padding => false}),
+            Goal = {'::',Ns,{',',{current_ontology_identity,Ns,Anchor},
+                {physics_control_input,room,{control_frame,Frame,Registration},
+                    1,1,{push,{body,3,1},{vector,1000,0,0}},{0}}}},
+            {Canonical,_,_} = erlog_int:term_instance(Goal,0),
+            {ok,Text} = quod_client_goal_parser:format(Canonical),
+            Request = #{network_identity => <<42:256>>,
+                agent_namespace => Ns,agent_genesis_anchor => Anchor,agent_instance_text => <<"viewer.">>,
+                signing_public_key => maps:get(pubkey,Identity),operation_id => crypto:strong_rand_bytes(32),
+                not_after_ms => quod_time:now_ms()+10000,mode => control,parser_version => 3,goal_text => Text},
+            {Both,_,_} = erlog_int:term_instance({',',Goal,Goal},0),
+            {ok,BothText} = quod_client_goal_parser:format(Both),
+            {ok,BothBytes} = quod_client_goal:encode(Request#{goal_text => BothText}),
+            ?assertMatch({ok,_,{normalized,{failed,_}}},
+                quod_client_goal_ingress:submit(BothBytes,quod_identity:sign(BothBytes,Identity))),
+            ?assertMatch(#{inputs := Empty} when map_size(Empty) =:= 0,gen_server:call(Pid,status)),
+            {ok,Bytes} = quod_client_goal:encode(Request#{operation_id => crypto:strong_rand_bytes(32)}),
+            ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},
+                quod_client_goal_ingress:submit(Bytes,quod_identity:sign(Bytes,Identity))),
+            ?assertMatch(#{inputs := #{Principal := #{sequence := 1}}},gen_server:call(Pid,status)),
+            View = maps:get(<<"view">>,Projection),
+            simulation_ack(Socket,View,Initial),
+            _ = simulation_input_frame(Socket,View,<<"1">>),
+            Expected = #{fence => quod_physics:fence(Spec),incarnation => maps:get(run_token,Spec),structure => 1},
+            {ok,_,{3,1,world,{X,_,_},_,_}} = quod_physics:body_state(Pid,Expected,{3,1},1000),
+            ?assert(X > 0),
+            ?assertMatch({control,Principal,_,_},Control)
+        after Socket ! stop end
+    end) end}.
+
+simulation_ack(Socket,View,Frame) ->
+    Socket ! {client,iolist_to_binary(json:encode(#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame)}))}.
+
+simulation_input_frame(Socket,View,Sequence) ->
+    Delivered = simulation_reply(Socket,<<"simulation_frame">>),
+    Frame = maps:get(<<"frame">>,Delivered),
+    simulation_ack(Socket,View,Frame),
+    case maps:get(<<"control_state">>,Frame) of
+        #{<<"sequence">> := Sequence,<<"pending">> := false,<<"result">> := <<"pushed">>} -> Frame;
+        _ -> simulation_input_frame(Socket,View,Sequence)
+    end.
+
 signed_chair_push_checkpoint_and_recovery_test_() ->
     {timeout,90,fun() -> with_chair(fun(F = #{namespace := Ns,node := Human}) ->
         {Pid,World} = enable(F), true = quod_reg:subscribe({runtime,Ns}),

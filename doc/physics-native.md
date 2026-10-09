@@ -286,7 +286,9 @@ application. A committed physical or policy change invalidates old commands
 before asynchronous reinstallation. Each sequence can apply once within its
 binding; a fresh registration reads the retained sequence and a new run discards
 all inputs. `queued(Sequence)` is admission, while the projected control feedback
-reports `pushed`, `refused` or expiry. The client keeps one request in flight,
+reports `pushed`, `refused` or expiry. A definite proof refusal keeps the current
+view available and clears the rejected discrete command; a later command has
+a fresh sequence and signed request. The client keeps one request in flight,
 waits for discrete feedback before sending another input, and suspends commands
 on an uncertain reply. Refresh obtains a fresh authorized view and never
 resubmits the lost push. Physics frames move the existing visual body without

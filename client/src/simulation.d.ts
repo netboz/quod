@@ -21,6 +21,7 @@ export function connectSimulation(identity: SignedIdentity, agent: AgentReferenc
   projection(view: SimulationView): void
   frame(view: SimulationView): void
   unavailable(reason: string): void
+  refused?(reason: string): void
   refreshing(): void | boolean
 }, options?: { world?: { namespace: string; anchor: Uint8Array } }): {
   command(input: PrologTerm): Promise<boolean>

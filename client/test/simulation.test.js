@@ -169,7 +169,7 @@ test('the signers ontology selects an exact foreign world without changing the a
 for (const [kind, input] of [['snap', snapInput(785)], ['push', pushInput('18446744073709551615', '2', [1, 0, 0])]]) {
 test(`${kind} admission waits for its discrete outcome and stops after uncertain loss`, async () => {
   let socket, settle
-  const posts = [], statuses = []
+  const posts = [], statuses = [], refusals = []
   const identity = { networkId: new Uint8Array(32), provider: {
     publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
   }, session: { session_id: 'session', expires_ms: Date.now() + 60000 } }
@@ -180,7 +180,8 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     close() { this.onclose?.() }
     receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
   }
-  const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {}, unavailable: s => statuses.push(s) }, {
+  const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {},
+    unavailable: s => statuses.push(s), refused: s => refusals.push(s) }, {
     WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32) },
     post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
   })
@@ -233,6 +234,20 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     assert.match(Buffer.from(posts[2].body.request, 'base64url').toString(), /,2,10,(?:snap|push)\(/)
     settle.resolve({ result: 'ok' })
     assert.equal(await resumed, true)
+    socket.receive(motion({ ...frame, tick: '2', registration: Buffer.alloc(32, 2).toString('base64url'),
+      control_state: { sequence: '10', pending: false, result: 'clear' } }, freshView))
+    const refused = recovered.command(input)
+    await Promise.resolve()
+    settle.resolve({ result: 'fail' })
+    assert.equal(await refused, false)
+    assert.deepEqual(statuses, ['lost response'], 'a definite proof refusal keeps the current view available')
+    assert.deepEqual(refusals, ['Movement was refused.'])
+    const following = recovered.command(input)
+    await Promise.resolve()
+    assert.equal(posts.length, 5, 'a refused discrete command does not wait for feedback that cannot arrive')
+    assert.match(Buffer.from(posts[4].body.request, 'base64url').toString(), /,2,12,(?:snap|push)\(/)
+    settle.resolve({ result: 'ok' })
+    assert.equal(await following, true)
   } finally { stream.close(); recovered?.close() }
 })
 }

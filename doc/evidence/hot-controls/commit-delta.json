@@ -1,0 +1,433 @@
+{
+  "commit": "61ce04b9c3300df3686f72c58fc12675c689afa6",
+  "source_added": 2502,
+  "source_removed": 287,
+  "source_net": 2215,
+  "files": [
+    {
+      "file": "client/src/controlled-navigation.js",
+      "added": 191,
+      "removed": 0
+    },
+    {
+      "file": "client/src/locomotion.d.ts",
+      "added": 22,
+      "removed": 0
+    },
+    {
+      "file": "client/src/locomotion.js",
+      "added": 104,
+      "removed": 0
+    },
+    {
+      "file": "client/src/signed-client.d.ts",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "file": "client/src/signed-client.js",
+      "added": 3,
+      "removed": 1
+    },
+    {
+      "file": "client/src/simulation.d.ts",
+      "added": 16,
+      "removed": 2
+    },
+    {
+      "file": "client/src/simulation.js",
+      "added": 85,
+      "removed": 11
+    },
+    {
+      "file": "client/src/world-scene.d.ts",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "file": "client/src/world-scene.js",
+      "added": 56,
+      "removed": 6
+    },
+    {
+      "file": "client/test/controlled-navigation.test.js",
+      "added": 105,
+      "removed": 0
+    },
+    {
+      "file": "client/test/movement.browser.mjs",
+      "added": 43,
+      "removed": 0
+    },
+    {
+      "file": "client/test/movement.fixture.html",
+      "added": 9,
+      "removed": 0
+    },
+    {
+      "file": "client/test/signed-client.test.js",
+      "added": 18,
+      "removed": 0
+    },
+    {
+      "file": "client/test/simulation.test.js",
+      "added": 95,
+      "removed": 6
+    },
+    {
+      "file": "doc/evidence/hot-controls/README.md",
+      "added": 81,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-04-STOP.json",
+      "added": 7,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-04-freeze.json",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-04-manifest.json",
+      "added": 913,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-04-results.json",
+      "added": 87,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-05-INTERRUPTED.json",
+      "added": 7,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-05-freeze.json",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-06-STOP.json",
+      "added": 11,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-06-freeze.json",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-07-STOP.json",
+      "added": 9,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-07-driver-exit.json",
+      "added": 5,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-07-freeze.json",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-07-manifest.json",
+      "added": 914,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-07-results.json",
+      "added": 105,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-08-PASSED.json",
+      "added": 120,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-08-explorer-manifest.json",
+      "added": 178,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-08-freeze.json",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-08-manifest.json",
+      "added": 914,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/clean-08-quic-source.json",
+      "added": 337,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-PASSED.json",
+      "added": 70,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-credit-fix.patch",
+      "added": 14,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-diff.patch",
+      "added": 847,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-freeze.json",
+      "added": 6,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-lifecycle-PASSED.json",
+      "added": 70,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-lifecycle-diff.patch",
+      "added": 291,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-lifecycle-freeze.json",
+      "added": 6,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-lifecycle-manifest.json",
+      "added": 333,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-manifest.json",
+      "added": 333,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-publication.json",
+      "added": 9,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-resolution.md",
+      "added": 39,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/quic-validation-logs.tar.gz",
+      "added": null,
+      "removed": null
+    },
+    {
+      "file": "doc/evidence/hot-controls/review-01-fable.md",
+      "added": 29,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/review-resolution.md",
+      "added": 59,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/session-delta.json",
+      "added": 121,
+      "removed": 0
+    },
+    {
+      "file": "doc/evidence/hot-controls/validation-logs.tar.gz",
+      "added": null,
+      "removed": null
+    },
+    {
+      "file": "doc/physics-native.md",
+      "added": 373,
+      "removed": 61
+    },
+    {
+      "file": "doc/world.md",
+      "added": 8,
+      "removed": 4
+    },
+    {
+      "file": "native/quod_physics/src/geometry.rs",
+      "added": 197,
+      "removed": 0
+    },
+    {
+      "file": "native/quod_physics/src/lib.rs",
+      "added": 205,
+      "removed": 90
+    },
+    {
+      "file": "native/quod_physics/src/motion.rs",
+      "added": 395,
+      "removed": 0
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "added": 326,
+      "removed": 16
+    },
+    {
+      "file": "rebar.config",
+      "added": 4,
+      "removed": 2
+    },
+    {
+      "file": "rebar.lock",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "added": 3,
+      "removed": 1
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "added": 120,
+      "removed": 2
+    },
+    {
+      "file": "src/quod_client.erl",
+      "added": 1,
+      "removed": 0
+    },
+    {
+      "file": "src/quod_client_goal.erl",
+      "added": 5,
+      "removed": 2
+    },
+    {
+      "file": "src/quod_client_goal_ingress.erl",
+      "added": 7,
+      "removed": 4
+    },
+    {
+      "file": "src/quod_client_goal_target.erl",
+      "added": 3,
+      "removed": 2
+    },
+    {
+      "file": "src/quod_client_http.erl",
+      "added": 4,
+      "removed": 1
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "added": 75,
+      "removed": 28
+    },
+    {
+      "file": "src/quod_effect.erl",
+      "added": 15,
+      "removed": 0
+    },
+    {
+      "file": "src/quod_erlog_db_local_prove.erl",
+      "added": 33,
+      "removed": 3
+    },
+    {
+      "file": "src/quod_node_actor.erl",
+      "added": 4,
+      "removed": 4
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "added": 455,
+      "removed": 76
+    },
+    {
+      "file": "src/quod_physics_native.erl",
+      "added": 9,
+      "removed": 2
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "added": 24,
+      "removed": 3
+    },
+    {
+      "file": "src/quod_proof_context.erl",
+      "added": 12,
+      "removed": 0
+    },
+    {
+      "file": "src/quod_proof_savepoint.erl",
+      "added": 14,
+      "removed": 2
+    },
+    {
+      "file": "src/quod_proof_scope.erl",
+      "added": 6,
+      "removed": 1
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "added": 7,
+      "removed": 1
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "added": 54,
+      "removed": 13
+    },
+    {
+      "file": "src/quod_scope_session.erl",
+      "added": 24,
+      "removed": 0
+    },
+    {
+      "file": "test/quod_ask_tests.erl",
+      "added": 7,
+      "removed": 1
+    },
+    {
+      "file": "test/quod_client_goal_tests.erl",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "file": "test/quod_physics_bench.erl",
+      "added": 10,
+      "removed": 10
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "added": 123,
+      "removed": 0
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "added": 802,
+      "removed": 40
+    },
+    {
+      "file": "test/quod_simplex_tests.erl",
+      "added": 4,
+      "removed": 8
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "added": 24,
+      "removed": 13
+    }
+  ]
+}

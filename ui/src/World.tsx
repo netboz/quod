@@ -129,7 +129,7 @@ export default function World() {
           setStatus('Live simulation. VR: left grip + pad for travel; left pad click for turn or teleport; right pad for actions.')
         },
         frame(current) { scene.simulation(current) },
-        refused(reason) { setStatus(reason) },
+        refused(reason, reasons) { setStatus([reason, ...reasons].join(' ')) },
         refreshing() {
           scene.simulation(null); setStatus('World updating. Movement paused…')
           setRevision(value => value + 1)

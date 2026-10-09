@@ -25,8 +25,8 @@ directory_control_peer_is_registered_root_snapshot_query_test() ->
     {fail, _} = erlog:prove(
                   {directory_control_peer, BadShort}, Erl0),
     %% The execution namespace, not the caller process, is the boundary.
-    {fail, _} = erlog:prove(
-                  Goal, proof_erlog(<<"private:body">>, Facts)).
+    ?assertMatch({{error,{context_violation,directory_control_peer,query,non_root}},_},
+        erlog:prove(Goal,proof_erlog(<<"private:body">>,Facts))).
 
 directory_control_peer_tracks_membership_snapshots_test() ->
     K1 = key(11),
@@ -95,12 +95,12 @@ directory_host_is_root_only_and_ground_namespace_only_test() ->
           {ok, _} = quod_ct:install_directory_generation(
                  Key, {<<"node">>, 4003},
                  [{Ns, anchor(3), validator}], 1, 1),
-          {fail, _} = erlog:prove(
+          ?assertMatch({{error,{context_violation,directory_host,query,non_root}},_},erlog:prove(
                         {directory_host, Ns, {'A'}, {'K'}, {'H'}, {'P'}},
-                        proof_erlog(<<"private:body">>)),
-          {fail, _} = erlog:prove(
+                        proof_erlog(<<"private:body">>))),
+          ?assertMatch({{error,instantiation_error},_},erlog:prove(
                         {directory_host, {'Ns'}, {'A'}, {'K'}, {'H'}, {'P'}},
-                        proof_erlog(<<"quod:root">>))
+                        proof_erlog(<<"quod:root">>)))
       end).
 
 private_projection_is_not_visible_to_predicate_test() ->

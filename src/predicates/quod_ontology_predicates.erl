@@ -1,4 +1,5 @@
 -module(quod_ontology_predicates).
+-import(quod_predicates, [fail_reason/2]).
 -moduledoc """
 Governed Prolog bridges for ontology creation and node-local hosting.
 
@@ -25,7 +26,6 @@ the complete policy path. `ontology_join_state/2` and
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3,
          reconcile_effect_custody/3, reconcile_node_ontologies/3]).
--export([lifecycle_error/2, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).
@@ -80,13 +80,12 @@ lifecycle_request_predicate(Goal, Next, #est{bs = Bs} = St) ->
                           St, RequestAction, Structural),
                     erlog_int:prove_body(
                       [{run_declared_action, Action, Handle} | Next], St1);
-                {error, Reason} ->
-                    fail_reason(lifecycle_error(Action, Reason), St)
+                {error,invalid_arguments} -> erlog_int:instantiation_error(St);
+                {error,_} -> erlog_int:domain_error(ontology_action,Action,St)
             end;
-        {false, _} ->
-            fail_reason(failure_reason(Action, wrong_ontology), St);
-        {true, error} ->
-            fail_reason(failure_reason(Action, invalid_action), St)
+        {false,{ok,_}} -> erlog_int:erlog_error(
+            {context_violation,element(1,Action),staging,wrong_ontology},St);
+        {_,error} -> erlog_int:domain_error(ontology_action,Action,St)
     end.
 
 structural_action({create_ontology, Name, Options, _Anchor}) ->
@@ -114,14 +113,13 @@ lifecycle_continuation_predicate(
                 {ok, Structural} ->
                     prepare_and_stage_action(
                       Action0, Desired0, RequestAction, Structural, Next, St);
-                error ->
-                    fail_reason(failure_reason(Action, invalid_action), St)
+                error -> erlog_int:domain_error(ontology_request_handle,Handle,St)
             end;
         error ->
-            fail_reason(failure_reason(Action, invalid_action), St)
+            erlog_int:domain_error(ontology_action,Action,St)
     end;
-lifecycle_continuation_predicate(_Goal, _Next, St) ->
-    fail_reason({ontology_lifecycle_failed, invalid_action}, St).
+lifecycle_continuation_predicate(Goal, _Next, St) ->
+    erlog_int:domain_error(ontology_action,Goal,St).
 
 prepare_and_stage_action(Action0, Desired0, RequestAction, Structural, Next, St) ->
     Principal = authenticated_principal(),
@@ -129,8 +127,13 @@ prepare_and_stage_action(Action0, Desired0, RequestAction, Structural, Next, St)
         {ok, Prepared} ->
             bind_prepared_action(
               Action0, Desired0, RequestAction, Prepared, Next, St);
-        {error, Reason} ->
-            fail_reason(lifecycle_error(RequestAction, Reason), St)
+        {error,invalid_arguments} -> erlog_int:instantiation_error(St);
+        {error,invalid_action} -> erlog_int:erlog_error({system_error,invalid_lifecycle_descriptor},St);
+        {error,Reason} when Reason =:= invalid_initial_terms; Reason =:= invalid_options ->
+            erlog_int:domain_error(ontology_action,RequestAction,St);
+        {error,{invalid_initial_term,_}} -> erlog_int:domain_error(ontology_action,RequestAction,St);
+        {error,{source_error,_,_,_}} -> erlog_int:domain_error(ontology_action,RequestAction,St);
+        {error,Reason} -> fail_reason(lifecycle_error(RequestAction,Reason),St)
     end.
 
 bind_prepared_action(
@@ -154,7 +157,11 @@ bind_prepared_action(Action0, Desired0, RequestAction, Prepared, Next,
          Action =:= RequestAction of
         true ->
             stage_prepared_action(Action, Desired, Prepared, Next, St);
-        false -> fail_reason(failure_reason(Action, invalid_action), St)
+        false ->
+            case quod_wire_term:is_ground({Action,Desired}) of
+                false -> erlog_int:instantiation_error(St);
+                true -> erlog_int:domain_error(ontology_action,Action,St)
+            end
     end.
 
 stage_prepared_action(Action, Desired, Prepared, Next, St) ->
@@ -169,13 +176,12 @@ stage_prepared_action(Action, Desired, Prepared, Next, St) ->
                             St1 = quod_erlog_db_local_prove:put_prepared_effect(
                                     St, Action, Desired, Effect, Prepared),
                             erlog_int:prove_body(Next, St1);
-                        {error, Reason} ->
-                            fail_reason(lifecycle_error(Action, Reason), St)
+                        {error,_} -> erlog_int:erlog_error({system_error,invalid_prepared_effect},St)
                     end;
                 none ->
                     fail_reason(failure_reason(Action, rebuilding), St)
             end;
-        false -> fail_reason(failure_reason(Action, invalid_action), St)
+        false -> erlog_int:instantiation_error(St)
     end.
 
 -doc "Bind the authenticated principal owned by the current proof.".
@@ -184,11 +190,10 @@ current_principal_predicate({current_principal, Principal}, Next, St) ->
     case policy_principal(authenticated_principal()) of
         {ok, PolicyPrincipal} ->
             erlog_int:unify_prove_body(Principal, PolicyPrincipal, Next, St);
-        error ->
-            erlog_int:fail(St)
+        error -> erlog_int:erlog_error(invalid_authenticated_principal,St)
     end;
-current_principal_predicate(_Goal, _Next, St) ->
-    erlog_int:fail(St).
+current_principal_predicate(Goal, _Next, St) ->
+    erlog_int:domain_error(principal_query,Goal,St).
 
 authenticated_principal() ->
     case quod_scope_session:principal() of
@@ -206,44 +211,22 @@ policy_principal({agent, _Blob} = Principal) ->
 policy_principal(Principal) ->
     {ok, Principal}.
 
--doc "Map a typed lifecycle API error to its bounded public Prolog reason.".
--spec lifecycle_error(term(), term()) -> term().
-lifecycle_error({create_ontology, _, _, _} = Action, Reason) ->
-    failure_reason(Action, creation_reason(Reason));
+%% Only operational preparation refusals reach this vocabulary. Argument
+%% and descriptor errors have already used the Erlog error channel.
 lifecycle_error({create_ontology, _, _} = Action, Reason) ->
     failure_reason(Action, creation_reason(Reason));
 lifecycle_error({join_ontology, _, _, _} = Action, Reason) ->
-    failure_reason(Action, join_reason(Reason));
-lifecycle_error(Action, _Reason) ->
-    failure_reason(Action, invalid_action).
+    failure_reason(Action, join_reason(Reason)).
 
--spec failure_reason(term(), term()) -> term().
-failure_reason({create_ontology, _, _, _}, Reason) ->
-    {ontology_creation_failed, Reason};
-failure_reason({create_ontology, _, _}, Reason) ->
-    {ontology_creation_failed, Reason};
-failure_reason({join_ontology, _, _, _}, Reason) ->
-    {ontology_join_failed, Reason};
-failure_reason(_Action, Reason) ->
-    {ontology_lifecycle_failed, Reason}.
+failure_reason({create_ontology, _, _, _}, Reason) -> {ontology_creation_failed,Reason};
+failure_reason({create_ontology, _, _}, Reason) -> {ontology_creation_failed,Reason};
+failure_reason({join_ontology, _, _, _}, Reason) -> {ontology_join_failed,Reason}.
 
-creation_reason(invalid_name) -> invalid_name;
-creation_reason(invalid_arguments) -> invalid_arguments;
-creation_reason(invalid_options) -> invalid_options;
-creation_reason(invalid_initial_terms) -> invalid_initial_terms;
 creation_reason(initial_content_too_large) -> initial_content_too_large;
-creation_reason({invalid_initial_term, _Term}) -> invalid_initial_terms;
-creation_reason({source_error, Index, Line, _Detail}) ->
-    {invalid_source, Index, Line};
-creation_reason({source_file_error, Index, _Path, _Reason}) ->
-    {source_file_error, Index};
+creation_reason({source_file_error, Index, _Path, _Reason}) -> {source_file_error,Index};
 creation_reason({already_configured, _Ns}) -> already_hosted;
 creation_reason(_Reason) -> start_failed.
 
-join_reason(invalid_name) -> invalid_name;
-join_reason(invalid_arguments) -> invalid_arguments;
-join_reason(invalid_genesis_hash) -> invalid_genesis_hash;
-join_reason(invalid_seeds) -> invalid_seeds;
 join_reason({already_configured, _Ns}) -> already_hosted;
 join_reason(root_unavailable) -> root_unavailable;
 join_reason(_Reason) -> start_failed.
@@ -255,17 +238,16 @@ ontology_join_state_predicate(Goal, Next, #est{bs = Bs} = St) ->
 state({ontology_join_state, Name, State}, Next, St) ->
     case quod_wire_term:is_ground(Name) of
         false ->
-            fail_reason({ontology_state_failed, invalid_arguments}, St);
+            erlog_int:instantiation_error(St);
         true ->
             case quod_ontology:local_state(Name) of
                 {ok, LocalState} ->
                     erlog_int:unify_prove_body(State, LocalState, Next, St);
                 {error, _Reason} ->
-                    fail_reason({ontology_state_failed, invalid_name}, St)
+                    erlog_int:domain_error(ontology_name,Name,St)
             end
     end;
-state(_Goal, _Next, St) ->
-    fail_reason({ontology_state_failed, invalid_arguments}, St).
+state(Goal, _Next, St) -> erlog_int:domain_error(ontology_state_query,Goal,St).
 
 -spec ontology_genesis_anchor_predicate(term(), term(), tuple()) -> term().
 ontology_genesis_anchor_predicate(Goal, Next, #est{bs = Bs} = St) ->
@@ -274,18 +256,17 @@ ontology_genesis_anchor_predicate(Goal, Next, #est{bs = Bs} = St) ->
 genesis_anchor({ontology_genesis_anchor, Name, Expected}, Next, St) ->
     case quod_wire_term:is_ground(Name) of
         false ->
-            fail_reason({ontology_anchor_failed, invalid_arguments}, St);
+            erlog_int:instantiation_error(St);
         true ->
             case quod_ontology:genesis_anchor(Name) of
                 {ok, RawAnchor} ->
                     match_genesis_anchor(Expected, RawAnchor, Next, St);
-                {error, not_hosted} -> erlog_int:fail(St);
-                {error, Reason} ->
-                    fail_reason({ontology_anchor_failed, Reason}, St)
+                {error, not_hosted} -> fail_reason({ontology_anchor_failed,not_hosted},St);
+                {error,invalid_name} -> erlog_int:domain_error(ontology_name,Name,St);
+                {error,Reason} -> fail_reason({ontology_anchor_failed,Reason},St)
             end
     end;
-genesis_anchor(_Goal, _Next, St) ->
-    fail_reason({ontology_anchor_failed, invalid_arguments}, St).
+genesis_anchor(Goal, _Next, St) -> erlog_int:domain_error(ontology_anchor_query,Goal,St).
 
 match_genesis_anchor(Expected, RawAnchor, Next, St) ->
     case erlog_int:deref(Expected, St#est.bs) of
@@ -296,8 +277,7 @@ match_genesis_anchor(Expected, RawAnchor, Next, St) ->
                 {ok, RawAnchor} -> erlog_int:prove_body(Next, St);
                 {ok, _OtherAnchor} -> erlog_int:fail(St);
                 error ->
-                    fail_reason(
-                      {ontology_anchor_failed, invalid_genesis_hash}, St)
+                    erlog_int:domain_error(genesis_anchor,Value,St)
             end
     end.
 
@@ -327,6 +307,3 @@ normalize_public_anchor(Value) ->
         _ -> error
     catch _:_ -> error
     end.
-
-fail_reason(Reason, St) ->
-    erlog_int:prove_body([{fail_with_reason, Reason}], St).

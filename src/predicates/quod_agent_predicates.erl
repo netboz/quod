@@ -37,7 +37,7 @@ local_node_agent({local_node_agent, Node}, Next, St) ->
         {ok, Principal} ->
             {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
             erlog_int:unify_prove_body(Node, NodeRef, Next, St);
-        _ -> erlog_int:fail(St)
+        _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
     end.
 
 -doc "Ask the existing resource owner to reconcile from its own committed selection.".
@@ -52,7 +52,7 @@ reconcile_agent_observers({reconcile_agent_observers, Scope}, Next, St) ->
 sign_agent_request({sign_agent_request, Typed0, Signature}, Next, #est{bs = Bs} = St) ->
     case quod_proof_session:read_only_state(St) of
         true -> sign_typed(erlog_int:dderef(Typed0, Bs), Signature, Next, St);
-        false -> erlog_int:fail(St)
+        false -> erlog_int:erlog_error({context_violation,sign_agent_request,query,write_proof},St)
     end.
 
 sign_typed({agent_goal_v1, Network,
@@ -63,19 +63,36 @@ sign_typed({agent_goal_v1, Network,
                 signing_public_key => Pub, operation_id => Operation,
                 not_after_ms => Deadline, mode => Mode, parser_version => Parser,
                 goal_text => GoalText},
-    case {quod_runtime_predicates:scope_identity(St),
-          quod_client_goal:encode(Request), quod_node_actor:principal()} of
-        {{ok, {Ns, Anchor}}, {ok, _}, {ok, NodePrincipal}} ->
-            case {quod_agent_ref:from_text(Ns, Anchor, InstanceText, Parser),
-                  quod_wire_term:encode_canonical(AgentRef),
-                  quod_agent_ref:materialize_principal(NodePrincipal)} of
-                {{ok, #{blob := Blob}}, {ok, Blob}, {ok, NodeRef}} ->
-                    authorize_sign(Request, Typed, NodeRef, Signature, Next, St);
-                _ -> erlog_int:fail(St)
-            end;
-        _ -> erlog_int:fail(St)
+    case quod_wire_term:is_ground(Typed) of
+        false -> erlog_int:instantiation_error(St);
+        true ->
+            case quod_client_goal:encode(Request) of
+                {error,_} -> erlog_int:domain_error(agent_request,Typed,St);
+                {ok,_} ->
+                    case quod_runtime_predicates:scope_identity(St) of
+                        error -> quod_predicates:fail_reason({scope_identity_unavailable,Ns},St);
+                        {ok,{Ns,Anchor}} ->
+                            case quod_node_actor:principal() of
+                                {ok,NodePrincipal} ->
+                                    case {quod_agent_ref:from_text(Ns,Anchor,InstanceText,Parser),
+                                          quod_wire_term:encode_canonical(AgentRef),
+                                          quod_agent_ref:materialize_principal(NodePrincipal)} of
+                                        {{ok,#{blob := Blob}},{ok,Blob},{ok,NodeRef}} ->
+                                            authorize_sign(Request,Typed,NodeRef,Signature,Next,St);
+                                        _ -> erlog_int:domain_error(agent_request,Typed,St)
+                                    end;
+                                _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+                            end;
+                        {ok,_} -> erlog_int:erlog_error(
+                            {context_violation,sign_agent_request,query,foreign_scope},St)
+                    end
+            end
     end;
-sign_typed(_, _Signature, _Next, St) -> erlog_int:fail(St).
+sign_typed(Typed, _Signature, _Next, St) ->
+    case quod_wire_term:is_ground(Typed) of
+        false -> erlog_int:instantiation_error(St);
+        true -> erlog_int:domain_error(agent_request,Typed,St)
+    end.
 
 authorize_sign(Request, Typed, NodeRef,
                Signature, Next, #est{vn = Vn} = St) ->
@@ -95,7 +112,8 @@ authorize_sign(Request, Typed, NodeRef,
             case quod_agent_vault:sign(Request, Deadline) of
                 {ok, _Bytes, Signed} ->
                     erlog_int:unify_prove_body(Signature, Signed, Next, St);
-                {error, _} -> erlog_int:fail(St)
+                {error,Reason} -> quod_predicates:fail_reason({agent_signing_unavailable,Reason},St)
             end;
-        _ -> erlog_int:fail(St)
+        denied -> erlog_int:fail(St);
+        invalid -> erlog_int:erlog_error(invalid_signing_policy,St)
     end.

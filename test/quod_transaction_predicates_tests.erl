@@ -145,10 +145,13 @@ failed_alternative_and_transaction_rollback_remove_events_test() ->
 trigger_event_rejects_invalid_payloads_test() ->
     lists:foreach(
       fun(Term) ->
-              ?assertMatch({fail, _}, prove({trigger_event, Term}, []))
+              ?assertException(throw, {erlog_error, {domain_error, event, Term}, _},
+                               prove({trigger_event, Term}, []))
       end,
-      [42, {'Unbound'}, {assert, fact}, {retract, fact},
-       {from, <<"other">>, <<0:256>>, event}]).
+      [42, {assert, fact}, {retract, fact},
+       {from, <<"other">>, <<0:256>>, event}]),
+    ?assertException(throw, {erlog_error, instantiation_error, _},
+                     prove({trigger_event, {'Unbound'}}, [])).
 
 trigger_event_is_refused_in_reaction_context_test() ->
     C = committed([]),

@@ -1,0 +1,2640 @@
+--- a/client/src/simulation.d.ts
++++ b/client/src/simulation.d.ts
+@@ -21,7 +21,7 @@
+   projection(view: SimulationView): void
+   frame(view: SimulationView): void
+   unavailable(reason: string): void
+-  refused?(reason: string): void
++  refused?(reason: string, reasons: string[]): void
+   refreshing(): void | boolean
+ }, options?: { world?: { namespace: string; anchor: Uint8Array } }): {
+   command(input: PrologTerm): Promise<boolean>
+--- a/client/src/simulation.js
++++ b/client/src/simulation.js
+@@ -129,7 +129,7 @@
+       if (active && epoch === commandEpoch && reply.result !== 'ok') {
+         if (reply.result === 'fail') {
+           discreteSequence = null
+-          refused('Movement was refused.')
++          refused('Movement was refused.', reply.reasons ?? [])
+         } else failed(new Error('Movement outcome unavailable. Refresh the simulation to reconnect.'))
+       }
+       return reply.result === 'ok'
+--- a/doc/proofs.md
++++ b/doc/proofs.md
+@@ -46,6 +46,85 @@
+ observes installed and certified evidence; it does not re-prove the goal or
+ resubmit an uncertain write.
+ 
++## Failure, reasoned failure and error
++
++Every refusal a proof can produce belongs to exactly one of three classes.
++
++1. **No solution.** The goal is false under the committed state and the
++   principal's policy. This is ordinary Prolog failure and adds no explicit
++   refusal reason.
++   Examples: no `can_view_physics/2` fact, an input vector outside the policy
++   speed, a sequence the policy does not accept. Content is allowed to be
++   false; nothing is wrong.
++
++2. **Reasoned failure.** The goal is refused by a condition the caller can act
++   on, and the proof must say which one. Record it with `fail_with_reason/1`
++   from Prolog or `quod_predicates:fail_reason/2` from Erlang. The proof still
++   fails, backtracking still works, and the reasons reach the caller as
++   `result: fail` with `reasons`. This class covers:
++   - conflicts between the request and current state: a checkpoint already
++     waiting, custody not yet replaceable, an expected epoch or revision that
++     no longer matches, an exclusive binding held by another principal;
++   - missing or ambiguous authored configuration: no rest policy, no
++     allowances, more than one definition where a singleton is required;
++   - runtime unavailability of a governed owner that the caller may retry
++     later: no installed physics world for the selected run, a read-only
++     owner query that refused or timed out, a transient already staged in
++     this proof.
++
++3. **Error.** The request or the engine violated a contract. Throw an
++   `erlog_error`. Argument errors use the ISO forms the engine already
++   provides: `instantiation_error/1` for an unbound argument the bridge needs,
++   `type_error/3` for the wrong type, `domain_error/3` for a value outside the
++   domain, including a policy predicate that returned a frame, lease or limit
++   of the wrong shape. Context errors use `{context_violation, ...}`: a
++   staging predicate reached from a read or execute request, a transient
++   staged in a proof that is not read-only or whose write intent is not
++   ordinary. The existing public allowlist filters detailed argument and
++   context errors; their detail stays server-side. This does not expand that
++   allowlist or rename its public error codes.
++
++A bare `erlog_int:fail(St)` in an external predicate is correct only for
++class 1 and for the documented no-managed-context case. Every other bare fail
++is a defect: it hides a reason the caller needed, or hides an error as a
++false goal.
++
++### Reason terms
++
++An explicit refusal reason is one ground term with the shape `{What, Detail}` or a bare atom,
++portable under `quod_wire_term` (atoms, integers, binaries, lists, tuples;
++no pids, references, funs or maps), and at most
++`?ERLOG_MAX_FAILURE_REASON_BYTES` canonical bytes. `What` is a lower-case
++atom naming the refused operation or resource in domain words. `Detail` is
++the smallest term that lets the caller act: an identifier, an expected value,
++or a sub-reason atom. Do not put internal state, process names, stack traces
++or raw Erlang error terms in a reason. Record one explicit reason per refusal.
++The engine also retains failed predicate calls as diagnostic boundaries;
++these describe the path and do not replace the explicit refusal reason.
++
++### Owner replies
++
++An Erlang owner answering a governed bridge returns `ok` or
++`{error, Reason}` with the same discipline: one atom or `{What, Detail}` per
++actionable refusal condition. Timeouts and dead owners are reported as such
++rather than folded into a domain refusal.
++The bridge converts a definite `{error, Reason}` refusal into a reasoned
++failure or an error by the rules above. A physics body or frame sample may
++bind `unavailable` when the installed owner answers that the requested sample
++is absent; a missing owner or failed call is a separate refusal.
++
++A transient release timeout or owner exit does not establish a refusal: the
++owner may already have admitted the action. Preserve it as an uncertain error,
++never a certain failure, and do not resubmit the action. This differs from a
++read-only query timeout, which cannot have applied an action.
++
++### Clients
++
++A client branches on the result class, not on "not ok". `ok` is accepted.
++`fail` keeps the current view and shows the reasons, because the server
++state is unchanged and certain. An error result, a transport failure or a
++timeout is uncertain: suspend, do not replay, refresh.
++
+ Implementation entry points are `src/quod_prolog.erl`,
+ `src/quod_proof_session.erl`, `src/predicates/quod_ask.erl`,
+ `src/quod_ask_router.erl`, and `src/quod_client_goal_ingress.erl`. Detailed
+--- a/priv/ontologies/quod_physics.pl
++++ b/priv/ontologies/quod_physics.pl
+@@ -29,14 +29,23 @@
+ physics_motion_read_projection(W, Body, Query, Frame, Revision,
+         query_limits(Skin, Tolerance, Slides, Checks)) :-
+     current_principal(Principal), can_query_physics_motion(W, Principal, Body, Query),
+-    physics_query_allowances(W, Principal,
+-        query_allowances(Skin, Tolerance, Slides, Checks, Travel, Turn)),
++    physics_required_configuration(Q, physics_query_allowances(W, Principal, Q),
++        query_allowances(Skin, Tolerance, Slides, Checks, Travel, Turn),
++        query_allowances_missing(W)),
+     integer(Skin), Skin > 0, integer(Tolerance), Tolerance >= 0, Tolerance < Skin,
+     integer(Slides), Slides > 0, integer(Checks), Checks > 0,
+     integer(Travel), Travel > 0, integer(Turn), Turn > 0,
+-    physics_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
++    physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
+     physics_query_input(Query, Coordinate, Travel, Turn),
+     physics_body_projection(W, Body, Frame, Revision).
++
++physics_required_allowances(W, Limits, Step, Gravity, Budget) :-
++    physics_required_configuration(allowances(L,S,G,B), physics_allowances(W,L,S,G,B),
++        allowances(Limits,Step,Gravity,Budget), allowances_missing(W)).
++
++physics_required_configuration(Template, Goal, Requested, Missing) :-
++    findall(Template, Goal, Rows),
++    (Rows = [] -> fail_with_reason(Missing) ; member(Requested, Rows)).
+ 
+ physics_query_input(place(pose(Position, rotation(X,Y,Z))), Coordinate, _, Turn) :-
+     physics_query_vector(Position, Coordinate), physics_query_vector(vector(X,Y,Z), Turn).
+@@ -68,13 +77,16 @@
+ physics_control_state(W, Principal, Epoch, Selection) :-
+     findall(control(E, S), physics_control(W, Principal, E, S), Rows),
+     (Rows = [] -> Epoch = 0, Selection = none
+-    ; Rows = [control(Epoch, Selection)]).
++    ; Rows = [control(E, S)] -> Epoch = E, Selection = S
++    ; fail_with_reason(ambiguous_control(W))).
+ 
+ physics_control_agent(W, ExpectedEpoch, ExpectedSelection, Selection) :-
+     term_variables([W, ExpectedEpoch, ExpectedSelection, Selection], []),
+     integer(ExpectedEpoch), ExpectedEpoch >= 0,
+     transaction((current_principal(Principal), physics_space(W, _, _),
+-        physics_control_state(W, Principal, ExpectedEpoch, ExpectedSelection),
++        physics_control_state(W, Principal, Epoch, Current),
++        (Epoch = ExpectedEpoch, Current = ExpectedSelection -> true
++        ; fail_with_reason(control_conflict(Epoch))),
+         physics_control_choice(W, Principal, Selection),
+         (ExpectedEpoch = 0, ExpectedSelection = none,
+          \+ physics_control(W, Principal, _, _) -> true
+@@ -85,25 +97,27 @@
+ physics_control_choice(_, _, none).
+ physics_control_choice(W, Principal, controlled(Agent, Viewpoint)) :-
+     physics_agent_configuration(W, Principal, Agent, Viewpoint, _),
+-    \+ (physics_control(W, Other, _, controlled(Agent, _)),
+-        Other \== Principal).
++    (\+ (physics_control(W, Other, _, controlled(Agent, _)),
++        Other \== Principal) -> true ; fail_with_reason(agent_controlled(Agent))).
+ 
+ %% Exact singleton definitions fail closed on ambiguous authored configuration.
+ %% Pose/motion schema and supported mechanics are checked by the installing
+ %% adapter, never inferred from an Eidolon or the human's device dimensions.
+-physics_agent_configuration(W, Principal, Agent, Viewpoint,
+-        controlled_agent(Agent, Revision, Body, BodyRevision, Motion,
+-                         viewpoint(Viewpoint, LocalPose, Tracking))) :-
++physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration) :-
++    Configuration = controlled_agent(Agent, _, _, _, _, viewpoint(Viewpoint, _, _)),
+     can_control_physics_agent(W, Principal, Agent),
+     once((instance_of(Class, Agent), (Class = agent ; isa(Class, agent)))),
+-    findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
++    (findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
+             [definition(Revision, Body, Motion)]),
++     findall(A, physics_agent(W, A, _, Body, _), [Agent]),
++     findall(R, physics_body(W, Body, R, _, _, _, _), [BodyRevision]),
++     findall(mount(B, Pose, Track), physics_viewpoint(W, Agent, Viewpoint, B, Pose, Track),
++            [mount(Body, LocalPose, Tracking)]) -> true
++    ; fail_with_reason(ambiguous_agent(Agent))),
+     integer(Revision), Revision > 0,
+-    findall(A, physics_agent(W, A, _, Body, _), [Agent]),
+-    findall(R, physics_body(W, Body, R, _, _, _, _), [BodyRevision]),
+-    findall(mount(B, Pose, Track), physics_viewpoint(W, Agent, Viewpoint, B, Pose, Track),
+-            [mount(Body, LocalPose, Tracking)]),
+-    term_variables([Agent, Viewpoint, Body, Motion, LocalPose, Tracking], []).
++    term_variables([Agent, Viewpoint, Body, Motion, LocalPose, Tracking], []),
++    Configuration = controlled_agent(Agent, Revision, Body, BodyRevision, Motion,
++                                    viewpoint(Viewpoint, LocalPose, Tracking)).
+ 
+ physics_control_configuration(W, Principal, Epoch, Configuration) :-
+     physics_control_state(W, Principal, Epoch, controlled(Agent, Viewpoint)),
+@@ -122,7 +136,11 @@
+ %% Camera/tracking offsets never enter this motion descriptor.
+ physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence, Input, Control, Lease, Limits) :-
+     agent_identifier(Registration), integer(Sequence), Sequence >= 0, current_principal(Principal),
+-    physics_control_configuration(W, Principal, Epoch, Configuration),
++    physics_input_control(W, Principal, Epoch, Configuration),
++    physics_input_limits(W, Principal, Configuration, Frame, Input, Lease, Limits),
++    Control = control(Principal, Epoch, Configuration).
++
++physics_input_limits(W, _, Configuration, Frame, Input, Lease, Limits) :-
+     Configuration = controlled_agent(_, _, Body, Revision, Motion, _),
+     Motion = motion(Mode, Speed, Turn, Lease, Limits, Capabilities),
+     physics_motion_mode(Mode), physics_motion_capabilities(Capabilities, []),
+@@ -132,11 +150,16 @@
+     integer(Skin), Skin > 0, integer(Tolerance), Tolerance >= 0, Tolerance < Skin,
+     integer(Slides), Slides > 0, integer(Checks), Checks > 0,
+     physics_allowed_input(Input, Mode, Speed, Turn, Capabilities),
+-    physics_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
++    physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
+     physics_absolute_input(Input, Coordinate),
+     physics_body_projection(W, Body, Frame, Revision),
+-    physics_body(W, Body, Revision, controlled, _, _, _),
+-    Control = control(Principal, Epoch, Configuration).
++    physics_body(W, Body, Revision, controlled, _, _, _).
++
++physics_input_control(W, Principal, Epoch, Configuration) :-
++    physics_control_state(W, Principal, Current, Selection),
++    (Selection = controlled(Agent, Viewpoint) -> true ; fail_with_reason(no_control(W))),
++    (Epoch = Current -> true ; fail_with_reason(control_conflict(Current))),
++    physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration).
+ 
+ can_push_physics_body(_, _, _) :- fail.
+ physics_push_allowances(_, _, _, _) :- fail.
+@@ -144,7 +167,8 @@
+ physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed) :-
+     can_push_physics_body(W, Principal, Body),
+     physics_free_body(W, Body, Revision),
+-    physics_push_allowances(W, Principal, Body, push_limits(MaxImpulse, MaxSpeed)),
++    physics_required_configuration(P, physics_push_allowances(W, Principal, Body, P),
++        push_limits(MaxImpulse, MaxSpeed), push_allowances_missing(Body)),
+     integer(MaxImpulse), MaxImpulse > 0, integer(MaxSpeed), MaxSpeed > 0.
+ 
+ physics_free_body(W, Body, Revision) :-
+@@ -152,19 +176,15 @@
+     \+ physics_joint(W, hinge(Body, _, _, _, _, _)),
+     \+ physics_joint(W, hinge(_, _, Body, _, _, _)).
+ 
+-physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence,
+-        push(body(Body, Revision), vector(X,Y,Z)), Control, Lease,
++physics_input_limits(W, Principal, Configuration, Frame,
++        push(body(Body, Revision), vector(X,Y,Z)), Lease,
+         push_limits(Body, Revision, MaxImpulse, MaxSpeed)) :-
+-    agent_identifier(Registration), integer(Sequence), Sequence >= 0,
+-    current_principal(Principal),
+-    physics_control_configuration(W, Principal, Epoch, Configuration),
+     Configuration = controlled_agent(_, _, _, _, motion(_, _, _, Lease, _, _), _),
+     integer(Lease), Lease > 0,
+     physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed),
+     physics_query_vector(vector(X,Y,Z), MaxImpulse),
+     X*X+Y*Y+Z*Z > 0, X*X+Y*Y+Z*Z =< MaxImpulse*MaxImpulse,
+-    physics_body_projection(W, Body, Frame, Revision),
+-    Control = control(Principal, Epoch, Configuration).
++    physics_body_projection(W, Body, Frame, Revision).
+ 
+ physics_motion_mode(free).
+ physics_motion_mode(grounded(Up)) :- integer(Up), Up > 0, Up =< 1000.
+@@ -204,7 +224,7 @@
+     physics_view(W, Marks), current_ontology_identity(Ns, Anchor),
+     agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token),
+     Generation > 0, physics_structure(W, Structure),
+-    physics_allowances(W, limits(_, MaxPoses, _, _, _), _, _, _),
++    physics_required_allowances(W, limits(_, MaxPoses, _, _, _), _, _, _),
+     length(Marks, Count), Count =< MaxPoses,
+     physics_view_bodies(Marks, W, Ns, Anchor, []),
+     physics_control_state(W, P, Binding, Selection),
+@@ -225,7 +245,7 @@
+                   baseline(Checkpoints, Joints, Activities, control_selection(Bindings, Controls))),
+       (physics_space(W, enabled, I), agent_hosted(I, Node, Epoch, Key),
+        physics_run(W, Generation, RunToken), physics_structure(W, Structure),
+-       physics_allowances(W, Limits, StepUs, Gravity, Budget),
++       physics_required_allowances(W, Limits, StepUs, Gravity, Budget),
+        physics_custody(W, Custody),
+        findall(C, physics_recovery_checkpoint(W, C), Checkpoints),
+        findall(J, physics_joint(W, J), Joints),
+@@ -318,7 +338,7 @@
+         \+ physics_body(W, Door, _, _, _, _, _),
+         \+ physics_body(W, Frame, _, _, _, _, _),
+         physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
+-        physics_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
++        physics_required_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
+         physics_valid_body(Door, Position, LeafBox, Density, Coordinate),
+         physics_valid_body(Frame, Position, FrameBox, Density, Coordinate),
+         physics_valid_motor(Angle, Motor),
+@@ -413,7 +433,7 @@
+     physics_joint(W,hinge(D,Revision,Frame,_,Baseline,motor(_,_,_,Tolerance))),
+     physics_body(W,Frame,FrameRevision,fixed,_,_,_),
+     integer(Tick), Tick > 0, Tick < 18446744073709551616, integer(Angle), Angle >= -Baseline, Angle =< Baseline,
+-    physics_allowances(W,_,_,_,Budget),
++    physics_required_allowances(W,_,_,_,Budget),
+     integer(At), integer(Expiry), Expiry > At, Expiry - At =< Budget,
+     current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry,
+     physics_door_result(W,D,Frame,Angle,Tolerance,Contact,Result).
+@@ -437,7 +457,7 @@
+         physics_structure(W,Structure), physics_body(W,D,Revision,Kind,Old,Shape,Density),
+         \+ physics_joint(W,hinge(D,_,_,_,_,_)),
+         \+ physics_joint(W,hinge(_,_,D,_,_,_)),
+-        physics_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
++        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+         physics_query_vector(Position,Coordinate), physics_relocated_pose(Old,Position,Pose),
+         Next is Structure + 1,
+         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
+@@ -458,7 +478,7 @@
+         physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor)),
+         physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density),
+         physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density),
+-        physics_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
++        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+         physics_valid_body(D,Position,LeafBox,Density,Coordinate), Next is Structure + 1,
+         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
+         retract(physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density)),
+@@ -489,18 +509,27 @@
+ physics_checkpoint_body(W,D,Revision,Sequence,Id) :-
+     term_variables([W,D,Revision,Sequence,Id], []), agent_identifier(Id),
+     transaction((current_principal(P), can_checkpoint_physics_body(W,D,P), physics_space(W,enabled,_),
+-        physics_free_body(W,D,Revision), physics_rest_policy(W,D,_),
+-        physics_rest_state(W,D,Sequence,Before), Before \= waiting(_),
+-        physics_rest_custody(W,D,Prior), physics_rest_replaceable(Prior,W,D),
++        (physics_free_body(W,D,Revision) -> true ; fail_with_reason(body_not_free(D))),
++        (physics_rest_policy(W,D,_) -> true ; fail_with_reason(rest_policy_missing(D))),
++        physics_rest_state(W,D,Current,Before),
++        (Sequence = Current -> true ; fail_with_reason(checkpoint_conflict(D))),
++        (Before \= waiting(_) -> true ; fail_with_reason(checkpoint_pending(D))),
++        physics_rest_custody(W,D,Prior),
++        (physics_rest_replaceable(Prior,W,D) -> true
++        ; fail_with_reason(checkpoint_custody_held(D))),
+         physics_remove_rest_state(W,D), Next is Sequence + 1,
+         assertz(physics_rest(W,D,Next,waiting(rest(Next,Id)))),
+         physics_remove_rest_request(W,D))).
+ 
+ physics_rest_state(W,D,Sequence,State) :-
+     findall(rest(S,T), physics_rest(W,D,S,T), Rows),
+-    (Rows = [] -> Sequence = 0, State = idle ; Rows = [rest(Sequence,State)]).
++    (Rows = [] -> Sequence = 0, State = idle
++    ; Rows = [rest(S,T)] -> Sequence = S, State = T
++    ; fail_with_reason(ambiguous_checkpoint(D))).
+ physics_rest_custody(W,D,C) :-
+-    findall(R, physics_rest_request(W,D,R), Rows), (Rows = [] -> C = none ; Rows = [C]).
++    findall(R, physics_rest_request(W,D,R), Rows),
++    (Rows = [] -> C = none ; Rows = [R] -> C = R
++    ; fail_with_reason(ambiguous_checkpoint_custody(D))).
+ %% An authored cancellation retires this activity, not its backend operation.
+ %% The changed revision makes its exact old finish permanently ineligible.
+ physics_rest_replaceable(none,_,_).
+@@ -546,7 +575,7 @@
+     physics_free_body(W,D,Revision), physics_rest(W,D,_,waiting(R)),
+     physics_rest_policy(W,D,recovery(Tolerance,Checks)),
+     integer(Tolerance), Tolerance >= 0, integer(Checks), Checks > 0,
+-    physics_allowances(W,limits(_,_,_,Coordinate,_),_,_,Budget),
++    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,Budget),
+     Pose = pose(Position,quaternion(X,Y,Z,Q)), physics_query_vector(Position,Coordinate),
+     physics_coordinate(X,1000000), physics_coordinate(Y,1000000),
+     physics_coordinate(Z,1000000), physics_coordinate(Q,1000000),
+--- a/src/predicates/quod_agent_predicates.erl
++++ b/src/predicates/quod_agent_predicates.erl
+@@ -37,7 +37,7 @@
+         {ok, Principal} ->
+             {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+             erlog_int:unify_prove_body(Node, NodeRef, Next, St);
+-        _ -> erlog_int:fail(St)
++        _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+     end.
+ 
+ -doc "Ask the existing resource owner to reconcile from its own committed selection.".
+@@ -52,7 +52,7 @@
+ sign_agent_request({sign_agent_request, Typed0, Signature}, Next, #est{bs = Bs} = St) ->
+     case quod_proof_session:read_only_state(St) of
+         true -> sign_typed(erlog_int:dderef(Typed0, Bs), Signature, Next, St);
+-        false -> erlog_int:fail(St)
++        false -> erlog_int:erlog_error({context_violation,sign_agent_request,query,write_proof},St)
+     end.
+ 
+ sign_typed({agent_goal_v1, Network,
+@@ -63,19 +63,36 @@
+                 signing_public_key => Pub, operation_id => Operation,
+                 not_after_ms => Deadline, mode => Mode, parser_version => Parser,
+                 goal_text => GoalText},
+-    case {quod_runtime_predicates:scope_identity(St),
+-          quod_client_goal:encode(Request), quod_node_actor:principal()} of
+-        {{ok, {Ns, Anchor}}, {ok, _}, {ok, NodePrincipal}} ->
+-            case {quod_agent_ref:from_text(Ns, Anchor, InstanceText, Parser),
+-                  quod_wire_term:encode_canonical(AgentRef),
+-                  quod_agent_ref:materialize_principal(NodePrincipal)} of
+-                {{ok, #{blob := Blob}}, {ok, Blob}, {ok, NodeRef}} ->
+-                    authorize_sign(Request, Typed, NodeRef, Signature, Next, St);
+-                _ -> erlog_int:fail(St)
+-            end;
+-        _ -> erlog_int:fail(St)
++    case quod_wire_term:is_ground(Typed) of
++        false -> erlog_int:instantiation_error(St);
++        true ->
++            case quod_client_goal:encode(Request) of
++                {error,_} -> erlog_int:domain_error(agent_request,Typed,St);
++                {ok,_} ->
++                    case quod_runtime_predicates:scope_identity(St) of
++                        error -> quod_predicates:fail_reason({scope_identity_unavailable,Ns},St);
++                        {ok,{Ns,Anchor}} ->
++                            case quod_node_actor:principal() of
++                                {ok,NodePrincipal} ->
++                                    case {quod_agent_ref:from_text(Ns,Anchor,InstanceText,Parser),
++                                          quod_wire_term:encode_canonical(AgentRef),
++                                          quod_agent_ref:materialize_principal(NodePrincipal)} of
++                                        {{ok,#{blob := Blob}},{ok,Blob},{ok,NodeRef}} ->
++                                            authorize_sign(Request,Typed,NodeRef,Signature,Next,St);
++                                        _ -> erlog_int:domain_error(agent_request,Typed,St)
++                                    end;
++                                _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
++                            end;
++                        {ok,_} -> erlog_int:erlog_error(
++                            {context_violation,sign_agent_request,query,foreign_scope},St)
++                    end
++            end
+     end;
+-sign_typed(_, _Signature, _Next, St) -> erlog_int:fail(St).
++sign_typed(Typed, _Signature, _Next, St) ->
++    case quod_wire_term:is_ground(Typed) of
++        false -> erlog_int:instantiation_error(St);
++        true -> erlog_int:domain_error(agent_request,Typed,St)
++    end.
+ 
+ authorize_sign(Request, Typed, NodeRef,
+                Signature, Next, #est{vn = Vn} = St) ->
+@@ -95,7 +112,8 @@
+             case quod_agent_vault:sign(Request, Deadline) of
+                 {ok, _Bytes, Signed} ->
+                     erlog_int:unify_prove_body(Signature, Signed, Next, St);
+-                {error, _} -> erlog_int:fail(St)
++                {error,Reason} -> quod_predicates:fail_reason({agent_signing_unavailable,Reason},St)
+             end;
+-        _ -> erlog_int:fail(St)
++        denied -> erlog_int:fail(St);
++        invalid -> erlog_int:erlog_error(invalid_signing_policy,St)
+     end.
+--- a/src/predicates/quod_agent_work_predicates.erl
++++ b/src/predicates/quod_agent_work_predicates.erl
+@@ -16,8 +16,9 @@
+ 
+ continue_agent_work({continue_agent_work, Instance0, Wake0}, Next, #est{bs = Bs} = St) ->
+     [Instance, Wake] = erlog_int:dderef([Instance0, Wake0], Bs),
+-    case quod_wire_term:is_ground(Instance) andalso
+-         (Wake =:= changed orelse Wake =:= continue) of
+-        true -> quod_runtime_predicates:request_resource(agent_work, {Instance, Wake}, Next, St);
+-        false -> erlog_int:fail(St)
++    case quod_wire_term:is_ground([Instance,Wake]) of
++        false -> erlog_int:instantiation_error(St);
++        true when Wake =:= changed; Wake =:= continue ->
++            quod_runtime_predicates:request_resource(agent_work,{Instance,Wake},Next,St);
++        true -> erlog_int:domain_error(agent_work_wake,Wake,St)
+     end.
+--- a/src/predicates/quod_ask.erl
++++ b/src/predicates/quod_ask.erl
+@@ -55,7 +55,7 @@
+ ask_2(Goal, Next, #est{bs = Bs} = St) ->
+     case erlog_int:dderef(Goal, Bs) of
+         {'::', NsTerm, Inner} -> do_ask(NsTerm, Inner, Next, St);
+-        _                     -> erlog_int:fail(St)
++        _ -> erlog_int:domain_error(ontology_query,Goal,St)
+     end.
+ 
+ %% The governing clause choice point owns this call's answer set. Erlog carries
+--- a/src/predicates/quod_committee_predicates.erl
++++ b/src/predicates/quod_committee_predicates.erl
+@@ -72,20 +72,20 @@
+ 
+ %% admit(Pubkey, Host, Port): prove can_join, then stage the peer_admitted assert. Gate + stage are ONE
+ %% erlog conjunction — if can_join fails, the assert is never reached, so nothing is staged and the prove
+-%% fails (run_proof discards the overlay). An ill-typed goal fails closed (never crashes the fact engine).
++%% fails (run_proof discards the overlay). An ill-typed goal raises an argument error.
+ admit_3(Goal, Next, #est{bs = Bs} = St) ->
+     case erlog_int:dderef(Goal, Bs) of
+         {admit, Pub, Host, Port} when is_binary(Pub) ->
+             case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
+                 {undefined, _} -> erlog_int:fail(St);
+-                {_Ns, false} -> erlog_int:fail(St);
++                {_Ns, false} -> quod_predicates:fail_reason(committee_full,St);
+                 {Ns, true} ->
+                     Fact = {peer_admitted, Pub, Host, Port, Pub},
+                     erlog_int:prove_body(
+                       [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)
+             end;
+-        _ ->
+-            erlog_int:fail(St)
++        {admit, {_}, _, _} -> erlog_int:instantiation_error(St);
++        {admit, Pub, _, _} -> erlog_int:type_error(binary,Pub,St)
+     end.
+ 
+ %% remove(Pubkey): refuse to remove the last member (crash-safe floor), then retract peer_admitted BY
+@@ -100,15 +100,19 @@
+                 %% variable, so three `{'_'}` would unify to one value and the retract would miss.
+                 true  -> erlog_int:prove_body(
+                            [{retract, {peer_admitted, {'Ri'}, {'Rh'}, {'Rp'}, Pub}} | Next], St);
+-                false -> erlog_int:fail(St)   %% never empty the committee
++                false ->
++                    case lists:member(Pub,admitted_pubkeys(St)) of
++                        true -> quod_predicates:fail_reason(last_committee_member,St);
++                        false -> erlog_int:fail(St)
++                    end
+             end;
+-        _ ->
+-            erlog_int:fail(St)
++        {remove, {_}} -> erlog_int:instantiation_error(St);
++        {remove, Pub} -> erlog_int:type_error(binary,Pub,St)
+     end.
+ 
+ %% peer_ready(Pk): succeed iff Pk is a live, caught-up follower by this node's own observation
+ %% (quod_feed:peer_ready/3 — fresh digest + height slack). Read-only: stages nothing, binds nothing.
+-%% An unbound/non-binary argument fails closed (the gate is a check, not a generator). NOTE validators MAY
++%% An unbound/non-binary argument raises an argument error (this is not a generator). NOTE validators MAY
+ %% legitimately split on this predicate (each judges from its OWN digest table) — see the verdict-split
+ %% note in `quod_commit_validation`'s membership validation.
+ peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
+@@ -125,8 +129,8 @@
+                     end;
+                 _ -> erlog_int:fail(St)
+             end;
+-        _ ->
+-            erlog_int:fail(St)
++        {peer_ready, {_}} -> erlog_int:instantiation_error(St);
++        {peer_ready, Pub} -> erlog_int:type_error(binary,Pub,St)
+     end.
+ 
+ %% This node's namespace, read from the run's execution context (`m:quod_predicates`), which every proof,
+--- a/src/predicates/quod_common_primitives.erl
++++ b/src/predicates/quod_common_primitives.erl
+@@ -12,15 +12,14 @@
+   32-byte identity the engine mints before the proof runs and binds into
+   every sealed plan and committed transaction. Same proof, same salt, same
+   `I`, in the origin worker and in every co-hosted or remote scope of that
+-  proof; a retried request is a new proof and draws afresh. Fails plainly
+-  (never errors) when `N` is not a positive integer, `Salt` is not ground,
+-  the context kind is not `proof`, or the state carries no proof identity
+-  (verdict re-proofs, bare engines). Ontologies reach it through
++  proof; a retried request is a new proof and draws afresh. Missing proof
++  identity (verdict re-proofs, bare engines) fails plainly. An unbound salt or
++  divisor, wrong divisor type/domain, or nonportable salt raises an error. Ontologies reach it through
+   `proof_draw/3` in `common_predicates.pl`. It is deterministic selection:
+   neither secure randomness nor a uniqueness guarantee.
+ - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
+   round, so generated text stays a binary and never becomes an atom. Fails
+-  plainly for anything that is not a binary or a list of bytes.
++  on unequal valid values; malformed arguments raise errors.
+ - `'$quod_predicate_source'(+Name/Arity, ?Source)` — canonical source of the
+   ordered authored clauses in the current staged view, excluding generated
+   following clauses. Facts print as `Head :- true`; a bound source compares
+@@ -107,7 +106,11 @@
+             %% Reading its empty baseline must not allocate an atom. Ordinary
+             %% signed edit admission later allocates and tracks the functor.
+             erlog_int:unify_prove_body(Source, <<>>, Next, St);
+-        _ -> erlog_int:fail(St)
++        Indicator ->
++            case quod_wire_term:is_ground(Indicator) of
++                false -> erlog_int:instantiation_error(St);
++                true -> erlog_int:domain_error(predicate_indicator,Indicator,St)
++            end
+     end.
+ 
+ retract_exact_1({'$quod_retract_exact', Clause0}, Next,
+@@ -173,20 +176,22 @@
+ 
+ -spec draw_3(term(), list(), tuple()) -> term().
+ draw_3({?DRAW, Salt0, N0, I0}, Next, #est{bs = Bs} = St) ->
+-    Salt = erlog_int:dderef(Salt0, Bs),
+-    case {erlog_int:deref(N0, Bs), proof_id(St)} of
+-        {N, {ok, ProofId}} when is_integer(N), N > 0 ->
+-            case quod_wire_term:is_ground(Salt)
+-                 andalso quod_wire_term:encode_canonical(Salt) of
+-                {ok, SaltBytes} ->
+-                    Mac = crypto:mac(hmac, sha256, ProofId, SaltBytes),
+-                    erlog_int:unify_prove_body(
+-                      I0, binary:decode_unsigned(Mac) rem N, Next, St);
+-                _ ->
+-                    erlog_int:fail(St)
+-            end;
+-        _ ->
+-            erlog_int:fail(St)
++    Salt = erlog_int:dderef(Salt0,Bs), N = erlog_int:deref(N0,Bs),
++    case proof_id(St) of
++        error -> erlog_int:fail(St);
++        {ok,ProofId} ->
++            case quod_wire_term:is_ground([Salt,N]) of
++                false -> erlog_int:instantiation_error(St);
++                true when not is_integer(N) -> erlog_int:type_error(integer,N,St);
++                true when N =< 0 -> erlog_int:domain_error(proof_draw_divisor,N,St);
++                true ->
++                    case quod_wire_term:encode_canonical(Salt) of
++                        {ok,SaltBytes} ->
++                            Mac = crypto:mac(hmac,sha256,ProofId,SaltBytes),
++                            erlog_int:unify_prove_body(I0,binary:decode_unsigned(Mac) rem N,Next,St);
++                        {error,_} -> erlog_int:domain_error(proof_salt,Salt,St)
++                    end
++            end
+     end.
+ 
+ %% The proof identity lives where the engine put it: the origin worker keeps
+@@ -224,13 +229,20 @@
+                     case bytes(Codes) of
+                         true -> erlog_int:unify_prove_body(
+                                   Binary0, list_to_binary(Codes), Next, St);
+-                        false -> erlog_int:fail(St)
++                        false ->
++                            case quod_wire_term:is_ground(Codes) of
++                                false -> erlog_int:instantiation_error(St);
++                                true -> erlog_int:domain_error(byte_list,Codes,St)
++                            end
+                     end;
+-                _ ->
+-                    erlog_int:fail(St)
+-            end;
+-        _ ->
+-            erlog_int:fail(St)
++                {_} -> erlog_int:instantiation_error(St);
++                Codes ->
++                    case quod_wire_term:is_ground(Codes) of
++                        false -> erlog_int:instantiation_error(St);
++                        true -> erlog_int:type_error(list,Codes,St)
++                    end
++            end;
++        Binary -> erlog_int:type_error(binary,Binary,St)
+     end.
+ 
+ bytes([Code | Codes]) when is_integer(Code), Code >= 0, Code =< 255 ->
+--- a/src/predicates/quod_directory_predicates.erl
++++ b/src/predicates/quod_directory_predicates.erl
+@@ -47,10 +47,13 @@
+                       [GenesisAnchor, NodeKey, Host, Port],
+                       Candidates, Next, St);
+                 error ->
+-                    erlog_int:fail(St)
++                    case quod_wire_term:is_ground(NsTerm) of
++                        false -> erlog_int:instantiation_error(St);
++                        true -> erlog_int:domain_error(ontology_name,NsTerm,St)
++                    end
+             end;
+-        _ ->
+-            erlog_int:fail(St)
++        _ -> erlog_int:erlog_error(
++            {context_violation,directory_host,query,non_root},St)
+     end.
+ 
+ %% Root's committed membership facts are the sole directory-control authority.
+@@ -66,8 +69,8 @@
+                  || Key <- quod_committee_predicates:admitted_pubkeys(St),
+                     is_binary(Key), byte_size(Key) =:= 32],
+             prove_member(NodeKey, Keys, Next, St);
+-        _ ->
+-            erlog_int:fail(St)
++        _ -> erlog_int:erlog_error(
++            {context_violation,directory_control_peer,query,non_root},St)
+     end.
+ 
+ %% Delegate unification and choice-point management to Erlog's standard list
+--- a/src/predicates/quod_ontology_predicates.erl
++++ b/src/predicates/quod_ontology_predicates.erl
+@@ -1,4 +1,5 @@
+ -module(quod_ontology_predicates).
++-import(quod_predicates, [fail_reason/2]).
+ -moduledoc """
+ Governed Prolog bridges for ontology creation and node-local hosting.
+ 
+@@ -25,7 +26,6 @@
+          ontology_join_state_predicate/3,
+          ontology_genesis_anchor_predicate/3,
+          reconcile_effect_custody/3, reconcile_node_ontologies/3]).
+--export([lifecycle_error/2, failure_reason/2]).
+ 
+ -define(ROOT_NS, <<"quod:root">>).
+ -define(NODE_NS, <<"quod:node">>).
+@@ -80,13 +80,12 @@
+                           St, RequestAction, Structural),
+                     erlog_int:prove_body(
+                       [{run_declared_action, Action, Handle} | Next], St1);
+-                {error, Reason} ->
+-                    fail_reason(lifecycle_error(Action, Reason), St)
++                {error,invalid_arguments} -> erlog_int:instantiation_error(St);
++                {error,_} -> erlog_int:domain_error(ontology_action,Action,St)
+             end;
+-        {false, _} ->
+-            fail_reason(failure_reason(Action, wrong_ontology), St);
+-        {true, error} ->
+-            fail_reason(failure_reason(Action, invalid_action), St)
++        {false,{ok,_}} -> erlog_int:erlog_error(
++            {context_violation,element(1,Action),staging,wrong_ontology},St);
++        {_,error} -> erlog_int:domain_error(ontology_action,Action,St)
+     end.
+ 
+ structural_action({create_ontology, Name, Options, _Anchor}) ->
+@@ -114,14 +113,13 @@
+                 {ok, Structural} ->
+                     prepare_and_stage_action(
+                       Action0, Desired0, RequestAction, Structural, Next, St);
+-                error ->
+-                    fail_reason(failure_reason(Action, invalid_action), St)
++                error -> erlog_int:domain_error(ontology_request_handle,Handle,St)
+             end;
+         error ->
+-            fail_reason(failure_reason(Action, invalid_action), St)
+-    end;
+-lifecycle_continuation_predicate(_Goal, _Next, St) ->
+-    fail_reason({ontology_lifecycle_failed, invalid_action}, St).
++            erlog_int:domain_error(ontology_action,Action,St)
++    end;
++lifecycle_continuation_predicate(Goal, _Next, St) ->
++    erlog_int:domain_error(ontology_action,Goal,St).
+ 
+ prepare_and_stage_action(Action0, Desired0, RequestAction, Structural, Next, St) ->
+     Principal = authenticated_principal(),
+@@ -129,8 +127,13 @@
+         {ok, Prepared} ->
+             bind_prepared_action(
+               Action0, Desired0, RequestAction, Prepared, Next, St);
+-        {error, Reason} ->
+-            fail_reason(lifecycle_error(RequestAction, Reason), St)
++        {error,invalid_arguments} -> erlog_int:instantiation_error(St);
++        {error,invalid_action} -> erlog_int:erlog_error({system_error,invalid_lifecycle_descriptor},St);
++        {error,Reason} when Reason =:= invalid_initial_terms; Reason =:= invalid_options ->
++            erlog_int:domain_error(ontology_action,RequestAction,St);
++        {error,{invalid_initial_term,_}} -> erlog_int:domain_error(ontology_action,RequestAction,St);
++        {error,{source_error,_,_,_}} -> erlog_int:domain_error(ontology_action,RequestAction,St);
++        {error,Reason} -> fail_reason(lifecycle_error(RequestAction,Reason),St)
+     end.
+ 
+ bind_prepared_action(
+@@ -154,7 +157,11 @@
+          Action =:= RequestAction of
+         true ->
+             stage_prepared_action(Action, Desired, Prepared, Next, St);
+-        false -> fail_reason(failure_reason(Action, invalid_action), St)
++        false ->
++            case quod_wire_term:is_ground({Action,Desired}) of
++                false -> erlog_int:instantiation_error(St);
++                true -> erlog_int:domain_error(ontology_action,Action,St)
++            end
+     end.
+ 
+ stage_prepared_action(Action, Desired, Prepared, Next, St) ->
+@@ -169,13 +176,12 @@
+                             St1 = quod_erlog_db_local_prove:put_prepared_effect(
+                                     St, Action, Desired, Effect, Prepared),
+                             erlog_int:prove_body(Next, St1);
+-                        {error, Reason} ->
+-                            fail_reason(lifecycle_error(Action, Reason), St)
++                        {error,_} -> erlog_int:erlog_error({system_error,invalid_prepared_effect},St)
+                     end;
+                 none ->
+                     fail_reason(failure_reason(Action, rebuilding), St)
+             end;
+-        false -> fail_reason(failure_reason(Action, invalid_action), St)
++        false -> erlog_int:instantiation_error(St)
+     end.
+ 
+ -doc "Bind the authenticated principal owned by the current proof.".
+@@ -184,11 +190,10 @@
+     case policy_principal(authenticated_principal()) of
+         {ok, PolicyPrincipal} ->
+             erlog_int:unify_prove_body(Principal, PolicyPrincipal, Next, St);
+-        error ->
+-            erlog_int:fail(St)
+-    end;
+-current_principal_predicate(_Goal, _Next, St) ->
+-    erlog_int:fail(St).
++        error -> erlog_int:erlog_error(invalid_authenticated_principal,St)
++    end;
++current_principal_predicate(Goal, _Next, St) ->
++    erlog_int:domain_error(principal_query,Goal,St).
+ 
+ authenticated_principal() ->
+     case quod_scope_session:principal() of
+@@ -206,44 +211,22 @@
+ policy_principal(Principal) ->
+     {ok, Principal}.
+ 
+--doc "Map a typed lifecycle API error to its bounded public Prolog reason.".
+--spec lifecycle_error(term(), term()) -> term().
+-lifecycle_error({create_ontology, _, _, _} = Action, Reason) ->
+-    failure_reason(Action, creation_reason(Reason));
++%% Only operational preparation refusals reach this vocabulary. Argument
++%% and descriptor errors have already used the Erlog error channel.
+ lifecycle_error({create_ontology, _, _} = Action, Reason) ->
+     failure_reason(Action, creation_reason(Reason));
+ lifecycle_error({join_ontology, _, _, _} = Action, Reason) ->
+-    failure_reason(Action, join_reason(Reason));
+-lifecycle_error(Action, _Reason) ->
+-    failure_reason(Action, invalid_action).
+-
+--spec failure_reason(term(), term()) -> term().
+-failure_reason({create_ontology, _, _, _}, Reason) ->
+-    {ontology_creation_failed, Reason};
+-failure_reason({create_ontology, _, _}, Reason) ->
+-    {ontology_creation_failed, Reason};
+-failure_reason({join_ontology, _, _, _}, Reason) ->
+-    {ontology_join_failed, Reason};
+-failure_reason(_Action, Reason) ->
+-    {ontology_lifecycle_failed, Reason}.
+-
+-creation_reason(invalid_name) -> invalid_name;
+-creation_reason(invalid_arguments) -> invalid_arguments;
+-creation_reason(invalid_options) -> invalid_options;
+-creation_reason(invalid_initial_terms) -> invalid_initial_terms;
++    failure_reason(Action, join_reason(Reason)).
++
++failure_reason({create_ontology, _, _, _}, Reason) -> {ontology_creation_failed,Reason};
++failure_reason({create_ontology, _, _}, Reason) -> {ontology_creation_failed,Reason};
++failure_reason({join_ontology, _, _, _}, Reason) -> {ontology_join_failed,Reason}.
++
+ creation_reason(initial_content_too_large) -> initial_content_too_large;
+-creation_reason({invalid_initial_term, _Term}) -> invalid_initial_terms;
+-creation_reason({source_error, Index, Line, _Detail}) ->
+-    {invalid_source, Index, Line};
+-creation_reason({source_file_error, Index, _Path, _Reason}) ->
+-    {source_file_error, Index};
++creation_reason({source_file_error, Index, _Path, _Reason}) -> {source_file_error,Index};
+ creation_reason({already_configured, _Ns}) -> already_hosted;
+ creation_reason(_Reason) -> start_failed.
+ 
+-join_reason(invalid_name) -> invalid_name;
+-join_reason(invalid_arguments) -> invalid_arguments;
+-join_reason(invalid_genesis_hash) -> invalid_genesis_hash;
+-join_reason(invalid_seeds) -> invalid_seeds;
+ join_reason({already_configured, _Ns}) -> already_hosted;
+ join_reason(root_unavailable) -> root_unavailable;
+ join_reason(_Reason) -> start_failed.
+@@ -255,17 +238,16 @@
+ state({ontology_join_state, Name, State}, Next, St) ->
+     case quod_wire_term:is_ground(Name) of
+         false ->
+-            fail_reason({ontology_state_failed, invalid_arguments}, St);
++            erlog_int:instantiation_error(St);
+         true ->
+             case quod_ontology:local_state(Name) of
+                 {ok, LocalState} ->
+                     erlog_int:unify_prove_body(State, LocalState, Next, St);
+                 {error, _Reason} ->
+-                    fail_reason({ontology_state_failed, invalid_name}, St)
++                    erlog_int:domain_error(ontology_name,Name,St)
+             end
+     end;
+-state(_Goal, _Next, St) ->
+-    fail_reason({ontology_state_failed, invalid_arguments}, St).
++state(Goal, _Next, St) -> erlog_int:domain_error(ontology_state_query,Goal,St).
+ 
+ -spec ontology_genesis_anchor_predicate(term(), term(), tuple()) -> term().
+ ontology_genesis_anchor_predicate(Goal, Next, #est{bs = Bs} = St) ->
+@@ -274,18 +256,17 @@
+ genesis_anchor({ontology_genesis_anchor, Name, Expected}, Next, St) ->
+     case quod_wire_term:is_ground(Name) of
+         false ->
+-            fail_reason({ontology_anchor_failed, invalid_arguments}, St);
++            erlog_int:instantiation_error(St);
+         true ->
+             case quod_ontology:genesis_anchor(Name) of
+                 {ok, RawAnchor} ->
+                     match_genesis_anchor(Expected, RawAnchor, Next, St);
+-                {error, not_hosted} -> erlog_int:fail(St);
+-                {error, Reason} ->
+-                    fail_reason({ontology_anchor_failed, Reason}, St)
++                {error, not_hosted} -> fail_reason({ontology_anchor_failed,not_hosted},St);
++                {error,invalid_name} -> erlog_int:domain_error(ontology_name,Name,St);
++                {error,Reason} -> fail_reason({ontology_anchor_failed,Reason},St)
+             end
+     end;
+-genesis_anchor(_Goal, _Next, St) ->
+-    fail_reason({ontology_anchor_failed, invalid_arguments}, St).
++genesis_anchor(Goal, _Next, St) -> erlog_int:domain_error(ontology_anchor_query,Goal,St).
+ 
+ match_genesis_anchor(Expected, RawAnchor, Next, St) ->
+     case erlog_int:deref(Expected, St#est.bs) of
+@@ -296,8 +277,7 @@
+                 {ok, RawAnchor} -> erlog_int:prove_body(Next, St);
+                 {ok, _OtherAnchor} -> erlog_int:fail(St);
+                 error ->
+-                    fail_reason(
+-                      {ontology_anchor_failed, invalid_genesis_hash}, St)
++                    erlog_int:domain_error(genesis_anchor,Value,St)
+             end
+     end.
+ 
+@@ -327,6 +307,3 @@
+         _ -> error
+     catch _:_ -> error
+     end.
+-
+-fail_reason(Reason, St) ->
+-    erlog_int:prove_body([{fail_with_reason, Reason}], St).
+--- a/src/predicates/quod_physics_predicates.erl
++++ b/src/predicates/quod_physics_predicates.erl
+@@ -1,4 +1,5 @@
+ -module(quod_physics_predicates).
++-import(quod_predicates, [fail_reason/2]).
+ -moduledoc "Governed live body queries and signed sample custody for physics.".
+ -include_lib("erlog/src/erlog_int.hrl").
+ -export([quod_predicate_module/0, load/1, physics_observation/3, signed_physics_request/3, current_signed_request/3]).
+@@ -29,45 +30,76 @@
+ live_query(Action0, Result, Next, St = #est{bs = Bs,vn = Vn}) ->
+     Action = erlog_int:dderef(Action0,Bs),
+     W = element(2,Action), B = element(3,Action),
+-    case {quod_proof_session:read_only_state(St), quod_runtime_predicates:scope_identity(St)} of
+-        {true, {ok, {Ns, Anchor}}} when is_integer(B), B >= 0 ->
+-            case quod_wire_term:is_ground(Action) of
++    case quod_wire_term:is_ground(Action) of
++        false -> erlog_int:instantiation_error(St);
++        true when not is_integer(B); B < 0 -> erlog_int:type_error(body_id,B,St);
++        true ->
++            case quod_proof_session:read_only_state(St) of
++                false -> erlog_int:erlog_error(
++                    {context_violation,element(1,Action),query,write_proof},St);
+                 true ->
+-                    {Handle, Bound} = quod_erlog_db_local_prove:register_action_request(
+-                        St, Action, {Ns, Anchor, W, B}),
+-                    {Policy,Limits} = case Action of
+-                        {physics_body_state,W,B} ->
+-                            {{physics_body_read_projection,W,B,{Vn},{Vn+1}},none};
+-                        {physics_motion_query,W,B,Q} ->
+-                            {{physics_motion_read_projection,W,B,Q,{Vn},{Vn+1},{Vn+2}},{Vn+2}}
+-                    end,
+-                    erlog_int:prove_body([Policy,
+-                        {'$quod_sample_physics',Handle,Action,{Vn},{Vn+1},Limits,Result} | Next],
+-                        Bound#est{vn = Vn+3});
+-                false -> erlog_int:fail(St)
+-            end;
+-        _ -> erlog_int:fail(St)
++                    case quod_runtime_predicates:scope_identity(St) of
++                        error -> fail_reason({scope_identity_unavailable,W},St);
++                        {ok,{Ns,Anchor}} ->
++                            {Handle,Bound} = quod_erlog_db_local_prove:register_action_request(
++                                St,Action,{Ns,Anchor,W,B}),
++                            {Policy,Limits} = case Action of
++                                {physics_body_state,W,B} ->
++                                    {{physics_body_read_projection,W,B,{Vn},{Vn+1}},none};
++                                {physics_motion_query,W,B,Q} ->
++                                    {{physics_motion_read_projection,W,B,Q,{Vn},{Vn+1},{Vn+2}},{Vn+2}}
++                            end,
++                            erlog_int:prove_body([Policy,
++                                {'$quod_sample_physics',Handle,Action,{Vn},{Vn+1},Limits,Result}|Next],
++                                Bound#est{vn = Vn+3})
++                    end
++            end
+     end.
+ 
+ sample_physics({'$quod_sample_physics', H0, A0, F0, R0, L0, Result}, Next, St = #est{bs = Bs}) ->
+     [Handle,Action,Frame,Revision,Limits] = erlog_int:dderef([H0,A0,F0,R0,L0],Bs),
+-    case {Frame,quod_erlog_db_local_prove:action_request(St,Handle,Action)} of
+-        {{physics_frame,World = {world_ref,Ns,Anchor,W},Authority,Epoch,Generation,Token,Structure},
+-         {ok,{Ns,Anchor,W,Body}}} ->
+-            Remaining = case quod_scope_session:remaining_ms() of
+-                {ok,Ms} -> Ms;
+-                error -> quod_proof_context:remaining_ms()
++    case quod_erlog_db_local_prove:action_request(St,Handle,Action) of
++        error -> erlog_int:domain_error(physics_request_handle,Handle,St);
++        {ok,{Ns,Anchor,W,Body}} ->
++            case quod_wire_term:is_ground(Frame) of
++                true -> ok;
++                false -> erlog_int:domain_error(physics_frame,Frame,St)
+             end,
+-            Expected = #{fence => {World,Authority,Epoch,Generation},
+-                         incarnation => Token,structure => Structure},
+-            Value = case {quod_reg:where({physics_world,World}),Remaining} of
+-                {Pid,Timeout} when is_pid(Pid), Timeout > 0 ->
+-                    try read_physics(Pid,Expected,{Body,Revision},Action,Limits,Timeout,Frame)
+-                    catch exit:_ -> unavailable end;
+-                _ -> unavailable
++            case is_integer(Revision) andalso Revision > 0 of
++                true -> ok;
++                false -> erlog_int:domain_error(physics_body_revision,Revision,St)
+             end,
+-            erlog_int:unify_prove_body(Result,Value,Next,St);
+-        _ -> erlog_int:fail(St)
++            case Frame of
++                {physics_frame,World = {world_ref,Ns,Anchor,W},Authority = {agent_instance_ref,Ns,Anchor,_},
++                 Epoch,Generation,Token,Structure}
++                  when is_integer(Epoch),Epoch > 0,is_integer(Generation),Generation > 0,
++                       is_binary(Token),byte_size(Token) =:= 32,is_integer(Structure),Structure > 0 ->
++                    case (Limits =:= none andalso element(1,Action) =:= physics_body_state)
++                         orelse valid_limits(Limits) of
++                        true -> ok;
++                        false -> erlog_int:domain_error(physics_limits,Limits,St)
++                    end,
++                    Remaining = case quod_scope_session:remaining_ms() of
++                        {ok,Ms} -> Ms;
++                        error -> quod_proof_context:remaining_ms()
++                    end,
++                    Expected = #{fence => {World,Authority,Epoch,Generation},
++                                 incarnation => Token,structure => Structure},
++                    case quod_reg:where({physics_world,World}) of
++                        undefined -> fail_reason({physics_world_unavailable,W},St);
++                        _Pid when Remaining =< 0 -> fail_reason(expired,St);
++                        Pid ->
++                            Sample = try
++                                {ok,read_physics(Pid,Expected,{Body,Revision},Action,Limits,Remaining,Frame)}
++                            catch exit:_ -> {error,physics_owner_unavailable} end,
++                            case Sample of
++                                {ok,Value} -> erlog_int:unify_prove_body(Result,Value,Next,St);
++                                {error,Reason} -> fail_reason({Reason,W},St)
++                            end
++                    end;
++                _ -> erlog_int:domain_error(physics_frame,Frame,St)
++            end;
++        {ok,_} -> erlog_int:domain_error(physics_request_handle,Handle,St)
+     end.
+ 
+ read_physics(Pid, Expected, Body, {physics_body_state,_,_}, none, Timeout, Frame) ->
+@@ -93,41 +125,75 @@
+ 
+ physics_control_input({physics_control_input,W,F,E,S,I,Result},Next,St = #est{bs = Bs,vn = Vn}) ->
+     Action = erlog_int:dderef({physics_control_input,W,F,E,S,I},Bs),
+-    case {quod_wire_term:is_ground(Action),quod_runtime_predicates:scope_identity(St)} of
+-        {true,{ok,{Ns,Anchor}}} ->
+-            {Handle,Bound} = quod_erlog_db_local_prove:register_action_request(St,Action,{Ns,Anchor}),
+-            {physics_control_input,World,Frame,Epoch,Sequence,Input} = Action,
+-            erlog_int:prove_body([
+-                {physics_input_projection,World,Frame,Epoch,Sequence,Input,{Vn},{Vn+1},{Vn+2}},
+-                {'$quod_stage_physics_input',Handle,Action,{Vn},{Vn+1},{Vn+2},Result}|Next],
+-                Bound#est{vn = Vn+3});
+-        _ -> erlog_int:fail(St)
++    case quod_wire_term:is_ground(Action) of
++        false -> erlog_int:instantiation_error(St);
++        true ->
++            ok = quod_erlog_db_local_prove:require_transient_context(St),
++            case quod_runtime_predicates:scope_identity(St) of
++                error -> fail_reason({scope_identity_unavailable,element(2,Action)},St);
++                {ok,{Ns,Anchor}} ->
++                    {Handle,Bound} = quod_erlog_db_local_prove:register_action_request(St,Action,{Ns,Anchor}),
++                    {physics_control_input,World,Frame,Epoch,Sequence,Input} = Action,
++                    erlog_int:prove_body([
++                        {physics_input_projection,World,Frame,Epoch,Sequence,Input,{Vn},{Vn+1},{Vn+2}},
++                        {'$quod_stage_physics_input',Handle,Action,{Vn},{Vn+1},{Vn+2},Result}|Next],
++                        Bound#est{vn = Vn+3})
++            end
+     end.
+ 
+ stage_input({'$quod_stage_physics_input',H0,A0,C0,L0,Q0,Result},Next,St = #est{bs = Bs}) ->
+     [Handle,Action,Control,Lease,Limits] = erlog_int:dderef([H0,A0,C0,L0,Q0],Bs),
+-    case {Action,quod_erlog_db_local_prove:action_request(St,Handle,Action)} of
+-        {{physics_control_input,W,{control_frame,{physics_frame,World = {world_ref,Ns,Anchor,W},
+-              Authority,Epoch,Generation,Token,Structure},Registration},_,Seq,Input},{ok,{Ns,Anchor}}}
+-          when is_integer(Lease),Lease > 0 ->
+-            Expiry = case quod_scope_session:request_expiry() of
+-                error -> quod_proof_context:request_expiry();
+-                Value -> Value
+-            end,
+-            Expected = #{fence => {World,Authority,Epoch,Generation},incarnation => Token,
+-                         structure => Structure,registration => Registration},
+-            case {quod_reg:where({physics_world,World}),Expiry} of
+-                {Pid,{ok,E1}} when is_pid(Pid),is_integer(E1) ->
+-                    Effect = {physics_input,Pid,Expected,Control,Seq,{Input,Limits},
+-                              min(E1,quod_time:now_ms()+Lease)},
+-                    case quod_erlog_db_local_prove:stage_transient(St,Effect) of
+-                        {ok,Staged} -> erlog_int:unify_prove_body(Result,{queued,Seq},Next,Staged);
+-                        error -> erlog_int:fail(St)
++    case quod_erlog_db_local_prove:action_request(St,Handle,Action) of
++        {ok,{Ns,Anchor}} ->
++            ok = quod_erlog_db_local_prove:require_transient_context(St),
++            case Action of
++                {physics_control_input,W,{control_frame,
++                    {physics_frame,World = {world_ref,Ns,Anchor,W},Authority = {agent_instance_ref,Ns,Anchor,_},
++                     Epoch,Generation,Token,Structure},Registration},_,Seq,Input}
++                  when is_integer(Epoch),Epoch > 0,is_integer(Generation),Generation > 0,
++                       is_binary(Token),byte_size(Token) =:= 32,is_integer(Structure),Structure > 0 ->
++                    case is_integer(Lease) andalso Lease > 0 of
++                        false -> erlog_int:domain_error(physics_lease,Lease,St);
++                        true ->
++                            case valid_limits(Limits) of
++                                true -> ok;
++                                false -> erlog_int:domain_error(physics_limits,Limits,St)
++                            end,
++                            Expiry = case quod_scope_session:request_expiry() of
++                                error -> quod_proof_context:request_expiry();
++                                Value -> Value
++                            end,
++                            Expected = #{fence => {World,Authority,Epoch,Generation},incarnation => Token,
++                                         structure => Structure,registration => Registration},
++                            case Expiry of
++                                {ok,E1} when is_integer(E1) ->
++                                    case quod_reg:where({physics_world,World}) of
++                                        undefined -> fail_reason({physics_world_unavailable,W},St);
++                                        Pid ->
++                                            Effect = {physics_input,Pid,Expected,Control,Seq,{Input,Limits},
++                                                      min(E1,quod_time:now_ms()+Lease)},
++                                            case quod_erlog_db_local_prove:stage_transient(St,Effect) of
++                                                {ok,Staged} -> erlog_int:unify_prove_body(Result,{queued,Seq},Next,Staged);
++                                                {error,Reason} -> fail_reason(Reason,St)
++                                            end
++                                    end;
++                                _ -> erlog_int:erlog_error(
++                                    {context_violation,physics_control_input,staging,unsigned},St)
++                            end
+                     end;
+-                _ -> erlog_int:fail(St)
++                _ -> erlog_int:domain_error(physics_frame,Action,St)
+             end;
+-        _ -> erlog_int:fail(St)
+-    end.
++        _ -> erlog_int:domain_error(physics_request_handle,Handle,St)
++    end.
++
++valid_limits({query_limits,Skin,Tolerance,Slides,Checks}) ->
++    is_integer(Skin) andalso Skin > 0 andalso is_integer(Tolerance)
++    andalso Tolerance >= 0 andalso Tolerance < Skin
++    andalso is_integer(Slides) andalso Slides > 0 andalso is_integer(Checks) andalso Checks > 0;
++valid_limits({push_limits,Body,Revision,Impulse,Speed}) ->
++    is_integer(Body) andalso Body >= 0 andalso is_integer(Revision) andalso Revision > 0
++    andalso is_integer(Impulse) andalso Impulse > 0 andalso is_integer(Speed) andalso Speed > 0;
++valid_limits(_) -> false.
+ 
+ current_signed_request({current_signed_request, Bytes, Signature}, Next, St) ->
+     Binding = case quod_scope_session:request_binding() of
+@@ -143,7 +209,10 @@
+ 
+ signed_physics_request({signed_physics_request, Goal0, B0, S0}, Next, St = #est{bs = Bs}) ->
+     [Goal, B, S] = erlog_int:dderef([Goal0, B0, S0], Bs),
+-    {ok, GoalBlob} = quod_durable_term:encode_goal(Goal),
++    GoalBlob = case quod_durable_term:encode_goal(Goal) of
++        {ok, Encoded} -> Encoded;
++        {error, _} -> erlog_int:domain_error(signed_goal, Goal, St)
++    end,
+     case {quod_runtime_predicates:scope_identity(St), quod_client_goal:verify(B, S)} of
+         {{ok, {Ns, Anchor}}, {ok, #{request := #{agent_namespace := Ns,
+              agent_genesis_anchor := Anchor, mode := execute}, goal_blob := GoalBlob}}} ->
+--- a/src/predicates/quod_runtime_predicates.erl
++++ b/src/predicates/quod_runtime_predicates.erl
+@@ -62,7 +62,7 @@
+     case scope_identity(St) of
+         {ok, {Ns, Hash}} ->
+             erlog_int:unify_prove_body([Namespace, Anchor], [Ns, Hash], Next, St);
+-        error -> erlog_int:fail(St)
++        error -> quod_predicates:fail_reason(scope_identity_unavailable,St)
+     end.
+ 
+ scope_identity(St) ->
+@@ -110,6 +110,7 @@
+                            St, {committed_operation_outcome, 3}),
+                     throw({erlog_error, {operation_outcome_unavailable, Unavailable}})
+             end;
++        {error,_} -> quod_predicates:fail_reason(scope_identity_unavailable,St);
+         _ -> erlog_int:fail(St)
+     end.
+ 
+@@ -136,9 +137,14 @@
+ limit_reaction_expiry({limit_reaction_expiry, Expiry0}, Next, St = #est{bs = Bs}) ->
+     Expiry = erlog_int:dderef(Expiry0, Bs),
+     case reaction_metadata(St) of
+-        {ok, #{ceiling := Upper, expiry_variable := Variable}}
+-          when is_integer(Expiry), Expiry > 0, Expiry =< Upper ->
+-            erlog_int:unify_prove_body(Variable, Expiry, Next, St);
++        {ok,#{ceiling := Upper,expiry_variable := Variable}} ->
++            case Expiry of
++                {_} -> erlog_int:instantiation_error(St);
++                _ when not is_integer(Expiry) -> erlog_int:type_error(integer,Expiry,St);
++                _ when Expiry =< 0 -> erlog_int:domain_error(request_expiry,Expiry,St);
++                _ when Expiry > Upper -> erlog_int:fail(St);
++                _ -> erlog_int:unify_prove_body(Variable,Expiry,Next,St)
++            end;
+         _ -> erlog_int:fail(St)
+     end.
+ 
+@@ -155,15 +161,23 @@
+ prepare_agent_custody({prepare_agent_custody, Target0, Epoch0, Result0}, Next,
+                       St = #est{bs = Bs}) ->
+     [Target, Epoch, Result] = erlog_int:dderef([Target0, Epoch0, Result0], Bs),
+-    case {reaction_metadata(St), Target, quod_wire_term:is_ground(Target), Result} of
+-        {{ok, #{mode := {node, Observer, execute},
+-                recovery := #{target := Target, epoch := Epoch, observer := Observer},
+-                preparation_variable := Variable}},
+-         {agent_instance_ref, Ns, <<_:256>>, _}, true, {_}}
+-          when is_binary(Ns), byte_size(Ns) > 0,
+-               is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64) ->
+-            Preparation = {custody, Target, Epoch, Result},
+-            erlog_int:unify_prove_body(Variable, Preparation, Next, St);
++    case reaction_metadata(St) of
++        {ok,#{mode := {node,Observer,execute},recovery := Recovery,
++               preparation_variable := Variable}} ->
++            case quod_wire_term:is_ground([Target,Epoch]) of
++                true -> ok;
++                false -> erlog_int:instantiation_error(St)
++            end,
++            case {Target,Epoch,Result} of
++                {{agent_instance_ref,Ns,<<_:256>>,_},E,{_}}
++                  when is_binary(Ns),byte_size(Ns) > 0,is_integer(E),E > 0,E < (1 bsl 64) ->
++                    case Recovery of
++                        #{target := Target,epoch := Epoch,observer := Observer} ->
++                            erlog_int:unify_prove_body(Variable,{custody,Target,Epoch,Result},Next,St);
++                        _ -> erlog_int:fail(St)
++                    end;
++                _ -> erlog_int:domain_error(agent_custody,{Target,Epoch,Result},St)
++            end;
+         _ -> erlog_int:fail(St)
+     end.
+ 
+@@ -171,9 +185,12 @@
+ %% candidates and backtracking cannot leak a custody preparation.
+ prepare_signed_request({prepare_signed_request, Bytes, Signature, Template}, Next, St = #est{bs = Bs}) ->
+     [B,S,T] = erlog_int:dderef([Bytes,Signature,Template], Bs),
+-    case {reaction_metadata(St), quod_agent:valid_signed_preparation(B,S,T)} of
+-        {{ok, #{physics := _, preparation_variable := Variable}}, true} ->
+-            erlog_int:unify_prove_body(Variable, {signed_store,B,S,T}, Next, St);
++    case reaction_metadata(St) of
++        {ok,#{physics := _,preparation_variable := Variable}} ->
++            case quod_agent:valid_signed_preparation(B,S,T) of
++                true -> erlog_int:unify_prove_body(Variable,{signed_store,B,S,T},Next,St);
++                false -> erlog_int:domain_error(signed_preparation,T,St)
++            end;
+         _ -> erlog_int:fail(St)
+     end.
+ 
+@@ -272,12 +289,12 @@
+                    erlog_int:deref(Variable, Bs), erlog_int:dderef(Goal, Bs)) of
+                 true -> erlog_int:unify_prove_body(
+                           Result, {request, Goal, Expiry, Preparation}, Next, St);
+-                false -> erlog_int:fail(St)
++                false -> erlog_int:domain_error(preparation_goal,erlog_int:dderef(Goal,Bs),St)
+             end;
+         {signed_store,B,S,T} ->
+             case quod_agent:valid_signed_preparation(B,S,T) andalso quod_wire_term:is_ground(erlog_int:dderef(Goal,Bs)) of
+                 true -> erlog_int:unify_prove_body(Result, {request,Goal,Expiry,Preparation}, Next, St);
+-                false -> erlog_int:fail(St)
++                false -> erlog_int:domain_error(preparation_goal,erlog_int:dderef(Goal,Bs),St)
+             end;
+         %% A private physics request asks for a custodied consequence. An
+         %% unrelated generic observed(_) clause cannot consume that request.
+@@ -315,5 +332,5 @@
+                 {error, Reason} ->
+                     throw({erlog_error, {resource_reconciliation_failed, Kind, Reason}})
+             end;
+-        false -> erlog_int:fail(St)
+-    end.
++        false -> erlog_int:instantiation_error(St)
++    end.
+--- a/src/predicates/quod_transaction_predicates.erl
++++ b/src/predicates/quod_transaction_predicates.erl
+@@ -50,7 +50,10 @@
+                       {permission_error, modify, trigger_event}, St)
+             end;
+         false ->
+-            erlog_int:fail(St)
++            case quod_wire_term:is_ground(Term) of
++                false -> erlog_int:instantiation_error(St);
++                true -> erlog_int:domain_error(event,Term,St)
++            end
+     end.
+ 
+ -spec transaction_1(term(), list(), tuple()) -> term().
+--- a/src/quod_effect.erl
++++ b/src/quod_effect.erl
+@@ -31,7 +31,8 @@
+ release_transient(none,_) -> ok;
+ release_transient({physics_input,Pid,Expected,Control,Sequence,Input,Expiry},Deadline) ->
+     try quod_physics:input(Pid,Expected,Control,Sequence,Input,Expiry,Deadline)
+-    catch exit:_ -> {error,transient_unavailable} end.
++    %% A lost reply does not prove the owner rejected the action.
++    catch exit:_ -> {unknown,owner_unavailable} end.
+ 
+ -type identity() :: {binary(), <<_:256>>}.
+ -type actor() :: {node, <<_:256>>} | {agent, binary()}.
+--- a/src/quod_erlog_db_local_prove.erl
++++ b/src/quod_erlog_db_local_prove.erl
+@@ -45,7 +45,7 @@
+          staged_desired_state/2,
+          cleanup_read_set/1]).
+ -export_type([access_guard/0, revision/0, checkpoint/0, read_only_frame/0]).
+--export([stage_transient/2, transient/1, transient_root/1]).
++-export([require_transient_context/1, stage_transient/2, transient/1, transient_root/1]).
+ 
+ -type access_guard() ::
+         unguarded |
+@@ -237,15 +237,33 @@
+ 
+ %% A control proof stages one indivisible owner operation. It cannot stage
+ %% durable changes or split an atomic promise across independent live owners.
+-stage_transient(#est{db = #db{mod = ?MODULE,ref = #lp{
++require_transient_context(#est{db = #db{mod = ?MODULE,ref = #lp{
+         transient_allowed = true,signed_request = true,read_only = true,
+-        transient = none,write_intent = ordinary} = Ov} = Db} = St, Effect) ->
+-    ensure_access(Ov),
+-    case quod_effect:valid_transient(Effect) of
+-        true -> {ok,St#est{db = Db#db{ref = Ov#lp{transient = Effect}}}};
+-        false -> error
+-    end;
+-stage_transient(_,_) -> error.
++        write_intent = ordinary} = Ov}}) ->
++    ensure_access(Ov), ok;
++require_transient_context(#est{db = #db{mod = ?MODULE,ref = #lp{} = Ov}} = St) ->
++    ensure_access(Ov),
++    Mode = case {Ov#lp.transient_allowed,Ov#lp.signed_request,Ov#lp.read_only} of
++        {_,false,_} -> unsigned;
++        {false,_,_} -> non_control;
++        {_,_,false} -> write_proof;
++        _ -> Ov#lp.write_intent
++    end,
++    erlog_int:erlog_error({context_violation,physics_control_input,staging,Mode},St);
++require_transient_context(St) ->
++    erlog_int:erlog_error({context_violation,physics_control_input,staging,unmanaged},St).
++
++stage_transient(St,Effect) ->
++    ok = require_transient_context(St),
++    #est{db = #db{ref = Ov} = Db} = St,
++    case Ov#lp.transient of
++        none ->
++            case quod_effect:valid_transient(Effect) of
++                true -> {ok,St#est{db = Db#db{ref = Ov#lp{transient = Effect}}}};
++                false -> erlog_int:domain_error(transient_effect,Effect,St)
++            end;
++        _ -> {error,transient_already_staged}
++    end.
+ 
+ transient(#est{db = #db{mod = ?MODULE,ref = Ov}}) ->
+     ensure_access(Ov), Ov#lp.transient.
+--- a/src/quod_physics.erl
++++ b/src/quod_physics.erl
+@@ -26,7 +26,7 @@
+     case min(Deadline-quod_time:mono_ms(),Expiry-quod_time:now_ms()) of
+         Remaining when Remaining > 0 ->
+             gen_server:call(Pid,{physics_input,Expected,Control,Sequence,Input,Expiry,Deadline},Remaining);
+-        _ -> {error,transient_expired}
++        _ -> {error,expired}
+     end.
+ watch(Pid, Expected) -> gen_server:call(Pid, {watch, Expected}).
+ unwatch(Pid, Ref) -> Pid ! {physics_unwatch, self(), Ref}, ok.
+@@ -54,6 +54,7 @@
+         _ -> false
+     end,
+     case NeedsNavigation andalso not navigation_current(S) of
++        true when element(1,Request) =:= physics_input -> {reply,{error,reinstalling},S};
+         true -> {reply,{error,unavailable},S};
+         false -> handle_current_call(Request,From,S)
+     end.
+@@ -107,19 +108,26 @@
+ handle_current_call({physics_input,Expected,Control = {control,Principal,_,_},Sequence,Input,Expiry,Deadline},_,
+             S = #s{phase = active,frame = Frame,inputs = Inputs}) ->
+     Previous = maps:get(Principal,Inputs,#{sequence => -1}),
+-    case current_projection(Frame,Expected) andalso current_control(Expected#{control => Control},S#s.spec)
+-         andalso Expiry > quod_time:now_ms() andalso Sequence > maps:get(sequence,Previous)
+-         andalso Deadline > quod_time:mono_ms()
+-         andalso current_registration(Control,Expected,S#s.viewer) andalso not pending_discrete(Previous)
+-         andalso installed_input(Control,Input,S#s.spec) of
+-        true ->
++    Retained = maps:get(sequence,Previous),
++    Checks = [
++        {current_projection(Frame,Expected),{stale_projection,maps:get(structure,Frame)}},
++        {current_control(Expected#{control => Control},S#s.spec) andalso
++         installed_input(Control,Input,S#s.spec),control_not_installed},
++        {current_registration(Control,Expected,S#s.viewer),stale_registration},
++        {Sequence > Retained,{stale_sequence,Retained}},
++        {not pending_discrete(Previous),discrete_pending},
++        {Expiry > quod_time:now_ms() andalso Deadline > quod_time:mono_ms(),expired}],
++    case lists:dropwhile(fun({Accepted,_}) -> Accepted end,Checks) of
++        [] ->
+             Row = #{control => Control,expected => Expected,sequence => Sequence,input => Input,expiry => Expiry,
+                     vertical => maps:get(vertical,Previous,0.0),falling => maps:get(falling,Previous,true),
+                     pending => true,result => queued},
+             Updated = S#s{inputs = Inputs#{Principal => Row}},
+             {reply,ok,schedule({true,[],[]},Updated)};
+-        false -> {reply,{error,transient_unavailable},S}
++        [{false,Reason}|_] -> {reply,{error,Reason},S}
+     end;
++handle_current_call({physics_input,_,_,_,_,_,_},_,S) ->
++    {reply,{error,physics_world_unavailable},S};
+ handle_current_call(status, _From, S) ->
+     {reply, (counters(S))#{phase => S#s.phase, incarnation => S#s.token,navigation_ready => navigation_current(S),
+         inputs => maps:map(fun(_,R) -> maps:with([sequence,result],R) end,S#s.inputs),
+--- a/src/quod_predicates.erl
++++ b/src/quod_predicates.erl
+@@ -35,7 +35,7 @@
+    Governed predicates register through `load/1`, which routes them via
+    `dispatch/3`. Before delegating to the real handler, `dispatch/3` checks the
+    predicate's class against the running context's *kind* and **fails closed**:
+-   a wrong-context call throws a distinct `{context_violation, …}` error rather
++   missing registration in a managed engine or a wrong-context call throws a distinct `{context_violation, …}` error rather
+    than silently succeeding.
+ 
+    Queries also declare whether they use proof-bound context, committed snapshot
+@@ -71,7 +71,7 @@
+ -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
+          with_chain/2, with_executor/2, ctx_executor/1]).
+ %% class metadata (also drives dispatch)
+--export([class/2, allowed/2]).
++-export([class/2, allowed/2, fail_reason/2]).
+ 
+ -define(CTX_FLAG, '$quod_ctx').
+ -define(REGISTRY_FLAG, '$quod_predicate_registry').
+@@ -95,6 +95,10 @@
+ -type dependency() :: none | proof_bound | committed_snapshot | live_observation.
+ -type ctx()   :: #qctx{} | undefined.
+ -export_type([kind/0, class/0, ctx/0]).
++
++-doc "Record a portable refusal reason and fail through ordinary Prolog backtracking.".
++fail_reason(Reason, St) ->
++    erlog_int:prove_body([{fail_with_reason, Reason}], St).
+ 
+ %%%===================================================================
+ %%% registration + dispatch
+@@ -350,7 +354,8 @@
+         Ctx ->
+             Functor = functor(Goal),
+             case descriptor(St, Functor) of
+-                undefined -> erlog_int:fail(St);
++                undefined -> erlog_int:erlog_error(
++                    {context_violation,Functor,unregistered,ctx_kind(Ctx)},St);
+                 {Class, Dependency, Mod, Fun} ->
+                     case allowed(Class, ctx_kind(Ctx)) of
+                         true  ->
+--- a/src/quod_prolog.erl
++++ b/src/quod_prolog.erl
+@@ -4413,7 +4413,8 @@
+                 {ok,_,_,_} = Finished ->
+                     case quod_effect:release_transient(Effect,Deadline) of
+                         ok -> Finished;
+-                        {error,_} = Error -> Error
++                        {error,Reason} -> {fail,[Reason]};
++                        {unknown,Reason} -> {error,Reason}
+                     end;
+                 Other -> Other
+             end;
+--- a/client/test/simulation.test.js
++++ b/client/test/simulation.test.js
+@@ -181,7 +181,7 @@
+     receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
+   }
+   const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {},
+-    unavailable: s => statuses.push(s), refused: s => refusals.push(s) }, {
++    unavailable: s => statuses.push(s), refused: (s, reasons) => refusals.push([s, reasons]) }, {
+     WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32) },
+     post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
+   })
+@@ -238,16 +238,26 @@
+       control_state: { sequence: '10', pending: false, result: 'clear' } }, freshView))
+     const refused = recovered.command(input)
+     await Promise.resolve()
+-    settle.resolve({ result: 'fail' })
++    settle.resolve({ result: 'fail', reasons: ['stale_sequence(10)'] })
+     assert.equal(await refused, false)
+     assert.deepEqual(statuses, ['lost response'], 'a definite proof refusal keeps the current view available')
+-    assert.deepEqual(refusals, ['Movement was refused.'])
++    assert.deepEqual(refusals, [['Movement was refused.', ['stale_sequence(10)']]])
+     const following = recovered.command(input)
+     await Promise.resolve()
+     assert.equal(posts.length, 5, 'a refused discrete command does not wait for feedback that cannot arrive')
+     assert.match(Buffer.from(posts[4].body.request, 'base64url').toString(), /,2,12,(?:snap|push)\(/)
+     settle.resolve({ result: 'ok' })
+     assert.equal(await following, true)
++    socket.receive(motion({ ...frame, tick: '3', registration: Buffer.alloc(32, 2).toString('base64url'),
++      control_state: { sequence: '12', pending: false, result: 'clear' } }, freshView))
++    const uncertain = recovered.command(input)
++    await Promise.resolve()
++    settle.resolve({ result: 'error', error: 'owner_unavailable' })
++    assert.equal(await uncertain, false)
++    assert.match(statuses.at(-1), /outcome unavailable/)
++    const count = posts.length
++    assert.equal(await recovered.command(input), false)
++    assert.equal(posts.length, count, 'an error suspends commands without resubmission')
+   } finally { stream.close(); recovered?.close() }
+ })
+ }
+--- a/test/quod_common_primitives_tests.erl
++++ b/test/quod_common_primitives_tests.erl
+@@ -22,18 +22,18 @@
+     ?assertEqual(<<0, 255>>, value({'B'}, {binary_codes, {'B'}, [0, 255]}, St)),
+     ?assertMatch({succeed, _},
+                  erlog_int:prove_goal({binary_codes, <<"Ug">>, [$U, $g]}, St)),
+-    lists:foreach(
+-      fun(Goal) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)) end,
+-      [{binary_codes, <<"Ug">>, [$U]},
+-       {binary_codes, ug, {'C'}},
+-       {binary_codes, 42, {'C'}},
+-       {binary_codes, [$U], {'C'}},
+-       {binary_codes, {'B'}, [300]},
+-       {binary_codes, {'B'}, [-1]},
+-       {binary_codes, {'B'}, [a]},
+-       {binary_codes, {'B'}, foo},
+-       {binary_codes, {'B'}, [$U | {'T'}]},
+-       {binary_codes, {'B'}, {'C'}}]).
++    ?assertMatch({fail,_},erlog_int:prove_goal({binary_codes,<<"Ug">>,[$U]},St)),
++    lists:foreach(fun({Goal,Error}) ->
++        ?assertMatch({erlog_error,Error,_},catch erlog_int:prove_goal(Goal,St))
++    end,[{{binary_codes,ug,{'C'}},{type_error,binary,ug}},
++         {{binary_codes,42,{'C'}},{type_error,binary,42}},
++         {{binary_codes,[$U],{'C'}},{type_error,binary,[$U]}},
++         {{binary_codes,{'B'},[300]},{domain_error,byte_list,[300]}},
++         {{binary_codes,{'B'},[-1]},{domain_error,byte_list,[-1]}},
++         {{binary_codes,{'B'},[a]},{domain_error,byte_list,[a]}},
++         {{binary_codes,{'B'},foo},{type_error,list,foo}},
++         {{binary_codes,{'B'},[$U|{'T'}]},instantiation_error},
++         {{binary_codes,{'B'},{'C'}},instantiation_error}]).
+ 
+ authored_clauses_hide_followers_and_preserve_scope_test() ->
+     with_authored([{choice, first}, {choice, second}], fun(St) ->
+@@ -299,23 +299,20 @@
+                                   {proof_draw, salt, 10, {'I'}}, bare()))
+     end).
+ 
+-invalid_inputs_fail_plainly_test() ->
++invalid_inputs_are_errors_test() ->
+     ProofId = crypto:strong_rand_bytes(32),
+     Scope = {scope, ProofId, self(), make_ref(), <<1:128>>},
+     with_committed(fun(Committed) ->
+-        lists:foreach(
+-          fun(Goal) ->
+-                  ?assertEqual(fail, quod_ct:session_prove(
+-                                       Committed, Scope, proof_ctx(), Goal))
+-          end,
+-          [{?DRAW, salt, 0, {'I'}},
+-           {?DRAW, salt, -3, {'I'}},
+-           {?DRAW, salt, ten, {'I'}},
+-           {?DRAW, salt, {'N'}, {'I'}},
+-           {?DRAW, {'Salt'}, 10, {'I'}},
+-           {?DRAW, {f, {'X'}}, 10, {'I'}},
+-           {?DRAW, [a | {'T'}], 10, {'I'}},
+-           {?DRAW, salt, 10, 99}]),
++        lists:foreach(fun({Goal,Error}) ->
++            ?assertMatch({error,{erlog,Error}},quod_ct:session_prove(Committed,Scope,proof_ctx(),Goal))
++        end,[{{?DRAW,salt,0,{'I'}},{domain_error,proof_draw_divisor,0}},
++             {{?DRAW,salt,-3,{'I'}},{domain_error,proof_draw_divisor,-3}},
++             {{?DRAW,salt,ten,{'I'}},{type_error,integer,ten}},
++             {{?DRAW,salt,{'N'},{'I'}},instantiation_error},
++             {{?DRAW,{'Salt'},10,{'I'}},instantiation_error},
++             {{?DRAW,{f,{'X'}},10,{'I'}},instantiation_error},
++             {{?DRAW,[a|{'T'}],10,{'I'}},instantiation_error}]),
++        ?assertEqual(fail,quod_ct:session_prove(Committed,Scope,proof_ctx(),{?DRAW,salt,10,99})),
+         %% A ground compound salt, and a bound I that matches, succeed.
+         I = draw(Committed, Scope, {f, [1, <<"b">>, c]}, 10),
+         ?assertMatch({ok, _}, quod_ct:session_prove(
+--- a/test/quod_directory_predicates_tests.erl
++++ b/test/quod_directory_predicates_tests.erl
+@@ -25,8 +25,8 @@
+     {fail, _} = erlog:prove(
+                   {directory_control_peer, BadShort}, Erl0),
+     %% The execution namespace, not the caller process, is the boundary.
+-    {fail, _} = erlog:prove(
+-                  Goal, proof_erlog(<<"private:body">>, Facts)).
++    ?assertMatch({{error,{context_violation,directory_control_peer,query,non_root}},_},
++        erlog:prove(Goal,proof_erlog(<<"private:body">>,Facts))).
+ 
+ directory_control_peer_tracks_membership_snapshots_test() ->
+     K1 = key(11),
+@@ -95,12 +95,12 @@
+           {ok, _} = quod_ct:install_directory_generation(
+                  Key, {<<"node">>, 4003},
+                  [{Ns, anchor(3), validator}], 1, 1),
+-          {fail, _} = erlog:prove(
++          ?assertMatch({{error,{context_violation,directory_host,query,non_root}},_},erlog:prove(
+                         {directory_host, Ns, {'A'}, {'K'}, {'H'}, {'P'}},
+-                        proof_erlog(<<"private:body">>)),
+-          {fail, _} = erlog:prove(
++                        proof_erlog(<<"private:body">>))),
++          ?assertMatch({{error,instantiation_error},_},erlog:prove(
+                         {directory_host, {'Ns'}, {'A'}, {'K'}, {'H'}, {'P'}},
+-                        proof_erlog(<<"quod:root">>))
++                        proof_erlog(<<"quod:root">>)))
+       end).
+ 
+ private_projection_is_not_visible_to_predicate_test() ->
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -252,7 +252,7 @@
+ 
+ node_enrollment_crash_custody_test_() ->
+     [{atom_to_list(Stage), {timeout, 60, fun() -> enrollment_crash_custody(Stage) end}}
+-     || Stage <- [before_send, after_commit, after_allocation, known_refusal,
++     || Stage <- [before_send, after_commit, after_allocation, known_refusal, malformed_template,
+                   admission_refusal, auth_restart]].
+ 
+ enrollment_crash_custody(Stage) ->
+@@ -271,7 +271,7 @@
+         PolicyAnchor = quod_simplex:genesis_hash(?NODE_NS),
+         {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                      "ontologies/node_execution.pl")),
+-        InitialTemplate = case Stage of known_refusal -> <<"broken(.">>; _ -> Template end,
++        InitialTemplate = case Stage of malformed_template -> <<"broken(.">>; _ -> Template end,
+         {ok, _, _} = quod_prolog:execute(?NODE_NS,
+             {assertz, {node_identity_template, InitialTemplate}}),
+         {ok, _, _} = quod_prolog:execute(?ROOT_NS, {transaction, {',',
+@@ -295,17 +295,28 @@
+                 {ok, NextAuth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
+                 unlink(NextAuth);
+             known_refusal ->
++                %% A denied policy is a definite refusal. Malformed authored
++                %% source uses the error channel and cannot authorize retry.
++                CreationPolicy = [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
++                    quod_prolog:read_terms(filename:join(code:priv_dir(quod),
++                                                        "ontologies/quod_root.pl"))],
++                replace_root_policy(can_create_ontology, 3,
++                    [{':-', {can_create_ontology, {'_'}, {'_'}, {'_'}}, fail}]),
+                 ?assertMatch({refused, {?NODE_NS, PolicyAnchor}}, quod_node_actor:enroll()),
+                 ?assertMatch({pending, #{rejected := enrollment}},
+                     quod_identity:load_node_actor_pointer(Dir)),
+-                {ok, _, _} = quod_prolog:execute(?NODE_NS, {transaction, {',',
+-                    {retract, {node_identity_template, InitialTemplate}},
+-                    {assertz, {node_identity_template, Template}}}});
++                replace_root_policy(can_create_ontology, 3, CreationPolicy);
++            malformed_template ->
++                ?assertMatch({submitted, {ok, _, {normalized, {error, _}}}},
++                    quod_node_actor:enroll()),
++                ?assertMatch({pending, #{rejected := none}},
++                    quod_identity:load_node_actor_pointer(Dir));
+             _ -> ok = quod_identity:begin_node_enrollment(Dir, Bytes, Sig)
+         end,
+         case Stage of
+             before_send -> ok;
+             known_refusal -> ok;
++            malformed_template -> ok;
+             admission_refusal -> ok;
+             auth_restart -> ok;
+             _ ->
+@@ -320,7 +331,7 @@
+                 end
+         end,
+         case Stage of
+-            before_send ->
++            Uncertain when Uncertain =:= before_send; Uncertain =:= malformed_template ->
+                 {ok, Before} = file:read_file(filename:join(Dir, "node.actor")),
+                 ?assertEqual(unresolved, quod_node_actor:enroll()),
+                 ?assertEqual(unresolved, quod_node_actor:enroll()),
+@@ -1476,9 +1487,8 @@
+     Ns = unique_ns(<<"forged-continuation">>),
+     Goal = {'$quod_stage_ontology', forged_handle,
+             create_goal(Ns, []), {ontology_hosted, Ns}},
+-    {fail, Reasons} = quod_prolog:execute(?ROOT_NS, Goal),
+-    ?assertEqual({ontology_creation_failed, invalid_action},
+-                 lists:last(Reasons)),
++    ?assertMatch({error,{erlog,{domain_error,ontology_request_handle,forged_handle}}},
++        quod_prolog:execute(?ROOT_NS,Goal)),
+     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+ 
+ ordinary_static_config_is_not_authority(_Fixture) ->
+@@ -1619,24 +1629,17 @@
+ 
+ node_does_not_own_generic_creation_policy(_Fixture) ->
+     Ns = unique_ns(<<"wrong-owner">>),
+-    {fail, Reasons} =
+-        quod_prolog:execute(?NODE_NS, create_goal(Ns, [])),
+-    ?assertEqual({ontology_creation_failed, wrong_ontology},
+-                 lists:last(Reasons)),
++    ?assertMatch({error,{erlog,{context_violation,create_ontology,staging,wrong_ontology}}},
++        quod_prolog:execute(?NODE_NS,create_goal(Ns,[]))),
+     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+ 
+ invalid_create_never_reaches_hosting(_Fixture) ->
+     BadNs = <<>>,
+-    {fail, Reasons} =
+-        quod_prolog:execute(?ROOT_NS, create_goal(BadNs, [])),
+-    ?assertEqual({ontology_creation_failed, invalid_name},
+-                 lists:last(Reasons)),
++    ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
++        quod_prolog:execute(?ROOT_NS,create_goal(BadNs,[]))),
+     ?assertEqual({error, invalid_name}, quod_ontology:local_state(BadNs)),
+-    {fail, VariableReasons} =
+-        quod_prolog:execute(
+-          ?ROOT_NS, create_goal({'Namespace'}, [])),
+-    ?assertEqual({ontology_creation_failed, invalid_arguments},
+-                 lists:last(VariableReasons)).
++    ?assertEqual({error,{erlog,instantiation_error}},
++        quod_prolog:execute(?ROOT_NS,create_goal({'Namespace'},[]))).
+ 
+ reserved_initial_terms_never_reach_hosting(#{dir := Dir}) ->
+     ReservedTerms =
+@@ -1649,6 +1652,8 @@
+           ?assertEqual(
+              {error, {invalid_initial_term, Term}},
+              quod_ontology:create(Ns, [{terms, [Term]}])),
++          ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
++              quod_prolog:execute(?ROOT_NS,create_goal(Ns,[{terms,[Term]}]))),
+           ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+           ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
+       end, ReservedTerms),
+@@ -2153,12 +2158,15 @@
+                  quod_prolog:read_terms(File)].
+ 
+ replace_root_invocation_policy(Clauses) ->
++    replace_root_policy(can_invoke, 4, Clauses).
++
++replace_root_policy(Functor, Arity, Clauses) ->
+     Assertions = [{assertz, Clause} || Clause <- Clauses],
+     Goal = lists:foldr(
+              fun(Assertion, Tail) -> {',', Assertion, Tail} end,
+              true, Assertions),
+     commit_root(
+-      {',', {abolish, {'/', can_invoke, 4}}, Goal}).
++      {',', {abolish, {'/', Functor, Arity}}, Goal}).
+ 
+ open_client_session(NetworkId, NodeKey,
+                     KeyPair = {PublicKey, _Seed}, Peer) ->
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -67,7 +67,7 @@
+         commit(Ns,{assertz,{can_invoke,{'$quod_sample_physics',{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Human,{'_'},Ns}}),
+         Frame = {physics_frame,World,maps:get(authority,Spec),maps:get(epoch,Spec),
+                  maps:get(generation,Spec),maps:get(run_token,Spec),1},
+-        ?assertMatch({ok,_,{normalized,{failed,_}}},
++        ?assertMatch({ok,_,{normalized,{error,_}}},
+                      body_read(Ns,{'$quod_sample_physics',forged,{physics_body_state,room,1},Frame,1,none,{0}})),
+         commit(Ns,{retract,{can_read_physics_body,room,Human,1}}),
+         ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Goal))
+@@ -77,6 +77,220 @@
+     {ok,Bytes,Signature} = quod_node_actor:signed_goal(read,{'::',Ns,Goal},
+         crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
+     quod_client_goal_ingress:submit(Bytes,Signature).
++
++assert_reason(Reason,{ok,_,{normalized,{failed,Blob}}}) ->
++    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
++    ?assert(lists:member(Reason,Reasons)).
++
++assert_reason_count(Reason, Count, {ok,_,{normalized,{failed,Blob}}}) ->
++    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
++    ?assertEqual(Count,length([R || R <- Reasons,R =:= Reason])).
++
++input_admission_reasons_test_() ->
++    {timeout,60,fun() -> with_chair(fun(F = #{namespace := Ns}) ->
++        {Pid,World} = enable(F), Limits = {query_limits,2,0,8,128},
++        {_,Expected,Frame,_,_} = install_test_control(F,Pid,World,
++            {motion,free,2000,1600,1000,Limits,[]}),
++        {control_frame,_,Registration} = Frame,
++        Installed = Expected#{registration => Registration}, Control = maps:get(control,Expected),
++        Input = {{push,{body,3,1},{vector,1000,0,0}},{push_limits,3,1,5000,5000}},
++        Request = fun(E,C,S,I,X,D) -> {physics_input,E,C,S,I,X,D} end,
++        Expiry = quod_time:now_ms()+5000, Deadline = quod_time:mono_ms()+5000,
++        Call = fun(E,C,S,I,X,D) -> gen_server:call(Pid,Request(E,C,S,I,X,D)) end,
++        [?assertEqual({error,{stale_projection,1}},Call(E,Control,1,Input,Expiry,Deadline)) || E <-
++            [Installed#{fence => stale},Installed#{structure => 0},Installed#{incarnation => <<0:256>>}]],
++        ?assertEqual({error,control_not_installed},Call(Installed,setelement(3,Control,2),1,Input,Expiry,Deadline)),
++        ?assertEqual({error,control_not_installed},Call(Installed,Control,1,
++            {element(1,Input),{push_limits,3,1,6000,5000}},Expiry,Deadline)),
++        ?assertEqual({error,stale_registration},Call(Installed#{registration => <<0:256>>},Control,1,Input,Expiry,Deadline)),
++        ?assertEqual({error,expired},Call(Installed,Control,1,Input,quod_time:now_ms()-1,Deadline)),
++        ?assertEqual({error,expired},Call(Installed,Control,1,Input,Expiry,quod_time:mono_ms()-1)),
++        %% Both calls precede the owner's self-scheduled step. Response delivery
++        %% proves processing; no sleep, polling or send trace selects this race.
++        ok = sys:suspend(Pid),
++        A = gen_server:send_request(Pid,Request(Installed,Control,1,Input,Expiry,Deadline)),
++        B = gen_server:send_request(Pid,Request(Installed,Control,2,Input,Expiry,Deadline)),
++        ok = sys:resume(Pid),
++        ?assertEqual({reply,ok},gen_server:receive_response(A,5000)),
++        ?assertEqual({reply,{error,discrete_pending}},gen_server:receive_response(B,5000)),
++        ?assertEqual({error,{stale_sequence,1}},Call(Installed,Control,1,Input,Expiry,Deadline)),
++        #{World := #{spec := #{navigation_guard := {Guard,G}}}} = worlds(Ns),
++        atomics:put(Guard,1,G+1),
++        try ?assertEqual({error,reinstalling},Call(Installed,Control,2,Input,Expiry,Deadline))
++        after atomics:put(Guard,1,G) end
++    end) end}.
++
++hot_control_policy_reasons_test_() ->
++    {timeout,90,fun() -> with_chair(fun(F = #{namespace := Ns,node := Human}) ->
++        {Pid,World} = enable(F),
++        {Definition,_,Frame,_,_} = install_test_control(F,Pid,World,
++            {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]}),
++        Runtime = quod_reg:where({quod_runtime,Ns}), ok = sys:suspend(Runtime),
++        try
++        assert_reason_count({ambiguous_control,room},0,body_read(Ns,
++            {physics_control_state,room,Human,99,{0}})),
++        assert_reason_count({ambiguous_agent,pilot},0,body_read(Ns,
++            {physics_agent_configuration,room,Human,pilot,eye,setelement(3,Definition,99)})),
++        Go = {physics_control_input,room,Frame,1,1,{drive,{vector,0,0,0},{angular,0,0,0}},{0}},
++        Checkpoint = {physics_checkpoint_body,room,3,1,0,<<209:256>>},
++        assert_reason({control_conflict,1},door_action(Ns,{physics_control_agent,room,0,none,none})),
++        Other = {agent_instance_ref,<<"other">>,<<99:256>>,someone},
++        commit(Ns,{assertz,{physics_control,room,Other,1,{controlled,pilot,eye}}}),
++        assert_reason({agent_controlled,pilot},door_action(Ns,
++            {physics_control_agent,room,1,{controlled,pilot,eye},{controlled,pilot,eye}})),
++        commit(Ns,{retract,{physics_control,room,Other,1,{controlled,pilot,eye}}}),
++        Agent = {physics_agent,room,pilot,1,2,element(6,Definition)},
++        Mount = {physics_viewpoint,room,pilot,eye,2,element(3,element(7,Definition)),element(4,element(7,Definition))},
++        Body = {physics_body,room,2,1,controlled,{vector,-3000,1000,0},{box,500,1000,500},1},
++        [?assertEqual(ok,begin
++            commit(Ns,{'$quod_retract_exact',Fact}),
++            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Fact)),
++            Result = control_goal({'::',Ns,Go}),
++            case Result of
++                {ok,_,{normalized,{failed,_}}} -> assert_reason({ambiguous_agent,pilot},Result);
++                _ -> error({missing_configuration_accepted,Fact,redact(brief(Result))})
++            end,
++            commit(Ns,{assertz,Fact}),ok end) || Fact <- [Agent,Mount,Body]],
++        Ambiguous = setelement(4,Agent,2),
++        commit(Ns,{assertz,Ambiguous}),
++        assert_reason({ambiguous_agent,pilot},control_goal({'::',Ns,Go})),
++        commit(Ns,{'$quod_retract_exact',Ambiguous}),
++        commit(Ns,{retract,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
++        assert_reason({no_control,room},control_goal({'::',Ns,Go})),
++        assert_reason_count({no_control,room},1,control_goal({'::',Ns,
++            setelement(6,Go,{push,{body,3,1},{vector,1000,0,0}})})),
++        commit(Ns,{assertz,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
++        DuplicateControl = {physics_control,room,Human,2,none},
++        commit(Ns,{assertz,DuplicateControl}),
++        assert_reason({ambiguous_control,room},control_goal({'::',Ns,Go})),
++        commit(Ns,{retract,DuplicateControl}),
++        assert_reason({body_not_free,3},door_action(Ns,setelement(4,Checkpoint,0))),
++        RestPolicy = {physics_rest_policy,room,3,{recovery,5,128}},
++        commit(Ns,{retract,RestPolicy}),
++        assert_reason({rest_policy_missing,3},door_action(Ns,Checkpoint)),
++        commit(Ns,{assertz,RestPolicy}),
++        Waiting = {physics_rest,room,3,1,{waiting,{rest,1,<<210:256>>}}},
++        commit(Ns,{assertz,Waiting}),
++        assert_reason_count({ambiguous_checkpoint,3},0,body_read(Ns,
++            {physics_rest_state,room,3,99,{0}})),
++        assert_reason({checkpoint_pending,3},door_action(Ns,setelement(5,Checkpoint,1))),
++        assert_reason({checkpoint_conflict,3},door_action(Ns,Checkpoint)),
++        OtherWaiting = setelement(5,Waiting,idle),
++        commit(Ns,{assertz,OtherWaiting}),
++        assert_reason({ambiguous_checkpoint,3},door_action(Ns,Checkpoint)),
++        commit(Ns,{retract,OtherWaiting}), commit(Ns,{retract,Waiting}),
++        {ok,HeldBytes,HeldSignature} = quod_node_actor:signed_goal(execute,
++            {'::',Ns,{assertz,{held_checkpoint,1}}},crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_client_goal_ingress:submit(HeldBytes,HeldSignature)),
++        Held = {physics_rest_request,room,3,{request,held,rest,HeldBytes,HeldSignature}},
++        commit(Ns,{assertz,Held}),
++        assert_reason_count({ambiguous_checkpoint_custody,3},0,body_read(Ns,
++            {physics_rest_custody,room,3,none})),
++        assert_reason({checkpoint_custody_held,3},door_action(Ns,Checkpoint)),
++        OtherHeld = setelement(4,Held,{request,other,rest,HeldBytes,HeldSignature}),
++        commit(Ns,{assertz,OtherHeld}),
++        assert_reason({ambiguous_checkpoint_custody,3},door_action(Ns,Checkpoint)),
++        commit(Ns,{retract,OtherHeld}), commit(Ns,{retract,Held}),
++        PushPolicy = {physics_push_allowances,room,{'_'},3,{push_limits,5000,5000}},
++        commit(Ns,{'$quod_retract_exact',PushPolicy}),
++        assert_reason({push_allowances_missing,3},control_goal({'::',Ns,
++            setelement(6,Go,{push,{body,3,1},{vector,1000,0,0}})})),
++        commit(Ns,{assertz,PushPolicy}),
++        SmallPush = {physics_push_allowances,room,{'_'},3,{push_limits,1,5000}},
++        commit(Ns,{asserta,SmallPush}),
++        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,{',',
++            {physics_push_configuration,room,Human,3,1,{0},5000},
++            {'>',{0},1000}})),
++        commit(Ns,{'$quod_retract_exact',SmallPush}),
++        commit(Ns,{assertz,{can_query_physics_motion,room,Human,2,{'_'}}}),
++        Query = {physics_motion_query,room,2,{travel,{vector,1,0,0},{angular,0,0,0}},{0}},
++        assert_reason({query_allowances_missing,room},body_read(Ns,Query)),
++        QueryPolicy = {physics_query_allowances,room,Human,{query_allowances,2,0,8,128,1,1000}},
++        commit(Ns,{',',{assertz,QueryPolicy},
++            {assertz,setelement(4,QueryPolicy,{query_allowances,2,0,8,128,2000,1000})}}),
++        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,
++            setelement(4,Query,{travel,{vector,1000,0,0},{angular,0,0,0}}))),
++        Allowances = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
++        commit(Ns,{retract,Allowances}),
++        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{physics_view,room,[]}}}),
++        assert_reason({allowances_missing,room},body_read(Ns,{physics_client_view,{0}}))
++        after sys:resume(Runtime) end
++    end) end}.
++
++hot_control_error_and_owner_results_test_() ->
++    {timeout,90,fun() -> with_chair(fun(F = #{namespace := Ns,node := Human}) ->
++        {Pid,World} = enable(F),
++        {Definition,_,ControlFrame,_,_} = install_test_control(F,Pid,World,
++            {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]}),
++        {control_frame,Frame,_} = ControlFrame,
++        Drive = {drive,{vector,0,0,0},{angular,0,0,0}},
++        Go = {physics_control_input,room,ControlFrame,1,1,Drive,{0}},
++        Read = {physics_body_state,room,1,{0}},
++        commit(Ns,{assertz,{can_read_physics_body,room,Human,1}}),
++        [?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Goal)) || Goal <-
++            [{physics_body_state,room,{0},{1}}, {physics_body_state,room,bad_body,{0}},
++             {physics_body_state,room,-1,{0}},
++             {physics_motion_query,room,1,{0},{1}},
++             {'$quod_sample_physics',forged,{physics_body_state,room,1},Frame,1,none,{0}}]],
++        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,setelement(6,Go,{0})})),
++        ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Read)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Go)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Go)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,
++            {'$quod_stage_physics_input',forged,Go,none,500,{query_limits,2,0,8,128},{0}}})),
++        Runtime = quod_reg:where({quod_runtime,Ns}), ok = sys:suspend(Runtime),
++        try
++            %% Authored policy return values still cross the real opaque handle.
++            remove_physics_policy(Ns,physics_body_read_projection),
++            Policy = fun(Fence,Revision) -> {physics_body_read_projection,room,1,Fence,Revision} end,
++            Bad = Policy(invalid_frame,1), commit(Ns,{assertz,Bad}),
++            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
++            commit(Ns,{retract,Bad}), WrongWorld = setelement(2,Frame,setelement(4,World,other)),
++            Wrong = Policy(WrongWorld,1), commit(Ns,{assertz,Wrong}),
++            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
++            commit(Ns,{retract,Wrong}), BadRevision = Policy(Frame,0), commit(Ns,{assertz,BadRevision}),
++            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
++            commit(Ns,{retract,BadRevision}), MissingSample = Policy(Frame,2), commit(Ns,{assertz,MissingSample}),
++            %% Missing body/revision is an explicit sample answer, not owner loss.
++            {ok,_,{normalized,{answers,_,[SampleBinding]}}} = body_read(Ns,Read),
++            {ok,SamplePairs} = quod_client_result:decode_binding(SampleBinding),
++            ?assertEqual([unavailable],[Value || {_,Value} <- SamplePairs]),
++            commit(Ns,{retract,MissingSample}), commit(Ns,{assertz,Policy(Frame,1)}),
++            remove_physics_policy(Ns,physics_input_projection),
++            Projection = fun(Lease,Limits) -> {physics_input_projection,room,ControlFrame,1,1,Drive,
++                {control,Human,1,Definition},Lease,Limits} end,
++            BadLease = Projection(0,{query_limits,2,0,8,128}), commit(Ns,{assertz,BadLease}),
++            ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Go})),
++            commit(Ns,{retract,BadLease}), BadLimits = Projection(500,invalid_limits), commit(Ns,{assertz,BadLimits}),
++            ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Go})),
++            commit(Ns,{retract,BadLimits}), commit(Ns,{assertz,Projection(500,{query_limits,2,0,8,128})}),
++            gen_server:stop(Pid),
++            assert_reason({physics_world_unavailable,room},body_read(Ns,Read)),
++            assert_reason({physics_world_unavailable,room},control_goal({'::',Ns,Go})),
++            Reader = refusing_test_owner(World,read),
++            NameMonitor = quod_reg:monitor_name({physics_world,World},info),
++            assert_reason({physics_owner_unavailable,room},body_read(Ns,Read)),
++            receive {test_owner_called,Reader,read} -> ok after 5000 -> error(owner_not_called) end,
++            receive {gproc,unreg,NameMonitor,_} -> ok after 5000 -> error(owner_name_not_retired) end,
++            Releaser = refusing_test_owner(World,release),
++            ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Go})),
++            receive {test_owner_called,Releaser,release} -> ok after 5000 -> error(release_not_called) end,
++            receive {test_owner_called,Releaser,_} -> error(uncertain_release_repeated) after 0 -> ok end
++        after sys:resume(Runtime) end
++    end) end}.
++
++remove_physics_policy(Ns,Functor) ->
++    [commit(Ns,{'$quod_retract_exact',Rule}) || Rule = {':-',Head,_} <-
++        quod_prolog:read_terms("priv/ontologies/quod_physics.pl"),element(1,Head) =:= Functor],ok.
++
++%% A controlled owner disappearance tests the lost-reply production seam.
++refusing_test_owner(World,Mode) ->
++    Parent = self(), {Pid,Monitor} = spawn_monitor(fun() ->
++        true = quod_reg:reg({physics_world,World}), Parent ! {test_owner_ready,self()},
++        receive {'$gen_call',_,_Request} -> Parent ! {test_owner_called,self(),Mode} end
++    end),
++    receive {test_owner_ready,Pid} -> ok after 5000 -> error(test_owner_not_registered) end,
++    erlang:demonitor(Monitor,[flush]), Pid.
+ 
+ signed_motion_query_owner_test_() ->
+     {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
+@@ -88,7 +302,7 @@
+         commit(Ns,{assertz,{can_query_physics_motion,room,Human,2,{'_'}}}),
+         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal)),
+         %% A write-mode proof cannot use a live query to admit a durable edit.
+-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Goal)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Goal)),
+         #{World := #{spec := Spec}} = worlds(Ns),
+         Expected = #{fence => quod_physics:fence(Spec),structure => 1,
+                      incarnation => maps:get(run_token,Spec)},
+@@ -126,13 +340,13 @@
+             {motion,free,2000,1600,500,Limits,[]}),
+         Drive = {drive,{vector,2000,0,0},{angular,0,0,0}},
+         {control_frame,_,Registration} = Frame,
+-        ?assertEqual({error,transient_unavailable},gen_server:call(Pid,
++        ?assertEqual({error,expired},gen_server:call(Pid,
+             {physics_input,Expected#{registration => Registration},maps:get(control,Expected),1,
+              {Drive,Limits},quod_time:now_ms()+500,quod_time:mono_ms()-1})),
+         Command = fun(Seq,Input) -> {physics_control_input,room,Frame,1,Seq,Input,{0}} end,
+         Go = Command(10,Drive),
+-        ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Go)),
+-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Go)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Go)),
++        ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Go)),
+         ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,{',',Go,fail}})),
+         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
+         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal(
+@@ -147,7 +361,7 @@
+         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
+         %% A control proof promises one indivisible live operation. A second
+         %% staged command fails the entire proof rather than partially applying.
+-        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal(
++        assert_reason(transient_already_staged,control_goal(
+             {'::',Ns,{',',Go,Command(11,Drive)}})),
+         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
+         quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+@@ -156,7 +370,7 @@
+         Moved = receive {physics_frame,Pid,Ref,V} -> V after 5000 -> error(control_did_not_move) end,
+         {2,1,world,{X,_,_},_,_} = lists:keyfind(2,1,maps:get(poses,Moved)),
+         ?assert(X > 0.0),
+-        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Go})),
++        assert_reason({stale_sequence,10},control_goal({'::',Ns,Go})),
+         Stop = {drive,{vector,0,0,0},{angular,0,0,0}},
+         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,Command(11,Stop)})),
+         assert_no_physics_io(fun() ->
+@@ -169,14 +383,14 @@
+         ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,Command(15,Drive)})),
+         commit(Ns,{assertz,{can_control_physics_agent,room,Human,pilot}}),
+         {Pid,World} = installed(Ns),
+-        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Go})),
++        assert_reason(stale_registration,control_goal({'::',Ns,Go})),
+         %% Even a higher-sequence command from the disconnected view cannot
+         %% control its replacement registration.
+-        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Command(100,Drive)})),
++        assert_reason(stale_registration,control_goal({'::',Ns,Command(100,Drive)})),
+         {ok,FreshRef,FreshView} = quod_physics:watch(Pid,Expected),
+         {control_frame,BaseFrame,_} = Frame,
+         FreshFrame = {control_frame,BaseFrame,maps:get(registration,FreshView)},
+-        ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,Command(100,Drive)})),
++        assert_reason(stale_registration,control_goal({'::',Ns,Command(100,Drive)})),
+         FreshCommand = setelement(3,Command(15,Stop),FreshFrame),
+         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,FreshCommand})),
+         quod_physics:unwatch(Pid,FreshRef)
+@@ -1312,6 +1526,15 @@
+     {ok,Pid} = quod_physics:start(self(),Spec),
+     try Fun(Pid,Spec) after gen_server:stop(Pid) end.
+ 
++input_uninstalled_world_and_expiry_test() ->
++    with_simulator(none,fun(Pid,_) ->
++        Request = {physics_input,#{},{control,principal,1,configuration},1,input,
++                   quod_time:now_ms()+5000,quod_time:mono_ms()+5000},
++        ?assertEqual({error,physics_world_unavailable},gen_server:call(Pid,Request)),
++        Effect = {physics_input,Pid,#{},{control,principal,1,configuration},1,input,quod_time:now_ms()-1},
++        ?assertEqual({error,expired},quod_effect:release_transient(Effect,quod_time:mono_ms()+5000))
++    end).
++
+ unguarded_world_is_refused_test() ->
+     {ok,_} = application:ensure_all_started(gproc),
+     World = {world_ref,<<"unguarded-test">>,crypto:strong_rand_bytes(32),room},
+@@ -1979,13 +2202,17 @@
+             {Both,_,_} = erlog_int:term_instance({',',Goal,Goal},0),
+             {ok,BothText} = quod_client_goal_parser:format(Both),
+             {ok,BothBytes} = quod_client_goal:encode(Request#{goal_text => BothText}),
+-            ?assertMatch({ok,_,{normalized,{failed,_}}},
++            assert_reason(transient_already_staged,
+                 quod_client_goal_ingress:submit(BothBytes,quod_identity:sign(BothBytes,Identity))),
+             ?assertMatch(#{inputs := Empty} when map_size(Empty) =:= 0,gen_server:call(Pid,status)),
+             {ok,Bytes} = quod_client_goal:encode(Request#{operation_id => crypto:strong_rand_bytes(32)}),
+             ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},
+                 quod_client_goal_ingress:submit(Bytes,quod_identity:sign(Bytes,Identity))),
+             ?assertMatch(#{inputs := #{Principal := #{sequence := 1}}},gen_server:call(Pid,status)),
++            {ok,DuplicateBytes} = quod_client_goal:encode(Request#{operation_id => crypto:strong_rand_bytes(32)}),
++            {ok,_,{normalized,{failed,DuplicateReasons}}} =
++                quod_client_goal_ingress:submit(DuplicateBytes,quod_identity:sign(DuplicateBytes,Identity)),
++            ?assertEqual({ok,[{stale_sequence,1}]},quod_wire_term:decode_failure_reasons(DuplicateReasons)),
+             View = maps:get(<<"view">>,Projection),
+             simulation_ack(Socket,View,Initial),
+             _ = simulation_input_frame(Socket,View,<<"1">>),
+@@ -2023,7 +2250,7 @@
+             commit(Ns,{retract,{can_push_physics_body,room,{'_'},3}}), reconcile(Ns),
+             ?assertMatch({ok,_,{normalized,{failed,_}}},OldCommand(0,Push)),
+             commit(Ns,{assertz,{can_push_physics_body,room,{'_'},3}}), reconcile(Ns),
+-            ?assertMatch({ok,_,{normalized,{error,proof_unavailable}}},OldCommand(1,Push)),
++            assert_reason(stale_registration,OldCommand(1,Push)),
+             {ok,Ref,Initial} = quod_physics:watch(Pid,Expected),
+             Frame = setelement(3,OldFrame,maps:get(registration,Initial)),
+             Command = fun(Seq,Input) -> Send(Frame,Seq,Input) end,
+--- a/ui/src/World.tsx
++++ b/ui/src/World.tsx
+@@ -129,7 +129,7 @@
+           setStatus('Live simulation. VR: left grip + pad for travel; left pad click for turn or teleport; right pad for actions.')
+         },
+         frame(current) { scene.simulation(current) },
+-        refused(reason) { setStatus(reason) },
++        refused(reason, reasons) { setStatus([reason, ...reasons].join(' ')) },
+         refreshing() {
+           scene.simulation(null); setStatus('World updating. Movement paused…')
+           setRevision(value => value + 1)
+--- a/doc/evidence/hot-controls/failure-reasons-audit.md
++++ b/doc/evidence/hot-controls/failure-reasons-audit.md
+@@ -0,0 +1,175 @@
++# External predicate refusal audit
++
++This table classifies every bare `erlog_int:fail` in `src/predicates` in the
++2026-10-09 input tree, before the edits below. Locations are input-tree line
++numbers (the ontology helper move adds one line). The hot-control table in
++`failure-reasons-design.md` supplies the physics rows; the three retained
++physics failures are signature/binding mismatch, signed goal/scope mismatch,
++and absent reaction metadata. Policy denial remains ordinary failure.
++
++`false` means no solution, `refusal` records a portable reason through the
++shared helper, and `error` uses the existing Erlog error channel. Missing
++managed context is the documented exception; absent private metadata is a
++valid non-match. An installed managed context missing a required identity
++is a refusal. Internal continuation failures preserve existing reasons.
++
++| Module: input line | Condition | Class and resulting contract |
++|---|---|---|
++| ontology:66 | no signer in this engine | false; no signer-bound context |
++| ontology:147 | prepared anchor does not unify with requested anchor | false |
++| ontology:188 | authenticated agent cannot materialize | error `invalid_authenticated_principal` |
++| ontology:191 | handler called with wrong functor | error `domain_error(principal_query,Goal)` |
++| ontology:282 | requested ontology not hosted | refusal `ontology_anchor_failed(not_hosted)` |
++| ontology:297 | valid anchor differs from committed anchor | false |
++| agent:40 | local node actor absent | refusal `node_actor_unavailable` |
++| agent:55 | signing from writable proof | error `context_violation(sign_agent_request,query,write_proof)` |
++| agent:74 | instance text and agent reference disagree or malformed | error `domain_error(agent_request,Typed)` |
++| agent:76 | executing scope identity absent | refusal `scope_identity_unavailable(Ns)` |
++| agent:76 | request scope differs from executing scope | error `context_violation(sign_agent_request,query,foreign_scope)` |
++| agent:76 | request cannot encode | error `domain_error(agent_request,Typed)` |
++| agent:76 | node actor absent | refusal `node_actor_unavailable` |
++| agent:78 | request unbound | error `instantiation_error` |
++| agent:78 | request wrong shape | error `domain_error(agent_request,Typed)` |
++| agent:98 | vault refuses signature release | refusal `agent_signing_unavailable(Reason)`; closed vault reason vocabulary |
++| agent:100 | signing policy denies | false |
++| agent:100 | signing policy evaluation errors | error `invalid_signing_policy`; never deny |
++| agent_work:22 | instance not ground | error `instantiation_error` |
++| agent_work:22 | wake unbound | error `instantiation_error` |
++| agent_work:22 | wake outside changed/continue | error `domain_error(agent_work_wake,Wake)` |
++| committee:80 | namespace absent | false; no managed context |
++| committee:81 | committee at encoding ceiling | refusal `committee_full`; MAX_VALIDATORS is an existing shared protocol bound; its value and ownership are unchanged |
++| committee:88 | public key unbound | error `instantiation_error` |
++| committee:88 | public key not binary | error `type_error(binary,Pub)` |
++| committee:103 | would remove last existing member | refusal `last_committee_member` |
++| committee:103 | key not a member | false; also at floor |
++| committee:106 | public key unbound/wrong type | same argument errors as admit |
++| committee:124 | peer not caught up/live | false; observational readiness relation |
++| committee:126 | namespace/height absent | false; no managed context |
++| committee:129 | public key unbound/wrong type | same argument errors as admit |
++| common:78 | invalid chunk size in pre-existing uncommitted source-chunk feature | outside this commit; preserve the feature owner's baseline; required instantiation/type/domain classification belongs with that feature |
++| common:135 | source indicator unbound | error `instantiation_error` |
++| common:135 | source indicator malformed | error `domain_error(predicate_indicator,Indicator)` |
++| common:145 | exact authored clause absent | false |
++| common:211 | draw salt unbound | error `instantiation_error` |
++| common:211 | salt not portable | error `domain_error(proof_salt,Salt)` |
++| common:214 | draw divisor unbound/wrong type/nonpositive | instantiation/type(integer)/domain(proof_draw_divisor) error |
++| common:214 | draw has no proof identity | false; no proof session/verdict context |
++| common:252 | codes contain variables | error `instantiation_error` |
++| common:252 | list contains nonbytes | error `domain_error(byte_list,Codes)` |
++| common:255 | both arguments unbound | error `instantiation_error` |
++| common:255 | codes not list | error `type_error(list,Codes)` |
++| common:258 | first argument not binary/variable | error `type_error(binary,Binary)` |
++| physics signed request | selected goal cannot encode as a bounded durable term | error `domain_error(signed_goal,Goal)`; encoded variables remain valid, signature/goal mismatch remains false |
++| directory:50 | ontology name unbound | error `instantiation_error` |
++| directory:50 | ontology name malformed | error `domain_error(ontology_name,Name)` |
++| directory:53 | directory queried outside root | error `context_violation(directory_host,query,non_root)` |
++| directory:70 | control peers queried outside root | error `context_violation(directory_control_peer,query,non_root)` |
++| ask:58 | handler receives wrong functor | error `domain_error(ontology_query,Goal)` |
++| ask:69 | follower already answered this call | false |
++| ask:137 | target stream exhausted | false; merges target reasons unchanged |
++| transaction:53 | event not ground | error `instantiation_error` |
++| transaction:53 | event outside durable event domain | error `domain_error(event,Term)` |
++| transaction:113 | independent continuation redo | false; restores mode and resumes alternatives |
++| transaction:118 | independent alternatives exhausted | false; restores ordinary intent |
++| action:119 | state-check redo | false; read-only scope preserved |
++| action:124 | state-check exhausted | false; restores writable scope |
++| action:178 | callable/action-shape recognition false | false; pure recognizers select authored action candidates |
++| runtime:65 | required scope identity absent | refusal `scope_identity_unavailable` |
++| runtime:104 | stored digest differs from signed digest | false; exact request matching relation |
++| runtime:113 | signature/operation scope mismatch | false |
++| runtime:113 | scope identity absent | refusal `scope_identity_unavailable` |
++| runtime:132 | no signed expiry/reaction metadata | false; no metadata context |
++| runtime:142 | reaction metadata absent | false; no metadata context |
++| runtime:142 | expiry unbound/wrong type/nonpositive | instantiation/type(integer)/domain(request_expiry) error |
++| runtime:142 | expiry above owner ceiling | false; requested constraint exceeds policy |
++| runtime:151 | observation absent or owner differs | false; authenticated observation relation |
++| runtime:167 | recovery metadata absent or exact owner/epoch mismatch | false; eligibility relation |
++| runtime:167 | required target or epoch unbound in matching metadata | error `instantiation_error` |
++| runtime:167 | custody target/epoch/result malformed in matching metadata | error `domain_error(agent_custody,Arguments)` |
++| runtime:177 | physics preparation metadata absent | false; no metadata context |
++| runtime:177 | signed preparation holes/template malformed | error `domain_error(signed_preparation,Template)` |
++| runtime:275 | prepared variable absent from selected goal | error `domain_error(preparation_goal,Goal)` |
++| runtime:280 | signed preparation/selected goal invalid | error `domain_error(preparation_goal,Goal)` |
++| runtime:284 | unrelated generic reaction lacks physics custody | false; declaration ineligible |
++| runtime:318 | resource scope not ground | error `instantiation_error` |
++
++Operation-outcome infrastructure errors remain errors, including the monotonic
++sealing veto when caught, as required by `doc/multiwrite-architecture.md`.
++Vault signing does not submit an action; its bounded unavailability refusal
++cannot imply an uncertain action resubmission. Transient release exits do.
++
++The input tree's documented plain-failure behavior for draw and byte conversion
++is superseded by Yan's ruling. Pure recognition relations and engine-owned
++search continuations remain false goals. The later lifecycle table also
++classifies already reasoned validation sites against the same contract.
++
++## Hot-control decisions checked against implementation
++
++The handoff's normative section has moved to `doc/proofs.md`. Definite release
++refusals become `{fail,[Reason]}`; caught exits become `{unknown,owner_unavailable}`
++in the internal effect reply and remain request errors. Navigation invalidation
++is checked before any active-world admission, returning `reinstalling` for
++inputs. A nonactive world refuses input as `physics_world_unavailable`.
++
++The inspection also found an expected checkpoint sequence conflict and missing
++push allowances. They now record `checkpoint_conflict(Body)` and
++`push_allowances_missing(Body)` respectively. The input control lookup records
++`control_conflict(CurrentEpoch)` for a stale binding epoch and `no_control(World)`
++for no selection, retaining plain permission denial within agent configuration.
++Malformed bridge-returned limits raise `domain_error(physics_limits,Limits)`;
++frame shape includes its anchored authority and positive generation/revision.
++
++The owner-side liveness vocabulary is independent of a valid read answer
++`unavailable`. A read timeout has no action consequence; a release timeout may
++have one. Neither path resubmits a request.
++
++Additional singleton checks on the hot-control path reject multiple binding,
++rest-state, or rest-custody rows with `ambiguous_control(World)`,
++`ambiguous_checkpoint(Body)`, or `ambiguous_checkpoint_custody(Body)`. These
++are authored configuration refusals, not ordinary no-solution queries. Their
++signed-ingress assertions sit beside the other policy-reason rows.
++
++The shared dispatcher's missing-descriptor branch is also an engine contract
++error in a managed context: `context_violation(Functor,unregistered,Kind)`.
++An unmanaged engine still fails plainly. This closes the fallback next to the
++shared helper; it does not grant access to an unregistered bridge.
++
++A sample projection also requires a positive integer body revision; malformed
++policy returns raise `domain_error(physics_body_revision,Revision)`. A valid
++positive revision with no installed sample still binds `unavailable`, tested
++by decoding the actual normalized answer binding.
++
++## Existing lifecycle reasons checked against the new contract
++
++These sites already had reasons, so the bare-fail enumeration did not find
++them. Yan's error ruling still applies. The table below precedes their edits;
++ordinary permission prerequisites and operational owner refusals retain their
++existing reasons.
++
++| Site | Condition | Class and resulting contract |
++|---|---|---|
++| lifecycle request validation | required request fields not ground | error `instantiation_error` (creation's output anchor remains a variable) |
++| lifecycle request validation | malformed typed action/name/options/seeds/anchor | error `domain_error(ontology_action,Action)` |
++| lifecycle request owner | action belongs to another ontology | error `context_violation(Functor,staging,wrong_ontology)` |
++| lifecycle continuation | opaque handle not registered for exact action | error `domain_error(ontology_request_handle,Handle)` |
++| lifecycle continuation | malformed action or wrong handler goal | error `domain_error(ontology_action,Action)` |
++| lifecycle preparation | malformed initial terms/source program | error `domain_error(ontology_action,Action)` |
++| lifecycle preparation | engine-owned structural descriptor invalid | error `system_error(invalid_lifecycle_descriptor)` |
++| lifecycle preparation | already hosted, source-file I/O, capacity or startup unavailable | retain existing bounded lifecycle refusal vocabulary |
++| lifecycle staging | prepared anchor differs from supplied valid anchor | ordinary unification failure |
++| lifecycle staging | required action/desired-state fields not ground | error `instantiation_error` |
++| lifecycle staging | exact request action changed | error `domain_error(ontology_action,Action)` |
++| lifecycle staging | prepared-effect construction violates contract | error `system_error(invalid_prepared_effect)` |
++| lifecycle staging | executor not installed | retain `ontology_*_failed(rebuilding)` |
++| ontology state/anchor query | required name not ground | error `instantiation_error` |
++| ontology state/anchor query | malformed name or query goal | error `domain_error(ontology_name,Name)` / query domain |
++| ontology anchor match | malformed bound anchor | error `domain_error(genesis_anchor,Value)` |
++| ontology anchor match | valid different anchor | ordinary failure |
++
++Singleton helpers check row cardinality with fresh variables, then unify the
++selected row with caller arguments. A valid unequal value stays ordinary
++failure. Required allowance lookups retain all authored alternatives; only an
++empty configuration records a missing reason. Input control is selected once
++before motion or push limits, so a failed push cannot duplicate its control
++refusal. A read whose caller deadline already expired records `expired`, not
++an unavailability claim about an owner it never called.
+--- a/doc/evidence/hot-controls/failure-reasons-design.md
++++ b/doc/evidence/hot-controls/failure-reasons-design.md
+@@ -0,0 +1,141 @@
++# Failure reasons versus errors: design decisions
++
++Authored by Claude Fable at Yan's request (2026-10-09) after review 02 of the
++hot-controls commit. Consultative; the implementation owner checks each
++decision against the code. The normative text in section 2 is meant to be
++merged into `doc/proofs.md`; this file is the handoff, not the home.
++
++## 1. What already exists and is kept
++
++- The forked erlog carries a bounded `fail_reasons` stack on the proof state.
++  `fail_with_reason(Reason)` records one ground, portable, wire-valid term and
++  fails. `get_fail_reasons/1` reads the stack. Both are installed for every
++  engine (`quod_resource_basis.erl:67`).
++- `quod_client_result` renders the stack as `result: fail` with `reasons`.
++  A plain failure renders as `result: fail` without reasons.
++- A thrown `erlog_error` is a different result class. Its reason is never
++  forwarded verbatim: `quod_client_result:valid_public_error/1` is a fixed
++  allowlist of atoms and `quod_scope_wire:normalize_public_error/2` turns
++  anything else into `{protocol_error, proof_engine}`.
++- `quod_predicates` already specifies two classes for external predicates:
++  no managed context fails plainly; wrong predicate class for the proof kind
++  throws `{context_violation, Functor, Class, Kind}`.
++- `quod_prolog.pl` already uses `fail_with_reason(edit_conflict(I))`,
++  `duplicate_clause(I)` and `edit_not_representable(I)`.
++  `quod_ontology_predicates:fail_reason/2` is the only Erlang helper.
++
++Nothing new is introduced. The decisions below only say when each existing
++channel is the right one, and make the helper shared.
++
++## 2. Normative contract
++
++Merged into [the proof contract](../../proofs.md#failure-reasoned-failure-and-error).
++The implementation distinguishes uncertain transient release exits from definite
++owner refusals: the former remain errors and must not be resubmitted.
++
++## 3. Shared helper
++
++Move `fail_reason/2` from `quod_ontology_predicates` to `quod_predicates`
++and export it. Keep the one-line body
++(`erlog_int:prove_body([{fail_with_reason, Reason}], St)`). Delete the
++private copy. No second helper for errors: call `erlog_int:instantiation_error/1`,
++`type_error/3`, `domain_error/3` and `erlog_error/2` directly.
++
++## 4. Classification of the hot-controls sites
++
++`src/predicates/quod_physics_predicates.erl`, line numbers from commit
++61ce04b.
++
++| Line | Condition | Class | Term |
++|---|---|---|---|
++| 47, 104 | action not ground | error | `instantiation_error` |
++| 49 | body id not a non-negative integer | error | `type_error(body_id, B)` |
++| 49 | proof not read-only | error | `{context_violation, physics_body_state_or_motion_query, query, write_proof}` |
++| 49, 104 | scope identity unavailable | reasoned | `{scope_identity_unavailable, W}` |
++| 70 | frame from policy has another identity or wrong shape | error | `domain_error(physics_frame, Frame)` |
++| 70 | registered handle does not match | error | `domain_error(physics_request_handle, Handle)` |
++| 66 to 67, 78, 84 | no installed owner for the world | reasoned | `{physics_world_unavailable, W}` |
++| 66 to 67 | owner call exited or timed out | reasoned | `{physics_owner_unavailable, W}` |
++| 78, 84 | owner answered `unavailable` for this body or frame | keep as the bound answer `unavailable`, documented | |
++| 125 | second transient in one proof | reasoned | `transient_already_staged` |
++| 125 | request mode is not control, proof not read-only, write intent not ordinary | error | `{context_violation, physics_control_input, staging, Mode}` |
++| 125 | effect fails `valid_transient` | error | `domain_error(transient_effect, Effect)` |
++| 127 | no installed owner for the world | reasoned | `{physics_world_unavailable, W}` |
++| 127 | signed request expiry absent | error | `{context_violation, physics_control_input, staging, unsigned}` |
++| 129 | lease from policy not a positive integer | error | `domain_error(physics_lease, Lease)` |
++| 129 | handle or action mismatch | error | `domain_error(physics_request_handle, Handle)` |
++| 141, 151 | signature or binding does not match | no solution | |
++| 157 | no reaction metadata | no solution, documented no-context case | |
++
++`src/quod_physics.erl`, `handle_current_call({physics_input, ...})` returns
++one `{error, transient_unavailable}` for seven conditions. Replace with one
++reply per condition, in this check order:
++
++| Condition | Reply |
++|---|---|
++| projection fence, structure or incarnation changed | `{error, {stale_projection, Structure}}` |
++| control not installed or push allowance not installed | `{error, control_not_installed}` |
++| registration does not match the current viewer | `{error, stale_registration}` |
++| sequence not above the retained one | `{error, {stale_sequence, Retained}}` |
++| a discrete input is still pending | `{error, discrete_pending}` |
++| lease or request already expired | `{error, expired}` |
++| deadline already passed | `{error, expired}` |
++| navigation guard not current | `{error, reinstalling}` |
++
++`quod_effect:release_transient/2` forwards definite owner refusals unchanged;
++`quod_prolog:finalize_request_result/3` turns them into `{fail,[Reason]}`.
++An owner exit or timeout may follow admission. The effect boundary returns
++`{unknown,owner_unavailable}` and finalization preserves the error class,
++suspending the client without resubmission. This corrects the original
++handoff's proposal to treat all caught exits as certain refusals.
++
++`priv/ontologies/quod_physics.pl`, conflicts that are currently plain
++failures and must become reasoned:
++
++| Predicate | Condition | Term |
++|---|---|---|
++| `physics_control_agent/4` | expected epoch or selection stale | `{control_conflict, Epoch}` |
++| `physics_control_choice/3` | agent controlled by another principal | `{agent_controlled, Agent}` |
++| `physics_agent_configuration/5` | zero or several definitions, viewpoints or bodies | `{ambiguous_agent, Agent}` |
++| `physics_checkpoint_body/5` | state already `waiting` | `{checkpoint_pending, D}` |
++| `physics_checkpoint_body/5` | custody not replaceable | `{checkpoint_custody_held, D}` |
++| `physics_checkpoint_body/5` | no `physics_rest_policy` | `{rest_policy_missing, D}` |
++| `physics_checkpoint_body/5` | body not free or revision stale | `{body_not_free, D}` |
++| `physics_input_projection/8` | no control configuration for the principal | `{no_control, W}` |
++| `physics_motion_read_projection/6` | no query allowances | `{query_allowances_missing, W}` |
++| any | `physics_allowances/5` absent | `{allowances_missing, W}` |
++
++Pure permission checks (`can_*`) stay plain failures.
++
++`client/src/simulation.js`, `command()`: branch on `reply.result`.
++`ok` returns true. `fail` keeps `current`, passes `reply.reasons` to the
++feedback callback and returns false without calling `failed()`. Anything
++else, including a thrown error, calls `failed()` as today.
++
++## 5. Audit beyond this commit
++
++Every `erlog_int:fail(St)` under `src/predicates` is classified into the
++three classes with the same table format, one row per condition, before any
++edit. Known counts at 61ce04b: ten in ask, transaction and agent predicates,
++about twelve in `quod_runtime_predicates`, including missing reaction
++metadata and operation outcome lookups. Rows in class 1 need no change. The
++audit table is the review artefact; the diff must match it.
++
++## 6. Tests
++
++- One test per reasoned failure row above asserts the exact reason through
++  the production seam (`quod_client_goal_ingress:submit/2`), reading
++  `reasons` from the normalized result, not from the log.
++- One test per error row asserts the error class at the seam.
++- The owner-side table is covered through `gen_server:call` on the world in
++  `quod_physics_tests`, one assertion per reply.
++- `client/test/simulation.test.js` gains the three-way branch: `ok`, `fail`
++  with reasons keeping the view, error suspending.
++- The same-namespace signed control test already planned by the parent
++  belongs in this round.
++
++## 7. Out of scope
++
++Changing the public error allowlist, renaming existing reasons in
++`quod_prolog.pl`, and any client wording. The reasoned-failure channel is
++expressive enough that the allowlist does not need to grow.
+--- a/test/quod_predicate_failure_tests.erl
++++ b/test/quod_predicate_failure_tests.erl
+@@ -0,0 +1,119 @@
++-module(quod_predicate_failure_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include_lib("erlog/src/erlog_int.hrl").
++-include("quod_ingress_limits.hrl").
++
++%% These contracts cannot be violated by signed ingress: it creates the scope
++%% and staging authority itself. Exercise their real overlay owners directly,
++%% rather than adding a public way to forge those private values.
++physics_private_contracts_test() ->
++    with_state(fun(Base) ->
++        Read = quod_predicates:set_context(overlay(Base,
++            #{read_only => true,signed_request => true,transient_allowed => true}),
++            quod_predicates:proof_context(<<"failure:test">>,1,undefined)),
++        assert_reason({scope_identity_unavailable,room},
++            quod_proof_session:run_first({physics_body_state,room,1,{0}},
++                quod_predicates:set_context(Base,quod_predicates:context(Read)),#{read_only => true})),
++        assert_reason({scope_identity_unavailable,room},
++            quod_proof_session:run_first({physics_control_input,room,frame,1,1,input,{0}},
++                quod_predicates:set_context(Base,quod_predicates:context(Read)),
++                #{read_only => true,signed_request => true,transient_allowed => true})),
++        Anchor = <<1:256>>, World = {world_ref,<<"failure:test">>,Anchor,room},
++        Frame = {physics_frame,World,{agent_instance_ref,<<"failure:test">>,Anchor,actor},1,1,<<2:256>>,1},
++        Action = {physics_control_input,room,{control_frame,Frame,<<3:256>>},1,1,
++                  {drive,{vector,0,0,0},{angular,0,0,0}}},
++        {Handle,Bound} = quod_erlog_db_local_prove:register_action_request(Read,Action,{<<"failure:test">>,Anchor}),
++        Stage = {'$quod_stage_physics_input',Handle,Action,{control,principal,1,configuration},
++                 500,{query_limits,2,0,8,128},{0}},
++        ?assertMatch({erlog_error,{context_violation,physics_control_input,staging,unsigned},_},
++            catch erlog_int:prove_goal(Stage,Bound)),
++        ?assertMatch({erlog_error,{domain_error,physics_lease,0},_},
++            catch erlog_int:prove_goal(setelement(5,Stage,0),Bound)),
++        ?assertMatch({erlog_error,{domain_error,physics_limits,invalid},_},
++            catch erlog_int:prove_goal(setelement(6,Stage,invalid),Bound)),
++        ?assertMatch({erlog_error,{domain_error,physics_request_handle,Handle},_},
++            catch erlog_int:prove_goal(setelement(3,Stage,setelement(3,Action,invalid)),Bound))
++    end).
++
++transient_context_and_descriptor_test() ->
++    with_state(fun(Base) ->
++        Allowed = #{read_only => true,signed_request => true,transient_allowed => true},
++        St = overlay(Base,Allowed),
++        ?assertMatch({erlog_error,{domain_error,transient_effect,invalid},_},
++            catch quod_erlog_db_local_prove:stage_transient(St,invalid)),
++        Effect = {physics_input,self(),#{},{control,principal,1,configuration},1,input,1},
++        {ok,Once} = quod_erlog_db_local_prove:stage_transient(St,Effect),
++        ?assertEqual({error,transient_already_staged},quod_erlog_db_local_prove:stage_transient(Once,Effect)),
++        lists:foreach(fun({Opts,Mode}) ->
++            ?assertMatch({erlog_error,{context_violation,physics_control_input,staging,Mode},_},
++                catch quod_erlog_db_local_prove:stage_transient(overlay(Base,Opts),Effect))
++        end,[{Allowed#{signed_request => false},unsigned},
++             {Allowed#{transient_allowed => false},non_control},
++             {Allowed#{read_only => false},write_proof}]),
++        ?assertMatch({erlog_error,{context_violation,physics_control_input,staging,atomic},_},
++            catch quod_erlog_db_local_prove:stage_transient(
++                quod_erlog_db_local_prove:set_write_intent(St,atomic),Effect))
++    end).
++
++audited_argument_errors_test() ->
++    with_state(fun(Base) ->
++        Ctx = quod_predicates:proof_context(<<"failure:test">>,1,undefined,[{<<"failure:test">>,<<1:256>>}]),
++        St = quod_predicates:set_context(overlay(Base,#{}),Ctx),
++        ?assertMatch({erlog_error,{domain_error,signed_goal,#{}},_},
++            catch quod_physics_predicates:signed_physics_request(
++                {signed_physics_request,#{},not_bytes,not_signature},[],St)),
++        ?assertMatch({erlog_error,{context_violation,{absent,0},unregistered,proof},_},
++            catch quod_predicates:dispatch(absent,[],St)),
++        lists:foreach(fun({Goal,Error}) ->
++            ?assertMatch({erlog_error,Error,_},catch erlog_int:prove_goal(Goal,St))
++        end,[{{trigger_event,{0}},instantiation_error},
++             {{trigger_event,{assert,forbidden}},{domain_error,event,{assert,forbidden}}},
++             {{continue_agent_work,actor,wrong},{domain_error,agent_work_wake,wrong}},
++             {{continue_agent_work,{0},changed},instantiation_error},
++             {{admit,{0},<<"host">>,1},instantiation_error},
++             {{remove,bad},{type_error,binary,bad}},
++             {{peer_ready,bad},{type_error,binary,bad}},
++             {{'$quod_predicate_source',bad,{0}},{domain_error,predicate_indicator,bad}},
++             {{ontology_join_state,{0},{1}},instantiation_error},
++             {{ontology_join_state,<<>>,{0}},{domain_error,ontology_name,<<>>}},
++             {{ontology_genesis_anchor,{0},{1}},instantiation_error},
++             {{ontology_genesis_anchor,<<>>,{0}},{domain_error,ontology_name,<<>>}}])
++    end).
++
++assert_reason(Reason,{fail,Reasons}) when is_list(Reasons) -> ?assert(lists:member(Reason,Reasons)).
++
++committee_refusal_reasons_test() ->
++    Key = <<1:256>>,
++    with_state([{peer_admitted,Key,<<"host">>,1,Key}],fun(Base) ->
++        assert_reason(last_committee_member,quod_proof_session:run_first(
++            {remove,Key},proof_state(Base),#{})),
++        ?assertMatch({fail,_},quod_proof_session:run_first(
++            {remove,<<2:256>>},proof_state(Base),#{}))
++    end),
++    Facts = [{peer_admitted,<<I:256>>,<<"host">>,1,<<I:256>>}
++             || I <- lists:seq(1,?MAX_VALIDATORS)],
++    with_state(Facts,fun(Base) ->
++        assert_reason(committee_full,quod_proof_session:run_first(
++            {admit,<<0:256>>,<<"host">>,1},proof_state(Base),#{}))
++    end).
++
++missing_ontology_anchor_reason_test() ->
++    {ok,_} = application:ensure_all_started(gproc),
++    with_state(fun(Base) ->
++        assert_reason({ontology_anchor_failed,not_hosted},quod_proof_session:run_first(
++            {ontology_genesis_anchor,<<"failure:unhosted">>,{0}},proof_state(Base),#{read_only => true}))
++    end).
++
++proof_state(Base) ->
++    quod_predicates:set_context(Base,quod_predicates:proof_context(<<"failure:test">>,1,undefined)).
++
++overlay(Base,Opts) -> quod_erlog_db_local_prove:wrap_state(Base,Opts).
++with_state(Fun) -> with_state([],Fun).
++with_state(Facts,Fun) ->
++    Est0 = quod_predicates:load_modules(quod_committed_projection:new_est(),
++        [quod_physics_predicates,quod_agent_work_predicates,quod_ontology_predicates]),
++    Est = lists:foldl(fun(Fact,State) ->
++        {succeed,Next} = erlog_int:prove_goal({assertz,Fact},State),Next
++    end,Est0,Facts),
++    #est{db = #db{ref = Ref}} = Base = quod_ct:commit_kb(Est),
++    try Fun(Base) after quod_erlog_db_mvcc:delete(Ref) end.
+--- a/doc/physics-native.md
++++ b/doc/physics-native.md
+@@ -85,8 +85,10 @@
+ `body_state(Frame, Tick, body(Id,Revision), metres_seconds, Pose, Velocity)`.
+ `Frame` is `physics_frame(WorldRef, Authority, HostEpoch, RunGeneration,
+ Incarnation, Structure)`; pose rotations use `quaternion(X,Y,Z,W)`.
+-The owner copies its retained sample. A missing owner, stale installed frame,
+-missing body or retired run is `unavailable`, never an inferred baseline.
++The owner copies its retained sample. A stale installed frame, missing body or
++retired run may bind `unavailable`, never an inferred baseline. A missing owner
++or failed owner call is a reasoned failure under the [proof contract](proofs.md),
++distinct from that valid answer. Malformed request or policy values are errors.
+ 
+ `physics_motion_query(World, Body, Query, Result)` additionally uses
+ `can_query_physics_motion(World, Principal, Body, Query)` and
+--- a/test/quod_agent_vault_tests.erl
++++ b/test/quod_agent_vault_tests.erl
+@@ -163,30 +163,31 @@
+             ?assertEqual(fail, signing_proof([Host, Key], true, Goal)),
+             %% A foreign ontology's permissive policy cannot release another
+             %% ontology's custody, even when it pins the same bridge module.
+-            ?assertEqual(fail, signing_proof([], true, Goal,
++            ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, foreign_scope}}},
++              signing_proof([], true, Goal,
+               #{source => <<"can_sign_agent_request(_,_,_).">>,
+                 identity => {<<"hostile">>, <<4:256>>}})),
+-            ?assertEqual(fail, signing_proof([], true, Goal,
++            ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, foreign_scope}}},
++              signing_proof([], true, Goal,
+               #{source => <<"can_sign_agent_request(_,_,_).">>,
+                 identity => {<<"agents">>, <<4:256>>}})),
+             ?assertEqual(fail, signing_proof(Facts, true,
+               {sign_agent_request, setelement(10, Typed, <<"assertz(unapproved).">>), {'Signature'}})),
+-            Catch = {';', {'catch', Goal, {'Error'}, {'=', {'Caught'}, yes}},
+-                     {'=', {'Result'}, denied}},
+-            {ok, Denied} = signing_proof([], true, Catch,
+-              #{source => <<"can_sign_agent_request(_,_,_) :- throw(policy_fault).">>}),
+-            ?assertEqual(denied, maps:get('Result', Denied)),
++            ?assertEqual({error, {erlog, invalid_signing_policy}}, signing_proof([], true, Goal,
++              #{source => <<"can_sign_agent_request(_,_,_) :- binary_codes(42,_).">>})),
+             ?assertEqual({error, deadline_exceeded},
+               quod_agent_vault:sign(Request, quod_time:mono_ms() - 1)),
+             ?assertEqual(fail, signing_proof([Grant, Host, setelement(4, Key, revoked)], true, Goal)),
+             ?assertEqual(fail, signing_proof([Grant, Host, setelement(4, Key, staged)], true, Goal)),
+             ?assertEqual(fail, signing_proof([Grant, setelement(3, Host, other_host), Key], true, Goal)),
+-            ?assertEqual(fail, signing_proof(Facts, false, Goal)),
++            ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, write_proof}}},
++                         signing_proof(Facts, false, Goal)),
+             StagedGrant = {',', {assertz, Grant}, {'$quod_state_check', Goal}},
+-            ?assertEqual(fail, signing_proof([Host, Key], false, StagedGrant)),
+-            ?assertEqual(fail, signing_proof(Facts, true,
++            ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, write_proof}}},
++                         signing_proof([Host, Key], false, StagedGrant)),
++            ?assertMatch({error, {erlog, {domain_error, agent_request, _}}}, signing_proof(Facts, true,
+               {sign_agent_request, setelement(4, Typed, <<"different_agent.">>), {'Signature'}})),
+-            ?assertEqual(fail, signing_proof(Facts, true,
++            ?assertMatch({error, {erlog, {domain_error, agent_request, <<"arbitrary bytes">>}}}, signing_proof(Facts, true,
+               {sign_agent_request, <<"arbitrary bytes">>, {'Signature'}}))
+         after
+             quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end),
+--- a/test/quod_transaction_predicates_tests.erl
++++ b/test/quod_transaction_predicates_tests.erl
+@@ -145,10 +145,13 @@
+ trigger_event_rejects_invalid_payloads_test() ->
+     lists:foreach(
+       fun(Term) ->
+-              ?assertMatch({fail, _}, prove({trigger_event, Term}, []))
++              ?assertException(throw, {erlog_error, {domain_error, event, Term}, _},
++                               prove({trigger_event, Term}, []))
+       end,
+-      [42, {'Unbound'}, {assert, fact}, {retract, fact},
+-       {from, <<"other">>, <<0:256>>, event}]).
++      [42, {assert, fact}, {retract, fact},
++       {from, <<"other">>, <<0:256>>, event}]),
++    ?assertException(throw, {erlog_error, instantiation_error, _},
++                     prove({trigger_event, {'Unbound'}}, [])).
+ 
+ trigger_event_is_refused_in_reaction_context_test() ->
+     C = committed([]),
+--- a/test/quod_agent_custody_tests.erl
++++ b/test/quod_agent_custody_tests.erl
+@@ -50,13 +50,15 @@
+                         recovery => #{target => AgentRef, epoch => 1, observer => Node},
+                         request_timeout_ms => 10000},
+             Calls = [
+-                {{'Result'}, {probe, {'Result'}, {'Other'}}},
+-                {already_bound, {probe, already_bound}},
+-                {{'Result'}, probe}],
+-            try lists:foreach(fun({Result, Template}) ->
++                {{'Result'}, {probe, {'Result'}, {'Other'}}, preparation_goal},
++                {already_bound, {probe, already_bound}, agent_custody},
++                {{'Result'}, probe, preparation_goal}],
++            try lists:foreach(fun({Result, Template, Domain}) ->
+                 Clause = {':-', {react_on, wake, Template},
+                           {prepare_agent_custody, AgentRef, 1, Result}},
+-                ?assertEqual(unmatched, quod_runtime_predicates:run_reaction(
++                ?assertMatch({failed, {reaction_guard, {erlog,
++                              {domain_error, Domain, _}}}},
++                    quod_runtime_predicates:run_reaction(
+                     element(2, Node), 1, Binding, Clause, wake, KB))
+             end, Calls)
+             after
+--- a/test/quod_reaction_metadata_tests.erl
++++ b/test/quod_reaction_metadata_tests.erl
+@@ -44,17 +44,27 @@
+     [?_test(with_node(fun(Est) ->
+         ?assertMatch({fail, _}, match(Est, Context, Goal, {record, {'Result'}}))
+     end)) || {Context, Goal} <-
+-        [{Meta, {prepare_agent_custody, actor, 1, {'Result'}}},
+-         {Meta, {prepare_agent_custody, setelement(2, Target, <<"other">>), 1, {'Result'}}},
++        [{Meta, {prepare_agent_custody, setelement(2, Target, <<"other">>), 1, {'Result'}}},
+          {Meta, {prepare_agent_custody, setelement(3, Target, <<3:256>>), 1, {'Result'}}},
+-         {Meta, {prepare_agent_custody, setelement(4, Target, {'Instance'}), 1, {'Result'}}},
+          {Meta, {prepare_agent_custody, Target, 2, {'Result'}}},
+-         {Meta, {prepare_agent_custody, Target, 1, already_bound}},
+          {maps:remove(recovery, Meta), {prepare_agent_custody, Target, 1, {'Result'}}},
+          {Meta#{mode => execute}, {prepare_agent_custody, Target, 1, {'Result'}}},
+          {Meta#{recovery => #{target => Target, epoch => 1,
+                              observer => setelement(4, Node, other)}},
+           {prepare_agent_custody, Target, 1, {'Result'}}}]].
++
++preparation_reports_invalid_arguments_test_() ->
++    [?_test(with_node(fun(Est) ->
++        ?assertMatch({error, {erlog, {domain_error, agent_custody, _}}},
++                     match(Est, metadata(), Goal, {record, {'Result'}}))
++    end)) || Goal <- [{prepare_agent_custody, actor, 1, {'Result'}},
++                     {prepare_agent_custody, target(), 1, already_bound}]] ++
++    [?_test(with_node(fun(Est) ->
++        ?assertEqual({error, {erlog, instantiation_error}},
++          match(Est, metadata(),
++                {prepare_agent_custody, setelement(4, target(), {'Instance'}), 1, {'Result'}},
++                {record, {'Result'}}))
++    end))].
+ 
+ metadata_backtracking_and_expiry_bounds_test() ->
+     with_node(fun(Est) ->
+@@ -76,7 +86,8 @@
+ 
+ preparation_template_still_requires_one_shared_result_variable_test_() ->
+     [?_test(with_node(fun(Est) ->
+-        ?assertMatch({fail, _}, match(Est, metadata(),
++        ?assertMatch({error, {erlog, {domain_error, preparation_goal, _}}},
++                     match(Est, metadata(),
+                                      {prepare_agent_custody, target(), 1, {'Result'}},
+                                      Template))
+     end)) || Template <- [true, {record, {'Other'}}, {record, {'Result'}, {'Other'}}]].
+--- a/test/quod_names_tests.erl
++++ b/test/quod_names_tests.erl
+@@ -100,9 +100,10 @@
+         ?assertEqual([], selections(<<"ugbash">>, St)),
+         ?assertEqual([], selections(<<"UGBASH">>, St)),
+         ?assertEqual([], selections(<<>>, St)),
+-        ?assertEqual([], selections('Ugbash', St)),
+-        ?assertEqual([], selections(42, St)),
+-        ?assertEqual([], selections([$U, $g], St)),
++        lists:foreach(fun(Invalid) ->
++            ?assertException(throw, {erlog_error, {type_error, binary, Invalid}, _},
++                             selections(Invalid, St))
++        end, ['Ugbash', 42, [$U, $g]]),
+         ?assertMatch({succeed, _},
+                      erlog_int:prove_goal({name, <<"Ugbash">>, <<"orc">>, <<"personal">>, <<"male">>}, St)),
+         ?assertMatch({succeed, _},

@@ -50,7 +50,10 @@ trigger_event_1({trigger_event, Term0}, Next, #est{bs = Bs} = St) ->
                       {permission_error, modify, trigger_event}, St)
             end;
         false ->
-            erlog_int:fail(St)
+            case quod_wire_term:is_ground(Term) of
+                false -> erlog_int:instantiation_error(St);
+                true -> erlog_int:domain_error(event,Term,St)
+            end
     end.
 
 -spec transaction_1(term(), list(), tuple()) -> term().

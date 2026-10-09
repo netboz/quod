@@ -4413,7 +4413,8 @@ finalize_request_result(#{request := #{mode := control}},Result = {ok,_,_,_},Dea
                 {ok,_,_,_} = Finished ->
                     case quod_effect:release_transient(Effect,Deadline) of
                         ok -> Finished;
-                        {error,_} = Error -> Error
+                        {error,Reason} -> {fail,[Reason]};
+                        {unknown,Reason} -> {error,Reason}
                     end;
                 Other -> Other
             end;

@@ -50,13 +50,15 @@ prepared_bridge_rejects_extra_or_bound_result_variables_test_() ->
                         recovery => #{target => AgentRef, epoch => 1, observer => Node},
                         request_timeout_ms => 10000},
             Calls = [
-                {{'Result'}, {probe, {'Result'}, {'Other'}}},
-                {already_bound, {probe, already_bound}},
-                {{'Result'}, probe}],
-            try lists:foreach(fun({Result, Template}) ->
+                {{'Result'}, {probe, {'Result'}, {'Other'}}, preparation_goal},
+                {already_bound, {probe, already_bound}, agent_custody},
+                {{'Result'}, probe, preparation_goal}],
+            try lists:foreach(fun({Result, Template, Domain}) ->
                 Clause = {':-', {react_on, wake, Template},
                           {prepare_agent_custody, AgentRef, 1, Result}},
-                ?assertEqual(unmatched, quod_runtime_predicates:run_reaction(
+                ?assertMatch({failed, {reaction_guard, {erlog,
+                              {domain_error, Domain, _}}}},
+                    quod_runtime_predicates:run_reaction(
                     element(2, Node), 1, Binding, Clause, wake, KB))
             end, Calls)
             after

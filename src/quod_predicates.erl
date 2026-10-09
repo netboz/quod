@@ -35,7 +35,7 @@ The typed **external-predicate contract** and the per-run **execution context**
    Governed predicates register through `load/1`, which routes them via
    `dispatch/3`. Before delegating to the real handler, `dispatch/3` checks the
    predicate's class against the running context's *kind* and **fails closed**:
-   a wrong-context call throws a distinct `{context_violation, …}` error rather
+   missing registration in a managed engine or a wrong-context call throws a distinct `{context_violation, …}` error rather
    than silently succeeding.
 
    Queries also declare whether they use proof-bound context, committed snapshot
@@ -71,7 +71,7 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
          with_chain/2, with_executor/2, ctx_executor/1]).
 %% class metadata (also drives dispatch)
--export([class/2, allowed/2]).
+-export([class/2, allowed/2, fail_reason/2]).
 
 -define(CTX_FLAG, '$quod_ctx').
 -define(REGISTRY_FLAG, '$quod_predicate_registry').
@@ -95,6 +95,10 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
 -type dependency() :: none | proof_bound | committed_snapshot | live_observation.
 -type ctx()   :: #qctx{} | undefined.
 -export_type([kind/0, class/0, ctx/0]).
+
+-doc "Record a portable refusal reason and fail through ordinary Prolog backtracking.".
+fail_reason(Reason, St) ->
+    erlog_int:prove_body([{fail_with_reason, Reason}], St).
 
 %%%===================================================================
 %%% registration + dispatch
@@ -350,7 +354,8 @@ dispatch(Goal, Next, St) ->
         Ctx ->
             Functor = functor(Goal),
             case descriptor(St, Functor) of
-                undefined -> erlog_int:fail(St);
+                undefined -> erlog_int:erlog_error(
+                    {context_violation,Functor,unregistered,ctx_kind(Ctx)},St);
                 {Class, Dependency, Mod, Fun} ->
                     case allowed(Class, ctx_kind(Ctx)) of
                         true  ->

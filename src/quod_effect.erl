@@ -31,7 +31,8 @@ valid_transient(_) -> false.
 release_transient(none,_) -> ok;
 release_transient({physics_input,Pid,Expected,Control,Sequence,Input,Expiry},Deadline) ->
     try quod_physics:input(Pid,Expected,Control,Sequence,Input,Expiry,Deadline)
-    catch exit:_ -> {error,transient_unavailable} end.
+    %% A lost reply does not prove the owner rejected the action.
+    catch exit:_ -> {unknown,owner_unavailable} end.
 
 -type identity() :: {binary(), <<_:256>>}.
 -type actor() :: {node, <<_:256>>} | {agent, binary()}.

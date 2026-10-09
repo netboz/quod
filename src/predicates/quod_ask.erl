@@ -55,7 +55,7 @@ load(#est{db = Db0} = Est) ->
 ask_2(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {'::', NsTerm, Inner} -> do_ask(NsTerm, Inner, Next, St);
-        _                     -> erlog_int:fail(St)
+        _ -> erlog_int:domain_error(ontology_query,Goal,St)
     end.
 
 %% The governing clause choice point owns this call's answer set. Erlog carries

@@ -252,7 +252,7 @@ observe_enrollment_completion(Manager) ->
 
 node_enrollment_crash_custody_test_() ->
     [{atom_to_list(Stage), {timeout, 60, fun() -> enrollment_crash_custody(Stage) end}}
-     || Stage <- [before_send, after_commit, after_allocation, known_refusal,
+     || Stage <- [before_send, after_commit, after_allocation, known_refusal, malformed_template,
                   admission_refusal, auth_restart]].
 
 enrollment_crash_custody(Stage) ->
@@ -271,7 +271,7 @@ enrollment_crash_custody(Stage) ->
         PolicyAnchor = quod_simplex:genesis_hash(?NODE_NS),
         {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
                                                      "ontologies/node_execution.pl")),
-        InitialTemplate = case Stage of known_refusal -> <<"broken(.">>; _ -> Template end,
+        InitialTemplate = case Stage of malformed_template -> <<"broken(.">>; _ -> Template end,
         {ok, _, _} = quod_prolog:execute(?NODE_NS,
             {assertz, {node_identity_template, InitialTemplate}}),
         {ok, _, _} = quod_prolog:execute(?ROOT_NS, {transaction, {',',
@@ -295,17 +295,28 @@ enrollment_crash_custody(Stage) ->
                 {ok, NextAuth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
                 unlink(NextAuth);
             known_refusal ->
+                %% A denied policy is a definite refusal. Malformed authored
+                %% source uses the error channel and cannot authorize retry.
+                CreationPolicy = [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
+                    quod_prolog:read_terms(filename:join(code:priv_dir(quod),
+                                                        "ontologies/quod_root.pl"))],
+                replace_root_policy(can_create_ontology, 3,
+                    [{':-', {can_create_ontology, {'_'}, {'_'}, {'_'}}, fail}]),
                 ?assertMatch({refused, {?NODE_NS, PolicyAnchor}}, quod_node_actor:enroll()),
                 ?assertMatch({pending, #{rejected := enrollment}},
                     quod_identity:load_node_actor_pointer(Dir)),
-                {ok, _, _} = quod_prolog:execute(?NODE_NS, {transaction, {',',
-                    {retract, {node_identity_template, InitialTemplate}},
-                    {assertz, {node_identity_template, Template}}}});
+                replace_root_policy(can_create_ontology, 3, CreationPolicy);
+            malformed_template ->
+                ?assertMatch({submitted, {ok, _, {normalized, {error, _}}}},
+                    quod_node_actor:enroll()),
+                ?assertMatch({pending, #{rejected := none}},
+                    quod_identity:load_node_actor_pointer(Dir));
             _ -> ok = quod_identity:begin_node_enrollment(Dir, Bytes, Sig)
         end,
         case Stage of
             before_send -> ok;
             known_refusal -> ok;
+            malformed_template -> ok;
             admission_refusal -> ok;
             auth_restart -> ok;
             _ ->
@@ -320,7 +331,7 @@ enrollment_crash_custody(Stage) ->
                 end
         end,
         case Stage of
-            before_send ->
+            Uncertain when Uncertain =:= before_send; Uncertain =:= malformed_template ->
                 {ok, Before} = file:read_file(filename:join(Dir, "node.actor")),
                 ?assertEqual(unresolved, quod_node_actor:enroll()),
                 ?assertEqual(unresolved, quod_node_actor:enroll()),
@@ -1476,9 +1487,8 @@ internal_staging_continuation_cannot_be_forged(_Fixture) ->
     Ns = unique_ns(<<"forged-continuation">>),
     Goal = {'$quod_stage_ontology', forged_handle,
             create_goal(Ns, []), {ontology_hosted, Ns}},
-    {fail, Reasons} = quod_prolog:execute(?ROOT_NS, Goal),
-    ?assertEqual({ontology_creation_failed, invalid_action},
-                 lists:last(Reasons)),
+    ?assertMatch({error,{erlog,{domain_error,ontology_request_handle,forged_handle}}},
+        quod_prolog:execute(?ROOT_NS,Goal)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
 
 ordinary_static_config_is_not_authority(_Fixture) ->
@@ -1619,24 +1629,17 @@ agent_is_gated_by_root_creation_policy(_Fixture) ->
 
 node_does_not_own_generic_creation_policy(_Fixture) ->
     Ns = unique_ns(<<"wrong-owner">>),
-    {fail, Reasons} =
-        quod_prolog:execute(?NODE_NS, create_goal(Ns, [])),
-    ?assertEqual({ontology_creation_failed, wrong_ontology},
-                 lists:last(Reasons)),
+    ?assertMatch({error,{erlog,{context_violation,create_ontology,staging,wrong_ontology}}},
+        quod_prolog:execute(?NODE_NS,create_goal(Ns,[]))),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
 
 invalid_create_never_reaches_hosting(_Fixture) ->
     BadNs = <<>>,
-    {fail, Reasons} =
-        quod_prolog:execute(?ROOT_NS, create_goal(BadNs, [])),
-    ?assertEqual({ontology_creation_failed, invalid_name},
-                 lists:last(Reasons)),
+    ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
+        quod_prolog:execute(?ROOT_NS,create_goal(BadNs,[]))),
     ?assertEqual({error, invalid_name}, quod_ontology:local_state(BadNs)),
-    {fail, VariableReasons} =
-        quod_prolog:execute(
-          ?ROOT_NS, create_goal({'Namespace'}, [])),
-    ?assertEqual({ontology_creation_failed, invalid_arguments},
-                 lists:last(VariableReasons)).
+    ?assertEqual({error,{erlog,instantiation_error}},
+        quod_prolog:execute(?ROOT_NS,create_goal({'Namespace'},[]))).
 
 reserved_initial_terms_never_reach_hosting(#{dir := Dir}) ->
     ReservedTerms =
@@ -1649,6 +1652,8 @@ reserved_initial_terms_never_reach_hosting(#{dir := Dir}) ->
           ?assertEqual(
              {error, {invalid_initial_term, Term}},
              quod_ontology:create(Ns, [{terms, [Term]}])),
+          ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
+              quod_prolog:execute(?ROOT_NS,create_goal(Ns,[{terms,[Term]}]))),
           ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
           ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
       end, ReservedTerms),
@@ -2153,12 +2158,15 @@ root_invocation_clauses() ->
                  quod_prolog:read_terms(File)].
 
 replace_root_invocation_policy(Clauses) ->
+    replace_root_policy(can_invoke, 4, Clauses).
+
+replace_root_policy(Functor, Arity, Clauses) ->
     Assertions = [{assertz, Clause} || Clause <- Clauses],
     Goal = lists:foldr(
              fun(Assertion, Tail) -> {',', Assertion, Tail} end,
              true, Assertions),
     commit_root(
-      {',', {abolish, {'/', can_invoke, 4}}, Goal}).
+      {',', {abolish, {'/', Functor, Arity}}, Goal}).
 
 open_client_session(NetworkId, NodeKey,
                     KeyPair = {PublicKey, _Seed}, Peer) ->

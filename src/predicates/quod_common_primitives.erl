@@ -12,15 +12,14 @@ that used them stays sealable.
   32-byte identity the engine mints before the proof runs and binds into
   every sealed plan and committed transaction. Same proof, same salt, same
   `I`, in the origin worker and in every co-hosted or remote scope of that
-  proof; a retried request is a new proof and draws afresh. Fails plainly
-  (never errors) when `N` is not a positive integer, `Salt` is not ground,
-  the context kind is not `proof`, or the state carries no proof identity
-  (verdict re-proofs, bare engines). Ontologies reach it through
+  proof; a retried request is a new proof and draws afresh. Missing proof
+  identity (verdict re-proofs, bare engines) fails plainly. An unbound salt or
+  divisor, wrong divisor type/domain, or nonportable salt raises an error. Ontologies reach it through
   `proof_draw/3` in `common_predicates.pl`. It is deterministic selection:
   neither secure randomness nor a uniqueness guarantee.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
-  plainly for anything that is not a binary or a list of bytes.
+  on unequal valid values; malformed arguments raise errors.
 - `'$quod_predicate_source'(+Name/Arity, ?Source)` — canonical source of the
   ordered authored clauses in the current staged view, excluding generated
   following clauses. Facts print as `Head :- true`; a bound source compares
@@ -132,7 +131,11 @@ predicate_source_2({'$quod_predicate_source', Indicator0, Source}, Next,
             %% Reading its empty baseline must not allocate an atom. Ordinary
             %% signed edit admission later allocates and tracks the functor.
             erlog_int:unify_prove_body(Source, <<>>, Next, St);
-        _ -> erlog_int:fail(St)
+        Indicator ->
+            case quod_wire_term:is_ground(Indicator) of
+                false -> erlog_int:instantiation_error(St);
+                true -> erlog_int:domain_error(predicate_indicator,Indicator,St)
+            end
     end.
 
 retract_exact_1({'$quod_retract_exact', Clause0}, Next,
@@ -198,20 +201,22 @@ exact_tag([], [], _Wanted) -> none.
 
 -spec draw_3(term(), list(), tuple()) -> term().
 draw_3({?DRAW, Salt0, N0, I0}, Next, #est{bs = Bs} = St) ->
-    Salt = erlog_int:dderef(Salt0, Bs),
-    case {erlog_int:deref(N0, Bs), proof_id(St)} of
-        {N, {ok, ProofId}} when is_integer(N), N > 0 ->
-            case quod_wire_term:is_ground(Salt)
-                 andalso quod_wire_term:encode_canonical(Salt) of
-                {ok, SaltBytes} ->
-                    Mac = crypto:mac(hmac, sha256, ProofId, SaltBytes),
-                    erlog_int:unify_prove_body(
-                      I0, binary:decode_unsigned(Mac) rem N, Next, St);
-                _ ->
-                    erlog_int:fail(St)
-            end;
-        _ ->
-            erlog_int:fail(St)
+    Salt = erlog_int:dderef(Salt0,Bs), N = erlog_int:deref(N0,Bs),
+    case proof_id(St) of
+        error -> erlog_int:fail(St);
+        {ok,ProofId} ->
+            case quod_wire_term:is_ground([Salt,N]) of
+                false -> erlog_int:instantiation_error(St);
+                true when not is_integer(N) -> erlog_int:type_error(integer,N,St);
+                true when N =< 0 -> erlog_int:domain_error(proof_draw_divisor,N,St);
+                true ->
+                    case quod_wire_term:encode_canonical(Salt) of
+                        {ok,SaltBytes} ->
+                            Mac = crypto:mac(hmac,sha256,ProofId,SaltBytes),
+                            erlog_int:unify_prove_body(I0,binary:decode_unsigned(Mac) rem N,Next,St);
+                        {error,_} -> erlog_int:domain_error(proof_salt,Salt,St)
+                    end
+            end
     end.
 
 %% The proof identity lives where the engine put it: the origin worker keeps
@@ -249,13 +254,20 @@ binary_codes_2({?BINARY_CODES, Binary0, Codes0}, Next, #est{bs = Bs} = St) ->
                     case bytes(Codes) of
                         true -> erlog_int:unify_prove_body(
                                   Binary0, list_to_binary(Codes), Next, St);
-                        false -> erlog_int:fail(St)
+                        false ->
+                            case quod_wire_term:is_ground(Codes) of
+                                false -> erlog_int:instantiation_error(St);
+                                true -> erlog_int:domain_error(byte_list,Codes,St)
+                            end
                     end;
-                _ ->
-                    erlog_int:fail(St)
+                {_} -> erlog_int:instantiation_error(St);
+                Codes ->
+                    case quod_wire_term:is_ground(Codes) of
+                        false -> erlog_int:instantiation_error(St);
+                        true -> erlog_int:type_error(list,Codes,St)
+                    end
             end;
-        _ ->
-            erlog_int:fail(St)
+        Binary -> erlog_int:type_error(binary,Binary,St)
     end.
 
 bytes([Code | Codes]) when is_integer(Code), Code >= 0, Code =< 255 ->

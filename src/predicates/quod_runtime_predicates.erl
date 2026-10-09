@@ -62,7 +62,7 @@ current_ontology_identity({current_ontology_identity, Namespace, Anchor}, Next, 
     case scope_identity(St) of
         {ok, {Ns, Hash}} ->
             erlog_int:unify_prove_body([Namespace, Anchor], [Ns, Hash], Next, St);
-        error -> erlog_int:fail(St)
+        error -> quod_predicates:fail_reason(scope_identity_unavailable,St)
     end.
 
 scope_identity(St) ->
@@ -110,6 +110,7 @@ committed_operation_outcome({committed_operation_outcome, B0, S0, Status}, Next,
                            St, {committed_operation_outcome, 3}),
                     throw({erlog_error, {operation_outcome_unavailable, Unavailable}})
             end;
+        {error,_} -> quod_predicates:fail_reason(scope_identity_unavailable,St);
         _ -> erlog_int:fail(St)
     end.
 
@@ -136,9 +137,14 @@ current_request_expiry({current_request_expiry, Expiry}, Next, St) ->
 limit_reaction_expiry({limit_reaction_expiry, Expiry0}, Next, St = #est{bs = Bs}) ->
     Expiry = erlog_int:dderef(Expiry0, Bs),
     case reaction_metadata(St) of
-        {ok, #{ceiling := Upper, expiry_variable := Variable}}
-          when is_integer(Expiry), Expiry > 0, Expiry =< Upper ->
-            erlog_int:unify_prove_body(Variable, Expiry, Next, St);
+        {ok,#{ceiling := Upper,expiry_variable := Variable}} ->
+            case Expiry of
+                {_} -> erlog_int:instantiation_error(St);
+                _ when not is_integer(Expiry) -> erlog_int:type_error(integer,Expiry,St);
+                _ when Expiry =< 0 -> erlog_int:domain_error(request_expiry,Expiry,St);
+                _ when Expiry > Upper -> erlog_int:fail(St);
+                _ -> erlog_int:unify_prove_body(Variable,Expiry,Next,St)
+            end;
         _ -> erlog_int:fail(St)
     end.
 
@@ -155,15 +161,23 @@ recovery_observation({recovery_observation, Event}, Next, St) ->
 prepare_agent_custody({prepare_agent_custody, Target0, Epoch0, Result0}, Next,
                       St = #est{bs = Bs}) ->
     [Target, Epoch, Result] = erlog_int:dderef([Target0, Epoch0, Result0], Bs),
-    case {reaction_metadata(St), Target, quod_wire_term:is_ground(Target), Result} of
-        {{ok, #{mode := {node, Observer, execute},
-                recovery := #{target := Target, epoch := Epoch, observer := Observer},
-                preparation_variable := Variable}},
-         {agent_instance_ref, Ns, <<_:256>>, _}, true, {_}}
-          when is_binary(Ns), byte_size(Ns) > 0,
-               is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64) ->
-            Preparation = {custody, Target, Epoch, Result},
-            erlog_int:unify_prove_body(Variable, Preparation, Next, St);
+    case reaction_metadata(St) of
+        {ok,#{mode := {node,Observer,execute},recovery := Recovery,
+               preparation_variable := Variable}} ->
+            case quod_wire_term:is_ground([Target,Epoch]) of
+                true -> ok;
+                false -> erlog_int:instantiation_error(St)
+            end,
+            case {Target,Epoch,Result} of
+                {{agent_instance_ref,Ns,<<_:256>>,_},E,{_}}
+                  when is_binary(Ns),byte_size(Ns) > 0,is_integer(E),E > 0,E < (1 bsl 64) ->
+                    case Recovery of
+                        #{target := Target,epoch := Epoch,observer := Observer} ->
+                            erlog_int:unify_prove_body(Variable,{custody,Target,Epoch,Result},Next,St);
+                        _ -> erlog_int:fail(St)
+                    end;
+                _ -> erlog_int:domain_error(agent_custody,{Target,Epoch,Result},St)
+            end;
         _ -> erlog_int:fail(St)
     end.
 
@@ -171,9 +185,12 @@ prepare_agent_custody({prepare_agent_custody, Target0, Epoch0, Result0}, Next,
 %% candidates and backtracking cannot leak a custody preparation.
 prepare_signed_request({prepare_signed_request, Bytes, Signature, Template}, Next, St = #est{bs = Bs}) ->
     [B,S,T] = erlog_int:dderef([Bytes,Signature,Template], Bs),
-    case {reaction_metadata(St), quod_agent:valid_signed_preparation(B,S,T)} of
-        {{ok, #{physics := _, preparation_variable := Variable}}, true} ->
-            erlog_int:unify_prove_body(Variable, {signed_store,B,S,T}, Next, St);
+    case reaction_metadata(St) of
+        {ok,#{physics := _,preparation_variable := Variable}} ->
+            case quod_agent:valid_signed_preparation(B,S,T) of
+                true -> erlog_int:unify_prove_body(Variable,{signed_store,B,S,T},Next,St);
+                false -> erlog_int:domain_error(signed_preparation,T,St)
+            end;
         _ -> erlog_int:fail(St)
     end.
 
@@ -272,12 +289,12 @@ reaction_result_2({'$quod_reaction_result', Goal, Result}, Next, St = #est{bs = 
                    erlog_int:deref(Variable, Bs), erlog_int:dderef(Goal, Bs)) of
                 true -> erlog_int:unify_prove_body(
                           Result, {request, Goal, Expiry, Preparation}, Next, St);
-                false -> erlog_int:fail(St)
+                false -> erlog_int:domain_error(preparation_goal,erlog_int:dderef(Goal,Bs),St)
             end;
         {signed_store,B,S,T} ->
             case quod_agent:valid_signed_preparation(B,S,T) andalso quod_wire_term:is_ground(erlog_int:dderef(Goal,Bs)) of
                 true -> erlog_int:unify_prove_body(Result, {request,Goal,Expiry,Preparation}, Next, St);
-                false -> erlog_int:fail(St)
+                false -> erlog_int:domain_error(preparation_goal,erlog_int:dderef(Goal,Bs),St)
             end;
         %% A private physics request asks for a custodied consequence. An
         %% unrelated generic observed(_) clause cannot consume that request.
@@ -315,5 +332,5 @@ request_resource(Kind, Scope0, Next, St = #est{bs = Bs}) ->
                 {error, Reason} ->
                     throw({erlog_error, {resource_reconciliation_failed, Kind, Reason}})
             end;
-        false -> erlog_int:fail(St)
+        false -> erlog_int:instantiation_error(St)
     end.

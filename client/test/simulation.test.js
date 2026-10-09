@@ -181,7 +181,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
   }
   const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {},
-    unavailable: s => statuses.push(s), refused: s => refusals.push(s) }, {
+    unavailable: s => statuses.push(s), refused: (s, reasons) => refusals.push([s, reasons]) }, {
     WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32) },
     post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
   })
@@ -238,16 +238,26 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
       control_state: { sequence: '10', pending: false, result: 'clear' } }, freshView))
     const refused = recovered.command(input)
     await Promise.resolve()
-    settle.resolve({ result: 'fail' })
+    settle.resolve({ result: 'fail', reasons: ['stale_sequence(10)'] })
     assert.equal(await refused, false)
     assert.deepEqual(statuses, ['lost response'], 'a definite proof refusal keeps the current view available')
-    assert.deepEqual(refusals, ['Movement was refused.'])
+    assert.deepEqual(refusals, [['Movement was refused.', ['stale_sequence(10)']]])
     const following = recovered.command(input)
     await Promise.resolve()
     assert.equal(posts.length, 5, 'a refused discrete command does not wait for feedback that cannot arrive')
     assert.match(Buffer.from(posts[4].body.request, 'base64url').toString(), /,2,12,(?:snap|push)\(/)
     settle.resolve({ result: 'ok' })
     assert.equal(await following, true)
+    socket.receive(motion({ ...frame, tick: '3', registration: Buffer.alloc(32, 2).toString('base64url'),
+      control_state: { sequence: '12', pending: false, result: 'clear' } }, freshView))
+    const uncertain = recovered.command(input)
+    await Promise.resolve()
+    settle.resolve({ result: 'error', error: 'owner_unavailable' })
+    assert.equal(await uncertain, false)
+    assert.match(statuses.at(-1), /outcome unavailable/)
+    const count = posts.length
+    assert.equal(await recovered.command(input), false)
+    assert.equal(posts.length, count, 'an error suspends commands without resubmission')
   } finally { stream.close(); recovered?.close() }
 })
 }

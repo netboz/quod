@@ -100,9 +100,10 @@ recognition_test() ->
         ?assertEqual([], selections(<<"ugbash">>, St)),
         ?assertEqual([], selections(<<"UGBASH">>, St)),
         ?assertEqual([], selections(<<>>, St)),
-        ?assertEqual([], selections('Ugbash', St)),
-        ?assertEqual([], selections(42, St)),
-        ?assertEqual([], selections([$U, $g], St)),
+        lists:foreach(fun(Invalid) ->
+            ?assertException(throw, {erlog_error, {type_error, binary, Invalid}, _},
+                             selections(Invalid, St))
+        end, ['Ugbash', 42, [$U, $g]]),
         ?assertMatch({succeed, _},
                      erlog_int:prove_goal({name, <<"Ugbash">>, <<"orc">>, <<"personal">>, <<"male">>}, St)),
         ?assertMatch({succeed, _},

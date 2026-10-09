@@ -29,14 +29,23 @@ physics_body_read_projection(W, Body, Frame, Revision) :-
 physics_motion_read_projection(W, Body, Query, Frame, Revision,
         query_limits(Skin, Tolerance, Slides, Checks)) :-
     current_principal(Principal), can_query_physics_motion(W, Principal, Body, Query),
-    physics_query_allowances(W, Principal,
-        query_allowances(Skin, Tolerance, Slides, Checks, Travel, Turn)),
+    physics_required_configuration(Q, physics_query_allowances(W, Principal, Q),
+        query_allowances(Skin, Tolerance, Slides, Checks, Travel, Turn),
+        query_allowances_missing(W)),
     integer(Skin), Skin > 0, integer(Tolerance), Tolerance >= 0, Tolerance < Skin,
     integer(Slides), Slides > 0, integer(Checks), Checks > 0,
     integer(Travel), Travel > 0, integer(Turn), Turn > 0,
-    physics_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
+    physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
     physics_query_input(Query, Coordinate, Travel, Turn),
     physics_body_projection(W, Body, Frame, Revision).
+
+physics_required_allowances(W, Limits, Step, Gravity, Budget) :-
+    physics_required_configuration(allowances(L,S,G,B), physics_allowances(W,L,S,G,B),
+        allowances(Limits,Step,Gravity,Budget), allowances_missing(W)).
+
+physics_required_configuration(Template, Goal, Requested, Missing) :-
+    findall(Template, Goal, Rows),
+    (Rows = [] -> fail_with_reason(Missing) ; member(Requested, Rows)).
 
 physics_query_input(place(pose(Position, rotation(X,Y,Z))), Coordinate, _, Turn) :-
     physics_query_vector(Position, Coordinate), physics_query_vector(vector(X,Y,Z), Turn).
@@ -68,13 +77,16 @@ can_control_physics_agent(_, _, _) :- fail.
 physics_control_state(W, Principal, Epoch, Selection) :-
     findall(control(E, S), physics_control(W, Principal, E, S), Rows),
     (Rows = [] -> Epoch = 0, Selection = none
-    ; Rows = [control(Epoch, Selection)]).
+    ; Rows = [control(E, S)] -> Epoch = E, Selection = S
+    ; fail_with_reason(ambiguous_control(W))).
 
 physics_control_agent(W, ExpectedEpoch, ExpectedSelection, Selection) :-
     term_variables([W, ExpectedEpoch, ExpectedSelection, Selection], []),
     integer(ExpectedEpoch), ExpectedEpoch >= 0,
     transaction((current_principal(Principal), physics_space(W, _, _),
-        physics_control_state(W, Principal, ExpectedEpoch, ExpectedSelection),
+        physics_control_state(W, Principal, Epoch, Current),
+        (Epoch = ExpectedEpoch, Current = ExpectedSelection -> true
+        ; fail_with_reason(control_conflict(Epoch))),
         physics_control_choice(W, Principal, Selection),
         (ExpectedEpoch = 0, ExpectedSelection = none,
          \+ physics_control(W, Principal, _, _) -> true
@@ -85,25 +97,27 @@ physics_control_agent(W, ExpectedEpoch, ExpectedSelection, Selection) :-
 physics_control_choice(_, _, none).
 physics_control_choice(W, Principal, controlled(Agent, Viewpoint)) :-
     physics_agent_configuration(W, Principal, Agent, Viewpoint, _),
-    \+ (physics_control(W, Other, _, controlled(Agent, _)),
-        Other \== Principal).
+    (\+ (physics_control(W, Other, _, controlled(Agent, _)),
+        Other \== Principal) -> true ; fail_with_reason(agent_controlled(Agent))).
 
 %% Exact singleton definitions fail closed on ambiguous authored configuration.
 %% Pose/motion schema and supported mechanics are checked by the installing
 %% adapter, never inferred from an Eidolon or the human's device dimensions.
-physics_agent_configuration(W, Principal, Agent, Viewpoint,
-        controlled_agent(Agent, Revision, Body, BodyRevision, Motion,
-                         viewpoint(Viewpoint, LocalPose, Tracking))) :-
+physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration) :-
+    Configuration = controlled_agent(Agent, _, _, _, _, viewpoint(Viewpoint, _, _)),
     can_control_physics_agent(W, Principal, Agent),
     once((instance_of(Class, Agent), (Class = agent ; isa(Class, agent)))),
-    findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
+    (findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
             [definition(Revision, Body, Motion)]),
+     findall(A, physics_agent(W, A, _, Body, _), [Agent]),
+     findall(R, physics_body(W, Body, R, _, _, _, _), [BodyRevision]),
+     findall(mount(B, Pose, Track), physics_viewpoint(W, Agent, Viewpoint, B, Pose, Track),
+            [mount(Body, LocalPose, Tracking)]) -> true
+    ; fail_with_reason(ambiguous_agent(Agent))),
     integer(Revision), Revision > 0,
-    findall(A, physics_agent(W, A, _, Body, _), [Agent]),
-    findall(R, physics_body(W, Body, R, _, _, _, _), [BodyRevision]),
-    findall(mount(B, Pose, Track), physics_viewpoint(W, Agent, Viewpoint, B, Pose, Track),
-            [mount(Body, LocalPose, Tracking)]),
-    term_variables([Agent, Viewpoint, Body, Motion, LocalPose, Tracking], []).
+    term_variables([Agent, Viewpoint, Body, Motion, LocalPose, Tracking], []),
+    Configuration = controlled_agent(Agent, Revision, Body, BodyRevision, Motion,
+                                    viewpoint(Viewpoint, LocalPose, Tracking)).
 
 physics_control_configuration(W, Principal, Epoch, Configuration) :-
     physics_control_state(W, Principal, Epoch, controlled(Agent, Viewpoint)),
@@ -122,7 +136,11 @@ physics_client_control(W, control(Epoch,
 %% Camera/tracking offsets never enter this motion descriptor.
 physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence, Input, Control, Lease, Limits) :-
     agent_identifier(Registration), integer(Sequence), Sequence >= 0, current_principal(Principal),
-    physics_control_configuration(W, Principal, Epoch, Configuration),
+    physics_input_control(W, Principal, Epoch, Configuration),
+    physics_input_limits(W, Principal, Configuration, Frame, Input, Lease, Limits),
+    Control = control(Principal, Epoch, Configuration).
+
+physics_input_limits(W, _, Configuration, Frame, Input, Lease, Limits) :-
     Configuration = controlled_agent(_, _, Body, Revision, Motion, _),
     Motion = motion(Mode, Speed, Turn, Lease, Limits, Capabilities),
     physics_motion_mode(Mode), physics_motion_capabilities(Capabilities, []),
@@ -132,11 +150,16 @@ physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence,
     integer(Skin), Skin > 0, integer(Tolerance), Tolerance >= 0, Tolerance < Skin,
     integer(Slides), Slides > 0, integer(Checks), Checks > 0,
     physics_allowed_input(Input, Mode, Speed, Turn, Capabilities),
-    physics_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
+    physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
     physics_absolute_input(Input, Coordinate),
     physics_body_projection(W, Body, Frame, Revision),
-    physics_body(W, Body, Revision, controlled, _, _, _),
-    Control = control(Principal, Epoch, Configuration).
+    physics_body(W, Body, Revision, controlled, _, _, _).
+
+physics_input_control(W, Principal, Epoch, Configuration) :-
+    physics_control_state(W, Principal, Current, Selection),
+    (Selection = controlled(Agent, Viewpoint) -> true ; fail_with_reason(no_control(W))),
+    (Epoch = Current -> true ; fail_with_reason(control_conflict(Current))),
+    physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration).
 
 can_push_physics_body(_, _, _) :- fail.
 physics_push_allowances(_, _, _, _) :- fail.
@@ -144,7 +167,8 @@ physics_push_allowances(_, _, _, _) :- fail.
 physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed) :-
     can_push_physics_body(W, Principal, Body),
     physics_free_body(W, Body, Revision),
-    physics_push_allowances(W, Principal, Body, push_limits(MaxImpulse, MaxSpeed)),
+    physics_required_configuration(P, physics_push_allowances(W, Principal, Body, P),
+        push_limits(MaxImpulse, MaxSpeed), push_allowances_missing(Body)),
     integer(MaxImpulse), MaxImpulse > 0, integer(MaxSpeed), MaxSpeed > 0.
 
 physics_free_body(W, Body, Revision) :-
@@ -152,19 +176,15 @@ physics_free_body(W, Body, Revision) :-
     \+ physics_joint(W, hinge(Body, _, _, _, _, _)),
     \+ physics_joint(W, hinge(_, _, Body, _, _, _)).
 
-physics_input_projection(W, control_frame(Frame, Registration), Epoch, Sequence,
-        push(body(Body, Revision), vector(X,Y,Z)), Control, Lease,
+physics_input_limits(W, Principal, Configuration, Frame,
+        push(body(Body, Revision), vector(X,Y,Z)), Lease,
         push_limits(Body, Revision, MaxImpulse, MaxSpeed)) :-
-    agent_identifier(Registration), integer(Sequence), Sequence >= 0,
-    current_principal(Principal),
-    physics_control_configuration(W, Principal, Epoch, Configuration),
     Configuration = controlled_agent(_, _, _, _, motion(_, _, _, Lease, _, _), _),
     integer(Lease), Lease > 0,
     physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed),
     physics_query_vector(vector(X,Y,Z), MaxImpulse),
     X*X+Y*Y+Z*Z > 0, X*X+Y*Y+Z*Z =< MaxImpulse*MaxImpulse,
-    physics_body_projection(W, Body, Frame, Revision),
-    Control = control(Principal, Epoch, Configuration).
+    physics_body_projection(W, Body, Frame, Revision).
 
 physics_motion_mode(free).
 physics_motion_mode(grounded(Up)) :- integer(Up), Up > 0, Up =< 1000.
@@ -204,7 +224,7 @@ physics_client_view(simulation_view(world_ref(Ns, Anchor, W),
     physics_view(W, Marks), current_ontology_identity(Ns, Anchor),
     agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token),
     Generation > 0, physics_structure(W, Structure),
-    physics_allowances(W, limits(_, MaxPoses, _, _, _), _, _, _),
+    physics_required_allowances(W, limits(_, MaxPoses, _, _, _), _, _, _),
     length(Marks, Count), Count =< MaxPoses,
     physics_view_bodies(Marks, W, Ns, Anchor, []),
     physics_control_state(W, P, Binding, Selection),
@@ -225,7 +245,7 @@ physics_projection(Node, Rows) :-
                   baseline(Checkpoints, Joints, Activities, control_selection(Bindings, Controls))),
       (physics_space(W, enabled, I), agent_hosted(I, Node, Epoch, Key),
        physics_run(W, Generation, RunToken), physics_structure(W, Structure),
-       physics_allowances(W, Limits, StepUs, Gravity, Budget),
+       physics_required_allowances(W, Limits, StepUs, Gravity, Budget),
        physics_custody(W, Custody),
        findall(C, physics_recovery_checkpoint(W, C), Checkpoints),
        findall(J, physics_joint(W, J), Joints),
@@ -318,7 +338,7 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
         \+ physics_body(W, Door, _, _, _, _, _),
         \+ physics_body(W, Frame, _, _, _, _, _),
         physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
-        physics_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
+        physics_required_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
         physics_valid_body(Door, Position, LeafBox, Density, Coordinate),
         physics_valid_body(Frame, Position, FrameBox, Density, Coordinate),
         physics_valid_motor(Angle, Motor),
@@ -413,7 +433,7 @@ physics_door_measurement(
     physics_joint(W,hinge(D,Revision,Frame,_,Baseline,motor(_,_,_,Tolerance))),
     physics_body(W,Frame,FrameRevision,fixed,_,_,_),
     integer(Tick), Tick > 0, Tick < 18446744073709551616, integer(Angle), Angle >= -Baseline, Angle =< Baseline,
-    physics_allowances(W,_,_,_,Budget),
+    physics_required_allowances(W,_,_,_,Budget),
     integer(At), integer(Expiry), Expiry > At, Expiry - At =< Budget,
     current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry,
     physics_door_result(W,D,Frame,Angle,Tolerance,Contact,Result).
@@ -437,7 +457,7 @@ physics_move_body(W,D,Revision,Structure,Position) :-
         physics_structure(W,Structure), physics_body(W,D,Revision,Kind,Old,Shape,Density),
         \+ physics_joint(W,hinge(D,_,_,_,_,_)),
         \+ physics_joint(W,hinge(_,_,D,_,_,_)),
-        physics_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
         physics_query_vector(Position,Coordinate), physics_relocated_pose(Old,Position,Pose),
         Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
@@ -458,7 +478,7 @@ physics_move_door(W,D,Sequence,Structure,Position) :-
         physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor)),
         physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density),
         physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density),
-        physics_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
         physics_valid_body(D,Position,LeafBox,Density,Coordinate), Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
         retract(physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density)),
@@ -489,18 +509,27 @@ physics_rest_policy(_, _, _) :- fail.
 physics_checkpoint_body(W,D,Revision,Sequence,Id) :-
     term_variables([W,D,Revision,Sequence,Id], []), agent_identifier(Id),
     transaction((current_principal(P), can_checkpoint_physics_body(W,D,P), physics_space(W,enabled,_),
-        physics_free_body(W,D,Revision), physics_rest_policy(W,D,_),
-        physics_rest_state(W,D,Sequence,Before), Before \= waiting(_),
-        physics_rest_custody(W,D,Prior), physics_rest_replaceable(Prior,W,D),
+        (physics_free_body(W,D,Revision) -> true ; fail_with_reason(body_not_free(D))),
+        (physics_rest_policy(W,D,_) -> true ; fail_with_reason(rest_policy_missing(D))),
+        physics_rest_state(W,D,Current,Before),
+        (Sequence = Current -> true ; fail_with_reason(checkpoint_conflict(D))),
+        (Before \= waiting(_) -> true ; fail_with_reason(checkpoint_pending(D))),
+        physics_rest_custody(W,D,Prior),
+        (physics_rest_replaceable(Prior,W,D) -> true
+        ; fail_with_reason(checkpoint_custody_held(D))),
         physics_remove_rest_state(W,D), Next is Sequence + 1,
         assertz(physics_rest(W,D,Next,waiting(rest(Next,Id)))),
         physics_remove_rest_request(W,D))).
 
 physics_rest_state(W,D,Sequence,State) :-
     findall(rest(S,T), physics_rest(W,D,S,T), Rows),
-    (Rows = [] -> Sequence = 0, State = idle ; Rows = [rest(Sequence,State)]).
+    (Rows = [] -> Sequence = 0, State = idle
+    ; Rows = [rest(S,T)] -> Sequence = S, State = T
+    ; fail_with_reason(ambiguous_checkpoint(D))).
 physics_rest_custody(W,D,C) :-
-    findall(R, physics_rest_request(W,D,R), Rows), (Rows = [] -> C = none ; Rows = [C]).
+    findall(R, physics_rest_request(W,D,R), Rows),
+    (Rows = [] -> C = none ; Rows = [R] -> C = R
+    ; fail_with_reason(ambiguous_checkpoint_custody(D))).
 %% An authored cancellation retires this activity, not its backend operation.
 %% The changed revision makes its exact old finish permanently ineligible.
 physics_rest_replaceable(none,_,_).
@@ -546,7 +575,7 @@ physics_rest_measurement(rest_sample(W,D,R,Authority,Epoch,G,Token,Structure,Rev
     physics_free_body(W,D,Revision), physics_rest(W,D,_,waiting(R)),
     physics_rest_policy(W,D,recovery(Tolerance,Checks)),
     integer(Tolerance), Tolerance >= 0, integer(Checks), Checks > 0,
-    physics_allowances(W,limits(_,_,_,Coordinate,_),_,_,Budget),
+    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,Budget),
     Pose = pose(Position,quaternion(X,Y,Z,Q)), physics_query_vector(Position,Coordinate),
     physics_coordinate(X,1000000), physics_coordinate(Y,1000000),
     physics_coordinate(Z,1000000), physics_coordinate(Q,1000000),

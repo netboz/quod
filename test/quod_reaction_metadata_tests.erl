@@ -44,17 +44,27 @@ preparation_rejects_unowned_or_invalid_target_test_() ->
     [?_test(with_node(fun(Est) ->
         ?assertMatch({fail, _}, match(Est, Context, Goal, {record, {'Result'}}))
     end)) || {Context, Goal} <-
-        [{Meta, {prepare_agent_custody, actor, 1, {'Result'}}},
-         {Meta, {prepare_agent_custody, setelement(2, Target, <<"other">>), 1, {'Result'}}},
+        [{Meta, {prepare_agent_custody, setelement(2, Target, <<"other">>), 1, {'Result'}}},
          {Meta, {prepare_agent_custody, setelement(3, Target, <<3:256>>), 1, {'Result'}}},
-         {Meta, {prepare_agent_custody, setelement(4, Target, {'Instance'}), 1, {'Result'}}},
          {Meta, {prepare_agent_custody, Target, 2, {'Result'}}},
-         {Meta, {prepare_agent_custody, Target, 1, already_bound}},
          {maps:remove(recovery, Meta), {prepare_agent_custody, Target, 1, {'Result'}}},
          {Meta#{mode => execute}, {prepare_agent_custody, Target, 1, {'Result'}}},
          {Meta#{recovery => #{target => Target, epoch => 1,
                              observer => setelement(4, Node, other)}},
           {prepare_agent_custody, Target, 1, {'Result'}}}]].
+
+preparation_reports_invalid_arguments_test_() ->
+    [?_test(with_node(fun(Est) ->
+        ?assertMatch({error, {erlog, {domain_error, agent_custody, _}}},
+                     match(Est, metadata(), Goal, {record, {'Result'}}))
+    end)) || Goal <- [{prepare_agent_custody, actor, 1, {'Result'}},
+                     {prepare_agent_custody, target(), 1, already_bound}]] ++
+    [?_test(with_node(fun(Est) ->
+        ?assertEqual({error, {erlog, instantiation_error}},
+          match(Est, metadata(),
+                {prepare_agent_custody, setelement(4, target(), {'Instance'}), 1, {'Result'}},
+                {record, {'Result'}}))
+    end))].
 
 metadata_backtracking_and_expiry_bounds_test() ->
     with_node(fun(Est) ->
@@ -76,7 +86,8 @@ metadata_backtracking_and_expiry_bounds_test() ->
 
 preparation_template_still_requires_one_shared_result_variable_test_() ->
     [?_test(with_node(fun(Est) ->
-        ?assertMatch({fail, _}, match(Est, metadata(),
+        ?assertMatch({error, {erlog, {domain_error, preparation_goal, _}}},
+                     match(Est, metadata(),
                                      {prepare_agent_custody, target(), 1, {'Result'}},
                                      Template))
     end)) || Template <- [true, {record, {'Other'}}, {record, {'Result'}, {'Other'}}]].

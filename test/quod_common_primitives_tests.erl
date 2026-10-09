@@ -22,18 +22,18 @@ binary_codes_test() ->
     ?assertEqual(<<0, 255>>, value({'B'}, {binary_codes, {'B'}, [0, 255]}, St)),
     ?assertMatch({succeed, _},
                  erlog_int:prove_goal({binary_codes, <<"Ug">>, [$U, $g]}, St)),
-    lists:foreach(
-      fun(Goal) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)) end,
-      [{binary_codes, <<"Ug">>, [$U]},
-       {binary_codes, ug, {'C'}},
-       {binary_codes, 42, {'C'}},
-       {binary_codes, [$U], {'C'}},
-       {binary_codes, {'B'}, [300]},
-       {binary_codes, {'B'}, [-1]},
-       {binary_codes, {'B'}, [a]},
-       {binary_codes, {'B'}, foo},
-       {binary_codes, {'B'}, [$U | {'T'}]},
-       {binary_codes, {'B'}, {'C'}}]).
+    ?assertMatch({fail,_},erlog_int:prove_goal({binary_codes,<<"Ug">>,[$U]},St)),
+    lists:foreach(fun({Goal,Error}) ->
+        ?assertMatch({erlog_error,Error,_},catch erlog_int:prove_goal(Goal,St))
+    end,[{{binary_codes,ug,{'C'}},{type_error,binary,ug}},
+         {{binary_codes,42,{'C'}},{type_error,binary,42}},
+         {{binary_codes,[$U],{'C'}},{type_error,binary,[$U]}},
+         {{binary_codes,{'B'},[300]},{domain_error,byte_list,[300]}},
+         {{binary_codes,{'B'},[-1]},{domain_error,byte_list,[-1]}},
+         {{binary_codes,{'B'},[a]},{domain_error,byte_list,[a]}},
+         {{binary_codes,{'B'},foo},{type_error,list,foo}},
+         {{binary_codes,{'B'},[$U|{'T'}]},instantiation_error},
+         {{binary_codes,{'B'},{'C'}},instantiation_error}]).
 
 authored_clauses_hide_followers_and_preserve_scope_test() ->
     with_authored([{choice, first}, {choice, second}], fun(St) ->
@@ -299,23 +299,20 @@ refuses_outside_a_proof_test() ->
                                   {proof_draw, salt, 10, {'I'}}, bare()))
     end).
 
-invalid_inputs_fail_plainly_test() ->
+invalid_inputs_are_errors_test() ->
     ProofId = crypto:strong_rand_bytes(32),
     Scope = {scope, ProofId, self(), make_ref(), <<1:128>>},
     with_committed(fun(Committed) ->
-        lists:foreach(
-          fun(Goal) ->
-                  ?assertEqual(fail, quod_ct:session_prove(
-                                       Committed, Scope, proof_ctx(), Goal))
-          end,
-          [{?DRAW, salt, 0, {'I'}},
-           {?DRAW, salt, -3, {'I'}},
-           {?DRAW, salt, ten, {'I'}},
-           {?DRAW, salt, {'N'}, {'I'}},
-           {?DRAW, {'Salt'}, 10, {'I'}},
-           {?DRAW, {f, {'X'}}, 10, {'I'}},
-           {?DRAW, [a | {'T'}], 10, {'I'}},
-           {?DRAW, salt, 10, 99}]),
+        lists:foreach(fun({Goal,Error}) ->
+            ?assertMatch({error,{erlog,Error}},quod_ct:session_prove(Committed,Scope,proof_ctx(),Goal))
+        end,[{{?DRAW,salt,0,{'I'}},{domain_error,proof_draw_divisor,0}},
+             {{?DRAW,salt,-3,{'I'}},{domain_error,proof_draw_divisor,-3}},
+             {{?DRAW,salt,ten,{'I'}},{type_error,integer,ten}},
+             {{?DRAW,salt,{'N'},{'I'}},instantiation_error},
+             {{?DRAW,{'Salt'},10,{'I'}},instantiation_error},
+             {{?DRAW,{f,{'X'}},10,{'I'}},instantiation_error},
+             {{?DRAW,[a|{'T'}],10,{'I'}},instantiation_error}]),
+        ?assertEqual(fail,quod_ct:session_prove(Committed,Scope,proof_ctx(),{?DRAW,salt,10,99})),
         %% A ground compound salt, and a bound I that matches, succeed.
         I = draw(Committed, Scope, {f, [1, <<"b">>, c]}, 10),
         ?assertMatch({ok, _}, quod_ct:session_prove(

@@ -72,20 +72,20 @@ load(Est0) ->
 
 %% admit(Pubkey, Host, Port): prove can_join, then stage the peer_admitted assert. Gate + stage are ONE
 %% erlog conjunction — if can_join fails, the assert is never reached, so nothing is staged and the prove
-%% fails (run_proof discards the overlay). An ill-typed goal fails closed (never crashes the fact engine).
+%% fails (run_proof discards the overlay). An ill-typed goal raises an argument error.
 admit_3(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {admit, Pub, Host, Port} when is_binary(Pub) ->
             case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
                 {undefined, _} -> erlog_int:fail(St);
-                {_Ns, false} -> erlog_int:fail(St);
+                {_Ns, false} -> quod_predicates:fail_reason(committee_full,St);
                 {Ns, true} ->
                     Fact = {peer_admitted, Pub, Host, Port, Pub},
                     erlog_int:prove_body(
                       [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)
             end;
-        _ ->
-            erlog_int:fail(St)
+        {admit, {_}, _, _} -> erlog_int:instantiation_error(St);
+        {admit, Pub, _, _} -> erlog_int:type_error(binary,Pub,St)
     end.
 
 %% remove(Pubkey): refuse to remove the last member (crash-safe floor), then retract peer_admitted BY
@@ -100,15 +100,19 @@ remove_1(Goal, Next, #est{bs = Bs} = St) ->
                 %% variable, so three `{'_'}` would unify to one value and the retract would miss.
                 true  -> erlog_int:prove_body(
                            [{retract, {peer_admitted, {'Ri'}, {'Rh'}, {'Rp'}, Pub}} | Next], St);
-                false -> erlog_int:fail(St)   %% never empty the committee
+                false ->
+                    case lists:member(Pub,admitted_pubkeys(St)) of
+                        true -> quod_predicates:fail_reason(last_committee_member,St);
+                        false -> erlog_int:fail(St)
+                    end
             end;
-        _ ->
-            erlog_int:fail(St)
+        {remove, {_}} -> erlog_int:instantiation_error(St);
+        {remove, Pub} -> erlog_int:type_error(binary,Pub,St)
     end.
 
 %% peer_ready(Pk): succeed iff Pk is a live, caught-up follower by this node's own observation
 %% (quod_feed:peer_ready/3 — fresh digest + height slack). Read-only: stages nothing, binds nothing.
-%% An unbound/non-binary argument fails closed (the gate is a check, not a generator). NOTE validators MAY
+%% An unbound/non-binary argument raises an argument error (this is not a generator). NOTE validators MAY
 %% legitimately split on this predicate (each judges from its OWN digest table) — see the verdict-split
 %% note in `quod_commit_validation`'s membership validation.
 peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
@@ -125,8 +129,8 @@ peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
                     end;
                 _ -> erlog_int:fail(St)
             end;
-        _ ->
-            erlog_int:fail(St)
+        {peer_ready, {_}} -> erlog_int:instantiation_error(St);
+        {peer_ready, Pub} -> erlog_int:type_error(binary,Pub,St)
     end.
 
 %% This node's namespace, read from the run's execution context (`m:quod_predicates`), which every proof,

@@ -16,8 +16,9 @@ load(Est) ->
 
 continue_agent_work({continue_agent_work, Instance0, Wake0}, Next, #est{bs = Bs} = St) ->
     [Instance, Wake] = erlog_int:dderef([Instance0, Wake0], Bs),
-    case quod_wire_term:is_ground(Instance) andalso
-         (Wake =:= changed orelse Wake =:= continue) of
-        true -> quod_runtime_predicates:request_resource(agent_work, {Instance, Wake}, Next, St);
-        false -> erlog_int:fail(St)
+    case quod_wire_term:is_ground([Instance,Wake]) of
+        false -> erlog_int:instantiation_error(St);
+        true when Wake =:= changed; Wake =:= continue ->
+            quod_runtime_predicates:request_resource(agent_work,{Instance,Wake},Next,St);
+        true -> erlog_int:domain_error(agent_work_wake,Wake,St)
     end.

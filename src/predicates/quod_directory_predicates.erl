@@ -47,10 +47,13 @@ directory_host_5(Goal, Next, #est{bs = Bs} = St) ->
                       [GenesisAnchor, NodeKey, Host, Port],
                       Candidates, Next, St);
                 error ->
-                    erlog_int:fail(St)
+                    case quod_wire_term:is_ground(NsTerm) of
+                        false -> erlog_int:instantiation_error(St);
+                        true -> erlog_int:domain_error(ontology_name,NsTerm,St)
+                    end
             end;
-        _ ->
-            erlog_int:fail(St)
+        _ -> erlog_int:erlog_error(
+            {context_violation,directory_host,query,non_root},St)
     end.
 
 %% Root's committed membership facts are the sole directory-control authority.
@@ -66,8 +69,8 @@ directory_control_peer_1(Goal, Next, #est{bs = Bs} = St) ->
                  || Key <- quod_committee_predicates:admitted_pubkeys(St),
                     is_binary(Key), byte_size(Key) =:= 32],
             prove_member(NodeKey, Keys, Next, St);
-        _ ->
-            erlog_int:fail(St)
+        _ -> erlog_int:erlog_error(
+            {context_violation,directory_control_peer,query,non_root},St)
     end.
 
 %% Delegate unification and choice-point management to Erlog's standard list

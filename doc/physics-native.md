@@ -85,8 +85,10 @@ grant and `can_read_physics_body(World, Principal, Body)`. It returns
 `body_state(Frame, Tick, body(Id,Revision), metres_seconds, Pose, Velocity)`.
 `Frame` is `physics_frame(WorldRef, Authority, HostEpoch, RunGeneration,
 Incarnation, Structure)`; pose rotations use `quaternion(X,Y,Z,W)`.
-The owner copies its retained sample. A missing owner, stale installed frame,
-missing body or retired run is `unavailable`, never an inferred baseline.
+The owner copies its retained sample. A stale installed frame, missing body or
+retired run may bind `unavailable`, never an inferred baseline. A missing owner
+or failed owner call is a reasoned failure under the [proof contract](proofs.md),
+distinct from that valid answer. Malformed request or policy values are errors.
 
 `physics_motion_query(World, Body, Query, Result)` additionally uses
 `can_query_physics_motion(World, Principal, Body, Query)` and

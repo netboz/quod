@@ -129,7 +129,7 @@ export function connectSimulation(identity, agent, { projection, frame, unavaila
       if (active && epoch === commandEpoch && reply.result !== 'ok') {
         if (reply.result === 'fail') {
           discreteSequence = null
-          refused('Movement was refused.')
+          refused('Movement was refused.', reply.reasons ?? [])
         } else failed(new Error('Movement outcome unavailable. Refresh the simulation to reconnect.'))
       }
       return reply.result === 'ok'

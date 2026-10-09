@@ -45,7 +45,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          staged_desired_state/2,
          cleanup_read_set/1]).
 -export_type([access_guard/0, revision/0, checkpoint/0, read_only_frame/0]).
--export([stage_transient/2, transient/1, transient_root/1]).
+-export([require_transient_context/1, stage_transient/2, transient/1, transient_root/1]).
 
 -type access_guard() ::
         unguarded |
@@ -237,15 +237,33 @@ action_request(_St, _Handle, _Action) -> error.
 
 %% A control proof stages one indivisible owner operation. It cannot stage
 %% durable changes or split an atomic promise across independent live owners.
-stage_transient(#est{db = #db{mod = ?MODULE,ref = #lp{
+require_transient_context(#est{db = #db{mod = ?MODULE,ref = #lp{
         transient_allowed = true,signed_request = true,read_only = true,
-        transient = none,write_intent = ordinary} = Ov} = Db} = St, Effect) ->
+        write_intent = ordinary} = Ov}}) ->
+    ensure_access(Ov), ok;
+require_transient_context(#est{db = #db{mod = ?MODULE,ref = #lp{} = Ov}} = St) ->
     ensure_access(Ov),
-    case quod_effect:valid_transient(Effect) of
-        true -> {ok,St#est{db = Db#db{ref = Ov#lp{transient = Effect}}}};
-        false -> error
-    end;
-stage_transient(_,_) -> error.
+    Mode = case {Ov#lp.transient_allowed,Ov#lp.signed_request,Ov#lp.read_only} of
+        {_,false,_} -> unsigned;
+        {false,_,_} -> non_control;
+        {_,_,false} -> write_proof;
+        _ -> Ov#lp.write_intent
+    end,
+    erlog_int:erlog_error({context_violation,physics_control_input,staging,Mode},St);
+require_transient_context(St) ->
+    erlog_int:erlog_error({context_violation,physics_control_input,staging,unmanaged},St).
+
+stage_transient(St,Effect) ->
+    ok = require_transient_context(St),
+    #est{db = #db{ref = Ov} = Db} = St,
+    case Ov#lp.transient of
+        none ->
+            case quod_effect:valid_transient(Effect) of
+                true -> {ok,St#est{db = Db#db{ref = Ov#lp{transient = Effect}}}};
+                false -> erlog_int:domain_error(transient_effect,Effect,St)
+            end;
+        _ -> {error,transient_already_staged}
+    end.
 
 transient(#est{db = #db{mod = ?MODULE,ref = Ov}}) ->
     ensure_access(Ov), Ov#lp.transient.

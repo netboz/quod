@@ -26,7 +26,7 @@ input(Pid,Expected,Control,Sequence,Input,Expiry,Deadline) ->
     case min(Deadline-quod_time:mono_ms(),Expiry-quod_time:now_ms()) of
         Remaining when Remaining > 0 ->
             gen_server:call(Pid,{physics_input,Expected,Control,Sequence,Input,Expiry,Deadline},Remaining);
-        _ -> {error,transient_expired}
+        _ -> {error,expired}
     end.
 watch(Pid, Expected) -> gen_server:call(Pid, {watch, Expected}).
 unwatch(Pid, Ref) -> Pid ! {physics_unwatch, self(), Ref}, ok.
@@ -54,6 +54,7 @@ handle_call(Request,From,S) ->
         _ -> false
     end,
     case NeedsNavigation andalso not navigation_current(S) of
+        true when element(1,Request) =:= physics_input -> {reply,{error,reinstalling},S};
         true -> {reply,{error,unavailable},S};
         false -> handle_current_call(Request,From,S)
     end.
@@ -107,19 +108,26 @@ handle_current_call({snapshot, Expected}, _From, S = #s{phase = active, frame = 
 handle_current_call({physics_input,Expected,Control = {control,Principal,_,_},Sequence,Input,Expiry,Deadline},_,
             S = #s{phase = active,frame = Frame,inputs = Inputs}) ->
     Previous = maps:get(Principal,Inputs,#{sequence => -1}),
-    case current_projection(Frame,Expected) andalso current_control(Expected#{control => Control},S#s.spec)
-         andalso Expiry > quod_time:now_ms() andalso Sequence > maps:get(sequence,Previous)
-         andalso Deadline > quod_time:mono_ms()
-         andalso current_registration(Control,Expected,S#s.viewer) andalso not pending_discrete(Previous)
-         andalso installed_input(Control,Input,S#s.spec) of
-        true ->
+    Retained = maps:get(sequence,Previous),
+    Checks = [
+        {current_projection(Frame,Expected),{stale_projection,maps:get(structure,Frame)}},
+        {current_control(Expected#{control => Control},S#s.spec) andalso
+         installed_input(Control,Input,S#s.spec),control_not_installed},
+        {current_registration(Control,Expected,S#s.viewer),stale_registration},
+        {Sequence > Retained,{stale_sequence,Retained}},
+        {not pending_discrete(Previous),discrete_pending},
+        {Expiry > quod_time:now_ms() andalso Deadline > quod_time:mono_ms(),expired}],
+    case lists:dropwhile(fun({Accepted,_}) -> Accepted end,Checks) of
+        [] ->
             Row = #{control => Control,expected => Expected,sequence => Sequence,input => Input,expiry => Expiry,
                     vertical => maps:get(vertical,Previous,0.0),falling => maps:get(falling,Previous,true),
                     pending => true,result => queued},
             Updated = S#s{inputs = Inputs#{Principal => Row}},
             {reply,ok,schedule({true,[],[]},Updated)};
-        false -> {reply,{error,transient_unavailable},S}
+        [{false,Reason}|_] -> {reply,{error,Reason},S}
     end;
+handle_current_call({physics_input,_,_,_,_,_,_},_,S) ->
+    {reply,{error,physics_world_unavailable},S};
 handle_current_call(status, _From, S) ->
     {reply, (counters(S))#{phase => S#s.phase, incarnation => S#s.token,navigation_ready => navigation_current(S),
         inputs => maps:map(fun(_,R) -> maps:with([sequence,result],R) end,S#s.inputs),

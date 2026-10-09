@@ -15,7 +15,7 @@ export type WorkspacePanelModel = {
 }
 export type WorldScene = {
   paint(marks: unknown[]): void
-  simulation(view: SimulationView | null): void
+  simulation(view: SimulationView | null | undefined): void
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
   setWorkspace(model: WorkspacePanelModel | null): void
   releaseNavigation(): void

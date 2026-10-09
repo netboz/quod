@@ -509,11 +509,11 @@ execute_signed(
   Goal, {agent, AgentRef} = Principal)
   when is_binary(TargetNs),
        is_binary(AgentRef),
-       (Mode =:= read orelse Mode =:= execute) ->
+       (Mode =:= read orelse Mode =:= execute orelse Mode =:= control) ->
     case signed_engine(TargetNs, Anchor) of
         {ok, Engine} ->
             case Mode of
-                read ->
+                M when M =:= read; M =:= control ->
                     public_proof(
                       Engine, TargetNs, prove_ro, Goal,
                       quod_trace:context(), Principal, Anchor, Evidence);
@@ -526,6 +526,9 @@ execute_signed(
     end;
 execute_signed(_Evidence, _Goal, _Principal) ->
     {error, invalid_signed_goal}.
+
+is_control_request(#{request := #{mode := control}}) -> true;
+is_control_request(_) -> false.
 
 signed_engine(TargetNs, <<_:256>> = Anchor) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
@@ -1942,6 +1945,7 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                        request_binding => RequestBinding,
                                        request_expiry => maps:get(request_expiry, RequestContext, none),
                                        signed_request => maps:get(request_auth, RequestContext) =/= none,
+                                       transient_allowed => maps:get(transient_allowed, RequestContext, false),
                                        trace_ctx => maps:get(
                                          trace_ctx, RequestContext,
                                          otel_ctx:new()),
@@ -2252,6 +2256,7 @@ verify_scope_authentication(
                             {ok, #{request_binding =>
                                        quod_client_goal:request_binding(Evidence),
                                    request_expiry => maps:get(not_after_ms, maps:get(request, Evidence)),
+                                   transient_allowed => is_control_request(Evidence),
                                    request_auth =>
                                        quod_client_goal:request_auth(Evidence)}};
                         {error, _} ->
@@ -4360,6 +4365,7 @@ run_pinned_origin(
     OverlayOpts = #{read_set => true,
                     read_only => ReadOnly,
                     signed_request => RequestEvidence =/= none,
+                    transient_allowed => is_control_request(RequestEvidence),
                     signer => Signer,
                     proof_context => {origin, OriginHandle}},
     Context = quod_predicates:with_chain(
@@ -4388,7 +4394,7 @@ run_pinned_origin(
                     deadline_ms = Deadline, kind = Kind,
                     namespace = Ns, anchor = Anchor, height = Applied,
                     context = Context, session = Session},
-        try finalize_pinned_result(RunFun(Origin))
+        try finalize_request_result(RequestEvidence,RunFun(Origin),Deadline)
         after
             quod_trace:with_span(
               quod_trace:context(), <<"quod.prolog.session_stop">>, internal,
@@ -4399,6 +4405,21 @@ run_pinned_origin(
           fun close_origin_scope/1,
           fun({_Owner, Invocation}) -> quod_ask:close_stream(Invocation) end)
     end.
+
+finalize_request_result(#{request := #{mode := control}},Result = {ok,_,_,_},Deadline) ->
+    case quod_proof_context:transient() of
+        {ok,Effect} ->
+            case finalize_pinned_result(Result) of
+                {ok,_,_,_} = Finished ->
+                    case quod_effect:release_transient(Effect,Deadline) of
+                        ok -> Finished;
+                        {error,_} = Error -> Error
+                    end;
+                Other -> Other
+            end;
+        {error,_} = Error -> finalize_pinned_result(Error)
+    end;
+finalize_request_result(_,Result,_) -> finalize_pinned_result(Result).
 
 finalize_pinned_result(Result) ->
     Mode = finalization_mode(Result),

@@ -788,7 +788,13 @@ t_grounded_ask(#{pets := P}) ->
                  prove(P, {'::', animals, {diet, dog, grass}})).
 
 t_self_ask(#{animals := A}) ->
-    ?assertMatch({ok, [#{}], _}, prove(A, {'::', animals, {isa, dog, mammal}})).
+    ?assertMatch({ok, [#{}], _}, prove(A, {'::', animals, {isa, dog, mammal}})),
+    %% A selected goal is syntax, including conjunction and a local cut.
+    ?assertMatch({ok, [#{}], _}, prove(A, {'::', animals,
+        {',', {isa, dog, mammal}, {',', '!', {isa, dog, mammal}}}})),
+    ?assertMatch({ok, [#{'X' := second}], _}, prove(A,
+        {',', {';', {'=', {'X'}, first}, {'=', {'X'}, second}},
+         {',', {'::', animals, {',', '!', true}}, {'=', {'X'}, second}}})).
 
 %% A content-readable qctx namespace is not distributed-proof authority. The
 %% foreign raw call must fail before the target engine opens any worker, while

@@ -10,6 +10,7 @@ the scope wire as Erlang references.
 """.
 
 -include("quod_proof_limits.hrl").
+-export([transient/0]).
 
 -export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
          request_evidence/0, request_auth/0, request_binding/0, request_expiry/0,
@@ -334,6 +335,17 @@ finalize(Mode) when Mode =:= commit; Mode =:= abort ->
               Result -> Result
           end
       end).
+
+transient() ->
+    transient(maps:values((context())#ctx.scopes),none).
+transient([],Effect) -> {ok,Effect};
+transient([#scope{handle = Handle}|Rest],Effect) ->
+    case quod_scope_session:transient(Handle) of
+        {ok,none} -> transient(Rest,Effect);
+        {ok,Next} when Effect =:= none -> transient(Rest,Next);
+        {ok,_} -> {error,multiple_transient_effects};
+        {error,_} = Error -> Error
+    end.
 
 finalize_seal(commit) ->
     case seal_plans() of

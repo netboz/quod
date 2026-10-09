@@ -26,7 +26,7 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 %% budget starts before authentication and is never renewed during lookup.
 -define(OPERATION_RESOLVE_BUDGET_MS, 5000).
 
--type mode() :: read | execute | cursor.
+-type mode() :: read | execute | cursor | control.
 -type result() ::
         {ok, quod_client_goal:evidence(), term()} | {error, term()}.
 
@@ -34,7 +34,7 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 -spec submit(mode(), binary(), binary(), binary(), term()) -> result().
 submit(ExpectedMode, SessionId, RequestBytes, Signature, Peer)
   when ExpectedMode =:= read; ExpectedMode =:= execute;
-       ExpectedMode =:= cursor ->
+       ExpectedMode =:= cursor; ExpectedMode =:= control ->
     case trace_stage(
            <<"quod.client.session_admission">>, internal,
            fun() -> quod_client_auth:admit_goal(SessionId, Peer) end) of
@@ -65,7 +65,7 @@ submit(RequestBytes, Signature, <<_:256>> = Peer) ->
     case quod_client_goal_target:verify_request(RequestBytes, Signature) of
         {ok, #{request := #{mode := Mode, signing_public_key := Key},
                agent_ref_blob := AgentRef} = Evidence}
-          when Mode =:= read; Mode =:= execute ->
+          when Mode =:= read; Mode =:= execute; Mode =:= control ->
             case quod_client_auth:admit_forwarded_goal(Key, Peer) of
                 ok ->
                     execute_gateway(Evidence, RequestBytes, Signature,
@@ -326,6 +326,8 @@ execute_gateway(
             execute_local(Evidence, Principal, Peer, Owner, CursorBinding);
         {error, wrong_target} ->
             {error, wrong_target};
+        {error, _NotLocal} when Mode =:= control ->
+            {error, signed_target_unavailable};
         {error, _NotLocal} ->
             forward_gateway(
               Evidence, RequestBytes, Signature, Principal, Peer, Owner,
@@ -343,7 +345,8 @@ execute_local(Evidence, Principal, Peer, Owner, CursorBinding) ->
 
 cursor_binding(cursor) -> crypto:strong_rand_bytes(32);
 cursor_binding(read) -> none;
-cursor_binding(execute) -> none.
+cursor_binding(execute) -> none;
+cursor_binding(control) -> none.
 
 forward_gateway(
   #{request := #{agent_namespace := Ns,

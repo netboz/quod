@@ -1,12 +1,14 @@
 # Retained server physics profile
 
 The authority and lifecycle contract is [world.md](world.md). This first adapter
-supports fixed and dynamic cuboids, authored baseline poses, uniform gravity,
+supports authored solid and surface geometry, baseline poses, uniform gravity,
 and coherent pose/contact snapshots. Vertical revolute cuboid doors add an
 ordinary close action, mechanical obstruction braking and signed blocked/closed
 consequences with an atomic stopped-angle checkpoint. One local client view
-can consume current poses. Hot controls, general agent queries and impact occurrences remain outside this
-profile. Unsupported joint/checkpoint declarations fail installation visibly;
+can consume current poses. Governed body-state and collision queries read the
+installed owner. Signed transient controls move ontology-defined rigid agents and push eligible
+free dynamic bodies. Explicit rest checkpoints preserve their recovery poses;
+impact occurrences remain outside this profile. Unsupported joint/checkpoint declarations fail installation visibly;
 there is no silent baseline fallback.
 
 ## Installation and policy
@@ -33,13 +35,41 @@ The Prolog selection supplies:
 
 - `physics_run(World, Generation, IncarnationToken)` and
   `physics_structure(World, Revision)`;
-- `physics_allowances(World, limits(Bodies, Poses, Contacts, CoordinateMm),
+- `physics_allowances(World, limits(Bodies, Poses, Contacts, CoordinateMm,
+  geometry(Parts, Vertices, Triangles)),
   StepMicroseconds, GravityMmPerSecondSquared, RequestBudgetMs)`;
-- `physics_body(World, Id, Revision, fixed|dynamic, vector(X,Y,Z),
-  box(HalfX,HalfY,HalfZ), DensityKgPerM3)`.
+- `physics_body(World, Id, Revision, fixed|dynamic|controlled, Pose,
+  Shape, DensityKgPerM3)`.
+
+This allowance schema replaces the earlier four-field `limits` term. Existing
+world policy must explicitly supply geometry allowances before deployment;
+this change does not migrate or wipe ontology history.
+
+`Pose` is `pose(vector(X,Y,Z), rotation(Rx,Ry,Rz))`, with millimetres and
+milliradians. Rotation applies X, then Y, then Z. `vector(X,Y,Z)` authors an
+identity rotation. Supported solids are `box(HalfX,HalfY,HalfZ)`, `ball(Radius)`,
+`capsule(HalfSegment,Radius)` along local Y, and `convex(Vertices)` with explicit
+convex-hull semantics and positive volume. `parts([part(LocalPose,Solid),...])`
+authors a rigid compound: gaps between parts remain gaps, and parts have their
+own position and orientation. Articulated geometry requires supported joints;
+it is not flattened into a hull or replaced with a capsule.
+
+Fixed bodies additionally support `surface(Vertices,Triangles)`. Vertices are
+`vector/3`; each `triangle(A,B,C)` names zero-based vertex indices. Invalid or
+degenerate triangles fail installation. This is an explicitly authored physical
+surface, independent of rendered meshes, picking bounds and voxel indexing.
+It represents sloped/non-cubic terrain without introducing a grid controller.
+Surface geometry cannot be used as a moving solid body.
+
+Geometry allowances count all installed parts, convex/surface vertices, and
+surface triangles across the world, including unchanged retained bodies.
+Unchanged geometry consumes its declared allowance without rebuilding native
+shapes. Geometry and body revisions install together. `controlled` selects a
+kinematic body; the governed motion path below applies checked poses without
+movement-induced impulses to dynamic obstacles.
 
 The limits are policy inputs, not Erlang constants. The native numeric envelope
-bounds positions and cuboid dimensions. Gravity, velocity, density and all
+bounds positions and physical dimensions. Gravity, velocity, density and all
 other numeric values must be finite and representable as Rapier `f32`; density
 is not compared to a distance allowance. IDs and body revisions use unsigned
 64-bit native fields. Positive mass, dimensions and step are representation
@@ -47,6 +77,287 @@ requirements. The ordinary hosted-agent admission policy still owns actor
 population and request capacity. Body/contact limits are not a hard byte or
 wall-clock allocation guarantee: broad/narrow-phase pairs can grow quadratically
 with the admitted body count. Policy authors must budget aggregate worlds too.
+
+## Live Prolog physics queries
+
+`physics_body_state(World, Body, Result)` requires the ordinary `can_invoke/4`
+grant and `can_read_physics_body(World, Principal, Body)`. It returns
+`body_state(Frame, Tick, body(Id,Revision), metres_seconds, Pose, Velocity)`.
+`Frame` is `physics_frame(WorldRef, Authority, HostEpoch, RunGeneration,
+Incarnation, Structure)`; pose rotations use `quaternion(X,Y,Z,W)`.
+The owner copies its retained sample. A missing owner, stale installed frame,
+missing body or retired run is `unavailable`, never an inferred baseline.
+
+`physics_motion_query(World, Body, Query, Result)` additionally uses
+`can_query_physics_motion(World, Principal, Body, Query)` and
+`physics_query_allowances(World, Principal,
+query_allowances(SkinMm, PenetrationToleranceMm, SlideIterations,
+NarrowPhaseTests, TranslationComponentMm, RotationComponentMrad))`.
+Each allowance is ontology policy. Both predicates require a read-only proof;
+they cannot validate staged grants or a durable edit using transient state.
+Unauthorized queries fail. Their Erlang continuations require an opaque handle
+created by the public predicate before evaluating ordinary Prolog policy.
+
+Queries are `place(pose(vector(X,Y,Z),rotation(Rx,Ry,Rz)))`,
+`travel(vector(Dx,Dy,Dz),angular(Ax,Ay,Az))` and
+`landing(vector(X,Y,Z), ReachMm, DropMm, MinUpPermille)`. Placement rotation uses the authored
+Euler convention; travel rotation is an angular displacement vector in world
+coordinates. Distances/angles in inputs are millimetres/milliradians. The native travel
+rotation query accepts at most pi radians per component. This is a single
+bounded rotation sweep, not an unbounded spin command.
+
+The result is `motion_query(Frame, Tick, body(Id,Revision), metres_seconds,
+Answer)`. `Answer` is `clear(Pose,Checks)`,
+`clipped(Pose,Contacts,Checks)`, `occupied(Body,Checks)`,
+`blocked(Body,Checks)`, `no_support`, `unsupported`,
+`unavailable`, `invalid`, or `exhausted`. Contacts name the collider and world
+normal. Translation slides along contact surfaces; rotation stops at contact.
+Slide exhaustion returns the conservative clipped pose; narrow-phase allowance
+exhaustion returns no usable pose. Unsupported shape pairs fail closed.
+
+Queries use the installed broad-phase index and current collider poses, including
+doors; they do not rebuild terrain or move any body. Collider installation must
+finish updating that index before queries become available. Results describe
+that tick only: a clear preview is neither a movement authorization nor a future
+landing guarantee. The command owner checks again at application.
+
+## Played-agent movement
+
+`physics_agent(World, Agent, Revision, Body, Motion)` selects an existing local
+agent instance and its declared rigid body. `physics_viewpoint(World, Agent,
+Name, Body, LocalPose, Tracking)` defines both position and orientation of the
+camera in that body frame. There is no universal capsule or browser eye height.
+The human principal may belong to another ontology and never impersonates the
+controlled agent. A compound body may have arbitrary authored local parts;
+unsupported articulated controllers fail closed.
+
+`physics_control_agent(World, ExpectedEpoch, ExpectedSelection, Selection)` is
+an ordinary transaction. Selection is `none` or `controlled(Agent, Viewpoint)`.
+It requires `can_control_physics_agent/3` plus ordinary invocation admission,
+checks exclusive target ownership, and advances an enduring binding epoch.
+Release retains the epoch tombstone. A revoked holder cannot be silently
+replaced while its durable binding still exists.
+
+The first movement profile is:
+
+```prolog
+motion(free, SpeedMmPerSecond, TurnMradPerSecond, LeaseMs,
+       query_limits(SkinMm, ToleranceMm, SlideIterations, NarrowPhaseTests), Capabilities)
+motion(grounded(MinUpPermille), Speed, Turn, Lease, Limits, Capabilities)
+```
+
+Grounded means world-Y gravity, horizontal commanded travel and support normals
+meeting the authored upward threshold. It is an explicit mechanical profile,
+not an inference from agent shape. Capabilities are unique entries from
+`snap(AngleMrad)`, `teleport(ReachMm, DropMm, MinUpPermille)` and `reposition`.
+Unknown modes/capabilities are refused. Policy supplies speeds, lease and query
+allowances; packet frequency does not multiply continuous travel distance.
+
+The signed `control` mode (wire tag 3; `/api/goals/control`) reuses the existing
+signed ingress and proof engine. Its database is read-only. The root uses the
+existing distributed savepoint, and an external predicate stages at most one
+indivisible transient effect in the immutable proof overlay. Only the first
+surviving answer, after successful scope finalization, releases it through
+`quod_effect` to the existing physics owner. Failure, abandoned branches,
+negation, cut failure, expiry or proof cleanup release nothing. Ordinary read,
+execute and cursor requests cannot stage this effect. This lane has no ledger,
+operation journal, automatic replay or remote control forwarding.
+
+```prolog
+physics_control_input(World, control_frame(PhysicsFrame, Registration),
+                      BindingEpoch, Sequence, Input, queued(Sequence)).
+```
+
+`PhysicsFrame` is the same exact frame used by live queries. Registration is
+created by the current signed view and checked by the physics owner, together
+with installed control configuration, authority, structure, sequence and expiry.
+A refresh/disconnect revokes it and clears voluntary input, including unapplied
+discrete requests. Grounded fall state survives a view disconnect or a reinstall
+of the same control configuration. Changed physical geometry wakes support
+checks even for a settled body. A clipped descent with no downward progress
+settles mechanically; it does not make that contact a valid teleport landing.
+While the physical configuration is unavailable, mechanics pause and old inputs
+do not keep the step timer awake. A new view reads the retained sequence high-water mark,
+including after configuration edits with the same binding; its prior result is
+reported as suspended when the configuration changed. An
+old registration cannot take over with a higher sequence. The browser sends one
+request at a time and suspends commands after an uncertain response, without
+replaying it. Proof success means queued admission; the view supplies the actual
+mechanical outcome.
+
+Inputs are `drive(vector(Vx,Vy,Vz),angular(Wx,Wy,Wz))`, `snap(AngleMrad)`,
+`teleport(vector(X,Y,Z))`, and explicitly permitted
+`reposition(pose(Position,Rotation))`. Drive is the latest desired velocity,
+leased and applied at the server timestep. Translation stops/slides; rotational
+sweeps check all parts and stop at contact. Snap may therefore stop short of its
+requested angle. Teleport keeps orientation, checks the complete straight body
+path, then searches downward for valid support. Occupied destinations, blocked
+paths, unsupported slopes, missing support and exhausted queries leave the pose
+unchanged. Previews never authorize a later landing. A pending discrete command
+cannot be overwritten before its outcome; there is no command accumulation queue.
+
+An occupied authored spawn or collider edit does not trigger hidden
+unbounded depenetration: travel is refused with `occupied`. Numerical
+penetration is admitted only up to the authored query tolerance, including
+contacts with dynamic bodies; it never excludes a class of physical obstacles. Explicit reposition
+checks the complete destination and may repair an occupied start without a
+travel path. Reposition is live motion, not a durable baseline edit. Restart
+restores authored body baselines under a new run/registration, making any
+correction visible. Free dynamic bodies support the rest checkpoints below; played-agent checkpoints
+remain outside this profile. Durable placement changes use the ordinary authored
+edit or request/observation/committed-consequence path, never a live query as
+evidence inside a durable proof.
+
+Relevant committed physical/control changes invalidate a runtime-owned shared
+generation before asynchronous reinstallation. Owners stop accepting/advancing
+old commands immediately on that token, coalesce invalidation notices, and
+notify only installed state. Shapes, indices and the simulation resource remain
+owned by the same retained physics process. No browser mesh or picking result
+becomes collision authority.
+
+### Desktop and tracked viewing
+
+The desktop adapter removes Babylon's translating inputs in the Simulation
+scene. Keys submit bounded desired travel through the predicate; the camera
+mount follows accepted poses without interpolation through walls. Look remains
+local. Unknown/unavailable worlds freeze commanded travel instead of enabling
+observer flight.
+
+`view_only` supports desktop look. `tracking(view_only, MaxOffsetMm)` additionally
+provides a calibrated XR reference-to-mount mapping. Calibration recentres
+position and heading while preserving tracked pitch and roll. Head motion is view motion;
+it does not change collision shape or body position. For each delivered frame,
+the owner measures a conservative clearance ball around the authored mount
+against the installed world, excluding its own body and using the same query
+allowance. This is sensory clearance, not a new player collider. Each tracked
+eye must stay within that clearance and the authored offset allowance. Otherwise
+an opaque mask asks the human to return; tracking continues behind it. Missing
+clearance, missing mappings, lost tracking and unavailable authority also mask.
+A moved door can reduce clearance at the next authoritative frame; this is not
+a physical barrier against a human moving in their room.
+
+Default XR mesh teleportation is disabled. On the intended Vive mapping, the
+left grip plus touchpad drives smooth travel; a left-pad left/right click requests
+snap turn and a forward click requests a half-range teleport in the controller's
+horizontal pointing direction. The right pad owns the action menu. Menus and
+workspaces suppress locomotion. Components are discovered by WebXR type; missing
+components are not guessed. Teleport placement uses body-origin coordinates and
+physical support, without a visual-floor ray granting permission. The current
+adapter has no landing preview marker. Hardware qualification must separately
+check Vive runtime/browser mappings, masking, comfort and contact feedback.
+
+## Chair pushes and rest checkpoints
+
+A chair is an ordinary `dynamic` body with a stable numeric body identity in its
+anchored world. Its projected mark binds `body_pose(Id, BodyRevision)` to the
+anchored domain subject in `depicts`; neither a mesh name nor a visual occurrence
+is a physics identity. Body identities must not be recycled after deletion.
+`physics_move_body/5` retains the identity and advances its body revision to the
+new world structure revision.
+
+The existing signed `control` request accepts:
+
+```prolog
+physics_control_input(World, control_frame(PhysicsFrame, Registration),
+    BindingEpoch, Sequence, push(body(Id, BodyRevision), vector(X,Y,Z)), Result).
+```
+
+The caller needs an active played-agent binding/view registration, ordinary
+invocation admission, `can_push_physics_body(World, Principal, Id)`, and
+`physics_push_allowances(World, Principal, Id, push_limits(MaxImpulse, MaxSpeed))`.
+Prolog checks eligibility, the exact dynamic-body revision, and nonzero impulse
+magnitude. Hinged bodies are ineligible. Policy supplies maximum impulse in
+milli-newton-seconds and maximum resulting speed in millimetres per second;
+input components use milli-newton-seconds. Eligibility policy may impose domain
+restrictions; the adapter does not infer reach or ownership from a rendered hit.
+The native owner refuses a push whose resulting linear speed exceeds the limit,
+including accumulated velocity from earlier pushes. This bound governs the
+command's application, not later velocity caused by gravity or collisions.
+
+The client helper `pushInput(id, revision, impulse)` in
+[locomotion.js](../client/src/locomotion.js) accepts newton-seconds and preserves
+64-bit IDs. Pass its term to the simulation connection's `command` method.
+The current profile exposes this programmatic action; it does not add a desktop
+or headset grab/push gesture.
+
+The owner rechecks installed policy, world/authority/host/run/incarnation,
+structure, body revision, registration, sequence and expiry at admission and
+application. A committed physical or policy change invalidates old commands
+before asynchronous reinstallation. Each sequence can apply once within its
+binding; a fresh registration reads the retained sequence and a new run discards
+all inputs. `queued(Sequence)` is admission, while the projected control feedback
+reports `pushed`, `refused` or expiry. The client keeps one request in flight,
+waits for discrete feedback before sending another input, and suspends commands
+on an uncertain reply. Refresh obtains a fresh authorized view and never
+resubmits the lost push. Physics frames move the existing visual body without
+writing its author baseline; appearance refresh and checkpoint-only installation
+retain the live pose and native resource.
+
+A durable checkpoint is explicitly requested through an ordinary action:
+
+```prolog
+physics_checkpoint_body(World, Id, ExpectedBodyRevision, ExpectedSequence, RequestId).
+```
+
+`RequestId` is 32 bytes and the initial sequence is zero. The world must be
+enabled. The caller needs
+`can_checkpoint_physics_body(World, Id, Principal)` and ordinary invocation
+admission. The world supplies `physics_rest_policy(World, Id,
+recovery(PenetrationToleranceMm, NarrowPhaseChecks))`. The action records
+`physics_rest(World, Id, NextSequence, waiting(rest(NextSequence, RequestId)))`.
+It never accepts a caller-supplied measured pose. Once the native body sleeps,
+the current authority emits a fenced, completed-tick rest observation. Give that
+actor explicit invocation grants for `physics_store_rest_request/4` and
+`physics_finish_rest/1`. Their existing custody lane saves exact signed bytes,
+then commits the finished request and checkpoint together:
+
+```prolog
+physics_checkpoint(World, rest_v1(Id, BodyRevision,
+    source(Authority, HostEpoch, Generation, Incarnation, Structure, Tick),
+    world_mm_quaternion_million,
+    pose(vector(X,Y,Z), quaternion(Qx,Qy,Qz,Qw)), zero_velocity)).
+```
+
+Positions are rounded millimetres and quaternion components are rounded to
+millionths; linear and angular recovery velocities are zero. The authored
+`physics_body/7` remains unchanged. Only the current checkpoint is selected;
+replacement cannot move backward in `(Generation, Tick)`. Each new explicit
+request and renewal of expired, certainly-unsent evidence completes a new
+mechanical step even for a sleeping body. Unknown signed outcomes are resolved using the original bytes, without
+resubmission or a fresh checkpoint request. A saved-but-never-submitted request
+can remain visibly unresolved. A new request cannot bypass active custody.
+
+An authored `physics_move_body/5` transaction advances structure/body revision,
+removes that body's checkpoint and cancels its waiting checkpoint activity
+atomically. It retains old signed custody for outcome resolution until a new
+explicit checkpoint request replaces it. Cancellation and the changed body
+revision fence the old finish permanently, so that distinct request may proceed
+even if the old backend outcome remains unknown; it never resubmits the old
+action or asserts a rejection. If the
+checkpoint commits first, the edit removes it; if the edit commits first, the
+old checkpoint loses ordinary OCC validation. Neither ordering restores the
+pre-edit pose. Editing an unrelated body keeps this chair's checkpoint but
+fences any pending observation against the old world structure.
+
+Request, custody and checkpoint commits each refresh the signed live view and
+suspend voluntary inputs. The retained body pose survives these refreshes.
+
+Owner death, runtime collapse/restart, ontology replay and host restart discard
+unsaved motion and unapplied pushes. The successor must commit a fresh run
+before installing the current compatible rest checkpoint, or the authored
+baseline with zero velocity when no checkpoint exists. Hosted-agent recovery
+selects any replacement host; uncertainty or missing commit quorum leaves the
+world unavailable. Replayed facts do not replay push or checkpoint reactions.
+An unresolved saved checkpoint operation is resolved, never submitted again.
+Frames under the new run expose the recovery reset and reject old commands.
+
+Rest recovery uses zero displacement: it checks all restored bodies against the
+current installed geometry with the policy's bounded narrow-phase allowance
+and penetration tolerance. It cannot move through a newer wall or open a closed
+door to repair overlap. Bad rotation, incompatible revision, unsupported shape
+checks, exhausted allowance or excessive overlap visibly fail installation;
+there is no silent baseline fallback. An authorized body edit invalidates the
+checkpoint and supplies a new baseline as the explicit recovery exit.
 
 ## Door actions and effective definitions
 
@@ -74,7 +385,8 @@ contact or arrival within its closed-angle tolerance; other bodies continue.
 Only Prolog interprets the sample as `blocked(OtherBody)` or `closed`.
 
 `physics_move_body/5` edits an unconnected obstacle with expected body and
-structure revisions. `physics_move_door/5` edits the whole supported joint
+structure revisions. Its new position retains authored geometry and orientation,
+including non-box and compound bodies. `physics_move_door/5` edits the whole supported joint
 group, advances its revisions, invalidates its checkpoint and cancels an
 active close. Both require `can_edit_physics/2`. `physics_cancel_door/3`,
 authorized by `can_cancel_physics_door/3`, explicitly ends a pending close
@@ -229,59 +541,59 @@ provides a remotely authorized contact-proof interface.
 
 ## One client view
 
-The browser's **Simulation** scene opens `/api/simulation` on the existing TLS
-client listener. This profile requires a local ontology containing the selected
-agent and view, with its simulation authority hosted on this node. It does not
-forward motion across nodes or authorize multiple viewers. A second active
-view receives `view_busy`.
+The browser's **Simulation** scene first reads
+`physics_client_world(ontology_ref(Namespace, Anchor))` in the signer's ontology.
+The containing world supplies a local reference; a human ontology can author a
+foreign reference. This is view selection, never a control grant. The client
+then opens `/api/simulation` on the existing TLS listener. Both the signer's
+ontology and the selected world must be local, and the simulation authority
+must be hosted here. There is still one viewer; a second receives `view_busy`.
 
-The world ontology defines `physics_view(World, Marks)` and
-`can_view_physics(World, Principal)`, and grants the selected agent ordinary
-`can_invoke` access to `physics_client_view/1`. There is no default view grant.
-Its one signed read is exactly `physics_client_view(View).`; the session,
-signature, agent key and Prolog policy use existing ingress. View data and its
-permission inputs must be local to that ontology in this profile. The body
-projection is not a transferable capability or permission to read contacts.
+The world defines `physics_view(World, Marks)`, `can_view_physics(World, Principal)`
+and an ordinary `can_invoke/4` grant for the complete guarded view goal:
 
-Each mark is a world-root `mark/7` whose sole transform source is
-`body_pose(BodyId, BodyRevision)`, and whose `depicts/3` names its anchored domain
-entity. The ID remains a view occurrence; several occurrences can share a body.
-The Prolog pose allowance bounds occurrence count. The endpoint checks all
-bindings against the installed simulation frame before exposing the projection.
-It rejects partial or mismatched body sets. Body IDs, revisions, epoch,
-generation, structure, durable height and ticks use decimal strings in JSON,
-including native uint64 values beyond JavaScript's safe integer range.
+```prolog
+Namespace::(current_ontology_identity(Namespace, Anchor), physics_client_view(View)).
+```
 
-The client sends `open` with the same `session_id`, base64url signed `request`
-and `signature` fields as ordinary reads. A `projection` reply includes a new
-`view` ID (the signed request digest), `height`, mark text and a complete current
-`frame`. Subsequent `simulation_frame` messages carry that view ID and a frame.
-Schema 1 frames explicitly name world, authority, host epoch, run generation,
-incarnation, structure and tick, with metre positions and world-space XYZW unit
-quaternions. Contacts and velocities are not exposed. The existing reply byte
-encoding limit applies independently of Prolog allocation allowances.
+There is no default grant. The endpoint accepts exactly that parsed goal with
+one `View` variable; an arbitrary proof cannot manufacture a projection.
+It subscribes to both source and world before reading, and verifies unchanged
+heights and the installed physical frame before attaching. An advance or replay
+in either scope revokes the view. Invocation permission and keys remain under
+ordinary signed ingress; the source principal is preserved in the world scope.
 
-An `ack` containing that view ID and exact last tick releases one delivery
-credit. While it is held, the simulation retains only its current frame; it
-does not enqueue intermediate poses. A sleeping unchanged world sends nothing,
-and repeated acknowledgements neither step nor write files. This credit is
-transport backpressure, not a durable acknowledgement or replay cursor.
+Marks are world-root `mark/7` occurrences using `body_pose(Id, Revision)` and
+anchored `depicts/3`. Occurrence identity and body identity remain distinct.
+The selected controlled body is also projected when it has no visible mark.
+The endpoint checks the complete body set against the current owner. Numeric
+identities, heights and sequences use decimal strings in JSON, preserving uint64
+values beyond JavaScript's safe integer range.
 
-The handler subscribes before its read, checks the read height after attachment,
-and invalidates on a subsequent durable advance, replay, structural change,
-owner death or signed-request expiry. `refresh` asks for a new signed projection;
-installation waits use owner notifications. The original signed deadline is
-never extended. Reconnect starts a fresh signed read; the browser's Refresh
-control and online event reopen the stream without readiness polling. A lost
-motion tick needs no read or replay. Old view IDs, fences and non-increasing
-ticks cannot move current occurrences. Appearance refresh retains the engine
-objects and uses the fresh live pose, never the durable baseline. Unavailable
-body poses are hidden, not presented as current. During a refresh the last pose
-remains visible with an explicit stale/refreshing status; old motion is rejected.
-Each namespace commit conservatively costs a new signature, read and watch,
-including door custody/checkpoint commits. A busy namespace can starve motion
-delivery. The signed answer exposes a height rather than a dependency watch;
-narrower invalidation is outside this bounded profile.
+`open` carries `session_id`, signed `request`, `signature`, `world_namespace`
+and base64url `world_anchor`. `projection` returns the signed-request digest as
+`view`, `height`, `expires_ms`, marks, optional Prolog control configuration and
+a current frame. Schema 1 frames carry world/authority/run/structure/tick,
+metre positions, XYZW quaternions, this view's random registration, selected
+control's last accepted sequence and operation outcome, and optional sensory
+clearance. Other principals' inputs are not exposed.
+
+An `ack` for the exact view and last tick releases one delivery credit. The
+owner retains one latest frame, not a motion queue. Unchanged sleeping worlds
+send nothing; repeated acknowledgements neither step nor write. Command outcomes
+advance feedback even when the body does not move. This is transport credit,
+not durable acknowledgement. The original signed expiry is enforced by server
+and browser; a lost connection cannot keep an authorized view indefinitely.
+
+Durable changes, owner death, expiry and structural invalidation require a fresh
+signed read. Installation waits use owner notices, not polling. The Simulation
+scene rereads the signer's selected world when refreshing. Unavailable poses are
+hidden and commanded travel pauses. Leaving the Simulation scene restores the
+separate local observer camera. Old view IDs, registrations, physical fences and
+non-increasing ticks cannot drive the current scene. Each namespace commit
+conservatively costs a new read/watch; a busy namespace can still starve view
+availability. Narrow dependency watches for arbitrary view proofs are outside
+this profile.
 
 Replay, runtime queue collapse, actor death, changed assignment and explicit
 disable retire the current simulator. Replay reconstructs desired resources

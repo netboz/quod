@@ -1,0 +1,70 @@
+{
+  "passed": true,
+  "sources_unchanged": true,
+  "results": [
+    {
+      "name": "fmt",
+      "command": [
+        "rebar3",
+        "fmt"
+      ],
+      "exit": 0,
+      "scope": "full formatter; unrelated test-only formatting discarded"
+    },
+    {
+      "name": "compile",
+      "command": [
+        "rebar3",
+        "compile"
+      ],
+      "exit": 0,
+      "seconds": 0.92
+    },
+    {
+      "name": "eunit",
+      "command": [
+        "rebar3",
+        "eunit"
+      ],
+      "exit": 0,
+      "seconds": 60.22
+    },
+    {
+      "name": "lint",
+      "command": [
+        "rebar3",
+        "lint"
+      ],
+      "exit": 0,
+      "seconds": 3.37
+    },
+    {
+      "name": "dialyzer",
+      "command": [
+        "rebar3",
+        "dialyzer"
+      ],
+      "exit": 0,
+      "seconds": 33.03
+    },
+    {
+      "name": "xref",
+      "command": [
+        "rebar3",
+        "xref"
+      ],
+      "exit": 0,
+      "seconds": 0.75
+    },
+    {
+      "name": "send-ready-ct",
+      "command": [
+        "rebar3",
+        "ct",
+        "--suite=quic_send_ready_SUITE"
+      ],
+      "exit": 0,
+      "seconds": 20.67
+    }
+  ]
+}

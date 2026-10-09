@@ -67,18 +67,18 @@ retries it. Authorization remains the target ontology's ordinary ACL. It uses
 the existing physical identity signer and never substitutes node authority for
 another agent's signature.
 """.
--spec signed_goal(read | execute, term(), <<_:256>>, pos_integer()) ->
+-spec signed_goal(read | execute | control, term(), <<_:256>>, pos_integer()) ->
           {ok, binary(), binary()} | {error, term()}.
 signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry)
-  when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry), Expiry > 0 ->
+  when (Mode =:= read orelse Mode =:= execute orelse Mode =:= control), is_integer(Expiry), Expiry > 0 ->
     signed_goal(Mode, Goal, Operation, Expiry, current);
 signed_goal(_, _, _, _) -> {error, invalid_request}.
 
 -doc "Construct a node request only while its explicit executor binding remains current.".
--spec signed_goal(read | execute, term(), <<_:256>>, pos_integer(), current | {term(), <<_:256>>}) ->
+-spec signed_goal(read | execute | control, term(), <<_:256>>, pos_integer(), current | {term(), <<_:256>>}) ->
           {ok, binary(), binary()} | {error, term()}.
 signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry, Expected)
-  when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry), Expiry > 0 ->
+  when (Mode =:= read orelse Mode =:= execute orelse Mode =:= control), is_integer(Expiry), Expiry > 0 ->
     case {principal(), quod_ontology:network_identity(),
           application:get_env(quod, node_pubkey), application:get_env(quod, identity_key)} of
         {{ok, Principal}, {ok, Network}, {ok, PublicKey}, {ok, Signer}} ->

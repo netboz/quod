@@ -9,7 +9,7 @@ together. Invocation mode is a separate concern and is restored before every
 caller continuation. Public nesting policy belongs to the caller, not here.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
--export([load/1, run/4, commit_1/3]).
+-export([load/1, run/4, commit_1/3, control_entry/3,control_goal/2]).
 -define(COMMIT, '$quod_savepoint_commit').
 -define(FAILED, '$quod_savepoint_failed').
 -record(savepoint, {ref :: reference(),
@@ -23,7 +23,19 @@ caller continuation. Public nesting policy belongs to the caller, not here.
 -doc "Install only the unforgeable-reference continuation, not a public control.".
 -spec load(tuple()) -> tuple().
 load(#est{db = Db} = St) ->
-    St#est{db = erlog_int:add_compiled_proc({?COMMIT, 1}, ?MODULE, commit_1, Db)}.
+    Commit = erlog_int:add_compiled_proc({?COMMIT, 1}, ?MODULE, commit_1, Db),
+    St#est{db = erlog_int:add_compiled_proc({'$quod_control_proof',2},?MODULE,control_entry,Commit)}.
+
+%% Control requests choose their first surviving answer under the same
+%% distributed savepoint as actions. The original goal remains the ACL input.
+control_goal(Goal,St) ->
+    {Handle,Bound} = quod_erlog_db_local_prove:register_action_request(St,control_proof,none),
+    erlog_int:prove_goal({'$quod_control_proof',Handle,Goal},Bound).
+control_entry({'$quod_control_proof',Handle,Goal},Next,St) ->
+    case quod_erlog_db_local_prove:action_request(St,Handle,control_proof) of
+        {ok,none} -> run(Goal,Next,St,ordinary);
+        _ -> erlog_int:fail(St)
+    end.
 
 -doc "Retain the first complete solution under one rollback boundary and invocation mode.".
 -spec run(term(), list(), tuple(), ordinary | atomic | independent) -> term().

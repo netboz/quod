@@ -13,7 +13,7 @@ import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm
   readEntityEidolons, readEidolonWorkspace, singleBinding, GoalFailure } from '../../client/src/world.js'
 import type { EidolonChoice, EidolonWorkspace, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
-import { connectSimulation } from '../../client/src/simulation.js'
+import { connectSimulation, readSimulationWorld } from '../../client/src/simulation.js'
 
 export default function World() {
   const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
@@ -117,22 +117,33 @@ export default function World() {
 
   useEffect(() => {
     if (view !== 'physics' || !scene || !identity || !agent) return
-    const stream = connectSimulation(identity, agent, {
-      projection(current) {
-        scene.simulation(current)
-        setMarks(current.marks)
-        setStatus('Live simulation.')
-      },
-      frame(current) { scene.simulation(current) },
-      refreshing() { setStatus('Refreshing the simulation view; showing its last pose…') },
-      unavailable(reason) { scene.simulation(null); setStatus(reason) },
-    })
+    scene.simulation(null)
+    let active = true
+    let stream: ReturnType<typeof connectSimulation> | undefined
+    void readSimulationWorld(identity, agent).then(world => {
+      if (!active) return
+      stream = connectSimulation(identity, agent, {
+        projection(current) {
+          scene.simulation(current)
+          setMarks(current.marks)
+          setStatus('Live simulation. VR: left grip + pad for travel; left pad click for turn or teleport; right pad for actions.')
+        },
+        frame(current) { scene.simulation(current) },
+        refreshing() {
+          scene.simulation(null); setStatus('World updating. Movement paused…')
+          setRevision(value => value + 1)
+          return false
+        },
+        unavailable(reason) { scene.simulation(null); setStatus(reason) },
+      }, { world })
+    }).catch(error => { if (active) setStatus(String(error)) })
     const online = () => setRevision(value => value + 1)
     window.addEventListener('online', online)
     return () => {
       window.removeEventListener('online', online)
-      stream.close()
-      scene.simulation(null)
+      active = false
+      stream?.close()
+      scene.simulation(undefined)
     }
   }, [view, scene, identity, agent, revision])
 

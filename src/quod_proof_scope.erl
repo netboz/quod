@@ -89,7 +89,12 @@ bindings(#scope{vars = Vars, state = #est{} = St}) ->
       end).
 
 run_step(fresh, Goal, St) ->
-    guarded(fun() -> erlog_int:prove_goal(Goal, St) end);
+    guarded(fun() ->
+        case quod_erlog_db_local_prove:transient_root(St) of
+            true -> quod_proof_savepoint:control_goal(Goal,St);
+            false -> erlog_int:prove_goal(Goal,St)
+        end
+    end);
 run_step(more, _Goal, St) ->
     guarded(fun() -> erlog_int:fail(St) end).
 

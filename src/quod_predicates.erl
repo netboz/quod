@@ -29,7 +29,7 @@ The typed **external-predicate contract** and the per-run **execution context**
    | class | role |
    |---|---|
    | `query` | Read context, state or governed runtime services. |
-   | `staging` | Stage durable operations in an ordinary proof. |
+   | `staging` | Stage operations under their durable or transient release contract. |
    | `reaction` | Bind request metadata while matching eligibility. |
 
    Governed predicates register through `load/1`, which routes them via

@@ -153,6 +153,7 @@ prepare_materialized(_Evidence, _Peer, _Owner, _CursorBinding) ->
 
 valid_mode_binding(cursor, <<_:256>>) -> true;
 valid_mode_binding(read, none) -> true;
+valid_mode_binding(control, none) -> true;
 valid_mode_binding(execute, none) -> true;
 valid_mode_binding(_, _) -> false.
 
@@ -173,8 +174,8 @@ execute(#{request := #{mode := cursor}} = Evidence, Goal, Principal,
             quod_client_cursor:open(
               Owner, CursorId, Evidence, Goal, Principal))
       end);
-execute(#{request := #{mode := read}} = Evidence, Goal, Principal,
-        _Owner, none) ->
+execute(#{request := #{mode := Mode}} = Evidence, Goal, Principal,
+        _Owner, none) when Mode =:= read; Mode =:= control ->
     trace_stage(
       <<"quod.client.target_execute">>, internal,
       fun() ->

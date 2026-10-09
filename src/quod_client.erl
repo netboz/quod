@@ -107,6 +107,7 @@ routes() ->
         {"/api/auth/complete", quod_client_http, auth_complete},
         {"/api/simulation", quod_client_simulation, []},
         {"/api/goals/read", quod_client_http, signed_goal_read},
+        {"/api/goals/control", quod_client_http, signed_goal_control},
         {"/api/goals/execute", quod_client_http, signed_goal_execute},
         {"/api/goals/outcomes", quod_client_http, signed_goal_outcome},
         {"/api/goals/cursors", quod_client_http, signed_goal_cursor},

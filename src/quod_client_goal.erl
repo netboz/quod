@@ -29,7 +29,7 @@ when they need the complete validator check.
 -define(DOMAIN, <<"quod.agent.goal.v1", 0>>).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
--type mode() :: read | execute | cursor.
+-type mode() :: read | execute | cursor | control.
 -type request() ::
         #{network_identity := <<_:256>>,
           signing_public_key := <<_:256>>,
@@ -437,15 +437,18 @@ valid_utf8_bytes(Bytes) ->
 valid_mode(read) -> true;
 valid_mode(execute) -> true;
 valid_mode(cursor) -> true;
+valid_mode(control) -> true;
 valid_mode(_) -> false.
 
 mode_tag(read) -> 0;
 mode_tag(execute) -> 1;
-mode_tag(cursor) -> 2.
+mode_tag(cursor) -> 2;
+mode_tag(control) -> 3.
 
 decode_mode(0) -> {ok, read};
 decode_mode(1) -> {ok, execute};
 decode_mode(2) -> {ok, cursor};
+decode_mode(3) -> {ok, control};
 decode_mode(_) -> error.
 
 %% ------------------------------------------------------------------

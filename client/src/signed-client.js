@@ -7,7 +7,7 @@ const GOAL_DOMAIN = encoder.encode('quod.agent.goal.v1\0')
 const CHALLENGE_DOMAIN = encoder.encode('quod.agent.challenge.v1\0')
 const REQUEST_TTL_MS = 30_000
 const PARSER_VERSION = 3
-const MODE_TAG = { read: 0, execute: 1, cursor: 2 }
+const MODE_TAG = { read: 0, execute: 1, cursor: 2, control: 3 }
 const cursorOperations = new Map()
 
 // Authenticate one key through the same challenge flow used by every browser
@@ -51,6 +51,8 @@ export async function signedGoal(identity, { mode, agent, goal }, options = {}) 
   const signature = new Uint8Array(await identity.provider.sign(request))
   const body = signedBody(identity, request, signature)
   if (mode === 'read') return post('/api/goals/read', body)
+  // Lossy commands are never journaled or automatically replayed.
+  if (mode === 'control') return post('/api/goals/control', body)
 
   const operation = await operationRow(identity, request, signature)
   if (options.context) operation.context = options.context

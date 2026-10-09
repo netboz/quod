@@ -1,5 +1,8 @@
 //! Mechanical adapter. No ontology, principal, generation or domain decisions.
 use rapier3d::prelude::*;
+mod geometry;
+mod motion;
+use geometry::{Geometry, Kind, Transform};
 use rustler::{Atom, Env, LocalPid, NifResult, ResourceArc, Term};
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -8,14 +11,18 @@ use std::sync::{Mutex, TryLockError};
 mod atoms {
     rustler::atoms! { ok, busy, retired, wrong_owner, native_failure, invalid_body,
     body_allowance, pose_allowance, contact_allowance, invalid_allowance,
-    coordinate_allowance, invalid_step, invalid_gravity, non_finite_state, stale_revision, invalid_hinge }
+    coordinate_allowance, invalid_step, invalid_gravity, non_finite_state, stale_revision, invalid_hinge, geometry_allowance, invalid_checkpoint }
 }
 
 // Metres, seconds and kilograms. Names and revisions remain in the Erlang owner.
-// id, revision, dynamic, position xyz, cuboid half extents xyz, density.
-type Body = (u64, u64, bool, (f64, f64, f64), (f64, f64, f64), f64);
+// id, revision, mechanical kind, baseline pose, authored geometry, density.
+type Body = (u64, u64, Kind, Transform, Geometry, f64);
+type Limits = (usize, usize, usize, f64, usize, usize, usize);
 type Pose = (u64, (f64, f64, f64), (f64, f64, f64, f64), (f64, f64, f64));
+type Rest = (u64, u64, (geometry::V3, (f64,f64,f64,f64)), f64, usize);
 type Sample = (bool, Vec<Pose>, Vec<(u64, u64)>);
+// Millimetres and quaternion millionths; a sleeping body has zero velocity.
+type RestSample = ((i64, i64, i64), (i64, i64, i64, i64));
 
 // Vertical revolute cuboid profile. Each leaf has one joint; the existing
 // body allowance bounds the joint set too. Restore angles are insertion inputs,
@@ -42,10 +49,11 @@ struct World {
     soft: SoftBodySet,
     rows: BTreeMap<u64, (Body, RigidBodyHandle)>,
     hinges: BTreeMap<u64, InstalledHinge>,
-    limits: (usize, usize, usize, f64),
+    limits: Limits,
     dt: f32,
     gravity: f32,
     changed: bool,
+    query_ready: bool,
 }
 
 struct WorldResource {
@@ -56,7 +64,7 @@ struct WorldResource {
 impl rustler::Resource for WorldResource {}
 
 impl World {
-    fn new(limits: (usize, usize, usize, f64), dt: f64, gravity: f64) -> Result<Self, Atom> {
+    fn new(limits: Limits, dt: f64, gravity: f64) -> Result<Self, Atom> {
         if !limits.3.is_finite() || limits.3 <= 0.0 || limits.3 > f32::MAX as f64 {
             return Err(atoms::invalid_allowance());
         }
@@ -84,77 +92,121 @@ impl World {
             dt: dt as f32,
             gravity: gravity as f32,
             changed: false,
+            query_ready: false,
         })
     }
 
     fn install(&mut self, definitions: Vec<Body>) -> Result<usize, Atom> {
-        if definitions.len() > self.limits.0 {
-            return Err(atoms::body_allowance());
-        }
+        if definitions.len() > self.limits.0 { return Err(atoms::body_allowance()); }
+        let mut budget = geometry::Budget { coordinate: self.limits.3,
+            parts: self.limits.4, vertices: self.limits.5, triangles: self.limits.6 };
         let mut seen = BTreeSet::new();
-        for row @ (id, revision, _, (x, y, z), (hx, hy, hz), density) in &definitions {
-            if !seen.insert(*id)
-                || *revision == 0
-                || *density <= 0.0
-                || (*hx as f32) <= 0.0
-                || (*hy as f32) <= 0.0
-                || (*hz as f32) <= 0.0
-                || (*density as f32) <= 0.0
-                || !(*density as f32).is_finite()
-            {
-                return Err(atoms::invalid_body());
-            }
-            if [x, y, z, hx, hy, hz]
-                .iter()
-                .any(|v| !v.is_finite() || v.abs() > self.limits.3)
-            {
-                return Err(atoms::coordinate_allowance());
-            }
-            let mass = (8.0 * hx * hy * hz * density) as f32;
-            if !mass.is_finite() || mass <= 0.0 {
-                return Err(atoms::invalid_body());
-            }
+        let mut prepared = Vec::new();
+        for row @ (id, revision, kind, pose, shape, density) in &definitions {
+            if !seen.insert(*id) || *revision == 0 || (*density as f32) <= 0.0
+                || !(*density as f32).is_finite() { return Err(atoms::invalid_body()); }
             if let Some((old, _)) = self.rows.get(id) {
-                if old != row && old.1 >= *revision {
-                    return Err(atoms::stale_revision());
+                if old == row { shape.charge(&mut budget)?; continue; }
+                if old.1 >= *revision { return Err(atoms::stale_revision()); }
+            }
+            let pose = geometry::transform(*pose,self.limits.3)?;
+            let shape = shape.build(*kind,&mut budget)?;
+            if *kind != Kind::Fixed {
+                let mass = shape.mass_properties(*density as f32).mass();
+                if !mass.is_finite() || mass <= 0.0 { return Err(atoms::invalid_body()); }
+            }
+            prepared.push((row.clone(),pose,shape));
+        }
+        let removed: Vec<_> = self.rows.keys().filter(|id| !seen.contains(id)).copied().collect();
+        let changes = removed.len() + prepared.len();
+        for id in removed { self.remove(id); }
+        for (row,pose,shape) in prepared {
+            let id = row.0;
+            self.remove(id);
+            let builder = match row.2 {
+                Kind::Dynamic => RigidBodyBuilder::dynamic().ccd_enabled(true),
+                Kind::Fixed => RigidBodyBuilder::fixed(),
+                Kind::Controlled => RigidBodyBuilder::kinematic_position_based(),
+            };
+            let body = self.bodies.insert(builder.pose(pose));
+            self.colliders.insert_with_parent(ColliderBuilder::new(shape)
+                .density(row.5 as f32).user_data(id as u128),body,&mut self.bodies);
+            self.rows.insert(id,(row,body));
+        }
+        self.changed |= changes != 0;
+        self.query_ready &= changes == 0;
+        Ok(changes)
+    }
+
+    // Rest state is an insertion input only. The Erlang owner sends it only
+    // for newly installed body revisions, never on a checkpoint-only update.
+    fn restore_rest(&mut self, rows: Vec<Rest>) -> Result<(), Atom> {
+        if rows.len() > self.limits.0 { return Err(atoms::body_allowance()); }
+        let mut seen = BTreeSet::new();
+        for (id, rev, (p, q), tolerance, checks) in &rows {
+            let Some((row, handle)) = self.rows.get(id) else { return Err(atoms::invalid_checkpoint()); };
+            if row.1 != *rev || row.2 != Kind::Dynamic || !seen.insert(*id)
+                || self.hinges.values().any(|h| h.row.0 == *id || h.row.2 == *id)
+                || !tolerance.is_finite() || *tolerance < 0.0 || *checks == 0 {
+                return Err(atoms::invalid_checkpoint());
+            }
+            let position = geometry::vector(*p,self.limits.3).map_err(Atom::from)?;
+            let rotation = Rotation::from_xyzw(q.0 as f32,q.1 as f32,q.2 as f32,q.3 as f32);
+            if !rotation.is_finite() || (rotation.length_squared()-1.0).abs() > 0.000004 {
+                return Err(atoms::invalid_checkpoint());
+            }
+            self.bodies[*handle].set_position(rapier3d::math::Pose::from_parts(position,rotation.normalize()),false);
+            self.bodies[*handle].sleep();
+        }
+        // Zero-displacement recovery: admit numerical contact tolerance, but
+        // never depenetrate a saved chair through a newer wall or closed door.
+        for (id, _, _, tolerance, checks) in &rows {
+            let handle = self.rows[id].1;
+            let body = &self.bodies[handle];
+            let collider = &self.colliders[body.colliders()[0]];
+            let mut remaining = *checks;
+            for (_, other) in self.colliders.iter() {
+                if other.parent() == Some(handle) { continue; }
+                remaining = remaining.checked_sub(1).ok_or_else(atoms::invalid_checkpoint)?;
+                let other_pose = match other.parent() {
+                    Some(h) => *self.bodies[h].position() * other.position_wrt_parent().copied().unwrap_or_default(),
+                    None => *other.position(),
+                };
+                let contact = rapier3d::parry::query::contact(body.position(),collider.shape(),
+                    &other_pose,other.shape(),0.0).map_err(|_| atoms::invalid_checkpoint())?;
+                if contact.is_some_and(|c| c.dist < -(*tolerance as f32)) {
+                    return Err(atoms::invalid_checkpoint());
                 }
             }
         }
-        let removed: Vec<_> = self
-            .rows
-            .keys()
-            .filter(|id| !seen.contains(id))
-            .copied()
-            .collect();
-        let mut changes = removed.len();
-        for id in removed {
-            self.remove(id);
-        }
-        for row @ (id, _, dynamic, (x, y, z), (hx, hy, hz), density) in definitions {
-            if self.rows.get(&id).is_some_and(|(old, _)| old == &row) {
-                continue;
-            }
-            self.remove(id);
-            let builder = if dynamic {
-                RigidBodyBuilder::dynamic()
-            } else {
-                RigidBodyBuilder::fixed()
-            };
-            let body = self
-                .bodies
-                .insert(builder.translation(Vector::new(x as f32, y as f32, z as f32)));
-            self.colliders.insert_with_parent(
-                ColliderBuilder::cuboid(hx as f32, hy as f32, hz as f32)
-                    .density(density as f32)
-                    .user_data(id as u128),
-                body,
-                &mut self.bodies,
-            );
-            self.rows.insert(id, (row, body));
-            changes += 1;
-        }
-        self.changed |= changes != 0;
-        Ok(changes)
+        Ok(())
+    }
+
+    fn rest_sample(&self, id: u64, rev: u64) -> Option<RestSample> {
+        let (row, handle) = self.rows.get(&id)?;
+        let b = &self.bodies[*handle];
+        if row.1 != rev || row.2 != Kind::Dynamic || !b.is_sleeping() { return None; }
+        let p = b.translation(); let q = b.rotation();
+        Some((((p.x as f64*1000.0).round() as i64,(p.y as f64*1000.0).round() as i64,
+               (p.z as f64*1000.0).round() as i64),
+              ((q.x as f64*1e6).round() as i64,(q.y as f64*1e6).round() as i64,
+               (q.z as f64*1e6).round() as i64,(q.w as f64*1e6).round() as i64)))
+    }
+
+    fn push_body(&mut self, id:u64, rev:u64, impulse:geometry::V3, max_speed:f64) -> bool {
+        let Some((row, handle)) = self.rows.get(&id) else { return false; };
+        if row.1 != rev || row.2 != Kind::Dynamic
+            || self.hinges.values().any(|h| h.row.0 == id || h.row.2 == id)
+            || !max_speed.is_finite() || max_speed <= 0.0 || !(max_speed as f32).is_finite() { return false; }
+        let Ok(impulse) = geometry::vector(impulse,f32::MAX as f64) else { return false; };
+        let b = &mut self.bodies[*handle];
+        let velocity = b.linvel() + impulse * b.mass().recip();
+        // Policy bounds the resulting speed, so rapid signed packets cannot
+        // accumulate an unbounded velocity. A refused push changes nothing.
+        if !velocity.is_finite() || velocity.length() as f64 > max_speed { return false; }
+        b.apply_impulse(impulse,true);
+        self.changed = true;
+        true
     }
 
     fn install_hinges(&mut self, inputs: Vec<(Hinge, f64)>) -> Result<usize, Atom> {
@@ -172,8 +224,10 @@ impl World {
             };
             if !seen.insert(*id)
                 || id == frame
-                || !leaf_row.2
-                || frame_row.2
+                || leaf_row.2 != Kind::Dynamic
+                || frame_row.2 != Kind::Fixed
+                || leaf_row.4.box_half_x().is_none()
+                || frame_row.4.box_half_x().is_none()
                 || *rev != leaf_row.1
                 || *rev != frame_row.1
                 || [baseline, restore, stiffness, damping, force, tolerance]
@@ -221,10 +275,11 @@ impl World {
             if let Some(old) = self.hinges.remove(&id) {
                 self.impulse.remove(old.handle, true);
             }
-            let (leaf_row, leaf) = self.rows[&id];
-            let (_, frame) = self.rows[&frame_id];
+            let (leaf_row, leaf) = &self.rows[&id];
+            let leaf = *leaf;
+            let frame = self.rows[&frame_id].1;
             let pivot = Vector::new(x as f32, y as f32, z as f32);
-            let offset = Vector::new(leaf_row.4 .0 as f32, 0.0, 0.0);
+            let offset = Vector::new(leaf_row.4.box_half_x().ok_or_else(atoms::invalid_hinge)?, 0.0, 0.0);
             let rotation = rapier3d::math::rotation_from_angle(Vector::Y * restore as f32);
             let position = self.bodies[frame].translation() + pivot + rotation * offset;
             self.bodies[leaf].set_translation(position, true);
@@ -250,6 +305,7 @@ impl World {
             changes += 1;
         }
         self.changed |= changes > 0;
+        self.query_ready &= changes == 0;
         Ok(changes)
     }
 
@@ -395,6 +451,7 @@ impl World {
             return Err(atoms::non_finite_state());
         }
         self.changed = false;
+        self.query_ready = true;
         self.brake_hinges()?;
         self.sample()
     }
@@ -472,7 +529,7 @@ fn access<T>(
 #[rustler::nif(schedule = "DirtyCpu")]
 fn new_world(
     env: Env,
-    limits: (usize, usize, usize, f64),
+    limits: Limits,
     dt: f64,
     gravity: f64,
 ) -> Result<ResourceArc<WorldResource>, Atom> {
@@ -502,6 +559,20 @@ fn install(
         }
         world.install(rows)
     })
+}
+#[rustler::nif(schedule = "DirtyCpu")]
+fn restore_rest(env:Env, resource:ResourceArc<WorldResource>, rows:Vec<Rest>) -> Result<(),Atom> {
+    access(env,resource,|w| w.restore_rest(rows))
+}
+#[rustler::nif(schedule = "DirtyCpu")]
+fn rest_sample(env:Env, resource:ResourceArc<WorldResource>, id:u64, rev:u64)
+    -> Result<Option<RestSample>,Atom> {
+    access(env,resource,|w| Ok(w.rest_sample(id,rev)))
+}
+#[rustler::nif(schedule = "DirtyCpu")]
+fn push_body(env:Env, resource:ResourceArc<WorldResource>, id:u64, rev:u64,
+             impulse:geometry::V3, max_speed:f64) -> Result<bool,Atom> {
+    access(env,resource,|w| Ok(w.push_body(id,rev,impulse,max_speed)))
 }
 #[rustler::nif(schedule = "DirtyCpu")]
 fn install_hinges(
@@ -539,12 +610,27 @@ fn hinge_samples(
     access(env, resource, |world| world.hinge_samples())
 }
 #[rustler::nif(schedule = "DirtyCpu")]
-fn step(env: Env, resource: ResourceArc<WorldResource>) -> Result<Sample, Atom> {
-    access(env, resource, World::step)
+fn step(env: Env, resource: ResourceArc<WorldResource>, refresh: bool) -> Result<Sample, Atom> {
+    access(env, resource, |world| {
+        // Explicit observation renewal completes a new mechanical step even
+        // at rest. Ordinary unchanged checks retain the sleeping sentinel.
+        world.changed |= refresh;
+        world.step()
+    })
 }
 #[rustler::nif(schedule = "DirtyCpu")]
 fn sample(env: Env, resource: ResourceArc<WorldResource>) -> Result<Sample, Atom> {
     access(env, resource, |world| world.sample())
+}
+#[rustler::nif(schedule = "DirtyCpu")]
+fn motion_query(env: Env, resource: ResourceArc<WorldResource>, id: u64, revision: u64,
+                query: motion::Query, limits: motion::Limits) -> Result<motion::Answer, Atom> {
+    access(env, resource, |world| Ok(motion::evaluate(world,id,revision,query,limits)))
+}
+#[rustler::nif(schedule = "DirtyCpu")]
+fn move_body(env: Env, resource: ResourceArc<WorldResource>, id: u64, revision: u64,
+             query: motion::Query, limits: motion::Limits) -> Result<motion::Answer, Atom> {
+    access(env, resource, |world| Ok(motion::apply(world,id,revision,query,limits)))
 }
 #[rustler::nif(schedule = "DirtyCpu")]
 fn retire(env: Env, resource: ResourceArc<WorldResource>) -> NifResult<Atom> {
@@ -565,17 +651,21 @@ rustler::init!("quod_physics_native");
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn box_body(id:u64, rev:u64, dynamic:bool, p:geometry::V3, h:geometry::V3, density:f64) -> Body {
+        (id,rev,if dynamic {Kind::Dynamic} else {Kind::Fixed},
+         (p,(0.0,0.0,0.0)),Geometry::Solid(geometry::Primitive::Box(h.0,h.1,h.2)),density)
+    }
     #[test]
     fn independent_hinges_brake_restore_and_retain() {
-        let mut w = World::new((5, 5, 10, 100.0), 1.0 / 60.0, 0.0).unwrap();
-        let frame = (1, 1, false, (0.0, 0.0, 0.0), (0.05, 1.0, 0.05), 1.0);
-        let door = (2, 1, true, (1.0, 1.0, 0.0), (1.0, 1.0, 0.1), 1.0);
-        let obstacle = (3, 1, false, (1.5, 1.0, -0.5), (0.2, 1.0, 0.2), 1.0);
-        let frame2 = (4, 1, false, (5.0, 0.0, 0.0), (0.05, 1.0, 0.05), 1.0);
-        let door2 = (5, 1, true, (6.0, 1.0, 0.0), (1.0, 1.0, 0.1), 1.0);
+        let mut w = World::new((5, 5, 10, 100.0, 64, 1024, 1024), 1.0 / 60.0, 0.0).unwrap();
+        let frame = box_body(1, 1, false, (0.0, 0.0, 0.0), (0.05, 1.0, 0.05), 1.0);
+        let door = box_body(2, 1, true, (1.0, 1.0, 0.0), (1.0, 1.0, 0.1), 1.0);
+        let obstacle = box_body(3, 1, false, (1.5, 1.0, -0.5), (0.2, 1.0, 0.2), 1.0);
+        let frame2 = box_body(4, 1, false, (5.0, 0.0, 0.0), (0.05, 1.0, 0.05), 1.0);
+        let door2 = box_body(5, 1, true, (6.0, 1.0, 0.0), (1.0, 1.0, 0.1), 1.0);
         let hinge = (2, 1, 1, (0.0, 1.0, 0.0), 1.5, (100.0, 10.0, 1000.0, 0.02));
         let hinge2 = (5, 1, 4, (0.0, 1.0, 0.0), 1.5, (100.0, 10.0, 1000.0, 0.02));
-        w.install(vec![frame, door, obstacle, frame2, door2])
+        w.install(vec![frame.clone(), door.clone(), obstacle.clone(), frame2.clone(), door2.clone()])
             .unwrap();
         assert_eq!(w.install_hinges(vec![(hinge, 1.5), (hinge2, 1.5)]), Ok(2));
         w.drive_hinge(2, true).unwrap();
@@ -599,10 +689,10 @@ mod tests {
         for _ in 0..600 {
             w.step().unwrap();
         }
-        let mut moved = obstacle;
+        let mut moved = obstacle.clone();
         moved.1 = 2;
-        moved.3 = (20.0, 1.0, -0.5);
-        w.install(vec![frame, door, moved, frame2, door2]).unwrap();
+        moved.3.0 = (20.0, 1.0, -0.5);
+        w.install(vec![frame.clone(), door.clone(), moved.clone(), frame2.clone(), door2.clone()]).unwrap();
         w.drive_hinge(2, true).unwrap();
         for _ in 0..600 {
             w.step().unwrap();
@@ -612,8 +702,8 @@ mod tests {
         }
         assert!(w.hinge_samples().unwrap()[0].1.abs() <= 20);
         let checkpoint = samples[0].1 as f64 / 1000.0;
-        let mut recovered = World::new((3, 3, 10, 100.0), 1.0 / 60.0, 0.0).unwrap();
-        recovered.install(vec![frame, door, obstacle]).unwrap();
+        let mut recovered = World::new((3, 3, 10, 100.0, 64, 1024, 1024), 1.0 / 60.0, 0.0).unwrap();
+        recovered.install(vec![frame.clone(), door.clone(), obstacle.clone()]).unwrap();
         recovered.install_hinges(vec![(hinge, checkpoint)]).unwrap();
         assert_eq!(
             recovered.hinge_samples().unwrap(),
@@ -622,20 +712,45 @@ mod tests {
     }
 
     #[test]
+    fn bounded_push_rest_and_recovery() {
+        let mut w = World::new((3,3,4,100.0,64,1024,1024),1.0/60.0,-9.81).unwrap();
+        let ground = box_body(1,1,false,(0.0,-0.5,0.0),(10.0,0.5,10.0),1.0);
+        let chair = box_body(2,1,true,(0.0,0.5,0.0),(0.5,0.5,0.5),1.0);
+        w.install(vec![ground.clone(),chair.clone()]).unwrap();
+        assert!(!w.push_body(2,0,(1.0,0.0,0.0),5.0));
+        assert!(!w.push_body(1,1,(1.0,0.0,0.0),5.0));
+        assert!(!w.push_body(2,1,(6.0,0.0,0.0),5.0));
+        assert!(w.push_body(2,1,(1.0,0.0,0.0),5.0));
+        assert_eq!(w.rest_sample(2,1),None);
+        for _ in 0..600 { w.step().unwrap(); }
+        let (p,q) = w.rest_sample(2,1).expect("pushed body settles");
+        assert!(p.0 > 0);
+        let cp = (2,1,((p.0 as f64/1000.0,p.1 as f64/1000.0,p.2 as f64/1000.0),
+            (q.0 as f64/1e6,q.1 as f64/1e6,q.2 as f64/1e6,q.3 as f64/1e6)),0.005,128);
+        let before = w.sample().unwrap();
+        assert_eq!(w.install(vec![ground.clone(),chair.clone()]),Ok(0));
+        assert_eq!(w.sample().unwrap(),before);
+        let mut recovered = World::new((3,3,4,100.0,64,1024,1024),1.0/60.0,-9.81).unwrap();
+        recovered.install(vec![ground.clone(),chair.clone()]).unwrap();
+        recovered.restore_rest(vec![cp]).unwrap();
+        assert_eq!(recovered.rest_sample(2,1),Some((p,q)));
+    }
+
+    #[test]
     fn falling_and_retained_installation() {
-        let mut w = World::new((2, 2, 1, 1000.0), 1.0 / 60.0, -9.81).unwrap();
-        let ground = (1, 1, false, (0.0, -0.5, 0.0), (10.0, 0.5, 10.0), 1.0);
-        let body = (2, 1, true, (0.0, 3.0, 0.0), (0.5, 0.5, 0.5), 1.0);
-        assert_eq!(w.install(vec![ground, body]), Ok(2));
+        let mut w = World::new((2, 2, 1, 1000.0, 64, 1024, 1024), 1.0 / 60.0, -9.81).unwrap();
+        let ground = box_body(1, 1, false, (0.0, -0.5, 0.0), (10.0, 0.5, 10.0), 1.0);
+        let body = box_body(2, 1, true, (0.0, 3.0, 0.0), (0.5, 0.5, 0.5), 1.0);
+        assert_eq!(w.install(vec![ground.clone(), body.clone()]), Ok(2));
         for _ in 0..30 {
             w.step().unwrap();
         }
         let before = w.sample().unwrap();
         assert!(before.1[1].1 .1 < 3.0);
-        assert_eq!(w.install(vec![ground, body]), Ok(0));
+        assert_eq!(w.install(vec![ground.clone(), body.clone()]), Ok(0));
         assert_eq!(w.sample().unwrap(), before);
-        let changed = (2, 2, true, (0.0, 5.0, 0.0), (0.5, 0.5, 0.5), 1.0);
-        assert_eq!(w.install(vec![ground, changed]), Ok(1));
+        let changed = box_body(2, 2, true, (0.0, 5.0, 0.0), (0.5, 0.5, 0.5), 1.0);
+        assert_eq!(w.install(vec![ground.clone(), changed.clone()]), Ok(1));
         assert_eq!(w.sample().unwrap().1[1].1 .1, 5.0);
         for _ in 0..1000 {
             w.step().unwrap();

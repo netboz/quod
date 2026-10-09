@@ -17,6 +17,21 @@ apply.
          operation/1, effect_id/1, executor/1, actor/1, target/1,
          request_digest/1, prepared_digest/1]).
 -export_type([effect/0]).
+-export([valid_transient/1, release_transient/2]).
+
+%% Ephemeral control effects never enter validate/1, consensus or the journal.
+%% One successful proof can release one indivisible operation to a local owner.
+valid_transient({physics_input,Pid,Expected,{control,_,Epoch,_},Sequence,_,Expiry}) ->
+    is_pid(Pid) andalso node(Pid) =:= node() andalso is_map(Expected)
+    andalso is_integer(Epoch) andalso Epoch > 0
+    andalso is_integer(Sequence) andalso Sequence >= 0
+    andalso is_integer(Expiry) andalso Expiry > 0;
+valid_transient(_) -> false.
+
+release_transient(none,_) -> ok;
+release_transient({physics_input,Pid,Expected,Control,Sequence,Input,Expiry},Deadline) ->
+    try quod_physics:input(Pid,Expected,Control,Sequence,Input,Expiry,Deadline)
+    catch exit:_ -> {error,transient_unavailable} end.
 
 -type identity() :: {binary(), <<_:256>>}.
 -type actor() :: {node, <<_:256>>} | {agent, binary()}.

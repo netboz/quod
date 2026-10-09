@@ -100,7 +100,7 @@ or of every local resource. Consumers wait for their actual resource owner.
             reaction_matches = 0 :: non_neg_integer(),
             reactions_executed = 0 :: non_neg_integer(),
             reaction_failures = 0 :: non_neg_integer(),
-            physics = #{}, physics_requests = #{},
+            physics = #{}, physics_requests = #{}, physics_navigation_guard = undefined,
             observer = none,
             agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
@@ -237,9 +237,20 @@ handle_call({reconcile_resource, _, _, _, _}, _From, S) ->
     {reply, {error, not_ready}, S};
 handle_call({project_physics, Rows}, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
-    case quod_physics:projection(Identity, Rows) of
-        {ok, Specs} -> {reply, ok, install_physics(Specs, S)};
-        Error -> {reply, Error, stop_physics(S)}
+    Changes = queued_resource_changes(S#s.queue,S#s.height),
+    case map_size(Changes) > 0 andalso
+         quod_resource_basis:affected(maps:get(physics_worlds,S#s.resource_basis,#{}),Changes) of
+        true -> {reply,{error,selection_superseded},queue_resource_key(physics_worlds,changed,S)};
+        false -> case quod_physics:projection(Identity, Rows) of
+            {ok, Specs} ->
+                Guard = case S#s.physics_navigation_guard of
+                    undefined -> atomics:new(1,[{signed,false}]);
+                    Existing -> Existing
+                end,
+                Current = [Spec#{navigation_guard => {Guard,atomics:get(Guard,1)}} || Spec <- Specs],
+                {reply, ok, install_physics(Current, S#s{physics_navigation_guard = Guard})};
+            Error -> {reply, Error, stop_physics(S)}
+        end
     end;
 handle_call({project_physics, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
 handle_call(physics_worlds, _, S) ->
@@ -499,7 +510,7 @@ handle_info({projection_advanced, Owner, {H,_Hash}, Changes},
                 true -> Pid ! {physics_outcome_changed,self(),D,Key,H};
                 false -> ok
             end
-        end,maps:get(doors,Spec,#{}));
+        end,maps:get(activities,Spec,#{}));
         (_,_) -> ok
     end,S#s.physics),
     {noreply,S};
@@ -589,6 +600,12 @@ handle_info({physics_match_finished, Caller, #{owner := Pid, ref := Ref}, Result
     Pid ! {physics_result,self(),Ref,Result}, {noreply,S};
 handle_info({physics_work, Pid, World, Ref, Kind, Work, Window}, S) ->
     {noreply, physics_work(Pid, World, Ref, Kind, Work, Window, S)};
+handle_info({physics_invalidation_seen,Pid,World,Notice},S) ->
+    case maps:get(World,S#s.physics,none) of
+        Entry = #{pid := Pid,navigation_notice := Notice} ->
+            {noreply,S#s{physics = (S#s.physics)#{World => maps:remove(navigation_notice,Entry)}}};
+        _ -> {noreply,S}
+    end;
 handle_info({physics_selection_applied, Pid, World, Ref}, S) ->
     case maps:get(World, S#s.physics, none) of
         #{pid := Pid, selection := {Ref, Sent}, spec := Desired, stopping := false} = Entry ->
@@ -888,19 +905,39 @@ mode_tag(M)                 -> element(1, M).
 %% Canonical transactions and their block-final snapshot advances share one
 %% ordered input. A control-only block changes no reactions or declarations,
 %% but its height must release readers awaiting that committed snapshot.
-enqueue_committed(Item, S = #s{mode = live}) ->
+enqueue_committed(Item,S) -> enqueue_current_committed(Item,invalidate_physics_navigation(Item,S)).
+
+invalidate_physics_navigation({local,Env,_},S = #s{physics_navigation_guard = Guard}) when Guard =/= undefined ->
+    Changes = resource_changes(changed_heads(Env),maps:get(height,Env,0) > S#s.height),
+    case quod_resource_basis:affected(maps:get(physics_worlds,S#s.resource_basis,#{}),Changes) of
+        false -> S;
+        true ->
+            _ = atomics:add_get(Guard,1,1),
+            Worlds = maps:map(fun(_,Entry = #{pid := Pid}) ->
+                case maps:is_key(navigation_notice,Entry) of
+                    true -> Entry;
+                    false ->
+                        Notice = make_ref(), Pid ! {physics_invalidated,self(),Notice},
+                        Entry#{navigation_notice => Notice}
+                end
+            end,S#s.physics),
+            S#s{physics = Worlds}
+    end;
+invalidate_physics_navigation(_,S) -> S.
+
+enqueue_current_committed(Item, S = #s{mode = live}) ->
     case S#s.queue_len < max_queued_events(S) of
         true -> maybe_run_events(S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1});
         false -> overflow_collapse(S)
     end;
-enqueue_committed(Item, S = #s{mode = {reconciling, _}}) ->
+enqueue_current_committed(Item, S = #s{mode = {reconciling, _}}) ->
     case S#s.queue_len < max_queued_events(S) of
         true -> S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1};
         false ->
             Pending = case S#s.pending_edge of none -> {collapse, make_ref()}; Id -> Id end,
             drop_queue(S#s{pending_edge = Pending, collapses = S#s.collapses + 1})
     end;
-enqueue_committed(_Item, S) -> S.
+enqueue_current_committed(_Item, S) -> S.
 
 maybe_run_events(S = #s{mode = live, runner = none, queue = Q}) when Q =/= [] ->
     {Items, Remaining, Turn, Dropped} = ready_work(lists:reverse(Q), S),
@@ -2944,17 +2981,21 @@ physics_capacity(#{authority := {agent_instance_ref, _, _, I}, epoch := Epoch, k
     end.
 
 physics_observation_current(#{owner := Pid, world := World, token := Token,
-    event := {door_sample,W,_,_,Authority,Epoch,Generation,Token,Structure,_,_,_,_,_,{validity,_,Expiry}},
-    expiry := Expiry, deadline := Deadline}, S) ->
-    case maps:get(World,S#s.physics,none) of
-        #{pid := Pid, token := Token, stopping := false,
+    event := Sample, expiry := Expiry, deadline := Deadline}, S) ->
+    case {physics_sample_fence(Sample),maps:get(World,S#s.physics,none)} of
+        {{W,Authority,Epoch,Generation,Token,Structure,Expiry},
+         #{pid := Pid, token := Token, stopping := false,
           spec := #{world := {world_ref,_,_,W}, authority := Authority, epoch := Epoch,
-                    generation := Generation, structure := Structure}} ->
+                    generation := Generation, structure := Structure}}} ->
             S#s.mode =:= live andalso Expiry > quod_time:now_ms() andalso
                 Deadline > quod_time:mono_ms();
         _ -> false
     end;
 physics_observation_current(_,_) -> false.
+
+physics_sample_fence({door_sample,W,_,_,A,E,G,T,S,_,_,_,_,_,{validity,_,Expiry}}) -> {W,A,E,G,T,S,Expiry};
+physics_sample_fence({rest_sample,W,_,_,A,E,G,T,S,_,_,_,{validity,_,Expiry}}) -> {W,A,E,G,T,S,Expiry};
+physics_sample_fence(_) -> invalid.
 
 physics_observation_error(#{expiry := Expiry,deadline := Deadline}) ->
     case Expiry =< quod_time:now_ms() orelse Deadline =< quod_time:mono_ms() of

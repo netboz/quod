@@ -26,7 +26,7 @@ signature validation.
          6 * ?DIRECTORY_MAX_NAMESPACE_BYTES + 512)).
 
 init(Req0, State)
-  when State =:= signed_goal_read; State =:= signed_goal_execute;
+  when State =:= signed_goal_read; State =:= signed_goal_control; State =:= signed_goal_execute;
        State =:= signed_goal_cursor; State =:= signed_goal_outcome;
        State =:= signed_cursor_next; State =:= signed_cursor_accept;
        State =:= signed_cursor_stop ->
@@ -99,6 +99,9 @@ dispatch(Req0, auth_complete) ->
 dispatch(Req0, signed_goal_read) ->
     post_json(Req0, signed_goal_read, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(read, Body, Req) end);
+dispatch(Req0, signed_goal_control) ->
+    post_json(Req0, signed_goal_control, ?MAX_SIGNED_GOAL_BODY,
+              fun(Body, Req) -> signed_goal(control, Body, Req) end);
 dispatch(Req0, signed_goal_execute) ->
     post_json(Req0, signed_goal_execute, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(execute, Body, Req) end);

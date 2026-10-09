@@ -45,6 +45,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          staged_desired_state/2,
          cleanup_read_set/1]).
 -export_type([access_guard/0, revision/0, checkpoint/0, read_only_frame/0]).
+-export([stage_transient/2, transient/1, transient_root/1]).
 
 -type access_guard() ::
         unguarded |
@@ -82,6 +83,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
              %% rollback-safe revision. The public descriptor is separately
              %% present in `effects`; journal custody starts only at handoff.
              prepared_effects = #{} :: map(),
+             transient_allowed = false :: boolean(),
+             transient = none :: none | term(),
              %% Worker-owned distributed-proof state. It must never enter the
              %% Prolog-visible flag store.
              proof_context = undefined :: term(),
@@ -104,6 +107,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
                      effects = [] :: [quod_effect:effect()],
                      effect_provenance = #{} :: map(),
                      prepared_effects = #{} :: map(),
+                     transient = none :: none | term(),
                      next_tag :: integer(),
                      distributed = [] :: [distributed_token()]}).
 -opaque checkpoint() :: #checkpoint{}.
@@ -116,6 +120,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 
 -record(read_only_frame, {scope_id      :: reference(),
                           read_only     :: boolean(),
+                          transient_allowed = false :: boolean(),
                           assert_hooks  :: map(),
                           retract_hooks :: map()}).
 -opaque read_only_frame() :: #read_only_frame{}.
@@ -150,6 +155,7 @@ wrap_state(St, Opts) ->
     AccessGuard = access_guard_option(Opts),
     Ov1 = Ov#lp{proof_context = ProofContext,
                 signed_request = boolean_option(signed_request, Opts),
+                transient_allowed = boolean_option(transient_allowed, Opts),
                 access_guard = AccessGuard,
                 read_only = ReadOnly},
     Ov2 =
@@ -228,6 +234,25 @@ action_request(
         _ -> error
     end;
 action_request(_St, _Handle, _Action) -> error.
+
+%% A control proof stages one indivisible owner operation. It cannot stage
+%% durable changes or split an atomic promise across independent live owners.
+stage_transient(#est{db = #db{mod = ?MODULE,ref = #lp{
+        transient_allowed = true,signed_request = true,read_only = true,
+        transient = none,write_intent = ordinary} = Ov} = Db} = St, Effect) ->
+    ensure_access(Ov),
+    case quod_effect:valid_transient(Effect) of
+        true -> {ok,St#est{db = Db#db{ref = Ov#lp{transient = Effect}}}};
+        false -> error
+    end;
+stage_transient(_,_) -> error.
+
+transient(#est{db = #db{mod = ?MODULE,ref = Ov}}) ->
+    ensure_access(Ov), Ov#lp.transient.
+
+transient_root(#est{checkpoint_depth = 0,db = #db{mod = ?MODULE,ref = #lp{
+        transient_allowed = true,proof_context = {session_ref,_,{origin,_}}}}}) -> true;
+transient_root(_) -> false.
 
 -doc "Stage one public effect and its private preparation in the same revision.".
 -spec put_prepared_effect(tuple(), term(), term(), quod_effect:effect(), term()) ->
@@ -465,10 +490,11 @@ enter_read_only(
     ensure_access(Ov),
     Frame = #read_only_frame{scope_id = ScopeId,
                              read_only = ReadOnly,
+                             transient_allowed = Ov#lp.transient_allowed,
                              assert_hooks = AssertHooks,
                              retract_hooks = RetractHooks},
     {Frame,
-     St#est{db = Db#db{ref = Ov#lp{read_only = true},
+     St#est{db = Db#db{ref = Ov#lp{read_only = true,transient_allowed = false},
                        assert_hooks = #{}, retract_hooks = #{}}}}.
 
 -doc "Leave a read-only frame without replacing its staged view or accumulated reads.".
@@ -478,10 +504,11 @@ leave_read_only(
                 ref = #lp{scope_id = ScopeId} = Ov} = Db} = St,
   #read_only_frame{scope_id = ScopeId,
                    read_only = ReadOnly,
+                   transient_allowed = TransientAllowed,
                    assert_hooks = AssertHooks,
                    retract_hooks = RetractHooks}) ->
     ensure_access(Ov),
-    St#est{db = Db#db{ref = Ov#lp{read_only = ReadOnly},
+    St#est{db = Db#db{ref = Ov#lp{read_only = ReadOnly,transient_allowed = TransientAllowed},
                       assert_hooks = AssertHooks,
                       retract_hooks = RetractHooks}};
 leave_read_only(_St, _Frame) ->
@@ -656,11 +683,13 @@ choicepoint_checkpoint(
       effects = Effects,
       effect_provenance = EffectProvenance,
       prepared_effects = PreparedEffects,
+      transient = Transient,
       next_tag = NextTag}) ->
     #checkpoint{scope_id = ScopeId, local = Local,
                 event_ops_rev = EventOpsRev, effects = Effects,
                 effect_provenance = EffectProvenance,
                 prepared_effects = PreparedEffects,
+                transient = Transient,
                 next_tag = NextTag,
                 distributed = quod_transaction_scope:checkpoint_token()}.
 
@@ -670,11 +699,12 @@ choicepoint_restore(
               local = Local, event_ops_rev = EventOpsRev, effects = Effects,
               effect_provenance = EffectProvenance,
               prepared_effects = PreparedEffects, next_tag = NextTag,
+              transient = Transient,
               distributed = Distributed}) ->
     ok = quod_transaction_scope:restore_token(Distributed),
     Ov#lp{local = Local, event_ops_rev = EventOpsRev, effects = Effects,
           effect_provenance = EffectProvenance,
-          prepared_effects = PreparedEffects, next_tag = NextTag};
+          prepared_effects = PreparedEffects, transient = Transient, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
     erlang:error(badarg).
 

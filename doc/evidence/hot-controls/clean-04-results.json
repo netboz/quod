@@ -1,0 +1,87 @@
+[
+  {
+    "name": "native-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "exit": 0,
+    "seconds": 34.78
+  },
+  {
+    "name": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 21.83
+  },
+  {
+    "name": "client-tests",
+    "command": [
+      "npm",
+      "--prefix",
+      "client",
+      "test"
+    ],
+    "exit": 0,
+    "seconds": 1.57
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "exit": 0,
+    "seconds": 4.02
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "exit": 0,
+    "seconds": 0.18
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit"
+    ],
+    "exit": 0,
+    "seconds": 511.38
+  },
+  {
+    "name": "ct",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "ct"
+    ],
+    "exit": 1,
+    "seconds": 570.57
+  }
+]

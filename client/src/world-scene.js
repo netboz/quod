@@ -3,7 +3,9 @@ import { Scene } from '@babylonjs/core/scene.js'
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
-import { Color3 } from '@babylonjs/core/Maths/math.color.js'
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
+import { Layer } from '@babylonjs/core/Layers/layer.js'
+import { Ray } from '@babylonjs/core/Culling/ray.js'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
@@ -17,6 +19,7 @@ import { createRenderResources } from './render-resources.js'
 import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
 import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
+import { createControlledNavigation } from './controlled-navigation.js'
 
 const MENU_RADIUS = 0.36
 const MENU_DEAD_ZONE = 0.24
@@ -56,6 +59,29 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   let workspace = null
   let panel = null
   let immersive = false
+  const contactMask = new Layer('physical-view-contact', null, scene, false, new Color4(1, 1, 1, 1))
+  const contactText = new DynamicTexture('physical-view-contact-text', { width: 2048, height: 1024 }, scene, false)
+  contactMask.texture = contactText
+  contactMask.isEnabled = false
+  let maskText = null
+  const playerNavigation = createControlledNavigation(scene, camera, canvas, {
+    active: navigation.active,
+    blocked: () => Boolean(workspace || menu.root),
+    mask: (visible, text) => {
+      contactMask.isEnabled = visible
+      if (visible && text !== maskText) {
+        maskText = text
+        contactText.drawText(text, null, 540, '40px system-ui, sans-serif', '#FFFFFF', '#000000', true, true)
+      }
+    },
+    feedback: text => {
+      onResourceError(new Error(text))
+      if (immersive) for (const controller of xr?.input.controllers ?? []) {
+        void controller.motionController?.pulse(0.25, 50)
+      }
+    },
+  })
+  scene.onBeforeRenderObservable.add(() => playerNavigation.render())
   scene.onPointerObservable.add(info => {
     const pick = navigation.active()
       ? scene.pick(engine.getRenderWidth() / 2, engine.getRenderHeight() / 2)
@@ -129,6 +155,29 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       const component = motionController.getComponentOfType('touchpad') ??
         motionController.getComponentOfType('thumbstick')
       if (!component) return
+      if (controller.inputSource.handedness === 'left') {
+        const squeeze = motionController.getComponentOfType('squeeze')
+        let down = component.pressed
+        const smooth = () => playerNavigation.axes(squeeze?.pressed ? component.axes : { x: 0, y: 0 })
+        component.onAxisValueChangedObservable.add(smooth)
+        squeeze?.onButtonStateChangedObservable.add(smooth)
+        component.onButtonStateChangedObservable.add(current => {
+          smooth()
+          const clicked = current.pressed && !down
+          down = current.pressed
+          if (!clicked || squeeze?.pressed || !playerNavigation.controlled()) return
+          const { x, y } = current.axes
+          if (Math.abs(x) > 0.5 && Math.abs(x) > Math.abs(y)) playerNavigation.snap(x)
+          else if (y < -0.5) {
+            const ray = new Ray(Vector3.Zero(), Vector3.Forward())
+            controller.getWorldPointerRayToRef(ray)
+            playerNavigation.teleport(ray.direction)
+          }
+        })
+        // Left-hand gestures belong to locomotion; the right-hand pad retains
+        // the action menu. A missing component never becomes a guessed button.
+        return
+      }
       let pressed = component.pressed
       component.onAxisValueChangedObservable.add(axes => {
         if (menu.root) selectMenuEntry(radialIndex(axes, menu.entries.length))
@@ -167,6 +216,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       paintBodyPoses(painted, poses)
     },
     simulation(current) {
+      playerNavigation.update(current)
       poses = current?.poses ?? new Map()
       if (current && current.marks !== simulationMarks) {
         painted = paintMarks(scene, current.marks, painted, resources, onResourceError)
@@ -191,19 +241,17 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       navigation.release()
       if (!xr) {
         await import('@babylonjs/core/XR/webXRDefaultExperience.js')
-        const floor = painted.get('floor')
-        await floor?.model?.ready
-        const floorMeshes = floor ? [floor.node, ...floor.node.getChildMeshes()]
-          .filter(node => node.getTotalVertices?.() > 0) : []
-        xr = await scene.createDefaultXRExperienceAsync({ floorMeshes })
+        xr = await scene.createDefaultXRExperienceAsync({ disableTeleportation: true })
         xr.baseExperience.onStateChangedObservable.add(state => {
           immersive = state === WebXRState.IN_XR
+          playerNavigation.xr(immersive ? xr.baseExperience.camera : null)
           closeMenu()
           showWorkspace()
           onImmersiveChanged(immersive)
         })
         for (const controller of xr.input.controllers) bindRadialControl(controller)
         xr.input.onControllerAddedObservable.add(bindRadialControl)
+        xr.input.onControllerRemovedObservable.add(() => playerNavigation.axes({ x: 0, y: 0 }))
       }
       await xr.baseExperience.enterXRAsync('immersive-vr', 'local-floor')
     },
@@ -211,6 +259,8 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       window.removeEventListener('resize', resize)
       navigation.dispose()
       movementSpeed.dispose()
+      playerNavigation.dispose()
+      contactMask.dispose()
       panel?.dispose()
       painted = clearMarks(painted)
       resources.dispose()

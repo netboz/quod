@@ -443,6 +443,24 @@ test('retryable cursor refusal clears the journal but keeps the same cursor requ
   }
 })
 
+test('transient control is signed once and never journaled or replayed after response loss', async () => {
+  const journal = memoryOperationJournal()
+  let calls = 0
+  await assert.rejects(signedGoal(signedIdentity(), { ...signedWrite(), mode: 'control' }, {
+    journal,
+    post: async (url, body) => {
+      calls++
+      assert.equal(url, '/api/goals/control')
+      assert.ok(body.signature)
+      throw new Error('response lost')
+    },
+  }), /response lost/)
+  assert.equal(calls, 1)
+  assert.deepEqual(await journal.list(), [])
+  assert.deepEqual(await resolveSignedOperations(signedIdentity(), { journal }), [])
+  assert.equal(calls, 1)
+})
+
 test('missing durable storage permits reads but sends no possible write', async () => {
   const previousFetch = globalThis.fetch
   const identity = signedIdentity()

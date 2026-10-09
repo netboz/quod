@@ -587,7 +587,8 @@ the runtime. Its own activation uses durable original signed-request custody
 and outcome resolution before installation. Same-host restart commits a fresh
 generation; no successor adopts a dead incarnation's generation. The
 [adapter profile](physics-native.md) describes failure, backpressure and recovery
-boundaries, including the supported vertical hinge/stopped-angle checkpoint and rejection of other joint/checkpoint declarations.
+boundaries, including vertical hinge/stopped-angle checkpoints, free-body rest
+checkpoints and rejection of unsupported joint/checkpoint declarations.
 
 The door bridge now selects close intents, restores supported stopped-angle
 checkpoints and hands authenticated immutable samples to the exact authority
@@ -600,9 +601,12 @@ remain outside this implemented profile.
 
 Frames stay in the retained simulation. One local signed view receives bounded
 current poses directly from that owner under their current fence; motion does
-not flood the runtime queue each tick. General agent queries and durable
-contact actions need their own governed observation interfaces. Self-authored
-checkpoint/cursor writes must preserve the same installation invariant: retain
+not flood the runtime queue each tick. Governed live queries and signed hot
+controls use the installed owner. Eligible free dynamic bodies support bounded
+pushes and explicitly requested rest checkpoints through the same custody and
+observation path. Authored edits atomically invalidate the affected checkpoint;
+restart loses uncheckpointed motion and never replays pushes. Durable contact
+actions remain outside the implemented profile. Checkpoint/cursor writes retain
 the live resource and process only actual input changes.
 
 Current parser/request limits are also an integration constraint

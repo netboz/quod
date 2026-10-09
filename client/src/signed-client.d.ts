@@ -21,7 +21,7 @@ export type SignedClientError = Error & {
   status?: number
 }
 
-export type SignedGoalMode = 'read' | 'execute' | 'cursor'
+export type SignedGoalMode = 'read' | 'execute' | 'cursor' | 'control'
 export type AgentReference = {
   id?: string
   namespace: string

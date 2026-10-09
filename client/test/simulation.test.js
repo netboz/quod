@@ -2,7 +2,8 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
-import { simulationProjection, advanceSimulation, connectSimulation } from '../src/simulation.js'
+import { simulationProjection, advanceSimulation, connectSimulation, readSimulationWorld } from '../src/simulation.js'
+import { driveInput, snapInput, pushInput } from '../src/locomotion.js'
 import { paintMarks, paintBodyPoses } from '../src/scene.js'
 
 const anchor = 'a'.repeat(32)
@@ -14,7 +15,7 @@ const sample = (changes = {}) => ({ schema: 1, units: 'metres_seconds', space: '
   world: 'room', authority: 'actor', epoch: '1', generation: '1', incarnation: 'token',
   structure: '2', tick: '1', poses: [{ body: '10', revision: '2', position: [0, 1, 0], rotation: [0, 0, 0, 1] }], ...changes })
 const projection = (frame = sample(), marks = `[${mark()}]`, view = 'read1') =>
-  simulationProjection({ type: 'projection', frame, marks, view, height: '4' })
+  simulationProjection({ type: 'projection', expires_ms: String(Date.now() + 30000), frame, marks, view, height: '4' })
 const motion = (frame, view = 'read1') => ({ type: 'simulation_frame', frame, view })
 
 test('dropped ticks are latest-wins; late, duplicate, foreign and old-incarnation frames cannot move the view', () => {
@@ -111,7 +112,7 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   let stream = connect()
   socket.onopen()
   const open = await socket.next(), first = await viewId(open)
-  socket.receive({ type: 'projection', view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
+  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
   assert.deepEqual(await socket.next(), { type: 'ack', view: first, tick: '1' })
   socket.receive({ type: 'refresh', reason: 'durable_gap' })
   assert.equal(refreshes.length, 1)
@@ -120,7 +121,7 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   assert.notEqual(open.request, refresh.request)
   socket.receive(motion(sample({ tick: '900' }), first))
   assert.equal(frames.length, 0)
-  socket.receive({ type: 'projection', view: second, height: '5', marks: `[${mark()}]`, frame: sample({ tick: '5' }) })
+  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample({ tick: '5' }) })
   assert.equal((await socket.next()).view, second)
   socket.receive(motion(sample({ tick: '12' }), second))
   assert.equal((await socket.next()).tick, '12')
@@ -130,9 +131,9 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   socket.onopen()
   const reconnect = await socket.next(), third = await viewId(reconnect)
   assert.notEqual(third, second)
-  socket.receive({ type: 'projection', view: second, height: '5', marks: `[${mark()}]`, frame: sample() })
+  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample() })
   assert.equal(projections.length, 2)
-  socket.receive({ type: 'projection', view: third, height: '6', marks: `[${mark()}]`, frame: sample({ generation: '2', incarnation: 'new' }) })
+  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: third, height: '6', marks: `[${mark()}]`, frame: sample({ generation: '2', incarnation: 'new' }) })
   assert.equal((await socket.next()).view, third)
   assert.equal(projections.length, 3)
   stream.close()
@@ -147,3 +148,91 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   await signing
   assert.equal(statuses.length, before)
 })
+
+test('the signers ontology selects an exact foreign world without changing the acting agent', async () => {
+  const identity = { networkId: new Uint8Array(32), provider: {
+    publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
+  }, session: { session_id: 'session', expires_ms: Date.now() + 60000 } }
+  const agent = { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }
+  const seen = []
+  const world = await readSimulationWorld(identity, agent, { post: async (url, body) => {
+    seen.push({ url, request: Buffer.from(body.request, 'base64url').toString() })
+    return { result: 'ok', bindings: [{ World: `ontology_ref(<<"room">>,<<"${anchor}">>)` }] }
+  } })
+  assert.equal(world.namespace, 'room')
+  assert.equal(world.anchor.length, 32)
+  assert.equal(seen[0].url, '/api/goals/read')
+  assert.ok(seen[0].request.includes('physics_client_world(World).'))
+  assert.ok(seen[0].request.includes('human.'))
+})
+
+for (const [kind, input] of [['snap', snapInput(785)], ['push', pushInput('18446744073709551615', '2', [1, 0, 0])]]) {
+test(`${kind} admission waits for its discrete outcome and stops after uncertain loss`, async () => {
+  let socket, settle
+  const posts = [], statuses = []
+  const identity = { networkId: new Uint8Array(32), provider: {
+    publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
+  }, session: { session_id: 'session', expires_ms: Date.now() + 60000 } }
+  const agent = { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }
+  class Socket {
+    constructor() { socket = this; this.sent = [] }
+    send(text) { this.sent.push(JSON.parse(text)) }
+    close() { this.onclose?.() }
+    receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
+  }
+  const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {}, unavailable: s => statuses.push(s) }, {
+    WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32) },
+    post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
+  })
+  const stream = connect()
+  let recovered
+  try {
+    await socket.onopen()
+    const open = socket.sent[0]
+    assert.equal(open.world_namespace, 'room')
+    const view = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(open.request, 'base64url'))).toString('base64url')
+    const frame = sample({ world: `world_ref(<<"room">>,<<"${anchor}">>,room)`,
+      authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,
+      incarnation: Buffer.alloc(32).toString('base64url'), registration: Buffer.alloc(32, 1).toString('base64url'),
+      control_state: { sequence: '7', pending: false, result: 'idle' } })
+    socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view, frame,
+      control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })
+    const first = stream.command(input)
+    await Promise.resolve()
+    assert.equal(await stream.command(driveInput([0, 0, 0])), false)
+    assert.equal(posts.length, 1)
+    assert.equal(posts[0].url, '/api/goals/control')
+    const request = Buffer.from(posts[0].body.request, 'base64url').toString()
+    assert.ok(request.includes('control_frame'))
+    if (kind === 'push') assert.ok(request.includes('push(body(18446744073709551615,2),vector(1000,0,0))'))
+    settle.resolve({ result: 'ok' }); assert.equal(await first, true)
+    assert.equal(await stream.command(driveInput([0, 0, 0])), false, 'queued discrete input must not be overwritten')
+    socket.receive(motion({ ...frame, tick: '2', control_state: { sequence: '8', pending: false, result: 'clear' } }, view))
+    const next = stream.command(driveInput([0, 0, 0]))
+    await Promise.resolve()
+    settle.reject(new Error('lost response'))
+    assert.equal(await next, false)
+    assert.equal(posts.length, 2)
+    assert.equal(await stream.command(driveInput([1, 0, 0])), false)
+    assert.equal(posts.length, 2)
+    assert.deepEqual(statuses, ['lost response'])
+    stream.close()
+    recovered = connect()
+    await socket.onopen()
+    const fresh = socket.sent[0]
+    const freshView = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(fresh.request, 'base64url'))).toString('base64url')
+    socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view: freshView,
+      frame: { ...frame, registration: Buffer.alloc(32, 2).toString('base64url'),
+        control_state: { sequence: '9', pending: false, result: 'suspended' } },
+      control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })
+    assert.equal(posts.length, 2, 'a fresh projection does not replay the uncertain command')
+    const resumed = recovered.command(input)
+    await Promise.resolve()
+    assert.equal(posts.length, 3)
+    assert.notEqual(posts[2].body.request, posts[1].body.request)
+    assert.match(Buffer.from(posts[2].body.request, 'base64url').toString(), /,2,10,(?:snap|push)\(/)
+    settle.resolve({ result: 'ok' })
+    assert.equal(await resumed, true)
+  } finally { stream.close(); recovered?.close() }
+})
+}

@@ -1112,17 +1112,13 @@ block_hash_deterministic_test() ->
 block_bytes_and_hash_match_across_fresh_vms_test() ->
     %% Escript archive paths belong to the launcher, not a fresh Erlang VM.
     Path = [filename:absname(P) || P <- code:get_path(), filelib:is_dir(P)],
-    PeerName1 = list_to_atom(
-                  "canonical_block_a_"
-                  ++ integer_to_list(erlang:unique_integer([positive]))),
-    PeerName2 = list_to_atom(
-                  "canonical_block_b_"
-                  ++ integer_to_list(erlang:unique_integer([positive]))),
+    %% These VMs exchange fixtures over standard_io, so distribution and its
+    %% host-name resolution are unnecessary dependencies of canonical hashing.
     {ok, Peer1, _} = peer:start(
-                       #{name => PeerName1, connection => standard_io,
+                       #{connection => standard_io,
                          args => ["+S", "2:2"]}),
     {ok, Peer2, _} = peer:start(
-                       #{name => PeerName2, connection => standard_io,
+                       #{connection => standard_io,
                          args => ["+S", "2:2"]}),
     try
         %% set_path preserves the caller's exact precedence. Repeating -pa in

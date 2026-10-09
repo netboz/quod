@@ -1,0 +1,291 @@
+diff --git a/src/quic_server_registry.erl b/src/quic_server_registry.erl
+index 925ad94..7d31574 100644
+--- a/src/quic_server_registry.erl
++++ b/src/quic_server_registry.erl
+@@ -32,6 +32,7 @@
+     start_link/0,
+     register/4,
+     unregister/1,
++    unregister_stopped/1,
+     lookup/1,
+     list/0,
+     get_port/1,
+@@ -74,6 +75,11 @@ register(Name, Pid, Port, Opts) ->
+ unregister(Name) ->
+     gen_server:call(?MODULE, {unregister, Name}).
+ 
++%% @doc Complete shutdown registration cleanup without retiring a live replacement.
++-spec unregister_stopped(atom()) -> ok.
++unregister_stopped(Name) ->
++    gen_server:call(?MODULE, {unregister_stopped, Name}).
++
+ %% @doc Look up a server by name.
+ -spec lookup(atom()) -> {ok, map()} | {error, not_found}.
+ lookup(Name) ->
+@@ -179,6 +185,7 @@ init([]) ->
+     {ok, #state{}}.
+ 
+ handle_call({register, Name, Pid, Port, Opts}, _From, State = #state{monitors = Monitors}) ->
++    KeptMonitors = clear_monitors(Name, Monitors),
+     %% Monitor the server process
+     MonRef = erlang:monitor(process, Pid),
+ 
+@@ -191,24 +198,24 @@ handle_call({register, Name, Pid, Port, Opts}, _From, State = #state{monitors =
+     },
+     true = ets:insert(?TABLE, {Name, Info}),
+ 
+-    NewMonitors = Monitors#{MonRef => Name},
++    NewMonitors = KeptMonitors#{MonRef => Name},
+     {reply, ok, State#state{monitors = NewMonitors}};
+-handle_call({unregister, Name}, _From, State = #state{monitors = Monitors}) ->
+-    %% Find and remove the monitor
+-    case ets:lookup(?TABLE, Name) of
+-        [{Name, #{pid := Pid}}] ->
+-            %% Find the monitor reference for this pid
+-            MonRef = find_monitor_by_pid(Pid, Monitors),
+-            case MonRef of
+-                undefined -> ok;
+-                _ -> erlang:demonitor(MonRef, [flush])
+-            end,
+-            true = ets:delete(?TABLE, Name),
+-            NewMonitors = maps:filter(fun(_, V) -> V =/= Name end, Monitors),
+-            {reply, ok, State#state{monitors = NewMonitors}};
+-        [] ->
+-            {reply, ok, State}
+-    end;
++handle_call({unregister, Name}, _From, State) ->
++    {reply, ok, remove_registration(Name, State)};
++handle_call({unregister_stopped, Name}, _From, State) ->
++    %% A new server may register after the old child was deleted. The registry
++    %% owns this check and deletion together, so late cleanup cannot erase it.
++    NextState =
++        case lookup(Name) of
++            {ok, #{pid := Pid}} ->
++                case is_process_alive(Pid) of
++                    true -> State;
++                    false -> remove_registration(Name, State)
++                end;
++            {error, not_found} ->
++                State
++        end,
++    {reply, ok, NextState};
+ handle_call({update_port, Name, Port}, _From, State) ->
+     {reply, do_update_port(Name, Port), State};
+ handle_call(_Request, _From, State) ->
+@@ -226,15 +233,18 @@ do_update_port(Name, Port) ->
+ handle_cast(_Msg, State) ->
+     {noreply, State}.
+ 
+-handle_info({'DOWN', MonRef, process, _Pid, _Reason}, State = #state{monitors = Monitors}) ->
++handle_info({'DOWN', MonRef, process, Pid, _Reason}, State = #state{monitors = Monitors}) ->
+     %% Server terminated, remove from registry
+     case maps:get(MonRef, Monitors, undefined) of
+         undefined ->
+             {noreply, State};
+         Name ->
+-            true = ets:delete(?TABLE, Name),
+-            NewMonitors = maps:remove(MonRef, Monitors),
+-            {noreply, State#state{monitors = NewMonitors}}
++            case lookup(Name) of
++                {ok, #{pid := Pid}} ->
++                    {noreply, remove_registration(Name, State)};
++                _ ->
++                    {noreply, State#state{monitors = maps:remove(MonRef, Monitors)}}
++            end
+     end;
+ handle_info(_Info, State) ->
+     {noreply, State}.
+@@ -246,21 +256,21 @@ terminate(_Reason, _State) ->
+ %% Internal functions
+ %%====================================================================
+ 
+-find_monitor_by_pid(Pid, Monitors) ->
+-    %% Find monitor reference by pid - need to check the registered info
+-    maps:fold(
+-        fun(MonRef, Name, Acc) ->
+-            case Acc of
+-                undefined ->
+-                    case ets:lookup(?TABLE, Name) of
+-                        [{Name, #{pid := Pid}}] -> MonRef;
+-                        _ -> undefined
+-                    end;
+-                _ ->
+-                    Acc
++remove_registration(Name, State = #state{monitors = Monitors}) ->
++    true = ets:delete(?TABLE, Name),
++    State#state{monitors = clear_monitors(Name, Monitors)}.
++
++clear_monitors(Name, Monitors) ->
++    maps:filter(
++        fun(MonRef, RegisteredName) ->
++            case RegisteredName =:= Name of
++                true ->
++                    erlang:demonitor(MonRef, [flush]),
++                    false;
++                false ->
++                    true
+             end
+         end,
+-        undefined,
+         Monitors
+     ).
+ 
+diff --git a/src/quic_server_sup.erl b/src/quic_server_sup.erl
+index f3648f3..01bdc28 100644
+--- a/src/quic_server_sup.erl
++++ b/src/quic_server_sup.erl
+@@ -73,9 +73,10 @@ start_server(Name, Port, Opts) when is_atom(Name), is_integer(Port), is_map(Opts
+ stop_server(Name) when is_atom(Name) ->
+     case supervisor:terminate_child(?MODULE, Name) of
+         ok ->
+-            _ = supervisor:delete_child(?MODULE, Name),
+-            %% Unregister is handled by registry monitor
+-            ok;
++            case supervisor:delete_child(?MODULE, Name) of
++                ok -> quic_server_registry:unregister_stopped(Name);
++                Error -> Error
++            end;
+         {error, not_found} ->
+             {error, {not_found, Name}}
+     end.
+diff --git a/test/quic_send_ready_SUITE.erl b/test/quic_send_ready_SUITE.erl
+index c53009e..7404a77 100644
+--- a/test/quic_send_ready_SUITE.erl
++++ b/test/quic_send_ready_SUITE.erl
+@@ -15,7 +15,9 @@
+     send_larger_than_flow_window_progresses/1,
+     oversized_send_is_atomic/1,
+     oversized_send_precedes_flow_control/1,
+-    queued_send_blocks_without_crashing/1
++    queued_send_blocks_without_crashing/1,
++    stopped_server_name_is_reusable/1,
++    stale_registry_death_preserves_replacement/1
+ ]).
+ 
+ all() ->
+@@ -27,7 +29,9 @@ all() ->
+         send_larger_than_flow_window_progresses,
+         oversized_send_is_atomic,
+         oversized_send_precedes_flow_control,
+-        queued_send_blocks_without_crashing
++        queued_send_blocks_without_crashing,
++        stopped_server_name_is_reusable,
++        stale_registry_death_preserves_replacement
+     ].
+ 
+ init_per_suite(Config) ->
+@@ -280,6 +284,114 @@ queued_send_blocks_without_crashing(_Config) ->
+         quic_test_echo_server:stop(Echo)
+     end.
+ 
++stopped_server_name_is_reusable(_Config) ->
++    {ok, Echo} = quic_test_echo_server:start(),
++    Name = maps:get(name, Echo),
++    {ok, #{pid := Old, opts := Opts}} = quic_server_registry:lookup(Name),
++    Registry = whereis(quic_server_registry),
++    Parent = self(),
++    Ref = make_ref(),
++    %% Forward calls to the real registry while holding its mailbox. This
++    %% makes the historical gap after stop deterministic without sleeps.
++    Proxy = spawn(fun() -> registry_proxy(Registry, Parent, Ref) end),
++    true = unregister(quic_server_registry),
++    true = register(quic_server_registry, Proxy),
++    ok = sys:suspend(Registry),
++    {Worker, Monitor} = spawn_monitor(fun() ->
++        ok = quic:stop_server(Name),
++        Parent ! {stop_returned, Ref, quic_server_registry:lookup(Name)}
++    end),
++    try
++        Observed =
++            receive
++                {registry_call, Ref} ->
++                    ok = sys:resume(Registry),
++                    receive
++                        {stop_returned, Ref, Result} -> Result
++                    after 5000 -> ct:fail(stop_did_not_complete)
++                    end;
++                {stop_returned, Ref, Result} ->
++                    Result
++            after 5000 -> ct:fail(stop_did_not_reach_registry)
++            end,
++        Summary =
++            case Observed of
++                {ok, #{pid := Owner}} -> {ok, Owner};
++                Other -> Other
++            end,
++        ?assertEqual({error, not_found}, Summary),
++        true = unregister(quic_server_registry),
++        true = register(quic_server_registry, Registry),
++        {ok, New} = quic:start_server(Name, 0, Opts),
++        ?assertNotEqual(Old, New),
++        ?assertMatch({ok, #{pid := New}}, quic_server_registry:lookup(Name)),
++        ok = quic:stop_server(Name),
++        ?assertEqual({error, not_found}, quic_server_registry:lookup(Name))
++    after
++        catch sys:resume(Registry),
++        case whereis(quic_server_registry) of
++            Proxy ->
++                true = unregister(quic_server_registry),
++                true = register(quic_server_registry, Registry);
++            Registry ->
++                ok
++        end,
++        exit(Proxy, kill),
++        exit(Worker, kill),
++        receive
++            {'DOWN', Monitor, process, Worker, _} -> ok
++        after 5000 -> ct:fail(stop_worker_not_closed)
++        end,
++        quic_test_echo_server:stop(Echo)
++    end.
++
++registry_proxy(Registry, Parent, Ref) ->
++    receive
++        {'$gen_call', _, _} = Message ->
++            Parent ! {registry_call, Ref},
++            Registry ! Message,
++            registry_proxy(Registry, Parent, Ref)
++    end.
++
++stale_registry_death_preserves_replacement(_Config) ->
++    Name = stale_registry_owner,
++    Old = spawn(fun() ->
++        receive
++            stop -> ok
++        end
++    end),
++    New = spawn(fun() ->
++        receive
++            stop -> ok
++        end
++    end),
++    Registry = whereis(quic_server_registry),
++    try
++        ok = quic_server_registry:register(Name, Old, 1234, #{}),
++        {state, Monitors} = sys:get_state(Registry),
++        [OldRef] = [R || {R, N} <- maps:to_list(Monitors), N =:= Name],
++        ok = quic_server_registry:register(Name, New, 1234, #{}),
++        exit(Old, kill),
++        %% A delayed genuine reference from the previous owner is harmless.
++        Registry ! {'DOWN', OldRef, process, Old, killed},
++        _ = sys:get_state(Registry),
++        ?assertMatch({ok, #{pid := New}}, quic_server_registry:lookup(Name)),
++        ok = quic_server_registry:unregister_stopped(Name),
++        ?assertMatch({ok, #{pid := New}}, quic_server_registry:lookup(Name)),
++        NewMonitor = erlang:monitor(process, New),
++        exit(New, kill),
++        receive
++            {'DOWN', NewMonitor, process, New, killed} -> ok
++        after 5000 -> ct:fail(replacement_not_stopped)
++        end,
++        ok = quic_server_registry:unregister_stopped(Name),
++        ?assertEqual({error, not_found}, quic_server_registry:lookup(Name))
++    after
++        exit(Old, kill),
++        exit(New, kill),
++        quic_server_registry:unregister(Name)
++    end.
++
+ connect(Port) ->
+     {ok, Conn} = quic:connect(
+         "127.0.0.1",

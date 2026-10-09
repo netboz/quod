@@ -107,7 +107,9 @@ do_ask(NsTerm, Inner, Next, St) ->
     Self = quod_predicates:ctx_ns(quod_predicates:context(St)),
     case quod_ontology_name:flatten(NsTerm) of
         error  -> ask_error({bad_name, NsTerm});
-        Self   -> erlog_int:prove_body([Inner | Next], St);  %% self-ask: in place, no hop, no chain growth
+        %% Inner is a Prolog term, not a compiled body. call/1 handles control
+        %% terms and their cut scope in place, without a hop or chain growth.
+        Self   -> erlog_int:prove_body([{call, Inner} | Next], St);
         Target -> guarded_ask(Self, Target, Inner, Next, St)
     end.
 

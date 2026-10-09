@@ -16,6 +16,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
+-export([transient/1]).
 -include("quod_proof_limits.hrl").
 
 -export([start/2, stop/1,
@@ -388,6 +389,11 @@ effects(Handle) ->
     State = get_session(Handle),
     overlay_effects(State#session_state.current).
 
+-spec transient(session()) -> term().
+transient(Handle) ->
+    State = get_session(Handle),
+    quod_erlog_db_local_prove:transient(State#session_state.current).
+
 -doc "Return private preparation for one effect in the current revision.".
 -spec prepared_effect(session(), quod_effect:effect()) ->
           {ok, {term(), term(), quod_effect:effect(), term()}} | error.
@@ -482,7 +488,7 @@ transcript(Handle) ->
 -doc "Whether the session currently stages content or a durable direct effect.".
 -spec dirty(session()) -> boolean().
 dirty(Handle) ->
-    local_changes(Handle) =/= [] orelse effects(Handle) =/= [].
+    local_changes(Handle) =/= [] orelse effects(Handle) =/= [] orelse transient(Handle) =/= none.
 
 -doc "Atomically retain one current immutable revision under bounded batch ids.".
 -spec checkpoint_many(session(), [term()]) ->

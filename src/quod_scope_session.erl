@@ -1,4 +1,5 @@
 -module(quod_scope_session).
+-export([transient/1]).
 -moduledoc """
 One selected-ontology scope for one top-level proof.
 
@@ -205,6 +206,22 @@ seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, Principal,
     remote_seal(Handle, Principal, RequestBinding);
 seal(_Handle, _OriginIdentity, _Principal, _RequestBinding, _OriginRole) ->
     {error, {protocol_error, session_binding}}.
+
+transient({local_scope,_,_,_,_,Session}) ->
+    {ok,quod_proof_session:transient(Session)};
+transient({quod_scope_session,Pid,_,ProofId,SessionRef,_,_} = Handle) ->
+    case command_remaining_ms() of
+        0 -> {error,current_execution_limit()};
+        Remaining ->
+            Ref = make_ref(), Monitor = monitor(process,Pid),
+            Pid ! {scope_transient,self(),ProofId,SessionRef,Ref},
+            try receive
+                {scope_reply,Pid,ProofId,SessionRef,Ref,{transient,Effect}} -> {ok,Effect};
+                {'DOWN',Monitor,process,Pid,Reason} -> {error,failure_reason(Handle,Reason)}
+            after Remaining -> {error,current_execution_limit()}
+            end after demonitor(Monitor,[flush]) end
+    end;
+transient(_) -> {error,transient_scope_unavailable}.
 
 remote_seal(Handle, Principal, RequestBinding) ->
     case bind_remote_router(Handle) of
@@ -1293,6 +1310,13 @@ dispatch_message({scope_savepoint, Origin, ProofId, Ref,
             handled;
         false ->
             handled
+    end;
+dispatch_message({scope_transient,Origin,ProofId,Ref,RequestRef}) ->
+    case valid_command(Origin,ProofId,Ref) of
+        true ->
+            send_reply(RequestRef,{transient,quod_proof_session:transient((runtime())#runtime.session)}),
+            handled;
+        false -> handled
     end;
 dispatch_message({scope_seal, Origin, ProofId, Ref,
                   RequestRef, OriginIdentity}) ->

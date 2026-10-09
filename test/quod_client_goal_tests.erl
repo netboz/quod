@@ -96,7 +96,7 @@ all_mode_tags_roundtrip_test() ->
               Request = request(<<16#41:256>>, Mode, <<"true.">>),
               {ok, Bytes} = quod_client_goal:encode(Request),
               ?assertEqual({ok, Request}, quod_client_goal:decode(Bytes))
-      end, [read, execute, cursor]).
+      end, [read, execute, cursor, control]).
 
 signature_binds_every_request_field_test() ->
     KeyPair = quod_identity:generate(),

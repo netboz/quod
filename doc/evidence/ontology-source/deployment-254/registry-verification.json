@@ -1,0 +1,12 @@
+{
+  "registry": "192.168.1.11:5000",
+  "repository": "quod",
+  "current_registry_digest_matches_running_release": true,
+  "current_digest": "sha256:f8e8776060180b0206490817fa72894caa709c8b60b743a6a1a6d3a49d7a4395",
+  "live_job": "quod-finality-candidate-v6-20260926",
+  "live_image": "192.168.1.11:5000/quod:0.7.253@sha256:f8e8776060180b0206490817fa72894caa709c8b60b743a6a1a6d3a49d7a4395",
+  "matching_registry_jobs": [
+    "docker-registry"
+  ],
+  "destination": "Existing internal LAN registry used by this exact deployment; not a new external recipient."
+}

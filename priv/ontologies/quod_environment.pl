@@ -12,9 +12,6 @@ environment_query(isa(_, _)).
 environment_query(have_attribute(_, _, _)).
 environment_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(isa/2).
-public_prolog_predicate(have_attribute/3).
-
 isa(environment, thing).
 isa(sky_sphere, environment).
 

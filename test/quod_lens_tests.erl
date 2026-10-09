@@ -294,9 +294,9 @@ policy_test() ->
 the_class_view_is_derived_test() ->
     with_lens(fun(St) ->
         holds({isa, lens, thing}, St),
-        ?assertEqual([<<"work_licences">>],
+        ?assertEqual([<<"ontology_source">>, <<"predicate_source">>, <<"work_licences">>],
                      solutions({'L'}, {instance_of, lens, {'L'}}, St)),
-        ?assertEqual([<<"reach_columns">>],
+        ?assertEqual([<<"source_text">>, <<"source_text">>, <<"reach_columns">>],
                      solutions({'E'}, {instance_of, encoding, {'E'}}, St)),
         ?assertEqual([<<"family">>, <<"reach">>],
                      lists:sort(solutions({'M'},

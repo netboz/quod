@@ -17,15 +17,6 @@ material_query(have_attribute(_, _, _)).
 material_query(attribute(_, _, _)).
 material_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(isa/2).
-public_prolog_predicate(material_class/1).
-public_prolog_predicate(most_specific_classes/3).
-public_prolog_predicate(property_unit/2).
-public_prolog_predicate(material_property/5).
-public_prolog_predicate(property_in/6).
-public_prolog_predicate(have_attribute/3).
-public_prolog_predicate(attribute/3).
-
 isa(material, thing).
 isa(wood, material).
 isa(oak_wood, wood).

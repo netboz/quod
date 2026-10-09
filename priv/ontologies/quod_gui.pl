@@ -11,9 +11,6 @@ gui_query(gui_view(_, _)).
 gui_query(isa(_, _)).
 gui_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(gui_view/2).
-public_prolog_predicate(isa/2).
-
 isa(gui_component, thing).
 isa(container, gui_component).
 isa(form, container).
@@ -35,7 +32,7 @@ gui_view(proof_console,
 
 gui_view(prolog_editor,
     form(<<"Prolog code">>,
-         [choice(predicate, <<"Predicate">>), input(new_predicate, <<"New predicate (name/arity)">>),
+         [choice(predicate, <<"Source lens">>), input(new_predicate, <<"New predicate (name/arity)">>),
           editor(source, <<"Source code">>),
           bindings(results, <<"Edit result">>), button(run, <<"Preview changes">>),
           button(accept, <<"Save changes">>), button(stop, <<"Cancel preview">>), button(create, <<"Add predicate">>),
@@ -43,5 +40,5 @@ gui_view(prolog_editor,
 
 gui_view(prolog_source,
     form(<<"Prolog source (read only)">>,
-         [choice(predicate, <<"Predicate">>),
+         [choice(predicate, <<"Source lens">>),
           editor(source, <<"Source code">>)])).

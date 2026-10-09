@@ -13,11 +13,6 @@ eidolon_query(instance_of(_, _)).
 eidolon_query(texture_asset(_, _, _, _)).
 eidolon_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(class_eidolon/4).
-public_prolog_predicate(eidolon/3).
-public_prolog_predicate(instance_of/2).
-public_prolog_predicate(texture_asset/4).
-
 surface_recipe(wood, solid, warm_wood, surface(<<"#93613D">>,0,700,0,[])).
 surface_recipe(oak_wood, solid, oak, Surface) :- textured_surface(wood_table_001, 1000, Surface).
 surface_recipe(stone, solid, stone, surface(<<"#918477">>,0,900,0,[])).

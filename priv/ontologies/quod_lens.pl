@@ -85,27 +85,6 @@ lens_query(have_attribute(_, _, _)).
 lens_query(attribute(_, _, _)).
 lens_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(lens/2).
-public_prolog_predicate(lens_subject/3).
-public_prolog_predicate(lens_group/2).
-public_prolog_predicate(lens_measure/3).
-public_prolog_predicate(lens_detail/2).
-public_prolog_predicate(encoding/3).
-public_prolog_predicate(encoding_mark/2).
-public_prolog_predicate(encoding_layout/2).
-public_prolog_predicate(encoding_channel/3).
-public_prolog_predicate(encoding_step/4).
-public_prolog_predicate(requires/2).
-public_prolog_predicate(group_at/2).
-public_prolog_predicate(group_colour/2).
-public_prolog_predicate(limit/2).
-public_prolog_predicate(view/3).
-public_prolog_predicate(diagnosis/3).
-public_prolog_predicate(isa/2).
-public_prolog_predicate(instance_of/2).
-public_prolog_predicate(have_attribute/3).
-public_prolog_predicate(attribute/3).
-
 %% --- the bounds ---------------------------------------------------------------
 %% This ontology's own bounds on what it will produce, not a copy of anyone
 %% else's. They are held below `quod:rendering`'s corresponding limits, which the
@@ -295,6 +274,29 @@ leading(0, _Codes, []) :- !.
 leading(Count, [Code | Rest], [Code | Kept]) :-
     Fewer is Count - 1,
     leading(Fewer, Rest, Kept).
+
+%% Source is a textual encoding of current knowledge. The default selects all
+%% stored clauses. A predicate lens is an explicit narrower selection, useful
+%% for editing; neither lens changes the target's source-read authorization.
+lens(<<"ontology_source">>, <<"complete current ontology state">>).
+lens(<<"predicate_source">>, <<"one predicate definition">>).
+encoding(<<"source_text">>, <<"ontology_source">>, <<"quod:prolog">>).
+encoding(<<"source_text">>, <<"predicate_source">>, <<"quod:prolog">>).
+encoding_layout(<<"source_text">>, <<"text">>).
+source_chunk_bytes(16384).
+
+rows(<<"ontology_source">>, [Target], [source(Chunk)]) :-
+    source_chunk_bytes(Bytes),
+    source_rows(Target, chunks(Bytes), Chunk).
+rows(<<"predicate_source">>, [Target, Indicator], [source(Source)]) :-
+    source_rows(Target, source(Indicator), Source).
+source_rows(Target, Query, Source) :-
+    quod:root::system_ontology(<<"quod:prolog">>, Anchor),
+    <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, Anchor),
+        prolog_inspect(Target, Query, Source)).
+
+laid_out(Encoding, _Lens, [source(Source)], Source) :-
+    encoding_layout(Encoding, <<"text">>).
 
 %% --- the authored lens --------------------------------------------------------
 %% What may this work ship under. The front row is the answer: one mark per

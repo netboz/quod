@@ -3,7 +3,7 @@
 import { binary, compound, variable, formatClause, formatTerm } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
 import { anchoredGoal, singleBinding } from './world.js'
-import { signedGoal } from './signed-client.js'
+import { signedGoal, signedCursorCommand } from './signed-client.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -27,6 +27,32 @@ export async function readCodeSource(identity, agent, workspace, indicator) {
     compound('prolog_source', [targetTerm(workspace.target), indicator, variable('Source')]), 'Source')
   if (result.type !== 'binary') throw new Error('invalid source text')
   return decoder.decode(result.value)
+}
+
+// One signed cursor owns the snapshot for every chunk. Publish the assembled
+// text only after exhaustion; an interrupted read is never a complete view.
+export async function readCodeState(identity, agent, workspace, signal) {
+  let reply = await signedGoal(identity, { mode: 'cursor', agent,
+    goal: anchoredGoal(workspace.tools,
+      compound('prolog_source', [targetTerm(workspace.target), variable('Source')])) })
+  const stream = new TextDecoder('utf-8', { fatal: true })
+  const chunks = []
+  try {
+    while (reply.result === 'solution') {
+      signal?.throwIfAborted()
+      const term = readTerm(singleBinding({ ...reply, result: 'ok' }, 'Source'))
+      if (term.type !== 'compound' || term.functor !== 'source_chunk' || term.args.length !== 2 ||
+          term.args[0].type !== 'atom' || !['more', 'done'].includes(term.args[0].value) ||
+          term.args[1].type !== 'binary') throw new Error('invalid source chunk')
+      chunks.push(stream.decode(term.args[1].value, { stream: true }))
+      if (term.args[0].value === 'done') return chunks.join('') + stream.decode()
+      reply = await signedCursorCommand(identity, reply.cursor, 'next')
+    }
+    signal?.throwIfAborted()
+    throw new Error('Ontology source inspection was refused or incomplete.')
+  } finally {
+    if (reply.result === 'solution') await signedCursorCommand(identity, reply.cursor, 'stop')
+  }
 }
 
 export async function prepareCodeEdit(identity, agent, workspace, indicator, baseline, source) {

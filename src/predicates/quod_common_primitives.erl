@@ -26,6 +26,10 @@ that used them stays sealable.
   following clauses. Facts print as `Head :- true`; a bound source compares
   exactly. Erlog's own `clause/2` decodes the compiled bodies, without exposing
   inspection variables in the caller's answer.
+- `'$quod_source_chunk'(+Bytes, ?Chunk)` — every stored interpreted clause in
+  the same staged snapshot, in canonical predicate order. Backtracking yields
+  bounded binary chunks, including the final empty chunk for an empty state.
+  The caller's ontology supplies the transport allowance; no content is pruned.
 - `'$quod_retract_exact'(+Clause)` — remove the first authored clause whose
   source is identical up to variable renaming. A fact is shorthand for
   `Head :- true`. It uses ordinary overlay mutations and savepoints, never
@@ -39,7 +43,7 @@ that used them stays sealable.
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([load/1, draw_3/3, binary_codes_2/3,
-         predicate_source_2/3, retract_exact_1/3, program_source_2/3,
+         predicate_source_2/3, source_chunk_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2]).
 
 -define(DRAW, '$quod_draw').
@@ -55,8 +59,29 @@ load(#est{db = Db0} = Est) ->
             {'$quod_predicate_source', 2}, ?MODULE, predicate_source_2, Db2),
     Db4 = erlog_int:add_compiled_proc(
             {'$quod_retract_exact', 1}, ?MODULE, retract_exact_1, Db3),
+    Db5 = erlog_int:add_compiled_proc(
+            {'$quod_source_chunk', 2}, ?MODULE, source_chunk_2, Db4),
     Est#est{db = erlog_int:add_compiled_proc(
-                   {'$quod_program_source', 2}, ?MODULE, program_source_2, Db4)}.
+                   {'$quod_program_source', 2}, ?MODULE, program_source_2, Db5)}.
+
+source_chunk_2({'$quod_source_chunk', Bytes0, Chunk}, Next,
+               #est{bs = Bs} = St) ->
+    case erlog_int:deref(Bytes0, Bs) of
+        Bytes when is_integer(Bytes), Bytes > 0 ->
+            #est{db = #db{mod = Module, ref = Ref}} =
+                quod_erlog_db_local_prove:authored_state(St),
+            Functors = lists:sort(Module:get_interpreted_functors(Ref)),
+            Text = iolist_to_binary([
+                [format_clause(C, St) || C <- element(2, authored_clauses(F, St))]
+                || F <- Functors]),
+            erlog_int:prove_body([{member, Chunk, source_chunks(Text, Bytes)} | Next], St);
+        _ -> erlog_int:fail(St)
+    end.
+
+source_chunks(Text, Bytes) when byte_size(Text) =< Bytes -> [{source_chunk, done, Text}];
+source_chunks(Text, Bytes) ->
+    <<Chunk:Bytes/binary, Rest/binary>> = Text,
+    [{source_chunk, more, Chunk} | source_chunks(Rest, Bytes)].
 
 program_source_2({'$quod_program_source', Clauses, Source0}, Next,
                  #est{bs = Bs, vn = Vn} = St) ->

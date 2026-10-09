@@ -74,14 +74,6 @@ naming_query(draw(_, _)).
 naming_query(draw(_)).
 naming_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(name/4).
-public_prolog_predicate(count/4).
-public_prolog_predicate(name_nth/5).
-public_prolog_predicate(draw/5).
-public_prolog_predicate(draw/4).
-public_prolog_predicate(draw/2).
-public_prolog_predicate(draw/1).
-
 %% --- public predicates -------------------------------------------------------
 
 %% name(?Name, ?Culture, ?Kind, ?Gender): Name belongs to a pool of the

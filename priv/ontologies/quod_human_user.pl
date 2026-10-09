@@ -10,6 +10,4 @@ can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 human_user_query(isa(_, _)).
 human_user_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(isa/2).
-
 isa(human_user, agent).

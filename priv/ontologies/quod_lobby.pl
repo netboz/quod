@@ -19,16 +19,6 @@ lobby_query(lobby_options(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 lobby_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(lobby_recipe/3).
-public_prolog_predicate(lobby_modes/1).
-public_prolog_predicate(device_menu/2).
-public_prolog_predicate(device_eidolons/4).
-public_prolog_predicate(isa/2).
-public_prolog_predicate(class_eidolon/4).
-public_prolog_predicate(eidolon/3).
-public_prolog_predicate(lobby_options/2).
-public_prolog_predicate(ontology_creation_allowed/3).
-
 %% A user's editable facts cannot grant names outside its own personal lobby.
 %% The pending requirement is read in the same proof as the prepared creation.
 ontology_creation_allowed(Owner, Name, Options) :-

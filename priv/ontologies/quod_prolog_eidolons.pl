@@ -12,10 +12,6 @@ prolog_eidolon_query(class_eidolon(_, _, _, _)).
 prolog_eidolon_query(isa(_, _)).
 prolog_eidolon_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(eidolon/3).
-public_prolog_predicate(class_eidolon/4).
-public_prolog_predicate(isa/2).
-
 isa(prolog_editor, eidolon).
 isa(eidolon, thing).
 
@@ -28,20 +24,14 @@ eidolon(prolog_editor, subject(Target, Entity),
     prolog_source_view(Target, ViewId),
     Gui::(current_ontology_identity(Gui, GuiAnchor), gui_view(ViewId, View)).
 
-%% A system administrator is identified by root's one authoritative list.
-%% Owners retain their target's ordinary broad authorization. Everyone else
-%% reaches only the target-authored public read surface.
-prolog_source_view(Target, prolog_editor) :-
+%% Root classifies system access before the target's ordinary owner path.
+prolog_source_view(Target, View) :-
     quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_source_access(Target, editable)),
-    !.
-prolog_source_view(ontology_ref(<<"quod:prolog:eidolons">>, Anchor), prolog_source) :-
-    current_ontology_identity(<<"quod:prolog:eidolons">>, Anchor),
-    !.
+                system_source_access(Target, Access)),
+    !,
+    prolog_access_view(Access, View).
 prolog_source_view(ontology_ref(Namespace, Anchor), prolog_editor) :-
-    Namespace::current_ontology_identity(Namespace, Anchor),
-    !.
-prolog_source_view(Target, prolog_source) :-
-    quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_source_access(Target, read_only)),
-    !.
+    Namespace::current_ontology_identity(Namespace, Anchor).
+
+prolog_access_view(editable, prolog_editor).
+prolog_access_view(read_only, prolog_source).

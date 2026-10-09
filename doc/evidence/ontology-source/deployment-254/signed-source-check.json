@@ -1,0 +1,114 @@
+{
+  "passed": true,
+  "root_anchor": "D0100AE71106BBFBF381794B68C6D141111E29415BB636FD10897D52541CBBCE",
+  "principal": "authenticated key-bound signup applicant; no administrator grant",
+  "targets": [
+    {
+      "namespace": "quod:agent",
+      "anchor": "GmrbhhB04Hx0C9JLFwfeRdrEzPw7VIbr-NUTtTLMzkk",
+      "bytes": 5788,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:environment",
+      "anchor": "VwfhuASPpDbxqpzOVEcgSadSd3IImkUFd4sJzh_HUzo",
+      "bytes": 6186,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:environment:eidolons",
+      "anchor": "f1GNWugA6P7-WaT2pVUd9ubrVToJxSFILvXCkqfLgTk",
+      "bytes": 6968,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:gui",
+      "anchor": "dd9AMN71Aj8_ph0jbH7RSF4J5k7fjVAPnoItiEIHLSw",
+      "bytes": 7030,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:human_user",
+      "anchor": "GbXyzbuFGdgrbytnJRdCziI0O8yMnTjC2J_hQiOivhk",
+      "bytes": 5835,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:lens",
+      "anchor": "LpL23nfMC-cv0iBHnGejeXV4XbrACktEW-sxtIAUL9Q",
+      "bytes": 15175,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:licence",
+      "anchor": "3U7qI9qgjkP_qhPillhFi1aNDYSZxPEQgxEwPKtHQJk",
+      "bytes": 13015,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:lobby",
+      "anchor": "WBAds9n0mVkOqu_vjb0pVz12KH0ZyjK8Xb_bb-SsUtw",
+      "bytes": 19399,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:material",
+      "anchor": "omK7vA6UVkbZO3dOQs-gc9uATdOE8rMeVTrCxdy731g",
+      "bytes": 8123,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:material:eidolons",
+      "anchor": "XSLlDyX1VmUVexbUGIY_oind64pHZIcs9cifAfCoiZw",
+      "bytes": 9223,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:measure",
+      "anchor": "RwbbwlracxNd0XxNHjT6_OXENDuPdOepLEpkMHajLJU",
+      "bytes": 13523,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:modelling",
+      "anchor": "ShnPfV8s6AjqakMPXC8Ch_CeA3quoQNC8PYtP9PVLIQ",
+      "bytes": 12019,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:names",
+      "anchor": "l74lj3xg48K63TpGiaKMuEeL19BZ3086wdWx4VY3Ndw",
+      "bytes": 27969,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:node",
+      "anchor": "sWsc7eHSZ1k7sOmEmAxShJOKoCMru31kKIwod4DuYVU",
+      "bytes": 19337,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:prolog",
+      "anchor": "xJKwmdxHX92LNKrQuvd2O9VYJjWvky3Ga8Ut0FLNDy0",
+      "bytes": 9382,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:prolog:eidolons",
+      "anchor": "2XPRgjpmKIErFzy3LbWLB0PYuWjDxrJSdN8W6IlvXK4",
+      "bytes": 6733,
+      "policyVisible": true
+    },
+    {
+      "namespace": "quod:rendering",
+      "anchor": "o-dSZm93gimPaXMNQ4oH8udB1_cEWAyUWbAYaTzushA",
+      "bytes": 13187,
+      "policyVisible": true
+    }
+  ],
+  "unchangedRepeat": true,
+  "wrongAnchorDenied": true,
+  "privateRootDenied": true,
+  "policyInvocationDenied": true,
+  "ledgerWrites": 0
+}

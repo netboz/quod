@@ -405,6 +405,112 @@ signed_prolog_eidolon_edits_use_target_policy_test_() ->
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
+complete_source_cursor_retains_current_snapshot_test_() ->
+    {timeout, 120, fun() ->
+        Dir = filename:join("/tmp", "quod-current-source-" ++
+                           integer_to_list(erlang:unique_integer([positive]))),
+        Ctx = start(Dir, [], extended_system_catalogue),
+        try
+            RootNs = quod_ontology:root_ns(),
+            {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
+            Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
+            ?assertMatch({ok, _, _}, quod_prolog:execute(RootNs,
+                {assertz, {root_administrator_agent, Owner}})),
+            Reader = Ctx#{instance => <<"human_user(other_agent).">>},
+            Target = system_target(<<"quod:node">>),
+            LensTarget = system_target(<<"quod:lens">>),
+            LensIndicator = {'/', source_chunk_bytes, 1},
+            ok = commit_editor_goal(Ctx, compile_source_edit(Ctx, LensTarget, LensIndicator,
+                editor_source(Ctx, LensTarget, LensIndicator), <<"source_chunk_bytes(4096).">>)),
+            %% A real signed administrator edit supplies a fact to retract.
+            Old = <<"inspection_marker(old) :- true.\n">>,
+            New = <<"inspection_marker(new) :- true.\n">>,
+            Indicator = {'/', inspection_marker, 1},
+            Edit = compile_source_edit(Ctx, Target, Indicator, <<>>, Old),
+            ok = commit_editor_goal(Ctx, Edit),
+            Before = complete_source(Reader, Target),
+            ?assertNotEqual(nomatch, binary:match(Before, Old)),
+            ?assertNotEqual(nomatch, binary:match(Before, <<"can_invoke(">>)),
+            ?assertNotEqual(nomatch, binary:match(Before, <<"ontology_hosting_allowed(">>)),
+            ?assertNotEqual(nomatch, binary:match(Before, <<"'$quod_known_class'">>)),
+            %% Freeze a cursor, then assert/retract while its first chunk is
+            %% suspended. Every remaining chunk must still be from Before.
+            Query = editor_scope(<<"quod:prolog">>, {prolog_source, Target, {0}}),
+            {CursorOwner, Id, Evidence, First} = open_source_cursor(Reader, Query),
+            ?assertMatch({source_chunk, more, _}, First),
+            Change = compile_source_edit(Ctx, Target, Indicator, Old, New),
+            ok = commit_editor_goal(Ctx, Change),
+            ?assertEqual(Before, finish_source(CursorOwner, Id, Evidence, First, [])),
+            After = complete_source(Reader, Target),
+            ?assertEqual(binary:replace(Before, Old, New), After),
+            %% The explicit lens narrows only its view, not target access.
+            ?assertEqual(New, editor_source(Reader, Target, Indicator)),
+            ?assertMatch({fail, _}, read(Reader,
+                editor_scope(<<"quod:node">>, {inspection_marker, new}))),
+            assert_repeat_source_has_no_io(Reader, Target, After),
+            {NodeSup, NodeConfig} = maps:get(<<"quod:node">>, maps:get(ontologies, Ctx)),
+            {ontology_ref, NodeNs, NodeAnchor} = Target,
+            stop_process(NodeSup),
+            {Resumed, _} = start_namespace(NodeNs,
+                NodeConfig#{mode => join, genesis_hash => NodeAnchor}),
+            try
+                ?assertEqual(After, complete_source(Reader, Target)),
+                ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:prolog">>,
+                    {prolog_source, maps:get(lobby, Ctx), {0}}))),
+                ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:prolog">>,
+                    {prolog_source, {ontology_ref, NodeNs, <<0:256>>}, {0}})))
+            after stop_process(Resumed) end
+        after stop(Ctx), file:del_dir_r(Dir) end
+    end}.
+
+complete_source(Ctx, Target) ->
+    {Owner, Id, Evidence, First} = open_source_cursor(Ctx,
+        editor_scope(<<"quod:prolog">>, {prolog_source, Target, {0}})),
+    finish_source(Owner, Id, Evidence, First, []).
+
+finish_source(Owner, Id, Evidence, {source_chunk, done, Text}, Chunks) ->
+    ?assertMatch({ok, Evidence, _}, quod_client_cursor:command(Owner, Id, stop)),
+    iolist_to_binary(lists:reverse([Text | Chunks]));
+finish_source(Owner, Id, Evidence, {source_chunk, more, Text}, Chunks) ->
+    {ok, Evidence, Raw} = quod_client_cursor:command(Owner, Id, next),
+    {solution, Id, _, Blob} = quod_client_result:normalize(Evidence, Raw),
+    {ok, [{<<"V0">>, Chunk}]} = quod_client_result:decode_binding(Blob),
+    finish_source(Owner, Id, Evidence, Chunk, [Text | Chunks]).
+
+assert_repeat_source_has_no_io(Ctx, Target, Expected) ->
+    Parent = self(), Tag = make_ref(),
+    Tracer = spawn_link(fun() -> source_trace_relay(Parent, Tag) end),
+    Trace = trace:session_create(source_read_test, Tracer, []),
+    MFAs = [{quod_committed_projection, new, 5},
+            {quod_committed_projection, read_terms, 1}, {quod_committed_projection, new_est, 0},
+            {quod_simplex, history_view, 3}, {quod_ledger_store, open_ro_snapshot, 1},
+            {quod_ledger_store, read_at, 2}, {file, write, 2}, {file, pwrite, 3},
+            {file, write_file, 2}, {file, write_file, 3}, {file, sync, 1}, {file, datasync, 1}],
+    [trace:function(Trace, MFA, true, [local]) || MFA <- MFAs],
+    trace:process(Trace, all, true, [call]),
+    try
+        ?assertEqual(Expected, complete_source(Ctx, Target)),
+        ?assertEqual(Expected, complete_source(Ctx, Target)),
+        Ref = trace:delivered(Trace, all),
+        receive {trace_delivered, all, Ref} -> ok after 10000 -> error(trace_timeout) end,
+        Tracer ! {barrier, Ref},
+        receive {Tag, barrier, Ref} -> ok after 10000 -> error(trace_barrier_timeout) end,
+        Calls = source_io_calls(Tag, []),
+        ?assertEqual([], Calls)
+    after trace:session_destroy(Trace), Tracer ! stop end.
+
+source_trace_relay(Parent, Tag) ->
+    receive
+        {barrier, Ref} -> Parent ! {Tag, barrier, Ref}, source_trace_relay(Parent, Tag);
+        stop -> ok;
+        Message -> Parent ! {Tag, Message}, source_trace_relay(Parent, Tag)
+    end.
+
+source_io_calls(Tag, Calls) ->
+    receive {Tag, {trace, _, call, {M, F, Args}}} ->
+        source_io_calls(Tag, [{M, F, length(Args)} | Calls])
+    after 0 -> Calls end.
+
 public_system_ontology_source_is_readable_but_not_mutable_test_() ->
     {timeout, 90, fun() ->
         Dir = filename:join("/tmp", "quod-public-system-source-" ++
@@ -446,12 +552,15 @@ public_system_ontology_source_is_readable_but_not_mutable_test_() ->
                 {ok, [#{<<"V0">> := Indicators}], _} = read(Ctx,
                     editor_scope(Tools, {prolog_predicates, Target, {0}})),
                 ?assert(lists:member(Indicator, Indicators)),
-                ?assertNot(lists:member({'/', can_invoke, 4}, Indicators)),
-                ?assertMatch({ok, [#{<<"V0">> := Source}], _} when byte_size(Source) > 0,
-                    read(Ctx, editor_scope(Tools,
-                        {prolog_source, Target, Indicator, {0}}))),
-                ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
-                    {prolog_source, Target, {'/', can_invoke, 4}, {0}})))
+                ?assert(lists:member({'/', can_invoke, 4}, Indicators)),
+                {ok, [#{<<"V0">> := Source}], _} = read(Ctx, editor_scope(Tools,
+                    {prolog_source, Target, Indicator, {0}})),
+                {ok, [#{<<"V0">> := Policy}], _} = read(Ctx, editor_scope(Tools,
+                    {prolog_source, Target, {'/', can_invoke, 4}, {0}})),
+                ?assert(byte_size(Source) > 0), ?assert(byte_size(Policy) > 0),
+                Complete = complete_source(Ctx, Target),
+                ?assertNotEqual(nomatch, binary:match(Complete, Source)),
+                ?assertNotEqual(nomatch, binary:match(Complete, Policy))
             end, Targets),
             %% Representative public domain calls keep working through their
             %% real signed and exactly anchored entry points.
@@ -509,36 +618,13 @@ public_system_ontology_source_is_readable_but_not_mutable_test_() ->
                          submit(Ctx, execute, Edit)),
             ?assertMatch({fail, _}, read(Ctx,
                 editor_scope(<<"quod:modelling">>, Fact))),
-            ?assertMatch({fail, _}, read(Ctx,
+            ?assertMatch({ok, _, _}, read(Ctx,
                 editor_scope(<<"quod:modelling">>,
                     {system_prolog_introspection, predicates, {0}}))),
             ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
                 {prolog_source, {ontology_ref, <<"quod:modelling">>, <<0:256>>},
-                 {'/', model, 2}, {0}}))),
-            %% The source tool and its recipe must fail closed on their own
-            %% self-ask fast path even before root has catalogue rows for them.
-            RootNs = quod_ontology:root_ns(),
-            ToolsAnchor = quod_simplex:genesis_hash(Tools),
-            ?assertMatch({ok, _, _}, quod_prolog:execute(RootNs,
-                {retract, {system_ontology, Tools, ToolsAnchor}})),
-            ToolsTarget = {ontology_ref, Tools, ToolsAnchor},
-            ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
-                {prolog_source, ToolsTarget, {'/', can_invoke, 4}, {0}}))),
-            {ok, [#{<<"V0">> := PublicTools}], _} = read(Ctx,
-                editor_scope(Tools, {prolog_predicates, ToolsTarget, {0}})),
-            ?assertNot(lists:member({'/', can_invoke, 4}, PublicTools)),
-            ?assertMatch({ok, _, _}, quod_prolog:execute(RootNs,
-                {assertz, {system_ontology, Tools, ToolsAnchor}})),
-            RecipeAnchor = quod_simplex:genesis_hash(Recipe),
-            ?assertMatch({ok, _, _}, quod_prolog:execute(RootNs,
-                {retract, {system_ontology, Recipe, RecipeAnchor}})),
-            RecipeTarget = {ontology_ref, Recipe, RecipeAnchor},
-            ?assertMatch({ok, [#{<<"V0">> :=
-                {workspace, RecipeTarget, ontology, _,
-                 {form, _, [{choice, predicate, _}, {editor, source, _}]}}}], _},
-                read(Ctx, editor_scope(Recipe,
-                    {eidolon, prolog_editor,
-                     {subject, RecipeTarget, ontology}, {0}})))
+                 {'/', model, 2}, {0}})))
+
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -561,21 +647,16 @@ system_ontology_editing_uses_universal_scope_identity_test_() ->
             lists:foreach(fun(Ns) -> verify_system_editor(Ctx, Ns) end,
                           [RootNs, <<"quod:modelling">>, <<"quod:prolog">>,
                            <<"quod:signup">>]),
-            %% A catalogued target that has not yet admitted the wrapper still
-            %% answers the administrator with its public declarations, keeps
-            %% the administrative view, and refuses the wrapped save.
+            %% A retained target without the wrapper refuses inspection;
+            %% there is no silent fallback to an API subset.
             RenderNs = <<"quod:rendering">>,
             Wrapper = {':-', {can_invoke, {'Goal'}, {'_'}, {'_'}, {'_'}},
                        {system_source_query, {'Goal'}}},
             ?assertMatch({ok, _, _}, quod_prolog:execute(RenderNs, {retract, Wrapper})),
             RenderTarget = system_target(RenderNs),
             ToolsNs = <<"quod:prolog">>,
-            {ok, [#{<<"V0">> := RenderPublic}], _} = read(Ctx,
-                editor_scope(ToolsNs, {prolog_predicates, RenderTarget, {0}})),
-            ?assert(lists:member({'/', mark_kind, 1}, RenderPublic)),
-            ?assertNot(lists:member({'/', can_invoke, 4}, RenderPublic)),
-            ?assertMatch({fail, _}, read(Ctx, editor_scope(ToolsNs,
-                {prolog_source, RenderTarget, {'/', can_invoke, 4}, {0}}))),
+            ?assertMatch({fail, _}, read(Ctx,
+                editor_scope(ToolsNs, {prolog_predicates, RenderTarget, {0}}))),
             ?assertMatch({ok, [#{<<"V0">> := {workspace, RenderTarget, ontology, _,
                 {form, _, [{choice, predicate, _}, {input, new_predicate, _} | _]}}}], _},
                 read(Ctx, editor_scope(<<"quod:prolog:eidolons">>,
@@ -641,7 +722,11 @@ verify_system_editor(Ctx, Ns) ->
                            {',', system_prolog_edit, {transaction, _}}}}, Edit)
     end,
     Other = Ctx#{instance => <<"human_user(other_agent).">>},
-    ?assertMatch({fail, _}, read(Other, Source)),
+    case Ns of
+        <<"quod:root">> -> ?assertMatch({fail, _}, read(Other, Source));
+        <<"quod:signup">> -> ?assertMatch({fail, _}, read(Other, Source));
+        _ -> ?assertMatch({ok, _, _}, read(Other, Source))
+    end,
     ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Other, execute, Edit)),
     {Owner, CursorId, Evidence} = open_cursor(Ctx, Edit),
     {ok, Evidence, CursorResult} =
@@ -815,6 +900,7 @@ start(Dir, ExtraClassFacts, CatalogueKind) ->
             {<<"lobby-test-environment">>, "quod_environment.pl", []},
             {<<"lobby-test-environment-eidolons">>, "quod_environment_eidolons.pl",
              [{environment_vocabulary, <<"lobby-test-environment">>}]},
+            {<<"quod:lens">>, "quod_lens.pl", []},
             {<<"quod:gui">>, "quod_gui.pl", []},
             {<<"quod:prolog">>, "quod_prolog.pl", []},
             {<<"quod:prolog:eidolons">>, "quod_prolog_eidolons.pl", []}],
@@ -823,7 +909,6 @@ start(Dir, ExtraClassFacts, CatalogueKind) ->
                  {<<"quod:environment:eidolons">>, "quod_environment_eidolons.pl",
                   [{environment_vocabulary, <<"quod:environment">>}]},
                  {<<"quod:human_user">>, "quod_human_user.pl", []},
-                 {<<"quod:lens">>, "quod_lens.pl", []},
                  {<<"quod:licence">>, "quod_licence.pl", []},
                  {<<"quod:lobby">>, "quod_lobby.pl", []},
                  {<<"quod:material">>, "quod_material.pl",
@@ -955,6 +1040,10 @@ signed_request(Ctx, Mode, Goal) ->
     {Bytes, Signature}.
 
 open_cursor(Ctx, Goal) ->
+    {Owner, Id, Evidence, _} = open_source_cursor(Ctx, Goal),
+    {Owner, Id, Evidence}.
+
+open_source_cursor(Ctx, Goal) ->
     {Bytes, Signature} = signed_request(Ctx, cursor, Goal),
     {ok, Evidence = #{request := #{signing_public_key := SigningKey}}} =
         quod_client_goal_target:verify_request(Bytes, Signature),
@@ -964,11 +1053,10 @@ open_cursor(Ctx, Goal) ->
     {ok, {Evidence, MaterializedGoal, Principal, Owner}} =
         quod_client_goal_target:prepare_local(
           Evidence, Peer, Owner, CursorId),
-    ?assertMatch(
-       {ok, Evidence, {normalized, {solution, CursorId, _, _}}},
-       quod_client_goal_target:execute(
-         Evidence, MaterializedGoal, Principal, Owner, CursorId)),
-    {Owner, CursorId, Evidence}.
+    {ok, Evidence, {normalized, {solution, CursorId, _, Blob}}} =
+       quod_client_goal_target:execute(Evidence, MaterializedGoal, Principal, Owner, CursorId),
+    {ok, Bindings} = quod_client_result:decode_binding(Blob),
+    {Owner, CursorId, Evidence, proplists:get_value(<<"V0">>, Bindings)}.
 
 read(Ctx, Goal) ->
     case submit(Ctx, read, Goal) of

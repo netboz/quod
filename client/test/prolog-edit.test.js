@@ -75,3 +75,38 @@ test('a real thirty-clause compiled edit crosses the shared result reader', asyn
     assert.ok(!goal.includes("'$quod_authored_clauses'"))
   } finally { globalThis.fetch = previousFetch }
 })
+
+test('complete source uses one cursor, preserves split UTF-8, and stops at the explicit final chunk', async () => {
+  const { readCodeState } = await import('../src/prolog-edit.js')
+  const previousFetch = globalThis.fetch
+  const whole = new TextEncoder().encode('fact(é).\nrule(X) :- fact(X).\n')
+  const paths = []
+  let page = 0
+  globalThis.fetch = async (url, init) => {
+    paths.push([url, init.method])
+    if (init.method === 'DELETE') return { ok: true, json: async () => ({ result: 'stopped' }) }
+    const part = page++ === 0 ? whole.slice(0, 6) : whole.slice(6)
+    const source = compound('source_chunk', [atom(page === 1 ? 'more' : 'done'), binary(part)])
+    return { ok: true, json: async () => ({ result: 'solution', cursor: 'snapshot', bindings: [{ Source: renderTerm(source) }] }) }
+  }
+  try {
+    assert.equal(await readCodeState(identity, agent, { target, tools }), new TextDecoder().decode(whole))
+    assert.deepEqual(paths, [['/api/goals/cursors', 'POST'], ['/api/goals/cursors/snapshot/next', 'POST'], ['/api/goals/cursors/snapshot', 'DELETE']])
+  } finally { globalThis.fetch = previousFetch }
+})
+
+test('a lost or exhausted source cursor never publishes a partial ontology', async () => {
+  const { readCodeState } = await import('../src/prolog-edit.js')
+  const previousFetch = globalThis.fetch
+  for (const ending of ['fail', 'lost']) {
+    let calls = 0
+    globalThis.fetch = async (url, init) => {
+      if (init.method === 'DELETE') return { ok: true, json: async () => ({ result: 'stopped' }) }
+      if (calls++ === 0) return { ok: true, json: async () => ({ result: 'solution', cursor: 'partial', bindings: [{ Source: 'source_chunk(more,<<"some.">>)' }] }) }
+      if (ending === 'lost') throw new TypeError('connection lost')
+      return { ok: true, json: async () => ({ result: 'fail' }) }
+    }
+    try { await assert.rejects(readCodeState(identity, agent, { target, tools })) }
+    finally { globalThis.fetch = previousFetch }
+  }
+})

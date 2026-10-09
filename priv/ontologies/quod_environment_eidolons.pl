@@ -13,10 +13,6 @@ eidolon_query(eidolon(_, _, _)).
 eidolon_query(panorama_asset(_, _, _)).
 eidolon_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(class_eidolon/4).
-public_prolog_predicate(eidolon/3).
-public_prolog_predicate(panorama_asset/3).
-
 class_eidolon(Class, Mode, panoramic, recipe(Ns, Anchor, sky_sphere_panoramic)) :-
     environment_eidolon(Class, Mode, sky_sphere_panoramic),
     current_ontology_identity(Ns, Anchor).

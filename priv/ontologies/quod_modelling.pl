@@ -13,11 +13,6 @@ modelling_query(align(_, _, _, _, _, _)).
 modelling_query(place_model(_, _, _, _, _)).
 modelling_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(model/2).
-public_prolog_predicate(shape/3).
-public_prolog_predicate(align/6).
-public_prolog_predicate(place_model/5).
-
 %% --- reusable recipe helpers -------------------------------------------------
 %% A recipe proves Parts; model/2 derives a scene without asserting anything.
 %% Occurrence IDs remain independent from both recipe and subject identities.

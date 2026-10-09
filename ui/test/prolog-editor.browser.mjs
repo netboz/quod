@@ -22,10 +22,22 @@ export async function checkPrologEditor(page, origin) {
   const preview = page.getByRole('button', { name: 'Preview changes', exact: true })
   const save = page.getByRole('button', { name: 'Save changes', exact: true })
   const resolve = page.getByRole('button', { name: 'Check saved outcome', exact: true })
-  const ready = () => page.waitForFunction(() => {
-    const field = document.querySelector('textarea[aria-label="Source code"]')
-    return field && !field.disabled
-  })
+  const ready = async () => {
+    await page.waitForFunction(() => {
+      const field = document.querySelector('textarea[aria-label="Source code"]')
+      return field && !field.disabled
+    })
+    const selection = page.getByRole('combobox').first()
+    if (await selection.inputValue() === '') {
+      assert.ok((await source.inputValue()).includes('policy(visible).'))
+      assert.equal(await source.getAttribute('readonly'), '')
+      await selection.selectOption('sample / 1')
+      await page.waitForFunction(() => {
+        const field = document.querySelector('textarea[aria-label="Source code"]')
+        return field && !field.disabled && !field.readOnly
+      })
+    }
+  }
   const value = expected => page.waitForFunction(expected =>
     document.querySelector('textarea[aria-label="Source code"]')?.value === expected, expected)
   const configure = options => page.evaluate(options => window.editorFixture.configure(options), options)
@@ -46,7 +58,7 @@ export async function checkPrologEditor(page, origin) {
     assert.equal(await preview.isDisabled(), true)
     await preview.evaluate(button => button.click())
     let snapshot = await state()
-    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors').length, 1)
+    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length, 1)
     assert.equal(snapshot.rows.length, 1)
     assert.equal(snapshot.rows[0].context.source, draft)
     assert.equal(snapshot.rows[0].context.baseline, 'sample(before).\n')
@@ -76,7 +88,7 @@ export async function checkPrologEditor(page, origin) {
     assert.ok(!result.includes('height #0'))
     snapshot = await state()
     assert.equal(snapshot.rows.length, 0)
-    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors').length, 1)
+    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length, 1)
     assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/outcomes').length, 2)
 
     // Positive lookup advances the baseline. A later conflict preserves this
@@ -158,16 +170,37 @@ export async function checkPrologEditor(page, origin) {
     assert.equal(await page.getByRole('combobox').first().inputValue(), 'fresh / 1',
       'a late catalogue response preserves the recovered predicate selection')
     assert.equal(await source.inputValue(), fresh)
-    const beforeFreshPreview = (await state()).calls.filter(call => call.path === '/api/goals/cursors').length
+    const beforeFreshPreview = (await state()).calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length
     await source.fill('fresh(next).\n')
     await preview.click()
     await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save changes' && !button.disabled))
     snapshot = await state()
-    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors').length, beforeFreshPreview + 1)
+    assert.equal(snapshot.calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length, beforeFreshPreview + 1)
     assert.equal(snapshot.compilerInputs.at(-1).baseline, fresh)
     assert.equal(snapshot.compilerInputs.at(-1).source, 'fresh(next).\n')
-    return { cursorSubmissions: snapshot.calls.filter(call => call.path === '/api/goals/cursors').length,
+    const recoveredPredicate = await page.getByRole('combobox').first().inputValue()
+    await mount({ readOnly: true })
+    await value('policy(visible).\n' + 'sample(next).\nfresh(saved).\n')
+    assert.equal(await source.getAttribute('readonly'), '')
+    assert.equal(await preview.count(), 0)
+    assert.equal(await save.count(), 0)
+    const spatial = await page.evaluate(() => {
+      const model = window.editorFixture.spatial()
+      return { sourceKind: model.view.fields.find(field => field.role === 'source').kind,
+        source: model.values.source, locked: model.locked }
+    })
+    assert.equal(spatial.sourceKind, 'bindings', 'read-only spatial source uses the scrollable text component')
+    assert.equal(spatial.source, await source.inputValue())
+    assert.equal(spatial.locked, false, 'the explicit lens selector stays usable')
+    assert.ok((await page.locator('header').textContent()).includes('Genesis:'))
+    await page.getByRole('combobox').first().selectOption('sample / 1')
+    await value('sample(next).\n')
+    assert.equal(await source.getAttribute('readonly'), '')
+    await page.getByRole('combobox').first().selectOption('')
+    await page.getByRole('button', { name: 'Refresh current state' }).click()
+    await value('policy(visible).\nsample(next).\nfresh(saved).\n')
+    return { cursorSubmissions: snapshot.calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length,
       outcomeLookups: snapshot.calls.filter(call => call.path === '/api/goals/outcomes').length,
-      compilerInputs: snapshot.compilerInputs, editedCards, recoveredPredicate: await page.getByRole('combobox').first().inputValue(), pendingRows: snapshot.rows.length }
+      compilerInputs: snapshot.compilerInputs, editedCards, recoveredPredicate, pendingRows: snapshot.rows.length }
   } finally { await page.evaluate(() => window.editorFixture?.dispose()) }
 }

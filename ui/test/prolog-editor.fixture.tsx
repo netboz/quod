@@ -17,6 +17,8 @@ export async function createEditorFixture() {
   const calls: Array<Record<string, unknown>> = []
   const compilerInputs: Array<{ baseline: string; source: string }> = []
   let root: Root | null = null
+  let spatial: any = null
+  const scene = { setWorkspace(model: any) { spatial = model } } as any
   const source = 'sample(before).\n'
   const sources = new Map([['sample / 1', source]])
   let holdCatalogue = false
@@ -88,6 +90,11 @@ export async function createEditorFixture() {
       }
       throw new Error(`unexpected read ${goal}`)
     }
+    if (path === '/api/goals/cursors' && String(row.goal).includes('prolog_source(')) {
+      return response({ result: 'solution', cursor: 'source-snapshot', bindings: [{ Source:
+        renderTerm(compound('source_chunk', [{ type: 'atom', value: 'done' }, bytes('policy(visible).\n' + [...sources.values()].join(''))])) }] })
+    }
+    if (path === '/api/goals/cursors/source-snapshot' && init?.method === 'DELETE') return response({ result: 'stopped' })
     if (path === '/api/goals/cursors') {
       if (conflict) return response({ result: 'fail', reasons: ['edit_conflict(sample/1)'] })
       const cursor = `edit-${++cursorNumber}`
@@ -107,7 +114,7 @@ export async function createEditorFixture() {
     if (/\/api\/goals\/cursors\/edit-\d+$/.test(path) && init?.method === 'DELETE') return response({ result: 'stopped' })
     throw new Error(`unexpected HTTP endpoint ${path}`)
   }
-  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string } = {}) => {
+  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string; readOnly?: boolean } = {}) => {
     root?.unmount()
     root = createRoot(document.getElementById('fixture')!)
     const identity = { provider: options.key === 'other' ? other : owner,
@@ -116,12 +123,13 @@ export async function createEditorFixture() {
     const agent = { id: options.actor ?? 'owner', namespace: 'human:owner',
       anchor: b64url(new Uint8Array(32).fill(options.agentAnchor ?? 9)), instanceText: `human_user(${options.actor ?? 'owner'}).` }
     const workspace = { target: { namespace: 'personal:lobby', anchor: new Uint8Array(32).fill(options.targetAnchor ?? 7) },
-      tools: { namespace: 'quod:prolog', anchor: new Uint8Array(32).fill(8) }, view }
+      tools: { namespace: 'quod:prolog', anchor: new Uint8Array(32).fill(8) },
+      view: options.readOnly ? { ...view, fields: view.fields.filter(field => ['predicate', 'source'].includes(field.role)) } : view }
     root.render(<SessionContext.Provider value={{ identity, agent, error: null } as SessionState}>
-      <PrologEditor workspace={workspace} onClose={() => { root?.unmount(); root = null }} scene={null} visible={false} />
+      <PrologEditor workspace={workspace} onClose={() => { root?.unmount(); root = null }} scene={scene} visible={true} />
     </SessionContext.Provider>)
   }
-  return { mount, calls, compilerInputs, rows: () => journal.list(),
+  return { mount, calls, compilerInputs, spatial: () => spatial, rows: () => journal.list(),
     heldCatalogues: () => catalogueWaiters.length,
     releaseCatalogue() { holdCatalogue = false; for (const release of catalogueWaiters.splice(0)) release() },
     configure(options: { accept?: 'lost' | 'pending'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean }) {

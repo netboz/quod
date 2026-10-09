@@ -1,0 +1,14 @@
+{
+  "job": "quod-finality-candidate-v6-20260926",
+  "version": 54,
+  "modify_index": 829041,
+  "counts": {
+    "quod-node": 8,
+    "quod-cloud": 0
+  },
+  "deployment": "affff327-2130-b43b-16f1-106aea724c8b",
+  "deployment_status": "successful",
+  "images": [
+    "192.168.1.11:5000/quod:0.7.254@sha256:b4f050064617ff5cd2e22d4c3d7ec9cee3c56be1ffcfc6ca0ab3b5534059c323"
+  ]
+}

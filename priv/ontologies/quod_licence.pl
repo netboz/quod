@@ -58,23 +58,6 @@ licence_query(have_attribute(_, _, _)).
 licence_query(attribute(_, _, _)).
 licence_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(licence/3).
-public_prolog_predicate(may_include/2).
-public_prolog_predicate(refuses/3).
-public_prolog_predicate(obligation/2).
-public_prolog_predicate(effective/2).
-public_prolog_predicate(blocks/4).
-public_prolog_predicate(must_carry/3).
-public_prolog_predicate(component/3).
-public_prolog_predicate(ships/2).
-public_prolog_predicate(notice/4).
-public_prolog_predicate(unresolved/2).
-public_prolog_predicate(family/1).
-public_prolog_predicate(isa/2).
-public_prolog_predicate(instance_of/2).
-public_prolog_predicate(have_attribute/3).
-public_prolog_predicate(attribute/3).
-
 %% --- what may include what ---------------------------------------------------
 
 %% may_include(?Outer, ?Inner): a work released under Outer may include a part

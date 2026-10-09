@@ -9,57 +9,41 @@ can_join(_, _, Key) :- peer_ready(Key).
 
 prolog_query(prolog_predicates(_, _)).
 prolog_query(prolog_source(_, _, _)).
+prolog_query(prolog_source(_, _)).
+prolog_query(prolog_inspect(_, _, _)).
 prolog_query(prolog_edit_goal(_, _, _, _, _)).
 prolog_query(prolog_clauses(_, _)).
 prolog_query(Goal) :- public_source_query(Goal).
 
-public_prolog_predicate(prolog_predicates/2).
-public_prolog_predicate(prolog_source/3).
-public_prolog_predicate(prolog_edit_goal/5).
-public_prolog_predicate(prolog_clauses/2).
-
 prolog_clauses(Source, Clauses) :-
     '$quod_program_source'(Clauses, Source).
 
-%% Four authorities in order: a root administrator through root's relay, the
-%% tool's own public declarations, the target's own policy, then the public
-%% declarations of any catalogued system target. That last clause also serves
-%% an administrator whose target does not yet admit the inspection wrapper.
-%% prolog_source/3 follows the same order.
-prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
-    quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_prolog_predicates(ontology_ref(Namespace, Anchor), Indicators)), !.
-prolog_predicates(ontology_ref(<<"quod:prolog">>, Anchor), Indicators) :-
-    current_ontology_identity(<<"quod:prolog">>, Anchor),
-    !,
-    public_prolog_predicates(Indicators).
-prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-        findall(Indicator, current_predicate(Indicator), Unsorted),
-        sort(Unsorted, Indicators)), !.
-prolog_predicates(ontology_ref(Namespace, Anchor), Indicators) :-
+%% One target inspection path. Catalogued system access is explicit and does
+%% not fall back to an API subset if a retained target lacks the read wrapper.
+%% Other targets retain their ordinary admission policy (including ownership).
+prolog_inspect(ontology_ref(Namespace, Anchor), Query, Result) :-
     quod:root::(current_ontology_identity(<<"quod:root">>, _),
                 system_source_access(ontology_ref(Namespace, Anchor), _)),
     !,
     Namespace::(current_ontology_identity(Namespace, Anchor),
-                public_prolog_predicates(Indicators)).
+                system_prolog_introspection(Query, Result)).
+prolog_inspect(ontology_ref(Namespace, Anchor), Query, Result) :-
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                prolog_introspection(Query, Result)).
 
-prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
-    quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source)), !.
-prolog_source(ontology_ref(<<"quod:prolog">>, Anchor), Indicator, Source) :-
-    current_ontology_identity(<<"quod:prolog">>, Anchor),
-    !,
-    public_prolog_source(Indicator, Source).
-prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-                '$quod_predicate_source'(Indicator, Source)), !.
-prolog_source(ontology_ref(Namespace, Anchor), Indicator, Source) :-
-    quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_source_access(ontology_ref(Namespace, Anchor), _)),
-    !,
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-                public_prolog_source(Indicator, Source)).
+prolog_predicates(Target, Indicators) :-
+    prolog_inspect(Target, predicates, Indicators).
+
+%% The default lens returns the entire frozen current state in bounded cursor
+%% answers. Explicit predicate selection belongs to the lens ontology as well.
+prolog_source(Target, Chunk) :-
+    quod:root::system_ontology(<<"quod:lens">>, Anchor),
+    <<"quod:lens">>::(current_ontology_identity(<<"quod:lens">>, Anchor),
+        view(<<"ontology_source">>, [Target], Chunk)).
+prolog_source(Target, Indicator, Source) :-
+    quod:root::system_ontology(<<"quod:lens">>, Anchor),
+    <<"quod:lens">>::(current_ontology_identity(<<"quod:lens">>, Anchor),
+        view(<<"predicate_source">>, [Target, Indicator], Source)).
 
 %% Source is data while this goal is compiled. The caller submits the explicit
 %% returned assertz/retract goals through normal signed admission; new callable

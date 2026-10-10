@@ -497,7 +497,7 @@ release(S) ->
     [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
     [quod_reg:demonitor_name({quod_prolog,Ns},M) ||
         {M,Ns} <- maps:to_list(maps:get(dependency_names,S,#{}))],
-    [catch gen_server:receive_response(Request,0) ||
+    _ = [catch gen_server:receive_response(Request,0) ||
         {Request,_} <- gen_server:reqids_to_list(maps:get(snapshots,S,gen_server:reqids_new()))],
     [unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
     case S of #{namespace := Ns} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,

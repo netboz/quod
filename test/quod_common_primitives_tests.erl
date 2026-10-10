@@ -13,6 +13,17 @@
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
 
+term_digest_test() ->
+    with_authored([],fun(St) ->
+        Digest = value({'D'},{term_digest,{geometry,{ball,500},1},{'D'}},St),
+        ?assertMatch(<<_:256>>,Digest),
+        ?assertEqual(Digest,value({'D'},
+            {term_digest,{{'$quod_symbol',<<"geometry">>},{{'$quod_symbol',<<"ball">>},500},1},{'D'}},St)),
+        ?assertNotEqual(Digest,value({'D'},{term_digest,{geometry,{ball,501},1},{'D'}},St)),
+        ?assertMatch({erlog_error,instantiation_error,_},
+            catch erlog_int:prove_goal({term_digest,{geometry,{'Shape'},1},{'D'}},St))
+    end).
+
 binary_codes_test() ->
     St = bare(),
     ?assertEqual([$U, $g], value({'C'}, {binary_codes, <<"Ug">>, {'C'}}, St)),

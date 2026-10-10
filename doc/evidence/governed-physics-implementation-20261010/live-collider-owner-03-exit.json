@@ -1,0 +1,32 @@
+{
+  "started": "2026-10-10T22:13:09.031816+00:00",
+  "command": [
+    "rebar3",
+    "eunit",
+    "--generator=quod_physics_tests:live_source_lifecycle_test_,quod_physics_tests:live_source_stale_install_and_revocation_test_,quod_physics_tests:live_source_unchanged_work_and_recovery_test_"
+  ],
+  "source_hashes": {
+    "doc/README.md": "c5550593a9fa9ee1da4211ada957b1ee6e4d615447618fadfad7cf8194822590",
+    "priv/ontologies/quod_physics.pl": "4bb7ab0a028351673dbf14696d3e389c2a835ab771051aef88a37bd598dc5a04",
+    "src/predicates/quod_common_primitives.erl": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6",
+    "src/quod_foreign_log.erl": "7faabd910d3712f96b78e4463ffd10679f486816b6a0f80471ae8c57d819d7e8",
+    "src/quod_physics.erl": "c8929a93abc4f423ec14799fdffd7ae0f76832b6b6f2d7e75fc010beb0e4c081",
+    "src/quod_resource_basis.erl": "0e2e2b4c06b8512d020d07df0ca6c57084bc96927d3a58b12975f8e02be17a1c",
+    "src/quod_runtime.erl": "2aa7bbd91de4d15957aaea345676e6297ce68a7c3e3bf250337015e46b5d4aaa",
+    "test/quod_physics_control_tests.erl": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3",
+    "test/quod_physics_tests.erl": "7874e22807ecb7e95397b8b948dc26d95b13a46ca54b2b534da1d55f80a06b0a"
+  },
+  "finished": "2026-10-10T22:13:20.578310+00:00",
+  "exit_code": 0,
+  "final_source_hashes": {
+    "doc/README.md": "c5550593a9fa9ee1da4211ada957b1ee6e4d615447618fadfad7cf8194822590",
+    "priv/ontologies/quod_physics.pl": "4bb7ab0a028351673dbf14696d3e389c2a835ab771051aef88a37bd598dc5a04",
+    "src/predicates/quod_common_primitives.erl": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6",
+    "src/quod_foreign_log.erl": "7faabd910d3712f96b78e4463ffd10679f486816b6a0f80471ae8c57d819d7e8",
+    "src/quod_physics.erl": "c8929a93abc4f423ec14799fdffd7ae0f76832b6b6f2d7e75fc010beb0e4c081",
+    "src/quod_resource_basis.erl": "0e2e2b4c06b8512d020d07df0ca6c57084bc96927d3a58b12975f8e02be17a1c",
+    "src/quod_runtime.erl": "2aa7bbd91de4d15957aaea345676e6297ce68a7c3e3bf250337015e46b5d4aaa",
+    "test/quod_physics_control_tests.erl": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3",
+    "test/quod_physics_tests.erl": "7874e22807ecb7e95397b8b948dc26d95b13a46ca54b2b534da1d55f80a06b0a"
+  }
+}

@@ -3999,13 +3999,15 @@ stable_bounded_heads([Head | Rest], Left, Seen, Acc) ->
         false -> overflow
     end.
 
-follow_freshness(H, Height) ->
+%% Ready projection notices carry the retained reader they describe. Consumers
+%% need no synchronous log-owner lookup while evaluating a resource selection.
+follow_freshness(H = #history{materializer = #materializer{pid = Pid,generation = Generation}}, Height) ->
     Hint = H#history.hinted_height,
     Lag = case Hint of
               N when is_integer(N), N >= Height -> N - Height;
               _ -> unknown
           end,
-    #{last_probe_ms => H#history.last_probe_ms,
+    #{reader => {Pid,Generation},last_probe_ms => H#history.last_probe_ms,
       last_advance_ms => H#history.last_advance_ms,
       hinted_height => Hint, lag => Lag}.
 
@@ -4030,13 +4032,16 @@ projection_down(MRef, _Pid, _Reason, S0) ->
     case Matches of
         [{Identity, H0, M0}] ->
             S1 = discard_materializer(Identity, H0, M0, S0),
-            H1 = maps:get(Identity, S1#s.histories),
-            notify_history(
-              Identity, projection, {building, materialized_height(H0)},
-              put_history(
-                Identity,
-                H1#history{reachability = {unreachable, materializer_down}},
-                S1));
+            %% Loss of an established reader is an explicit rebuild reason.
+            %% If that rebuild cannot publish even its first verified state,
+            %% park the failure until new source progress; never spin on the
+            %% same invalid cache or treat a failed build as an empty source.
+            case M0#materializer.height > 0 of
+                true -> ensure_materializer_advanced(Identity,
+                    notify_history(Identity,projection,{building,materialized_height(H0)},S1));
+                false -> notify_history(Identity,projection,
+                    {unreachable,materializer_down,materialized_height(H0)},S1)
+            end;
         [] -> S0
     end.
 

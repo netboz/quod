@@ -154,7 +154,7 @@ The current client lives under `client/` and the shared browser shell under
 
 This is the contract for the shared simulation. The implemented first server
 profile is described in [the retained native adapter](physics-native.md); it
-covers optional cuboid simulation, activation/recovery and the obstructed-door consequence through the runtime. It supersedes the authority, recovery and observation proposals
+covers optional explicit-geometry simulation, activation/recovery and the obstructed-door consequence through the runtime. It supersedes the authority, recovery and observation proposals
 in the archived [client/world direction](outdated/client-world-direction.md) and
 [consequence direction](outdated/world-consequence-direction.md). Scene
 streaming for physical bodies is available for one local authorized client view;
@@ -254,10 +254,13 @@ The revision contract is deliberately separate from tick progression:
 
 Physical structure includes colliders, mass/material parameters used by physics,
 authored transforms and their ancestor frames, body type, joints and attachments.
-Physical descriptors bind exact committed recipe inputs; adopting a changed
-shared recipe is a world structural edit. Changing that recipe or a parent
-invalidates every affected body through the committed revision dependency;
-it cannot leave old colliders authoritative.
+A live body descriptor binds its source entity and exact assignment/definition
+revisions. Governed source edits advance affected body and world revisions in
+the same atomic transaction; retained verified subscriptions install that change
+automatically. Explicitly materialized reusable recipes remain a different
+choice: adopting another recipe version is a world structural edit. Changing
+an authored parent likewise invalidates affected body revisions; old colliders
+cannot remain authoritative after those dependencies change.
 An appearance-only edit changes the authored entity revision without changing
 physical structure. Unchanged geometry checks and ordinary motion advance
 neither edit nor body revision. Activity/control state, such as which close
@@ -586,7 +589,7 @@ installed consequences and live reactions. The existing owners are
 [multi-ontology transaction path](multiwrite-architecture.md).
 
 The typed `physics_worlds` resource now selects committed authority, baseline
-cuboid structure and policy allowances, and retains one native simulation under
+physical structure and policy allowances, and retains one native simulation under
 the runtime. Its own activation uses durable original signed-request custody
 and outcome resolution before installation. Same-host restart commits a fresh
 generation; no successor adopts a dead incarnation's generation. The

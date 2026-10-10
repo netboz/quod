@@ -38,6 +38,8 @@ affected(Basis, Changed) ->
 dependency_keys({fact, Functor}) -> [{fact, Functor}];
 dependency_keys(predicate_registry) -> [predicate_registry];
 dependency_keys({input, Key}) -> [{input, Key}];
+dependency_keys({source, World, Identity, Key}) -> [{source, World, Identity, Key}];
+dependency_keys({source_fence, Identity, Fence}) -> [{source_fence, Identity, Fence}];
 dependency_keys({flag_lookup, Name}) -> [{flag_names, Name}];
 dependency_keys({flag_value, '$quod_ctx', _}) -> [parent];
 dependency_keys({flag_value, Name, _}) -> [{flag, Name}];
@@ -74,4 +76,5 @@ pure_native(erlog_lib_lists, Fun, Predicate) ->
 pure_native(erlog_lib_dcg, expand_term_2, {expand_term, 2}) -> true;
 pure_native(erlog_lib_dcg, phrase_3, {phrase, 3}) -> true;
 pure_native(quod_common_primitives, binary_codes_2, {binary_codes, 2}) -> true;
+pure_native(quod_common_primitives, term_digest_2, {term_digest, 2}) -> true;
 pure_native(_, _, _) -> false.

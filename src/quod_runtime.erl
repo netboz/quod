@@ -100,7 +100,7 @@ or of every local resource. Consumers wait for their actual resource owner.
             reaction_matches = 0 :: non_neg_integer(),
             reactions_executed = 0 :: non_neg_integer(),
             reaction_failures = 0 :: non_neg_integer(),
-            physics = #{}, physics_requests = #{}, physics_navigation_guard = undefined,
+            physics = #{}, physics_requests = #{},
             observer = none,
             agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
@@ -235,24 +235,46 @@ handle_call({reconcile_resource, MinHeight, Resource, Scope, Deadline}, From, S 
     end;
 handle_call({reconcile_resource, _, _, _, _}, _From, S) ->
     {reply, {error, not_ready}, S};
-handle_call({project_physics, Rows}, {Caller, _},
+handle_call(physics_selection_identity, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
+    {reply,Identity,S};
+handle_call({physics_source, World, Identity}, {Caller, _},
+            S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := {Ns,Anchor}}})
+  when element(1,World) =:= world_ref, element(2,World) =:= Ns, element(3,World) =:= Anchor ->
+    Row = maps:get(Identity,S#s.source_views,undefined),
+    Handle = case Row of
+        #{state := {ready,_,_,#{reader := {Pid,Generation}},_}}
+          when is_pid(Pid), is_reference(Generation) -> {ok,Pid,Generation};
+        _ -> {error,source_not_ready}
+    end,
+    {reply,{source,source_fence(Row),Handle},S};
+handle_call({physics_source, _, _}, _, S) -> {reply,{error,stale_resource_owner},S};
+handle_call({project_physics, Rows, Unavailable}, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
     Changes = queued_resource_changes(S#s.queue,S#s.height),
-    case map_size(Changes) > 0 andalso
-         quod_resource_basis:affected(maps:get(physics_worlds,S#s.resource_basis,#{}),Changes) of
+    Basis = maps:get(physics_worlds,S#s.resource_basis,#{}),
+    case not source_basis_current(Basis,S) orelse
+         (map_size(Changes) > 0 andalso quod_resource_basis:affected(Basis,Changes)) of
         true -> {reply,{error,selection_superseded},queue_resource_key(physics_worlds,changed,S)};
-        false -> case quod_physics:projection(Identity, Rows) of
-            {ok, Specs} ->
-                Guard = case S#s.physics_navigation_guard of
-                    undefined -> atomics:new(1,[{signed,false}]);
-                    Existing -> Existing
-                end,
-                Current = [Spec#{navigation_guard => {Guard,atomics:get(Guard,1)}} || Spec <- Specs],
-                {reply, ok, install_physics(Current, S#s{physics_navigation_guard = Guard})};
+        false -> case physics_projections(Identity,Rows) of
+            {Specs,Rejected,Reply} ->
+                Blocked = lists:usort(Unavailable ++ Rejected),
+                Current = [physics_guard(Spec,S) || Spec <- Specs],
+                %% An unavailable source is not deletion. Keep its exact owner
+                %% suspended while another world's valid selection can install.
+                Kept = [maps:get(spec,E) || {W,E} <- maps:to_list(S#s.physics),
+                                             lists:member(W,Blocked)],
+                Clean = S#s{physics = maps:map(fun(W,E) ->
+                    case lists:member(W,Blocked) of
+                        true -> E;
+                        false -> E#{local_invalidated => false,navigation_invalidated => false,source_waits => #{}}
+                    end
+                end,S#s.physics)},
+                {reply,Reply,install_physics(Current ++ Kept,invalidate_physics_worlds(Blocked,Clean))};
             Error -> {reply, Error, stop_physics(S)}
         end
     end;
-handle_call({project_physics, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
+handle_call({project_physics, _, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
 handle_call(physics_worlds, _, S) ->
     {reply, S#s.physics, S};
 handle_call({project_agent_observers, all, []}, {Caller, _},
@@ -285,6 +307,7 @@ handle_call({resource_selected, Key, Basis}, {Caller, _},
         agent_custody -> S;
         _ ->
             Kept = case {Key, S#s.resource_waiter} of
+                {physics_worlds, _} -> Basis;
                 {{agent_work, _}, _} ->
                     maps:merge(maps:get(Key, S#s.resource_basis, #{}), Basis);
                 {_, {{internal, _}, _}} -> Basis;
@@ -297,7 +320,8 @@ handle_call({resource_selected, Key, Basis}, {Caller, _},
         _ -> Basis
     end,
     Changes = queued_resource_changes(S#s.queue, S#s.height),
-    case map_size(Changes) > 0 andalso quod_resource_basis:affected(Checked, Changes) of
+    case not source_basis_current(Checked,Next) orelse
+         (map_size(Changes) > 0 andalso quod_resource_basis:affected(Checked, Changes)) of
         true when Key =:= agent_recovery; Key =:= agent_custody ->
             {reply, {error, selection_superseded}, Next};
         true -> {reply, {error, selection_superseded}, queue_resource_key(Key, changed, Next)};
@@ -452,8 +476,8 @@ handle_info({replay_started, Id, _From}, S) ->
     {noreply, begin_replay(Id, S)};
 handle_info(
   {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}, S0) ->
-    {noreply, handle_source_notice(
-                FollowRef, NoticeRef, Identity, Notice, S0)};
+    {noreply, maybe_run_events(handle_source_notice(
+                FollowRef, NoticeRef, Identity, Notice, S0))};
 handle_info({source_follow_attach, Token},
             S0 = #s{source_attach_token = Token}) ->
     {noreply,
@@ -600,6 +624,12 @@ handle_info({physics_match_finished, Caller, #{owner := Pid, ref := Ref}, Result
     Pid ! {physics_result,self(),Ref,Result}, {noreply,S};
 handle_info({physics_work, Pid, World, Ref, Kind, Work, Window}, S) ->
     {noreply, physics_work(Pid, World, Ref, Kind, Work, Window, S)};
+handle_info({physics_pause_seen,Pid,World,Notice},S) ->
+    case maps:get(World,S#s.physics,none) of
+        Entry = #{pid := Pid,source_pause_notice := Notice} ->
+            {noreply,S#s{physics = (S#s.physics)#{World => maps:remove(source_pause_notice,Entry)}}};
+        _ -> {noreply,S}
+    end;
 handle_info({physics_invalidation_seen,Pid,World,Notice},S) ->
     case maps:get(World,S#s.physics,none) of
         Entry = #{pid := Pid,navigation_notice := Notice} ->
@@ -907,23 +937,71 @@ mode_tag(M)                 -> element(1, M).
 %% but its height must release readers awaiting that committed snapshot.
 enqueue_committed(Item,S) -> enqueue_current_committed(Item,invalidate_physics_navigation(Item,S)).
 
-invalidate_physics_navigation({local,Env,_},S = #s{physics_navigation_guard = Guard}) when Guard =/= undefined ->
+invalidate_physics_navigation({local,Env,_},S) ->
     Changes = resource_changes(changed_heads(Env),maps:get(height,Env,0) > S#s.height),
     case quod_resource_basis:affected(maps:get(physics_worlds,S#s.resource_basis,#{}),Changes) of
         false -> S;
-        true ->
-            _ = atomics:add_get(Guard,1,1),
-            Worlds = maps:map(fun(_,Entry = #{pid := Pid}) ->
-                case maps:is_key(navigation_notice,Entry) of
-                    true -> Entry;
-                    false ->
-                        Notice = make_ref(), Pid ! {physics_invalidated,self(),Notice},
-                        Entry#{navigation_notice => Notice}
-                end
-            end,S#s.physics),
-            S#s{physics = Worlds}
+        true -> invalidate_physics_worlds(maps:keys(S#s.physics),
+                    S#s{physics = maps:map(fun(_,E) -> E#{local_invalidated => true} end,S#s.physics)})
     end;
 invalidate_physics_navigation(_,S) -> S.
+
+physics_projections({Ns,Anchor} = Identity,Rows) ->
+    try
+        {Selected,Rejected,_Seen,Reply} = lists:foldl(fun(Row,{Specs,Bad,Known,Status}) ->
+            {world,W,_,_,_,_,_,_,_,_,_,_,_,_,_} = Row,
+            true = quod_wire_term:is_ground(W), World = {world_ref,Ns,Anchor,W},
+            case {maps:is_key(World,Known),quod_physics:projection(Identity,[Row])} of
+                {false,{ok,[Spec]}} -> {[Spec|Specs],Bad,Known#{World => true},Status};
+                _ -> {Specs,[World|Bad],Known#{World => true},{error,invalid_physics_projection}}
+            end
+        end,{[],[],#{},ok},Rows),
+        {[Spec || Spec <- Selected,not lists:member(maps:get(world,Spec),Rejected)],Rejected,Reply}
+    catch _:_ -> {error,invalid_physics_projection} end.
+
+physics_guard(Spec = #{world := World},S) ->
+    Guard = case maps:get(World,S#s.physics,undefined) of
+        #{spec := #{navigation_guard := {Existing,_}}} -> Existing;
+        _ -> atomics:new(1,[{signed,false}])
+    end,
+    Spec#{navigation_guard => {Guard,atomics:get(Guard,1)}}.
+
+invalidate_physics_worlds(Worlds,S) ->
+    change_physics_readiness(Worlds,invalidated,S).
+
+pause_physics_worlds(Worlds,S) ->
+    change_physics_readiness(Worlds,pending,S).
+
+change_physics_readiness(Worlds,Mode,S) ->
+    S#s{physics = maps:map(fun(World,Entry = #{pid := Pid,spec := Spec}) ->
+        case lists:member(World,Worlds) of
+            false -> Entry;
+            true ->
+                {Guard,Selected} = maps:get(navigation_guard,Spec),
+                Current = atomics:get(Guard,1) =:= Selected,
+                case Current of true -> atomics:add(Guard,1,1); false -> ok end,
+                case Mode of
+                    pending when Current ->
+                        case maps:is_key(source_pause_notice,Entry) of
+                            true -> Entry;
+                            false -> Notice = make_ref(), Pid ! {physics_source_pending,self(),Notice},
+                                     Entry#{source_pause_notice => Notice}
+                        end;
+                    pending -> Entry;
+                    invalidated ->
+                        case maps:get(navigation_invalidated,Entry,false) of
+                            true -> Entry;
+                            false ->
+                                Next = Entry#{navigation_invalidated => true},
+                                case maps:is_key(navigation_notice,Entry) of
+                                    true -> Next;
+                                    false -> Notice = make_ref(), Pid ! {physics_invalidated,self(),Notice},
+                                             Next#{navigation_notice => Notice}
+                                end
+                        end
+                end
+        end
+    end,S#s.physics)}.
 
 enqueue_current_committed(Item, S = #s{mode = live}) ->
     case S#s.queue_len < max_queued_events(S) of
@@ -1553,12 +1631,19 @@ handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
     case maps:get(Identity, S0#s.source_views, undefined) of
         #{follow_ref := FollowRef} = Row0 ->
             case source_notice_state(Notice) of
+                {ok, {ready,H,_,_,_}, _}
+                  when is_map_key(verified,Row0), H < element(1,map_get(verified,Row0)) ->
+                    ack_source_notice(FollowRef,NoticeRef,S0);
                 {ok, State, Publications} ->
-                    Row1 = Row0#{state => State},
+                    Row1 = case State of
+                        {ready,H,P,_,_} -> Row0#{state => State,verified => {H,P}};
+                        _ -> Row0#{state => State}
+                    end,
                     S1 = S0#s{source_views =
                                   (S0#s.source_views)#{Identity => Row1}},
                     enqueue_source_publications(
-                      FollowRef, NoticeRef, Identity, Publications, S1);
+                      FollowRef, NoticeRef, Identity, Publications,
+                      source_resources_changed(Identity,Row0,Row1,S1));
                 error ->
                     erlang:error({invalid_source_follow_notice, Notice})
             end;
@@ -1717,9 +1802,9 @@ stop_source_view(Identity, S0) ->
                     ok = quod_foreign_log:unfollow(FollowRef);
                 none -> ok
             end,
-            S1#s{source_views = Views1,
-                 source_attach_queue =
-                     lists:delete(Identity, S1#s.source_attach_queue)};
+            source_resources_changed(Identity,Row,undefined,
+                S1#s{source_views = Views1,
+                     source_attach_queue = lists:delete(Identity,S1#s.source_attach_queue)});
         error ->
             S1
     end.
@@ -1745,17 +1830,70 @@ foreign_log_down(S0) ->
     maps:fold(
       fun(Identity, Row, Acc0) ->
               Height = source_last_height(maps:get(state, Row)),
-              put_source_view(
-                Identity,
-                #{follow_ref => none,
-                  state => {unreachable, unavailable, Height},
-                  attempt => maps:get(attempt, Row, 0)}, Acc0)
+              Next = Row#{follow_ref => none,state => {unreachable,unavailable,Height}},
+              source_resources_changed(Identity,Row,Next,put_source_view(Identity,Next,Acc0))
       end, S1, S1#s.source_views).
 
 source_last_height({building, Height}) -> Height;
 source_last_height({unreachable, _Reason, Height}) -> Height;
 source_last_height({ready, Height, _ProjectionId, _Freshness, _Delta}) -> Height;
 source_last_height(_) -> 0.
+
+%% Source progress is a resource dependency, independently of reaction delivery.
+%% A building projection parks its worlds; only verified changed predicates
+%% decide whether their definitions need selecting again.
+source_resources_changed(Identity,Before,After,S) ->
+    case source_fence(Before) =:= source_fence(After) of
+        true -> S;
+        false ->
+            Basis = maps:get(physics_worlds,S#s.resource_basis,#{}),
+            Worlds = lists:usort([W || {source,W,I,lifecycle} <- maps:keys(Basis), I =:= Identity]),
+            case After of
+                #{state := {ready,_,_,_,Delta}} ->
+                    Known = case Before of #{verified := {H,_}} -> H; _ -> unknown end,
+                    Changed = resource_changes(maps:get(changed_heads,Delta),true),
+                    Affected = [W || W <- Worlds,
+                        maps:get(resnapshot,Delta) orelse maps:get(from,Delta) =/= Known orelse
+                        source_world_affected(W,Identity,Basis,Changed)],
+                    Ready = source_worlds_ready(Identity,Worlds,Affected,invalidate_physics_worlds(Affected,S)),
+                    case Affected of [] -> Ready;
+                        _ -> queue_resource_key(physics_worlds,changed,Ready) end;
+                _ ->
+                    Paused = case After of
+                        #{state := {building,_}} -> pause_physics_worlds(Worlds,S);
+                        _ -> invalidate_physics_worlds(Worlds,S)
+                    end,
+                    Waiting = Paused#s{physics = maps:map(fun(W,E) ->
+                        case lists:member(W,Worlds) of
+                            true -> E#{source_waits => (maps:get(source_waits,E,#{}))#{Identity => true}};
+                            false -> E
+                        end
+                    end,Paused#s.physics)},
+                    case After of undefined -> queue_resource_key(physics_worlds,changed,Waiting);
+                                  _ -> Waiting end
+            end
+    end.
+
+source_world_affected(World,Identity,Basis,Changed) ->
+    Source = maps:from_keys([K || {source,W,I,K} <- maps:keys(Basis),
+                                  W =:= World,I =:= Identity,K =/= lifecycle],true),
+    map_size(Source) =:= 0 orelse quod_resource_basis:affected(Source,Changed).
+
+source_worlds_ready(Identity,Worlds,Affected,S) ->
+    S#s{physics = maps:map(fun(W,E) ->
+        case lists:member(W,Worlds) of
+            false -> E;
+            true ->
+                Waits = maps:remove(Identity,maps:get(source_waits,E,#{})),
+                Dirty = maps:get(local_invalidated,E,false) orelse lists:member(W,Affected),
+                Next = E#{source_waits => Waits,local_invalidated => Dirty},
+                case map_size(Waits) =:= 0 andalso not Dirty of
+                    false -> Next;
+                    true -> Spec = physics_guard(maps:get(spec,E),S),
+                            send_physics_selection(Next#{spec => Spec},Spec)
+                end
+        end
+    end,S#s.physics)}.
 
 source_state_count(Status, Views) ->
     length([ok || Row <- maps:values(Views),
@@ -2498,6 +2636,75 @@ max_queued_events(#s{config = Config}) ->
 
 %%% Resource selection runs to completion before touching the real owner.
 
+source_fence(undefined) -> absent;
+source_fence(#{follow_ref := Follow,state := {ready,H,Projection,Freshness,_}}) ->
+    {Follow,H,Projection,maps:get(reader,Freshness,none)};
+source_fence(#{follow_ref := Follow,state := State}) -> {Follow,State}.
+
+source_basis_current(Basis,S) ->
+    maps:fold(fun
+        ({source_fence,Identity,{snapshot,Follow,H,Projection,Pid,Generation,Deadline}},_,Current) ->
+            Current andalso
+            source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= {Follow,H,Projection,{Pid,Generation}}
+            andalso is_process_alive(Pid) andalso Deadline > quod_time:mono_ms();
+        ({source_fence,Identity,Fence},_,Current) ->
+            Current andalso source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= Fence;
+        (_,_,Current) -> Current
+    end,true,Basis).
+
+resolve_resource_sources(_,_,{physics_worlds,[]},_) -> {physics_worlds,[],[]};
+resolve_resource_sources(Ns,Est,{physics_worlds,Rows},Deadline) ->
+    Identity = gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_selection_identity,infinity),
+    {Ready,Unavailable} = lists:foldl(fun(Row,{Accepted,Failed}) ->
+        {world,W,I,_,_,_,_,_,_,_,_,_,Bodies,_,_} = Row,
+        {Ns,Anchor} = Identity,
+        World = {world_ref,Ns,Anchor,W}, Authority = {agent_instance_ref,Ns,Anchor,I},
+        Resolved = [resolve_physics_body(Ns,Est,World,Authority,B,Deadline) || B <- Bodies],
+        case lists:all(fun({ok,_}) -> true; (_) -> false end,Resolved) of
+            true -> {[setelement(13,Row,[B || {ok,B} <- Resolved])|Accepted],Failed};
+            false -> {Accepted,[World|Failed]}
+        end
+    end,{[],[]},Rows),
+    {physics_worlds,lists:reverse(Ready),Unavailable};
+resolve_resource_sources(_,_,Selected,_) -> Selected.
+
+resolve_physics_body(_,_,_,_,{body,B,R,Kind,Pose,{owned,Shape,Density}},_) ->
+    {ok,{body,B,R,Kind,Pose,Shape,Density}};
+resolve_physics_body(Ns,Est,World,Authority,
+        {body,B,R,Kind,Pose,{live,{entity_ref,Source,Anchor,Entity},Assignment,Revision,Digest}},Deadline) ->
+    Identity = {Source,Anchor},
+    %% Missing/denied selections retain their source dependency as well.
+    quod_observation:note({source,World,Identity,lifecycle},Est),
+    case gen_server:call(quod_reg:via({quod_runtime,Ns}),
+                         {physics_source,World,Identity},infinity) of
+        {source,Fence,{ok,Pid,Generation}} ->
+            quod_observation:note({source_fence,Identity,Fence},Est),
+            quod_foreign_projection:read(Pid,Generation,Deadline,fun(Snapshot) ->
+                #{identity := Identity,height := H,projection_id := Projection,est := SourceEst} = Snapshot,
+                case Fence of
+                    {Follow,H,Projection,{Pid,Generation}} ->
+                        quod_observation:note({source_fence,Identity,
+                            {snapshot,Follow,H,Projection,Pid,Generation,Deadline}},Est),
+                        Goal = {',',{physics_definition_projection,World,Authority,Entity,Revision,
+                                           {geometry,{'Shape'},{'Density'}}},
+                                {',',{physics_definition_delegate,Entity,World,Authority,Assignment},
+                                     {term_digest,{geometry,{'Shape'},{'Density'}},Digest}}},
+                        {Result,Basis} = quod_resource_basis:capture(SourceEst,
+                            fun(Observed) -> select_resource(Source,H,Observed,Goal) end),
+                        maps:foreach(fun(Key,_) -> quod_observation:note({source,World,Identity,Key},Est) end,Basis),
+                        case Result of
+                            #{'Shape' := Shape,'Density' := Density} -> {ok,{body,B,R,Kind,Pose,Shape,Density}};
+                            _ -> {error,source_definition_unavailable}
+                        end;
+                    _ -> {error,source_selection_superseded}
+                end
+            end);
+        {source,Fence,{error,_} = Error} ->
+            quod_observation:note({source_fence,Identity,Fence},Est), Error;
+        {error,_} = Error -> Error
+    end;
+resolve_physics_body(_,_,_,_,_,_) -> {error,invalid_body_definition}.
+
 valid_resource_scope(agent_custody,
                      {{agent_instance_ref, Ns, Anchor, _}, Epoch, Observer},
                      #s{binding = #{identity := {Ns, Anchor}}}) ->
@@ -2511,7 +2718,10 @@ run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
         true ->
             Key = resource_key(Resource, Scope),
             {Outcome, Basis} = quod_resource_basis:capture(Est,
-                fun(Observed) -> select_resource_description(Ns, H, Observed, Resource, Scope) end),
+                fun(Observed) ->
+                    Selected = select_resource_description(Ns,H,Observed,Resource,Scope),
+                    resolve_resource_sources(Ns,Observed,Selected,Deadline)
+                end),
             Selected = case Outcome of
                 {error, {throw, Reason, _Stack}} -> {error, Reason};
                 _ -> Outcome
@@ -2612,8 +2822,8 @@ select_resource_description(Ns, H, Est, agent_custody,
     end;
 select_resource_description(_, _, _, _, _) -> {error, invalid_resource_request}.
 
-install_resource(Ns, _, {physics_worlds, Rows}) ->
-    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows}, infinity);
+install_resource(Ns, _, {physics_worlds, Rows, Unavailable}) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows, Unavailable}, infinity);
 install_resource(Ns, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
 install_resource(Ns, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
 install_resource(Ns, H, {node_ontologies, Hosts, Contacts}) ->

@@ -1,0 +1,40 @@
+{
+  "started": "2026-10-10T22:45:19.447917+00:00",
+  "command": [
+    "rebar3",
+    "eunit",
+    "--generator=quod_physics_tests:live_source_signed_view_test_,quod_physics_tests:unsimulated_definition_edit_test_,quod_physics_tests:live_source_lifecycle_test_,quod_physics_tests:live_source_reader_replacement_test_"
+  ],
+  "source_hashes": {
+    "doc/README.md": "c5550593a9fa9ee1da4211ada957b1ee6e4d615447618fadfad7cf8194822590",
+    "doc/physics-native.md": "7bb2afc574db61d20e64a0f2985b587132cc8b9130dca1fbbdd5a47a6e899d16",
+    "doc/spaces.md": "289b489095a715c72998b7fcd49f2faa63f4c9899e1c8652100504042ef58cc3",
+    "doc/world.md": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179",
+    "priv/ontologies/quod_physics.pl": "58fbe0dc58c09e2aae44d12d779e18dda888bb95a3b66d5743a78ba32d62a221",
+    "src/predicates/quod_common_primitives.erl": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6",
+    "src/quod_foreign_log.erl": "cc34ff174b5a44ab413fb85daf98c7e635f8de98b1c34e1d0955835c47ea7ee6",
+    "src/quod_physics.erl": "5261d00023c6e271a2ec2925edae522209dabf0382af91e2f33cf5ae44893888",
+    "src/quod_resource_basis.erl": "0e2e2b4c06b8512d020d07df0ca6c57084bc96927d3a58b12975f8e02be17a1c",
+    "src/quod_runtime.erl": "120cf8f3658be44753132fc83a6b4a513e439bff9efd849a771b69fdec04980a",
+    "test/quod_common_primitives_tests.erl": "2d33d91e30d76bfb47af5393a13ab1a8cf51607821cbfc5a4d09d2380cf31f74",
+    "test/quod_physics_control_tests.erl": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3",
+    "test/quod_physics_tests.erl": "b2224b3dc6e199a5100f15f6aaa6a180dd53b4a6eaf2f7131647b0d42ae05e7a"
+  },
+  "finished": "2026-10-10T22:45:33.367526+00:00",
+  "exit_code": 1,
+  "final_source_hashes": {
+    "doc/README.md": "c5550593a9fa9ee1da4211ada957b1ee6e4d615447618fadfad7cf8194822590",
+    "doc/physics-native.md": "7bb2afc574db61d20e64a0f2985b587132cc8b9130dca1fbbdd5a47a6e899d16",
+    "doc/spaces.md": "289b489095a715c72998b7fcd49f2faa63f4c9899e1c8652100504042ef58cc3",
+    "doc/world.md": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179",
+    "priv/ontologies/quod_physics.pl": "58fbe0dc58c09e2aae44d12d779e18dda888bb95a3b66d5743a78ba32d62a221",
+    "src/predicates/quod_common_primitives.erl": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6",
+    "src/quod_foreign_log.erl": "cc34ff174b5a44ab413fb85daf98c7e635f8de98b1c34e1d0955835c47ea7ee6",
+    "src/quod_physics.erl": "5261d00023c6e271a2ec2925edae522209dabf0382af91e2f33cf5ae44893888",
+    "src/quod_resource_basis.erl": "0e2e2b4c06b8512d020d07df0ca6c57084bc96927d3a58b12975f8e02be17a1c",
+    "src/quod_runtime.erl": "120cf8f3658be44753132fc83a6b4a513e439bff9efd849a771b69fdec04980a",
+    "test/quod_common_primitives_tests.erl": "2d33d91e30d76bfb47af5393a13ab1a8cf51607821cbfc5a4d09d2380cf31f74",
+    "test/quod_physics_control_tests.erl": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3",
+    "test/quod_physics_tests.erl": "b2224b3dc6e199a5100f15f6aaa6a180dd53b4a6eaf2f7131647b0d42ae05e7a"
+  }
+}

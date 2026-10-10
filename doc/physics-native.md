@@ -33,8 +33,9 @@ agent and allocating its native world. Enabling it selects only the node in the
 actor's committed hosting assignment. Other nodes have no local simulator for
 that assignment. Each space can select a different host.
 Each space uses a dedicated physics actor in this profile; sharing one actor
-between independently enabled spaces is unsupported. The fixture uses one
-world per containing ontology. Existing per-predicate OCC also means activation
+between independently enabled spaces is unsupported. Tests cover different
+world-owning ontologies and independently hosted worlds in one ontology.
+Existing per-predicate OCC also means activation
 custody changes in one ontology can conflict across its worlds.
 
 The Prolog selection supplies:
@@ -44,12 +45,94 @@ The Prolog selection supplies:
 - `physics_allowances(World, limits(Bodies, Poses, Contacts, CoordinateMm,
   geometry(Parts, Vertices, Triangles)),
   StepMicroseconds, GravityMmPerSecondSquared, RequestBudgetMs)`;
-- `physics_body(World, Id, Revision, fixed|dynamic|controlled, Pose,
-  Shape, DensityKgPerM3)`.
+- `physics_body_definition(World, Id, Revision, fixed|dynamic|controlled, Pose,
+  owned(Shape, DensityKgPerM3)|live(EntityRef, AssignmentRevision,
+  DefinitionRevision, Digest))`;
+- `physics_next_body(World, NextUnusedId)` for admission and door allocation.
 
 This allowance schema replaces the earlier four-field `limits` term. Existing
 world policy must explicitly supply geometry allowances before deployment;
 this change does not migrate or wipe ontology history.
+
+## Live definitions and atomic admission
+
+Compose the [space transitions](spaces.md) with
+`space_physical_change(W,S,Change) :- physics_space_change(W,S,Change)`.
+The source entity owns `physics_definition(Entity, Revision,
+geometry(Shape,Density))` and `physics_definition_allowance(Entity,CoordinateMm)`.
+The destination supplies `physics_admission(World,EntityRef,Kind,Pose)` and an
+authored ground `subscribes(SourceNamespace,SourceAnchor)` fact. Derived
+subscription answers are not runtime declarations. Admission requires an
+enabled simulation; merely classifying a space allocates no body.
+
+`space_place/3` commits the exclusive assignment, destination admission,
+source installation delegation, live body binding and structure revision in
+one existing atomic transaction. The source's
+`can_delegate_physics_definition(Entity,Principal,WorldRef,AuthorityRef)`
+controls its exact delegation. It does not grant invocation, disclosure,
+control or hosting. Each participating scope still needs its ordinary entry
+ACL for the exact anchored callback. Callbacks verify the staged counterpart;
+they are not independent public editing entries.
+
+`physics_edit_definition(Entity,ExpectedRevision,geometry(Shape,Density))`
+requires source `can_edit_physics_definition/2` and destination
+`can_refresh_physics_definition(World,Principal,EntityRef)`. It changes the
+source definition and the destination body/structure revisions and checkpoint
+state atomically. This destination permission does not grant arbitrary world
+editing. The binding stores an exact source reference, assignment/definition
+revisions and canonical term digest, never a mutable geometry copy.
+
+`space_withdraw/3` removes the exact body/delegation and retains the assignment
+tombstone. `physics_delete_definition/2` composes that withdrawal and a
+revisioned `none` definition. Unsupported constraints, an existing agent/body
+binding or unresolved original checkpoint custody refuse removal; compose an
+authorized binding release first in the same transaction. Body IDs never
+return to the allocator. An existing world must initialize the allocator
+explicitly above its authored IDs through an authorized edit.
+
+`physics_assign_authority(World,BeforeInstance,AfterInstance)` requires world
+editing permission, an already hosted successor, completed activation custody
+and every source's delegation permission for that successor. It changes the
+world assignment and all live source grants atomically. Host/key assignment
+uses the existing agent lifecycle; replacement starts a new run generation.
+This is not an inter-simulation transfer.
+
+The runtime resolves live definitions over its existing retained verified
+source projections in its bounded resource worker. Source predicate changes
+wake the affected resources independently of reaction delivery. Installation
+checks the exact source follow, projection height/identity and materializer
+generation alongside local body/structure fences and the original deadline.
+Ready subscription notices carry the exact retained reader. Selection and
+installation compare its current follow row and reader lifetime locally;
+they neither block on the shared log owner nor fetch or rebuild source state.
+An established reader's death triggers reconstruction from the current retained
+verified cache. Failure before publishing a replacement parks the source until
+new progress, rather than repeatedly rebuilding the same failed input.
+
+While a source verifies a new delta, its consuming simulation pauses without
+discarding the viewer or extending input expiry. An unrelated delta resumes
+the same controls. A relevant change retires the old view; missing or denied
+geometry keeps its world unavailable, never turns the collider into empty
+space. Independent valid worlds continue. Recovery selects current verified
+state without replaying reactions. Unchanged selections do not rebuild native
+geometry or write/sync storage. Geometry and installation-authorization
+changes reach existing viewers through this same physics owner and its normal
+refresh/installed notices. A viewer needs the world's viewing/control grants,
+not entry grants to every collider source. The signed view separately retains
+its actual visible-world, acting-agent, physics and Prolog authorization reads.
+Hot inputs and authenticated contact matching use installed body/run fences
+without reading source geometry again.
+
+Explicit reusable door recipes produce owned geometry. They are deliberately
+materialized recipes, not the default semantics of admitted live instances.
+In this adapter, a live definition belongs to a different ontology with an
+explicit subscription; geometry authored in the world's own scope uses owned
+body definitions. Repositioning a live body revalidates its source geometry,
+so the editor needs the corresponding source entry grants. An entity admitted
+only to an unsimulated space has no installation delegation; its definition
+can be edited without a simulated receiver consequence.
+
+## Geometry and resource policy
 
 `Pose` is `pose(vector(X,Y,Z), rotation(Rx,Ry,Rz))`, with millimetres and
 milliradians. Rotation applies X, then Y, then Z. `vector(X,Y,Z)` authors an

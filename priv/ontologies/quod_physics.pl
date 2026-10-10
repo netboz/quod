@@ -1,4 +1,4 @@
-%% First mechanical profile: one optional world per containing ontology.
+%% Optional physical worlds use explicitly assigned, independently hosted actors.
 %% Space policy supplies every allowance and hosting/signing grant.
 %% Distances are millimetres, time microseconds, density kg/m3.
 
@@ -11,6 +11,209 @@ physics_enabled(W, I) :-
     space_instance(W, physical_space),
     findall(space(Mode, Actor), physics_space(W, Mode, Actor), [space(enabled, I)]),
     physics_required_allowances(W, _, _, _, _).
+
+%% One authored body description, either owned geometry or an exact live source.
+%% Body identity, kind and placement belong to the admitting world; source shape
+%% and density never become a second mutable fact at that destination.
+physics_body_definition(_, _, _, _, _, _) :- fail.
+physics_resolve_definition(_, owned(Shape, Density), Shape, Density).
+physics_resolve_definition(W, live(entity_ref(Ns, Anchor, Entity), Assignment, Revision, Digest),
+                           Shape, Density) :-
+    physics_world_authority(W, World, Authority),
+    Ns::(current_ontology_identity(Ns, Anchor),
+         physics_definition_projection(World, Authority, Entity, Revision, geometry(Shape,Density)),
+         physics_definition_delegate(Entity, World, Authority, Assignment)),
+    term_digest(geometry(Shape,Density), Digest).
+
+physics_world_authority(W, world_ref(Ns, Anchor, W), agent_instance_ref(Ns, Anchor, I)) :-
+    current_ontology_identity(Ns, Anchor),
+    findall(A, physics_space(W, _, A), [I]).
+
+physics_definition(_, _, _) :- fail.
+physics_definition_delegate(_, _, _, _) :- fail.
+can_edit_physics_definition(_, _) :- fail.
+can_refresh_physics_definition(_, _, _) :- fail.
+can_delegate_physics_definition(_, _, _, _) :- fail.
+physics_definition_allowance(_, _) :- fail.
+physics_admission(_, _, _, _) :- fail.
+
+%% This pure, source-owned export is also evaluated over retained verified state.
+%% Installation delegation is not user invocation or disclosure permission.
+physics_definition_projection(World, Authority, Entity, Revision, Definition) :-
+    World = world_ref(Ns, Anchor, Space),
+    space_assignment(Entity, Assignment, entity_ref(Ns, Anchor, Space)),
+    findall(grant(W,A,R), physics_definition_delegate(Entity,W,A,R),
+            [grant(World,Authority,Assignment)]),
+    findall(definition(R,D), physics_definition(Entity,R,D),
+            [definition(Revision,Definition)]),
+    Definition = geometry(_, _).
+
+physics_delegate_definition(Entity, World, Authority, Assignment, Revision, Definition) :-
+    term_variables([Entity,World,Authority,Assignment], []),
+    transaction((current_principal(P),
+        can_delegate_physics_definition(Entity,P,World,Authority),
+        World = world_ref(Ns,Anchor,Space),
+        space_assignment(Entity,Assignment,entity_ref(Ns,Anchor,Space)),
+        \+ physics_definition_delegate(Entity,_,_,_),
+        assertz(physics_definition_delegate(Entity,World,Authority,Assignment)),
+        physics_definition_projection(World,Authority,Entity,Revision,Definition))).
+
+physics_release_definition(Entity, World, Assignment) :-
+    term_variables([Entity,World,Assignment], []),
+    transaction((Next is Assignment + 1, space_assignment(Entity,Next,none),
+        findall(A,physics_definition_delegate(Entity,World,A,Assignment),[Authority]),
+        retract(physics_definition_delegate(Entity,World,Authority,Assignment)))).
+
+%% Simulated spaces compose this hook explicitly; ordinary unsimulated spaces
+%% retain their own space_physical_change/3 policy and allocate no native body.
+physics_space_change(W, Subject, admitted) :-
+    physics_enabled(W,_), physics_world_authority(W,World,Authority),
+    Subject = entity_ref(Ns,Anchor,Entity), physics_subscription(Ns,Anchor),
+    current_ontology_identity(Here,History),
+    findall(admission(K,P),physics_admission(W,Subject,K,P),[admission(Kind,Pose)]),
+    \+ physics_body_definition(W,_,_,_,_,live(Subject,_,_,_)),
+    Ns::(current_ontology_identity(Ns,Anchor),
+         space_assignment(Entity,Assignment,entity_ref(Here,History,W)),
+         physics_delegate_definition(Entity,World,Authority,Assignment,Revision,geometry(Shape,Density))),
+    term_digest(geometry(Shape,Density),Digest),
+    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
+    physics_body_capacity(W,1),
+    physics_allocate_body(W,Body), physics_checked_body(Body,Kind,Pose,Shape,Density,Coordinate),
+    physics_advance_structure(W,Next),
+    assertz(physics_body_definition(W,Body,Next,Kind,Pose,live(Subject,Assignment,Revision,Digest))).
+physics_space_change(W, Subject, withdrawn) :-
+    current_ontology_identity(Here,History), World = world_ref(Here,History,W),
+    findall(body(B,R,K,P,D),
+        (physics_body_definition(W,B,R,K,P,D),D = live(Subject,_,_,_)),
+        [body(Body,Revision,Kind,Pose,Definition)]),
+    Definition = live(Subject,Assignment,_,_), Subject = entity_ref(Ns,Anchor,Entity),
+    physics_removable_body(W,Body),
+    Ns::(current_ontology_identity(Ns,Anchor),
+         physics_release_definition(Entity,World,Assignment)),
+    physics_advance_structure(W,_),
+    retract(physics_body_definition(W,Body,Revision,Kind,Pose,Definition)),
+    physics_remove_rest_checkpoint(W,Body), physics_remove_rest_state(W,Body),
+    physics_remove_rest_request(W,Body).
+
+%% The subscription owner retains authored ground facts, not derived answers.
+physics_subscription(Ns,Anchor) :-
+    '$quod_predicate_source'(subscribes/2,Source),
+    '$quod_program_source'(Clauses,Source),
+    member((subscribes(S,A) :- true),Clauses), S == Ns, A == Anchor.
+
+physics_next_body(_, _) :- fail.
+physics_allocate_body(W, Body) :-
+    physics_body_allocator(W,Body),
+    physics_reserve_body_ids(W,[Body]).
+physics_reserve_body_ids(W, Bodies) :-
+    physics_body_allocator(W,Next),
+    sort(Bodies,Sorted), length(Bodies,Count), length(Sorted,Count),
+    physics_body_id_end(Sorted,Next,End),
+    retract(physics_next_body(W,Next)), assertz(physics_next_body(W,End)).
+physics_body_allocator(W,Next) :-
+    (findall(N,physics_next_body(W,N),[Next]), integer(Next), Next >= 0 -> true
+    ; fail_with_reason(body_allocator_missing(W))).
+physics_body_id_end([], Next, Next).
+physics_body_id_end([B|Bodies], Next, End) :-
+    (integer(B), B >= Next, B < 18446744073709551616 -> true
+    ; fail_with_reason(body_identity_unavailable(B))),
+    Following is B + 1, physics_body_id_end(Bodies,Following,End).
+physics_body_capacity(W,Additional) :-
+    physics_required_allowances(W,limits(Max,_,_,_,_),_,_,_),
+    findall(B,physics_body_definition(W,B,_,_,_,_),Bodies), length(Bodies,Count),
+    (Count + Additional =< Max -> true ; fail_with_reason(body_allowance(Max))).
+physics_advance_structure(W,Next) :-
+    findall(S,physics_structure(W,S),[Before]), Next is Before + 1,
+    retract(physics_structure(W,Before)), assertz(physics_structure(W,Next)).
+
+%% Replacing an authority changes every live source delegation in the same
+%% signed transition. Host/key assignment remains the existing agent lifecycle.
+physics_assign_authority(W, Before, After) :-
+    term_variables([W,Before,After], []), Before \== After,
+    transaction((current_principal(P), can_edit_physics(W,P),
+        findall(space(M,I),physics_space(W,M,I),[space(Mode,Before)]),
+        agent_hosted(After,_,_,_), physics_run(W,Generation,_),
+        physics_custody(W,Custody), physics_previous_complete(Custody,Generation),
+        current_ontology_identity(Ns,Anchor),
+        findall(live(S,A,R,D),physics_body_definition(W,_,_,_,_,live(S,A,R,D)),References),
+        retract(physics_space(W,Mode,Before)), assertz(physics_space(W,Mode,After)),
+        physics_redelegate_sources(References,world_ref(Ns,Anchor,W),
+            agent_instance_ref(Ns,Anchor,Before),agent_instance_ref(Ns,Anchor,After)))).
+
+physics_redelegate_sources([],_,_,_).
+physics_redelegate_sources([live(entity_ref(Ns,Anchor,Entity),Assignment,_,_)|Rest],World,Before,After) :-
+    Ns::(current_ontology_identity(Ns,Anchor),
+         physics_redelegate_definition(Entity,World,Before,After,Assignment)),
+    physics_redelegate_sources(Rest,World,Before,After).
+physics_redelegate_definition(Entity,World,Before,After,Assignment) :-
+    term_variables([Entity,World,Before,After,Assignment], []),
+    transaction((current_principal(P), can_delegate_physics_definition(Entity,P,World,After),
+        World = world_ref(Ns,Anchor,Space),
+        space_assignment(Entity,Assignment,entity_ref(Ns,Anchor,Space)),
+        Ns::(current_ontology_identity(Ns,Anchor), physics_world_authority(Space,World,After)),
+        findall(grant(W,A,R),physics_definition_delegate(Entity,W,A,R),[grant(World,Before,Assignment)]),
+        retract(physics_definition_delegate(Entity,World,Before,Assignment)),
+        assertz(physics_definition_delegate(Entity,World,After,Assignment)))).
+
+physics_edit_definition(Entity, Expected, Definition) :-
+    term_variables([Entity,Expected,Definition], []),
+    transaction((current_principal(P), can_edit_physics_definition(Entity,P),
+        findall(definition(R,D),physics_definition(Entity,R,D),[definition(Expected,Before)]),
+        Definition = geometry(Shape,Density),
+        findall(C,physics_definition_allowance(Entity,C),[Coordinate]),
+        physics_checked_body(0,fixed,vector(0,0,0),Shape,Density,Coordinate),
+        Next is Expected + 1,
+        retract(physics_definition(Entity,Expected,Before)),
+        assertz(physics_definition(Entity,Next,Definition)),
+        physics_definition_consequence(Entity,Expected,Next,Definition))).
+
+physics_definition_consequence(Entity,Before,Next,Definition) :-
+    findall(grant(W,A,R),physics_definition_delegate(Entity,W,A,R),Grants),
+    (Grants = [] -> true
+    ; Grants = [grant(world_ref(Ns,Anchor,Space),_,Assignment)],
+      space_assignment(Entity,Assignment,entity_ref(Ns,Anchor,Space)),
+      current_ontology_identity(Here,History),
+      Ns::(current_ontology_identity(Ns,Anchor),
+           physics_refresh_definition(Space,entity_ref(Here,History,Entity),Assignment,Before,Next,Definition))).
+
+physics_refresh_definition(W,Subject,Assignment,Before,Next,Definition) :-
+    term_variables([W,Subject,Assignment,Before,Next,Definition], []),
+    transaction((current_principal(P), can_refresh_physics_definition(W,P,Subject),
+        space_placement(W,Subject,Assignment), Next is Before + 1,
+        physics_world_authority(W,World,Authority), Subject = entity_ref(Ns,Anchor,Entity),
+        Ns::(current_ontology_identity(Ns,Anchor),
+             physics_definition_projection(World,Authority,Entity,Next,Definition)),
+        findall(body(B,R,K,Position,D),
+            (physics_body_definition(W,B,R,K,Position,D),D = live(Subject,Assignment,Before,_)),
+            [body(Body,Revision,Kind,Pose,Old)]),
+        physics_unconstrained_body(W,Body),
+        physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
+        Definition = geometry(Shape,Density),
+        physics_checked_body(Body,Kind,Pose,Shape,Density,Coordinate), term_digest(Definition,Digest),
+        physics_advance_structure(W,Structure),
+        retract(physics_body_definition(W,Body,Revision,Kind,Pose,Old)),
+        assertz(physics_body_definition(W,Body,Structure,Kind,Pose,live(Subject,Assignment,Next,Digest))),
+        physics_remove_rest_checkpoint(W,Body), physics_cancel_rest_edit(W,Body))).
+
+physics_delete_definition(Entity, Expected) :-
+    term_variables([Entity,Expected], []),
+    transaction((current_principal(P), can_edit_physics_definition(Entity,P),
+        findall(D,physics_definition(Entity,Expected,D),[Before]),
+        space_assignment(Entity,Assignment,Destination),
+        (Destination = none -> true ; space_withdraw(Entity,Assignment,Destination)),
+        retract(physics_definition(Entity,Expected,Before)), Next is Expected + 1,
+        assertz(physics_definition(Entity,Next,none)))).
+
+physics_unconstrained_body(W,B) :-
+    (\+ physics_joint(W,hinge(B,_,_,_,_,_)), \+ physics_joint(W,hinge(_,_,B,_,_,_)) -> true
+    ; fail_with_reason(body_constraint_group(B))).
+physics_removable_body(W,B) :-
+    physics_unconstrained_body(W,B),
+    (\+ physics_agent(W,_,_,B,_) -> true ; fail_with_reason(body_agent_binding(B))),
+    physics_rest_custody(W,B,Custody),
+    (Custody = none -> true
+    ; Custody = request(_,_,Bytes,Signature),
+      committed_operation_outcome(Bytes,Signature,Status), member(Status,[committed,rejected,aborted])).
 
 %% A domain supplies one local view and its ordinary principal policy. Marks
 %% name occurrences; only body_pose/2 names their physical source. Live samples
@@ -71,7 +274,7 @@ physics_body_projection(W, Body,
                       Epoch, Generation, Token, Structure), Revision) :-
     current_ontology_identity(Ns, Anchor), physics_enabled(W, I),
     agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token), Generation > 0,
-    physics_structure(W, Structure), physics_body(W, Body, Revision, _, _, _, _).
+    physics_structure(W, Structure), physics_body_definition(W, Body, Revision, _, _, _).
 
 %% Physical agents and viewpoints are domain definitions. Binding a principal
 %% selects an existing agent; it never creates a body or changes the signer.
@@ -116,7 +319,7 @@ physics_agent_configuration(W, Principal, Agent, Viewpoint, Configuration) :-
     (findall(definition(R, B, M), physics_agent(W, Agent, R, B, M),
             [definition(Revision, Body, Motion)]),
      findall(A, physics_agent(W, A, _, Body, _), [Agent]),
-     findall(R, physics_body(W, Body, R, _, _, _, _), [BodyRevision]),
+     findall(R, physics_body_definition(W, Body, R, _, _, _), [BodyRevision]),
      findall(mount(B, Pose, Track), physics_viewpoint(W, Agent, Viewpoint, B, Pose, Track),
             [mount(Body, LocalPose, Tracking)]) -> true
     ; fail_with_reason(ambiguous_agent(Agent))),
@@ -159,7 +362,7 @@ physics_input_limits(W, _, Configuration, Frame, Input, Lease, Limits) :-
     physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
     physics_absolute_input(Input, Coordinate),
     physics_body_projection(W, Body, Frame, Revision),
-    physics_body(W, Body, Revision, controlled, _, _, _).
+    physics_body_definition(W, Body, Revision, controlled, _, _).
 
 physics_input_control(W, Principal, Epoch, Configuration) :-
     physics_control_state(W, Principal, Current, Selection),
@@ -178,7 +381,7 @@ physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed) :
     integer(MaxImpulse), MaxImpulse > 0, integer(MaxSpeed), MaxSpeed > 0.
 
 physics_free_body(W, Body, Revision) :-
-    physics_body(W, Body, Revision, dynamic, _, _, _),
+    physics_body_definition(W, Body, Revision, dynamic, _, _),
     \+ physics_joint(W, hinge(Body, _, _, _, _, _)),
     \+ physics_joint(W, hinge(_, _, Body, _, _, _)).
 
@@ -265,7 +468,7 @@ physics_view_bodies([mark(_, _, _, Pose, _, _, Depicts) | Rest], W) :-
 %% source receives native poses; its subject may live in another ontology.
 physics_view_body(relative(_, Pose), Depicts, W) :- physics_view_body(Pose, Depicts, W).
 physics_view_body(transform(_, _, _, _, _, _), _, _).
-physics_view_body(body_pose(B, R), depicts(_, _, _), W) :- physics_body(W, B, R, _, _, _, _).
+physics_view_body(body_pose(B, R), depicts(_, _, _), W) :- physics_body_definition(W, B, R, _, _, _).
 
 physics_projection(Node, Rows) :-
     findall(world(W, I, Epoch, Key, Generation, RunToken, Custody, Structure,
@@ -291,8 +494,8 @@ physics_projection(Node, Rows) :-
                (physics_control(W, Principal, _, controlled(_, _)),
                 physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed)), Pushes),
        append(AgentControls, Pushes, Controls),
-       findall(body(Id, Rev, Kind, Pose, Shape, Density),
-               physics_body(W, Id, Rev, Kind, Pose, Shape, Density), Bodies)), Rows).
+       findall(body(Id, Rev, Kind, Pose, Definition),
+               physics_body_definition(W, Id, Rev, Kind, Pose, Definition), Bodies)), Rows).
 
 physics_custody(W, Custody) :-
     findall(R, physics_request(W, R), Requests),
@@ -348,8 +551,8 @@ physics_activation_status(W, Request, activated) :-
     Generation is Previous + 1, physics_run(W, Generation, Token).
 physics_activation_status(W, Request, cancelled) :- physics_cancelled_request(W, Request).
 
-%% Effective geometry is materialized by an authorized action, never by the
-%% runtime's local-only selector. A shared definition binds its exact history.
+%% A reusable door recipe is deliberately pinned and materialized. Live
+%% instances instead use the source-owned definition/assignment contract below.
 physics_door_definition(local(Name, Version), Definition) :-
     physics_door_class(Name, Version, Definition).
 physics_door_definition(class_ref(Ns, Anchor, Name, Version), Definition) :-
@@ -363,20 +566,20 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
     term_variables([W, Door, Frame, Source, Position, Structure], []),
     transaction((current_principal(P), can_edit_physics(W, P),
         physics_structure(W, Structure), Door \= Frame,
-        \+ physics_body(W, Door, _, _, _, _, _),
-        \+ physics_body(W, Frame, _, _, _, _, _),
+        physics_reserve_body_ids(W, [Door,Frame]),
+        \+ physics_body_definition(W, Door, _, _, _, _),
+        \+ physics_body_definition(W, Frame, _, _, _, _),
         physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
         physics_valid_hinge_definition(Position, FrameBox, LeafBox),
-        physics_required_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
+        physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
         physics_checked_body(Door, dynamic, Position, LeafBox, Density, Coordinate),
         physics_checked_body(Frame, fixed, Position, FrameBox, Density, Coordinate),
         physics_valid_motor(Angle, Motor),
-        findall(Id, physics_body(W, Id, _, _, _, _, _), Bodies),
-        length(Bodies, Count), Count + 2 =< MaxBodies,
+        physics_body_capacity(W,2),
         Next is Structure + 1,
         retract(physics_structure(W, Structure)), assertz(physics_structure(W, Next)),
-        assertz(physics_body(W, Frame, Next, fixed, Position, FrameBox, Density)),
-        assertz(physics_body(W, Door, Next, dynamic, Position, LeafBox, Density)),
+        assertz(physics_body_definition(W, Frame, Next, fixed, Position, owned(FrameBox, Density))),
+        assertz(physics_body_definition(W, Door, Next, dynamic, Position, owned(LeafBox, Density))),
         assertz(physics_joint(W, hinge(Door, Next, Frame, vector(0,0,0), Angle, Motor))),
         assertz(physics_door_source(W, Door, Source)),
         assertz(physics_door(W, Door, 0, idle)))).
@@ -512,16 +715,16 @@ physics_door_measurement(
     physics_enabled(W,I), current_ontology_identity(Ns,Anchor),
     Authority = agent_instance_ref(Ns,Anchor,I), agent_hosted(I,_,Epoch,_),
     physics_run(W,Generation,Token), physics_structure(W,Structure),
-    physics_door(W,D,_,closing(R)), physics_body(W,D,Revision,dynamic,_,_,_),
+    physics_door(W,D,_,closing(R)), physics_body_definition(W,D,Revision,dynamic,_,_),
     physics_joint(W,hinge(D,Revision,Frame,_,Baseline,motor(_,_,_,Tolerance))),
-    physics_body(W,Frame,FrameRevision,fixed,_,_,_),
+    physics_body_definition(W,Frame,FrameRevision,fixed,_,_),
     integer(Tick), Tick > 0, Tick < 18446744073709551616, integer(Angle), Angle >= -Baseline, Angle =< Baseline,
     physics_required_allowances(W,_,_,_,Budget),
     integer(At), integer(Expiry), Expiry > At, Expiry - At =< Budget,
     current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry,
     physics_door_result(W,D,Frame,Angle,Tolerance,Contact,Result).
 physics_door_result(W,D,Frame,_,_,contact(Other,Revision),blocked(Other)) :-
-    Other \= D, Other \= Frame, physics_body(W,Other,Revision,_,_,_,_).
+    Other \= D, Other \= Frame, physics_body_definition(W,Other,Revision,_,_,_).
 physics_door_result(_,_,_,Angle,Tolerance,clear,closed) :-
     Angle >= -Tolerance, Angle =< Tolerance.
 
@@ -537,7 +740,8 @@ physics_remove_door_checkpoint(W,D) :-
 physics_move_body(W,D,Revision,Structure,Position) :-
     term_variables([W,D,Revision,Structure,Position], []),
     transaction((current_principal(P), can_edit_physics(W,P),
-        physics_structure(W,Structure), physics_body(W,D,Revision,Kind,Old,Shape,Density),
+        physics_structure(W,Structure), physics_body_definition(W,D,Revision,Kind,Old,Definition),
+        physics_resolve_definition(W,Definition,Shape,Density),
         \+ physics_joint(W,hinge(D,_,_,_,_,_)),
         \+ physics_joint(W,hinge(_,_,D,_,_,_)),
         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
@@ -545,8 +749,8 @@ physics_move_body(W,D,Revision,Structure,Position) :-
         physics_checked_body(D,Kind,Pose,Shape,Density,Coordinate),
         Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
-        retract(physics_body(W,D,Revision,Kind,Old,Shape,Density)),
-        assertz(physics_body(W,D,Next,Kind,Pose,Shape,Density)),
+        retract(physics_body_definition(W,D,Revision,Kind,Old,Definition)),
+        assertz(physics_body_definition(W,D,Next,Kind,Pose,Definition)),
         physics_remove_rest_checkpoint(W,D),
         physics_cancel_rest_edit(W,D))).
 
@@ -560,17 +764,17 @@ physics_move_door(W,D,Sequence,Structure,Position) :-
     transaction((current_principal(P), can_edit_physics(W,P), physics_structure(W,Structure),
         physics_door(W,D,Sequence,State),
         physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor)),
-        physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density),
-        physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density),
+        physics_body_definition(W,D,Revision,dynamic,LeafPosition,owned(LeafBox,Density)),
+        physics_body_definition(W,F,Revision,fixed,FramePosition,owned(FrameBox,Density)),
         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
         physics_valid_hinge_definition(Position,FrameBox,LeafBox),
         physics_checked_body(D,dynamic,Position,LeafBox,Density,Coordinate),
         physics_checked_body(F,fixed,Position,FrameBox,Density,Coordinate), Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
-        retract(physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density)),
-        retract(physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density)),
-        assertz(physics_body(W,D,Next,dynamic,Position,LeafBox,Density)),
-        assertz(physics_body(W,F,Next,fixed,Position,FrameBox,Density)),
+        retract(physics_body_definition(W,D,Revision,dynamic,LeafPosition,owned(LeafBox,Density))),
+        retract(physics_body_definition(W,F,Revision,fixed,FramePosition,owned(FrameBox,Density))),
+        assertz(physics_body_definition(W,D,Next,dynamic,Position,owned(LeafBox,Density))),
+        assertz(physics_body_definition(W,F,Next,fixed,Position,owned(FrameBox,Density))),
         retract(physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor))),
         assertz(physics_joint(W,hinge(D,Next,F,Pivot,Angle,Motor))),
         physics_remove_door_checkpoint(W,D),

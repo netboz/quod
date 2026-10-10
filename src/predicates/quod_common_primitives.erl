@@ -41,7 +41,7 @@ that used them stays sealable.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([load/1, draw_3/3, binary_codes_2/3,
+-export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3,
          predicate_source_2/3, source_chunk_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2]).
 
@@ -60,8 +60,22 @@ load(#est{db = Db0} = Est) ->
             {'$quod_retract_exact', 1}, ?MODULE, retract_exact_1, Db3),
     Db5 = erlog_int:add_compiled_proc(
             {'$quod_source_chunk', 2}, ?MODULE, source_chunk_2, Db4),
+    Db6 = erlog_int:add_compiled_proc(
+            {'$quod_program_source', 2}, ?MODULE, program_source_2, Db5),
     Est#est{db = erlog_int:add_compiled_proc(
-                   {'$quod_program_source', 2}, ?MODULE, program_source_2, Db5)}.
+                   {term_digest, 2}, ?MODULE, term_digest_2, Db6)}.
+
+%% Canonical symbols make the digest independent of local atom materialization.
+term_digest_2({term_digest, Term0, Digest}, Next, #est{bs = Bs} = St) ->
+    Term = erlog_int:dderef(Term0, Bs),
+    case quod_wire_term:is_ground(Term) of
+        false -> erlog_int:instantiation_error(St);
+        true -> case quod_wire_term:encode_canonical(Term) of
+            {ok, Bytes} -> erlog_int:unify_prove_body(
+                               Digest, crypto:hash(sha256, Bytes), Next, St);
+            {error, bad_term} -> erlog_int:domain_error(canonical_term, Term, St)
+        end
+    end.
 
 source_chunk_2({'$quod_source_chunk', Bytes0, Chunk}, Next,
                #est{bs = Bs} = St) ->

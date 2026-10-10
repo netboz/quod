@@ -125,19 +125,18 @@ failures; ordinary false policy remains ordinary Prolog failure.
 authored consequence inside the destination's transaction, with no default
 success. Missing or refused composition rolls back both owners. An unsimulated
 physical space explicitly supplies a no-effect rule; class membership does not
-supply it. This slice demonstrates unsimulated physical admission, not installed
-bodies or physically fulfilled placement.
+supply it. Unsimulated physical admission allocates no native body and does not
+prove physically fulfilled placement.
 
-For simulated membership the physics integration must first define the exact
-entity/body and space/simulation-domain bindings under their existing owners.
-Its consequence must compose body admission or removal, affected constraint
-cleanup, structure/body revisions, checkpoint invalidation and pending activity
-cancellation in this same transaction. Unsupported constraint groups or unresolved
-original physical operations must refuse the transition. Authored physical
-edits use existing revision-checked physics actions, not membership edits or
-containment-driven geometry copies. Live collider dependencies must advance
-through the existing subscriptions and retained verified projections; this
-vocabulary supplies no alternate update mechanism. Several rooms may share one
+The [native physics composition](physics-native.md#live-definitions-and-atomic-admission)
+supplies `physics_space_change/3` for simulated membership. Its live binding
+names the exact source entity, assignment and definition revisions; the
+destination owns body identity and placement. Admission, definition edits and
+withdrawal compose their source and receiver changes in the same transaction.
+Unsupported constraint groups, agent bindings or unresolved original physical
+operations refuse removal. Live collider dependencies advance through existing
+subscriptions and retained verified projections; this vocabulary supplies no
+alternate update mechanism. Several rooms may share one
 simulation domain. There is no class-level one-ontology or one-simulator-per-room
 rule. The current physics adapter's narrower limits remain explicit integration
 constraints, not class semantics.
@@ -161,4 +160,6 @@ membership delete/add is insufficient and provides no authority-transfer claim.
 The production-owner tests are [quod_space_tests.erl](../test/quod_space_tests.erl).
 They use non-lobby identities and signed requests, including distinct principals,
 competing prepared proofs, rollback, replay and exact operation resolution.
-Physics resource selection is present during the no-allocation checks.
+Physics resource selection is present during the no-allocation checks. The
+simulated integration is exercised through production owners in
+[quod_physics_tests.erl](../test/quod_physics_tests.erl).

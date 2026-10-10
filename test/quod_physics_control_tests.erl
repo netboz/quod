@@ -94,8 +94,7 @@ commit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_ct:rp(Ns,Goal)).
 bodies(Ns) ->
     Row = {body,{'Id'},{'Revision'},{'Kind'},{'Position'},{'Shape'},{'Density'}},
     {ok,[#{'Bodies' := Bodies}],_} = quod_prolog:prove_ro(Ns,
-        {findall,Row,{physics_body,room,{'Id'},{'Revision'},{'Kind'},
-            {'Position'},{'Shape'},{'Density'}},{'Bodies'}}),
+        {findall,Row,{physics_body_definition, room, {'Id'}, {'Revision'}, {'Kind'}, {'Position'}, {owned, {'Shape'}, {'Density'}}},{'Bodies'}}),
     Bodies.
 
 with_control(Fun) ->
@@ -106,8 +105,8 @@ with_control(Fun) ->
          {can_view_physics,room,{'_'}},
          {physics_space,room,disabled,actor},
          {instance_of,agent,compact},{instance_of,agent,wide},
-         {physics_body,room,2,1,fixed,{vector,0,1000,0},{box,200,200,200},1},
-         {physics_body,room,3,1,fixed,{vector,2000,1000,0},{box,1000,300,500},1},
+         {physics_body_definition, room, 2, 1, fixed, {vector,0,1000,0}, {owned, {box,200,200,200}, 1}},
+         {physics_body_definition, room, 3, 1, fixed, {vector,2000,1000,0}, {owned, {box,1000,300,500}, 1}},
          {physics_agent,room,compact,1,2,{motion,grounded}},
          {physics_agent,room,wide,1,3,{motion,grounded}},
          {physics_viewpoint,room,compact,eye,2,{pose,{vector,0,100,0},{rotation,0,0,0}},view_only},

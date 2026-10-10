@@ -1,0 +1,22 @@
+--- review03/src/quod_client_simulation.erl
++++ current/src/quod_client_simulation.erl
+@@ -497,7 +497,7 @@
+     [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
+     [quod_reg:demonitor_name({quod_prolog,Ns},M) ||
+         {M,Ns} <- maps:to_list(maps:get(dependency_names,S,#{}))],
+-    [catch gen_server:receive_response(Request,0) ||
++    _ = [catch gen_server:receive_response(Request,0) ||
+         {Request,_} <- gen_server:reqids_to_list(maps:get(snapshots,S,gen_server:reqids_new()))],
+     [unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
+     case S of #{namespace := Ns} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
+--- review03/src/quod_runtime.erl
++++ current/src/quod_runtime.erl
+@@ -979,7 +979,7 @@
+             true ->
+                 {Guard,Selected} = maps:get(navigation_guard,Spec),
+                 Current = atomics:get(Guard,1) =:= Selected,
+-                case Current of true -> atomics:add_get(Guard,1,1); false -> ok end,
++                case Current of true -> atomics:add(Guard,1,1); false -> ok end,
+                 case Mode of
+                     pending when Current ->
+                         case maps:is_key(source_pause_notice,Entry) of

@@ -14,7 +14,7 @@ fence, rather than flooding its event queue.
             pending = none, window = none, resolved = none, uncertain = none, timer = none, tick = 0,
             frame = none, revisions = #{}, controls = #{}, driving = #{}, observations = #{},
             installs = 0, steps = 0, queries = 0, viewer = none, agent_controls = [], inputs = #{},
-            installed_guard = none, moving = false}).
+            installed_guard = none, installed_geometry = none, moving = false}).
 
 start(Owner, Spec) ->
     gen_server:start(quod_reg:via({physics_world, maps:get(world, Spec)}), ?MODULE, {Owner, Spec}, []).
@@ -48,6 +48,7 @@ init({Owner, Spec = #{navigation_guard := {_,_}}}) ->
 handle_call(Request,From,S) ->
     NeedsNavigation = case Request of
         {watch,_} -> true;
+        {snapshot,_} -> true;
         {body_state,_,_} -> true;
         {motion_query,_,_,_,_} -> true;
         {physics_input,_,_,_,_,_,_} -> true;
@@ -142,11 +143,16 @@ handle_info({physics_unwatch, Pid, Ref}, S = #s{viewer = #{pid := Pid, ref := Re
     {noreply, clear_viewer(S)};
 handle_info({'DOWN', M, process, _, _}, S = #s{viewer = #{monitor := M}}) ->
     {noreply, clear_viewer(S)};
+handle_info({physics_source_pending,Owner,Notice},S = #s{owner = Owner,spec = Spec}) ->
+    Owner ! {physics_pause_seen,self(),maps:get(world,Spec),Notice},
+    %% Pause while a retained source verifies its next delta. An unrelated
+    %% change must preserve the viewer and the original input expiry.
+    {noreply,pause_steps(S)};
 handle_info({physics_invalidated,Owner,Notice},S = #s{owner = Owner,spec = Spec}) ->
     Owner ! {physics_invalidation_seen,self(),maps:get(world,Spec),Notice},
     _ = case S#s.viewer of #{pid := Pid,ref := Ref} -> Pid ! {physics_refresh,self(),Ref}; _ -> ok end,
     Stopped = maps:map(fun(_,Row) -> suspend_input(Row) end,S#s.inputs),
-    {noreply,clear_viewer(S#s{inputs = Stopped})};
+    {noreply,clear_viewer(pause_steps(S#s{inputs = Stopped}))};
 handle_info({physics_selected, Owner, Ref, Spec}, S = #s{owner = Owner, spec = Old}) ->
     Owner ! {physics_selection_applied, self(), maps:get(world, Spec), Ref},
     ChangedRun = S#s.phase =:= active andalso fence(Old) =/= fence(Spec),
@@ -214,28 +220,31 @@ same_run(A, B) -> maps:with([world, authority, epoch, key], A) =:= maps:with([wo
 counters(S) -> #{installs => S#s.installs, steps => S#s.steps, queries => S#s.queries, tick => S#s.tick}.
 activation_state(Spec) -> maps:with([generation, run_token, custody], Spec).
 
-advance(S = #s{phase = {failed, _}}) -> S;
-advance(S = #s{pending = P}) when P =/= none -> S;
-advance(S = #s{phase = active, spec = Spec}) -> resume_observations(install(Spec, S));
+advance(S) ->
+    case navigation_current(S) of true -> advance_current(S); false -> S end.
+
+advance_current(S = #s{phase = {failed, _}}) -> S;
+advance_current(S = #s{pending = P}) when P =/= none -> S;
+advance_current(S = #s{phase = active, spec = Spec}) -> resume_observations(install(Spec, S));
 %% An uncertain custody write must not be replaced by a newly signed request
 %% merely because its selection has not arrived. No timeout implies rejection.
-advance(S = #s{uncertain = Issued, spec = Spec}) when Issued =/= none ->
+advance_current(S = #s{uncertain = Issued, spec = Spec}) when Issued =/= none ->
     case activation_state(Spec) =:= Issued of
         true -> S;
-        false -> advance(S#s{uncertain = none,phase = activating})
+        false -> advance_current(S#s{uncertain = none,phase = activating})
     end;
-advance(S = #s{spec = #{custody := none}}) -> request_activation(S);
-advance(S = #s{spec = #{custody := {request, Token, Previous, _, _} = Custody,
+advance_current(S = #s{spec = #{custody := none}}) -> request_activation(S);
+advance_current(S = #s{spec = #{custody := {request, Token, Previous, _, _} = Custody,
                          generation := G, run_token := Installed},
                token = Token, resolved = Custody}) ->
     case G =:= Previous + 1 andalso Installed =:= Token of
         true -> start_native(S);
         false -> S#s{phase = awaiting_selection}
     end;
-advance(S = #s{spec = #{custody := {request, _, Previous, _, _} = Custody,
+advance_current(S = #s{spec = #{custody := {request, _, Previous, _, _} = Custody,
                          generation := G}, resolved = Custody}) ->
     case G > Previous of true -> request_activation(S); false -> S#s{phase = awaiting_selection} end;
-advance(S = #s{spec = #{custody := {request, _, _, Bytes, Signature}}}) ->
+advance_current(S = #s{spec = #{custody := {request, _, _, Bytes, Signature}}}) ->
     request(resolve, {Bytes, Signature}, S).
 
 request_activation(S = #s{spec = Spec, token = Token}) ->
@@ -283,7 +292,10 @@ start_native(S = #s{spec = #{limits := Limits, dt := Dt, gravity := Gravity}}) -
 
 install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
     Hinges = maps:get(hinges,Spec,[]),
-    case native(fun() ->
+    Geometry = maps:with([bodies,hinges,restores],Spec),
+    Result = case S#s.installed_geometry =:= Geometry of
+        true -> {ok,0};
+        false -> native(fun() ->
         case quod_physics_native:install(Resource,Bodies) of
             {ok,N} -> case quod_physics_native:install_hinges(Resource,Hinges) of
                 {ok,J} ->
@@ -294,9 +306,11 @@ install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
                 Error -> Error end;
             Error -> Error
         end
-    end) of
+        end)
+    end,
+    case Result of
         {ok, Changes} ->
-            {ControlChanges,DoorsInstalled} = install_controls(S#s{spec = Spec,
+            {ControlChanges,DoorsInstalled} = install_controls(S#s{spec = Spec,installed_geometry = Geometry,
                 revisions = maps:from_list([{Id,Rev} || {Id,Rev,_,_,_,_} <- Bodies])}),
             AgentControls = maps:get(agent_controls, Spec, []),
             ControlChanged = S#s.agent_controls =/= AgentControls,
@@ -383,7 +397,9 @@ install_controls(S = #s{spec = Spec, controls = Old, native = Resource, observat
 do_step(S0) -> step_native(advance_inputs(S0)).
 step_native(S) -> step_native(S,false).
 step_native(S = #s{phase = Phase},_) when Phase =/= active -> S;
-step_native(S = #s{native = Resource},Refresh) ->
+step_native(S,Refresh) ->
+    case navigation_current(S) of true -> step_current_native(S,Refresh); false -> S end.
+step_current_native(S = #s{native = Resource},Refresh) ->
     case native(fun() -> quod_physics_native:step(Resource,Refresh) end) of
         %% Rapier's sleeping-step sentinel means unchanged, not an empty world.
         {ok,{false,[],[]}} when S#s.frame =/= none ->
@@ -398,6 +414,10 @@ step_native(S = #s{native = Resource},Refresh) ->
         {ok, Sample} -> sample_rests(sample_doors(schedule(Sample, publish(Sample, S#s{tick = S#s.tick + 1, steps = S#s.steps + 1, moving = element(1,Sample)}))));
         {error, Reason} -> fail(Reason, S)
     end.
+
+pause_steps(S) ->
+    _ = case S#s.timer of none -> ok; Timer -> erlang:cancel_timer(Timer) end,
+    S#s{timer = none}.
 
 schedule({Active, Poses, Contacts},S) ->
     schedule_active({Active orelse S#s.moving orelse inputs_active(S),Poses,Contacts},S).
@@ -538,8 +558,10 @@ input_feedback(#s{inputs = Inputs}) ->
 
 %% One retained sample and one outstanding delivery, with no motion queue.
 %% A structural/run change revokes the projection even while credit is held.
-deliver_frame(S = #s{viewer = none}) -> S;
-deliver_frame(S = #s{viewer = #{pid := Pid, ref := Ref, expected := Expected,
+deliver_frame(S) ->
+    case navigation_current(S) of true -> deliver_current_frame(S); false -> S end.
+deliver_current_frame(S = #s{viewer = none}) -> S;
+deliver_current_frame(S = #s{viewer = #{pid := Pid, ref := Ref, expected := Expected,
                                credit := Credit, tick := Previous} = V, frame = Frame}) ->
     case current_projection(Frame, Expected) of
         false -> Pid ! {physics_refresh, self(), Ref}, clear_viewer(S);

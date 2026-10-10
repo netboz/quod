@@ -1,0 +1,8 @@
+{
+  "status": "interrupted",
+  "last_completed_gate": "ui-lint",
+  "incomplete_gate": "eunit",
+  "true_child_exit": null,
+  "diagnosis": "Release driver and child no longer exist after session interruption; no complete EUnit result. Existing logs retained; no remote mutation.",
+  "recorded": "2026-10-10T23:26:47.414983+00:00"
+}

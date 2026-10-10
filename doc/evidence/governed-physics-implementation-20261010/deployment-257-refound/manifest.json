@@ -1,0 +1,20 @@
+{
+  "README.md": "bc7d1d74809f7ddc5fa89da7e12a7672379b02fe6fb0cea8a3762c2232888dea",
+  "anchors.json": "d3e92ed152f1e78fba5adee057421b0617ee70cb4753ffa91524e93f3b5c9ef8",
+  "client-endpoint.json": "f853fd801e0c6460a174331d820eaaf17034e59b98dfb654e55415cf25029d9b",
+  "deployment-logs.tar.gz": "e98bebd02b207a45df242ffdd31999efb05070d92eecfe23bc5b869281190148",
+  "deployment-success.json": "e6be5706e88a635354d29383b46161f1bcbb9184b3513740f8678babfd3b9f17",
+  "final-seal.json": "480bb6be0b71296dd2aaae594fd0609814f25b1fae9151a451f5e046f22de429",
+  "fleet-probe.json": "747661f48bd6bc63ff891f168206741c03dd8f97b403f766ad18053fa9c9b007",
+  "gates-01-logs.tar.gz": "63111316938a1bd52f3b2ff4c867479309bec267b74aac27dd937288f3373b36",
+  "gates-02-logs.tar.gz": "3e528f402fb6f1d897d92c17297f88d0866f38b57e139d1aae57952903b43c3d",
+  "image-source-manifest.json": "6b1f59490fc9b479d1f013d4c3a29324518a5c1f8289fb8b4265e9ae224d445e",
+  "interrupted-campaign.json": "eb7c6d418adf0d9e2713e9a5d327117155b300dd713e364270e0155403710728",
+  "old-volumes-deleted.json": "0ba96643608597b268bc2ea296ad58578bdcd4e6c396593dec274fdcf3a2c81a",
+  "release-gates.json": "a55657777ab776ef42aff61d12961f0f9ac28932729083e03d82a955d8a52f48",
+  "root-info.json": "5ecd9e747a98aa11e5a014370dcd89220eff667ae3c4857c4821f46fed73100c",
+  "scope.json": "52262560a8426bc537a81672586919210fcf2a1fa600098cb27ffea129a37d48",
+  "signed-source-after.json": "92116f7df3168c7bd874619239e5e18d9e1bf6922c3fb6755dbd14eaff3b734c",
+  "source-commit.json": "0fd282b0894c3fb1a8c80aa53251e9dbad38da3a1513c22783950002a320f152",
+  "verified-image.json": "cc8d70a6a41aaf4a28e054d36adc0cefec5acb1119e6c695f7a4a861f997c84b"
+}

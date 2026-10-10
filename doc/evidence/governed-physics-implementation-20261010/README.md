@@ -1,8 +1,9 @@
 # Governed physics: partial implementation evidence
 
-QUD.27 remains open. This folder records local implementation stages,
-not acceptance of the full feature. No server, deployment,
-live ledger, account or founding history was changed.
+QUD.27 remains open. This folder records implementation stages and the
+[authorized candidate deployment/refound](deployment-257-refound/README.md),
+not acceptance of the full physics feature. Earlier local stages made no remote
+mutation; the release explicitly reset candidate ledgers as Yan requested.
 
 The [system-registration slice](system-registration-slice.md) adds physics
 to the existing common startup base, proves separate gravity/permissions in two
@@ -166,28 +167,29 @@ server writer, queued release or pending refound. That session performed only
 read-only checks with an ephemeral signup principal; it established no personal
 lobby baseline. Its [sealed evidence](../hot-controls/deployment-256-refound/README.md)
 and reported root/system-vocabulary anchors do not identify the current personal
-world. This session has not independently refreshed that server-state report.
+world. The 0.7.257 release below freshly verified the reported job state before
+executing Yan's separately authorized refound.
 
-Still open: coordinated deployment through the existing release authority; exact source
-dependency-to-install wiring through existing subscriptions; generic admission,
-withdrawal and concurrent/recovery coverage; generic ordinary-view selection
-and control behavior; remote committed collider propagation and work measures;
-and real signed desktop acceptance in the same current personal lobby. Separate
-Vive/WebXR and durable real-door acceptance are not claimed by these fixtures.
+Still open: real committed remote collider propagation and unchanged-work
+measurements, a fresh signed personal-world identity/history baseline and real
+signed desktop collision acceptance. Separate Vive/WebXR and durable real-door
+acceptance are not claimed by local fixtures or release smoke checks.
 
 ## Automatic live colliders: October 11 local stage
 
-The preceding open-scope list records the state before the
-[live-collider implementation](live-collider-implementation-01.md). Source
-dependency-to-install wiring, atomic admission/edit/withdrawal, concurrent
-rollback/recovery coverage and the signed ordinary-view path are now implemented
-and locally verified. The final affected-owner regression passed 456 tests;
+The [live-collider implementation](live-collider-implementation-01.md) supplies
+source dependency-to-install wiring, atomic admission/edit/withdrawal, concurrent
+rollback/recovery coverage and the signed ordinary-view path. These are now
+implemented and locally verified. The final affected-owner regression passed 456 tests;
 xref and Dialyzer passed. Three Fable implementation reviews were completed;
 the last found no remaining correctness, authorization or integration blocker.
 The handoff records each failed run, correction, frozen source and limitation.
 
-This stage is uncommitted and undeployed. Full release gates and coordinated
-compatible deployment, real remote propagation/work measurements, the fresh
-signed personal-world identity/history baseline and actual desktop collision
-acceptance remain open. No signed browser session was available through MCP.
-The tracker stays open; local fixture evidence does not replace those checks.
+Implementation and version labels are committed. The
+[0.7.257 candidate release/refound](deployment-257-refound/README.md) passed all
+clean sequential release gates, then verified eight healthy nodes and signed
+source/authorization reads after the explicitly authorized wipe. Real remote
+collider propagation/work measurements, the fresh signed personal-world baseline
+and actual desktop collision acceptance remain open. No signed browser session
+was available through MCP. Local fixtures and release checks do not replace
+those acceptance obligations.

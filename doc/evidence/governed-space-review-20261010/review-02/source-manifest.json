@@ -1,0 +1,144 @@
+{
+  "started": "2026-10-10T14:35:41.283Z",
+  "head": "4ba646223870c4706f3c2ca0de4b84c76e4d2a92",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636,
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "bytes": 41248,
+      "sha256": "22761af5c34755d2b404431d5b2697e8a3d7b5ee426d8bd6b7f5f085f8659208"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "bytes": 5404,
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/proofs.md",
+      "bytes": 7371,
+      "sha256": "2f76d43e0a1e15b2d1613f4a8e8c2ac390c25426ce2ebad7b0c74d17c89c8cfd"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "bytes": 3414,
+      "sha256": "26eb5a4d819311dbcdbbd37b1ae97de4667b73cc5b94e119027225e3e186ca75"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "bytes": 42261,
+      "sha256": "6d62b0ac902d716510971751a036a8fa0f10e7c9b90556ce7d8ae13e6120d4f1"
+    },
+    {
+      "file": "doc/governed-physics-plan.md",
+      "bytes": 19985,
+      "sha256": "b5e944e5f992156425a2678073ca58b4bd45fa14e3d1f83957e6eaf5703ecf92"
+    },
+    {
+      "file": "priv/ontologies/space.pl",
+      "bytes": 6101,
+      "sha256": "e93108c9cc9f74f81127f554976354d06955f5c6a137f626fd05984b7419ff1d"
+    },
+    {
+      "file": "test/quod_space_tests.erl",
+      "bytes": 10737,
+      "sha256": "1ed7be51b7938d5ec105c240f1d5d5a4f25d17ca3c8f866dd43bdecc2090043f"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "bytes": 10101,
+      "sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "bytes": 3376,
+      "sha256": "d8e128ce67a2168dd7b6fee9d805ebce76aee78768c540549635f877928491f4"
+    },
+    {
+      "file": "priv/ontologies/quod_lobby.pl",
+      "bytes": 13040,
+      "sha256": "9be812ab020665b691bcdf9e5058f1555703a027f7c99c7deacea510cbb0bfcb"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "bytes": 35125,
+      "sha256": "56793e8074e31ab06596bbf7344eeb39fb56d82156be746c00ddaae396b7ec67"
+    },
+    {
+      "file": "priv/ontologies/fipa_request.pl",
+      "bytes": 4158,
+      "sha256": "d7a7de47079235a134eec507efeb789afdc78fc8af6d6294f93e725ca22032da"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "bytes": 14293,
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "src/quod_erlog_db_local_prove.erl",
+      "bytes": 45085,
+      "sha256": "63011937e61f2a3eab8035d99c4d20d1f018a20903b2b9bc63619c45aa55717e"
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "bytes": 339090,
+      "sha256": "d0244b78289997d3d6b71223674c3717c863f5d6bfbc032c342ab10c06fb18d7"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "bytes": 147962,
+      "sha256": "0e35abd2874adf27d59ef9d02f862da4d02bc3c7180cd6515e7e781efea22ebd"
+    },
+    {
+      "file": "src/quod_client_goal_ingress.erl",
+      "bytes": 22922,
+      "sha256": "7d0eea3a5dd9e5d4853ff24b8c92bb4bd9d5d23a47b41a4fa4961aea19b7a0a5"
+    },
+    {
+      "file": "src/quod_reg.erl",
+      "bytes": 5699,
+      "sha256": "285d1168f9f0b3f5fd47a9f5e997df322f22a0fdf147abd624c8c526f8374598"
+    },
+    {
+      "file": "test/quod_agent_hosting_tests.erl",
+      "bytes": 84320,
+      "sha256": "75fef71724a030ac31c954d4bb06507523643260eaa855503e5b0e95f2c81eee"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "bytes": 155952,
+      "sha256": "2504cf57d7c1d055344284e8d5f5f2b896c6d462da473d5e62236bed68de5a82"
+    },
+    {
+      "file": "doc/evidence/space-ontology-review-20261010/followup-disposition.md",
+      "bytes": 5677,
+      "sha256": "70fca3361e8f5d3e06574fe439e573c043d394de490f2f42c25b1af6e0c27307"
+    }
+  ],
+  "request_name": "review-request.md",
+  "request_sha256": "7219242f2adfbfa11bea470cfa3b4bab839304c355d1b87745ba25b7767588cb",
+  "runner_sha256": "f9980a90d46d7e67cf8a28fe770a5abf04054fe4740acb2fd1e4b5593e758b7a",
+  "args": [
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ]
+}

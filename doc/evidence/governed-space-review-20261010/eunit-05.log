@@ -1,0 +1,23 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 10-Oct-2026::16:47:16.416536 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[0;31mF[0m
+Failures:
+
+  1) quod_space_tests:-distinct_owner_authorization_test_/0-fun-1-/0
+[0;31m     Failure/Error: ?assertMatch({ fail , _ }, quod_prolog : prove_ro ( Ns , Goal ))
+       expected: = { fail , _ }
+            got: fail[0m
+[0;36m     %% eunit_proc.erl:537:in `eunit_proc:handle_test/2`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_5927DCE9C5D812B1
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_5927DCE9C5D812B1
+[0m
+
+Finished in 1.728 seconds
+[0;31m3 tests, 1 failures
+[0m===> Error running tests

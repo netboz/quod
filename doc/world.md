@@ -14,6 +14,10 @@ measures interactions; ontology rules decide their domain meaning and
 durable consequences. Ordinary and immersive clients consume bounded
 projections of the same world state.
 
+The [governed space contract](spaces.md) defines organizational containment and
+optional exclusive physical admission independently of ontology ownership.
+Class membership alone enables no simulation.
+
 ## Application startup
 
 The normal application entry is the TLS client's root URL. Startup first

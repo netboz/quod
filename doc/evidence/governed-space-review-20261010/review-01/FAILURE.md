@@ -1,0 +1,1 @@
+Review did not start. The sandbox denied Node's synchronous git child call with EPERM while preparing the manifest. Snapshot files were copied, but Claude was not launched. Preserve this attempt; review-02 is a separately labeled launch of the same authorized request with the required subprocess/network access.

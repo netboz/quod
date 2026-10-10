@@ -1,0 +1,21 @@
+{
+  "started": "2026-10-10T17:58:58.922252+00:00",
+  "command": [
+    "escript",
+    "doc/evidence/governed-physics-implementation-20261010/registry-snapshot-diagnostic-01.erl"
+  ],
+  "source_hashes": {
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "de7a7aea87c1603c8d7f32a1690d194fa3bdbba4fba3a22387ccb5cfdb7306e9",
+    "doc/physics-native.md": "b521717a514e4ff974e58c3927c7a68df8d1b68541fcf91306e9ed83af51a670"
+  },
+  "finished": "2026-10-10T17:58:59.751875+00:00",
+  "exit_code": 0,
+  "final_source_hashes": {
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "de7a7aea87c1603c8d7f32a1690d194fa3bdbba4fba3a22387ccb5cfdb7306e9",
+    "doc/physics-native.md": "b521717a514e4ff974e58c3927c7a68df8d1b68541fcf91306e9ed83af51a670"
+  }
+}

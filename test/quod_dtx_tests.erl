@@ -850,7 +850,7 @@ finalize_seals_local_scope_and_stores_the_plan_test() ->
               Identity,
               fun(ScopeId) ->
                   {ok, self(),
-                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}}
+                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}, 1}
               end),
         {_Id, {solution, _}} =
             first(Session, {',', {parent, tom, {'X'}},
@@ -884,7 +884,7 @@ finalize_of_a_clean_proof_seals_nothing_test() ->
               Identity,
               fun(ScopeId) ->
                   {ok, self(),
-                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}}
+                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}, 1}
               end),
         %% Reads without any staged write anywhere: no plan exists to carry.
         {_Id, {solution, _}} = first(Session, {parent, tom, {'X'}}),
@@ -909,7 +909,7 @@ finalize_fails_the_proof_on_a_refused_seal_test() ->
               Identity,
               fun(ScopeId) ->
                   {ok, self(),
-                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}}
+                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}, 1}
               end),
         {_Id, {solution, _}} = first(Session, {assertz, {t, 1}}),
         ok = quod_proof_session:absorb_read_set(
@@ -940,7 +940,7 @@ failed_material_proof_aborts_without_sealing_test() ->
               Identity,
               fun(ScopeId) ->
                   {ok, self(),
-                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}}
+                   {local_scope, ScopeId, ?NS, Anchor, 1, Session}, 1}
               end),
         {_Id, {complete, _}} =
             first(Session,

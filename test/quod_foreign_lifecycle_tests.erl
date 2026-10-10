@@ -859,6 +859,63 @@ async_follow_installs_reference_before_first_notice_test() ->
     after 5000 -> error(follow_fixture_stalled)
     end.
 
+cancelled_view_releases_late_foreign_registration_test_() ->
+    [{"late registration is released", ?_test(cancelled_view_foreign_registration(resume))},
+     {"owner death clears the pending registration", ?_test(cancelled_view_foreign_registration(stop))}].
+
+cancelled_view_foreign_registration(Completion) ->
+    with_owner(fun(_, _, _, _, _, _) -> {error, unavailable} end, fun(Owner) ->
+        Ns = <<"quod:cancelled-view">>, Anchor = <<174:256>>,
+        ok = sys:suspend(Owner),
+        Waiting = try
+            {ok, Request} = quod_foreign_log:follow_request({Ns,Anchor},progress),
+            Requests = gen_server:reqids_add(Request,{Owner,Ns,Anchor,1},gen_server:reqids_new()),
+            Timer = make_ref(),
+            State = #{peer => {127,0,0,1},timer => Timer,follow_requests => Requests},
+            {reply,{text,Expired},Cancelled} =
+                quod_client_simulation:websocket_info({timeout,Timer,expired},State),
+            ?assertEqual(<<"expired">>,maps:get(<<"reason">>,json:decode(Expired))),
+            %% A second open cannot accumulate another pending registration.
+            %% No proof is admitted until the old owner has released custody.
+            Enc = fun(B) -> base64:encode(B,#{mode => urlsafe,padding => false}) end,
+            Open = json:encode(#{type => open,session_id => Enc(<<0:256>>),
+                request => Enc(<<>>),signature => Enc(<<0:512>>),
+                world_namespace => Ns,world_anchor => Enc(Anchor)}),
+            {reply,{text,Recovering},Next} = quod_client_simulation:websocket_handle(
+                {text,iolist_to_binary(Open)},Cancelled),
+            ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,json:decode(Recovering))),
+            ?assertEqual(1,gen_server:reqids_size(maps:get(follow_requests,Next))),
+            Next
+        after
+            case Completion of
+                resume -> sys:resume(Owner);
+                stop -> unlink(Owner), exit(Owner,kill)
+            end
+        end,
+        Receive = fun Await(S) ->
+            receive Message ->
+                case quod_client_simulation:websocket_info(Message,S) of
+                    {ok,ReceivedState} -> Await(ReceivedState);
+                    Result -> Result
+                end
+            after 1000 -> error(missing_cancelled_registration) end
+        end,
+        {reply,{text,Refresh},Clean} = Receive(Waiting),
+        ?assertEqual(<<"refresh">>,maps:get(<<"type">>,json:decode(Refresh))),
+        ?assertEqual(#{peer => {127,0,0,1}},Clean),
+        %% This owner call follows the asynchronous unfollow from this same
+        %% consumer, proving that the late reference is no longer retained.
+        case Completion of
+            resume ->
+                ?assertEqual(0,maps:get(follow_consumers,quod_foreign_log:stats())),
+                receive
+                    {quod_foreign_follow,_,_,{Ns,Anchor},_} = Stale ->
+                        ?assertEqual({ok,Clean},quod_client_simulation:websocket_info(Stale,Clean))
+                after 1000 -> error(missing_retired_follow_notice) end;
+            stop -> ok
+        end
+    end).
+
 with_owner(Fetch, Fun) ->
     {ok, _} = application:ensure_all_started(crypto),
     {ok, _} = application:ensure_all_started(gproc),

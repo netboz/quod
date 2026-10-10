@@ -1,0 +1,332 @@
+diff --git a/doc/physics-native.md b/doc/physics-native.md
+index c2a0181..83ee8d1 100644
+--- a/doc/physics-native.md
++++ b/doc/physics-native.md
+@@ -61,6 +61,15 @@ surface, independent of rendered meshes, picking bounds and voxel indexing.
+ It represents sloped/non-cubic terrain without introducing a grid controller.
+ Surface geometry cannot be used as a moving solid body.
+ 
++Governed body edits share the Prolog `physics_valid_body/6` schema for body
++identity, kind, authored pose, geometry, density and coordinate allowance.
++It accepts every shape above; the supported hinge requires box solids and a
++`vector/3` baseline, with no authored frame or leaf rotation. Integer rotations,
++density, motor scalars and dimensions must fit the adapter's finite binary32 representation;
++this encoding envelope is independent of coordinate and geometry policy.
++Native installation additionally checks numeric representation, convex volume,
++triangle area, compound bounds and supported joint mechanics.
++
+ Geometry allowances count all installed parts, convex/surface vertices, and
+ surface triangles across the world, including unchanged retained bodies.
+ Unchanged geometry consumes its declared allowance without rebuilding native
+diff --git a/native/quod_physics/src/lib.rs b/native/quod_physics/src/lib.rs
+index e748922..3f0e967 100644
+--- a/native/quod_physics/src/lib.rs
++++ b/native/quod_physics/src/lib.rs
+@@ -228,6 +228,8 @@ impl World {
+                 || frame_row.2 != Kind::Fixed
+                 || leaf_row.4.box_half_x().is_none()
+                 || frame_row.4.box_half_x().is_none()
++                || leaf_row.3.1 != (0.0, 0.0, 0.0)
++                || frame_row.3.1 != (0.0, 0.0, 0.0)
+                 || *rev != leaf_row.1
+                 || *rev != frame_row.1
+                 || [baseline, restore, stiffness, damping, force, tolerance]
+diff --git a/priv/ontologies/quod_physics.pl b/priv/ontologies/quod_physics.pl
+index 578809e..28d8b98 100644
+--- a/priv/ontologies/quod_physics.pl
++++ b/priv/ontologies/quod_physics.pl
+@@ -338,9 +338,10 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
+         \+ physics_body(W, Door, _, _, _, _, _),
+         \+ physics_body(W, Frame, _, _, _, _, _),
+         physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
++        physics_valid_hinge_definition(Position, FrameBox, LeafBox),
+         physics_required_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
+-        physics_valid_body(Door, Position, LeafBox, Density, Coordinate),
+-        physics_valid_body(Frame, Position, FrameBox, Density, Coordinate),
++        physics_checked_body(Door, dynamic, Position, LeafBox, Density, Coordinate),
++        physics_checked_body(Frame, fixed, Position, FrameBox, Density, Coordinate),
+         physics_valid_motor(Angle, Motor),
+         findall(Id, physics_body(W, Id, _, _, _, _, _), Bodies),
+         length(Bodies, Count), Count + 2 =< MaxBodies,
+@@ -352,18 +353,72 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
+         assertz(physics_door_source(W, Door, Source)),
+         assertz(physics_door(W, Door, 0, idle)))).
+ 
+-physics_valid_body(Id, vector(X,Y,Z), box(Hx,Hy,Hz), Density, Coordinate) :-
++%% Shared authored-body schema. Native installation still checks numeric
++%% representation, hull volume, triangle area and supported joint mechanics.
++%% A surface is explicit fixed collision coverage, never a moving solid.
++physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
++    term_variables([Id, Kind, Pose, Shape, Density, Coordinate], []),
+     integer(Id), Id >= 0, Id < 18446744073709551616,
+-    integer(Density), Density > 0,
+-    physics_coordinate(X, Coordinate), physics_coordinate(Y, Coordinate), physics_coordinate(Z, Coordinate),
+-    physics_coordinate(Hx, Coordinate), Hx > 0,
+-    physics_coordinate(Hy, Coordinate), Hy > 0,
+-    physics_coordinate(Hz, Coordinate), Hz > 0.
+-physics_coordinate(X, Limit) :- integer(X), X >= -Limit, X =< Limit.
++    member(Kind, [fixed, dynamic, controlled]), physics_positive_scalar(Density),
++    integer(Coordinate), Coordinate > 0,
++    physics_valid_pose(Pose, Coordinate), physics_valid_shape(Kind, Shape, Coordinate).
++physics_checked_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
++    (physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) -> true
++    ; fail_with_reason(invalid_physics_body(Id))).
++physics_valid_pose(vector(X,Y,Z), Coordinate) :-
++    physics_body_vector(vector(X,Y,Z), Coordinate).
++physics_valid_pose(pose(Position, rotation(X,Y,Z)), Coordinate) :-
++    physics_body_vector(Position, Coordinate),
++    physics_milli_integer(X), physics_milli_integer(Y), physics_milli_integer(Z).
++physics_valid_shape(_, Shape, Coordinate) :- physics_valid_solid(Shape, Coordinate).
++physics_valid_shape(_, parts(Parts), Coordinate) :-
++    Parts = [_ | _], physics_valid_parts(Parts, Coordinate).
++physics_valid_shape(fixed, surface(Vertices, Triangles), Coordinate) :-
++    Vertices = [_,_,_ | _], physics_valid_vertices(Vertices, Coordinate),
++    length(Vertices, Count), Triangles = [_ | _], physics_valid_triangles(Triangles, Count).
++physics_valid_solid(box(X,Y,Z), Coordinate) :-
++    physics_dimension(X, Coordinate), physics_dimension(Y, Coordinate), physics_dimension(Z, Coordinate).
++physics_valid_solid(ball(Radius), Coordinate) :- physics_dimension(Radius, Coordinate).
++physics_valid_solid(capsule(HalfSegment, Radius), Coordinate) :-
++    physics_dimension(HalfSegment, Coordinate), physics_dimension(Radius, Coordinate).
++physics_valid_solid(convex(Vertices), Coordinate) :-
++    Vertices = [_,_,_,_ | _], physics_valid_vertices(Vertices, Coordinate).
++physics_dimension(X, Coordinate) :- physics_body_coordinate(X, Coordinate), X > 0.
++physics_valid_parts([], _).
++physics_valid_parts([part(Pose, Solid) | Rest], Coordinate) :-
++    physics_valid_pose(Pose, Coordinate), physics_valid_solid(Solid, Coordinate),
++    physics_valid_parts(Rest, Coordinate).
++physics_valid_vertices([], _).
++physics_valid_vertices([Vertex | Rest], Coordinate) :-
++    physics_body_vector(Vertex, Coordinate), physics_valid_vertices(Rest, Coordinate).
++physics_valid_triangles([], _).
++physics_valid_triangles([triangle(A,B,C) | Rest], Count) :-
++    physics_vertex_index(A, Count), physics_vertex_index(B, Count), physics_vertex_index(C, Count),
++    A \= B, B \= C, A \= C, physics_valid_triangles(Rest, Count).
++physics_vertex_index(Index, Count) :-
++    integer(Index), Index >= 0, Index < 4294967296, Index < Count.
++%% IEEE-754 binary32's largest finite value; this is an encoding envelope,
++%% not a resource allowance. Policy still supplies each coordinate limit.
++physics_native_scalar_limit(340282346638528859811704183484516925440).
++physics_positive_scalar(X) :-
++    integer(X), X > 0, physics_native_scalar_limit(Max), X =< Max.
++physics_milli_integer(X) :-
++    integer(X), physics_native_scalar_limit(Max), Limit is Max * 1000,
++    X >= -Limit, X =< Limit.
++physics_coordinate(X, Limit) :-
++    physics_milli_integer(X), X >= -Limit, X =< Limit.
++physics_body_vector(vector(X,Y,Z), Limit) :-
++    physics_body_coordinate(X, Limit), physics_body_coordinate(Y, Limit), physics_body_coordinate(Z, Limit).
++physics_body_coordinate(X, Limit) :-
++    physics_milli_integer(X),
++    (physics_coordinate(X, Limit) -> true ; fail_with_reason(coordinate_allowance(Limit))).
++physics_valid_hinge_definition(Position, Frame, Leaf) :-
++    (Position = vector(_,_,_), Frame = box(_,_,_), Leaf = box(_,_,_) -> true
++    ; fail_with_reason(unsupported_hinge_definition)).
+ physics_valid_motor(Angle, motor(Stiffness, Damping, Torque, Tolerance)) :-
+     integer(Angle), Angle > 0, Angle < 3142,
+-    integer(Stiffness), Stiffness > 0, integer(Damping), Damping > 0,
+-    integer(Torque), Torque > 0, integer(Tolerance), Tolerance > 0, Tolerance < Angle.
++    physics_positive_scalar(Stiffness), physics_positive_scalar(Damping),
++    physics_positive_scalar(Torque), integer(Tolerance), Tolerance > 0, Tolerance < Angle.
+ 
+ %% The sequence belongs to the activity, not to body or authored revisions.
+ %% A caller cannot reuse an old request by recycling its human-chosen id.
+@@ -458,7 +513,8 @@ physics_move_body(W,D,Revision,Structure,Position) :-
+         \+ physics_joint(W,hinge(D,_,_,_,_,_)),
+         \+ physics_joint(W,hinge(_,_,D,_,_,_)),
+         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+-        physics_query_vector(Position,Coordinate), physics_relocated_pose(Old,Position,Pose),
++        Position = vector(_,_,_), physics_relocated_pose(Old,Position,Pose),
++        physics_checked_body(D,Kind,Pose,Shape,Density,Coordinate),
+         Next is Structure + 1,
+         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
+         retract(physics_body(W,D,Revision,Kind,Old,Shape,Density)),
+@@ -479,7 +535,9 @@ physics_move_door(W,D,Sequence,Structure,Position) :-
+         physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density),
+         physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density),
+         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
+-        physics_valid_body(D,Position,LeafBox,Density,Coordinate), Next is Structure + 1,
++        physics_valid_hinge_definition(Position,FrameBox,LeafBox),
++        physics_checked_body(D,dynamic,Position,LeafBox,Density,Coordinate),
++        physics_checked_body(F,fixed,Position,FrameBox,Density,Coordinate), Next is Structure + 1,
+         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
+         retract(physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density)),
+         retract(physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density)),
+diff --git a/test/quod_physics_tests.erl b/test/quod_physics_tests.erl
+index 0172a62..6dadc85 100644
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -1,6 +1,124 @@
+ -module(quod_physics_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ 
++supported_geometry_signed_edit_test_() ->
++    Tetrahedron = [{vector,0,0,0},{vector,500,0,0},{vector,0,500,0},{vector,0,0,500}],
++    Shapes = [{box,fixed,{box,500,500,500}}, {ball,fixed,{ball,500}}, {capsule,fixed,{capsule,500,250}},
++        {convex,fixed,{convex,Tetrahedron}},
++        {dynamic_ball,dynamic,{ball,500}}, {controlled_capsule,controlled,{capsule,500,250}},
++        {dynamic_convex,dynamic,{convex,Tetrahedron}},
++        {parts,fixed,{parts,[{part,{pose,{vector,-750,0,0},{rotation,0,100,0}},{box,250,500,250}},
++                       {part,{vector,750,0,0},{ball,250}}]}},
++        {surface,fixed,{surface,[{vector,-500,0,-500},{vector,500,0,-500},{vector,0,0,500}],
++                           [{triangle,0,2,1}]}}],
++    [{atom_to_list(Name),{timeout,60,fun() ->
++        with_world(fun(F = #{namespace := Ns,node := Principal}) ->
++            {Pid,World} = enable(F),
++            #{World := #{spec := Spec}} = worlds(Ns), Fence = quod_physics:fence(Spec),
++            Expected = #{fence => Fence,structure => 1,tick => -1},
++            {ok,Before,_} = quod_physics:snapshot(Pid,Expected),
++            {2,1,world,_,Rotation,_} = lists:keyfind(2,1,maps:get(poses,Before)),
++            Move = {physics_move_body,room,2,1,1,{vector,4000,3000,0}},
++            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
++            commit(Ns,{assertz,{can_edit_physics,room,Principal}}),
++            ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,Move)),
++            {Pid,World} = installed(Ns),
++            {ok,After,#{installs := Installs}} = quod_physics:snapshot(Pid,Expected#{structure => 2}),
++            {2,2,world,Position,Rotation,_} = lists:keyfind(2,1,maps:get(poses,After)),
++            ?assertEqual({4.0,3.0,0.0},Position),
++            ?assertEqual({error,unavailable},quod_physics:snapshot(Pid,Expected)),
++            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
++            assert_no_physics_io(fun() ->
++                reconcile(Ns), reconcile(Ns),
++                ?assertMatch(#{installs := Installs},gen_server:call(Pid,status))
++            end)
++        end,fun(Rules) -> [case Rule of
++            {physics_body,room,2,1,_,_,_,_} ->
++                {physics_body,room,2,1,Kind,{pose,{vector,0,3000,0},{rotation,0,250,0}},Shape,1};
++            {physics_allowances,W,Limits,Step,_,Budget} ->
++                {physics_allowances,W,Limits,Step,0,Budget};
++            _ -> Rule
++        end || Rule <- Rules] end)
++    end}} || {Name,Kind,Shape} <- Shapes].
++
++invalid_geometry_signed_edit_leaves_state_unchanged_test_() ->
++    Surface = {surface,[{vector,0,0,0},{vector,500,0,0},{vector,0,0,500}],[{triangle,0,1,2}]},
++    Invalid = [{dynamic,Surface}, {controlled,Surface}, {fixed,{box,0,500,500}},
++        {fixed,{ball,1000001}}, {fixed,{capsule,0,100}}, {fixed,{parts,[]}},
++        {fixed,{parts,[{part,{vector,0,0,0},Surface}]}},
++        {fixed,{parts,[{part,{pose,{vector,0,0,0},{rotation,bad,0,0}},{ball,100}}]}},
++        {fixed,{convex,[{vector,0,0,0},{vector,500,0,0},{vector,0,0,500}]}},
++        {fixed,setelement(3,Surface,[{triangle,0,1,3}])},
++        {fixed,setelement(3,Surface,[{triangle,0,1,1}])}],
++    {timeout,60,fun() -> with_world(fun(#{namespace := Ns,node := Principal}) ->
++        commit(Ns,{assertz,{can_edit_physics,room,Principal}}),
++        lists:foreach(fun({Kind,Shape}) ->
++            Body = {physics_body,room,2,1,Kind,{vector,0,3000,0},Shape,1},
++            commit(Ns,{',',{retract,{physics_body,room,2,{'_'},{'_'},{'_'},{'_'},{'_'}}},
++                          {assertz,Body}}),
++            Height = quod_prolog:applied(Ns),
++            assert_reason({invalid_physics_body,2},door_action(Ns,
++                {physics_move_body,room,2,1,1,{vector,4000,3000,0}})),
++            ?assertEqual(Height,quod_prolog:applied(Ns)),
++            ?assertMatch({ok,[_],Height},quod_prolog:prove_ro(Ns,{',',Body,{physics_structure,room,1}})),
++            ?assertEqual(#{},worlds(Ns))
++        end,Invalid)
++    end) end}.
++
++numeric_geometry_and_hinge_refusals_test_() ->
++    {timeout,60,fun() -> with_door(fun(#{namespace := Ns}) ->
++        Huge = 1 bsl 2048,
++        Position = {vector,0,3000,0}, Shape = {box,500,500,500},
++        Bodies = [{physics_body,room,2,1,fixed,Position,Shape,Huge},
++            {physics_body,room,2,1,fixed,{pose,Position,{rotation,0,Huge,0}},Shape,1},
++            {physics_body,room,2,1,fixed,Position,
++                {parts,[{part,{vector,1000001,0,0},{ball,100}}]},1},
++            {physics_body,room,18446744073709551616,1,fixed,Position,Shape,1}],
++        lists:foreach(fun(Body) ->
++            commit(Ns,{assertz,Body}), Height = quod_prolog:applied(Ns), Id = element(3,Body),
++            assert_reason({invalid_physics_body,Id},door_action(Ns,
++                {physics_move_body,room,Id,1,2,{vector,4000,3000,0}})),
++            ?assertEqual(Height,quod_prolog:applied(Ns)), commit(Ns,{retract,Body})
++        end,Bodies),
++        Body = {physics_body,room,2,1,fixed,Position,Shape,1}, commit(Ns,{assertz,Body}),
++        BeforeRange = quod_prolog:applied(Ns),
++        assert_reason({coordinate_allowance,1000000},door_action(Ns,
++            {physics_move_body,room,2,1,2,{vector,1000001,3000,0}})),
++        ?assertEqual(BeforeRange,quod_prolog:applied(Ns)), commit(Ns,{retract,Body}),
++        Height = quod_prolog:applied(Ns),
++        assert_reason(unsupported_hinge_definition,door_action(Ns,
++            {physics_add_door,room,12,13,{local,basic_door,1},
++                {pose,Position,{rotation,0,250,0}},2})),
++        assert_reason(unsupported_hinge_definition,door_action(Ns,
++            {physics_move_door,room,10,0,2,{pose,Position,{rotation,0,250,0}}})),
++        ?assertEqual(Height,quod_prolog:applied(Ns)),
++        commit(Ns,{assertz,{physics_door_class,non_box,1,
++            {door,{box,50,1000,50},{ball,500},1,1500,{motor,100,10,1000,20}}}}),
++        AfterClass = quod_prolog:applied(Ns),
++        assert_reason(unsupported_hinge_definition,door_action(Ns,
++            {physics_add_door,room,12,13,{local,non_box,1},Position,2})),
++        ?assertEqual(AfterClass,quod_prolog:applied(Ns)),
++        ?assertEqual(#{},worlds(Ns))
++    end,false) end}.
++
++native_hinge_refuses_authored_rotation_test() ->
++    lists:foreach(fun(Rotated) ->
++        {ok,R} = quod_physics_native:new_world({2,2,4,100.0,2,0,0},1/60,0.0),
++        try
++            Frame = {1,1,fixed,{{0.0,0.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.05,1.0,0.05}},1.0},
++            Leaf = {2,1,dynamic,{{1.0,1.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0,1.0,0.1}},1.0},
++            Rows = [case Row of
++                {Rotated,Rev,Kind,{P,_},Shape,Density} ->
++                    {Rotated,Rev,Kind,{P,{0.0,0.25,0.0}},Shape,Density};
++                _ -> Row end || Row <- [Frame,Leaf]],
++            ?assertEqual({ok,2},quod_physics_native:install(R,Rows)),
++            Hinge = {2,1,1,{0.0,1.0,0.0},1.5,{100.0,10.0,1000.0,0.02}},
++            ?assertEqual({error,invalid_hinge},quod_physics_native:install_hinges(R,[{Hinge,1.5}])),
++            ?assertEqual({error,retired},quod_physics_native:hinge_samples(R)),
++            ?assertEqual({error,retired},quod_physics_native:sample(R))
++        after quod_physics_native:retire(R) end
++    end,[1,2]).
++
+ optional_retained_world_test_() ->
+     {timeout, 90, fun() ->
+         with_world(fun(#{namespace := Ns, node := Node, key := Key}) ->
+@@ -132,6 +250,13 @@ hot_control_policy_reasons_test_() ->
+         assert_reason_count({ambiguous_agent,pilot},0,body_read(Ns,
+             {physics_agent_configuration,room,Human,pilot,eye,setelement(3,Definition,99)})),
+         Go = {physics_control_input,room,Frame,1,1,{drive,{vector,0,0,0},{angular,0,0,0}},{0}},
++        [begin
++            {ok,_,{normalized,{failed,Reasons}}} = control_goal({'::',Ns,setelement(6,Go,Input)}),
++            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
++            ?assertEqual([],[R || R = {coordinate_allowance,_} <- Decoded])
++        end || Input <- [{drive,{vector,2001,0,0},{angular,0,0,0}},
++                         {drive,{vector,0,0,0},{angular,0,1601,0}},
++                         {push,{body,3,1},{vector,5001,0,0}}]],
+         Checkpoint = {physics_checkpoint_body,room,3,1,0,<<209:256>>},
+         assert_reason({control_conflict,1},door_action(Ns,{physics_control_agent,room,0,none,none})),
+         Other = {agent_instance_ref,<<"other">>,<<99:256>>,someone},
+@@ -210,6 +335,10 @@ hot_control_policy_reasons_test_() ->
+             {assertz,setelement(4,QueryPolicy,{query_allowances,2,0,8,128,2000,1000})}}),
+         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,
+             setelement(4,Query,{travel,{vector,1000,0,0},{angular,0,0,0}}))),
++        {ok,_,{normalized,{failed,QueryReasons}}} = body_read(Ns,
++            setelement(4,Query,{travel,{vector,2001,0,0},{angular,0,0,0}})),
++        {ok,DecodedQueryReasons} = quod_wire_term:decode_failure_reasons(QueryReasons),
++        ?assertEqual([],[R || R = {coordinate_allowance,_} <- DecodedQueryReasons]),
+         Allowances = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+         commit(Ns,{retract,Allowances}),
+         commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{physics_view,room,[]}}}),
+@@ -924,7 +1053,8 @@ assert_no_physics_io(Fun) ->
+     Watched = [{quod_physics_native,new_world,3}, {quod_ledger_store,fold,5},
+                {quod_ledger_store,fold_groups,3}, {quod_ledger_store,open,3},
+                {quod_file,write_atomic,3}, {dets,insert,2}, {dets,sync,1}, {file,write,2}, {file,sync,1}, {file,datasync,1}],
+-    [trace:function(Trace, MFA, true, [local]) || MFA <- Watched],
++    Match = [{'_',[],[{message,{caller}}]}],
++    [trace:function(Trace, MFA, Match, [local]) || MFA <- Watched],
+     trace:process(Trace, all, true, [call]),
+     try
+         Fun(),
+@@ -996,7 +1126,13 @@ enable(#{namespace := Ns, node := Node, key := Key}) ->
+     installed(Ns).
+ trace_calls(Acc) ->
+     receive
+-        {trace, _, call, Call} -> trace_calls([Call | Acc]);
++        {trace, Pid, call, {M,F,Args}, Caller} ->
++            Keys = case catch gproc:info(Pid,gproc) of
++                {gproc,Entries} -> [Key || {Key,_} <- Entries];
++                _ -> []
++            end,
++            trace_calls([#{pid => Pid,call => {M,F,length(Args)},
++                           caller => Caller,registered_keys => Keys} | Acc]);
+         {finish,From,Ref} -> From ! {trace_calls,Ref,lists:reverse(Acc)}
+     end.
+ 

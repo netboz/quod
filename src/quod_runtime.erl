@@ -434,9 +434,9 @@ handle_cast(_Msg, S) -> {noreply, S}.
 
 %% A ready edge: the KB finished a rebuild (Id = RecoveryId, or `boot` for the quiet first
 %% ready transition). Reconcile exactly once per edge; a `boot` edge counts only while booting.
-handle_info({replay_ready, boot, _H}, S = #s{mode = booting}) ->
+handle_info({replay_ready, {_, boot}, _H}, S = #s{mode = booting}) ->
     {noreply, replace_snapshot_and_reconcile(boot, S)};
-handle_info({replay_ready, boot, _H}, S) ->
+handle_info({replay_ready, {_, boot}, _H}, S) ->
     {noreply, S};
 handle_info({replay_ready, Id, _H}, S = #s{last_recovery = Id}) ->
     {noreply, S};

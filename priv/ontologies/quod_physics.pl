@@ -2,22 +2,23 @@
 %% Space policy supplies every allowance and hosting/signing grant.
 %% Distances are millimetres, time microseconds, density kg/m3.
 
-agent_hosting_suspended(I) :- physics_space(_, disabled, I).
+agent_hosting_suspended(I) :- physics_space(W, _, I), \+ physics_enabled(W, I).
+
+%% Classification, enablement and configuration have one shared eligibility
+%% rule. Class membership by itself allocates nothing and grants no access.
+physics_enabled(W, I) :-
+    physics_space(W, enabled, I),
+    space_instance(W, physical_space),
+    findall(space(Mode, Actor), physics_space(W, Mode, Actor), [space(enabled, I)]),
+    physics_required_allowances(W, _, _, _, _).
 
 %% A domain supplies one local view and its ordinary principal policy. Marks
 %% name occurrences; only body_pose/2 names their physical source. Live samples
 %% never validate a durable transaction.
 can_view_physics(_, _) :- fail.
-physics_view(_, _) :- fail.
 can_read_physics_body(_, _, _) :- fail.
 can_query_physics_motion(_, _, _, _) :- fail.
 physics_query_allowances(_, _, _) :- fail.
-
-%% A signer's ontology may instead author an exact foreign reference here.
-%% This is view selection, not permission to control anything in that world.
-physics_client_world(ontology_ref(Ns, Anchor)) :-
-    current_principal(P), physics_space(W, enabled, _), can_view_physics(W, P),
-    current_ontology_identity(Ns, Anchor).
 
 %% The live bridge enters this policy in an immutable read-only proof. The
 %% returned frame names committed authority; only its installed owner can
@@ -40,12 +41,17 @@ physics_motion_read_projection(W, Body, Query, Frame, Revision,
     physics_body_projection(W, Body, Frame, Revision).
 
 physics_required_allowances(W, Limits, Step, Gravity, Budget) :-
-    physics_required_configuration(allowances(L,S,G,B), physics_allowances(W,L,S,G,B),
-        allowances(Limits,Step,Gravity,Budget), allowances_missing(W)).
+    physics_configuration_rows(allowances(L,S,G,B), physics_allowances(W,L,S,G,B),
+        allowances_missing(W), Rows),
+    (Rows = [allowances(Limits,Step,Gravity,Budget)] -> true
+    ; fail_with_reason(ambiguous_physics_configuration)).
 
 physics_required_configuration(Template, Goal, Requested, Missing) :-
+    physics_configuration_rows(Template, Goal, Missing, Rows), member(Requested, Rows).
+
+physics_configuration_rows(Template, Goal, Missing, Rows) :-
     findall(Template, Goal, Rows),
-    (Rows = [] -> fail_with_reason(Missing) ; member(Requested, Rows)).
+    (Rows = [] -> fail_with_reason(Missing) ; true).
 
 physics_query_input(place(pose(Position, rotation(X,Y,Z))), Coordinate, _, Turn) :-
     physics_query_vector(Position, Coordinate), physics_query_vector(vector(X,Y,Z), Turn).
@@ -63,7 +69,7 @@ physics_query_vector(vector(X,Y,Z), Limit) :-
 physics_body_projection(W, Body,
         physics_frame(world_ref(Ns, Anchor, W), agent_instance_ref(Ns, Anchor, I),
                       Epoch, Generation, Token, Structure), Revision) :-
-    current_ontology_identity(Ns, Anchor), physics_space(W, enabled, I),
+    current_ontology_identity(Ns, Anchor), physics_enabled(W, I),
     agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token), Generation > 0,
     physics_structure(W, Structure), physics_body(W, Body, Revision, _, _, _, _).
 
@@ -218,32 +224,54 @@ physics_allowed_input(snap(Angle), _, _, _, Capabilities) :-
 %% Like locomotion, it changes live pose; it does not rewrite a durable baseline.
 physics_allowed_input(reposition(_), _, _, _, Capabilities) :- member(reposition, Capabilities).
 
-physics_client_view(simulation_view(world_ref(Ns, Anchor, W),
-        agent_instance_ref(Ns, Anchor, I), Epoch, Generation, Token, Structure, Marks, Control)) :-
-    current_principal(P), physics_space(W, enabled, I), can_view_physics(W, P),
-    physics_view(W, Marks), current_ontology_identity(Ns, Anchor),
-    agent_hosted(I, _, Epoch, _), physics_run(W, Generation, Token),
-    Generation > 0, physics_structure(W, Structure),
-    physics_required_allowances(W, limits(_, MaxPoses, _, _, _), _, _, _),
-    length(Marks, Count), Count =< MaxPoses,
-    physics_view_bodies(Marks, W, Ns, Anchor, []),
-    physics_control_state(W, P, Binding, Selection),
-    (Selection = none -> Control = none
-    ; physics_control_configuration(W, P, Binding, Configuration),
-      Control = control(P, Binding, Configuration)).
+physics_client_view(W, Marks, Selection) :-
+    current_principal(P),
+    physics_control_state(W, P, Binding, BindingSelection),
+    physics_view_selection(W, P, Binding, BindingSelection, Marks, Selection).
 
-physics_view_bodies([], _, _, _, _).
-physics_view_bodies([mark(Id, _, _, body_pose(B, R), _, _, depicts(Ns, Anchor, Entity)) | Rest],
-                    W, Ns, Anchor, Seen) :-
-    binary_codes(Id, [_ | _]), term_variables(Entity, []), \+ member(Id, Seen),
-    physics_body(W, B, R, _, _, _, _),
-    physics_view_bodies(Rest, W, Ns, Anchor, [Id | Seen]).
+physics_view_selection(W, P, Binding, BindingSelection, Marks, Selection) :-
+    (can_view_physics(W, P) ->
+        (findall(space(M, A), physics_space(W, M, A), [space(Mode, I)]) ->
+            (Mode = disabled -> Selection = disabled
+            ; BindingSelection = controlled(Agent, _),
+              \+ can_control_physics_agent(W, P, Agent) -> Selection = denied
+            ; Mode = enabled, physics_enabled(W, I), physics_view_bodies(Marks, W),
+              physics_selected_control(W, P, Binding, BindingSelection, Control) ->
+                physics_active_selection(W, I, Control, Selection)
+            ; Selection = unavailable)
+        ; Selection = unavailable)
+    ; Selection = denied).
+
+physics_selected_control(_, _, _, none, none).
+physics_selected_control(W, P, Binding, controlled(_, _), control(P, Binding, Configuration)) :-
+    physics_control_configuration(W, P, Binding, Configuration).
+
+physics_active_selection(W, I, Control, Selection) :-
+    current_ontology_identity(Ns, Anchor),
+    findall(S, physics_structure(W, S), [Structure]),
+    findall(run(G, T), physics_run(W, G, T), Runs),
+    findall(E, agent_hosted(I, _, E, _), Hosts),
+    (Runs = [run(Generation, Token)], Hosts = [Epoch], Generation > 0 ->
+        Selection = simulation_view(world_ref(Ns, Anchor, W),
+            agent_instance_ref(Ns, Anchor, I), Epoch, Generation, Token, Structure, Control)
+    ; (Runs = []; Runs = [run(0, none)]; Hosts = []) -> Selection = recovering
+    ; Selection = unavailable).
+
+physics_view_bodies([], _).
+physics_view_bodies([mark(_, _, _, Pose, _, _, Depicts) | Rest], W) :-
+    physics_view_body(Pose, Depicts, W), physics_view_bodies(Rest, W).
+
+%% Decorative occurrences keep their authored frames. Only an explicit body
+%% source receives native poses; its subject may live in another ontology.
+physics_view_body(relative(_, Pose), Depicts, W) :- physics_view_body(Pose, Depicts, W).
+physics_view_body(transform(_, _, _, _, _, _), _, _).
+physics_view_body(body_pose(B, R), depicts(_, _, _), W) :- physics_body(W, B, R, _, _, _, _).
 
 physics_projection(Node, Rows) :-
     findall(world(W, I, Epoch, Key, Generation, RunToken, Custody, Structure,
                   Limits, StepUs, Gravity, Bodies, Budget,
                   baseline(Checkpoints, Joints, Activities, control_selection(Bindings, Controls))),
-      (physics_space(W, enabled, I), agent_hosted(I, Node, Epoch, Key),
+      (physics_enabled(W, I), agent_hosted(I, Node, Epoch, Key),
        physics_run(W, Generation, RunToken), physics_structure(W, Structure),
        physics_required_allowances(W, Limits, StepUs, Gravity, Budget),
        physics_custody(W, Custody),
@@ -271,7 +299,7 @@ physics_custody(W, Custody) :-
     (Requests = [] -> Custody = none ; Requests = [Custody]).
 
 physics_actor(W) :-
-    physics_space(W, enabled, I), current_ontology_identity(Ns, Anchor),
+    physics_enabled(W, I), current_ontology_identity(Ns, Anchor),
     current_principal(agent_instance_ref(Ns, Anchor, I)),
     agent_hosted(I, _, _, _).
 
@@ -338,9 +366,10 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
         \+ physics_body(W, Door, _, _, _, _, _),
         \+ physics_body(W, Frame, _, _, _, _, _),
         physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
+        physics_valid_hinge_definition(Position, FrameBox, LeafBox),
         physics_required_allowances(W, limits(MaxBodies, _, _, Coordinate, _), _, _, _),
-        physics_valid_body(Door, Position, LeafBox, Density, Coordinate),
-        physics_valid_body(Frame, Position, FrameBox, Density, Coordinate),
+        physics_checked_body(Door, dynamic, Position, LeafBox, Density, Coordinate),
+        physics_checked_body(Frame, fixed, Position, FrameBox, Density, Coordinate),
         physics_valid_motor(Angle, Motor),
         findall(Id, physics_body(W, Id, _, _, _, _, _), Bodies),
         length(Bodies, Count), Count + 2 =< MaxBodies,
@@ -352,18 +381,72 @@ physics_add_door(W, Door, Frame, Source, Position, Structure) :-
         assertz(physics_door_source(W, Door, Source)),
         assertz(physics_door(W, Door, 0, idle)))).
 
-physics_valid_body(Id, vector(X,Y,Z), box(Hx,Hy,Hz), Density, Coordinate) :-
+%% Shared authored-body schema. Native installation still checks numeric
+%% representation, hull volume, triangle area and supported joint mechanics.
+%% A surface is explicit fixed collision coverage, never a moving solid.
+physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
+    term_variables([Id, Kind, Pose, Shape, Density, Coordinate], []),
     integer(Id), Id >= 0, Id < 18446744073709551616,
-    integer(Density), Density > 0,
-    physics_coordinate(X, Coordinate), physics_coordinate(Y, Coordinate), physics_coordinate(Z, Coordinate),
-    physics_coordinate(Hx, Coordinate), Hx > 0,
-    physics_coordinate(Hy, Coordinate), Hy > 0,
-    physics_coordinate(Hz, Coordinate), Hz > 0.
-physics_coordinate(X, Limit) :- integer(X), X >= -Limit, X =< Limit.
+    member(Kind, [fixed, dynamic, controlled]), physics_positive_scalar(Density),
+    integer(Coordinate), Coordinate > 0,
+    physics_valid_pose(Pose, Coordinate), physics_valid_shape(Kind, Shape, Coordinate).
+physics_checked_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
+    (physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) -> true
+    ; fail_with_reason(invalid_physics_body(Id))).
+physics_valid_pose(vector(X,Y,Z), Coordinate) :-
+    physics_body_vector(vector(X,Y,Z), Coordinate).
+physics_valid_pose(pose(Position, rotation(X,Y,Z)), Coordinate) :-
+    physics_body_vector(Position, Coordinate),
+    physics_milli_integer(X), physics_milli_integer(Y), physics_milli_integer(Z).
+physics_valid_shape(_, Shape, Coordinate) :- physics_valid_solid(Shape, Coordinate).
+physics_valid_shape(_, parts(Parts), Coordinate) :-
+    Parts = [_ | _], physics_valid_parts(Parts, Coordinate).
+physics_valid_shape(fixed, surface(Vertices, Triangles), Coordinate) :-
+    Vertices = [_,_,_ | _], physics_valid_vertices(Vertices, Coordinate),
+    length(Vertices, Count), Triangles = [_ | _], physics_valid_triangles(Triangles, Count).
+physics_valid_solid(box(X,Y,Z), Coordinate) :-
+    physics_dimension(X, Coordinate), physics_dimension(Y, Coordinate), physics_dimension(Z, Coordinate).
+physics_valid_solid(ball(Radius), Coordinate) :- physics_dimension(Radius, Coordinate).
+physics_valid_solid(capsule(HalfSegment, Radius), Coordinate) :-
+    physics_dimension(HalfSegment, Coordinate), physics_dimension(Radius, Coordinate).
+physics_valid_solid(convex(Vertices), Coordinate) :-
+    Vertices = [_,_,_,_ | _], physics_valid_vertices(Vertices, Coordinate).
+physics_dimension(X, Coordinate) :- physics_body_coordinate(X, Coordinate), X > 0.
+physics_valid_parts([], _).
+physics_valid_parts([part(Pose, Solid) | Rest], Coordinate) :-
+    physics_valid_pose(Pose, Coordinate), physics_valid_solid(Solid, Coordinate),
+    physics_valid_parts(Rest, Coordinate).
+physics_valid_vertices([], _).
+physics_valid_vertices([Vertex | Rest], Coordinate) :-
+    physics_body_vector(Vertex, Coordinate), physics_valid_vertices(Rest, Coordinate).
+physics_valid_triangles([], _).
+physics_valid_triangles([triangle(A,B,C) | Rest], Count) :-
+    physics_vertex_index(A, Count), physics_vertex_index(B, Count), physics_vertex_index(C, Count),
+    A \= B, B \= C, A \= C, physics_valid_triangles(Rest, Count).
+physics_vertex_index(Index, Count) :-
+    integer(Index), Index >= 0, Index < 4294967296, Index < Count.
+%% IEEE-754 binary32's largest finite value; this is an encoding envelope,
+%% not a resource allowance. Policy still supplies each coordinate limit.
+physics_native_scalar_limit(340282346638528859811704183484516925440).
+physics_positive_scalar(X) :-
+    integer(X), X > 0, physics_native_scalar_limit(Max), X =< Max.
+physics_milli_integer(X) :-
+    integer(X), physics_native_scalar_limit(Max), Limit is Max * 1000,
+    X >= -Limit, X =< Limit.
+physics_coordinate(X, Limit) :-
+    physics_milli_integer(X), X >= -Limit, X =< Limit.
+physics_body_vector(vector(X,Y,Z), Limit) :-
+    physics_body_coordinate(X, Limit), physics_body_coordinate(Y, Limit), physics_body_coordinate(Z, Limit).
+physics_body_coordinate(X, Limit) :-
+    physics_milli_integer(X),
+    (physics_coordinate(X, Limit) -> true ; fail_with_reason(coordinate_allowance(Limit))).
+physics_valid_hinge_definition(Position, Frame, Leaf) :-
+    (Position = vector(_,_,_), Frame = box(_,_,_), Leaf = box(_,_,_) -> true
+    ; fail_with_reason(unsupported_hinge_definition)).
 physics_valid_motor(Angle, motor(Stiffness, Damping, Torque, Tolerance)) :-
     integer(Angle), Angle > 0, Angle < 3142,
-    integer(Stiffness), Stiffness > 0, integer(Damping), Damping > 0,
-    integer(Torque), Torque > 0, integer(Tolerance), Tolerance > 0, Tolerance < Angle.
+    physics_positive_scalar(Stiffness), physics_positive_scalar(Damping),
+    physics_positive_scalar(Torque), integer(Tolerance), Tolerance > 0, Tolerance < Angle.
 
 %% The sequence belongs to the activity, not to body or authored revisions.
 %% A caller cannot reuse an old request by recycling its human-chosen id.
@@ -371,7 +454,7 @@ physics_close_door(W, D, Sequence, Id) :-
     term_variables([W,D,Sequence,Id], []), agent_identifier(Id),
     transaction((current_principal(P), can_close_physics_door(W,D,P),
         physics_door(W,D,Sequence,Before), Before \= closing(_),
-        physics_space(W,enabled,_), physics_joint(W,hinge(D,_,_,_,_,_)),
+        physics_enabled(W,_), physics_joint(W,hinge(D,_,_,_,_,_)),
         retract(physics_door(W,D,Sequence,Before)), Next is Sequence + 1,
         assertz(physics_door(W,D,Next,closing(close(Next,Id)))),
         physics_remove_door_request(W,D))).
@@ -426,7 +509,7 @@ physics_finish_door(Sample,Result) :-
 physics_door_measurement(
     door_sample(W,D,R,Authority,Epoch,Generation,Token,Structure,Revision,FrameRevision,
                 Tick,Angle,Contact,validity(At,Expiry)), Result) :-
-    physics_space(W,enabled,I), current_ontology_identity(Ns,Anchor),
+    physics_enabled(W,I), current_ontology_identity(Ns,Anchor),
     Authority = agent_instance_ref(Ns,Anchor,I), agent_hosted(I,_,Epoch,_),
     physics_run(W,Generation,Token), physics_structure(W,Structure),
     physics_door(W,D,_,closing(R)), physics_body(W,D,Revision,dynamic,_,_,_),
@@ -458,7 +541,8 @@ physics_move_body(W,D,Revision,Structure,Position) :-
         \+ physics_joint(W,hinge(D,_,_,_,_,_)),
         \+ physics_joint(W,hinge(_,_,D,_,_,_)),
         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
-        physics_query_vector(Position,Coordinate), physics_relocated_pose(Old,Position,Pose),
+        Position = vector(_,_,_), physics_relocated_pose(Old,Position,Pose),
+        physics_checked_body(D,Kind,Pose,Shape,Density,Coordinate),
         Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
         retract(physics_body(W,D,Revision,Kind,Old,Shape,Density)),
@@ -479,7 +563,9 @@ physics_move_door(W,D,Sequence,Structure,Position) :-
         physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density),
         physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density),
         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
-        physics_valid_body(D,Position,LeafBox,Density,Coordinate), Next is Structure + 1,
+        physics_valid_hinge_definition(Position,FrameBox,LeafBox),
+        physics_checked_body(D,dynamic,Position,LeafBox,Density,Coordinate),
+        physics_checked_body(F,fixed,Position,FrameBox,Density,Coordinate), Next is Structure + 1,
         retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
         retract(physics_body(W,D,Revision,dynamic,LeafPosition,LeafBox,Density)),
         retract(physics_body(W,F,Revision,fixed,FramePosition,FrameBox,Density)),
@@ -508,7 +594,7 @@ physics_rest_policy(_, _, _) :- fail.
 
 physics_checkpoint_body(W,D,Revision,Sequence,Id) :-
     term_variables([W,D,Revision,Sequence,Id], []), agent_identifier(Id),
-    transaction((current_principal(P), can_checkpoint_physics_body(W,D,P), physics_space(W,enabled,_),
+    transaction((current_principal(P), can_checkpoint_physics_body(W,D,P), physics_enabled(W,_),
         (physics_free_body(W,D,Revision) -> true ; fail_with_reason(body_not_free(D))),
         (physics_rest_policy(W,D,_) -> true ; fail_with_reason(rest_policy_missing(D))),
         physics_rest_state(W,D,Current,Before),
@@ -569,7 +655,7 @@ physics_finish_rest(Sample) :-
 
 physics_rest_measurement(rest_sample(W,D,R,Authority,Epoch,G,Token,Structure,Revision,Tick,Pose,
                                      validity(At,Expiry))) :-
-    physics_space(W,enabled,I), current_ontology_identity(Ns,Anchor),
+    physics_enabled(W,I), current_ontology_identity(Ns,Anchor),
     Authority = agent_instance_ref(Ns,Anchor,I), agent_hosted(I,_,Epoch,_),
     physics_run(W,G,Token), physics_structure(W,Structure),
     physics_free_body(W,D,Revision), physics_rest(W,D,_,waiting(R)),

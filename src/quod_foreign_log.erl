@@ -958,17 +958,13 @@ projection_clauses(FollowRef, Functors, TimeoutMs)
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
             Handle = try gen_server:call(
-                           Pid, {projection_handle, FollowRef, self()}, min(1000, TimeoutMs))
+                           Pid, {projection_handle, FollowRef}, min(1000, TimeoutMs))
                      catch exit:_ -> {error, unavailable}
                      end,
             case Handle of
                 {ok, ProjectionPid, Generation} ->
-                    case Deadline - quod_time:mono_ms() of
-                        Remaining when Remaining > 0 ->
-                            quod_foreign_projection:clauses(
-                              ProjectionPid, Generation, Functors, Remaining);
-                        _ -> {error, unavailable}
-                    end;
+                    quod_foreign_projection:read(ProjectionPid, Generation, Deadline,
+                        fun(Snapshot) -> quod_foreign_projection:clauses(Functors, Snapshot) end);
                 {error, _} = Error -> Error
             end;
         undefined -> {error, unavailable}
@@ -1141,7 +1137,7 @@ handle_call({follow, Identity, Interest}, From, S0) ->
 handle_call({unfollow, FollowRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
-handle_call({projection_handle, FollowRef, ConsumerPid}, _From, S) ->
+handle_call({projection_handle, FollowRef}, {ConsumerPid, _}, S) ->
     {reply, follow_materializer(FollowRef, ConsumerPid, S), S};
 handle_call({verification, Deadline, TraceCtx, EnqueuedNative, Request}, From, S0) ->
     observe_foreign_stage(owner_mailbox, ok, EnqueuedNative),

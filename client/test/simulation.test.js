@@ -2,7 +2,10 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
-import { simulationProjection, advanceSimulation, connectSimulation, readSimulationWorld } from '../src/simulation.js'
+import { Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector.js'
+import { worldProjection, advanceSimulation, connectWorldView } from '../src/simulation.js'
+import { readPersonalLobby, viewDependencies } from '../src/world.js'
+import { atom, renderTerm } from '../src/prolog-term.js'
 import { driveInput, snapInput, pushInput } from '../src/locomotion.js'
 import { paintMarks, paintBodyPoses } from '../src/scene.js'
 
@@ -15,8 +18,82 @@ const sample = (changes = {}) => ({ schema: 1, units: 'metres_seconds', space: '
   world: 'room', authority: 'actor', epoch: '1', generation: '1', incarnation: 'token',
   structure: '2', tick: '1', poses: [{ body: '10', revision: '2', position: [0, 1, 0], rotation: [0, 0, 0, 1] }], ...changes })
 const projection = (frame = sample(), marks = `[${mark()}]`, view = 'read1') =>
-  simulationProjection({ type: 'projection', expires_ms: String(Date.now() + 30000), frame, marks, view, height: '4' })
+  worldProjection({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), frame, marks, view, height: '4' })
 const motion = (frame, view = 'read1') => ({ type: 'simulation_frame', frame, view })
+
+test('ordinary selections are explicit and cannot accept native frames or expired authorization', () => {
+  const message = { type: 'projection', view: 'ordinary', height: '18446744073709551615',
+    expires_ms: String(Date.now() + 30000), marks: '[]' }
+  for (const selection of ['nonphysical', 'disabled', 'denied', 'recovering', 'unavailable']) {
+    const current = worldProjection({ ...message, selection })
+    assert.equal(current.selection, selection)
+    assert.equal(current.control, null)
+    assert.equal(advanceSimulation(current, motion(sample(), 'ordinary')), current)
+    assert.throws(() => worldProjection({ ...message, selection, frame: sample() }), /selection/)
+  }
+  assert.throws(() => worldProjection(message), /selection/)
+  assert.throws(() => worldProjection({ ...message, selection: 'nonphysical', expires_ms: '1' }), /expired/)
+})
+
+test('navigation fences preserve uint64 heights and exact sorted source identities', () => {
+  const row = { ns: 'policy', genesis_anchor: Buffer.alloc(32).toString('base64url'), height: '9007199254740993' }
+  assert.ok(renderTerm(viewDependencies([row])).includes('9007199254740993'))
+  assert.throws(() => viewDependencies(undefined), /missing/)
+  for (const rows of [[row, row], [{ ...row, height: 9007199254740992 }],
+    [{ ...row, height: '18446744073709551616' }], [{ ...row, genesis_anchor: 'AA' }]]) {
+    assert.throws(() => viewDependencies(rows), /dependency/)
+  }
+  // Erlang orders UTF-8 namespace bytes, which differs from UTF-16 ordering.
+  assert.doesNotThrow(() => viewDependencies([{ ...row, ns: '\uE000' }, { ...row, ns: '\u{10000}' }]))
+})
+
+test('mixed scenes retain parents, decoration and exact subjects under one body pose writer', () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  scene.useRightHandedSystem = true
+  const parent = 'mark(<<"frame">>,<<"group">>,[],transform(5000,2000,3000,0,90,0),no_surface,unlabelled,depicts_nothing)'
+  const body = mark().replace('body_pose(10,2)', 'relative(<<"frame">>,body_pose(10,2))')
+  const ornament = mark('10', '2', '#123456', 'ornament')
+    .replace('body_pose(10,2)', 'relative(<<"door">>,transform(1000,0,0,0,0,45))')
+    .replace(`depicts(<<"room">>,<<"${anchor}">>,door(10))`, 'depicts_nothing')
+  const current = projection(sample({ poses: [{ body: '10', revision: '2', position: [2, 1, 3],
+    rotation: [0, Math.SQRT1_2, 0, Math.SQRT1_2] }] }), `[${parent},${body},${ornament}]`)
+  const close = (a, b) => assert.ok(Vector3.Distance(a, Vector3.FromArray(b)) < 1e-5, `${a.asArray()} != ${b}`)
+  try {
+    let painted = paintMarks(scene, current.marks)
+    const frame = painted.get('frame').node, door = painted.get('door').node, decor = painted.get('ornament').node
+    const material = decor.material
+    assert.equal(door.parent, frame)
+    assert.equal(decor.parent, door)
+    assert.equal(decor.isEnabled(), false, 'an uninstalled body hides its attached decoration')
+    paintBodyPoses(painted, current.poses)
+    door.computeWorldMatrix(true); decor.computeWorldMatrix(true)
+    close(door.getAbsolutePosition(), [2, 1, 3])
+    close(decor.getAbsolutePosition(), [2, 1, 2])
+    const rotation = new Quaternion()
+    door.getWorldMatrix().decompose(undefined, rotation)
+    assert.ok(Math.abs(Quaternion.Dot(rotation, new Quaternion(...current.poses.get('10:2').rotation))) > 0.99999)
+    close(frame.position, [5, 2, 3])
+    close(decor.position, [1, 0, 0])
+    assert.equal(door.metadata.depicts.ontology, 'room')
+    assert.deepEqual(door.metadata.depicts.anchor, new TextEncoder().encode(anchor))
+    assert.equal(decor.metadata.depicts, null)
+    const refreshed = projection(sample({ poses: [...current.poses.values()] }),
+      `[${parent.replace('5000,2000,3000,0,90,0', '-4000,1000,2000,30,0,60')},${body},${ornament}]`)
+    painted = paintMarks(scene, refreshed.marks, painted)
+    paintBodyPoses(painted, refreshed.poses)
+    door.computeWorldMatrix(true); decor.computeWorldMatrix(true)
+    close(door.getAbsolutePosition(), [2, 1, 3])
+    close(decor.getAbsolutePosition(), [2, 1, 2])
+    assert.equal(painted.get('door').node, door)
+    assert.equal(decor.material, material)
+    paintBodyPoses(painted, new Map())
+    assert.equal(frame.isEnabled(), true)
+    assert.equal(door.isEnabled(), false)
+    assert.equal(decor.isEnabled(), false)
+    assert.throws(() => projection(sample(), `[${body},${parent}]`), /parent/)
+    assert.throws(() => projection(sample(), `[${parent},${body.replace('body_pose(10,2)', 'body_pose(10,3)')}]`), /projection/)
+  } finally { scene.dispose(); engine.dispose() }
+})
 
 test('dropped ticks are latest-wins; late, duplicate, foreign and old-incarnation frames cannot move the view', () => {
   const first = projection()
@@ -30,6 +107,37 @@ test('dropped ticks are latest-wins; late, duplicate, foreign and old-incarnatio
     assert.equal(advanceSimulation(moved, motion(sample(change))), moved)
   }
   assert.equal(advanceSimulation(moved, motion(sample({ tick: '200' }), 'old-read')), moved)
+})
+
+test('independent bodies retain their world poses through moving and replaced parents', () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  scene.useRightHandedSystem = true
+  const parent = mark('10', '2', '#FFFFFF', 'parent')
+  const child = mark('11', '1', '#FFFFFF', 'child')
+    .replace('body_pose(11,1)', 'relative(<<"parent">>,body_pose(11,1))')
+  const poses = [sample().poses[0], { body: '11', revision: '1', position: [4, 2, 3], rotation: [0, 0, 0, 1] }]
+  let painted
+  try {
+    const first = projection(sample({ poses }), `[${parent},${child}]`)
+    painted = paintMarks(scene, first.marks)
+    const node = painted.get('child').node
+    paintBodyPoses(painted, first.poses)
+    const moved = advanceSimulation(first, motion(sample({ tick: '2', poses: [
+      { ...poses[0], position: [8, 7, 6], rotation: [0, Math.SQRT1_2, 0, Math.SQRT1_2] }, poses[1],
+    ] })))
+    paintBodyPoses(painted, moved.poses)
+    node.computeWorldMatrix(true)
+    assert.ok(Vector3.Distance(node.getAbsolutePosition(), new Vector3(4, 2, 3)) < 1e-5)
+    const replacement = parent.replace('<<"parent">>', '<<"replacement">>')
+    const next = projection(sample({ poses: [...moved.poses.values()] }),
+      `[${replacement},${child.replace('relative(<<"parent">>', 'relative(<<"replacement">>')}]`)
+    painted = paintMarks(scene, next.marks, painted)
+    paintBodyPoses(painted, next.poses)
+    assert.equal(painted.get('child').node, node)
+    assert.equal(node.parent, painted.get('replacement').node)
+    node.computeWorldMatrix(true)
+    assert.ok(Vector3.Distance(node.getAbsolutePosition(), new Vector3(4, 2, 3)) < 1e-5)
+  } finally { scene.dispose(); engine.dispose() }
 })
 
 test('appearance refresh retains the live transform; deletion/recreation reusing a mark cannot inherit the old pose', () => {
@@ -102,17 +210,18 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
     receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
     close() { this.onclose?.() }
   }
-  const connect = () => connectSimulation(identity, agent, {
+  const connect = () => connectWorldView(identity, agent, {
     projection: current => projections.push(current), frame: current => frames.push(current),
     unavailable: reason => statuses.push(reason),
     refreshing: () => refreshes.push(true),
-  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation' })
+  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation',
+    world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [] })
   const viewId = async request => Buffer.from(await crypto.subtle.digest('SHA-256',
     Buffer.from(request.request, 'base64url'))).toString('base64url')
   let stream = connect()
   socket.onopen()
   const open = await socket.next(), first = await viewId(open)
-  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
+  socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
   assert.deepEqual(await socket.next(), { type: 'ack', view: first, tick: '1' })
   socket.receive({ type: 'refresh', reason: 'durable_gap' })
   assert.equal(refreshes.length, 1)
@@ -121,7 +230,7 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   assert.notEqual(open.request, refresh.request)
   socket.receive(motion(sample({ tick: '900' }), first))
   assert.equal(frames.length, 0)
-  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample({ tick: '5' }) })
+  socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample({ tick: '5' }) })
   assert.equal((await socket.next()).view, second)
   socket.receive(motion(sample({ tick: '12' }), second))
   assert.equal((await socket.next()).tick, '12')
@@ -131,9 +240,9 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   socket.onopen()
   const reconnect = await socket.next(), third = await viewId(reconnect)
   assert.notEqual(third, second)
-  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample() })
+  socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), view: second, height: '5', marks: `[${mark()}]`, frame: sample() })
   assert.equal(projections.length, 2)
-  socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), view: third, height: '6', marks: `[${mark()}]`, frame: sample({ generation: '2', incarnation: 'new' }) })
+  socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), view: third, height: '6', marks: `[${mark()}]`, frame: sample({ generation: '2', incarnation: 'new' }) })
   assert.equal((await socket.next()).view, third)
   assert.equal(projections.length, 3)
   stream.close()
@@ -149,20 +258,23 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   assert.equal(statuses.length, before)
 })
 
-test('the signers ontology selects an exact foreign world without changing the acting agent', async () => {
+test('navigation returns an exact space and every signed dependency without changing the acting agent', async () => {
   const identity = { networkId: new Uint8Array(32), provider: {
     publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
   }, session: { session_id: 'session', expires_ms: Date.now() + 60000 } }
   const agent = { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }
   const seen = []
-  const world = await readSimulationWorld(identity, agent, { post: async (url, body) => {
+  const result = await readPersonalLobby(identity, agent, { post: async (url, body) => {
     seen.push({ url, request: Buffer.from(body.request, 'base64url').toString() })
-    return { result: 'ok', bindings: [{ World: `ontology_ref(<<"room">>,<<"${anchor}">>)` }] }
+    return { result: 'ok', dependencies: [{ ns: 'foreign-policy', genesis_anchor: Buffer.alloc(32).toString('base64url'), height: '9007199254740993' }],
+      bindings: [{ Lobby: `entity_ref(<<"room">>,<<"${anchor}">>,gallery)`, Modes: '[playing,edition]' }] }
   } })
-  assert.equal(world.namespace, 'room')
-  assert.equal(world.anchor.length, 32)
+  assert.equal(result.reference.namespace, 'room')
+  assert.equal(result.reference.anchor.length, 32)
+  assert.deepEqual(result.reference.instance, atom('gallery'))
+  assert.equal(result.dependencies[0].height, '9007199254740993')
   assert.equal(seen[0].url, '/api/goals/read')
-  assert.ok(seen[0].request.includes('physics_client_world(World).'))
+  assert.ok(seen[0].request.includes('lobby_navigation(Lobby,Modes).'))
   assert.ok(seen[0].request.includes('human.'))
 })
 
@@ -180,9 +292,9 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     close() { this.onclose?.() }
     receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
   }
-  const connect = () => connectSimulation(identity, agent, { projection() {}, frame() {},
+  const connect = () => connectWorldView(identity, agent, { projection() {}, frame() {},
     unavailable: s => statuses.push(s), refused: (s, reasons) => refusals.push([s, reasons]) }, {
-    WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32) },
+    WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [],
     post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
   })
   const stream = connect()
@@ -196,7 +308,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
       authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,
       incarnation: Buffer.alloc(32).toString('base64url'), registration: Buffer.alloc(32, 1).toString('base64url'),
       control_state: { sequence: '7', pending: false, result: 'idle' } })
-    socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view, frame,
+    socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view, frame,
       control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })
     const first = stream.command(input)
     await Promise.resolve()
@@ -222,7 +334,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     await socket.onopen()
     const fresh = socket.sent[0]
     const freshView = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(fresh.request, 'base64url'))).toString('base64url')
-    socket.receive({ type: 'projection', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view: freshView,
+    socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view: freshView,
       frame: { ...frame, registration: Buffer.alloc(32, 2).toString('base64url'),
         control_state: { sequence: '9', pending: false, result: 'suspended' } },
       control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })

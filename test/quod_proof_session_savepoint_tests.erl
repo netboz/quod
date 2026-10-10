@@ -325,7 +325,7 @@ register_local_scope(Ns, AnchorByte, Pid, Session) ->
           {Ns, Anchor},
           fun(NewScopeId) ->
               {ok, Pid,
-               {local_scope, NewScopeId, Ns, Anchor, 1, Session}}
+               {local_scope, NewScopeId, Ns, Anchor, 1, Session}, 1}
           end),
     ScopeId.
 

@@ -228,6 +228,8 @@ impl World {
                 || frame_row.2 != Kind::Fixed
                 || leaf_row.4.box_half_x().is_none()
                 || frame_row.4.box_half_x().is_none()
+                || leaf_row.3.1 != (0.0, 0.0, 0.0)
+                || frame_row.3.1 != (0.0, 0.0, 0.0)
                 || *rev != leaf_row.1
                 || *rev != frame_row.1
                 || [baseline, restore, stiffness, damping, force, tolerance]

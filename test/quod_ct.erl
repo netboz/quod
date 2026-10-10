@@ -848,7 +848,7 @@ applied_wait_engine(Ns, Parent, Mode, Height, Reads) ->
             quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 1}),
             applied_wait_engine(Ns, Parent, Mode, 1, Reads);
         {advance, replay_ready} ->
-            quod_reg:publish({runtime, Ns}, {replay_ready, boot, 1}),
+            quod_reg:publish({runtime, Ns}, {replay_ready, {self(),boot}, 1}),
             applied_wait_engine(Ns, Parent, Mode, 1, Reads)
     end.
 

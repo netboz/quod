@@ -48,8 +48,9 @@ model_geometry(Kind, Expressions, Size) :-
     Kind \== <<"mesh">>, model_dimensions(Expressions, Size).
 model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
+model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
 model_transform(relative(Parent, At), relative(Parent, Placed)) :-
-    At = transform(_, _, _, _, _, _), model_transform(At, Placed).
+    (At = transform(_, _, _, _, _, _); At = body_pose(_, _)), model_transform(At, Placed).
 
 shape(group, <<"group">>, []).
 shape(box(W, H, D), <<"box">>,

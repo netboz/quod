@@ -1,0 +1,114 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+      "bytes": 8636
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c6cb76a1124dc97a053e693b0f2868e310bfa80ed6c1e4f0f1d4c0b3ced090f2",
+      "bytes": 41450
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821",
+      "bytes": 5404
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/view-dependency-plan.md",
+      "sha256": "a847b9c250404a9e0123545bb6d61de3b5d06e50dfd29c5b283d51f0ef024919",
+      "bytes": 7775
+    },
+    {
+      "file": "src/quod_proof_context.erl",
+      "sha256": "0ad8d0c73a4f3442ace6fc281960cde5ce2027719c13c904c9d7a268bb2935c5",
+      "bytes": 50899
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "sha256": "6f97d3e1664d7b0d818869e812638891b18413d77f2cbc13850b891c0a3dc445",
+      "bytes": 339447
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b",
+      "bytes": 42846
+    },
+    {
+      "file": "src/quod_scope_session.erl",
+      "sha256": "feb59347d8f37950da37cc459eb55ab135714317be75719a141fe81d660d4f26",
+      "bytes": 77479
+    },
+    {
+      "file": "src/quod_ask_router.erl",
+      "sha256": "b56438513f1e81fa2f1b8e32869eb0dbf3b82ce5f1d950c191346d1bdabba1c2",
+      "bytes": 90103
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "sha256": "020a6fb0defaa7ac0ef704eff255a297e8695d098ccf3f3c05eb4d18b2d65489",
+      "bytes": 78810
+    },
+    {
+      "file": "src/quod_client_result.erl",
+      "sha256": "ce4aaed4c4f49e6bf92f520c3e36476c9bdeb977efcb2062b7bab4c64fa32e0e",
+      "bytes": 22190
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "sha256": "085c8c3a92520b2288445941607d5dafe9240c5e5a899f0aa8f0385da25154c3",
+      "bytes": 16605
+    },
+    {
+      "file": "src/quod_foreign_log.erl",
+      "sha256": "594784c99db1ea89d224eb4cca98996ca38c01178523e259ed3674a0b89fd740",
+      "bytes": 324340
+    },
+    {
+      "file": "src/quod_client_goal_target.erl",
+      "sha256": "a12fcae0bb00e86c737e5bfff3c032bcb65412fa023a86422d62df996436bf0a",
+      "bytes": 9721
+    },
+    {
+      "file": "src/quod_agent.erl",
+      "sha256": "037e20915e12b83e57f793c50b0cdb5a916f24de43892f9f3be980d3696c1ed4",
+      "bytes": 15096
+    },
+    {
+      "file": "src/quod_namespace_manager.erl",
+      "sha256": "165df7e455ca9ef24c91af71c0aa43e84fce805f4612451d7ae08bc6aaba1e7d",
+      "bytes": 65016
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "sha256": "ac1a6fc7e8536e776759b27a5c2d58742e732f522bf96c40e3a30dfb60571009",
+      "bytes": 5492
+    },
+    {
+      "file": "include/quod_client_goal_limits.hrl",
+      "sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "bytes": 2341
+    },
+    {
+      "file": "test/quod_proof_context_tests.erl",
+      "sha256": "503a486ce82a64a9dda1eff604533406b538b98f10d67f62e2e4bf3d91bb3565",
+      "bytes": 15470
+    },
+    {
+      "file": "test/quod_client_result_tests.erl",
+      "sha256": "d36b7f0197b72b16a8b176823ca5fd009d57595dbd7bdfc45dacc04609013d57",
+      "bytes": 12144
+    },
+    {
+      "file": "test/quod_ask_router_tests.erl",
+      "sha256": "d9433d7aa489c26dc3a025120911c4c1001947b9f03f00dee7dbe7e56b7ab056",
+      "bytes": 55055
+    },
+    {
+      "file": "test/quod_ask_tests.erl",
+      "sha256": "e4b15b4f4b38123f7ddb3609068ba9ea028ae920740de8526bea8c26eb8801e6",
+      "bytes": 69100
+    }
+  ]
+}

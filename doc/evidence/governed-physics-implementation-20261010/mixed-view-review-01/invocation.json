@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-10T19:50:26.208654+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "cwd": "/home/yan/src/quod/doc/evidence/governed-physics-implementation-20261010/mixed-view-review-01",
+  "scope": "mixed-scene implementation only; full task remains open"
+}

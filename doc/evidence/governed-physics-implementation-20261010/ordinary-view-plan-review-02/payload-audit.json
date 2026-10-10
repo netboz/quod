@@ -1,0 +1,25 @@
+{
+  "files": [
+    "AGENTS.md",
+    "doc/world.md",
+    "doc/multiwrite-architecture.md",
+    "priv/ontologies/common_predicates.pl",
+    "priv/ontologies/space.pl",
+    "priv/ontologies/lobby_instance.pl",
+    "priv/ontologies/quod_physics.pl",
+    "src/quod_client_simulation.erl",
+    "src/quod_foreign_log.erl",
+    "client/src/world.js",
+    "client/src/simulation.js",
+    "client/src/controlled-navigation.js",
+    "client/src/world-scene.js",
+    "ui/src/World.tsx",
+    "test/quod_foreign_lifecycle_tests.erl",
+    "include/quod_client_goal_limits.hrl",
+    "include/quod_proof_limits.hrl",
+    "ordinary-view-plan.md",
+    "previous-dependency-review.md"
+  ],
+  "credential_markers": [],
+  "scope": "Audited source/spec/test and local plan/review only. No deployment data, private browser profile, environment files or credentials."
+}

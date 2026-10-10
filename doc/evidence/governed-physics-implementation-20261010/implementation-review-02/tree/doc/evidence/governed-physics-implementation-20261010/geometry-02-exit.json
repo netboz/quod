@@ -1,0 +1,13 @@
+{
+  "started": "2026-10-10T16:59:22.620124+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:supported_geometry_signed_edit_test_+invalid_geometry_signed_edit_rolls_back_test_"
+  ],
+  "prior_failure": "geometry-01: fixture setup used unsupported retractall/1; replaced by existing single-body retract/1; failed fixture preserved",
+  "finished": "2026-10-10T16:59:29.035624+00:00",
+  "exit_code": 0
+}

@@ -52,6 +52,9 @@ test('authored off-centre cockpit follows accepted body pose; commands cannot tr
     navigation.update(undefined)
     assert.deepEqual(camera.position.asArray(), [0, 2, -5])
     assert.deepEqual(camera.keysUp, [87, 90, 38])
+    camera.position.x += 3
+    navigation.update(undefined)
+    assert.equal(camera.position.x, 3, 'an observer projection must not reset ongoing travel')
   }))
 
 test('tracked head offsets are calibrated view motion; clearance masks them without moving the body', () => fixture(

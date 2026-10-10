@@ -62,6 +62,7 @@ for a peer or connection that produces neither signal.
     request_link = undefined :: undefined | pid(),
     return_link = undefined :: undefined | pid(),
     status = opening :: opening | active,
+    base_height = undefined :: undefined | non_neg_integer(),
     next_command_seq = 2 :: pos_integer(),
     last_command_seq = 1 :: non_neg_integer(),
     last_request_id :: binary(),
@@ -160,7 +161,7 @@ start_link() ->
 
 -spec ensure_scope(term(), binding(), quod_scope_wire:authentication(),
                    non_neg_integer()) ->
-          {ok, remote_handle()} | pending() | {error, term()}.
+          {ok, remote_handle(), non_neg_integer()} | pending() | {error, term()}.
 ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
     with_router(
       fun(Router) ->
@@ -169,7 +170,7 @@ ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
 
 -spec ensure_scope(gen_server:server_ref(), term(), binding(),
                    quod_scope_wire:authentication(), non_neg_integer()) ->
-          {ok, remote_handle()} | pending() | {error, term()}.
+          {ok, remote_handle(), non_neg_integer()} | pending() | {error, term()}.
 ensure_scope(Router, Endpoint, Binding, Authentication, RemainingMs) ->
     TraceCarrier = quod_trace:inject(quod_trace:context()),
     guarded_call(
@@ -344,7 +345,7 @@ handle_call(
            Owner, Endpoint, Binding, Authentication, RemainingMs,
            TraceCarrier, S0) of
         {reuse, #scope{status = active} = Scope} ->
-            {reply, {ok, handle(Scope, S0)}, S0};
+            {reply, {ok, handle(Scope, S0), Scope#scope.base_height}, S0};
         {reuse, #scope{open_ref = OpenRef}} ->
             {reply, pending(OpenRef, S0), S0};
         {new, Fields, OpenFrame} ->
@@ -1494,7 +1495,8 @@ first_failed([{Reason, false} | _]) -> Reason.
 route_valid_event({scope_opened, BaseHeight}, _RequestId, _Deliver,
                   Scope0 = #scope{status = opening, owner = Owner,
                                   open_ref = OpenRef}, S0) ->
-    Scope1 = Scope0#scope{status = active, open_frame = <<>>},
+    Scope1 = Scope0#scope{status = active, open_frame = <<>>,
+                          base_height = BaseHeight},
     S1 = put_scope(Scope1, S0#s{opens = maps:remove(OpenRef, S0#s.opens)}),
     Owner ! {quod_scope_open, OpenRef,
              {ok, handle(Scope1, S1), BaseHeight,

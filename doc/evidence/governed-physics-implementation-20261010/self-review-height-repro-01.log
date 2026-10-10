@@ -1,0 +1,19 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_client_result_tests:read_dependency_heights_are_lossless_json_test/0
+[0;31m     Failure/Error: ?assertEqual(<<48>>, Decimal)
+       expected: <<"0">>
+            got: 0[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 0.108 seconds
+[0;31m15 tests, 1 failures
+[0m===> Error running tests

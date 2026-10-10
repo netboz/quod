@@ -240,8 +240,8 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
             ?assertEqual({error, not_validator}, quod_simplex:identity_view(<<"agents">>)),
             Result = quod_client_goal_ingress:submit(
               maps:get(request_bytes, Fixture), maps:get(signature, Fixture), NodeKey),
-            ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}}, Result),
-            {ok, _, {normalized, {answers, 1, [Bindings]}}} = Result,
+            ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}}, Result),
+            {ok, _, {normalized, {read, _, {answers, 1, [Bindings]}}}} = Result,
             %% Verify the emitted signature, not just policy success.
             {ok, Bytes} = quod_client_goal:encode(Request),
             {ok, Decoded} = quod_durable_term:decode_result(Bindings),
@@ -258,7 +258,7 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
                 after ssl:close(Socket) end
             end),
             ok = gen_server:stop(quod_reg:where({agent_vault, node})),
-            ?assertMatch({ok, _, {normalized, {failed, _}}},
+            ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
               quod_client_goal_ingress:submit(maps:get(request_bytes, Fixture),
                                                maps:get(signature, Fixture), NodeKey))
         after

@@ -1,0 +1,228 @@
+{
+  "review_not_launched": true,
+  "reason": "Automatic approval review rejected external review citing deployment/refound scripts and possible credentials. Packet inventory checked locally before any new attempt.",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636
+    },
+    {
+      "file": "CLAUDE.md",
+      "bytes": 872
+    },
+    {
+      "file": "doc/world.md",
+      "bytes": 41450
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "bytes": 5404
+    },
+    {
+      "file": "doc/proofs.md",
+      "bytes": 7371
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "bytes": 3414
+    },
+    {
+      "file": "doc/lifecycle-and-routing.md",
+      "bytes": 4561
+    },
+    {
+      "file": "doc/physics-native.md",
+      "bytes": 43891
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/view-dependency-plan.md",
+      "bytes": 5870
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "bytes": 339090
+    },
+    {
+      "file": "src/quod_proof_context.erl",
+      "bytes": 50169
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "bytes": 42846
+    },
+    {
+      "file": "src/quod_scope_session.erl",
+      "bytes": 77479
+    },
+    {
+      "file": "src/quod_ask_router.erl",
+      "bytes": 89926
+    },
+    {
+      "file": "src/quod_client_goal_target.erl",
+      "bytes": 9721
+    },
+    {
+      "file": "src/quod_client_goal_ingress.erl",
+      "bytes": 22922
+    },
+    {
+      "file": "src/quod_client_result.erl",
+      "bytes": 20604
+    },
+    {
+      "file": "src/quod_scope_wire.erl",
+      "bytes": 42417
+    },
+    {
+      "file": "src/quod_client_goal.erl",
+      "bytes": 22950
+    },
+    {
+      "file": "src/quod_agent_identity.erl",
+      "bytes": 9096
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "bytes": 13360
+    },
+    {
+      "file": "src/quod_foreign_log.erl",
+      "bytes": 324340
+    },
+    {
+      "file": "src/quod_foreign_projection.erl",
+      "bytes": 16291
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "bytes": 147962
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "bytes": 21656
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "bytes": 78726
+    },
+    {
+      "file": "src/quod_transaction_scope.erl",
+      "bytes": 16971
+    },
+    {
+      "file": "src/quod_client_goal_router.erl",
+      "bytes": 32814
+    },
+    {
+      "file": "src/quod_client.erl",
+      "bytes": 8656
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "bytes": 39737
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "bytes": 3376
+    },
+    {
+      "file": "client/src/simulation.js",
+      "bytes": 9881
+    },
+    {
+      "file": "client/src/world.js",
+      "bytes": 8778
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "bytes": 21176
+    },
+    {
+      "file": "include/quod_transport_limits.hrl",
+      "bytes": 297
+    },
+    {
+      "file": "include/quod_ingress_limits.hrl",
+      "bytes": 1616
+    },
+    {
+      "file": "include/quod_dtx_owner.hrl",
+      "bytes": 1605
+    },
+    {
+      "file": "include/quod_term_limits.hrl",
+      "bytes": 268
+    },
+    {
+      "file": "include/quod_vm_limits.hrl",
+      "bytes": 580
+    },
+    {
+      "file": "include/quod_c4_attempt.hrl",
+      "bytes": 335
+    },
+    {
+      "file": "include/quod_client_goal_limits.hrl",
+      "bytes": 2341
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "bytes": 5492
+    },
+    {
+      "file": "include/quod_directory_limits.hrl",
+      "bytes": 253
+    },
+    {
+      "file": "include/quod_ledger.hrl",
+      "bytes": 12042
+    },
+    {
+      "file": "test/quod_client_result_tests.erl",
+      "bytes": 10709
+    },
+    {
+      "file": "test/quod_client_goal_router_tests.erl",
+      "bytes": 23493
+    },
+    {
+      "file": "test/quod_client_goal_target_tests.erl",
+      "bytes": 8662
+    },
+    {
+      "file": "test/quod_client_goal_endpoint_tests.erl",
+      "bytes": 5093
+    },
+    {
+      "file": "test/quod_client_goal_ingress_tests.erl",
+      "bytes": 37483
+    },
+    {
+      "file": "test/quod_client_goal_parser_tests.erl",
+      "bytes": 14823
+    },
+    {
+      "file": "test/quod_proof_context_tests.erl",
+      "bytes": 14414
+    },
+    {
+      "file": "test/quod_scope_session_tests.erl",
+      "bytes": 66040
+    },
+    {
+      "file": "test/quod_client_goal_tests.erl",
+      "bytes": 12120
+    },
+    {
+      "file": "test/quod_ask_router_tests.erl",
+      "bytes": 55051
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "bytes": 169480
+    }
+  ],
+  "credential_marker_files": [],
+  "deployment_or_refound_paths": []
+}

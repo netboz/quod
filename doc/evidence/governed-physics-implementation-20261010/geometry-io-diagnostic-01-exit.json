@@ -1,0 +1,13 @@
+{
+  "started": "2026-10-10T17:26:06.006954+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:supported_geometry_signed_edit_test_"
+  ],
+  "reason": "owners-geometry-02 failed global unchanged trace on file:datasync/1. Attribute bounded calls by pid, caller MFA and registry keys; omit argument values; preserve strict zero-I/O assertion and failed fixture.",
+  "finished": "2026-10-10T17:26:13.706238+00:00",
+  "exit_code": 0
+}

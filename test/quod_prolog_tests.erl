@@ -222,7 +222,7 @@ committed_result_survives_scope_cleanup_failure_test() ->
               fun(ScopeId) ->
                   Handle = {quod_scope_session, ScopePid, ScopeId, ProofId,
                             make_ref(), Ns, Anchor},
-                  {ok, ScopePid, Handle}
+                  {ok, ScopePid, Handle, 7}
               end),
         TestMRef = monitor(process, ScopePid),
         exit(ScopePid, kill),
@@ -471,7 +471,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
         ProofId = <<48:256>>,
         ScopeId = <<49:128>>,
         Deadline = quod_time:mono_ms() + 5000,
-        {ok, Handle} = gen_server:call(
+        {ok, Handle, _Height} = gen_server:call(
                          Pid,
                          {scope_open, ScopeId, ProofId, Anchor, false,
                           Deadline, {Ns, Anchor}, {node, Pubkey}, node,
@@ -2017,7 +2017,7 @@ t_replay_no_event({Ns, _}) ->
 %% (d) live -> replaying -> live -> replaying, without restarting quod_prolog: a replay run opens
 %% (started), the resuming live apply closes the SAME run (ready, correlating Id) and fires its event,
 %% and a second replay run mints a DISTINCT Id — so a consumer can ignore a stale boundary.
-t_replay_reentry({Ns, _}) ->
+t_replay_reentry({Ns, Engine}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
         ok = ae(
@@ -2028,11 +2028,33 @@ t_replay_reentry({Ns, _}) ->
         ?assertMatch({applied_live, _}, recv_rt(applied_live)),
         %% gap-fill: replay at 2 opens a run from height 1; it is silent
         ok = ae(Ns, 2, batch(change(Ns, diff_for({b, 2}), #{})), replay),
-        {replay_started, Id, 1} = recv_rt(replay_started),
+        Started = {replay_started, Id, 1} = recv_rt(replay_started),
+        ?assertMatch({Engine,_},Id),
+        ?assertEqual({recovering,Id},maps:get(readiness,quod_prolog:stats(Ns))),
+        %% The real publication feeds the socket's existing receive handler.
+        %% A different owner and duplicate starts cannot invalidate this view.
+        View = #{peer => {127,0,0,1},owners => #{Engine => Ns},
+                 heights => #{Ns => 1},local_ready => #{Ns => true}},
+        ?assertEqual({ok,View},quod_client_simulation:websocket_info(
+            {replay_started,{self(),make_ref()},1},View)),
+        {reply,{text,Paused},Recovering} = quod_client_simulation:websocket_info(Started,View),
+        ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,json:decode(Paused))),
+        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(Started,Recovering)),
+        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(
+            {replay_ready,{Engine,make_ref()},2},Recovering)),
+        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(
+            {projection_advanced,Engine,2},Recovering)),
         ok = refute_rt(applied_live),
         %% the resuming live apply at 3 closes the run (same Id, ready height 2), then fires the event
         ok = ae(Ns, 3, batch(change(Ns, diff_for({c, 3}), #{})), live),
-        ?assertMatch({replay_ready, Id, 2}, recv_rt(replay_ready)),
+        Ready = {replay_ready, Id, 2} = recv_rt(replay_ready),
+        ?assertEqual(ready,maps:get(readiness,quod_prolog:stats(Ns))),
+        {reply,{text,Refresh},#{peer := {127,0,0,1}}} =
+            quod_client_simulation:websocket_info(Ready,Recovering),
+        ?assertEqual(<<"refresh">>,maps:get(<<"type">>,json:decode(Refresh))),
+        %% The socket released this consumer's subscription; reacquire it for
+        %% the next independent recovery run below.
+        true = quod_reg:subscribe({runtime,Ns}),
         ?assertMatch({applied_live, #{height := 3}}, recv_rt(applied_live)),
         %% a second replay run mints a DISTINCT Id (stale-boundary immunity)
         ok = ae(Ns, 4, batch(change(Ns, diff_for({d, 4}), #{})), replay),
@@ -2146,7 +2168,7 @@ t_quiet_boot_ready_edge_once({_Ns, _}) ->
                                outcome_backend => memory}),
         true = quod_reg:subscribe({runtime, Fresh}),
         ok = quod_prolog:mark_ready(Fresh),
-        receive {replay_ready, boot, 0} -> ok
+        receive {replay_ready, {Pid,boot}, 0} -> ok
         after 1000 -> erlang:error(no_boot_ready_edge) end,
         ok = quod_prolog:mark_ready(Fresh),
         _ = quod_prolog:applied(Fresh),   %% barrier: the second cast has been processed

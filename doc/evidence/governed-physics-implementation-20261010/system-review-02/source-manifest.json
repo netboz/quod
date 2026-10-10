@@ -1,0 +1,277 @@
+{
+  "head": "77a0b1e046be11a14fdef2139149296d6ca377e6",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "CLAUDE.md",
+      "sha256": "92caaf14ecd838d23d471744cf9aecd8e425e4efbc0e8536045c3d3d870134e7"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/README.md",
+      "sha256": "39e12925c04aeb267d39f256daf47472c9e68cf2c725daace6ac2439593c7e8e"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/existing-model-audit.md",
+      "sha256": "229eb21d024faefd231a70af7d44265d2c22df2d5396e0cd24a45e7e4331ceef"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/existing-owner-capability-gap.md",
+      "sha256": "ae0f385d2bf67563cf750f537fcb822f16d21f2c05faf4afa81feb46dc90054e"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/reuse-review-disposition.md",
+      "sha256": "1594cc6c40e821af98a9f9b525046b538ffa27db7cb51d221e28aff8abb88359"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/subscription-trace.md",
+      "sha256": "c56d006082974c10cdb9f0199e8ac6c1ef2db39d4308ce8c2234efcf58899c59"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/system-completion-fixed-01-exit.json",
+      "sha256": "5b55992b2040a0ecea4c906f56c1f9ea42280905b3c0fe96e62b207668c4bed2"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/system-registration-cleanup-01-exit.json",
+      "sha256": "78666f4a91458486e3df8256e40dd12566d54b50c454889c1b0f71ac020c1ed1"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/system-registration-slice.md",
+      "sha256": "e64927bcb17f1b70c04fbe5724c8f81bb21110d01d0f7a23ad96919cd16d7d09"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/system-worlds-02-exit.json",
+      "sha256": "02214a52adea9dd216d44c6aa0626e86d161b8c83efb145d586de537279d5524"
+    },
+    {
+      "file": "doc/lifecycle-and-routing.md",
+      "sha256": "33352a2467a2dd998f1c65b757c2bb24d6e9f50c0c15925478ad1570cf84ec53"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "5b2fea876529bc917930612272847959a887b205b4f98adc6b6f74a7c72f2d64"
+    },
+    {
+      "file": "doc/proofs.md",
+      "sha256": "2f76d43e0a1e15b2d1613f4a8e8c2ac390c25426ce2ebad7b0c74d17c89c8cfd"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "sha256": "26eb5a4d819311dbcdbbd37b1ae97de4667b73cc5b94e119027225e3e186ca75"
+    },
+    {
+      "file": "doc/spaces.md",
+      "sha256": "9a177d4994b8d94b26fe7f9d3d638d73bd33b31daf81898526d617bc1f5d53ea"
+    },
+    {
+      "file": "doc/system-ontology-acls.md",
+      "sha256": "c852c4853128f9afdfe5e3bda66f742288bd7bd9e62ef4413be80f85edf02855"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c6cb76a1124dc97a053e693b0f2868e310bfa80ed6c1e4f0f1d4c0b3ced090f2"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "sha256": "d8e128ce67a2168dd7b6fee9d805ebce76aee78768c540549635f877928491f4"
+    },
+    {
+      "file": "priv/ontologies/quod_agent.pl",
+      "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f"
+    },
+    {
+      "file": "priv/ontologies/quod_environment.pl",
+      "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43"
+    },
+    {
+      "file": "priv/ontologies/quod_lobby.pl",
+      "sha256": "9be812ab020665b691bcdf9e5058f1555703a027f7c99c7deacea510cbb0bfcb"
+    },
+    {
+      "file": "priv/ontologies/quod_material.pl",
+      "sha256": "8fa34ec28eb02510164f4d05f9e31ed10dd0a39784589e843761cf73adc8f96d"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231"
+    },
+    {
+      "file": "priv/ontologies/quod_root.pl",
+      "sha256": "9e025c546c82e46837285a28e6ba0cf4e183de9bc8e1758b5359a3ea23a633ad"
+    },
+    {
+      "file": "priv/ontologies/space.pl",
+      "sha256": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab"
+    },
+    {
+      "file": "src/predicates/quod_agent_predicates.erl",
+      "sha256": "7269c3153ddd0c9ac7947f2ecfdf3a9f487ae0eea889057e39f695d23bb4e468"
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "sha256": "a45cfefd470c7f2e009f78136ba098f0868757e251f63db8b88eb17ca73b1a53"
+    },
+    {
+      "file": "src/predicates/quod_committee_predicates.erl",
+      "sha256": "fc762b2d0b00ba48af0d5568cb3824a0815d9c4bb8e203c77fdfbcc9729ae7e6"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "sha256": "ae90596e21074b270abdf29146c9f0f26e2a97efd182771e2ba0e2d37cb64ec4"
+    },
+    {
+      "file": "src/predicates/quod_ontology_predicates.erl",
+      "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51"
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "sha256": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "src/quod_app.erl",
+      "sha256": "1c4997684ec249525145715e5fc3c94d6a9075c07007a558171c6f9eb9ed7a4b"
+    },
+    {
+      "file": "src/quod_client_goal_ingress.erl",
+      "sha256": "7d0eea3a5dd9e5d4853ff24b8c92bb4bd9d5d23a47b41a4fa4961aea19b7a0a5"
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "sha256": "c5e530452754ea5b8a996d03326eda91b75049e3cc6026012989abf00f10b5b6"
+    },
+    {
+      "file": "src/quod_commit_validation.erl",
+      "sha256": "b4a98d21f4c88d2db1ca105597e89c22768a6849130c773e1001a5fc5273f1d1"
+    },
+    {
+      "file": "src/quod_committed_projection.erl",
+      "sha256": "20d9e862a5a5eab1e8f25ba398d1403a6bcb0214b1e82040e712d9a1c3311fad"
+    },
+    {
+      "file": "src/quod_diff.erl",
+      "sha256": "2030c41065b439ef705b0cc74e3c231bc3d165b290fd155cc2f3af7d7ce4073d"
+    },
+    {
+      "file": "src/quod_dtx_current_view.erl",
+      "sha256": "2cf0d7b8792d01f358f010ab652ac0fd65dddec8f8ea175202b5da31b585538b"
+    },
+    {
+      "file": "src/quod_erlog_db_local_prove.erl",
+      "sha256": "63011937e61f2a3eab8035d99c4d20d1f018a20903b2b9bc63619c45aa55717e"
+    },
+    {
+      "file": "src/quod_erlog_db_mvcc.erl",
+      "sha256": "a746644188250d169b373ce61e71261df1032c58b46857adc79f521384671542"
+    },
+    {
+      "file": "src/quod_foreign_log.erl",
+      "sha256": "594784c99db1ea89d224eb4cca98996ca38c01178523e259ed3674a0b89fd740"
+    },
+    {
+      "file": "src/quod_ontology.erl",
+      "sha256": "ff6e612d49207e5f313d06e1e751645db91aa256ab20372de1197800ee475bb1"
+    },
+    {
+      "file": "src/quod_operation.erl",
+      "sha256": "3e0df88cf990754c595b3ba01eaaf55455f5213985e399650924dc28f2e33daa"
+    },
+    {
+      "file": "src/quod_outcome.erl",
+      "sha256": "099b838990a2c00a685b4e06e3861a398d46edada5eb5bb2eda93daa22aba976"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "sha256": "495e93da98f016dbb9d8306696807f2b1583b1a630f99bed008ae1cf2d559a64"
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "sha256": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7"
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "sha256": "d0244b78289997d3d6b71223674c3717c863f5d6bfbc032c342ab10c06fb18d7"
+    },
+    {
+      "file": "src/quod_resource_basis.erl",
+      "sha256": "9b610f005d26e8c145d6ed9e25907653a8cfba44b332cdad28a39097a9bd4c46"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "0e35abd2874adf27d59ef9d02f862da4d02bc3c7180cd6515e7e781efea22ebd"
+    },
+    {
+      "file": "src/quod_scope_session.erl",
+      "sha256": "feb59347d8f37950da37cc459eb55ab135714317be75719a141fe81d660d4f26"
+    },
+    {
+      "file": "src/quod_simplex.erl",
+      "sha256": "1a16375442176db2208493e9cfee34e674b2e4711d2fce44c297f49e87d98a25"
+    },
+    {
+      "file": "src/quod_system_ontology.erl",
+      "sha256": "506bb36d2430167d8ba5f049fc46f35a77576a4756660311292ea25ef3f537a7"
+    },
+    {
+      "file": "test/quod_agent_hosting_tests.erl",
+      "sha256": "cccadb31d77f198c2b55baaed079b6252151ca0e3aea69e7ac5df5900e47a565"
+    },
+    {
+      "file": "test/quod_ask_tests.erl",
+      "sha256": "6bea17a76bc1ede57266014bb7338ec3787a70755642ff0459fa71266d22d5d7"
+    },
+    {
+      "file": "test/quod_class_semantics_tests.erl",
+      "sha256": "b8b6b6571786d525eb4f5c49784b16539fb72b5d9e9805e9009feef62eed1a24"
+    },
+    {
+      "file": "test/quod_committed_projection_tests.erl",
+      "sha256": "1abe40d3ea451b5bf77c746131b8983cbd43ca1caeee34d6ccb1a7ef4a5d58e9"
+    },
+    {
+      "file": "test/quod_foreign_log_tests.erl",
+      "sha256": "29bf2edb35f84de7321cb2581b00e153e0baa9c782cea9413a40c99992428f5c"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "f17eb17809384fad6745c642feca8d43dc15c69176338ff767189a34b5c102e6"
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "sha256": "ec4d9a193ab0c4434fe57492bf6aed44ac432e9fd17d890ef363c018e6b5e6ee"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "sha256": "a47723f447a2b389eb0998b80588624287277876be5b54dfaa6c19e41a79431e"
+    },
+    {
+      "file": "test/quod_predicate_failure_tests.erl",
+      "sha256": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b"
+    },
+    {
+      "file": "test/quod_runtime_tests.erl",
+      "sha256": "97b767389c4e1e1a4dac36390b1b06f16fe8a48060b92bbadd97795f4f0be38c"
+    },
+    {
+      "file": "test/quod_space_tests.erl",
+      "sha256": "a469cfdb65b52fbed3da637cf9162a18e39d7d8d8ef384afdc53340e51a4f21b"
+    }
+  ]
+}

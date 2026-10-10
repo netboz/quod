@@ -3,6 +3,12 @@
 %% Found with quod_agent_predicates for proof-bound identity checks.
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
 
+lobby_space(Space, Modes) :-
+    findall(S, instance_of(lobby, S), [Space]), findall(M, lobby_modes(M), [Modes]).
+
+world_view(Space, Mode, Marks) :-
+    instance_of(lobby, Space), lobby_view(Mode, Marks).
+
 lobby_modes(Modes) :-
     lobby_vocabulary(Namespace, Anchor),
     Namespace::(current_ontology_identity(Namespace, Anchor), lobby_modes(Modes)).

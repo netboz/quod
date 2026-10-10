@@ -34,8 +34,8 @@
 %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
 %%     Id        a view-scoped occurrence identity, not a domain name
 %%     Size      ordered integer-mm fields, or a typed mesh_asset descriptor
-%%     Transform transform(X,Y,Z,RX,RY,RZ) | relative(Parent, transform(...))
-%%               | body_pose(BodyId, StructuralRevision) in a simulation view
+%%     Transform transform(X,Y,Z,RX,RY,RZ) | body_pose(Id, Revision)
+%%               | relative(Parent, transform(...)) | relative(Parent, body_pose(...))
 %%     Material  surface(Colour, Metal, Rough, Emission, Textures) |
 %%               asset_surfaces for meshes | no_surface for groups.
 %%               Optical factors/repeats are permille.
@@ -209,8 +209,9 @@ placed(transform(X, Y, Z, RX, RY, RZ)) :-
     turn(RX), turn(RY), turn(RZ).
 placed(relative(Parent, Transform)) :-
     bounded_text(Parent, <<"mark_id">>),
-    Transform = transform(_, _, _, _, _, _),
-    placed(Transform).
+    attachment_pose(Transform).
+attachment_pose(transform(X,Y,Z,RX,RY,RZ)) :- placed(transform(X,Y,Z,RX,RY,RZ)).
+attachment_pose(body_pose(Body, Revision)) :- placed(body_pose(Body, Revision)).
 
 offset(V) :-
     integer(V),

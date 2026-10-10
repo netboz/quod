@@ -39,6 +39,7 @@ export function createControlledNavigation(scene, camera, canvas, {
 
   function update(value) {
     const wasObserver = current === undefined
+    if (wasObserver && value === undefined) return
     current = value
     if (value === undefined) {
       for (const input of observerInputs) camera.inputs.add(input)

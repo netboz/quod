@@ -1,0 +1,99 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+      "bytes": 8636
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c6cb76a1124dc97a053e693b0f2868e310bfa80ed6c1e4f0f1d4c0b3ced090f2",
+      "bytes": 41450
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821",
+      "bytes": 5404
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683",
+      "bytes": 10101
+    },
+    {
+      "file": "priv/ontologies/space.pl",
+      "sha256": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab",
+      "bytes": 7022
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "sha256": "d8e128ce67a2168dd7b6fee9d805ebce76aee78768c540549635f877928491f4",
+      "bytes": 3376
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "1d173bcb3277a74a0e27207481089bd71304afabe96414f2e8476b2172c248ac",
+      "bytes": 39148
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "sha256": "8fcde359ab309874954467fea9dc29c375e42d9b0172f6c5f2ac641e6dd77443",
+      "bytes": 21704
+    },
+    {
+      "file": "src/quod_foreign_log.erl",
+      "sha256": "594784c99db1ea89d224eb4cca98996ca38c01178523e259ed3674a0b89fd740",
+      "bytes": 324340
+    },
+    {
+      "file": "client/src/world.js",
+      "sha256": "3a9850072d8a13829d7b3bfd1c186fe8cd2390d6ed8168a61565eb3628c18d3a",
+      "bytes": 8778
+    },
+    {
+      "file": "client/src/simulation.js",
+      "sha256": "e53d3e9715fe57474d1bf40d9147b8bc9230fd39aff8a499ecfcc67b9d4d93e4",
+      "bytes": 9881
+    },
+    {
+      "file": "client/src/controlled-navigation.js",
+      "sha256": "240784b4ed5df2c06455fcbb17689967ee0c57f8b952c625e3137ca08e31342d",
+      "bytes": 9968
+    },
+    {
+      "file": "client/src/world-scene.js",
+      "sha256": "e60e6da2698feb67f9b25042d2dafb0fd1e3c2a2f6318c5599cecf62324acdee",
+      "bytes": 11800
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "sha256": "3dd142b8fd8bae6e01d732e4140d3e26140443c34d09f03d2cf500697cc88576",
+      "bytes": 21176
+    },
+    {
+      "file": "test/quod_foreign_lifecycle_tests.erl",
+      "sha256": "8b1dac1e8b814149d22cb7502664ee83e308ccbed92757d098fe5f663d614707",
+      "bytes": 52632
+    },
+    {
+      "file": "include/quod_client_goal_limits.hrl",
+      "sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "bytes": 2341
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "sha256": "ac1a6fc7e8536e776759b27a5c2d58742e732f522bf96c40e3a30dfb60571009",
+      "bytes": 5492
+    },
+    {
+      "file": "ordinary-view-plan.md",
+      "sha256": "4f0db44c1ca52c9dab84bcc2e89d19bacc35bb260be62d59686099d74517a9ed",
+      "bytes": 6380
+    },
+    {
+      "file": "previous-dependency-review.md",
+      "sha256": "16483cf903f1a5d894903ea208151338b989fc1cdb82e710fe16bc93760ea4f6",
+      "bytes": 7099
+    }
+  ]
+}

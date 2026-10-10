@@ -5,6 +5,7 @@
 context_test_() ->
     [?_test(with_context(fun reuses_exact_identity/1)),
      ?_test(with_context(fun rejects_anchor_conflict/1)),
+     ?_test(with_context(fun retains_exact_read_heights/1)),
      ?_test(with_context(fun bounds_distinct_scopes/1)),
      ?_test(with_context(fun bounds_invocation_proxies/1)),
      ?_test(with_context(fun binds_proxies_to_registered_owner/1)),
@@ -34,7 +35,7 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
     try
         {ok, ScopeId, first} = quod_proof_context:get_or_open_scope(
                                  Identity,
-                                 fun(_Id) -> {ok, ScopePid, first} end),
+                                 fun(_Id) -> {ok, ScopePid, first, 7} end),
         {ok, ScopeId, first} = quod_proof_context:get_or_open_scope(
                                  Identity,
                                  fun(_Id) -> error(opened_twice) end),
@@ -46,12 +47,28 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
         ScopePid ! stop
     end.
 
+retains_exact_read_heights(_Ctx) ->
+    A = {<<"a">>, <<11:256>>}, B = {<<"b">>, <<12:256>>},
+    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
+        fun(_) -> {ok,self(),b,42} end),
+    {ok, _, a} = quod_proof_context:get_or_open_scope(A,
+        fun(_) -> {ok,self(),a,17} end),
+    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
+        fun(_) -> error(must_reuse_pinned_height) end),
+    Dependencies = [{<<"a">>,<<11:256>>,17},{<<"b">>,<<12:256>>,42}],
+    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()),
+    ?assertEqual({error,{protocol_error,proof_engine}},
+        quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
+            fun(_) -> {ok,self(),missing,-1} end)),
+    ?assertEqual(ok,quod_proof_context:finalize(abort)),
+    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()).
+
 rejects_anchor_conflict(_Ctx) ->
     ScopePid = spawn(fun wait/0),
     try
         {ok, _ScopeId, first} = quod_proof_context:get_or_open_scope(
                         {<<"b">>, <<1:256>>},
-                        fun(_Id) -> {ok, ScopePid, first} end),
+                        fun(_Id) -> {ok, ScopePid, first, 7} end),
         ?assertEqual(
            {error, {anchor_conflict, <<"b">>}},
            quod_proof_context:get_or_open_scope(
@@ -70,7 +87,7 @@ bounds_distinct_scopes(_Ctx) ->
               Anchor = <<Index:256>>,
               {ok, _ScopeId, Index} = quod_proof_context:get_or_open_scope(
                               {Ns, Anchor},
-                              fun(_Id) -> {ok, Pid, Index} end)
+                              fun(_Id) -> {ok, Pid, Index, 7} end)
           end,
           lists:zip(lists:seq(1, 8), lists:sublist(Pids, 8))),
         Ninth = lists:nth(9, Pids),
@@ -78,7 +95,7 @@ bounds_distinct_scopes(_Ctx) ->
            {error, {scope_limit_exceeded, ?QUOD_MAX_SCOPES_PER_PROOF}},
            quod_proof_context:get_or_open_scope(
              {<<"9">>, <<9:256>>},
-             fun(_Id) -> {ok, Ninth, 9} end))
+             fun(_Id) -> {ok, Ninth, 9, 7} end))
     after
         lists:foreach(fun(Pid) -> Pid ! stop end, Pids)
     end.
@@ -102,7 +119,7 @@ binds_proxies_to_registered_owner(_Ctx) ->
     try
         {ok, ScopeId, scope} = quod_proof_context:get_or_open_scope(
                         {<<"b">>, <<1:256>>},
-                        fun(_Id) -> {ok, ScopePid, scope} end),
+                        fun(_Id) -> {ok, ScopePid, scope, 7} end),
         Owner = {ScopeId, opaque_id()},
         OtherInvocation = {ScopeId, opaque_id()},
         StrangerActor = {opaque_id(), opaque_id()},
@@ -148,7 +165,7 @@ local_typed_death_wins_finalization(#{proof_id := ProofId}) ->
                                    Handle = {quod_scope_session, ScopePid,
                                              ScopeId, ProofId, make_ref(),
                                              Ns, Anchor},
-                                   {ok, ScopePid, Handle}
+                                   {ok, ScopePid, Handle, 7}
                                end),
     receive {scope_answer, ScopePid, ok} -> ok
     after 1000 -> error(scope_answer_missing)
@@ -179,7 +196,7 @@ live_local_scope_is_closed_at_finalization(#{proof_id := ProofId}) ->
                                    Handle = {quod_scope_session, ScopePid,
                                              ScopeId, ProofId, make_ref(),
                                              Ns, Anchor},
-                                   {ok, ScopePid, Handle}
+                                   {ok, ScopePid, Handle, 7}
                                end),
     ?assertEqual(ok, quod_proof_context:finalize(commit)),
     receive {scope_closed, ScopePid} -> ok
@@ -218,11 +235,13 @@ finalizes_remote_router_once(#{proof_id := ProofId}) ->
     RequestLink = spawn(fun wait/0),
     Owner = self(),
     try
-        {ok, _} = bind_remote_router(Router),
         Remote = remote_handle(Router, RequestLink, ProofId, 1),
         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
                                   {<<"remote">>, <<11:256>>},
-                                  fun(_Id) -> {ok, Router, Remote} end),
+                                  fun(_Id) ->
+                                      {ok, _} = bind_remote_router(Router),
+                                      {ok, Router, Remote, 7}
+                                  end),
         ?assertEqual(ok, quod_proof_context:finalize(commit)),
         receive {router_finalized, Router, Owner, ProofId} -> ok
         after 1000 -> error(finalize_not_called)
@@ -254,7 +273,7 @@ retains_finalization_poison(#{proof_id := ProofId}) ->
         Remote = remote_handle(Router, RequestLink, ProofId, 2),
         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
                                   {<<"remote">>, <<13:256>>},
-                                  fun(_Id) -> {ok, Router, Remote} end),
+                                  fun(_Id) -> {ok, Router, Remote, 7} end),
         ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
         ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
         receive {router_finalized, Router, Owner, ProofId} -> ok
@@ -281,7 +300,7 @@ maps_dead_router_to_target(#{proof_id := ProofId}) ->
         Remote = remote_handle(Router, RequestLink, ProofId, 3),
         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
                                   {<<"remote">>, <<11:256>>},
-                                  fun(_Id) -> {ok, Router, Remote} end),
+                                  fun(_Id) -> {ok, Router, Remote, 7} end),
         ?assertEqual(
            {error, {ontology_unreachable, <<"remote">>}},
            quod_proof_context:finalize(commit))
@@ -295,10 +314,10 @@ closes_each_scope_once(_Ctx) ->
     Pid2 = spawn(fun wait/0),
     {ok, _ScopeId1, one} = quod_proof_context:get_or_open_scope(
                   {<<"b">>, <<1:256>>},
-                  fun(_Id) -> {ok, Pid1, one} end),
+                  fun(_Id) -> {ok, Pid1, one, 7} end),
     {ok, _ScopeId2, two} = quod_proof_context:get_or_open_scope(
                   {<<"c">>, <<2:256>>},
-                  fun(_Id) -> {ok, Pid2, two} end),
+                  fun(_Id) -> {ok, Pid2, two, 7} end),
     NoProxy = fun(_Proxy) -> ok end,
     ok = quod_proof_context:stop(
            fun(Scope) -> Parent ! {closed, Scope} end, NoProxy),
@@ -344,7 +363,7 @@ process_monitors() ->
 
 register_actor(Pid, Ns, Anchor) ->
     {ok, ScopeId, scope} = quod_proof_context:get_or_open_scope(
-                    {Ns, Anchor}, fun(_Id) -> {ok, Pid, scope} end),
+                    {Ns, Anchor}, fun(_Id) -> {ok, Pid, scope, 7} end),
     Actor = {ScopeId, opaque_id()},
     ok = quod_proof_context:register_invocation(
            Actor, quod_transaction_scope:empty_selection()),

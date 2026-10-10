@@ -1,0 +1,7039 @@
+-module(quod_foreign_log).
+-moduledoc """
+Node-wide owner for certified foreign evidence and optional material projections.
+
+Exact claims and progress consumers use the existing credited history reader to
+fetch the pinned genesis, necessary committee transitions, and selected finality
+proof. The shared verifier authenticates signed material heights and each new
+era under its predecessor committee. Only projection demand acquires and folds
+a contiguous material archive. Sparse evidence never proves absence. Routes,
+peer heights, checkpoints and reference fields confer no authority themselves.
+
+Immutable verified era records, certified progress and any complete material
+prefix belong to this one identity-scoped owner. Current views additionally need
+current-committee quorum confirmation. Exact reads covered by a published prefix
+borrow its pinned snapshot/index directly, without a new worker or network read.
+No request rebuilds retained history: startup and diagnosed corruption own that
+explicit lifecycle. A borrowed hosted view retains its source-PID lifetime.
+
+The gen_server never waits for network, disk, replay or crypto. Its existing
+monitored verifier owns each credited pull and decodes pages outside the owner.
+Raw delivery is not completion: the correlated decode acknowledgement retains
+link credit and the original page deadline until acceptance. Owner death,
+cancellation and stale replies cannot transfer authority to another incarnation.
+
+One per-identity queue serves exact, current and follow demand. A caller has its
+own absolute deadline, including mailbox time; expiry detaches that caller.
+Runnable shared work survives, while a callerless unavailable-route park retires.
+Distinct directory, feed, installed-readiness and certified-progress events wake
+only affected dependencies. An unchanged failed request cannot wake itself or
+renew its allowance. There is no readiness polling or retry timer.
+
+A projection follows the existing archive and shared committed materializer.
+The registered foreign-cache writer holds exclusive mutation custody across
+open, recovery and append. Complete groups are copied before proof-stage reuse;
+one range sync, accumulated index delta and checkpoint precede publication.
+Persistence failure invalidates that cursor; a later source cannot borrow its
+stale state. A transport failure retains its independently verified durable
+prefix. Startup verifies any complete suffix beyond a valid saved checkpoint.
+
+The gproc writer name is released by actual worker death, never by a result or
+kill request. Contention parks in the same queue under a correlated monitor.
+Sparse workers leave retained material sessions untouched. Current watches keep
+existing exact-identity feed registrations so unchanged quorum-confirmed tips
+need no network reacquisition. No second executor, facts database or messaging
+system is introduced.
+""".
+
+-behaviour(gen_server).
+
+-include("quod_ledger.hrl").
+-include("quod_proof_limits.hrl").
+-include("quod_directory_limits.hrl").
+-include("quod_transport_limits.hrl").
+
+-export([start_link/0, start_link/1,
+         verify/5, verify_reference/3, verify_local/4,
+         verify_reference/4, verify_reference/5,
+         resolve_reference/6, verify_local_deadline/4,
+         reselect_verified/4,
+         read_local_application_deadline/4,
+         current/3, current/4,
+         observe_candidate/2, route_hints/2, valid_route_candidates/1,
+         follow/2, refresh/1, ack/2, projection_clauses/3, unfollow/1,
+         follow_request/2, unfollow_request/1,
+         stats/0]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+
+-ifdef(TEST).
+-define(LOCAL_READ_GATE(Stage), test_local_read_gate(Stage)).
+-define(WORKER_RESULT_GATE(Ref), test_worker_result_gate(Ref)).
+-export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2,
+         local_view_fetch/5, fetch_evidence_pages/9,
+         consume_reference_reply/3,
+         open_verified_cache/6, test_replay_cache/4,
+         test_install_worker_meta/3, test_install_verified_progress/3,
+         test_fail_persist_after/1,
+         test_install_feed_registration/5,
+         test_set_feed_height/4,
+         test_install_feed_opening/5,
+         test_install_feed_authority/3,
+         test_corrupt_resident_height/3,
+         test_lifecycle_state/0,
+         measure_foreign_stage/2,
+         test_parallel_probes/4, test_confirmation_candidates/2]).
+-else.
+-define(LOCAL_READ_GATE(_Stage), ok).
+-define(WORKER_RESULT_GATE(_Ref), ok).
+-endif.
+
+-define(KEY, {foreign_log, node}).
+-define(DEFAULT_PAGE_TIMEOUT_MS, 8000).
+-define(MANIFEST, "identity.term").
+-define(CHECKPOINT, "checkpoint.term").
+-define(LOG, "log.0001").
+-define(CACHE_VERSION, 7). %% signed material heights in archive and era authority
+-define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
+-define(MAX_TIMER_MS, 16#FFFFFFFF).
+-define(MANIFEST_RESERVE_BYTES, 4096).
+-define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
+-define(MAX_CHANGED_HEADS, ?QUOD_MAX_PLAN_DIFF_OPS).
+-define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
+
+%% One live cache cursor belongs to the existing custodian, never to a route.
+%% Invalid cursors retain cleanup handles only: no continuation may read,
+%% append, suspend or publish them as a verified prefix.
+-record(verified_cursor, {
+          store,
+          height,
+          projection,
+          phase_index,
+          batch = none,
+          state = verified
+         }).
+
+%% A caller owns a deadline and observation, never the lifetime of shared work.
+-record(caller, {
+          deadline :: integer() | infinity,
+          timer = none :: none | reference(),
+          trace_ctx = undefined :: term(),
+          enqueued_native :: integer(),
+          residence = none :: term(),
+          stage = none :: term(),
+          ordinal = 0 :: non_neg_integer(),
+          %% Diagnostic deduplication/count only; never a scheduling/sharing key.
+          queue_observation = {none, 0} :: {term(), non_neg_integer()}
+         }).
+
+-record(consumer, {
+          pid :: pid(),
+          mref :: reference(),
+          interest :: progress | projection,
+          baseline = pending :: pending | delivered,
+          outstanding = none :: none | {reference(), term()},
+          pending = none :: none | term()
+         }).
+
+-record(materializer, {
+          pid :: pid(),
+          mref :: reference(),
+          generation :: reference(),
+          height = 0 :: non_neg_integer(),
+          projection_id = none :: none | <<_:256>>,
+          memory_bytes = 0 :: non_neg_integer()
+         }).
+
+%% A routed request keeps only the caller's bounded, untrusted hints and the
+%% semantic verification it asked for.  Routes are selected again by this
+%% owner when work becomes runnable; a parked row therefore cannot fossilise
+%% an endpoint or create a second route registry.
+-record(routed_work, {
+          supplied = [] :: [{<<_:256>>, term()}],
+          contact = none :: none | {<<_:256>>, term()},
+          kind :: term()
+         }).
+
+%% A published prefix is an immutable read capability, not permission to
+%% resume mutation. Its resource belongs to this node owner, not a fetch job.
+-record(prefix, {
+          height :: pos_integer(),
+          projection :: map(),
+          snapshot :: quod_ledger_store:session(),
+          index :: quod_dtx_phase_index:index()
+         }).
+
+-record(history, {
+          identity :: {binary(), <<_:256>>},
+          cache_ns :: binary(),
+          height = 0 :: non_neg_integer(),
+          bytes = 0 :: non_neg_integer(),
+          projection = undefined :: undefined | map(),
+          resident_verified = false :: boolean(),
+          phase_session = none :: none | term(),
+          cache_session = none :: none | quod_ledger_store:session(),
+          published = none :: none | #prefix{},
+          authorities = #{} :: map(),
+          certified_tip = none :: none | map(),
+          waiting = {[], []} :: term(),
+          last_used = 0 :: integer(),
+          active = none :: none | reference(),
+          consumers = #{} :: #{reference() => #consumer{}},
+          follow_token = none :: none | reference(),
+          follow_inflight = false :: boolean(),
+          follow_dirty = false :: boolean(),
+          follow_start_height = 0 :: non_neg_integer(),
+          progress_signals_open = false :: boolean(),
+          local_ready = 0 :: non_neg_integer(),
+          current_watch = none :: none | remote,
+          materializer = none :: none | #materializer{},
+          last_probe_ms = 0 :: integer(),
+          last_advance_ms = 0 :: integer(),
+          hinted_height = unknown :: unknown | non_neg_integer(),
+          projection_state = building :: building | ready,
+          projection_wait = none :: none | network_identity,
+          reachability = unknown :: reachable | unknown | {unreachable, term()},
+          bootstrap_hints = [] :: [{<<_:256>>, term()}]
+         }).
+
+%% A job keeps its semantic/caller identity across queue, custody wait and
+%% running turns. Queue membership versus the pending map determines its
+%% lifetime; transitions replace only the execution handles, not a second
+%% record's manually copied common metadata.
+-record(request, {
+          ref :: reference(),
+          from = none :: none |
+                  {follow, {binary(), <<_:256>>}, reference()} |
+                  {initialize, {binary(), <<_:256>>}},
+          callers = #{} :: #{gen_server:from() => #caller{}},
+          peer :: term(),
+          identity :: {binary(), <<_:256>>},
+          work :: term(),
+          worker = none :: none | pid(),
+          mref = none :: none | reference(),
+          source = none :: none | {pid(), reference()} | down,
+          timer = none :: none | reference(),
+          progress_edge = false :: boolean(),
+          custody = acquiring :: acquiring | held,
+          material_custody = false :: boolean(),
+          phase_hold = none :: none | quod_dtx_phase_index:index(),
+          proof_stages = #{} :: #{file:filename_all() => pid()},
+          retiring = false :: boolean(),
+          trace_ctx = undefined :: term(),
+          fetch_fun = undefined :: undefined | function(),
+          parked = false :: false | true | {custody, reference()},
+          enqueued_native :: integer(),
+          job_id = undefined :: undefined | binary(),
+          attempt = 1 :: pos_integer()
+         }).
+
+-record(pull, {
+          from :: none | gen_server:from(),
+          caller :: pid(),
+          request_ref :: reference(),
+          binding :: reference(),
+          query :: term(),
+          deadline :: integer(),
+          turn = queued :: queued | {sent, pid(), reference(), binary()} |
+                           {decoding, pid(), reference(), binary(), binary()},
+          trace_ctx = undefined :: term(),
+          mref :: reference(),
+          timer :: reference()
+         }).
+
+%% One exact lease in the existing pinned pool. Logical pages remain only in
+%% pulls; credit selects their oldest runnable row, not a second frame queue.
+-record(page_binding, {
+          ref :: reference(),
+          key :: {binary(), term(), binary()},
+          lease = none :: none | reference(),
+          link = none :: none | pid(),
+          mref = none :: none | reference(),
+          credit = none :: none | binary(),
+          retiring = false :: boolean(),
+          waiting = {[], []} :: term(),
+          active = none :: none | binary(),
+          identities = #{} :: map()
+         }).
+
+%% One source-owned registration on the target ontology's existing feed
+%% channel.  It carries only volatile reachability and a correlated height
+%% wake; certified history remains owned by this module's ordinary follower.
+%% `remaining` is the already-certified endpoint fallback list for the one
+%% current opening attempt.  Exhaustion parks the row until a real route or
+%% certified-history event asks reconciliation to try the then-current view.
+-record(feed_registration, {
+          identity :: {binary(), <<_:256>>},
+          peer :: <<_:256>>,
+          registration_id :: <<_:128>>,
+          current_endpoint = none :: none | term(),
+          remaining = [] :: [term()],
+          open_ref = none :: none | reference(),
+          link = none :: none | pid(),
+          mref = none :: none | reference(),
+          registered = false :: boolean(),
+          height = unknown :: unknown | non_neg_integer()
+         }).
+
+-record(s, {
+          root :: file:filename_all(),
+          fetch_fun = undefined :: undefined | function(),
+          page_timeout_ms = ?DEFAULT_PAGE_TIMEOUT_MS :: pos_integer(),
+          pending = #{} :: #{reference() => #request{}},
+          pulls = #{} :: #{<<_:128>> => #pull{}},
+          histories = #{} :: #{{binary(), binary()} => #history{}},
+          follows = #{} :: #{reference() => {binary(), <<_:256>>}},
+          %% Unverified, TLS-authenticated transport contacts are small P
+          %% hints. They survive releasing an inactive decoded history, but
+          %% are never durable evidence and never carry a projection.
+          bootstrap = #{} :: #{{binary(), binary()} => [{<<_:256>>, term()}]},
+          total_bytes = 0 :: non_neg_integer(),
+          projection_bytes = 0 :: non_neg_integer(),
+          follow_wakes = 0 :: non_neg_integer(),
+          follow_pages = 0 :: non_neg_integer(),
+          follow_entries = 0 :: non_neg_integer(),
+          follow_bytes = 0 :: non_neg_integer(),
+          follow_coalesced = 0 :: non_neg_integer(),
+          follow_resnapshots = 0 :: non_neg_integer(),
+          projection_rebuilds = 0 :: non_neg_integer(),
+          %% Owner-lifetime integrity counts, independent of telemetry.
+          history_custody_losses = 0 :: non_neg_integer(),
+          history_corruptions = 0 :: non_neg_integer(),
+          history_index_losses = 0 :: non_neg_integer(),
+          max_follow_lag = 0 :: non_neg_integer(),
+          bootstrap_accepted = 0 :: non_neg_integer(),
+          bootstrap_rejected = 0 :: non_neg_integer(),
+          bootstrap_evicted = 0 :: non_neg_integer(),
+          page_bindings = #{} :: #{term() => #page_binding{}},
+          page_contacts = #{} :: #{term() => reference()},
+          page_openings = #{} :: #{reference() => reference()},
+          progress_channels = #{} ::
+              #{binary() => {binary(), pos_integer(), boolean()}},
+          feed_registrations = #{} ::
+              #{{{binary(), <<_:256>>}, <<_:256>>} =>
+                    #feed_registration{}},
+          feed_registration_openings = #{} ::
+              #{reference() => {{binary(), <<_:256>>}, <<_:256>>}},
+          feed_registration_monitors = #{} ::
+              #{reference() => {{binary(), <<_:256>>}, <<_:256>>}},
+          transport_monitor :: reference()
+         }).
+
+%%%===================================================================
+%%% Public API
+%%%===================================================================
+
+-spec start_link() -> {ok, pid()} | {error, term()}.
+start_link() ->
+    start_link(application:get_env(quod, foreign_log, #{})).
+
+-spec start_link(map()) -> {ok, pid()} | {error, term()}.
+start_link(Opts) when is_map(Opts) ->
+    gen_server:start_link(quod_reg:via(?KEY), ?MODULE, Opts, []).
+
+-doc """
+Verify one exact foreign DTX reference through one explicit source.
+
+This is the low-level exact-source form used for isolated verification and
+adversarial checks. Normal DTX recovery uses `resolve_reference/6`, which
+prefers a captured local prefix and otherwise selects routed sources inside
+this owner. Routed forms share the cache, history fold, certificate checks,
+and resource accounting.
+""".
+-spec verify(<<_:256>>, term(), quod_dtx:certified_ref(),
+             transaction | vote | resolve | complete,
+             pos_integer()) ->
+          {ok, map()} | {error, term()}.
+verify(PeerKey, Endpoint, Ref, ExpectedPhase, TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    Deadline = caller_deadline(TimeoutMs),
+    verification_call(
+      {verify, PeerKey, Endpoint, Ref, ExpectedPhase, TimeoutMs}, Deadline);
+verify(_PeerKey, _Endpoint, _Ref, _ExpectedPhase, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+-doc """
+Verify one exact foreign DTX reference through the shared source selector.
+
+Certified directory routes, certified history routes, and bounded authenticated
+bootstrap candidates are transport hints only.  The existing history verifier
+still proves the exact anchor, phase, certificate chain, and committee at the
+referenced slot. The node which supplied the bytes contributes no authority.
+""".
+-spec verify_reference(quod_dtx:certified_ref(),
+                       entry | transaction | vote | resolve | complete,
+                       pos_integer()) -> {ok, map()} | {error, term()}.
+verify_reference(Ref, ExpectedPhase, TimeoutMs) ->
+    verify_reference(Ref, ExpectedPhase, none, TimeoutMs).
+
+-doc """
+Verify one exact reference with an authenticated request-scoped contact.
+
+The contact is preferred only by this verification job. It is not inserted
+into bootstrap state; a caller may retain it separately only after this
+verification succeeds.
+""".
+-spec verify_reference(quod_dtx:certified_ref(),
+                       entry | transaction | vote | resolve | complete,
+                       none | {<<_:256>>, term()}, pos_integer()) ->
+          {ok, map()} | {error, term()}.
+verify_reference(Ref, ExpectedPhase, Contact, TimeoutMs) ->
+    verify_reference(Ref, ExpectedPhase, Contact, none, TimeoutMs).
+
+-doc """
+Verify one exact reference with optional committed-entry acceleration material.
+
+`EntryHint` is never authority.  A bounded entry is offered to the same
+anchored history fold and exact reference checker as a fetched entry.  Bad or
+unrelated material is ignored and ordinary certified fetching remains the
+correctness path.
+""".
+-spec verify_reference(quod_dtx:certified_ref(),
+                       entry | transaction | vote | resolve | complete,
+                       none | {<<_:256>>, term()}, none | quod_ledger:entry_artifact() | quod_ledger:selected_entry(),
+                       pos_integer()) -> {ok, map()} | {error, term()}.
+verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    verify_reference_deadline(
+      Ref, ExpectedPhase, Contact, EntryHint0, caller_deadline(TimeoutMs));
+verify_reference(_Ref, _ExpectedPhase, _Contact, _EntryHint, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+verify_reference_deadline(Ref, ExpectedPhase, Contact, EntryHint0, Deadline) ->
+    case valid_request_contact(Contact) of
+        true ->
+            EntryHint = normalize_entry_hint(EntryHint0),
+            case caller_remaining(Deadline) of
+                0 -> {error, retry};
+                Remaining ->
+                    verification_call(
+                      {verify_reference, Ref, ExpectedPhase, Contact,
+                       EntryHint, Remaining}, Deadline)
+            end;
+        false ->
+            {error, bad_foreign_reference}
+    end.
+
+-doc """
+Resolve exact evidence independently of the endpoint which supplied its reference.
+
+The exact hosted identity uses only its local owner, waiting on committed
+progress if necessary; only a non-hosted identity makes a routed verification
+request. A sufficient capture stays pinned even if its owner disappears or its
+evidence fails verification. Local and routed primitives share the original
+absolute monotonic deadline. Neither
+contacts nor entry hints confer authority, and the expected target is checked
+before any owner capture or routed admission.
+""".
+-spec resolve_reference({binary(), <<_:256>>}, quod_dtx:certified_ref(),
+                        entry | transaction | vote | resolve | complete,
+                        none | {<<_:256>>, term()},
+                        none | quod_ledger:entry_artifact() | quod_ledger:selected_entry(), integer()) ->
+          {ok, map()} | {error, term()}.
+resolve_reference(Target, Ref, Phase, Contact, EntryHint, Deadline)
+  when is_integer(Deadline) ->
+    case {validate_reference_request(Ref, Phase), valid_request_contact(Contact)} of
+        {{ok, Target}, true} ->
+            case caller_remaining(Deadline) of
+                0 -> {error, retry};
+                Remaining when Remaining =< ?MAX_TIMER_MS - 1000 ->
+                    {ok, Target, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
+                    case quod_simplex:history_view_at(Target, Slot, Deadline) of
+                        {ok, #{identity := Target, slot := Height} = View}
+                          when Height >= Slot ->
+                            verify_local_deadline(View, Ref, Phase, Deadline);
+                        {error, NonHosted}
+                          when NonHosted =:= not_hosted; NonHosted =:= invalid_identity ->
+                            verify_reference_deadline(
+                              Ref, Phase, Contact, EntryHint, Deadline);
+                        {error, timeout} -> {error, retry};
+                        {error, _} = Error -> Error;
+                        _ -> {error, retry}
+                    end;
+                _ -> {error, bad_foreign_reference}
+            end;
+        _ -> {error, bad_foreign_reference}
+    end;
+resolve_reference(_Target, _Ref, _Phase, _Contact, _EntryHint, _Deadline) ->
+    {error, bad_foreign_reference}.
+
+-doc """
+Remember one TLS-authenticated node contact as an untrusted source candidate.
+
+The call is asynchronous so an ingress statem never blocks on cache ownership.
+It grants no ontology role and is useful only if later certified history from
+that endpoint proves the exact supplied identity.
+""".
+-spec observe_candidate({binary(), <<_:256>>}, {<<_:256>>, term()}) -> ok.
+observe_candidate(Identity, {PeerKey, Endpoint}) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            gen_server:cast(Pid, {observe_candidate, Identity,
+                                  PeerKey, Endpoint});
+        undefined ->
+            ok
+    end;
+observe_candidate(_Identity, _Contact) ->
+    ok.
+
+-doc """
+Return the route-hint view for one exact ontology identity.
+
+`Supplied` may contain already-certified historical route candidates from a
+caller. It uses the same keyed, ordered endpoint-list representation returned
+by this function and by current-view evidence. It is merged inside the
+foreign-log owner with directory, cached-history, and authenticated bootstrap
+hints; no caller should reimplement that merge. Before a committee is
+certified, each result row contains one discovery endpoint.
+After certification, each row contains at most two ordered endpoints: a
+first-party live contact, its certified historical fallback, or—only when no
+certified endpoint exists—a supplied discovery fallback.
+""".
+-spec route_hints({binary(), <<_:256>>}, [{<<_:256>>, [term()]}]) ->
+          {ok, [{<<_:256>>, [term()]}]} |
+          {error, unavailable | anchor_conflict | invalid_request}.
+route_hints(Identity, Supplied) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, {route_hints, Identity, Supplied}, 1000)
+            catch exit:_ -> {error, unavailable}
+            end;
+        undefined ->
+            {error, unavailable}
+    end.
+
+-doc "Validate the one bounded keyed route-candidate representation.".
+-spec valid_route_candidates(term()) -> boolean().
+valid_route_candidates(Routes) ->
+    case normalize_route_candidates(Routes) of
+        {ok, _Normalized} -> true;
+        error -> false
+    end.
+
+-doc """
+Verify one exact reference against a co-hosted owner's immutable history view.
+
+The owner supplies its immutable ledger snapshot and read-only phase/era
+capture. Every reference is read and checked directly, including old committee
+eras. No foreign job, cache or prefix replay is involved. Returned committee
+and committee id are fixed by the referenced
+slot. Validator routes are reachability hints from that committee era, never
+authority.
+""".
+-spec verify_local(quod_simplex:history_view(),
+                   quod_dtx:certified_ref(),
+                   entry | transaction | vote | resolve | complete,
+                   pos_integer() | infinity) ->
+          {ok, map()} | {error, term()}.
+verify_local(
+  View, Ref, ExpectedPhase, TimeoutMs)
+  when ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
+         TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
+    verify_local_deadline(View, Ref, ExpectedPhase, caller_deadline(TimeoutMs));
+verify_local(_View, _Ref, _ExpectedPhase, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+-doc "Verify an already captured local view under the original absolute deadline.".
+-spec verify_local_deadline(quod_simplex:history_view(),
+                            quod_dtx:certified_ref(),
+                            entry | transaction | vote | resolve | complete, integer() | infinity) ->
+          {ok, map()} | {error, term()}.
+verify_local_deadline(
+  #{identity := {Ns, _}, snapshot := Snapshot} = View,
+  Ref, ExpectedPhase, Deadline)
+  when is_integer(Deadline) orelse Deadline =:= infinity ->
+    verify_captured_local(
+      View, Ref, ExpectedPhase, Deadline,
+      fun(_Height, Projection) ->
+          verify_resident_snapshot(
+            Snapshot, ref_slot(Ref), Ns, Ref, ExpectedPhase, Projection)
+      end);
+verify_local_deadline(_View, _Ref, _ExpectedPhase, _Deadline) ->
+    {error, bad_foreign_reference}.
+
+-doc "Read and certify one local application once through its owner's captured archive.".
+-spec read_local_application_deadline(quod_simplex:history_view(), pos_integer(),
+                                       <<_:256>>, integer() | infinity) ->
+          {ok, quod_dtx:certified_ref(), quod_ledger:selected_entry(), map()} | {error, term()}.
+read_local_application_deadline(
+  #{identity := {Ns, _} = Identity, snapshot := Snapshot} = View,
+  Slot, <<_:256>> = TxId, Deadline)
+  when is_integer(Slot), Slot > 0, is_integer(Deadline) orelse Deadline =:= infinity ->
+    case caller_live(Deadline) of
+        false -> {error, retry};
+        true -> with_local_view_owner(View, fun() ->
+            with_snapshot_store(Snapshot, Ns, fun(Store) ->
+                case quod_ledger_store:read_at(Store, Slot, {application, TxId}) of
+                    {ok, Selected} ->
+                        Record = quod_ledger:selected_record(Selected),
+                        case quod_dtx:certified_entry_ref(Identity, Selected, Record) of
+                            {ok, Ref} ->
+                                Verified = verify_captured_local(View, Ref, transaction, Deadline,
+                                  fun(Height, Projection) ->
+                                      case reference_projection(Slot, Height, Projection) of
+                                          {ok, EvidenceProjection} ->
+                                              verify_exact_reference_entry(Ref, transaction, Selected, EvidenceProjection);
+                                          error -> {error, retry}
+                                      end
+                                  end),
+                                case Verified of
+                                    {ok, Evidence} -> {ok, Ref, Selected, Evidence};
+                                    {error, _} = Error -> Error
+                                end;
+                            {error, _} -> {error, invalid_foreign_reference}
+                        end;
+                    not_found -> {error, retry}
+                end
+            end)
+        end)
+    end;
+read_local_application_deadline(_, _, _, _) -> {error, bad_foreign_reference}.
+
+verify_captured_local(
+  #{owner := Owner, identity := Identity, slot := Height,
+    applied := Applied, projection := Projection} = View,
+  Ref, ExpectedPhase, Deadline, Verify)
+  when is_pid(Owner), is_integer(Height), Height >= 0,
+       is_integer(Applied), Applied >= 0, Applied =< Height,
+       is_function(Verify, 2) ->
+    Remaining = caller_remaining(Deadline),
+    Result = case Remaining =/= 0 andalso
+                  validate_local_request(View, Ref, ExpectedPhase, Remaining) of
+        {ok, Identity} ->
+            ?LOCAL_READ_GATE(before_read),
+            with_local_view_owner(
+              View, fun() ->
+                  Read = Verify(Height, Projection),
+                  ?LOCAL_READ_GATE(after_read),
+                  Read
+              end);
+        {error, _} = Error -> Error;
+        false -> {error, retry}
+    end,
+    caller_result(Deadline, bind_local_evidence(Result, View));
+verify_captured_local(_View, _Ref, _ExpectedPhase, _Deadline, _Verify) ->
+    {error, bad_foreign_reference}.
+
+bind_local_evidence({ok, Evidence}, #{owner := Owner, identity := Identity}) ->
+    {ok, Evidence#{local_owner => #{owner => Owner, identity => Identity}}};
+bind_local_evidence(Result, _View) -> Result.
+
+-doc """
+Select another record from a completed, locally verified exact-entry result.
+
+This accepts only a successful verifier result retained by the current
+validation call, never a wire map or an untrusted entry hint. Identity, signed
+height and block hash must match; the shared exact checker still decodes and
+binds the new record and phase. Hosted evidence keeps its original owner
+incarnation, without retaining another snapshot or projection.
+""".
+-spec reselect_verified(map(), quod_dtx:certified_ref(),
+                        entry | transaction | vote | resolve | complete,
+                        integer()) -> {ok, map()} | {error, term()}.
+reselect_verified(
+  #{identity := Identity, slot := Height, block_hash := Hash,
+    entry := Entry, committee := Committee, committee_id := CommitteeId,
+    routes := Routes} = Evidence, Ref, Phase, Deadline)
+  when is_integer(Deadline) ->
+    case {quod_dtx:certified_ref_claim(Ref), valid_phase(Phase), caller_live(Deadline)} of
+        {error, _, _} -> {error, bad_foreign_reference};
+        {_, false, _} -> {error, bad_foreign_reference};
+        {_, _, false} -> {error, retry};
+        {{ok, {Identity, Height, Hash, _Digest}}, true, true} ->
+            Authority = #{committee => Committee, committee_id => CommitteeId,
+                          validator_routes => Routes},
+            Select = fun() ->
+                Result = case quod_ledger:hint_bytes(Entry) of
+                    {ok, Bytes} -> verify_exact_reference_entry(Ref, Phase, Bytes, Authority);
+                    {error, _} -> {error, invalid_foreign_reference}
+                end,
+                ?LOCAL_READ_GATE(after_read),
+                Result
+            end,
+            ?LOCAL_READ_GATE(before_read),
+            Result = case maps:find(local_owner, Evidence) of
+                {ok, View} -> bind_local_evidence(with_local_view_owner(View, Select), View);
+                error -> Select()
+            end,
+            caller_result(Deadline, Result);
+        _ -> {error, invalid_foreign_reference}
+    end;
+reselect_verified(_Evidence, _Ref, _Phase, _Deadline) ->
+    {error, bad_foreign_reference}.
+
+-ifdef(TEST).
+%% Caller-local barriers exercise the real direct verifier, not an admitted
+%% foreign worker. Ordinary builds contain neither these calls nor this code.
+test_local_read_gate(Stage) ->
+    case get({?MODULE, local_read_gate}) of
+        {Stage, Parent, Token} ->
+            erase({?MODULE, local_read_gate}),
+            Parent ! {local_read_held, Token, self()},
+            receive {release_local_read, Token} -> ok end;
+        _ -> ok
+    end.
+-endif.
+
+caller_deadline(infinity) -> infinity;
+caller_deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
+
+caller_remaining(infinity) -> infinity;
+caller_remaining(Deadline) -> max(0, Deadline - quod_time:mono_ms()).
+
+caller_live(infinity) -> true;
+caller_live(Deadline) -> Deadline > quod_time:mono_ms().
+
+caller_result(Deadline, Result) ->
+    case caller_live(Deadline) of true -> Result; false -> {error, retry} end.
+
+verification_call(Request, Deadline) ->
+    verification_call(quod_reg:where(?KEY), Request, Deadline).
+
+verification_call(Pid, Request, Deadline) ->
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.foreign.owner_request">>, internal, #{},
+      fun(Span) ->
+          {Result, Cause0} = case {caller_live(Deadline), Pid} of
+              {false, _} -> {{error, retry}, caller_expired};
+              {true, undefined} -> {{error, retry}, owner_unavailable};
+              {true, _} ->
+                  Timeout = case Deadline of
+                      infinity -> infinity;
+                      _ -> max(0, Deadline - quod_time:mono_ms()) + 1000
+                  end,
+                  try gen_server:call(Pid,
+                        {verification, Deadline, quod_trace:context(),
+                         erlang:monotonic_time(), Request}, Timeout)
+                  of R -> {R, owner_reply}
+                  catch exit:_ -> {{error, retry}, owner_call_failed}
+                  end
+          end,
+          Consumed = case Result of
+              {ready_reference, _, _, _, _} ->
+                  with_foreign_stages(Span,
+                    fun() -> consume_reference_reply(Pid, Result, Deadline) end);
+              _ -> Result
+          end,
+          Reply = caller_result(Deadline, Consumed),
+          Cause = case caller_live(Deadline) of true -> Cause0; false -> caller_expired end,
+          _ = quod_trace:set_attributes(Span, #{'quod.foreign.cause' => atom_to_binary(Cause)}),
+          _ = quod_trace:result(Span, Reply),
+          Reply
+      end).
+
+%% The owner returns a bounded, already-published read capability. Actual
+%% point I/O and the SAME exact verifier run in the existing caller, not in
+%% the node owner's mailbox or another per-identity queue. Both the certifying
+%% and resulting eras are resolved at capture; no live index handle escapes.
+consume_reference_reply(Owner,
+  {ready_reference, Snapshot, Ref, Phase, Projection}, Deadline) ->
+    {Height, _Hash} = maps:get(history_head, Projection),
+    _ = quod_trace:set_attributes(otel_tracer:current_span_ctx(quod_trace:context()),
+          #{'quod.foreign.read_source' => <<"published_prefix">>,
+            'quod.foreign.captured_height' => Height}),
+    ?LOCAL_READ_GATE(before_read),
+    case is_process_alive(Owner) andalso caller_live(Deadline) of
+        true ->
+            Read = verify_resident_snapshot(Snapshot, ref_slot(Ref),
+                        cache_namespace(ref_identity(Ref)), Ref, Phase, Projection),
+            ?LOCAL_READ_GATE(after_read),
+            case is_process_alive(Owner) andalso caller_live(Deadline) of
+                true -> Read;
+                false -> {error, retry}
+            end;
+        false -> {error, retry}
+    end.
+
+%% Later appends preserve a borrowed view. Only replacing or losing its exact
+%% owner makes it unavailable; never recapture a newer session for an old view.
+with_local_view_owner(View, Fun) ->
+    case quod_simplex:history_view_live(View) of
+        true ->
+            Result = Fun(),
+            case quod_simplex:history_view_live(View) of
+                true -> Result;
+                false -> {error, retry}
+            end;
+        false -> {error, retry}
+    end.
+
+local_view_fetch(View, Store, Query, Deadline, Consume) ->
+    case quod_simplex:history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+            false -> {error, retry};
+            true ->
+                Open = case Query of
+                           {continue, {local, Retained}, 1} -> {ok, Retained};
+                           _ -> quod_catchup:open_history_transfer(Store, View, Query)
+                       end,
+                Page = case Open of
+                           {ok, Sender} -> quod_catchup:transfer_page(Store, Sender);
+                           {error, _} = Error -> Error
+                       end,
+                case Page of
+                    {ok, Parts, Next} ->
+                        Continuation = case Next of done -> done; _ -> {{local, Next}, 1} end,
+                        Height = quod_ledger_store:last(Store),
+                        Consumed = Consume(Parts, Height, Continuation),
+                        case quod_simplex:history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+                            true -> {ok, Consumed, Height, Continuation};
+                            false -> {error, retry, Consumed}
+                        end;
+                    {error, _} = PageError -> PageError
+                end
+    end.
+
+%% validate_local_request already checked the identity/reference/projection
+%% binding. Read the exact claim from that certified immutable prefix; a
+%% caller's preferred witness cannot force a different archive or prefix replay.
+%% This read acquires no writer or registry-server custody.
+verify_resident_snapshot(
+  Snapshot, Slot, Ns, Ref, ExpectedPhase, Projection) ->
+    with_snapshot_store(Snapshot, Ns, fun(Store) ->
+        verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection)
+    end).
+
+with_snapshot_store(Snapshot, Ns, Fun) ->
+    case quod_ledger_store:open_ro_snapshot(Snapshot) of
+        {ok, Store} ->
+            try
+                case quod_ledger_store:namespace(Store) of
+                    Ns -> Fun(Store);
+                    _OtherNamespace -> {error, bad_foreign_reference}
+                end
+            after quod_ledger_store:close(Store) end;
+        {error, _Unavailable} -> {error, retry}
+    end.
+
+verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
+    Lookup = trace_foreign_stage(exact_lookup,
+               fun() -> quod_ledger_store:read_at(
+                          Store, Slot, {digest, Slot, ref_record_digest(Ref)}) end),
+    verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection).
+
+verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection) ->
+    case {Lookup, reference_projection(Slot, Slot, Projection)} of
+        {{ok, Entry}, {ok, EvidenceProjection}} ->
+            Slot = quod_ledger:entry_index(Entry),
+            verify_exact_reference_entry(
+              Ref, ExpectedPhase, Entry, EvidenceProjection);
+        {not_found, _} ->
+            {error, retry};
+        {_, error} ->
+            {error, retry}
+    end.
+
+-doc """
+Return one certificate-verified current committee view for an anchored identity.
+
+It verifies committee succession from the pinned genesis anchor and a proof
+of the selected tip, then requires a full quorum of that committee to
+corroborate its height and hash. Ordinary material history is not downloaded.
+Supplied routes remain identity-pinned fetch hints only.
+
+Before genesis is certified, candidates retain discovery order. Afterwards the
+returned route view contains only certified committee keys, with live
+first-party reachability ahead of the certified historical endpoint for the
+same key. Untrusted hosts may still supply history bytes to cross a committee
+move, but they cannot corroborate the current view. The returned view uses
+`route_candidates`, distinct from exact phase evidence's certified `routes`.
+""".
+-spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>}, pos_integer()) ->
+          {ok, map()} | {error, term()}.
+current(Routes, Identity, TimeoutMs) ->
+    current(Routes, Identity, none, TimeoutMs).
+
+-doc """
+Return one certified current view using a request-scoped authenticated contact.
+
+`Contact` is the TLS peer and endpoint carrying the current request. It is
+preferred for this verification job but is not stored as a bootstrap hint.
+Only successfully verified history becomes reusable state.
+""".
+-spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>},
+              none | {<<_:256>>, term()}, pos_integer()) ->
+          {ok, map()} | {error, term()}.
+current(Routes0, Identity, Contact, TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    Deadline = caller_deadline(TimeoutMs),
+    case {normalize_route_candidates(Routes0), valid_identity(Identity),
+          valid_request_contact(Contact)} of
+        {{ok, [_ | _] = Routes}, true, true} ->
+            StartedNative = erlang:monotonic_time(),
+            {Ns, _Anchor} = Identity,
+            Result = quod_trace:with_span(
+                       quod_trace:context(), <<"quod.foreign.current">>, internal,
+                       #{'quod.namespace' => Ns},
+                       fun(SpanCtx) ->
+                           observe_foreign_stage(current_setup, ok, StartedNative),
+                           R = verification_call(
+                                 {current, Routes, Identity, Contact, TimeoutMs}, Deadline),
+                           _ = quod_trace:result(SpanCtx, R),
+                           R
+                       end),
+            observe_foreign_stage(current_total, foreign_result(Result), StartedNative),
+            caller_result(Deadline, Result);
+        _ ->
+            {error, bad_foreign_reference}
+    end;
+current(_Routes, _Identity, _Contact, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+-doc "Follow certified progress or materialized facts through the same monitored subscription.".
+-spec follow({binary(), <<_:256>>}, progress | projection) ->
+          {ok, reference()} |
+          {error, invalid_identity | unavailable}.
+follow(Identity, Interest) ->
+    case valid_identity(Identity) andalso valid_follow_interest(Interest) of
+        true ->
+            case quod_reg:where(?KEY) of
+                Pid when is_pid(Pid) ->
+                    try gen_server:call(Pid, {follow, Identity, Interest}, 1000)
+                    catch exit:_ -> {error, unavailable}
+                    end;
+                undefined ->
+                    {error, unavailable}
+            end;
+        false ->
+            {error, invalid_identity}
+    end.
+
+-doc "Register from the consumer's own receive loop without a helper owner.".
+-spec follow_request({binary(), <<_:256>>}, progress | projection) ->
+          {ok, gen_server:request_id()} | {error, invalid_identity | unavailable}.
+follow_request(Identity, Interest) ->
+    case valid_identity(Identity) andalso valid_follow_interest(Interest) of
+        true -> send_follow_request({follow, Identity, Interest});
+        false -> {error, invalid_identity}
+    end.
+
+valid_follow_interest(progress) -> true;
+valid_follow_interest(projection) -> true;
+valid_follow_interest(_) -> false.
+
+-doc "Remove this consumer's follow without blocking its shutdown.".
+-spec unfollow_request(reference()) ->
+          {ok, gen_server:request_id()} | {error, unavailable}.
+unfollow_request(FollowRef) when is_reference(FollowRef) ->
+    send_follow_request({unfollow, FollowRef}).
+
+send_follow_request(Request) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) -> {ok, gen_server:send_request(Pid, Request)};
+        undefined -> {error, unavailable}
+    end.
+
+-doc "Request an immediate certified refresh for one follow owned by this process.".
+-spec refresh(reference()) -> ok.
+refresh(FollowRef) when is_reference(FollowRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            gen_server:cast(Pid, {refresh, FollowRef, self()});
+        undefined ->
+            ok
+    end;
+refresh(_FollowRef) ->
+    ok.
+
+-doc "Acknowledge completion of one exact local follow notice.".
+-spec ack(reference(), reference()) -> ok.
+ack(FollowRef, NoticeRef)
+  when is_reference(FollowRef), is_reference(NoticeRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            gen_server:cast(Pid, {ack, FollowRef, NoticeRef, self()});
+        undefined -> ok
+    end;
+ack(_FollowRef, _NoticeRef) ->
+    ok.
+
+-doc "Read exact clauses and their applied height from this follow's certified projection.".
+-spec projection_clauses(reference(), [{term(), non_neg_integer()}],
+                         pos_integer()) -> {ok, non_neg_integer(), map()} | {error, term()}.
+projection_clauses(FollowRef, Functors, TimeoutMs)
+  when is_reference(FollowRef), is_list(Functors),
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            Handle = try gen_server:call(
+                           Pid, {projection_handle, FollowRef, self()}, min(1000, TimeoutMs))
+                     catch exit:_ -> {error, unavailable}
+                     end,
+            case Handle of
+                {ok, ProjectionPid, Generation} ->
+                    case Deadline - quod_time:mono_ms() of
+                        Remaining when Remaining > 0 ->
+                            quod_foreign_projection:clauses(
+                              ProjectionPid, Generation, Functors, Remaining);
+                        _ -> {error, unavailable}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        undefined -> {error, unavailable}
+    end;
+projection_clauses(_, _, _) -> {error, bad_request}.
+
+-doc "Remove one exact follow owned by the calling consumer.".
+-spec unfollow(reference()) -> ok.
+unfollow(FollowRef) when is_reference(FollowRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, {unfollow, FollowRef}, 1000)
+            catch exit:_ -> ok
+            end;
+        undefined -> ok
+    end;
+unfollow(_FollowRef) ->
+    ok.
+
+-ifdef(TEST).
+test_install_feed_registration(Pid, Identity, Peer, Link, RegistrationId)
+  when is_pid(Pid), is_pid(Link), is_binary(RegistrationId),
+       byte_size(RegistrationId) =:= 16 ->
+    gen_server:call(
+      Pid,
+      {test_install_feed_registration,
+       Identity, Peer, Link, RegistrationId}).
+
+test_set_feed_height(Pid, Identity, Peers, Height)
+  when is_pid(Pid), is_list(Peers), is_integer(Height), Height >= 0 ->
+    gen_server:call(Pid, {test_set_feed_height, Identity, Peers, Height}).
+
+test_install_feed_opening(Pid, Identity, Peer, RegistrationId, OpenRef)
+  when is_pid(Pid), is_binary(RegistrationId),
+       byte_size(RegistrationId) =:= 16, is_reference(OpenRef) ->
+    gen_server:call(
+      Pid,
+      {test_install_feed_opening,
+       Identity, Peer, RegistrationId, OpenRef}).
+
+test_install_feed_authority(Pid, Identity, Projection)
+  when is_pid(Pid), is_map(Projection) ->
+    gen_server:call(
+      Pid, {test_install_feed_authority, Identity, Projection}).
+
+test_corrupt_resident_height(Pid, Identity, Height)
+  when is_pid(Pid), is_integer(Height), Height >= 0 ->
+    gen_server:call(Pid, {test_corrupt_resident_height, Identity, Height}).
+-endif.
+
+
+-spec stats() -> map().
+stats() ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, stats)
+            catch exit:_ -> empty_stats()
+            end;
+        undefined -> empty_stats()
+    end.
+
+empty_stats() ->
+    #{pending => 0, queued => 0, pulls => 0, histories => 0, page_bindings => 0,
+      feed_registrations => 0,
+      resident_verified => 0,
+      cache_bytes => 0,
+      follow_consumers => 0, followed_histories => 0,
+      projection_workers => 0, projection_bytes => 0,
+      follow_building => 0, follow_unreachable => 0,
+      follow_wakes => 0, follow_pages => 0,
+      follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
+      follow_resnapshots => 0,
+      projection_rebuilds => 0, max_follow_lag => 0,
+      history_custody_losses => 0, history_corruptions => 0,
+      history_index_losses => 0}.
+
+%%%===================================================================
+%%% gen_server
+%%%===================================================================
+
+init(Opts) ->
+    process_flag(trap_exit, true),
+    Root = maps:get(
+             cache_dir, Opts,
+             filename:join(
+               quod_ledger_store:default_data_dir(), "foreign-log")),
+    FetchFun = maps:get(fetch_fun, Opts, undefined),
+    PageTimeout = maps:get(page_timeout_ms, Opts, ?DEFAULT_PAGE_TIMEOUT_MS),
+    case valid_options(Root, FetchFun, PageTimeout) of
+        true ->
+            %% Materialized projections are rebuildable P state. A normal
+            %% worker shutdown removes its generation directory; clearing the
+            %% dedicated parent here also reclaims anything left by an
+            %% untrappable kill before this owner restarted.
+            cleanup_projection_dirs(Root),
+            true = quod_reg:subscribe({runtime, quod_ontology:root_ns()}),
+            TransportMonitor = quod_reg:monitor_name({transport, node}, follow),
+            S0 = #s{root = Root, fetch_fun = FetchFun,
+                    page_timeout_ms = PageTimeout,
+                    transport_monitor = TransportMonitor},
+            %% Catalogue manifests only. Each retained identity is initialized
+            %% by its existing exclusive writer, before queued request work.
+            %% The node owner remains responsive while those writers do I/O.
+            {ok, initialize_retained_histories(S0)};
+        false ->
+            {stop, bad_foreign_log_config}
+    end.
+
+valid_options(Root, FetchFun, PageTimeout) ->
+    (is_list(Root) orelse is_binary(Root)) andalso
+        (FetchFun =:= undefined orelse is_function(FetchFun, 6)) andalso
+        is_integer(PageTimeout) andalso PageTimeout > 0 andalso
+        PageTimeout =< ?MAX_TIMER_MS - 1000.
+
+cleanup_projection_dirs(Root) ->
+    _ = file:del_dir_r(filename:join(Root, "projections")),
+    ok.
+
+handle_call(stats, _From, S) ->
+    Followed = [H || H <- maps:values(S#s.histories),
+                     map_size(H#history.consumers) > 0],
+    Reply = #{pending => map_size(S#s.pending),
+              queued => lists:sum(
+                          [queue:len(Q) || #history{waiting = Q} <-
+                                               maps:values(S#s.histories)]),
+              pulls => map_size(S#s.pulls),
+              histories => map_size(S#s.histories),
+              page_bindings => map_size(S#s.page_bindings),
+              feed_registrations => length(
+                                      [ok || #feed_registration{
+                                                registered = true} <-
+                                                   maps:values(
+                                                     S#s.feed_registrations)]),
+              resident_verified => length(
+                                     [ok || #history{
+                                                resident_verified = true} <-
+                                                maps:values(S#s.histories)]),
+              cache_bytes => S#s.total_bytes,
+              follow_consumers => map_size(S#s.follows),
+              followed_histories => length(Followed),
+              projection_workers => length(
+                                      [ok || #history{materializer = M} <- Followed,
+                                             M =/= none]),
+              projection_bytes => S#s.projection_bytes,
+              follow_building => length(
+                                   [ok || H = #history{projection_state = building} <-
+                                              Followed, needs_projection(H)]),
+              follow_unreachable => length(
+                                      [ok || #history{
+                                               reachability =
+                                                   {unreachable, _}} <- Followed]),
+              follow_wakes => S#s.follow_wakes,
+              follow_pages => S#s.follow_pages,
+              follow_entries => S#s.follow_entries,
+              follow_bytes => S#s.follow_bytes,
+              follow_coalesced => S#s.follow_coalesced,
+              follow_resnapshots => S#s.follow_resnapshots,
+              projection_rebuilds => S#s.projection_rebuilds,
+              history_custody_losses => S#s.history_custody_losses,
+              history_corruptions => S#s.history_corruptions,
+              history_index_losses => S#s.history_index_losses,
+              max_follow_lag => S#s.max_follow_lag,
+              bootstrap_candidates => bootstrap_candidate_count(S),
+              bootstrap_accepted => S#s.bootstrap_accepted,
+              bootstrap_rejected => S#s.bootstrap_rejected,
+              bootstrap_evicted => S#s.bootstrap_evicted},
+    {reply, Reply, S};
+handle_call({follow, Identity, Interest}, From, S0) ->
+    {noreply, add_follow(Identity, Interest, From, S0)};
+handle_call({unfollow, FollowRef}, From, S0) ->
+    {ConsumerPid, _Tag} = From,
+    {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
+handle_call({projection_handle, FollowRef, ConsumerPid}, _From, S) ->
+    {reply, follow_materializer(FollowRef, ConsumerPid, S), S};
+handle_call({verification, Deadline, TraceCtx, EnqueuedNative, Request}, From, S0) ->
+    observe_foreign_stage(owner_mailbox, ok, EnqueuedNative),
+    Caller = #caller{deadline = Deadline,
+                     trace_ctx = stripped_trace_context(TraceCtx),
+                     enqueued_native = EnqueuedNative},
+    ValidDeadline = valid_caller_deadline(Request, Deadline),
+    case ValidDeadline andalso caller_live(Deadline) of
+        false ->
+            Cause = case ValidDeadline of true -> caller_expired; false -> malformed_request end,
+            observe_unadmitted_caller(Caller, Cause),
+            {reply, {error, retry}, S0};
+        true ->
+            measure_foreign_ok(owner_admission,
+              fun() -> handle_verification(Request, Caller, From, S0) end)
+    end;
+handle_call({claim_cache_custody, RequestRef}, {Worker, _}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker, identity = Identity, custody = acquiring, retiring = false,
+                 callers = Callers} = Request ->
+            case request_source_live(Request) andalso
+                 quod_reg:where(cache_writer_key(Identity)) =:= Worker of
+                true ->
+                    H0 = maps:get(Identity, S0#s.histories),
+                    Material = material_work(Request#request.work, H0),
+                    Resident = case Material of true -> resident_cache(Identity, S0); false -> none end,
+                    H1 = case Material of
+                        true -> H0#history{resident_verified = false, phase_session = none};
+                        false -> H0
+                    end,
+                    S1 = put_history(Identity, H1, S0),
+                    Running = stage_callers(Callers, running),
+                    annotate_caller_stages(Running, work_lifetime_attributes(Request#request.work)),
+                    S2 = S1#s{pending = (S1#s.pending)#{RequestRef =>
+                                      Request#request{custody = held, material_custody = Material,
+                                          callers = Running}}},
+                    Keep = [Index || Index <- [H0#history.phase_session,
+                                                prefix_index(H0#history.published)],
+                                     Index =/= none],
+                    Context = #{material => Material, authorities => H0#history.authorities,
+                                certified_tip => H0#history.certified_tip,
+                                deadline => evidence_work_deadline(Request)},
+                    {reply, {ok, Resident, Keep, worker_trace(Identity, Callers,
+                              Request#request.job_id, Request#request.attempt), Context}, S2};
+                false -> {reply, {error, retry}, S0}
+            end;
+        _ -> {reply, {error, retry}, S0}
+    end;
+handle_call({retain_phase_index, RequestRef, Index}, {Worker, _}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker, custody = held, phase_hold = none,
+                 retiring = false} = Request ->
+            case request_source_live(Request) of
+                true ->
+                    case quod_dtx_phase_index:retain_empty(Index) of
+                        {ok, Hold} ->
+                            {reply, ok, S0#s{pending = (S0#s.pending)#{RequestRef =>
+                                              Request#request{phase_hold = Hold}}}};
+                        {error, _} = Error -> {reply, Error, S0}
+                    end;
+                false -> {reply, {error, retry}, S0}
+            end;
+        _ -> {reply, {error, retry}, S0}
+    end;
+handle_call({route_hints, Identity, Supplied}, _From, S0) ->
+    case {valid_identity(Identity), normalize_route_candidates(Supplied)} of
+        {true, {ok, Normalized}} ->
+            S1 = ensure_history(Identity, S0),
+            Reply = case selected_route_sources(
+                           Identity, flatten_route_candidates(Normalized), S1) of
+                        {ok, Sources} ->
+                            case route_candidates(Sources) of
+                                [_ | _] = Routes -> {ok, Routes};
+                                [] -> {error, unavailable}
+                            end;
+                        {error, anchor_conflict} ->
+                            {error, anchor_conflict}
+                    end,
+            {reply, Reply, hibernate_history(Identity, S1)};
+        _ ->
+            {reply, {error, invalid_request}, S0}
+    end;
+handle_call(
+  {pull_page, RequestRef, Peer, Endpoint, Ns, Query, Deadline, TraceCtx}, From,
+  S = #s{fetch_fun = undefined}) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{identity = {Ns, _Anchor} = Identity, work = Work} ->
+            admit_pull(RequestRef, Identity, Work, Peer, Endpoint,
+                       Query, Deadline, TraceCtx, From, S);
+        _ ->
+            {reply, {error, retry}, S}
+    end;
+handle_call({proof_stage, RequestRef}, {Caller, _}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{identity = Identity, custody = held, retiring = false,
+                 proof_stages = Stages} = R ->
+            Path = quod_ledger_store:staging_path_in(cache_dir(S#s.root, cache_namespace(Identity))),
+            {reply, {ok, Path}, S#s{pending = (S#s.pending)#{
+                RequestRef => R#request{proof_stages = Stages#{Path => Caller}}}}};
+        _ -> {reply, {error, retry}, S}
+    end;
+handle_call({complete_page_decode, Key, Verdict}, {Caller, _}, S0) ->
+    {Reply, S1} = complete_page_decode(Key, Verdict, Caller, S0),
+    {reply, Reply, S1};
+handle_call({current_feed_tip, RequestRef, Height, Committee}, {Worker, _}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{worker = Worker, identity = Identity, custody = held,
+                 retiring = false} ->
+            {reply, current_feed_tip(Identity, Height, Committee, S), S};
+        _ -> {reply, unknown, S}
+    end;
+handle_call({borrow_local_view, RequestRef, View}, {Worker, _Tag}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker, identity = Identity, source = none,
+                 work = {follow, Identity, _Sources, Deadline}} = Request ->
+            case View of
+                #{identity := Identity, owner := SourceOwner} ->
+                    case Deadline > quod_time:mono_ms() andalso
+                         quod_simplex:history_view_live(View) of
+                        true ->
+                            Source = monitor_source_owner(
+                                       Identity, RequestRef, SourceOwner),
+                            Pending = (S0#s.pending)#{
+                                        RequestRef => Request#request{source = Source}},
+                            {reply, ok, S0#s{pending = Pending}};
+                        false -> {reply, {error, retry}, S0}
+                    end;
+                _ -> {reply, {error, retry}, S0}
+            end;
+        _ -> {reply, {error, retry}, S0}
+    end;
+handle_call({reserve_page, RequestRef, Bytes}, _From, S0)
+  when is_integer(Bytes), Bytes >= 0 ->
+    case reserve_page(RequestRef, Bytes, S0) of
+        {ok, S1} -> {reply, ok, S1};
+        {error, S1} -> {reply, {error, retry}, S1}
+    end;
+handle_call({set_cache_size, RequestRef, Bytes}, _From, S0)
+  when is_integer(Bytes), Bytes >= 0 ->
+    case set_cache_size(RequestRef, Bytes, S0) of
+        {ok, S1} -> {reply, ok, S1};
+        {error, S1} -> {reply, {error, retry}, S1}
+    end;
+handle_call({reset_cache, RequestRef}, _From, S0) ->
+    case reset_cache_accounting(RequestRef, S0) of
+        {ok, S1} ->
+            %% Request-detected corruption was counted when initialization
+            %% was queued. Corruption first found during startup (or during
+            %% a custody-loss rebuild) is a separate diagnosis, counted here.
+            S2 = case maps:get(RequestRef, S1#s.pending) of
+                #request{work = {initialize, _, cache_corrupt}} -> S1;
+                _ -> count_history_integrity_loss(cache_corrupt, S1)
+            end,
+            {reply, ok, S2};
+        error -> {reply, {error, retry}, S0}
+    end;
+handle_call(Request, From, S) ->
+    handle_private_call(Request, From, S).
+
+-ifdef(TEST).
+test_lifecycle_state() ->
+    gen_server:call(quod_reg:where(?KEY), test_lifecycle_state).
+
+test_install_worker_meta(RequestRef, Meta, S) ->
+    install_worker_meta(RequestRef, Meta, S).
+
+test_install_verified_progress(RequestRef, Meta, S) ->
+    install_verified_progress(RequestRef, Meta, S).
+
+test_fail_persist_after(Stage)
+  when Stage =:= ledger_append; Stage =:= ledger_sync; Stage =:= phase_commit;
+       Stage =:= checkpoint_write; Stage =:= cache_accounting;
+       Stage =:= reserve_page ->
+    put({?MODULE, persistence_failure}, Stage),
+    ok.
+
+test_caller_rows(Callers) ->
+    [#{deadline => C#caller.deadline} || C <- maps:values(Callers)].
+
+test_wait_reason(true) -> route;
+test_wait_reason(false) -> runnable;
+test_wait_reason({custody, _}) -> custody.
+
+handle_private_call(test_lifecycle_state, _From, S) ->
+    Rows = maps:map(
+      fun(_Identity, H) ->
+          Active = case maps:get(H#history.active, S#s.pending, undefined) of
+              undefined -> none;
+              R -> #{ref => H#history.active, worker => R#request.worker,
+                     job_id => R#request.job_id,
+                     work => R#request.work,
+                     callers => test_caller_rows(R#request.callers),
+                     edge => R#request.progress_edge, custody => R#request.custody}
+          end,
+          #{active => Active, height => H#history.height,
+            resident_verified => H#history.resident_verified,
+            waiting => [#{ref => Q#request.ref,
+                          job_id => Q#request.job_id,
+                          work => Q#request.work,
+                          wait_reason => test_wait_reason(Q#request.parked),
+                          callers => test_caller_rows(Q#request.callers),
+                          edge => false} || Q <- queue:to_list(H#history.waiting)]}
+      end, S#s.histories),
+    {reply, Rows, S};
+handle_private_call({test_hold_next_page_decode, TestPid, Token, Stage}, _From, S)
+  when is_pid(TestPid), is_reference(Token),
+       (Stage =:= before_decode orelse Stage =:= before_completion orelse
+        Stage =:= after_accept) ->
+    put({?MODULE, page_decode_gate}, {TestPid, Token, Stage}),
+    {reply, ok, S};
+handle_private_call({test_hold_next_worker_result, TestPid, Token}, _From, S)
+  when is_pid(TestPid), is_reference(Token) ->
+    put({?MODULE, worker_result_gate}, {TestPid, Token}),
+    {reply, ok, S};
+handle_private_call({test_hold_next_follow_worker, TestPid, Token}, _From, S)
+  when is_pid(TestPid), is_reference(Token) ->
+    put({?MODULE, follow_worker_gate}, {TestPid, Token}),
+    {reply, ok, S};
+handle_private_call({test_hold_next_initialization, TestPid, Token}, _From, S)
+  when is_pid(TestPid), is_reference(Token) ->
+    put({?MODULE, initialization_gate}, {TestPid, Token}),
+    {reply, ok, S};
+handle_private_call({test_hold_next_confirmation, TestPid, Token}, _From, S)
+  when is_pid(TestPid), is_reference(Token) ->
+    put({?MODULE, confirmation_gate}, {TestPid, Token}),
+    {reply, ok, S};
+handle_private_call({test_follow_attempt_state, Identity}, _From, S) ->
+    H = maps:get(Identity, S#s.histories),
+    {reply, #{height => H#history.height, certified_height => history_progress_height(H),
+              hint => H#history.hinted_height,
+              inflight => H#history.follow_inflight, dirty => H#history.follow_dirty,
+              token => H#history.follow_token}, S};
+handle_private_call(test_page_rows, _From, S) ->
+    Rows = maps:map(fun(_ReqId, #pull{from = From, caller = Caller, binding = Binding,
+                                     deadline = Deadline, turn = Turn}) ->
+                        #{caller => Caller, binding => Binding, deadline => Deadline,
+                          turn => Turn, from_pending => From =/= none}
+                    end, S#s.pulls),
+    {reply, Rows, S};
+handle_private_call(test_page_binding, _From, S) ->
+    Rows = maps:map(fun(Ref, B) ->
+                       #{ref => Ref, link => B#page_binding.link,
+                         active => B#page_binding.active, credit => B#page_binding.credit,
+                         retiring => B#page_binding.retiring,
+                         waiting => queue:to_list(B#page_binding.waiting)}
+                   end, S#s.page_bindings),
+    {reply, Rows, S};
+handle_private_call(
+  {test_install_feed_registration,
+   Identity, <<_:256>> = Peer, Link, <<_:128>> = RegistrationId},
+  _From, S0) when is_pid(Link) ->
+    Key = {Identity, Peer},
+    S1 = close_feed_registration_key(Key, S0),
+    MRef = erlang:monitor(process, Link),
+    Registration = #feed_registration{
+                      identity = Identity, peer = Peer,
+                      registration_id = RegistrationId,
+                      link = Link, mref = MRef},
+    {reply, ok,
+     S1#s{
+       feed_registrations =
+           (S1#s.feed_registrations)#{Key => Registration},
+       feed_registration_monitors =
+           (S1#s.feed_registration_monitors)#{MRef => Key}}};
+handle_private_call(
+  {test_set_feed_height, Identity, Peers, Height}, _From, S0) ->
+    Registrations = lists:foldl(
+      fun(Peer, Acc) ->
+          Key = {Identity, Peer},
+          Row = maps:get(Key, Acc),
+          Acc#{Key := Row#feed_registration{registered = true, height = Height}}
+      end, S0#s.feed_registrations, Peers),
+    H0 = maps:get(Identity, S0#s.histories),
+    H1 = H0#history{hinted_height = max(Height, H0#history.hinted_height)},
+    {reply, ok, put_history(Identity, H1,
+       S0#s{feed_registrations = Registrations})};
+handle_private_call(
+  {test_install_feed_opening,
+   Identity, <<_:256>> = Peer, <<_:128>> = RegistrationId, OpenRef},
+  _From, S0) when is_reference(OpenRef) ->
+    Key = {Identity, Peer},
+    Registration = #feed_registration{
+                      identity = Identity, peer = Peer,
+                      registration_id = RegistrationId,
+                      open_ref = OpenRef},
+    {reply, ok,
+     S0#s{
+       feed_registrations =
+           (S0#s.feed_registrations)#{Key => Registration},
+       feed_registration_openings =
+           (S0#s.feed_registration_openings)#{OpenRef => Key}}};
+handle_private_call(
+  {test_install_feed_authority, Identity, Projection}, _From, S0) ->
+    case valid_identity(Identity) andalso
+         valid_projection(Projection, Identity) of
+        true ->
+            S1 = ensure_history(Identity, S0),
+            H0 = maps:get(Identity, S1#s.histories),
+            {Height, Hash} = history_head(Projection),
+            H1 = retain_verified_evidence(H0, #{certified_tip =>
+                #{height => Height, hash => Hash, authority => Projection}}),
+            {reply, ok, put_history(Identity, H1, S1)};
+        false ->
+            {reply, {error, bad_projection}, S0}
+    end;
+handle_private_call(
+  {test_corrupt_resident_height, Identity, Height}, _From, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            {reply, ok,
+             put_history(Identity, H0#history{height = Height}, S0)};
+        undefined ->
+            {reply, {error, not_found}, S0}
+    end;
+handle_private_call(_Request, _From, S) ->
+    {reply, {error, bad_request}, S}.
+-else.
+handle_private_call(_Request, _From, S) ->
+    {reply, {error, bad_request}, S}.
+-endif.
+
+handle_verification(
+  {verify, Peer, Endpoint, Ref, Phase, TimeoutMs}, Caller, From, S0) ->
+    case validate_route_request(Peer, Endpoint, Ref, Phase, TimeoutMs) of
+        {ok, Identity} ->
+            begin_worker(Peer, Identity, Caller,
+              {exact, Peer, Endpoint, Ref, Phase}, S0#s.fetch_fun, From, S0);
+        {error, Reason} ->
+            observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
+            {reply, {error, Reason}, S0}
+    end;
+handle_verification(
+  {verify_reference, Ref, Phase, Contact, EntryHint, TimeoutMs}, Caller, From, S0) ->
+    case validate_reference_request(Ref, Phase, TimeoutMs) of
+        {ok, Identity} ->
+            begin_current_worker(
+              Identity, [], Contact, Caller,
+              {exact_reference, Ref, Phase, EntryHint},
+              From, S0);
+        {error, Reason} ->
+            observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
+            {reply, {error, Reason}, S0}
+    end;
+handle_verification(
+  {current, Routes, Identity, Contact, TimeoutMs},
+  Caller, From, S0) ->
+    case validate_current_identity_request(
+           Routes, Identity, TimeoutMs) of
+        ok ->
+            begin_current_worker(
+              Identity, flatten_route_candidates(Routes), Contact, Caller,
+              {current_identity, Identity},
+              From, S0);
+        {error, Reason} ->
+            observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
+            {reply, {error, Reason}, S0}
+    end.
+
+valid_caller_deadline(_Request, Deadline) -> is_integer(Deadline).
+
+%% Arrival and publication use the same bounded read capture. Readiness is a
+%% property of the published prefix, independent of routes or writer custody.
+ready_reference({exact, _Peer, _Endpoint, Ref, Phase}, Identity, S) ->
+    ready_reference(Ref, Phase, Identity, S);
+ready_reference(#routed_work{kind = {exact_reference, Ref, Phase, _Hint}}, Identity, S) ->
+    ready_reference(Ref, Phase, Identity, S);
+ready_reference(_Work, _Identity, _S) -> miss.
+
+ready_reference(Ref, Phase, Identity, S) ->
+    {ok, Identity, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{published = #prefix{height = Height, index = Hold,
+                                     snapshot = Snapshot, projection = Projection}}
+          when Slot =< Height ->
+            Reply = case quod_dtx_phase_index:capture(Hold, Height) of
+                {ok, View} ->
+                    case {quod_dtx_phase_index:committee(View, Slot),
+                          quod_dtx_phase_index:committee(View, max(1, Slot - 1))} of
+                        {{ok, Era}, {ok, CertifyingEra}} ->
+                            %% At most two immutable rows; never copy history.
+                            Eras = lists:reverse(lists:usort([Era, CertifyingEra])),
+                            Exact = (maps:remove(history_index, Projection))#{committee_views := Eras},
+                            {ready_reference, Snapshot, Ref, Phase, Exact};
+                        _ -> {error, retry}
+                    end;
+                {error, _} -> {error, retry}
+            end,
+            {ready, Reply};
+        _ -> miss
+    end.
+
+begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
+    case start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) of
+        {ok, S1} -> {noreply, S1}
+    end.
+
+begin_current_worker(
+  Identity, Supplied, Contact, TimeoutMs, Kind, From, S0) ->
+    Work = #routed_work{supplied = Supplied, contact = Contact, kind = Kind},
+    begin_worker(none, Identity, TimeoutMs, Work, S0#s.fetch_fun, From, S0).
+
+start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
+    case ready_reference(Work, Identity, S0) of
+        {ready, Reply} ->
+            observe_unadmitted_caller(TimeoutMs, ready_prefix_capture),
+            gen_server:reply(From, Reply),
+            {ok, S0};
+        miss ->
+            case join_identical_request(Identity, Work, From, TimeoutMs, S0) of
+                {joined, S1} -> {ok, S1};
+                no -> start_distinct_worker(
+                        Peer, Identity, TimeoutMs, Work, FetchFun, From, S0)
+            end
+    end.
+
+resolve_routed_work(Identity, #routed_work{supplied = Supplied,
+                                            contact = Contact,
+                                            kind = Kind}, S0) ->
+    case selected_route_sources(Identity, Supplied, S0) of
+        {ok, Sources0} ->
+            Sources = add_request_contact(Contact, Sources0),
+            case routed_source_candidates(Kind, Sources) of
+                [{Peer, _Endpoint} | _] ->
+                    {ready, Peer,
+                     routed_worker_work(Kind, Sources, follow_request_timeout(S0))};
+                [] ->
+                    {wait, no_route}
+            end;
+        {error, anchor_conflict} ->
+            {wait, anchor_conflict}
+    end.
+
+routed_worker_work(
+  {exact_reference, Ref, Phase, EntryHint}, Sources, _ProbeTimeout) ->
+    {exact_routes,
+     history_source_candidates(Sources),
+     Ref, Phase, EntryHint};
+routed_worker_work({current_identity, Identity}, Sources, ProbeTimeout) ->
+    {current_identity, Sources, Identity, ProbeTimeout}.
+
+routed_source_candidates({exact_reference, _Ref, _Phase, _EntryHint}, Sources) ->
+    history_source_candidates(Sources);
+routed_source_candidates(_CurrentWork, Sources) ->
+    flatten_route_candidates(route_candidates(Sources)).
+
+start_distinct_worker(
+  Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
+    %% Subscribe before route selection/dispatch, including attempts that park.
+    S1 = case Work of
+        #routed_work{} -> open_progress_signals(Identity, ensure_history(Identity, S0));
+        _ -> ensure_history(Identity, S0)
+    end,
+    RequestRef = make_ref(),
+    {InternalFrom, Callers} = request_owners(
+                                RequestRef, From, TimeoutMs),
+    Queued = #request{
+                ref = RequestRef, from = InternalFrom,
+                callers = stage_callers(Callers, queued), peer = Peer,
+                identity = Identity, work = Work, fetch_fun = FetchFun,
+                enqueued_native = erlang:monotonic_time()},
+    {ok, enqueue_request(Queued, S1)}.
+
+enqueue_request(#request{identity = Identity} = Queued, S0) ->
+    %% Readers use published prefixes; only missing ranges need writer custody.
+    H0 = maps:get(Identity, S0#s.histories),
+    {_, JobId, _} = launch_identity(queued_launch_identity(Queued)),
+    H1 = H0#history{waiting = queue:in(
+          Queued#request{job_id = JobId}, H0#history.waiting)},
+    start_next_request(Identity, put_history(Identity, H1, S0)).
+
+launch_request_owned(
+  Job = #request{identity = Identity, work = RequestWork,
+                 fetch_fun = FetchFun, callers = Callers0},
+  Peer, WorkerWork, S0) ->
+    {RequestRef, JobId, Attempt} = launch_identity(queued_launch_identity(Job)),
+    Callers = stage_callers(Callers0, acquiring),
+    annotate_caller_stages(Callers, work_lifetime_attributes(RequestWork)),
+    ResidentStarted = erlang:monotonic_time(),
+    ResidentResult = resident_current_identity(WorkerWork, Identity, S0),
+    case ResidentResult of
+        {ok, Evidence} ->
+            observe_foreign_stage(
+              request_current, ok, ResidentStarted),
+            cancel_caller_timers(Callers),
+            reply_request_callers(Callers, {ok, Evidence}),
+            start_next_request(Identity, touch_history(Identity, S0));
+        miss ->
+            Owner = self(),
+            Root = S0#s.root,
+            PageTimeout = S0#s.page_timeout_ms,
+            Worker = spawn_verification_worker(
+                       RequestRef, RequestWork,
+                       fun() ->
+                           case acquire_cache_custody(Owner, RequestRef, Identity) of
+                               {ok, Resident, Keep, Trace, Context} ->
+                                   verification_custody_acquired(RequestRef),
+                                   verification_worker(
+                                     Owner, RequestRef, WorkerWork, Root, FetchFun,
+                                     PageTimeout, Resident, Keep, Trace, Context);
+                               denied -> ok
+                           end
+                       end),
+            MRef = erlang:monitor(process, Worker),
+            _ = quod_process:kill_when_owner_dies(Owner, Worker),
+            Timer = request_work_timer(RequestWork, RequestRef),
+            Request = Job#request{callers = Callers, peer = Peer,
+                                   worker = Worker, mref = MRef,
+                                   source = none, timer = Timer, parked = false,
+                                   job_id = JobId, attempt = Attempt},
+            H0 = maps:get(Identity, S0#s.histories),
+            %% Transfer the suspended phase session only after this worker
+            %% holds its registered cache name. Contention owns no disk state.
+            H1 = H0#history{active = RequestRef,
+                            last_used = quod_time:mono_ms()},
+            S0#s{pending = (S0#s.pending)#{RequestRef => Request},
+                 histories = (S0#s.histories)#{Identity => H1}}
+    end.
+
+launch_identity({Ref, undefined, Attempt}) ->
+    {Ref, binary:encode_hex(crypto:strong_rand_bytes(16), lowercase), Attempt};
+launch_identity({Ref, Id, Attempt}) -> {Ref, Id, Attempt}.
+
+queued_launch_identity(Q) ->
+    {Q#request.ref, Q#request.job_id, Q#request.attempt}.
+
+cache_writer_key(Identity) -> {foreign_cache_writer, Identity}.
+
+prepare_cache_custody(Root, Identity, Retained) ->
+    %% Admission inspection was read-only. Re-read/recover through the ordinary
+    %% verifier; only this registered writer may sweep abandoned files.
+    CacheNs = cache_namespace(Identity),
+    ok = cleanup_cache_temps(cache_dir(Root, CacheNs)),
+    ok = quod_dtx_phase_index:cleanup(Root, CacheNs, Retained).
+
+acquire_cache_custody(Owner, RequestRef, Identity) ->
+    Registered = try quod_reg:reg(cache_writer_key(Identity))
+                 catch error:badarg -> false; exit:_ -> false
+                 end,
+    case Registered of
+        true ->
+            %% The owner and source lifetimes are monitored. This local
+            %% handoff does not borrow a detachable caller's deadline.
+            case gen_server:call(Owner, {claim_cache_custody, RequestRef}, infinity) of
+                {ok, _, _, _, _} = Grant -> Grant;
+                {error, _} -> denied
+            end;
+        false ->
+            Owner ! {cache_custody_denied, RequestRef, self()},
+            denied
+    end.
+
+worker_trace({Ns, Anchor}, Callers, JobId, Attempt) ->
+    Ordered = lists:sort(
+                fun(A, B) -> A#caller.enqueued_native =< B#caller.enqueued_native end,
+                maps:values(Callers)),
+    Contexts = [otel_tracer:current_span_ctx(C#caller.trace_ctx)
+                || C <- Ordered, C#caller.trace_ctx =/= undefined],
+    case quod_trace:shared_context(Contexts) of
+        none -> none;
+        {Context, Links} ->
+            {Context, Links, #{'quod.namespace' => Ns,
+                              'quod.foreign.job_id' => JobId,
+                              'quod.foreign.attempt' => Attempt,
+                              'quod.genesis_anchor' => binary:encode_hex(Anchor, lowercase)}}
+    end.
+
+-ifdef(TEST).
+%% A one-shot gate pauses the real admitted reader before disk work. Tests can
+%% kill a source while a follow is genuinely owned, without
+%% replacing the verifier, source monitor, or worker-DOWN cleanup paths.
+spawn_verification_worker(_RequestRef, Work, Fun) ->
+    ResultGate = erase({?MODULE, worker_result_gate}),
+    Gate = case Work of
+               {follow, _, _, _} -> {follow, erase({?MODULE, follow_worker_gate})};
+               {initialize, _, _} -> {initialize, erase({?MODULE, initialization_gate})};
+               _ -> undefined
+           end,
+    ConfirmationGate = case Work of
+                           #routed_work{kind = {current_identity, _}} ->
+                               erase({?MODULE, confirmation_gate});
+                           {current_identity, _, _, _} ->
+                               erase({?MODULE, confirmation_gate});
+                           _ -> undefined
+                       end,
+    spawn_opt(
+      fun() ->
+          put({?MODULE, worker_result_gate}, ResultGate),
+          put({?MODULE, confirmation_gate}, ConfirmationGate),
+          put({?MODULE, custody_acquired_gate}, Gate),
+          Fun()
+      end, verification_worker_options()).
+
+verification_custody_acquired(RequestRef) ->
+    case erase({?MODULE, custody_acquired_gate}) of
+        {follow, {TestPid, Token}} ->
+            TestPid ! {follow_worker_held, Token, RequestRef, self()},
+            receive {release_follow_worker, Token} -> ok end;
+        {initialize, {TestPid, Token}} ->
+            TestPid ! {initialization_held, Token, RequestRef, self()},
+            receive {release_initialization, Token} -> ok end;
+        _ -> ok
+    end.
+
+%% Hold only after real verification and cache closure. This lets deadline
+%% tests suspend the owner without blocking an earlier disk/page owner call.
+test_worker_result_gate(RequestRef) ->
+    case erase({?MODULE, worker_result_gate}) of
+        {TestPid, Token} ->
+            TestPid ! {worker_result_held, Token, RequestRef, self()},
+            receive {release_worker_result, Token} -> ok end;
+        _ -> ok
+    end.
+-else.
+spawn_verification_worker(_RequestRef, _Work, Fun) ->
+    spawn_opt(Fun, verification_worker_options()).
+verification_custody_acquired(_RequestRef) -> ok.
+-endif.
+
+verification_worker_options() ->
+    [{max_heap_size,
+      #{size => foreign_worker_heap_words(), kill => true, error_logger => true}}].
+
+request_owners(_RequestRef, {follow, _, _} = From, _TimeoutMs) ->
+    {From, #{}};
+request_owners(_RequestRef, {initialize, _} = From, _TimeoutMs) ->
+    {From, #{}};
+request_owners(RequestRef, From, TimeoutMs) ->
+    {none, add_request_caller(RequestRef, From, TimeoutMs, #{})}.
+
+add_request_caller(RequestRef, From, Caller = #caller{deadline = Deadline}, Callers) ->
+    Timer = request_caller_timer(RequestRef, From, Deadline),
+    Observed = start_caller_residence(Caller),
+    Callers#{From => Observed#caller{timer = Timer}}.
+
+start_caller_residence(#caller{trace_ctx = undefined} = Caller) -> Caller;
+start_caller_residence(#caller{trace_ctx = Context, enqueued_native = Enqueued,
+                                deadline = Deadline} = Caller) ->
+    {ResidenceCtx, Span} = quod_trace:start_span(
+        Context, <<"quod.foreign.caller_residence">>, internal,
+        (caller_budget_attributes(Deadline))#{
+          'quod.owner.mailbox_native' => erlang:monotonic_time() - Enqueued}),
+    stage_caller(Caller#caller{residence = {ResidenceCtx, Span}}, admitted).
+
+observe_unadmitted_caller(Caller, Cause) ->
+    end_caller_residence(start_caller_residence(Caller), Cause).
+
+stage_callers(Callers, Stage) ->
+    maps:map(fun(_From, Caller) -> stage_caller(Caller, Stage) end, Callers).
+
+annotate_caller_stages(Callers, Attributes) ->
+    maps:foreach(fun(_From, #caller{stage = Stage}) ->
+        case Stage of
+            none -> ok;
+            {_, Span} -> _ = quod_trace:set_attributes(Span, Attributes), ok
+        end
+    end, Callers).
+
+park_routed_callers(Callers, Reason) ->
+    Parked = stage_callers(Callers, parked),
+    annotate_caller_stages(Parked, #{'quod.owner.park_reason' => atom_to_binary(Reason)}),
+    Parked.
+
+stage_caller(#caller{residence = none} = Caller, _Stage) -> Caller;
+stage_caller(#caller{stage = {Stage, _}} = Caller, Stage) -> Caller;
+stage_caller(#caller{residence = {Context, _}, ordinal = Ordinal,
+                     deadline = Deadline, queue_observation = {_, Count}} = Caller, Stage) ->
+    end_caller_stage(Caller),
+    {_, Span} = quod_trace:start_span(
+        Context, <<"quod.foreign.owner_stage">>, internal,
+        (caller_budget_attributes(Deadline))#{'quod.owner.stage' => atom_to_binary(Stage),
+          'quod.owner.stage_ordinal' => Ordinal + 1}),
+    Caller#caller{stage = {Stage, Span}, ordinal = Ordinal + 1,
+                  queue_observation = {none, Count}}.
+
+end_caller_stage(#caller{stage = none}) -> ok;
+end_caller_stage(#caller{stage = {_, Span}}) ->
+    _ = otel_span:end_span(Span),
+    ok.
+
+end_caller_residence(#caller{residence = none}, _Cause) -> ok;
+end_caller_residence(#caller{residence = {_, Span}, ordinal = Count,
+                             queue_observation = {_, Blockers}} = Caller, Cause) ->
+    end_caller_stage(Caller),
+    _ = quod_trace:set_attributes(Span, #{'quod.owner.stages_expected' => Count,
+                                        'quod.owner.blockers_expected' => Blockers,
+                                        'quod.owner.terminal' => atom_to_binary(Cause)}),
+    _ = otel_span:end_span(Span),
+    ok.
+
+caller_budget_attributes(infinity) ->
+    #{'quod.caller.budget_kind' => <<"infinity">>};
+caller_budget_attributes(Deadline) ->
+    #{'quod.caller.budget_kind' => <<"finite">>,
+      'quod.caller.remaining_ms' => max(0, Deadline - quod_time:mono_ms())}.
+
+work_lifetime_attributes({follow, _, _, Deadline}) ->
+    #{'quod.foreign.work_lifetime' => <<"follow_deadline">>,
+      'quod.foreign.work_remaining_ms' => max(0, Deadline - quod_time:mono_ms())};
+work_lifetime_attributes(Work) ->
+    %% These shared jobs have no caller-owned job timer. Per-page and current
+    %% probe budgets remain their existing, separate dependency lifetimes.
+    Lifetime = case observed_work_kind(Work) of
+        <<"current">> -> <<"shared_current">>;
+        _ -> <<"shared_exact">>
+    end,
+    #{'quod.foreign.work_lifetime' => Lifetime}.
+
+observed_work_kind(#routed_work{kind = Kind}) -> observed_work_kind(Kind);
+observed_work_kind({initialize, _, _}) -> <<"initialize">>;
+observed_work_kind({exact_reference, _, _, _}) -> <<"exact">>;
+observed_work_kind({exact_routes, _, _, _, _}) -> <<"exact">>;
+observed_work_kind({exact, _, _, _, _}) -> <<"exact">>;
+observed_work_kind({current_identity, _}) -> <<"current">>;
+observed_work_kind({current_identity, _, _, _}) -> <<"current">>;
+observed_work_kind({follow, _, _, _}) -> <<"follow">>;
+observed_work_kind(_) -> <<"unknown">>.
+
+request_caller_timer(_RequestRef, _From, infinity) ->
+    none;
+request_caller_timer(RequestRef, From, Deadline) ->
+    erlang:send_after(
+      max(0, Deadline - quod_time:mono_ms()), self(),
+      {verification_caller_timeout, RequestRef, From}).
+
+request_work_timer({follow, _Identity, _Sources, Deadline}, RequestRef) ->
+    erlang:send_after(
+      max(0, Deadline - quod_time:mono_ms()), self(),
+      {verification_timeout, RequestRef});
+request_work_timer(_Work, _RequestRef) ->
+    none.
+
+stripped_trace_context(undefined) -> undefined;
+stripped_trace_context(Context) ->
+    case quod_trace:shared_context([otel_tracer:current_span_ctx(Context)]) of
+        {Clean, _Links} -> Clean;
+        none -> undefined
+    end.
+
+resident_cache(Identity, #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{height = Height, projection = Projection,
+                 resident_verified = true, phase_session = PhaseSession,
+                 cache_session = CacheSession}
+          when is_map(Projection), PhaseSession =/= none,
+               CacheSession =/= none ->
+            {verified_session, Height, Projection,
+             PhaseSession, CacheSession};
+        _ -> none
+    end.
+
+%% A current view already certified by this owner remains current while a
+%% quorum of the identity's committee keeps an ordered feed registration at
+%% that exact height. The registrations are only freshness witnesses: a
+%% missing quorum falls through to the ordinary certified fetch and fold.
+%% Live exact-height feeds can establish confirmation after a verified suffix,
+%% not merely preserve a prior probe result. They never certify history bytes.
+resident_current_identity(
+  {current_identity, Sources, Identity, _ProbeTimeout}, Identity,
+  S) ->
+    Started = erlang:monotonic_time(),
+    Result = resident_confirmed_current(Sources, Identity, S),
+    Stage = case Result of
+        {ok, _} -> resident_current_hit;
+        miss -> resident_current_miss
+    end,
+    observe_foreign_stage(Stage, ok, Started),
+    Result;
+resident_current_identity(_Work, _Identity, _S) ->
+    miss.
+
+resident_confirmed_current(Sources, Identity,
+                           S = #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{current_watch = remote, progress_signals_open = true} = H ->
+            case history_certified_view(H) of
+                #{height := Height, authority := Authority} ->
+                    Committee = maps:get(committee, Authority),
+                    case current_feed_tip(Identity, Height, Committee, S) of
+                        Height -> {ok, current_view_evidence(Identity, Height, Authority,
+                                     current_route_candidates(Sources, Authority))};
+                        _ -> miss
+                    end;
+                none -> miss
+            end;
+        _ -> miss
+    end.
+
+current_feed_tip(Identity, Height, Committee0, S) ->
+    Committee = lists:usort(Committee0),
+    #history{hinted_height = Hint} = maps:get(Identity, S#s.histories),
+    Members = maps:from_list(
+      [{Peer, true}
+       || Peer <- Committee,
+          #feed_registration{registered = true, height = RegisteredHeight,
+                             link = Link} <-
+              [maps:get({Identity, Peer}, S#s.feed_registrations, undefined)],
+          RegisteredHeight =:= Hint, is_pid(Link), is_process_alive(Link)]),
+    case is_integer(Hint) andalso Hint >= Height andalso Committee =/= []
+         andalso confirmation_sufficient(quod_simplex:quorum(length(Committee)), Members) of
+        true -> Hint;
+        false when is_integer(Hint), Hint > Height -> {behind, Hint};
+        false -> unknown
+    end.
+
+worker_feed_tip(Owner, RequestRef, Height, Projection, Deadline) ->
+    page_owner_call(Owner,
+      {current_feed_tip, RequestRef, Height, quod_simplex:history_committee(Projection)},
+      Deadline).
+
+touch_history(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            put_history(
+              Identity, H0#history{last_used = quod_time:mono_ms()}, S0);
+        undefined ->
+            S0
+    end.
+
+retain_current_watch(
+  Identity, #routed_work{kind = {current_identity, Identity}},
+  {ok, #{slot := Height}}, S0) ->
+    H0 = maps:get(Identity, S0#s.histories),
+    case history_progress_height(H0) =:= Height of
+        true ->
+            H1 = H0#history{current_watch = remote, hinted_height = retained_hint(Height, H0)},
+            open_progress_signals(Identity, put_history(Identity, H1, S0));
+        false -> S0
+    end;
+retain_current_watch(_Identity, _Work, _Result, S0) -> S0.
+
+retained_hint(Height, #history{hinted_height = Hint})
+  when is_integer(Hint) -> max(Height, Hint);
+retained_hint(Height, #history{}) -> Height.
+
+%% The certified-history cache has one writer per identity. Concurrent scope
+%% opens commonly ask for the same current identity view; their route lists
+%% are transport hints, not part of that view, so they share one certified
+%% result. Distinct work waits in the owner's FIFO and starts from completion,
+%% never from polling. Every caller keeps its original final deadline.
+join_identical_request(Identity, Work, From, TimeoutMs,
+                       S = #s{histories = Histories, pending = Pending}) ->
+    case {normal_caller(From), maps:get(Identity, Histories, undefined)} of
+        {true, #history{active = RequestRef} = History}
+          when is_reference(RequestRef) ->
+            case join_active_request(
+                   RequestRef, Work, From, TimeoutMs, Identity, Pending) of
+                {joined, Pending1} ->
+                    {joined, S#s{pending = Pending1}};
+                no ->
+                    join_waiting_request(
+                      Work, From, TimeoutMs, Identity, History, S)
+            end;
+        {true, #history{} = History} ->
+            join_waiting_request(
+              Work, From, TimeoutMs, Identity, History, S);
+        _ ->
+            no
+    end.
+
+join_active_request(RequestRef, Work, From, TimeoutMs, Identity, Pending) ->
+    case maps:get(RequestRef, Pending, undefined) of
+        Request = #request{from = none, callers = Callers,
+                           work = ActiveWork} ->
+            case shareable_work(Work, ActiveWork, Identity) of
+                true ->
+                    Joined = add_request_caller(RequestRef, From, TimeoutMs, Callers),
+                    observe_active_join(maps:get(From, Joined), Request),
+                    Stage = case Request#request.custody of
+                        acquiring -> acquiring;
+                        held -> running
+                    end,
+                    Staged = stage_callers(Joined, Stage),
+                    annotate_caller_stages(Staged, work_lifetime_attributes(ActiveWork)),
+                    {joined, Pending#{RequestRef => Request#request{
+                        callers = Staged}}};
+                false ->
+                    no
+            end;
+        _ ->
+            no
+    end.
+
+observe_active_join(#caller{trace_ctx = undefined}, _Request) -> ok;
+observe_active_join(#caller{trace_ctx = Context}, Request) ->
+    Links = case Request#request.trace_ctx of
+        undefined -> [];
+        WorkerContext -> opentelemetry:links([otel_tracer:current_span_ctx(WorkerContext)])
+    end,
+    quod_trace:with_span(Context, <<"quod.foreign.join">>, internal,
+      #{'quod.worker.pid' => list_to_binary(pid_to_list(Request#request.worker)),
+        'quod.foreign.job_id' => Request#request.job_id,
+        'quod.foreign.attempt' => Request#request.attempt},
+      Links, fun(_) -> ok end).
+
+join_waiting_request(Work, From, TimeoutMs, Identity,
+                     #history{waiting = Waiting0} = History, S) ->
+    case join_waiting_item(
+           Work, From, TimeoutMs, Identity, queue:to_list(Waiting0)) of
+        {joined, Waiting1, Wake} ->
+            S1 = put_history(
+                   Identity,
+                   History#history{waiting = queue:from_list(Waiting1)}, S),
+            S2 = case Wake of
+                     true -> start_next_request(Identity, S1);
+                     false -> S1
+                 end,
+            {joined, observe_queue_blockers(Identity, S2)};
+        no ->
+            no
+    end.
+
+join_waiting_item(_Work, _From, _TimeoutMs, _Identity, []) ->
+    no;
+join_waiting_item(
+  Work, From, TimeoutMs, Identity,
+  [#request{ref = RequestRef, from = none,
+                   callers = Callers, work = QueuedWork,
+                   parked = Parked} = Queued | Rest]) ->
+    case shareable_waiting_work(
+           Work, QueuedWork, Parked, Identity) of
+        wake ->
+            {joined,
+             [Queued#request{
+                callers = stage_callers(add_request_caller(
+                            RequestRef, From, TimeoutMs, Callers), queued),
+                parked = false} | Rest],
+             true};
+        true ->
+            {joined,
+             [Queued#request{
+                callers = stage_callers(add_request_caller(
+                            RequestRef, From, TimeoutMs, Callers), waiting_stage(Parked))} | Rest],
+             false};
+        false ->
+            prepend_join_waiting_item(
+              Queued,
+              join_waiting_item(
+                Work, From, TimeoutMs, Identity, Rest))
+    end;
+join_waiting_item(Work, From, TimeoutMs, Identity, [Queued | Rest]) ->
+    prepend_join_waiting_item(
+      Queued,
+      join_waiting_item(Work, From, TimeoutMs, Identity, Rest)).
+
+prepend_join_waiting_item(Queued, {joined, Rest, Wake}) ->
+    {joined, [Queued | Rest], Wake};
+prepend_join_waiting_item(_Queued, no) ->
+    no.
+
+waiting_stage(true) -> parked;
+waiting_stage(false) -> queued;
+waiting_stage({custody, _}) -> custody_wait.
+
+%% Route lists are not semantic identity for an active certified job, but a
+%% parked row has no job yet. A new request arriving over the same currently
+%% authenticated contact is a concrete availability edge: wake the one shared
+%% row and verify again. A different supplied/contact hint keeps its own row so
+%% it can run instead of donating its only route to the older wait.
+shareable_waiting_work(
+  #routed_work{contact = {Peer, Endpoint}, kind = Kind1},
+  #routed_work{contact = {Peer, Endpoint}, kind = Kind2},
+  true, Identity) ->
+    case shareable_routed_kind(Kind1, Kind2, Identity) of
+        true -> wake;
+        false -> false
+    end;
+shareable_waiting_work(
+  #routed_work{supplied = Supplied, contact = Contact, kind = Kind},
+  #routed_work{supplied = Supplied, contact = Contact, kind = Kind},
+  true, _Identity) ->
+    true;
+shareable_waiting_work(
+  #routed_work{}, #routed_work{}, true, _Identity) ->
+    false;
+shareable_waiting_work(Work, QueuedWork, _Parked, Identity) ->
+    shareable_work(Work, QueuedWork, Identity).
+
+normal_caller({Pid, _Tag}) when is_pid(Pid) -> true;
+normal_caller(_) -> false.
+
+shareable_work(
+  #routed_work{contact = Contact, kind = Kind1},
+  #routed_work{contact = Contact, kind = Kind2}, Identity) ->
+    shareable_routed_kind(Kind1, Kind2, Identity);
+shareable_work(Work, Work, _Identity) -> true;
+shareable_work(_Work1, _Work2, _Identity) -> false.
+
+shareable_routed_kind(
+  {current_identity, Identity}, {current_identity, Identity}, Identity) ->
+    true;
+shareable_routed_kind(Kind, Kind, _Identity) ->
+    true;
+shareable_routed_kind(_Kind1, _Kind2, _Identity) ->
+    false.
+
+handle_cast({release_proof_stage, RequestRef, Path, Caller}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{proof_stages = Stages} = R when map_get(Path, Stages) =:= Caller ->
+            _ = file:delete(Path),
+            {noreply, S#s{pending = (S#s.pending)#{RequestRef =>
+                R#request{proof_stages = maps:remove(Path, Stages)}}}};
+        _ -> {noreply, S}
+    end;
+handle_cast({observe_candidate, Identity, PeerKey, Endpoint}, S0) ->
+    {noreply, remember_bootstrap_candidate(
+                Identity, PeerKey, Endpoint, S0)};
+handle_cast({ack, FollowRef, NoticeRef, ConsumerPid}, S0)
+  when is_reference(FollowRef), is_reference(NoticeRef), is_pid(ConsumerPid) ->
+    {noreply, acknowledge_follow(
+                FollowRef, NoticeRef, ConsumerPid, S0)};
+handle_cast({refresh, FollowRef, ConsumerPid}, S0)
+  when is_reference(FollowRef), is_pid(ConsumerPid) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{pid = ConsumerPid}, _History} ->
+            {noreply, wake_follow(Identity, S0)};
+        _ ->
+            {noreply, S0}
+    end;
+handle_cast(_Message, S) ->
+    {noreply, S}.
+
+handle_info(
+  {quod_message, {PeerIdentity, Link}, Chan, Payload}, S) ->
+    case quod_link:peer_key(PeerIdentity) of
+        undefined -> {noreply, S};
+        Peer -> {noreply, handle_feed_signal(Peer, Link, Chan, Payload, S)}
+    end;
+handle_info({catchup_credit, Link, BindingRef, Grant}, S) ->
+    {noreply, accept_page_credit(Link, BindingRef, Grant, S)};
+handle_info({catchup_page, Link, BindingRef, Grant, ReqId, Result, NextGrant}, S) ->
+    {noreply, accept_page_result(Link, BindingRef, Grant, ReqId, Result, NextGrant, S)};
+handle_info({{catchup_page_owner_down, ReqId}, MRef, process, _Pid, _Reason}, S) ->
+    case maps:get(ReqId, S#s.pulls, undefined) of
+        #pull{mref = MRef} -> {noreply, cancel_pull(ReqId, puller_down, S)};
+        _ -> {noreply, S}
+    end;
+handle_info({{catchup_binding_down, BindingRef}, MRef, process, Link, _Reason}, S) ->
+    case maps:get(BindingRef, S#s.page_bindings, undefined) of
+        #page_binding{ref = BindingRef, mref = MRef, link = Link} ->
+            {noreply, reopen_waiting_binding(BindingRef, retire_page_binding(BindingRef, S))};
+        _ -> {noreply, S}
+    end;
+%% The same live-finality edge that drives the local feed is the reliable wake
+%% for a co-hosted followed ontology.  The entry itself is never evidence here:
+%% every interested identity still advances through the one certified follower.
+handle_info({committed, Ns, Slot, _Entry}, S) ->
+    {noreply, wake_namespace_progress(Ns, Slot, S)};
+handle_info({certified_head, Ns, Slot}, S) ->
+    {noreply, wake_namespace_progress(Ns, Slot, S)};
+handle_info({proof_ready, Identity, Owner, Prolog, Generation}, S) ->
+    {noreply, local_source_ready(Identity, Owner, Prolog, Generation, S)};
+%% A materializer can discover its Root dependency immediately before or
+%% after Root publishes this edge.  The waiting handler below covers the
+%% crossed order; this edge resumes every worker already parked on it.
+handle_info({replay_ready, _Id, _Height}, S) ->
+    {noreply, resume_network_identity_projections(resume_history_initializations(S))};
+handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
+    handle_worker_done(RequestRef, Result, Meta0, S0);
+handle_info({cache_custody_denied, RequestRef, Worker}, S0) ->
+    {noreply, park_cache_custody(RequestRef, Worker, S0)};
+handle_info({verification_trace, RequestRef, Worker, Span}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker} = Request ->
+            Context = otel_tracer:set_current_span(otel_ctx:new(), Span),
+            S1 = S0#s{pending = (S0#s.pending)#{RequestRef =>
+                                      Request#request{trace_ctx = Context}}},
+            {noreply, observe_queue_blockers(Request#request.identity, S1)};
+        _ -> {noreply, S0}
+    end;
+handle_info({verification_caller_timeout, RequestRef, From}, S0) ->
+    {noreply, expire_request_caller(RequestRef, From, S0)};
+handle_info({verification_timeout, RequestRef}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker} = Request ->
+            exit(Worker, kill),
+            %% Keep this identity active until the monitor confirms that the
+            %% cache worker is dead.  Releasing it here could admit a second
+            %% writer against the same ledger/checkpoint between `exit/2` and
+            %% the eventual DOWN message.
+            S1 = S0#s{pending = (S0#s.pending)#{RequestRef =>
+                                      Request#request{retiring = true}}},
+            {noreply, observe_queue_blockers(Request#request.identity, S1)};
+        undefined ->
+            {noreply, S0}
+    end;
+handle_info({pull_timeout, ReqId}, S0) ->
+    {noreply, cancel_pull(ReqId, page_expired, S0)};
+handle_info({follow_refresh, Identity, Token}, S0) ->
+    {noreply, begin_follow_refresh(Identity, Token, S0)};
+handle_info({directory_route_available, Identity}, S0) ->
+    S1 = reopen_identity_bindings(Identity, reconcile_feed_registrations(Identity, S0)),
+    S2 = release_route_waiters(Identity, directory_route, S1),
+    {noreply, wake_follow_if_route_needed(Identity, S2)};
+handle_info(
+  {gproc, unreg, Monitor, _Name},
+  S0 = #s{transport_monitor = Monitor}) ->
+    %% The transport owns every connection and stream.  Its replacement
+    %% invalidates both completed links and openings whose cast may have died
+    %% in the old owner's mailbox.  Keep only semantic follow/verification
+    %% interest; the exact registered edge below rebuilds from current routes.
+    S1 = lists:foldl(fun retire_page_binding/2, S0, maps:keys(S0#s.page_bindings)),
+    {noreply, close_all_feed_registrations(S1)};
+handle_info(
+  {gproc, registered, Monitor, _Name},
+  S0 = #s{transport_monitor = Monitor}) ->
+    S1 = lists:foldl(fun reopen_waiting_binding/2, S0, maps:keys(S0#s.page_bindings)),
+    {noreply, reconcile_all_feed_registrations(S1)};
+handle_info({gproc, unreg, Monitor, {n, l, {foreign_cache_writer, Identity}}}, S0) ->
+    {noreply, release_cache_custody(Identity, Monitor, S0)};
+handle_info(
+  {link_up, OpenRef, <<_:256>> = Peer, Chan, Link}, S0)
+  when is_reference(OpenRef), is_binary(Chan), is_pid(Link) ->
+    case maps:is_key(OpenRef, S0#s.feed_registration_openings) of
+        true -> {noreply, finish_feed_registration_open(OpenRef, Peer, Chan, Link, S0)};
+        false -> {noreply, finish_page_open(OpenRef, Peer, Chan, Link, S0)}
+    end;
+handle_info(
+  {link_error, OpenRef, <<_:256>> = Peer, Chan}, S0)
+  when is_reference(OpenRef), is_binary(Chan) ->
+    {noreply, fail_page_open(OpenRef, Peer, Chan,
+                fail_feed_registration_open(OpenRef, Peer, Chan, S0))};
+handle_info(
+  {foreign_projection_building, Identity, Generation, Height}, S0) ->
+    {noreply, projection_building(Identity, Generation, Height, S0)};
+handle_info(
+  {foreign_projection_waiting, Identity, Generation, _Reason, Height}, S0) ->
+    {noreply, projection_waiting(Identity, Generation, Height, S0)};
+handle_info(
+  {foreign_projection_ready, Identity, Generation, Result}, S0) ->
+    {noreply, projection_ready(Identity, Generation, Result, S0)};
+handle_info({{borrow_down, Identity, RequestRef}, MRef, process, Owner, _Reason}, S0) ->
+    {noreply, borrow_source_down(Identity, RequestRef, MRef, Owner, S0)};
+handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
+    case maps:get(MRef, S0#s.feed_registration_monitors, undefined) of
+        {_Identity, _Peer} ->
+            {noreply, feed_registration_down(MRef, Pid, S0)};
+        undefined ->
+            case request_by_monitor(MRef, S0#s.pending) of
+                {ok, RequestRef} ->
+                    Request = maps:get(RequestRef, S0#s.pending),
+                    Cause = case Request#request.source of
+                        down -> source_down;
+                        _ -> worker_down
+                    end,
+                    S1 = case {Request#request.work, Request#request.material_custody} of
+                        {{initialize, _, _}, _} -> S0;
+                        {_, true} ->
+                            %% The sole mutator died without handing back its
+                            %% coherent cursor. Recover on this actual DOWN,
+                            %% not from a future request discovering the loss.
+                            schedule_history_reconstruction(RequestRef,
+                                Request#request.identity, custody_lost, S0);
+                        _ -> S0
+                    end,
+                    {noreply, finish_request(RequestRef, {error, retry}, Cause, S1)};
+                error ->
+                    case consumer_by_monitor(MRef, S0) of
+                        {ok, FollowRef} ->
+                            {noreply, remove_follow_any(FollowRef, S0)};
+                        error ->
+                            {noreply, projection_down(MRef, Pid, Reason, S0)}
+                    end
+            end
+    end;
+handle_info(_Info, S) ->
+    {noreply, S}.
+
+terminate(_Reason, #s{page_bindings = Bindings,
+                      progress_channels = ProgressChannels,
+                      histories = Histories,
+                      feed_registrations = FeedRegistrations,
+                      transport_monitor = TransportMonitor, pending = Pending}) ->
+    maps:foreach(fun(_Ref, R) ->
+        release_phase_hold(R#request.phase_hold),
+        cleanup_proof_stages(R#request.proof_stages),
+        maps:foreach(fun(_From, C) -> end_caller_residence(C, owner_down) end,
+                     R#request.callers)
+    end, Pending),
+    maps:foreach(
+      fun(Identity, #history{materializer = Materializer,
+                            waiting = Waiting, phase_session = PhaseSession,
+                            published = Published}) ->
+              lists:foreach(fun(Q) ->
+                  release_custody_monitor(Identity, Q),
+                  maps:foreach(fun(_From, C) -> end_caller_residence(C, owner_down) end,
+                               Q#request.callers)
+              end, queue:to_list(Waiting)),
+              stop_materializer(Materializer),
+              close_phase_session(PhaseSession),
+              release_prefix(Published)
+      end, Histories),
+    maps:foreach(fun release_page_binding/2, Bindings),
+    _ = [catch quod_reg:unsubscribe({channel, Chan})
+         || Chan <- maps:keys(ProgressChannels)],
+    _ = [catch quod_reg:unsubscribe({committed, Ns})
+         || {_Chan, {Ns, _Count, _}} <- maps:to_list(ProgressChannels)],
+    _ = [catch quod_reg:unsubscribe({runtime, Ns})
+         || {_Chan, {Ns, _Count, true}} <- maps:to_list(ProgressChannels)],
+    _ = [catch quod_reg:unsubscribe({directory_route, Identity})
+         || {Identity, #history{progress_signals_open = true}} <-
+                maps:to_list(Histories)],
+    maps:foreach(
+      fun(_Key, Registration) ->
+              close_feed_registration(Registration)
+      end, FeedRegistrations),
+    _ = catch quod_reg:demonitor_name(
+                {transport, node}, TransportMonitor),
+    ok.
+
+%%%===================================================================
+%%% Admission and owner accounting
+%%%===================================================================
+
+validate_reference_request(Ref, Phase, TimeoutMs) ->
+    case valid_local_timeout(TimeoutMs) andalso TimeoutMs =/= infinity of
+        true -> validate_reference_request(Ref, Phase);
+        false -> {error, bad_foreign_reference}
+    end.
+
+validate_reference_request(Ref, Phase) ->
+    case validate_reference(Ref) of
+        {ok, Identity} ->
+            case valid_phase(Phase) of
+                true -> {ok, Identity};
+                false -> {error, bad_foreign_reference}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+normalize_entry_hint(Entry) ->
+    case quod_ledger:hint_bytes(Entry) of
+        {ok, Bytes} when byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES -> Entry;
+        _ -> none
+    end.
+
+validate_route_request(
+  <<_:256>>, Endpoint,
+  {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
+   <<_:256>>, <<_:256>>, Proof} = Ref,
+  Phase, TimeoutMs)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       is_integer(Slot), Slot > 0,
+       is_binary(Proof), byte_size(Proof) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    case quod_quic:valid_endpoint(Endpoint) andalso valid_phase(Phase)
+         andalso quod_dtx:validate_certified_ref(Ref) of
+        true -> {ok, {Ns, Anchor}};
+        false -> {error, bad_foreign_reference}
+    end;
+validate_route_request(_Peer, _Endpoint, _Ref, _Phase, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+validate_local_request(
+  #{owner := Owner, identity := {Ns, Anchor}, slot := Height,
+    applied := Applied, snapshot := _Snapshot, projection := Projection},
+  {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
+   <<_:256>>, <<_:256>>, Proof} = Ref,
+  Phase, TimeoutMs)
+  when is_pid(Owner), is_integer(Height), Height >= 0,
+       is_integer(Applied), Applied >= 0, Applied =< Height,
+       is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       is_integer(Slot), Slot > 0,
+       is_binary(Proof), byte_size(Proof) > 0 ->
+    case valid_local_timeout(TimeoutMs) andalso valid_phase(Phase)
+         andalso quod_dtx:validate_certified_ref(Ref)
+         andalso valid_projection(Projection, {Ns, Anchor}) of
+        true -> {ok, {Ns, Anchor}};
+        false -> {error, bad_foreign_reference}
+    end;
+validate_local_request(_View, _Ref, _Phase, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+valid_local_timeout(infinity) -> true;
+valid_local_timeout(TimeoutMs) ->
+    is_integer(TimeoutMs) andalso TimeoutMs > 0
+        andalso TimeoutMs =< ?MAX_TIMER_MS - 1000.
+
+validate_current_identity_request([_ | _] = Routes, Identity, TimeoutMs) ->
+    case normalize_route_candidates(Routes) of
+        {ok, Routes} ->
+            validate_current_identity(Identity, TimeoutMs);
+        _ ->
+            {error, bad_foreign_reference}
+    end;
+validate_current_identity_request(_Routes, _Identity, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+validate_current_identity(Identity, TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    case valid_identity(Identity) of
+        true -> ok;
+        false -> {error, bad_foreign_reference}
+    end;
+validate_current_identity(_Identity, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+valid_request_contact(none) ->
+    true;
+valid_request_contact({<<_:256>>, Endpoint}) ->
+    quod_quic:valid_endpoint(Endpoint);
+valid_request_contact(_) ->
+    false.
+
+valid_identity({Ns, <<_:256>>})
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+    true;
+valid_identity(_) ->
+    false.
+
+validate_reference(Ref) ->
+    case Ref of
+        {quod_dtx_ref, 3, Ns, <<_:256>> = Anchor, Slot,
+         <<_:256>>, <<_:256>>, Proof}
+          when is_binary(Ns), byte_size(Ns) > 0,
+               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+               is_integer(Slot), Slot > 0,
+               is_binary(Proof), byte_size(Proof) > 0 ->
+            case quod_dtx:validate_certified_ref(Ref) of
+                true -> {ok, {Ns, Anchor}};
+                false -> {error, bad_foreign_reference}
+            end;
+        _ ->
+            {error, bad_foreign_reference}
+    end.
+
+normalize_route_candidates(Routes) when is_list(Routes) ->
+    normalize_route_candidates(Routes, 0, []);
+normalize_route_candidates(_) ->
+    error.
+
+normalize_route_candidates([], _Count, Acc) ->
+    {ok, lists:reverse(Acc)};
+normalize_route_candidates(
+  [{<<_:256>> = Peer, Endpoints0} | Rest], Count, Acc)
+  when is_list(Endpoints0), Count < ?MAX_VALIDATORS ->
+    Endpoints = lists:uniq(Endpoints0),
+    case Endpoints0 =:= Endpoints andalso Endpoints =/= [] andalso
+         length(Endpoints) =< 2 andalso
+         lists:all(fun quod_quic:valid_endpoint/1, Endpoints) andalso
+         not lists:keymember(Peer, 1, Acc) of
+        true ->
+            normalize_route_candidates(
+              Rest, Count + 1, [{Peer, Endpoints} | Acc]);
+        false ->
+            error
+    end;
+normalize_route_candidates(_, _Count, _Acc) ->
+    error.
+
+selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
+    case directory_route_hints(Ns, Anchor) of
+        {error, anchor_conflict} ->
+            {error, anchor_conflict};
+        {ok, Directory} ->
+            {Projection, Bootstrap} =
+                case maps:get(Identity, S#s.histories, undefined) of
+                    #history{bootstrap_hints = B} = H -> {history_authority(H), B};
+                    undefined -> {undefined, bootstrap_hints(Identity, S)}
+                end,
+            {ok, #{request => [], live => Directory, supplied => Supplied,
+                   bootstrap => Bootstrap, projection => Projection}}
+    end.
+
+add_request_contact(none, Sources) ->
+    Sources;
+add_request_contact({Peer, Endpoint}, Sources) ->
+    %% The TLS-authenticated contact carrying this request is the freshest
+    %% first-party endpoint for its key. Keep its provenance distinct and only
+    %% in this work item: failed ontology authentication must leave no
+    %% remembered identity or address, while both initial fetch and current-tip
+    %% confirmation can still prefer the exact contact over stale stored hints.
+    Sources#{request := [{Peer, Endpoint}]}.
+
+route_candidates(#{request := Request, live := Live, supplied := Supplied,
+                   bootstrap := Bootstrap, projection := Projection} = Sources) ->
+    case is_map(Projection) of
+        true -> current_route_candidates(Sources, Projection);
+        false -> discovery_route_candidates(Request, Live, Supplied, Bootstrap)
+    end.
+
+discovery_route_candidates(Request, Live, Supplied, Bootstrap) ->
+    Routes = lists:sublist(
+               stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
+               ?MAX_VALIDATORS),
+    [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
+
+%% Fetching bytes and trusting an answer are different operations. Certified
+%% committee routes stay first, but the same history verifier may fetch from a
+%% current authenticated contact after every old host has left. The fallback
+%% gains no vote and is never returned by route_hints/2 unless the fetched
+%% history itself later certifies its key as a current validator.
+history_source_candidates(
+  #{request := Request, live := Live, supplied := Supplied,
+    bootstrap := Bootstrap} = Sources) ->
+    Certified = flatten_route_candidates(route_candidates(Sources)),
+    Discovery = flatten_route_candidates(
+                  discovery_route_candidates(
+                    Request, Live, Supplied, Bootstrap)),
+    lists:uniq(Certified ++ Discovery).
+
+history_fallback_sources(Sources, CertifiedHints) ->
+    Certified = flatten_route_candidates(CertifiedHints),
+    [Source || Source <- history_source_candidates(Sources),
+               not lists:member(Source, Certified)].
+
+directory_route_hints(Ns, Anchor) ->
+    case quod_directory:validator_routes(Ns, Anchor) of
+        {ok, Rows} ->
+            {ok,
+             [{PeerKey, Endpoint}
+              || #{node_key := <<_:256>> = PeerKey,
+                   endpoint := Endpoint} <- Rows,
+                 quod_quic:valid_endpoint(Endpoint)]};
+        {error, anchor_conflict} ->
+            {error, anchor_conflict};
+        {error, unavailable} ->
+            {ok, []}
+    end.
+
+remember_bootstrap_candidate(Identity, PeerKey, Endpoint, S0) ->
+    case valid_identity(Identity) andalso
+         is_binary(PeerKey) andalso byte_size(PeerKey) =:= 32 andalso
+         quod_quic:valid_endpoint(Endpoint) of
+        false ->
+            S0#s{bootstrap_rejected = S0#s.bootstrap_rejected + 1};
+        true ->
+            S1 = ensure_bootstrap_history(Identity, S0),
+            H0 = maps:get(Identity, S1#s.histories),
+            {Hints, Evicted} = put_bootstrap_hint(
+                                 PeerKey, Endpoint,
+                                 H0#history.bootstrap_hints,
+                                 history_authority(H0)),
+            H1 = H0#history{bootstrap_hints = Hints,
+                            last_used = quod_time:mono_ms()},
+            S2 = put_history(
+                   Identity, H1,
+                   S1#s{bootstrap_accepted =
+                            S1#s.bootstrap_accepted + 1,
+                        bootstrap_evicted =
+                            S1#s.bootstrap_evicted + Evicted}),
+            hibernate_history(
+              Identity, wake_follow(Identity, S2))
+    end.
+
+%% A transport hint creates only a lazy, dormant history row. It never evicts
+%% verified history: there is no global history budget to compete for.
+ensure_bootstrap_history(Identity, S = #s{histories = Histories})
+  when is_map_key(Identity, Histories) ->
+    S;
+ensure_bootstrap_history(Identity, S) ->
+    ensure_history(Identity, S).
+
+put_bootstrap_hint(PeerKey, Endpoint, Hints0, Projection) ->
+    WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0,
+                                  Peer =/= PeerKey],
+    Hints1 = [{PeerKey, Endpoint} | WithoutPeer],
+    case length(Hints1) =< ?MAX_CURRENT_ROUTE_HINTS of
+        true -> {Hints1, 0};
+        false ->
+            Committee = case is_map(Projection) of
+                            true -> quod_simplex:history_committee(Projection);
+                            false -> []
+                        end,
+            {evict_oldest_unprotected(Hints1, Committee), 1}
+    end.
+
+evict_oldest_unprotected(Hints, ProtectedKeys) ->
+    Reversed = lists:reverse(Hints),
+    case drop_first(
+           fun({Peer, _Endpoint}) ->
+                   not lists:member(Peer, ProtectedKeys)
+           end, Reversed) of
+        {ok, Kept} -> lists:reverse(Kept);
+        %% Defensive only: an overflow list cannot be entirely protected
+        %% while committees are bounded below the hint cap. If that invariant
+        %% ever changes, refuse the newest contact rather than evicting a
+        %% current committee member.
+        none -> tl(Hints)
+    end.
+
+drop_first(_Predicate, []) ->
+    none;
+drop_first(Predicate, [Item | Rest]) ->
+    case Predicate(Item) of
+        true -> {ok, Rest};
+        false ->
+            case drop_first(Predicate, Rest) of
+                {ok, Kept} -> {ok, [Item | Kept]};
+                none -> none
+            end
+    end.
+
+%% `entry` asks this same exact-reference verifier to accept either content or
+%% a DTX control. Read certificates bind the last material ledger entry, whose
+%% class is intentionally opaque to the certificate collector.
+valid_phase(entry) -> true;
+valid_phase(transaction) -> true;
+valid_phase(vote) -> true;
+valid_phase(resolve) -> true;
+valid_phase(complete) -> true;
+valid_phase(_) -> false.
+
+ensure_history(Identity, S = #s{histories = Histories})
+  when is_map_key(Identity, Histories) ->
+    S;
+ensure_history(Identity, S0) ->
+    %% Startup already catalogued every retained identity. A request can
+    %% create an empty history, never discover/replay an old prefix here.
+    H0 = #history{identity = Identity, cache_ns = cache_namespace(Identity),
+                  last_used = quod_time:mono_ms()},
+    H = H0#history{bootstrap_hints = bootstrap_hints(Identity, S0)},
+    S1 = S0#s{bootstrap = maps:remove(Identity, S0#s.bootstrap)},
+    S1#s{histories = (S1#s.histories)#{Identity => H}}.
+
+reserve_page(RequestRef, Bytes, S0) ->
+    case request_identity(RequestRef, S0) of
+        {ok, Identity} ->
+            H0 = maps:get(Identity, S0#s.histories),
+            H1 = H0#history{bytes = H0#history.bytes + Bytes},
+            {ok, S0#s{histories = (S0#s.histories)#{Identity => H1},
+                      total_bytes = S0#s.total_bytes + Bytes}};
+        error -> {error, S0}
+    end.
+
+set_cache_size(RequestRef, Bytes, S0) ->
+    case request_identity(RequestRef, S0) of
+        {ok, Identity} ->
+            H0 = maps:get(Identity, S0#s.histories),
+            case Bytes =< H0#history.bytes of
+                true ->
+                    H1 = H0#history{bytes = Bytes},
+                    {ok, S0#s{histories =
+                                  (S0#s.histories)#{Identity => H1},
+                               total_bytes =
+                                   S0#s.total_bytes -
+                                       (H0#history.bytes - Bytes)}};
+                false ->
+                    Delta = Bytes - H0#history.bytes,
+                    H1 = H0#history{bytes = Bytes},
+                    {ok, S0#s{histories =
+                                  (S0#s.histories)#{Identity => H1},
+                               total_bytes = S0#s.total_bytes + Delta}}
+            end;
+        error -> {error, S0}
+    end.
+
+reset_cache_accounting(RequestRef, S0) ->
+    case request_identity(RequestRef, S0) of
+        {ok, Identity} ->
+            H00 = maps:get(Identity, S0#s.histories),
+            S1 = case H00#history.materializer of
+                     none -> S0;
+                     #materializer{} = M ->
+                         discard_materializer(Identity, H00, M, S0)
+                 end,
+            H0 = maps:get(Identity, S1#s.histories),
+            close_phase_session(H0#history.phase_session),
+            release_prefix(H0#history.published),
+            Request = maps:get(RequestRef, S1#s.pending),
+            release_phase_hold(Request#request.phase_hold),
+            H1 = H0#history{height = 0, bytes = 0,
+                            projection = undefined,
+                            resident_verified = false,
+                            phase_session = none, published = none, cache_session = none},
+            {ok, S1#s{histories = (S1#s.histories)#{Identity => H1},
+                      pending = (S1#s.pending)#{RequestRef => Request#request{phase_hold = none}},
+                      total_bytes = max(
+                                      0, S1#s.total_bytes - H0#history.bytes)}};
+        error -> error
+    end.
+
+handle_worker_done(RequestRef, Result, Meta0, S0) ->
+    Context = case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{trace_ctx = Ctx} -> Ctx;
+        _ -> undefined
+    end,
+    quod_trace:with_optional_span(Context, <<"quod.foreign.result_install">>,
+      internal, #{}, fun() -> receive_worker_result(RequestRef, Result, Meta0, S0) end).
+
+receive_worker_result(RequestRef, Result, Meta0, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{} = Request ->
+            case request_source_live(Request) of
+                true -> install_worker_result(RequestRef, Result, Meta0, Request, S0);
+                false ->
+                    close_phase_session(maps:get(phase_session, Meta0, none)),
+                    {noreply, cancel_source_request(RequestRef, S0)}
+            end;
+        undefined ->
+            {noreply, S0}
+    end.
+
+install_worker_result(RequestRef, Result, Meta,
+                      #request{identity = Identity, work = Work}, S0)
+  when is_map_key(reconstruction_required, Meta) ->
+    Cause = maps:get(reconstruction_required, Meta),
+    case Work of
+        {initialize, Identity, _} ->
+            {noreply, finish_request(RequestRef, {error, Cause}, initialization_failed, S0)};
+        _ ->
+            %% The failed request never reconstructs its own prefix. A known
+            %% integrity failure becomes explicit owner work, ahead of later
+            %% readers. No route error or caller timeout reaches this arm.
+            S1 = schedule_history_reconstruction(RequestRef, Identity, Cause, S0),
+            {noreply, finish_request(RequestRef, Result, foreign_trace_reason(Result), S1)}
+    end;
+install_worker_result(RequestRef, Result0, Meta,
+                      #request{identity = Identity, work = Work}, S0) ->
+    {Result, S3} = measure_foreign_ok(
+           result_install,
+           fun() ->
+               S1 = install_verified_progress(RequestRef, Meta, S0),
+               %% Installed authority includes its current-view watch and
+               %% feed registrations; charge that owner work to this stage.
+               %% A newer feed hint still invalidates a queued current reply.
+               Reply = current_reply(Work, Result0, maps:get(Identity, S1#s.histories)),
+               {Reply, retain_current_watch(Identity, Work, Reply, S1)}
+           end),
+    case {Result, maps:get(RequestRef, S3#s.pending, undefined)} of
+        {{error, retry}, #request{work = #routed_work{}}} ->
+            {noreply, park_failed_routed_request(RequestRef, S3)};
+        _ ->
+            {noreply, finish_request(RequestRef, Result,
+                                    foreign_trace_reason(Result), S3)}
+    end.
+
+current_reply(#routed_work{kind = {current_identity, _}}, {ok, #{slot := Height}},
+              #history{hinted_height = Hint}) when is_integer(Hint), Hint > Height ->
+    {error, retry};
+current_reply(_Work, Result, _History) -> Result.
+
+monitor_source_owner(Identity, RequestRef, Owner) ->
+    {Owner, erlang:monitor(
+              process, Owner, [{tag, {borrow_down, Identity, RequestRef}}])}.
+
+release_source_monitor({Owner, MRef}) when is_pid(Owner), is_reference(MRef) ->
+    _ = erlang:demonitor(MRef, [flush]),
+    ok;
+release_source_monitor(_NoneOrDown) ->
+    ok.
+
+request_source_live(#request{retiring = true}) -> false;
+request_source_live(#request{source = none}) -> true;
+request_source_live(#request{source = down}) -> false;
+request_source_live(#request{identity = Identity, source = {Owner, _MRef}}) ->
+    quod_simplex:history_view_live(#{owner => Owner, identity => Identity}).
+
+borrow_source_down(Identity, RequestRef, MRef, Owner, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{identity = Identity, source = {Owner, MRef}} ->
+            cancel_source_request(RequestRef, S0);
+        undefined ->
+            queued_source_down(Identity, RequestRef, MRef, Owner, S0);
+        _ -> S0
+    end.
+
+cancel_source_request(RequestRef, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{source = down} -> S0;
+        #request{worker = Worker, source = Source} = Request ->
+            release_source_monitor(Source),
+            exit(Worker, kill),
+            %% The cache writer still owns this identity until its exact DOWN.
+            %% Late success is discarded, and the ordinary DOWN completion
+            %% replies retry to every caller of only this borrowed operation.
+            Pending = (S0#s.pending)#{
+                        RequestRef => Request#request{source = down, retiring = true}},
+            observe_queue_blockers(Request#request.identity, S0#s{pending = Pending});
+        undefined -> S0
+    end.
+
+queued_source_down(Identity, RequestRef, MRef, Owner, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            drop_queued_source(Identity, RequestRef, MRef, Owner, H0, S0);
+        undefined -> S0
+    end.
+
+drop_queued_source(Identity, RequestRef, MRef, Owner, H0, S0) ->
+    {Drop, Keep} = lists:partition(
+                     fun(#request{ref = Ref, source = Source}) ->
+                             Ref =:= RequestRef andalso Source =:= {Owner, MRef}
+                     end, queue:to_list(H0#history.waiting)),
+    case Drop of
+        [] -> S0;
+        [#request{callers = Callers, source = Source} = Queued] ->
+            release_custody_monitor(Identity, Queued),
+            release_source_monitor(Source),
+            cancel_caller_timers(Callers),
+            reply_request_callers(Callers, {error, retry}, source_down),
+            S1 = put_history(
+                   Identity, H0#history{waiting = queue:from_list(Keep)}, S0),
+            start_next_request(Identity, S1)
+    end.
+
+request_identity(RequestRef, #s{pending = Pending}) ->
+    case maps:get(RequestRef, Pending, undefined) of
+        #request{identity = Identity} -> {ok, Identity};
+        undefined -> error
+    end.
+
+request_by_monitor(MRef, Pending) ->
+    case [Ref || {Ref, #request{mref = RefM}} <- maps:to_list(Pending),
+                 RefM =:= MRef] of
+        [Ref] -> {ok, Ref};
+        [] -> error
+    end.
+
+park_failed_routed_request(RequestRef, S0) ->
+    case maps:take(RequestRef, S0#s.pending) of
+        {Job = #request{from = From, callers = Callers0,
+                  identity = Identity, work = #routed_work{},
+                  mref = MRef, timer = Timer, progress_edge = Edge,
+                  attempt = Attempt}, Pending1} ->
+            release_phase_hold(Job#request.phase_hold),
+            cleanup_proof_stages(Job#request.proof_stages),
+            Callers = live_request_callers(Callers0),
+            annotate_caller_stages(Callers, #{'quod.owner.progress_edge_consumed' => Edge}),
+            cancel_optional_timer(Timer),
+            _ = erlang:demonitor(MRef, [flush]),
+            Histories1 = clear_active_request(
+                           Identity, RequestRef, S0#s.histories),
+            S1 = cancel_request_pulls(
+                   RequestRef,
+                   S0#s{pending = Pending1, histories = Histories1}),
+            case From =:= none andalso map_size(Callers) =:= 0 of
+                true ->
+                    start_next_request(
+                      Identity, maybe_close_progress_signals(Identity, S1));
+                false ->
+                    H0 = maps:get(Identity, S1#s.histories),
+                    WaitingCallers = case Edge of
+                        true -> stage_callers(Callers, queued);
+                        false -> park_routed_callers(Callers, no_progress_edge)
+                    end,
+                    Parked = park_job(
+                               Job#request{ref = RequestRef, peer = none, source = none,
+                                           fetch_fun = S1#s.fetch_fun,
+                                           attempt = Attempt + 1},
+                               WaitingCallers, not Edge),
+                    S2 = put_history(
+                           Identity,
+                           H0#history{
+                             waiting = queue:in(
+                                         Parked, H0#history.waiting)}, S1),
+                    start_next_request(
+                      Identity, open_progress_signals(Identity, S2))
+            end;
+        error ->
+            S0
+    end.
+
+park_cache_custody(RequestRef, Worker, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        Job = #request{worker = Worker, custody = acquiring, retiring = false,
+                       callers = Callers, identity = Identity,
+                       mref = MRef, timer = Timer} ->
+            %% An absent name immediately emits unreg. Installing the monitor
+            %% before the row is safe because this owner serializes both turns.
+            %% A registry outage here fails this owner, never strands an
+            %% unmonitored wait. No lookup is treated as writer release.
+            Monitor = quod_reg:monitor_name(cache_writer_key(Identity), info),
+            cancel_optional_timer(Timer),
+            _ = erlang:demonitor(MRef, [flush]),
+            Histories = clear_active_request(Identity, RequestRef, S0#s.histories),
+            H0 = maps:get(Identity, Histories),
+            Queued = park_job(Job#request{ref = RequestRef},
+                               stage_callers(Callers, custody_wait), {custody, Monitor}),
+            observe_queue_blockers(Identity, S0#s{
+                 pending = maps:remove(RequestRef, S0#s.pending),
+                 histories = Histories#{Identity => H0#history{
+                     waiting = queue:in_r(Queued, H0#history.waiting)}}});
+        _ -> S0
+    end.
+
+%% Called only after the transition has released its actual worker monitor
+%% and timer. Semantic identity and caller ownership stay on this same row;
+%% no running transport/span handle survives into a queued attempt.
+park_job(Job, Callers, Parked) ->
+    Job#request{callers = Callers, parked = Parked,
+                phase_hold = none, proof_stages = #{},
+                worker = none, mref = none, timer = none,
+                progress_edge = false, custody = acquiring, retiring = false,
+                trace_ctx = undefined, enqueued_native = erlang:monotonic_time()}.
+
+release_cache_custody(Identity, Monitor, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{waiting = Waiting} = H0 ->
+            Items = queue:to_list(Waiting),
+            case lists:any(fun(Q) -> Q#request.parked =:= {custody, Monitor} end,
+                           Items) of
+                true ->
+                    _ = quod_reg:demonitor_name(cache_writer_key(Identity), Monitor),
+                    Ready = [case Q#request.parked of
+                                 {custody, Monitor} -> Q#request{parked = false,
+                                     callers = stage_callers(Q#request.callers, queued)};
+                                 _ -> Q
+                             end || Q <- Items],
+                    start_next_request(Identity, put_history(
+                        Identity, H0#history{waiting = queue:from_list(Ready)}, S0));
+                false -> S0
+            end;
+        _ -> S0
+    end.
+
+release_custody_monitor(Identity, #request{parked = {custody, Monitor}}) ->
+    _ = catch quod_reg:demonitor_name(cache_writer_key(Identity), Monitor),
+    ok;
+release_custody_monitor(_Identity, _Queued) -> ok.
+
+clear_active_request(Identity, RequestRef, Histories) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{active = RequestRef} = H0 ->
+            Histories#{Identity => H0#history{
+                                     active = none,
+                                     last_used = quod_time:mono_ms()}};
+        _ ->
+            Histories
+    end.
+
+finish_request(RequestRef, Reply, Cause, S0) ->
+    case maps:take(RequestRef, S0#s.pending) of
+        {#request{from = From, callers = Callers,
+                  identity = Identity, source = Source,
+                  mref = MRef, timer = Timer, phase_hold = PhaseHold,
+                  proof_stages = Stages}, Pending1} ->
+            release_phase_hold(PhaseHold),
+            cleanup_proof_stages(Stages),
+            cancel_optional_timer(Timer),
+            cancel_caller_timers(Callers),
+            release_source_monitor(Source),
+            _ = erlang:demonitor(MRef, [flush]),
+            Histories1 =
+                case maps:get(Identity, S0#s.histories, undefined) of
+                    #history{} = H ->
+                        (S0#s.histories)#{Identity =>
+                                             H#history{active = none,
+                                                       last_used =
+                                                           quod_time:mono_ms()}};
+                    undefined -> S0#s.histories
+                end,
+            S1 = S0#s{pending = Pending1, histories = Histories1},
+            S2 = cancel_request_pulls(RequestRef, S1),
+            S3 = case From of
+                {initialize, Identity} ->
+                    finish_history_initialization(Identity, Reply, S2);
+                {follow, Identity, Token} ->
+                    finish_follow_refresh(Identity, Token, Reply, S2);
+                none ->
+                    reply_request_callers(Callers, Reply, Cause),
+                    S2
+            end,
+            release_idle_page_bindings(start_next_request(Identity, S3));
+        error ->
+            S0
+    end.
+
+reply_request_callers(Callers, Reply) ->
+    reply_request_callers(Callers, Reply, foreign_trace_reason(Reply)).
+
+reply_request_callers(Callers, Reply, ResultCause) ->
+    measure_foreign_ok(
+      caller_wake,
+      fun() ->
+          maps:foreach(
+            fun(From, #caller{deadline = Deadline} = Caller) ->
+                    Cause = case caller_live(Deadline) of
+                        true -> ResultCause;
+                        false -> expired
+                    end,
+                    end_caller_residence(Caller, Cause),
+                    gen_server:reply(From, caller_result(Deadline, Reply))
+            end, Callers)
+      end).
+
+live_request_callers(Callers) ->
+    maps:filter(fun(From, #caller{deadline = Deadline, timer = Timer} = Caller) ->
+        case caller_live(Deadline) of
+            true -> true;
+            false ->
+                cancel_optional_timer(Timer),
+                end_caller_residence(Caller, expired),
+                gen_server:reply(From, {error, retry}),
+                false
+        end
+    end, Callers).
+
+cancel_optional_timer(none) -> ok;
+cancel_optional_timer(Timer) ->
+    _ = erlang:cancel_timer(Timer),
+    ok.
+
+cancel_caller_timers(Callers) ->
+    maps:foreach(
+      fun(_Caller, #caller{timer = Timer}) ->
+              cancel_optional_timer(Timer),
+              ok
+      end, Callers).
+
+start_next_request(Identity, S0) ->
+    observe_queue_blockers(Identity,
+      select_next_request(Identity, release_ready_readers(Identity, S0))).
+
+release_ready_readers(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{waiting = Waiting} = H ->
+            Pending = lists:filter(fun(Q) ->
+                case ready_reference(Q#request.work, Identity, S0) of
+                    {ready, Reply} ->
+                        release_custody_monitor(Identity, Q),
+                        release_source_monitor(Q#request.source),
+                        cancel_caller_timers(Q#request.callers),
+                        observe_foreign_stage(queue_wait, ok, Q#request.enqueued_native),
+                        reply_request_callers(Q#request.callers, Reply, ready_prefix_capture),
+                        false;
+                    miss -> true
+                end
+            end, queue:to_list(Waiting)),
+            put_history(Identity, H#history{waiting = queue:from_list(Pending)}, S0);
+        undefined -> S0
+    end.
+
+select_next_request(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{active = none, waiting = Waiting0} = H0 ->
+            case take_runnable_request(
+                   Identity, queue:to_list(Waiting0), S0) of
+                {ready, Queued, Peer, WorkerWork, Rest} ->
+                    %% Admission remains in this owner turn. If the source died
+                    %% during transfer, the new monitor immediately reports DOWN.
+                    release_source_monitor(Queued#request.source),
+                    H1 = H0#history{waiting = queue:from_list(Rest)},
+                    S1 = put_history(Identity, H1, S0),
+                    observe_foreign_stage(
+                      queue_wait, ok,
+                      Queued#request.enqueued_native),
+                    launch_request_owned(Queued, Peer, WorkerWork, S1);
+                {waiting, Rest} ->
+                    H1 = H0#history{waiting = queue:from_list(Rest)},
+                    S1 = put_history(Identity, H1, S0),
+                    case has_parked_route_waiter(H1) of
+                        true -> open_progress_signals(Identity, S1);
+                        false -> hibernate_history(
+                                   Identity,
+                                   maybe_close_progress_signals(Identity, S1))
+                    end
+            end;
+        _ -> S0
+    end.
+
+%% Observe only this identity's existing selector/lifetime transitions. There is
+%% no scheduling index: among missing-range jobs, route parks are bypassable,
+%% a custody head is not, and an active worker remains the predecessor through
+%% retirement until its DOWN. Covered readers have already left this queue.
+%% The long owner_stage already measures queue residence; these short linked
+%% children identify changes within it without replacing its duration or parent.
+observe_queue_blockers(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{waiting = Waiting, active = Active} = H ->
+            case queue:is_empty(Waiting) of
+                true -> S0;
+                false ->
+                    Blocker = case maps:get(Active, S0#s.pending, undefined) of
+                        #request{} = R -> active_queue_descriptor(R);
+                        undefined -> none
+                    end,
+                    {Rows, _} = lists:mapfoldl(
+                      fun(Q, Earlier) ->
+                          Own = case Q#request.parked of
+                              true -> queued_descriptor(route_park, Q, false);
+                              {custody, _} -> queued_descriptor(custody_wait, Q, false);
+                              false -> case Earlier of
+                                  none -> unknown_queue_descriptor();
+                                  _ -> Earlier
+                              end
+                          end,
+                          Callers = maps:map(fun(_From, C) ->
+                              observe_queue_caller(C, Identity, Own)
+                          end, Q#request.callers),
+                          Next = case {Earlier, Q#request.parked} of
+                              {none, {custody, _}} ->
+                                  queued_descriptor(earlier_custody_wait, Q, true);
+                              {none, false} -> queued_descriptor(earlier_queued, Q, true);
+                              _ -> Earlier
+                          end,
+                          {Q#request{callers = Callers}, Next}
+                      end, Blocker, queue:to_list(Waiting)),
+                    put_history(Identity, H#history{waiting = queue:from_list(Rows)}, S0)
+            end;
+        undefined -> S0
+    end.
+
+active_queue_descriptor(R) ->
+    Class = case R#request.retiring of true -> retiring; false -> active end,
+    Age = case maps:values(R#request.callers) of
+        [] -> #{'quod.owner.blocker_age_kind' => <<"unknown">>};
+        Callers ->
+            Oldest = lists:min([C#caller.enqueued_native || C <- Callers]),
+            #{'quod.owner.blocker_age_kind' => <<"oldest_live_caller">>,
+              'quod.owner.blocker_age_native' => erlang:monotonic_time() - Oldest}
+    end,
+    queue_descriptor(Class, R#request.job_id, R#request.attempt,
+                     R#request.work, R#request.trace_ctx, Age).
+
+queued_descriptor(Class, Q, LinkCaller) ->
+    Context = case LinkCaller of
+        false -> undefined;
+        true -> case worker_trace(Q#request.identity,
+                        Q#request.callers, Q#request.job_id,
+                        Q#request.attempt) of
+            none -> undefined;
+            {Ctx, _, _} -> Ctx
+        end
+    end,
+    queue_descriptor(Class, Q#request.job_id, Q#request.attempt,
+      Q#request.work, Context,
+      #{'quod.owner.blocker_age_kind' => <<"queue_row">>,
+        'quod.owner.blocker_age_native' =>
+            erlang:monotonic_time() - Q#request.enqueued_native}).
+
+queue_descriptor(Class, JobId, Attempt, Work, Context, Age) ->
+    Span = case Context of
+        undefined -> undefined;
+        _ -> otel_tracer:current_span_ctx(Context)
+    end,
+    Recorded = otel_span:is_recording(Span),
+    {LinkKey, Links} = case Recorded of
+        true -> {{otel_span:trace_id(Span), otel_span:span_id(Span)},
+                 opentelemetry:links([Span])};
+        false -> {none, []}
+    end,
+    Kind = observed_work_kind(Work),
+    {{Class, JobId, Attempt, Kind, LinkKey},
+      Age#{'quod.owner.blocker' => atom_to_binary(Class),
+           'quod.owner.blocker_job_id' => JobId,
+           'quod.owner.blocker_attempt' => Attempt,
+           'quod.owner.blocker_work' => Kind,
+           'quod.owner.blocker_trace_available' => Recorded}, Links}.
+
+unknown_queue_descriptor() ->
+    {unknown, #{'quod.owner.blocker' => <<"unknown">>,
+                'quod.owner.blocker_trace_available' => false,
+                'quod.owner.blocker_age_kind' => <<"unknown">>}, []}.
+
+observe_queue_caller(#caller{residence = none} = Caller, _Identity, _Descriptor) -> Caller;
+observe_queue_caller(#caller{queue_observation = {Key, _}} = Caller,
+                     _Identity, {Key, _, _}) -> Caller;
+observe_queue_caller(#caller{residence = {Context, Residence}, deadline = Deadline,
+                             queue_observation = {_, Count}} = Caller,
+                     {Ns, Anchor}, {Key, Attributes, Links}) ->
+    case otel_span:is_recording(Residence) of
+        false -> Caller;
+        true ->
+            quod_trace:with_span(Context, <<"quod.foreign.queue_blocker">>, internal,
+              (maps:merge(Attributes, caller_budget_attributes(Deadline)))#{
+                'quod.namespace' => Ns,
+                'quod.genesis_anchor' => binary:encode_hex(Anchor, lowercase),
+                'quod.owner.blocker_ordinal' => Count + 1}, Links, fun(_) -> ok end),
+            Caller#caller{queue_observation = {Key, Count + 1}}
+    end.
+
+take_runnable_request(Identity, Waiting, S0) ->
+    take_runnable_request(Identity, Waiting, [], S0).
+
+take_runnable_request(_Identity, [], Skipped, _S0) ->
+    {waiting, lists:reverse(Skipped)};
+take_runnable_request(
+  _Identity, [#request{work = {initialize, _, _}, parked = true} | _] = Rest,
+  Skipped, _S0) ->
+    %% An unavailable startup dependency cannot be repaired by a caller.
+    {waiting, lists:reverse(Skipped) ++ Rest};
+take_runnable_request(
+  _Identity, [#request{parked = {custody, _}} | _] = Rest, Skipped, _S0) ->
+    %% Custody excludes every job for this cache, not just one routed row.
+    {waiting, lists:reverse(Skipped) ++ Rest};
+take_runnable_request(
+  Identity,
+  [Queued = #request{work = #routed_work{}, parked = true} | Rest],
+  Skipped, S0) ->
+    take_runnable_request(Identity, Rest, [Queued | Skipped], S0);
+take_runnable_request(
+  Identity,
+  [Queued = #request{work = #routed_work{} = Work} | Rest],
+  Skipped, S0) ->
+    Callers = stage_callers(Queued#request.callers, route_selection),
+    case resolve_routed_work(Identity, Work, S0) of
+        {ready, Peer, WorkerWork} ->
+            annotate_caller_stages(Callers, #{'quod.owner.route_result' => <<"ready">>}),
+            {ready, Queued#request{callers = Callers}, Peer, WorkerWork,
+             lists:reverse(Skipped) ++ Rest};
+        {wait, Reason} ->
+            annotate_caller_stages(Callers,
+                #{'quod.owner.route_result' => atom_to_binary(Reason)}),
+            take_runnable_request(
+              Identity, Rest,
+              [Queued#request{parked = true,
+                  callers = park_routed_callers(Callers, Reason)} | Skipped], S0)
+    end;
+take_runnable_request(
+  _Identity, [Queued | Rest], Skipped, _S0) ->
+    {ready, Queued, Queued#request.peer,
+     Queued#request.work, lists:reverse(Skipped) ++ Rest}.
+
+release_route_waiters(Identity, EventClass, S0) ->
+    S1 = case maps:get(Identity, S0#s.histories, undefined) of
+        #history{active = Ref, waiting = Waiting} ->
+            lists:foreach(fun(#request{parked = Parked, callers = Callers}) ->
+                case Parked of
+                    true -> annotate_caller_stages(Callers,
+                              #{'quod.owner.wake' => atom_to_binary(EventClass)});
+                    _ -> ok
+                end
+            end, queue:to_list(Waiting)),
+            case maps:get(Ref, S0#s.pending, undefined) of
+                #request{work = #routed_work{}, callers = Callers} = Request ->
+                    annotate_caller_stages(Callers,
+                        #{'quod.owner.wake' => atom_to_binary(EventClass),
+                          'quod.owner.progress_edge_buffered' => true}),
+                    S0#s{pending = (S0#s.pending)#{Ref =>
+                                     Request#request{progress_edge = true}}};
+                _ -> S0
+            end;
+        _ -> S0
+    end,
+    release_queued_route_waiters(Identity, S1).
+
+release_queued_route_waiters(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{waiting = Waiting0} = H0 ->
+            Waiting1 = queue:from_list(
+                         [release_route_waiter(Queued)
+                          || Queued <- queue:to_list(Waiting0)]),
+            start_next_request(
+              Identity,
+              put_history(Identity, H0#history{waiting = Waiting1}, S0));
+        undefined ->
+            S0
+    end.
+
+release_route_waiter(#request{work = #routed_work{}, parked = true} = Queued) ->
+    Queued#request{parked = false,
+        callers = stage_callers(Queued#request.callers, queued)};
+release_route_waiter(Queued) ->
+    Queued.
+
+has_parked_route_waiter(#history{waiting = Waiting}) ->
+    lists:any(
+      fun(#request{work = #routed_work{}, parked = true}) -> true;
+         (_) -> false
+      end, queue:to_list(Waiting)).
+
+expire_request_caller(RequestRef, From, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{callers = Callers} = Request ->
+            case maps:take(From, Callers) of
+                {Caller, Callers1} ->
+                    end_caller_residence(Caller, expired),
+                    gen_server:reply(From, {error, retry}),
+                    Pending1 = (S0#s.pending)#{
+                                 RequestRef =>
+                                     Request#request{callers = Callers1}},
+                    S0#s{pending = Pending1};
+                error ->
+                    S0
+            end;
+        undefined ->
+            expire_queued_caller(RequestRef, From, S0)
+    end.
+
+expire_queued_caller(RequestRef, From, S0) ->
+    expire_queued_caller(
+      RequestRef, From, maps:to_list(S0#s.histories), S0).
+
+expire_queued_caller(_RequestRef, _From, [], S0) ->
+    S0;
+expire_queued_caller(RequestRef, From, [{Identity, H0} | Rest], S0) ->
+    Items0 = queue:to_list(H0#history.waiting),
+    case update_queued_caller(RequestRef, From, Items0) of
+        {updated, Items1} ->
+            gen_server:reply(From, {error, retry}),
+            S1 = put_history(
+                   Identity,
+                   H0#history{waiting = queue:from_list(Items1)}, S0),
+            start_next_request(
+              Identity, maybe_close_progress_signals(Identity, S1));
+        found ->
+            S0;
+        not_found ->
+            expire_queued_caller(RequestRef, From, Rest, S0)
+    end.
+
+update_queued_caller(_RequestRef, _From, []) ->
+    not_found;
+update_queued_caller(
+  RequestRef, From,
+  [#request{ref = RequestRef, callers = Callers,
+                   parked = Parked} = Queued | Rest]) ->
+    case maps:take(From, Callers) of
+        {Caller, Callers1} ->
+            end_caller_residence(Caller, expired),
+            case Parked =:= true andalso map_size(Callers1) =:= 0 of
+                true ->
+                    release_source_monitor(Queued#request.source),
+                    {updated, Rest};
+                false ->
+                    {updated,
+                     [Queued#request{callers = Callers1} | Rest]}
+            end;
+        error ->
+            found
+    end;
+update_queued_caller(RequestRef, From, [Queued | Rest]) ->
+    case update_queued_caller(RequestRef, From, Rest) of
+        {updated, Rest1} -> {updated, [Queued | Rest1]};
+        Other -> Other
+    end.
+
+%%%===================================================================
+%%% Continuous certified follow lifecycle
+%%%===================================================================
+
+add_follow(Identity, Interest, From = {ConsumerPid, _Tag}, S0)
+  when is_pid(ConsumerPid) ->
+    S1 = ensure_history(Identity, S0),
+    H0 = maps:get(Identity, S1#s.histories),
+    WasIdle = map_size(H0#history.consumers) =:= 0,
+    FollowRef = make_ref(),
+    MRef = erlang:monitor(process, ConsumerPid),
+    Consumer = #consumer{pid = ConsumerPid, mref = MRef, interest = Interest},
+    H1 = H0#history{
+           consumers = (H0#history.consumers)#{FollowRef => Consumer},
+           last_used = quod_time:mono_ms()},
+    S2 = S1#s{
+           histories = (S1#s.histories)#{Identity => H1},
+           follows = (S1#s.follows)#{FollowRef => Identity}},
+    %% Both signals come from this exact owner. An asynchronous consumer
+    %% installs the correlated reference before seeing its first credit-bearing
+    %% notice; no early-notice buffer or second registration turn is needed.
+    ok = gen_server:reply(From, {ok, FollowRef}),
+    Notice = initial_follow_notice(Interest, WasIdle, H1),
+    S3 = notify_follow(FollowRef, Notice, S2),
+    S4 = case WasIdle of
+             true -> open_progress_signals(Identity, S3);
+             false -> S3
+         end,
+    %% A new consumer joins an existing custody holder. Registration/commit
+    %% edges still mark real advancement; demand alone does not repeat its job.
+    case WasIdle andalso not H0#history.follow_inflight of
+         true -> wake_follow(Identity, S4);
+         false when Interest =:= projection, H1#history.materializer =:= none ->
+             case H1#history.published =:= none orelse
+                  H1#history.height < history_progress_height(H1) of
+                 true -> wake_follow(Identity, S4);
+                 false -> ensure_materializer_advanced(Identity, S4)
+             end;
+         false -> S4
+    end.
+
+initial_follow_notice(progress, false, H) -> certified_notice(H);
+initial_follow_notice(projection, _, #history{projection_state = ready,
+                       materializer = #materializer{height = Height,
+                                                    projection_id = Projection}} = H) ->
+    {resnapshot, Height, Projection, follow_freshness(H, Height)};
+initial_follow_notice(_, _, H) -> {building, materialized_height(H)}.
+
+acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{pid = ConsumerPid,
+                                outstanding = {NoticeRef, _Notice}} = C0,
+         H0} ->
+            C1 = C0#consumer{outstanding = none},
+            H1 = put_consumer(FollowRef, C1, H0),
+            S1 = put_history(Identity, H1, S0),
+            case C1#consumer.pending of
+                none -> S1;
+                Pending ->
+                    notify_follow(
+                      FollowRef, Pending,
+                      put_history(
+                        Identity,
+                        put_consumer(
+                          FollowRef, C1#consumer{pending = none}, H1),
+                        S1))
+            end;
+        _ ->
+            S0
+    end.
+
+remove_follow(FollowRef, ConsumerPid, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, _Identity, #consumer{pid = ConsumerPid}, _H} ->
+            remove_follow_any(FollowRef, S0);
+        _ ->
+            S0
+    end.
+
+remove_follow_any(FollowRef, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{mref = MRef}, H0} ->
+            _ = erlang:demonitor(MRef, [flush]),
+            Consumers1 = maps:remove(FollowRef, H0#history.consumers),
+            H1 = H0#history{consumers = Consumers1,
+                            last_used = quod_time:mono_ms()},
+            S1 = put_history(
+                   Identity, H1,
+                   S0#s{follows = maps:remove(FollowRef, S0#s.follows)}),
+            S2 = case needs_projection(H1) of
+                     true -> S1;
+                     false -> release_follow_materializer(Identity, S1)
+                 end,
+            case map_size(Consumers1) of
+                0 ->
+                    case H1#history.current_watch of
+                        Watch when Watch =/= none -> hibernate_history(Identity, S2);
+                        none -> hibernate_history(
+                                   Identity,
+                                   stop_follow_target(Identity, S2))
+                    end;
+                _ -> S2
+            end;
+        error ->
+            S0
+    end.
+
+release_follow_materializer(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{materializer = none} ->
+            S0;
+        #history{materializer = #materializer{} = Materializer} = H0 ->
+            discard_materializer(Identity, H0, Materializer, S0);
+        undefined ->
+            S0
+    end.
+
+follow_consumer(FollowRef, S) ->
+    case maps:get(FollowRef, S#s.follows, undefined) of
+        undefined -> error;
+        Identity ->
+            case maps:get(Identity, S#s.histories, undefined) of
+                #history{} = H ->
+                    case maps:get(FollowRef, H#history.consumers, undefined) of
+                        #consumer{} = C -> {ok, Identity, C, H};
+                        undefined -> error
+                    end;
+                undefined -> error
+            end
+    end.
+
+follow_materializer(FollowRef, ConsumerPid, S) ->
+    case follow_consumer(FollowRef, S) of
+        {ok, _Identity, #consumer{pid = ConsumerPid, interest = progress}, _} ->
+            {error, not_projection};
+        {ok, _Identity, #consumer{pid = ConsumerPid},
+         #history{projection_state = ready,
+                  materializer = #materializer{pid = Pid,
+                                               generation = Generation}}} ->
+            {ok, Pid, Generation};
+        {ok, _Identity, #consumer{pid = ConsumerPid}, _History} ->
+            {error, building};
+        _ -> {error, not_found}
+    end.
+
+consumer_by_monitor(MRef, S) ->
+    Matches =
+        [FollowRef
+         || {FollowRef, Identity} <- maps:to_list(S#s.follows),
+            #history{} = H <- [maps:get(Identity, S#s.histories)],
+            #consumer{mref = ConsumerMRef} <-
+                [maps:get(FollowRef, H#history.consumers)],
+            ConsumerMRef =:= MRef],
+    case Matches of
+        [FollowRef] -> {ok, FollowRef};
+        [] -> error
+    end.
+
+put_consumer(FollowRef, Consumer, H) ->
+    H#history{consumers = (H#history.consumers)#{FollowRef => Consumer}}.
+
+put_history(Identity, H, S) ->
+    S#s{histories = (S#s.histories)#{Identity => H}}.
+
+%% A cache is durable verified data. Once no worker or projection consumer owns
+%% it, release its exact catch-up leases and disk handles, but retain the one bounded
+%% projection, immutable ledger-index session, and suspended derived phase
+%% session already verified by this owner. A current-view watch keeps the feed
+%% freshness registration; the next real delta resumes the same verifier
+%% instead of replaying or rescanning history.
+%% Node startup verifies retained disk state before publishing a reusable prefix.
+hibernate_history(Identity, S0) ->
+    S1 = case maps:get(Identity, S0#s.histories, undefined) of
+        #history{active = none, consumers = Consumers, materializer = none,
+                 follow_token = none, follow_inflight = false} = H0
+          when map_size(Consumers) =:= 0 ->
+            case queue:is_empty(H0#history.waiting) of
+                true ->
+                    Released = maybe_close_progress_signals(Identity, S0),
+                    hibernate_idle_history(Identity,
+                        maps:get(Identity, Released#s.histories), Released);
+                false -> S0
+            end;
+        _ ->
+            S0
+    end,
+    release_idle_page_bindings(S1).
+
+hibernate_idle_history(_Identity,
+                       #history{resident_verified = true}, S0) ->
+    S0;
+hibernate_idle_history(_Identity, #history{published = #prefix{}}, S0) ->
+    S0;
+hibernate_idle_history(_Identity, #history{certified_tip = Tip}, S0) when Tip =/= none ->
+    S0;
+hibernate_idle_history(Identity, H, S0) ->
+    close_phase_session(H#history.phase_session),
+    Bootstrap = case H#history.bootstrap_hints of
+                    [] -> maps:remove(Identity, S0#s.bootstrap);
+                    Hints -> (S0#s.bootstrap)#{Identity => Hints}
+                end,
+    S0#s{histories = maps:remove(Identity, S0#s.histories),
+              bootstrap = Bootstrap,
+              total_bytes = max(0, S0#s.total_bytes - H#history.bytes)}.
+
+bootstrap_hints(Identity, #s{histories = Histories, bootstrap = Bootstrap}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{bootstrap_hints = Hints} -> Hints;
+        undefined -> maps:get(Identity, Bootstrap, [])
+    end.
+
+bootstrap_candidate_count(#s{histories = Histories, bootstrap = Bootstrap}) ->
+    lists:sum([length(H#history.bootstrap_hints) || H <- maps:values(Histories)]) +
+        lists:sum([length(Hints) || Hints <- maps:values(Bootstrap)]).
+
+notify_history(Identity, Interest, Notice, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{consumers = Consumers} ->
+            lists:foldl(
+              fun(FollowRef, Acc) -> notify_follow(FollowRef, Notice, Acc) end,
+              S0, [Ref || {Ref, C} <- maps:to_list(Consumers),
+                          Interest =:= all orelse C#consumer.interest =:= Interest]);
+        undefined -> S0
+    end.
+
+notify_follow(FollowRef, Notice, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{outstanding = none, pid = Pid} = C0, H0} ->
+            NoticeRef = make_ref(),
+            {Delivery, C1} = follow_delivery(Notice, C0),
+            Pid ! {quod_foreign_follow, FollowRef, NoticeRef, Identity, Delivery},
+            C2 = C1#consumer{outstanding = {NoticeRef, Delivery}},
+            S1 = count_follow_resnapshot(Delivery, S0),
+            put_history(Identity, put_consumer(FollowRef, C2, H0), S1);
+        {ok, Identity, #consumer{pending = Pending0} = C0, H0} ->
+            C1 = C0#consumer{pending = coalesce_notice(Pending0, Notice)},
+            put_history(
+              Identity, put_consumer(FollowRef, C1, H0),
+              S0#s{follow_coalesced = S0#s.follow_coalesced + 1});
+        error ->
+            S0
+    end.
+
+%% The first ready delivery establishes this consumer's baseline. A consumer
+%% joining an in-flight materialization must never replay its earlier events.
+follow_delivery({advanced, _, To, Projection, Freshness, _, _},
+                #consumer{baseline = pending} = C) ->
+    follow_delivery({resnapshot, To, Projection, Freshness}, C);
+follow_delivery({resnapshot, _, _, _} = Notice, C) ->
+    {Notice, C#consumer{baseline = delivered}};
+follow_delivery(Notice, C) -> {Notice, C}.
+
+count_follow_resnapshot({resnapshot, _To, _Projection, _Freshness}, S) ->
+    S#s{follow_resnapshots = S#s.follow_resnapshots + 1};
+count_follow_resnapshot(_Notice, S) ->
+    S.
+
+coalesce_notice(none, Notice) -> Notice;
+coalesce_notice(
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0, _Publications0},
+  {advanced, _From, To, Projection, Freshness, _Heads, _Publications}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {resnapshot, _To0, _Projection0, _Fresh0},
+  {advanced, _From, To, Projection, Freshness, _Heads, _Publications}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0, _Publications0},
+  {resnapshot, To, Projection, Freshness}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {resnapshot, _To0, _Projection0, _Fresh0},
+  {resnapshot, To, Projection, Freshness}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(_Previous, Newest) ->
+    Newest.
+
+-ifdef(TEST).
+test_coalesce_notice(Previous, Newest) ->
+    coalesce_notice(Previous, Newest).
+-endif.
+
+%% A live block/digest, a directory change, or an explicit consumer refresh is
+%% only a wake signal. It never advances the cache itself. At most one follow
+%% job and one coalesced dirty edge exist per subscribed projection identity.
+%% A current-view-only wake merely invalidates that view; the next real request
+%% advances it through the same verifier. The certified worker remains the sole
+%% place which can accept history.
+wake_follow(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            case follow_refresh_needed(H0) of
+                false ->
+                    S0;
+                true ->
+                    case {H0#history.follow_token,
+                          H0#history.follow_inflight} of
+                        {none, false} ->
+                            Token = make_ref(),
+                            self() ! {follow_refresh, Identity, Token},
+                            put_history(
+                              Identity, H0#history{follow_token = Token},
+                              S0#s{follow_wakes = S0#s.follow_wakes + 1});
+                        {Token, false} when is_reference(Token) ->
+                            %% The queued mailbox turn has not started its
+                            %% certified work yet, so every signal already
+                            %% belongs to that same job.
+                            S0;
+                        {_Token, true} ->
+                            put_history(
+                              Identity, H0#history{follow_dirty = true}, S0)
+                    end
+            end;
+        _ ->
+            S0
+    end.
+
+follow_refresh_needed(#history{consumers = Consumers})
+  when map_size(Consumers) > 0 ->
+    true;
+follow_refresh_needed(#history{}) ->
+    false.
+
+%% Directory renewal is a route/reconnection edge, not a periodic history
+%% probe. Parked exact work is released by the caller above, and a live feed
+%% registration supplies subsequent certified-progress wakes. A first attempt
+%% with no established reachability still needs a dirty edge to close the race
+%% where its route snapshot predates this event; an unreachable follower needs
+%% an immediate new attempt. A reachable follower needs neither.
+wake_follow_if_route_needed(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{reachability = reachable} -> S0;
+        #history{} -> wake_follow(Identity, S0);
+        undefined -> S0
+    end.
+
+begin_follow_refresh(Identity, Token, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{follow_token = Token} = H0 ->
+            case follow_refresh_needed(H0) of
+                true ->
+                    H1 = H0#history{follow_token = none,
+                                    follow_inflight = true,
+                                    follow_dirty = false,
+                                    follow_start_height = follow_verified_height(H0)},
+                    S1 = put_history(Identity, H1, S0),
+                    Timeout = follow_request_timeout(S1),
+                    Deadline = quod_time:mono_ms() + Timeout,
+                    case selected_route_sources(Identity, [], S1) of
+                        {error, anchor_conflict} ->
+                            finish_follow_refresh(
+                              Identity, Token,
+                              {error, {unreachable, anchor_conflict}}, S1);
+                        {ok, Sources} ->
+                            case start_worker(
+                                   {follow, Identity}, Identity, Timeout,
+                                   {follow, Identity, Sources, Deadline}, S1#s.fetch_fun,
+                                   {follow, Identity, Token}, S1) of
+                                {ok, S2} -> S2
+                            end
+                    end;
+                false ->
+                    put_history(
+                      Identity, H0#history{follow_token = none}, S0)
+            end;
+        _ ->
+            S0
+    end.
+
+follow_request_timeout(S) ->
+    min(?MAX_TIMER_MS - 1000, 2 * S#s.page_timeout_ms + 1000).
+
+finish_follow_refresh(Identity, _Token, Reply, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{consumers = Consumers, current_watch = none} = H0
+          when map_size(Consumers) =:= 0 ->
+            hibernate_history(
+              Identity,
+              put_history(
+                Identity,
+                H0#history{follow_inflight = false, follow_dirty = false},
+                S0));
+        #history{} = H0 ->
+            Now = quod_time:mono_ms(),
+            {Hint, Reason} =
+                case Reply of
+                    {ok, Evidence} when is_map(Evidence) ->
+                        {maps:get(hinted_height, Evidence,
+                                  maps:get(slot, Evidence, unknown)),
+                         none};
+                    {error, {unreachable, Why}} ->
+                        {H0#history.hinted_height, Why};
+                    {error, _} ->
+                        {H0#history.hinted_height, unavailable}
+                end,
+            KnownHint = case {H0#history.hinted_height, Hint} of
+                            {Old, New} when is_integer(Old), is_integer(New) -> max(Old, New);
+                            {Old, unknown} -> Old;
+                            {_, New} -> New
+                        end,
+            Advanced = Reason =:= none andalso
+                       follow_verified_height(H0) > H0#history.follow_start_height,
+            H1 = H0#history{last_probe_ms = Now, hinted_height = KnownHint,
+                            follow_inflight = false,
+                            reachability =
+                                case Reason of
+                                    none -> reachable;
+                                    _ -> {unreachable, Reason}
+                                end},
+            S1 = put_history(Identity, H1, S0),
+            S2 = ensure_materializer_advanced(Identity, S1),
+            S3 = case Reason of
+                     none -> notify_history(Identity, progress, certified_notice(H1), S2);
+                     _ -> notify_history(
+                            Identity, all,
+                            {unreachable, Reason,
+                             materialized_height(
+                               maps:get(Identity, S2#s.histories))}, S2)
+                 end,
+            continue_follow_progress(Identity, Advanced, KnownHint, S3);
+        undefined ->
+            S0
+    end.
+
+%% A certified page which says that a later tip already exists is also an
+%% exact progress edge: continue immediately instead of waiting for another
+%% feed digest.  It is merged with any signal received while the worker was
+%% active, so both conditions still produce only one next job.  No unchanged
+%% or failed result can create a loop.
+continue_follow_progress(Identity, Advanced, Hint, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{follow_dirty = Dirty} = H0 ->
+            Height = follow_verified_height(H0),
+            MoreCertified =
+                Advanced andalso
+                    is_integer(Hint) andalso Hint > Height,
+            case Dirty orelse MoreCertified of
+                true ->
+                    wake_follow(
+                      Identity,
+                      put_history(
+                        Identity, H0#history{follow_dirty = false}, S0));
+                false ->
+                    S0
+            end;
+        _ ->
+            S0
+    end.
+
+newer_certified_tip(none, Tip) -> Tip;
+newer_certified_tip(Tip, none) -> Tip;
+newer_certified_tip(#{height := Height, hash := Hash} = Old,
+                    #{height := Height, hash := Hash}) -> Old;
+newer_certified_tip(#{height := OldHeight}, #{height := Height} = New) when Height > OldHeight -> New;
+newer_certified_tip(#{height := OldHeight} = Old, #{height := Height}) when Height < OldHeight -> Old;
+newer_certified_tip(_, _) -> error(conflicting_verified_tip).
+
+history_certified_view(#history{published = Prefix, certified_tip = Tip}) ->
+    Material = case Prefix of
+        #prefix{height = H, projection = P} ->
+            {H, Hash} = history_head(P), #{height => H, hash => Hash, authority => P};
+        none -> none
+    end,
+    newer_certified_tip(Tip, Material).
+
+history_progress_height(H) ->
+    case history_certified_view(H) of none -> 0; #{height := Height} -> Height end.
+
+history_authority(H) ->
+    case history_certified_view(H) of none -> undefined; #{authority := A} -> A end.
+
+certified_notice(H) ->
+    case history_certified_view(H) of
+        #{height := Height, hash := Hash} -> {certified, Height, Hash};
+        none -> {building, 0}
+    end.
+
+follow_verified_height(H) ->
+    case needs_projection(H) of true -> H#history.height; false -> history_progress_height(H) end.
+
+needs_projection(#history{consumers = Consumers}) ->
+    lists:any(fun(#consumer{interest = I}) -> I =:= projection end,
+              maps:values(Consumers)).
+
+ensure_materializer_advanced(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{height = Height, projection = Projection,
+                 cache_session = CacheSession,
+                 materializer = Materializer} = H0
+          when Height > 0, is_map(Projection), CacheSession =/= none ->
+            case {needs_projection(H0), history_head(Projection)} of
+                {true, {Height, <<_:256>>}} ->
+                    View = #{owner => self(), identity => Identity, slot => Height,
+                             snapshot => CacheSession, projection => Projection},
+                    case Materializer of
+                        none ->
+                            {Pid, MRef, Generation} =
+                                quod_foreign_projection:start_monitor(
+                                  self(), Identity,
+                                  quod_ledger_store:ns_dir(
+                                    filename:join(S0#s.root, "projections"),
+                                    H0#history.cache_ns), View),
+                            M = #materializer{pid = Pid, mref = MRef,
+                                              generation = Generation},
+                            quod_foreign_projection:advance(
+                              Pid, Generation, View),
+                            put_history(
+                              Identity,
+                              H0#history{materializer = M,
+                                         projection_state = building,
+                                         projection_wait = none},
+                              S0#s{projection_rebuilds =
+                                       S0#s.projection_rebuilds + 1});
+                        #materializer{pid = Pid, generation = Generation} ->
+                            quod_foreign_projection:advance(
+                              Pid, Generation, View),
+                            put_history(
+                              Identity,
+                              H0#history{projection_wait = none}, S0)
+                    end;
+                _ ->
+                    S0
+            end;
+        _ ->
+            S0
+    end.
+
+history_head(Projection) when is_map(Projection) ->
+    maps:get(history_head, Projection, none).
+
+projection_building(Identity, Generation, Height, S0) ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, H0, _M} ->
+            notify_history(
+              Identity, projection, {building, Height},
+              put_history(
+                Identity,
+                H0#history{projection_state = building,
+                           projection_wait = none}, S0));
+        error -> S0
+    end.
+
+projection_waiting(Identity, Generation, Height, S0) ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, H0, _M} ->
+            S1 = notify_history(
+                   Identity, projection, {building, Height},
+                   put_history(
+                     Identity,
+                     H0#history{projection_wait = network_identity}, S0)),
+            %% Root may have become ready before this message crossed the
+            %% owner's mailbox.  Recheck the dependency at the edge instead
+            %% of waiting for an event which has already happened.
+            case quod_ontology:network_identity() of
+                {ok, <<_:256>>} -> ensure_materializer_advanced(Identity, S1);
+                _ -> S1
+            end;
+        error -> S0
+    end.
+
+resume_network_identity_projections(S0) ->
+    lists:foldl(
+      fun({Identity, #history{projection_wait = network_identity}}, S) ->
+              ensure_materializer_advanced(Identity, S);
+         ({_Identity, #history{}}, S) ->
+              S
+      end, S0, maps:to_list(S0#s.histories)).
+
+projection_ready(Identity, Generation,
+                 #{from := From, height := Height,
+                   projection_id := ProjectionId,
+                   changed_heads := Heads0, resnapshot := Resnapshot0,
+                   publications := Publications0,
+                   memory_bytes := MemoryBytes}, S0)
+  when is_integer(From), is_integer(Height), Height >= From,
+       is_binary(ProjectionId), byte_size(ProjectionId) =:= 32,
+       is_list(Heads0), is_list(Publications0),
+       is_integer(MemoryBytes), MemoryBytes >= 0 ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, H0, M0} ->
+            Total = max(
+                      0, S0#s.projection_bytes -
+                             M0#materializer.memory_bytes + MemoryBytes),
+            M1 = M0#materializer{
+                   height = Height, projection_id = ProjectionId,
+                   memory_bytes = MemoryBytes},
+            LastAdvance = case Height > M0#materializer.height of
+                              true -> quod_time:mono_ms();
+                              false -> H0#history.last_advance_ms
+                          end,
+            H1 = H0#history{materializer = M1,
+                            last_advance_ms = LastAdvance,
+                            projection_state = ready,
+                            projection_wait = none},
+            S1 = put_history(
+                   Identity, H1,
+                   S0#s{projection_bytes = Total,
+                        max_follow_lag = max(
+                                           S0#s.max_follow_lag,
+                                           follow_lag(H1, Height))}),
+            Freshness = follow_freshness(H1, Height),
+            {Resnapshot, Heads} = bounded_heads(
+                                    Resnapshot0 orelse From =:= 0,
+                                    Heads0),
+            Publications = case Resnapshot of
+                               true -> [];
+                               false -> Publications0
+                           end,
+            Notice = case Resnapshot of
+                         true -> {resnapshot, Height, ProjectionId,
+                                  Freshness};
+                         false -> {advanced, From, Height, ProjectionId,
+                                   Freshness, Heads, Publications}
+                     end,
+            notify_history(Identity, projection, Notice, S1);
+        error -> S0
+    end;
+projection_ready(_Identity, _Generation, _Result, S) ->
+    S.
+
+bounded_heads(true, _Heads) -> {true, []};
+bounded_heads(false, Heads) ->
+    case stable_bounded_heads(Heads, ?MAX_CHANGED_HEADS, #{}, []) of
+        {ok, Unique} -> {false, Unique};
+        overflow -> {true, []}
+    end.
+
+stable_bounded_heads([], _Left, _Seen, Acc) ->
+    {ok, lists:reverse(Acc)};
+stable_bounded_heads([Head | Rest], Left, Seen, Acc) ->
+    case maps:is_key(Head, Seen) of
+        true -> stable_bounded_heads(Rest, Left, Seen, Acc);
+        false when Left > 0 ->
+            stable_bounded_heads(
+              Rest, Left - 1, Seen#{Head => true}, [Head | Acc]);
+        false -> overflow
+    end.
+
+follow_freshness(H, Height) ->
+    Hint = H#history.hinted_height,
+    Lag = case Hint of
+              N when is_integer(N), N >= Height -> N - Height;
+              _ -> unknown
+          end,
+    #{last_probe_ms => H#history.last_probe_ms,
+      last_advance_ms => H#history.last_advance_ms,
+      hinted_height => Hint, lag => Lag}.
+
+follow_lag(#history{hinted_height = Hint}, Height)
+  when is_integer(Hint), Hint >= Height -> Hint - Height;
+follow_lag(_H, _Height) -> 0.
+
+materializer_matches(Identity, Generation, S) ->
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{materializer =
+                     #materializer{generation = Generation} = M} = H ->
+            {ok, H, M};
+        _ -> error
+    end.
+
+projection_down(MRef, _Pid, _Reason, S0) ->
+    Matches =
+        [{Identity, H, M}
+         || {Identity, H = #history{materializer = M}} <-
+                maps:to_list(S0#s.histories),
+            is_record(M, materializer), M#materializer.mref =:= MRef],
+    case Matches of
+        [{Identity, H0, M0}] ->
+            S1 = discard_materializer(Identity, H0, M0, S0),
+            H1 = maps:get(Identity, S1#s.histories),
+            notify_history(
+              Identity, projection, {building, materialized_height(H0)},
+              put_history(
+                Identity,
+                H1#history{reachability = {unreachable, materializer_down}},
+                S1));
+        [] -> S0
+    end.
+
+discard_materializer(Identity, H0, M0, S0) ->
+    stop_materializer(M0),
+    put_history(
+      Identity,
+      H0#history{materializer = none, projection_state = building,
+                 projection_wait = none},
+      S0#s{projection_bytes = max(
+                                  0, S0#s.projection_bytes -
+                                         M0#materializer.memory_bytes)}).
+
+materialized_height(#history{materializer = none}) -> 0;
+materialized_height(#history{materializer = #materializer{height = Height}}) ->
+    Height.
+
+stop_follow_target(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            S1 = case H0#history.materializer of
+                     none -> S0;
+                     #materializer{} = M ->
+                         discard_materializer(Identity, H0, M, S0)
+                 end,
+            H1 = maps:get(Identity, S1#s.histories),
+            H2 = H1#history{follow_token = none,
+                            follow_inflight = false,
+                            follow_dirty = false,
+                            hinted_height = unknown,
+                            projection_state = building,
+                            projection_wait = none,
+                            reachability = unknown},
+            S2 = put_history(Identity, H2, S1),
+            maybe_close_progress_signals(
+              Identity, withdraw_follow_demand(Identity, S2));
+        undefined -> S0
+    end.
+
+withdraw_follow_demand(Identity, S0) ->
+    H = maps:get(Identity, S0#s.histories),
+    Ref = H#history.active,
+    S1 = case maps:get(Ref, S0#s.pending, none) of
+        #request{from = {follow, Identity, _}, custody = Custody,
+                 worker = Worker} = Request ->
+            %% Subscription demand ends now, not ownership of a mutable
+            %% cursor. A custody holder returns its verified state through
+            %% the ordinary bounded handoff. Before acquisition, cancellation
+            %% remains immediate; deadline and owner-death teardown are intact.
+            case Custody of
+                held -> put_history(Identity, H#history{follow_inflight = true}, S0);
+                _ -> exit(Worker, kill),
+                     S0#s{pending = (S0#s.pending)#{Ref => Request#request{retiring = true}}}
+            end;
+        _ -> S0
+    end,
+    #history{waiting = Waiting0} = H0 = maps:get(Identity, S1#s.histories),
+    Waiting1 = queue:filter(fun(Q) ->
+        case queued_follow(Identity, Q) of
+            true -> release_custody_monitor(Identity, Q), false;
+            false -> true
+        end
+    end, Waiting0),
+    start_next_request(
+      Identity, put_history(Identity, H0#history{waiting = Waiting1}, S1)).
+
+queued_follow(
+  Identity,
+  #request{from = {follow, RequestIdentity, _Token}}) ->
+    RequestIdentity =:= Identity;
+queued_follow(_Identity, _Queued) ->
+    false.
+
+stop_materializer(none) -> ok;
+stop_materializer(#materializer{pid = Pid, mref = MRef}) ->
+    _ = erlang:demonitor(MRef, [flush]),
+    quod_foreign_projection:stop(Pid).
+
+cancel_request_pulls(RequestRef, S0) ->
+    Refs = [ReqId || {ReqId, #pull{request_ref = Ref}} <- maps:to_list(S0#s.pulls),
+                     Ref =:= RequestRef],
+    Bindings = lists:usort([(maps:get(ReqId, S0#s.pulls))#pull.binding || ReqId <- Refs]),
+    S1 = lists:foldl(fun(Id, Acc) -> cancel_pull_owned(Id, request_retired, Acc) end,
+                    S0, Refs),
+    lists:foldl(fun drive_page_binding/2, S1, Bindings).
+
+%% Residency is not attempt permission. Only a new verified prefix can wake
+%% parked siblings; an unchanged failed request must not wake another failed
+%% request back and forth without an external progress edge.
+install_verified_progress(RequestRef, Meta, S0) ->
+    {ok, Identity} = request_identity(RequestRef, S0),
+    OldHeight = history_progress_height(maps:get(Identity, S0#s.histories)),
+    S1 = install_worker_meta(
+           RequestRef, Meta, record_follow_progress(RequestRef, Meta, S0)),
+    case history_progress_height(maps:get(Identity, S1#s.histories)) > OldHeight of
+        true -> release_queued_route_waiters(Identity, S1);
+        false -> S1
+    end.
+
+retain_verified_evidence(H0, Meta) ->
+    Authorities = maps:fold(fun(Era, A, Acc) ->
+        case maps:find(Era, Acc) of
+            error -> Acc#{Era => A};
+            {ok, A} -> Acc;
+            {ok, _} -> error(conflicting_verified_authority)
+        end
+    end, H0#history.authorities, maps:get(authorities, Meta, #{})),
+    Tip = newer_certified_tip(H0#history.certified_tip, maps:get(certified_tip, Meta, none)),
+    H0#history{authorities = Authorities, certified_tip = Tip}.
+
+install_worker_meta(RequestRef, #{evidence_only := true} = Meta, S0) ->
+    {ok, Identity} = request_identity(RequestRef, S0),
+    H0 = maps:get(Identity, S0#s.histories),
+    install_verified_history(Identity, H0, retain_verified_evidence(H0, Meta), S0);
+install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
+    case request_identity(RequestRef, S0) of
+        {ok, Identity} ->
+            case maps:get(Identity, S0#s.histories, undefined) of
+                #history{} = Previous ->
+                    H0 = retain_verified_evidence(Previous, Meta),
+                    ActualBytes = maps:get(bytes, Meta, H0#history.bytes),
+                    Projection = maps:get(
+                                   projection, Meta,
+                                   H0#history.projection),
+                    ResidentVerified =
+                        maps:get(resident_verified, Meta, false),
+                    PhaseSession = maps:get(phase_session, Meta, none),
+                    Height = maps:get(height, Meta, H0#history.height),
+                    PriorSession = case {Height, Projection} of
+                                       {OldHeight, OldProjection}
+                                         when OldHeight =:= H0#history.height,
+                                              OldProjection =:= H0#history.projection ->
+                                           H0#history.cache_session;
+                                       _ -> none
+                                   end,
+                    CacheSession = maps:get(cache_session, Meta, PriorSession),
+                    {Published, S1} = publish_prefix(RequestRef, ResidentVerified,
+                        Height, Projection, PhaseSession, CacheSession, H0#history.published, S0),
+                    close_replaced_phase_session(
+                      H0#history.phase_session, PhaseSession),
+                    H1 = H0#history{height = Height,
+                                    bytes = ActualBytes,
+                                    projection = Projection,
+                                    resident_verified = ResidentVerified,
+                                    phase_session = PhaseSession,
+                                    cache_session = CacheSession,
+                                    published = Published},
+                    Total1 = max(
+                               0, S0#s.total_bytes - H0#history.bytes +
+                                      ActualBytes),
+                    install_verified_history(
+                      Identity, Previous, H1, S1#s{total_bytes = Total1});
+                undefined -> S0
+            end;
+        error -> S0
+    end;
+install_worker_meta(_RequestRef, _Meta, S) -> S.
+
+install_verified_history(Identity, Previous, Installed, S) ->
+    %% First certified authority replaces discovery guesses. Later live
+    %% contacts remain useful, including when material custody is absent.
+    H = case {is_map(history_authority(Previous)), is_map(history_authority(Installed))} of
+        {false, true} -> Installed#history{bootstrap_hints = []};
+        _ -> Installed
+    end,
+    reconcile_feed_registrations(Identity, put_history(Identity, H, S)).
+
+publish_prefix(RequestRef, true, Height, Projection, Session, Snapshot, Previous, S0)
+  when Height > 0, is_map(Projection), Snapshot =/= none ->
+    Request = maps:get(RequestRef, S0#s.pending),
+    Hold = case Request#request.phase_hold of
+        none -> prefix_index(Previous);
+        New -> New
+    end,
+    true = quod_dtx_phase_index:same_session(Hold, Session),
+    case Request#request.phase_hold of
+        none -> ok;
+        _ -> release_prefix(Previous)
+    end,
+    Prefix = #prefix{height = Height, projection = Projection,
+                     snapshot = Snapshot, index = Hold},
+    {Prefix, S0#s{pending = (S0#s.pending)#{RequestRef => Request#request{phase_hold = none}}}};
+publish_prefix(_RequestRef, false, _Height, _Projection, _Session, _Snapshot, Previous, S) ->
+    {Previous, S}.
+
+prefix_index(none) -> none;
+prefix_index(#prefix{index = Hold}) -> Hold.
+
+release_prefix(Prefix) -> release_phase_hold(prefix_index(Prefix)).
+release_phase_hold(none) -> ok;
+release_phase_hold(Hold) ->
+    %% Resource release grants no writer permission and does not unlink a
+    %% file beneath a dying worker. Ordinary next-custody cleanup reclaims it.
+    _ = quod_dtx_phase_index:release(Hold),
+    ok.
+
+close_replaced_phase_session(Session, Session) -> ok;
+close_replaced_phase_session(Old, _New) -> close_phase_session(Old).
+
+close_phase_session(none) -> ok;
+close_phase_session(Session) ->
+    _ = quod_dtx_phase_index:close(Session),
+    ok.
+
+suspend_phase_session(PhaseIndex) ->
+    case measure_foreign_stage(
+           phase_suspend,
+           fun() -> quod_dtx_phase_index:suspend(PhaseIndex) end) of
+        {ok, Session} -> Session;
+        {error, _} ->
+            close_phase_session(PhaseIndex),
+            none
+    end.
+
+phase_session_stats(PhaseIndex) ->
+    case quod_dtx_phase_index:stats(PhaseIndex) of
+        {ok, #{rows := Rows, file_bytes := FileBytes}} ->
+            #{phase_index_rows => Rows,
+              phase_index_bytes => FileBytes};
+        {error, _} ->
+            #{}
+    end.
+
+record_follow_progress(RequestRef, Meta, S0) when is_map(Meta) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{from = {follow, Identity, _Token}} ->
+            case maps:get(Identity, S0#s.histories, undefined) of
+                #history{height = OldHeight, bytes = OldBytes} ->
+                    Height = maps:get(height, Meta, OldHeight),
+                    Bytes = maps:get(bytes, Meta, OldBytes),
+                    Entries = max(0, Height - OldHeight),
+                    Pages = case Entries of
+                                0 -> 0;
+                                _ -> (Entries + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
+                                     div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES
+                            end,
+                    S0#s{follow_pages = S0#s.follow_pages + Pages,
+                         follow_entries = S0#s.follow_entries + Entries,
+                         follow_bytes = S0#s.follow_bytes + max(0, Bytes - OldBytes)};
+                undefined -> S0
+            end;
+        _ -> S0
+    end;
+record_follow_progress(_RequestRef, _Meta, S) -> S.
+
+foreign_worker_heap_words() ->
+    max(1, ?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES div erlang:system_info(wordsize)).
+
+%%%===================================================================
+%%% Catch-up transport
+%%%===================================================================
+
+open_progress_signals(Identity = {Ns, _Anchor}, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{progress_signals_open = false} = H0 ->
+            true = quod_reg:subscribe({directory_route, Identity}),
+            ok = quod_directory:route_needed(Identity),
+            S1 = add_namespace_progress_signals(Ns, S0),
+            reconcile_feed_registrations(
+              Identity,
+              put_history(
+                Identity, H0#history{progress_signals_open = true}, S1));
+        #history{progress_signals_open = true} ->
+            reconcile_feed_registrations(Identity, S0);
+        _ ->
+            S0
+    end.
+
+maybe_close_progress_signals(Identity = {Ns, _Anchor}, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{progress_signals_open = true,
+                 consumers = Consumers,
+                 current_watch = CurrentWatch,
+                 certified_tip = Tip, resident_verified = ResidentVerified} = H0 ->
+            case map_size(Consumers) =:= 0 andalso
+                 not (CurrentWatch =/= none andalso (ResidentVerified orelse Tip =/= none)) andalso
+                 H0#history.active =:= none andalso
+                 queue:is_empty(H0#history.waiting) of
+                true ->
+                    _ = catch quod_reg:unsubscribe(
+                                {directory_route, Identity}),
+                    S1 = remove_namespace_progress_signals(Ns, S0),
+                    close_identity_feed_registrations(
+                      Identity,
+                      put_history(
+                        Identity,
+                        H0#history{progress_signals_open = false}, S1));
+                false ->
+                    S0
+            end;
+        _ ->
+            S0
+    end.
+
+add_namespace_progress_signals(Ns, S0) ->
+    Chan = quod_feed:channel(Ns),
+    case maps:get(Chan, S0#s.progress_channels, undefined) of
+        undefined ->
+            true = quod_reg:subscribe({channel, Chan}),
+            true = quod_reg:subscribe({committed, Ns}),
+            %% Root's runtime subscription also owns network-identity recovery.
+            %% Retire only subscriptions acquired by this namespace interest.
+            Runtime = try gproc:get_value(quod_reg:prop({runtime, Ns})) of
+                _ -> false
+            catch error:badarg -> quod_reg:subscribe({runtime, Ns})
+            end,
+            S0#s{progress_channels =
+                     (S0#s.progress_channels)#{Chan => {Ns, 1, Runtime}}};
+        {Ns, Count, Runtime} ->
+            S0#s{progress_channels =
+                     (S0#s.progress_channels)#{Chan => {Ns, Count + 1, Runtime}}}
+    end.
+
+remove_namespace_progress_signals(Ns, S0) ->
+    Chan = quod_feed:channel(Ns),
+    case maps:get(Chan, S0#s.progress_channels, undefined) of
+        {Ns, 1, Runtime} ->
+            _ = catch quod_reg:unsubscribe({channel, Chan}),
+            _ = catch quod_reg:unsubscribe({committed, Ns}),
+            _ = case Runtime of true -> catch quod_reg:unsubscribe({runtime, Ns}); false -> ok end,
+            S0#s{progress_channels =
+                     maps:remove(Chan, S0#s.progress_channels)};
+        {Ns, Count, Runtime} when Count > 1 ->
+            S0#s{progress_channels =
+                     (S0#s.progress_channels)#{Chan => {Ns, Count - 1, Runtime}}};
+        _ ->
+            S0
+    end.
+
+%% The existing certified route view owns recipient selection.  This is not a
+%% second directory: the registration map contains only live link ownership,
+%% and is reconciled from the current projection whenever that projection or
+%% its exact directory routes change.
+reconcile_feed_registrations(Identity, S0) ->
+    Desired = desired_feed_registration_routes(Identity, S0),
+    Existing =
+        [Key
+         || Key = {RegistrationIdentity, _Peer} <-
+                maps:keys(S0#s.feed_registrations),
+            RegistrationIdentity =:= Identity],
+    S1 = lists:foldl(
+           fun(Key = {_RegistrationIdentity, Peer}, Acc) ->
+                   case maps:is_key(Peer, Desired) of
+                       true -> Acc;
+                       false -> close_feed_registration_key(Key, Acc)
+                   end
+           end, S0, Existing),
+    maps:fold(
+      fun(Peer, Endpoints, Acc) ->
+              ensure_feed_registration(Identity, Peer, Endpoints, Acc)
+      end, S1, Desired).
+
+reconcile_all_feed_registrations(S0) ->
+    Identities =
+        [Identity
+         || {Identity, #history{progress_signals_open = true}} <-
+                maps:to_list(S0#s.histories)],
+    lists:foldl(fun reconcile_feed_registrations/2, S0, Identities).
+
+close_all_feed_registrations(S0) ->
+    lists:foldl(
+      fun close_feed_registration_key/2,
+      S0, maps:keys(S0#s.feed_registrations)).
+
+desired_feed_registration_routes(Identity, S) ->
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{progress_signals_open = true, current_watch = Watch, consumers = Consumers} = H
+          when map_size(Consumers) > 0 orelse Watch =:= remote ->
+            case {history_authority(H), selected_route_sources(Identity, [], S)} of
+                {Authority, {ok, Sources}} when is_map(Authority) ->
+                    maps:from_list(current_route_candidates(Sources, Authority));
+                _ -> #{}
+            end;
+        _ -> #{}
+    end.
+
+ensure_feed_registration(Identity, Peer, Endpoints,
+                         S = #s{feed_registrations = Registrations}) ->
+    Key = {Identity, Peer},
+    case maps:get(Key, Registrations, undefined) of
+        #feed_registration{link = Link} when is_pid(Link) ->
+            S;
+        #feed_registration{open_ref = OpenRef,
+                           current_endpoint = Endpoint}
+          when is_reference(OpenRef) ->
+            case lists:member(Endpoint, Endpoints) of
+                true -> S;
+                false ->
+                    start_feed_registration(
+                      Identity, Peer, Endpoints,
+                      close_feed_registration_key(Key, S))
+            end;
+        #feed_registration{} ->
+            start_feed_registration(
+              Identity, Peer, Endpoints,
+              close_feed_registration_key(Key, S));
+        undefined ->
+            start_feed_registration(Identity, Peer, Endpoints, S)
+    end.
+
+start_feed_registration(Identity, Peer, [_ | _] = Endpoints, S0) ->
+    Registration = #feed_registration{
+                      identity = Identity, peer = Peer,
+                      registration_id = crypto:strong_rand_bytes(16)},
+    open_next_feed_registration(
+      Registration#feed_registration{remaining = Endpoints}, S0).
+
+open_next_feed_registration(
+  Registration = #feed_registration{
+                     identity = {Ns, _Anchor} = Identity,
+                     peer = Peer,
+                     remaining = [Endpoint | Rest]},
+  S0) ->
+    OpenRef = quod_quic:open_link_pinned(
+                Peer, Endpoint, quod_feed:channel(Ns)),
+    Key = {Identity, Peer},
+    Registration1 = Registration#feed_registration{
+                      current_endpoint = Endpoint, remaining = Rest,
+                      open_ref = OpenRef, link = none, mref = none,
+                      registered = false},
+    S0#s{
+      feed_registrations =
+          (S0#s.feed_registrations)#{Key => Registration1},
+      feed_registration_openings =
+          (S0#s.feed_registration_openings)#{OpenRef => Key}};
+open_next_feed_registration(
+  Registration = #feed_registration{identity = Identity, peer = Peer}, S0) ->
+    Key = {Identity, Peer},
+    Registration1 = Registration#feed_registration{
+                      current_endpoint = none, remaining = [],
+                      open_ref = none, link = none, mref = none,
+                      registered = false},
+    S0#s{feed_registrations =
+             (S0#s.feed_registrations)#{Key => Registration1}}.
+
+finish_feed_registration_open(OpenRef, Peer, Chan, Link,
+                              S0 = #s{feed_registration_openings = Openings0}) ->
+    case maps:get(OpenRef, Openings0, undefined) of
+        Key = {{Ns, Anchor}, Peer} ->
+            case Chan =:= quod_feed:channel(Ns) of
+                true ->
+                    Openings1 = maps:remove(OpenRef, Openings0),
+                    case maps:get(Key, S0#s.feed_registrations, undefined) of
+                        Registration = #feed_registration{
+                                           open_ref = OpenRef,
+                                           registration_id = RegistrationId} ->
+                            MRef = erlang:monitor(process, Link),
+                            quod_link:send_ordered(
+                              Link,
+                              quod_feed:recipient_register_frame(
+                                Ns, Anchor, RegistrationId)),
+                            Registration1 = Registration#feed_registration{
+                                              open_ref = none, link = Link,
+                                              mref = MRef, registered = false},
+                            S0#s{
+                              feed_registrations =
+                                  (S0#s.feed_registrations)#{
+                                    Key => Registration1},
+                              feed_registration_openings = Openings1,
+                              feed_registration_monitors =
+                                  (S0#s.feed_registration_monitors)#{
+                                    MRef => Key}};
+                        _Stale ->
+                            _ = quod_link:close(Link),
+                            S0#s{feed_registration_openings = Openings1}
+                    end;
+                false ->
+                    _ = quod_link:close(Link),
+                    S0
+            end;
+        _CrossedOrStale ->
+            _ = quod_link:close(Link),
+            S0
+    end.
+
+fail_feed_registration_open(OpenRef, Peer, Chan,
+                            S0 = #s{feed_registration_openings = Openings0}) ->
+    case maps:get(OpenRef, Openings0, undefined) of
+        Key = {{Ns, _Anchor}, Peer} ->
+            case Chan =:= quod_feed:channel(Ns) of
+                true ->
+                    S1 = S0#s{
+                           feed_registration_openings =
+                               maps:remove(OpenRef, Openings0)},
+                    case maps:get(Key, S1#s.feed_registrations, undefined) of
+                        Registration = #feed_registration{
+                                           open_ref = OpenRef} ->
+                            open_next_feed_registration(
+                              Registration#feed_registration{
+                                open_ref = none}, S1);
+                        _Stale ->
+                            S1
+                    end;
+                false ->
+                    S0
+            end;
+        _CrossedOrStale ->
+            S0
+    end.
+
+feed_registration_down(MRef, Link,
+                       S0 = #s{feed_registration_monitors = Monitors0}) ->
+    case maps:take(MRef, Monitors0) of
+        {Key = {Identity, Peer}, Monitors1} ->
+            S1 = S0#s{feed_registration_monitors = Monitors1},
+            case maps:get(Key, S1#s.feed_registrations, undefined) of
+                Registration = #feed_registration{link = Link, mref = MRef} ->
+                    Registration1 = Registration#feed_registration{
+                                      current_endpoint = none,
+                                      remaining = [], open_ref = none,
+                                      link = none, mref = none,
+                                      registered = false},
+                    S2 = S1#s{feed_registrations =
+                                  (S1#s.feed_registrations)#{
+                                    Key => Registration1}},
+                    case maps:get(
+                           Peer,
+                           desired_feed_registration_routes(Identity, S2),
+                           []) of
+                        [_ | _] = Endpoints ->
+                            start_feed_registration(
+                              Identity, Peer, Endpoints,
+                              close_feed_registration_key(Key, S2));
+                        [] ->
+                            S2
+                    end;
+                _Stale ->
+                    S1
+            end;
+        error ->
+            S0
+    end.
+
+accept_feed_recipient_signal(Peer, Link, Identity = {Ns, Anchor},
+                             RegistrationId, Height, S0)
+  when is_integer(Height), Height >= 0 ->
+    Key = {Identity, Peer},
+    case maps:get(Key, S0#s.feed_registrations, undefined) of
+        Registration = #feed_registration{
+                           link = Link,
+                           registration_id = RegistrationId} ->
+            quod_link:send_ordered(
+              Link,
+              quod_feed:recipient_ack_frame(
+                Ns, Anchor, RegistrationId, Height)),
+            Registration1 = Registration#feed_registration{
+                              registered = true, height = Height},
+            Event = case Registration#feed_registration.registered of
+                        false -> feed_registered;
+                        true -> feed_recipient
+                    end,
+            wake_history_progress(
+              Identity, {ok, Height}, Event,
+              S0#s{feed_registrations =
+                       (S0#s.feed_registrations)#{Key => Registration1}});
+        _CrossedOrStale ->
+            S0
+    end;
+accept_feed_recipient_signal(_Peer, _Link, _Identity,
+                             _RegistrationId, _Height, S) ->
+    S.
+
+note_feed_height(Identity, Height, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{hinted_height = OldHint} = H0 ->
+            Hint = case OldHint of
+                       Known when is_integer(Known) -> max(Known, Height);
+                       unknown -> Height
+                   end,
+            put_history(Identity, H0#history{hinted_height = Hint}, S0);
+        undefined ->
+            S0
+    end.
+
+close_identity_feed_registrations(Identity, S0) ->
+    Keys = [Key
+            || Key = {RegistrationIdentity, _Peer} <-
+                   maps:keys(S0#s.feed_registrations),
+               RegistrationIdentity =:= Identity],
+    lists:foldl(fun close_feed_registration_key/2, S0, Keys).
+
+close_feed_registration_key(
+  Key, S0 = #s{feed_registrations = Registrations0,
+               feed_registration_openings = Openings0,
+               feed_registration_monitors = Monitors0}) ->
+    case maps:take(Key, Registrations0) of
+        {Registration = #feed_registration{open_ref = OpenRef,
+                                           mref = MRef}, Registrations1} ->
+            Openings1 = case OpenRef of
+                            OpeningRef when is_reference(OpeningRef) ->
+                                maps:remove(OpeningRef, Openings0);
+                            none -> Openings0
+                        end,
+            Monitors1 = case MRef of
+                            MonitorRef when is_reference(MonitorRef) ->
+                                _ = erlang:demonitor(MonitorRef, [flush]),
+                                maps:remove(MonitorRef, Monitors0);
+                            none -> Monitors0
+                        end,
+            close_feed_registration(Registration),
+            S0#s{feed_registrations = Registrations1,
+                 feed_registration_openings = Openings1,
+                 feed_registration_monitors = Monitors1};
+        error ->
+            S0
+    end.
+
+close_feed_registration(
+  #feed_registration{identity = {Ns, Anchor},
+                     registration_id = RegistrationId,
+                     link = Link}) when is_pid(Link) ->
+    quod_link:send_ordered(
+      Link,
+      quod_feed:recipient_unregister_frame(Ns, Anchor, RegistrationId)),
+    _ = quod_link:close(Link),
+    ok;
+close_feed_registration(#feed_registration{}) ->
+    ok.
+
+handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
+    case maps:get(Chan, S0#s.progress_channels, undefined) of
+        {Ns, _Count, _Runtime} ->
+            case quod_feed:decode_recipient(Payload, Ns) of
+                {registered, RegistrationId, Anchor, Height} ->
+                    accept_feed_recipient_signal(
+                      Peer, Link, {Ns, Anchor}, RegistrationId, Height, S0);
+                {wake, RegistrationId, Anchor, Height} ->
+                    accept_feed_recipient_signal(
+                      Peer, Link, {Ns, Anchor}, RegistrationId, Height, S0);
+                error ->
+                    case quod_feed:progress_signal(Payload, Ns) of
+                        true ->
+                            wake_namespace_progress_from_peer(
+                              Peer, Ns,
+                              quod_feed:progress_height(Payload, Ns), S0);
+                        false -> S0
+                    end;
+                %% Target-side controls are consumed by a hosted `quod_feed`.
+                %% They must not masquerade as progress for this source owner.
+                _TargetControl ->
+                    S0
+            end;
+        undefined ->
+            S0
+    end.
+
+%% A restarted co-hosted source can be ready at the same material height.
+%% Reconfirm through the existing follower once for each installed ready edge; an empty
+%% protocol view is not a material entry and must not be needed to wake it.
+%% The notice is only availability: the ordinary capture/verifier remains
+%% authoritative. Stale owners, wrong anchors and duplicates do no work.
+local_source_ready({Ns, Anchor} = Identity, Owner, Prolog, Generation, S)
+  when is_binary(Ns), is_pid(Owner), is_pid(Prolog), is_integer(Generation) ->
+    case {maps:get(Identity, S#s.histories, undefined),
+          quod_reg:where({quod_simplex, Ns}), quod_reg:where({quod_prolog, Ns}),
+          quod_simplex:genesis_hash(Ns)} of
+        {#history{progress_signals_open = true, local_ready = Previous} = H,
+         Owner, Prolog, Anchor} when Generation > Previous ->
+            S1 = put_history(Identity, H#history{local_ready = Generation}, S),
+            wake_follow(Identity, release_route_waiters(Identity, local_ready, S1));
+        _ -> S
+    end;
+local_source_ready(_, _, _, _, S) -> S.
+
+wake_namespace_progress(Ns, Height, S0) ->
+    Identities =
+        [Identity
+         || {Identity = {HistoryNs, _Anchor},
+             #history{progress_signals_open = true}} <-
+                maps:to_list(S0#s.histories),
+            HistoryNs =:= Ns],
+    lists:foldl(
+      fun(Identity, Acc) ->
+              wake_history_progress(Identity, {ok, Height}, local_commit, Acc)
+      end, S0, Identities).
+
+%% A generic feed block/digest carries no anchor. Correlate its authenticated
+%% peer separately for every same-named identity and accept it only when that
+%% peer belongs to the identity's latest certified committee. It remains a
+%% freshness edge; the ordinary follower still verifies every fetched byte.
+wake_namespace_progress_from_peer(Peer, Ns, Progress, S0) ->
+    Identities =
+        [Identity
+         || {Identity = {HistoryNs, _Anchor},
+             #history{progress_signals_open = true} = H} <-
+                maps:to_list(S0#s.histories),
+            HistoryNs =:= Ns,
+            is_map(history_authority(H)),
+            lists:member(
+              Peer, quod_simplex:history_committee(history_authority(H)))],
+    lists:foldl(
+      fun(Identity, Acc) ->
+              wake_history_progress(Identity, Progress, peer_feed, Acc)
+      end, S0, Identities).
+
+%% Feed registration, local commit and generic feed notices share one rule.
+%% Record freshness before releasing callers. A new registration is a genuine
+%% reconnection edge even at the same height; repeated covered heights on that
+%% registration cannot spend another follow job.
+wake_history_progress(Identity, Progress, Event, S0) ->
+    S1 = case Progress of
+             error -> S0;
+             _ -> note_feed_progress(Identity, Progress, S0)
+         end,
+    S2 = release_route_waiters(Identity, Event, S1),
+    case Event =:= feed_registered orelse progress_may_advance(Identity, Progress, S2) of
+        true -> wake_follow(Identity, S2);
+        false -> S2
+    end.
+
+%% Digest heights are authenticated reachability/freshness hints, never
+%% evidence. A height at or below the certified resident row cannot require
+%% work. A newer height and every opaque block still wake the one verifier.
+progress_may_advance(
+  Identity, {ok, Height}, #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{} = H -> Height > history_progress_height(H);
+        _ ->
+            true
+    end;
+progress_may_advance(_Identity, unknown, _S) ->
+    true;
+progress_may_advance(_Identity, error, _S) ->
+    false.
+
+%% Keep one freshness basis: known heights raise the same monotone hint;
+%% an opaque progress edge withdraws old feed heights without closing links
+%% or forgetting a known higher hint. The next ordered observation restores
+%% only its own member's height. Otherwise the existing probes corroborate it.
+note_feed_progress(Identity, {ok, Height}, S) -> note_feed_height(Identity, Height, S);
+note_feed_progress(Identity, unknown, S) ->
+    S#s{feed_registrations = maps:map(fun
+        ({I, _}, R) when I =:= Identity -> R#feed_registration{height = unknown};
+        (_, R) -> R
+    end, S#s.feed_registrations)}.
+
+admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
+           Query, Deadline0, TraceCtx, From = {Caller, _}, S0) ->
+    Deadline = case Work of
+                   {follow, _, _, WorkDeadline} -> min(Deadline0, WorkDeadline);
+                   _ -> Deadline0
+               end,
+    case Deadline > quod_time:mono_ms() of
+        false -> {reply, {error, retry}, S0};
+        true ->
+            {BindingRef, S1} = ensure_page_binding({Peer, Endpoint, Ns}, Identity, S0),
+            ReqId = crypto:strong_rand_bytes(16),
+            Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
+                                      self(), {pull_timeout, ReqId}),
+            MRef = erlang:monitor(process, Caller, [{tag, {catchup_page_owner_down, ReqId}}]),
+            Pull = #pull{from = From, caller = Caller, trace_ctx = TraceCtx,
+                         request_ref = RequestRef, binding = BindingRef,
+                         query = Query, deadline = Deadline,
+                         mref = MRef, timer = Timer},
+            B = maps:get(BindingRef, S1#s.page_bindings),
+            S2 = put_page_binding(B#page_binding{waiting = queue:in(ReqId, B#page_binding.waiting)},
+                                  S1#s{pulls = (S1#s.pulls)#{ReqId => Pull}}),
+            traced_page_owner(TraceCtx, page_admission,
+              #{'quod.foreign.page_expected_terminal' => 1,
+                'quod.foreign.page_id' => binary:encode_hex(ReqId, lowercase)},
+              fun() ->
+                  {noreply, drive_page_binding(BindingRef, reopen_waiting_binding(BindingRef, S2))}
+              end)
+    end.
+
+ensure_page_binding(Key, Identity, S0) ->
+    case maps:get(Key, S0#s.page_contacts, undefined) of
+        undefined ->
+            Ref = make_ref(),
+            B = #page_binding{ref = Ref, key = Key, identities = #{Identity => true}},
+            {Ref, put_page_binding(B, S0#s{page_contacts = (S0#s.page_contacts)#{Key => Ref}})};
+        Ref ->
+            B = maps:get(Ref, S0#s.page_bindings),
+            {Ref, put_page_binding(B#page_binding{identities = (B#page_binding.identities)#{Identity => true}}, S0)}
+    end.
+
+put_page_binding(B = #page_binding{ref = Ref}, S) ->
+    S#s{page_bindings = (S#s.page_bindings)#{Ref => B}}.
+
+reopen_waiting_binding(Ref, S0) ->
+    case maps:get(Ref, S0#s.page_bindings, undefined) of
+        #page_binding{lease = none, link = none, retiring = false,
+                      key = {Peer, Endpoint, Ns}, waiting = Waiting} = B ->
+            case not queue:is_empty(Waiting) andalso
+                 is_pid(quod_reg:where({transport, node})) of
+                true ->
+                    Lease = quod_quic:open_link_pinned_lease(Peer, Endpoint, quod_catchup:channel(Ns)),
+                    put_page_binding(B#page_binding{lease = Lease},
+                      S0#s{page_openings = (S0#s.page_openings)#{Lease => Ref}});
+                false -> S0
+            end;
+        _ -> S0
+    end.
+
+finish_page_open(OpenRef, Peer, Chan, Link, S0) ->
+    case maps:get(OpenRef, S0#s.page_openings, undefined) of
+        undefined -> S0;
+        Ref ->
+            case maps:get(Ref, S0#s.page_bindings, undefined) of
+                #page_binding{lease = OpenRef, link = none,
+                              key = {Peer, _Endpoint, Ns}} = B ->
+                    case Chan =:= quod_catchup:channel(Ns) of
+                        true ->
+                            MRef = erlang:monitor(process, Link, [{tag, {catchup_binding_down, Ref}}]),
+                            quod_link:bind_catchup(Link, Ref),
+                            put_page_binding(B#page_binding{link = Link, mref = MRef},
+                              S0#s{page_openings = maps:remove(OpenRef, S0#s.page_openings)});
+                        false -> S0
+                    end;
+                _ -> S0
+            end
+    end.
+
+fail_page_open(OpenRef, Peer, Chan, S0) ->
+    case maps:get(OpenRef, S0#s.page_openings, undefined) of
+        undefined -> S0;
+        Ref ->
+            B = maps:get(Ref, S0#s.page_bindings),
+            case B#page_binding.key of
+                {Peer, _Endpoint, Ns} ->
+                    case Chan =:= quod_catchup:channel(Ns) of
+                        true ->
+                            %% This concrete opening attempt has failed. Its
+                            %% unsent pages complete once; only their existing
+                            %% semantic owner may choose another source.
+                            S1 = lists:foldl(
+                                   fun(ReqId, S) -> complete_pull(ReqId, {error, link_down},
+                                                                 link_down, S) end,
+                                   S0, queue:to_list(B#page_binding.waiting)),
+                            release_idle_page_bindings(retire_page_binding(Ref, S1));
+                        false -> S0
+                    end;
+                _ -> S0
+            end
+    end.
+
+accept_page_credit(Link, Ref, Grant, S0) ->
+    case maps:get(Ref, S0#s.page_bindings, undefined) of
+        #page_binding{link = Link, credit = none, active = none, retiring = false} = B ->
+            drive_page_binding(Ref, put_page_binding(B#page_binding{credit = Grant}, S0));
+        _ -> S0
+    end.
+
+drive_page_binding(Ref, S0) ->
+    case maps:get(Ref, S0#s.page_bindings, undefined) of
+        #page_binding{link = Link, credit = Grant, active = none,
+                      retiring = false, waiting = Waiting} = B
+          when is_pid(Link), is_binary(Grant) ->
+            case queue:out(Waiting) of
+                {empty, _} -> S0;
+                {{value, ReqId}, Rest} ->
+                    Pull = maps:get(ReqId, S0#s.pulls),
+                    case Pull#pull.deadline > quod_time:mono_ms() of
+                        false -> drive_page_binding(Ref,
+                                   complete_pull(ReqId, {error, retry}, page_expired, S0));
+                        true ->
+                            quod_link:request_page(Link, Ref, Grant, ReqId, Pull#pull.query),
+                            put_page_binding(B#page_binding{credit = none, active = ReqId, waiting = Rest},
+                              S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{turn = {sent, Link, Ref, Grant}}}})
+                    end
+            end;
+        _ -> S0
+    end.
+
+accept_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
+    case {maps:get(Ref, S0#s.page_bindings, undefined), maps:get(ReqId, S0#s.pulls, undefined)} of
+        {#page_binding{link = Link, active = ReqId, credit = none, retiring = false},
+         #pull{binding = Ref, turn = {sent, Link, Ref, Grant}, deadline = Deadline}} ->
+            case Deadline > quod_time:mono_ms() of
+                false -> cancel_pull(ReqId, page_expired, S0);
+                true -> accept_live_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0)
+            end;
+        _ -> S0
+    end.
+
+accept_live_page_result(Link, Ref, Grant, ReqId, {ok, Parts, Height, Continuation}, NextGrant, S0) ->
+    Pull = maps:get(ReqId, S0#s.pulls),
+    %% Raw delivery consumes the call alias, not page custody. The original
+    %% monitor/deadline and active binding survive until this worker completes
+    %% decoding. No successor may overtake that completion.
+    Key = {self(), ReqId, Ref, Link, Grant},
+    Gate = take_page_decode_gate(),
+    traced_page_owner(Pull#pull.trace_ctx, page_delivery,
+      fun() ->
+          gen_server:reply(Pull#pull.from,
+                           {decode_page, Key, Parts, Height, Continuation, Pull#pull.deadline, Gate}),
+          S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{
+                    from = none, turn = {decoding, Link, Ref, Grant, NextGrant}}}}
+      end);
+accept_live_page_result(_Link, Ref, _Grant, ReqId, {error, _} = Error, NextGrant, S0) ->
+    %% Wire errors are terminal without a decode turn, but still return credit.
+    finish_page_turn(ReqId, Ref, Error, NextGrant, S0).
+
+complete_page_decode({Owner, ReqId, Ref, Link, Grant}, Verdict, Caller, S0)
+  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed) ->
+    case {maps:get(ReqId, S0#s.pulls, undefined),
+          maps:get(Ref, S0#s.page_bindings, undefined)} of
+        {#pull{from = none, caller = Caller, binding = Ref, deadline = Deadline,
+               turn = {decoding, Link, Ref, Grant, NextGrant}},
+         #page_binding{ref = Ref, link = Link, active = ReqId,
+                       credit = none, retiring = false}} ->
+            case {Verdict, Deadline > quod_time:mono_ms()} of
+                {decoded, true} -> {ok, finish_page_turn(ReqId, Ref, ok, NextGrant, S0)};
+                _ ->
+                    Cause = case Verdict of
+                        malformed -> malformed_page;
+                        _ -> page_expired
+                    end,
+                    {{error, retry}, cancel_pull(ReqId, Cause, S0)}
+            end;
+        _ -> {{error, retry}, S0}
+    end;
+complete_page_decode(_Key, _Verdict, _Caller, S) ->
+    {{error, retry}, S}.
+
+finish_page_turn(ReqId, Ref, Reply, NextGrant, S0) ->
+    Cause = case Reply of ok -> completed; {error, _} -> wire_error end,
+    S1 = complete_pull(ReqId, Reply, Cause, S0),
+    B1 = maps:get(Ref, S1#s.page_bindings),
+    drive_page_binding(Ref, put_page_binding(B1#page_binding{credit = NextGrant}, S1)).
+
+traced_page_owner(TraceCtx, Stage, Fun) ->
+    traced_page_owner(TraceCtx, Stage, #{}, Fun).
+
+traced_page_owner(undefined, _Stage, _Attributes, Fun) -> Fun();
+traced_page_owner(TraceCtx, Stage, Attributes, Fun) ->
+    quod_trace:with_span(TraceCtx, <<"quod.foreign.", (atom_to_binary(Stage))/binary>>,
+                         internal, Attributes, fun(_) -> Fun() end).
+
+complete_pull(ReqId, Reply, Cause, S0) ->
+    case maps:take(ReqId, S0#s.pulls) of
+        {#pull{from = From, timer = Timer, mref = MRef, binding = Ref,
+               trace_ctx = TraceCtx, turn = Turn, deadline = Deadline}, Pulls} ->
+            %% The raw reply may already have consumed From. Mark the one
+            %% retained page's actual terminal cause before any reply/removal,
+            %% including link loss while its worker is decoding. The owner
+            %% creates its own child: it must not mutate the worker's page
+            %% span, which may already have ended after caller-side expiry.
+            TurnName = case Turn of queued -> queued; _ -> element(1, Turn) end,
+            traced_page_owner(TraceCtx, page_completion_owner,
+              #{'quod.foreign.page_terminal_count' => 1,
+                'quod.foreign.page_id' => binary:encode_hex(ReqId, lowercase),
+                'quod.foreign.page_terminal' => atom_to_binary(Cause),
+                'quod.foreign.page_turn' => atom_to_binary(TurnName),
+                'quod.foreign.page_deadline_expired' => Deadline =< quod_time:mono_ms()},
+              fun() ->
+                  _ = erlang:cancel_timer(Timer),
+                  _ = erlang:demonitor(MRef, [flush]),
+                  reply_page_caller(From, Reply),
+                  B = maps:get(Ref, S0#s.page_bindings),
+                  B1 = case B#page_binding.active of
+                           ReqId -> B#page_binding{active = none};
+                           _ -> B#page_binding{waiting = queue:filter(fun(Id) -> Id =/= ReqId end, B#page_binding.waiting)}
+                       end,
+                  put_page_binding(B1, S0#s{pulls = Pulls})
+              end);
+        error -> S0
+    end.
+
+reply_page_caller(none, _Reply) -> ok;
+reply_page_caller(From, Reply) -> gen_server:reply(From, Reply).
+
+cancel_pull(ReqId, Cause, S0) ->
+    case maps:get(ReqId, S0#s.pulls, undefined) of
+        #pull{binding = Ref} -> drive_page_binding(Ref, cancel_pull_owned(ReqId, Cause, S0));
+        undefined -> S0
+    end.
+
+cancel_pull_owned(ReqId, Cause, S0) ->
+    case maps:get(ReqId, S0#s.pulls, undefined) of
+        #pull{turn = queued} ->
+            complete_pull(ReqId, {error, retry}, Cause, S0);
+        #pull{binding = Ref, turn = Turn} ->
+            Link = spent_page_link(Turn),
+            S1 = complete_pull(ReqId, {error, retry}, Cause, S0),
+            B = maps:get(Ref, S1#s.page_bindings),
+            quod_link:close(Link),
+            %% Do not bind unsent rows to a still-retiring cached stream.
+            put_page_binding(B#page_binding{credit = none, retiring = true}, S1);
+        undefined -> S0
+    end.
+
+spent_page_link({sent, Link, _Ref, _Grant}) -> Link;
+spent_page_link({decoding, Link, _Ref, _Grant, _NextGrant}) -> Link.
+
+retire_page_binding(Ref, S0) ->
+    case maps:get(Ref, S0#s.page_bindings, undefined) of
+        #page_binding{active = Active, lease = Lease} = B0 ->
+            S1 = case Active of
+                     none -> S0;
+                     _ -> complete_pull(Active, {error, link_down}, link_down, S0)
+                 end,
+            B = maps:get(Ref, S1#s.page_bindings),
+            release_page_binding(Ref, B0),
+            put_page_binding(B#page_binding{lease = none, link = none, mref = none,
+                                            credit = none, retiring = false},
+              S1#s{page_openings = maps:remove(Lease, S1#s.page_openings)});
+        undefined -> S0
+    end.
+
+release_page_binding(_Ref, #page_binding{key = {Peer, Endpoint, Ns}, lease = Lease, mref = MRef}) ->
+    case MRef of none -> ok; _ -> erlang:demonitor(MRef, [flush]) end,
+    case Lease of
+        none -> ok;
+        _ -> quod_quic:release_link_pinned(Peer, Endpoint, quod_catchup:channel(Ns), Lease)
+    end.
+
+reopen_identity_bindings(Identity, S0) ->
+    maps:fold(fun(Ref, #page_binding{identities = Identities}, S) ->
+                  case maps:is_key(Identity, Identities) of
+                      true -> reopen_waiting_binding(Ref, S);
+                      false -> S
+                  end
+              end, S0, S0#s.page_bindings).
+
+release_idle_page_bindings(S0) ->
+    maps:fold(fun(Ref, #page_binding{identities = Identities} = B, S) ->
+                  Live = maps:filter(fun(Identity, _) -> page_identity_interested(Identity, S) end, Identities),
+                  case map_size(Live) =:= 0 andalso B#page_binding.active =:= none
+                       andalso queue:is_empty(B#page_binding.waiting) of
+                      true ->
+                          release_page_binding(Ref, B),
+                          S#s{page_bindings = maps:remove(Ref, S#s.page_bindings),
+                              page_contacts = maps:remove(B#page_binding.key, S#s.page_contacts),
+                              page_openings = maps:remove(B#page_binding.lease, S#s.page_openings)};
+                      false -> put_page_binding(B#page_binding{identities = Live}, S)
+                  end
+              end, S0, S0#s.page_bindings).
+
+page_identity_interested(Identity, S) ->
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{consumers = Consumers, active = Active, waiting = Waiting} ->
+            %% Initialization only reads retained disk state. Its ownership
+            %% must not keep network leases from a dead request alive.
+            ActiveNetwork = case maps:get(Active, S#s.pending, undefined) of
+                undefined -> false;
+                #request{work = {initialize, _, _}} -> false;
+                #request{} -> true
+            end,
+            map_size(Consumers) > 0 orelse ActiveNetwork orelse
+                lists:any(fun(#request{work = {initialize, _, _}}) -> false;
+                             (#request{}) -> true
+                          end, queue:to_list(Waiting));
+        undefined -> false
+    end.
+
+%%%===================================================================
+%%% Verification worker
+%%%===================================================================
+
+verification_worker(
+  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, Resident, Keep, Trace, Context) ->
+    %% Probe children are linked so terminating their verification worker also
+    %% terminates every in-flight route fetch. Expected transport exits are
+    %% normalized where the dependency is called; an internal fault takes
+    %% down this monitored worker and remains visible to the runtime.
+    StartedNative = erlang:monotonic_time(),
+    traced_verification_work(
+      Trace, Work, Owner, RequestRef,
+      fun(SpanCtx) ->
+          Result0 = case maps:get(material, Context) of
+              true ->
+                  trace_foreign_stage(cache_prepare,
+                    fun() -> prepare_cache_custody(Root, verification_identity(Work), Keep) end),
+                  verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident, Context);
+              false ->
+                  verification_evidence_work(Work, Owner, RequestRef, FetchFun, PageTimeout, Context)
+          end,
+          {Result, Meta0} = normalize_worker_result(Result0),
+          Meta = case maps:get(material, Context) of
+              true -> close_worker_cache(Meta0);
+              false -> Meta0#{evidence_only => true}
+          end,
+          ?WORKER_RESULT_GATE(RequestRef),
+          observe_foreign_stage(
+            verification_stage(Work), foreign_result(Result), StartedNative),
+          trace_foreign_stage(worker_handoff,
+            fun() ->
+                Owner ! {foreign_worker_done, RequestRef, Result, Meta},
+                ok
+            end),
+          _ = quod_trace:set_attributes(
+                SpanCtx, worker_trace_attributes(Resident, Meta)),
+          trace_foreign_result(SpanCtx, Result),
+          ok
+      end).
+
+verification_stage({initialize, _, _}) -> cache_replay;
+verification_stage({exact, _, _, _, _}) -> request_exact;
+verification_stage({exact_routes, _, _, _, _}) -> request_exact;
+verification_stage({current_identity, _, _, _}) -> request_current;
+verification_stage({follow, _, _, _}) -> request_follow.
+
+traced_verification_work(none, _Work, _Owner, _RequestRef, Fun) ->
+    Fun(undefined);
+traced_verification_work({TraceCtx, Links, JobAttributes}, Work,
+                         Owner, RequestRef, Fun) ->
+    quod_trace:with_span(
+      TraceCtx, <<"quod.foreign.verification_worker">>, internal,
+      maps:merge(JobAttributes, verification_trace_attributes(Work)), Links,
+      fun(SpanCtx) ->
+          Owner ! {verification_trace, RequestRef, self(), SpanCtx},
+          with_foreign_stages(SpanCtx, fun() -> Fun(SpanCtx) end)
+      end).
+
+with_foreign_stages(SpanCtx, Fun) ->
+    Previous = put(?TRACE_STAGE_ACTIVE, otel_span:is_recording(SpanCtx)),
+    PreviousCounts = put({?MODULE, trace_counts}, #{}),
+    try
+        Fun()
+    catch Class:Reason:Stack ->
+        trace_foreign_exception(SpanCtx, Class),
+        erlang:raise(Class, Reason, Stack)
+    after
+        _ = quod_trace:set_attributes(SpanCtx, trace_count_attributes()),
+        restore_trace_counts(PreviousCounts),
+        restore_trace_stage(Previous)
+    end.
+
+restore_trace_stage(undefined) -> erase(?TRACE_STAGE_ACTIVE);
+restore_trace_stage(Previous) -> put(?TRACE_STAGE_ACTIVE, Previous).
+
+restore_trace_counts(undefined) -> erase({?MODULE, trace_counts});
+restore_trace_counts(Previous) -> put({?MODULE, trace_counts}, Previous).
+
+verification_trace_attributes(Work) ->
+    {Ns, Anchor} = verification_identity(Work),
+    Attributes = #{'quod.namespace' => Ns,
+                   'quod.genesis_anchor' => binary:encode_hex(Anchor, lowercase),
+                   'quod.foreign.work' => atom_to_binary(verification_stage(Work)),
+                   'quod.foreign.worker_pid' => list_to_binary(pid_to_list(self()))},
+    case verification_reference(Work) of
+        {Ref, Phase} ->
+            Attributes#{'quod.foreign.requested_slot' => ref_slot(Ref),
+                        'quod.foreign.expected_phase' => atom_to_binary(Phase)};
+        none -> Attributes
+    end.
+
+verification_identity({initialize, Identity, _}) -> Identity;
+verification_identity({exact, _, _, Ref, _}) -> ref_identity(Ref);
+verification_identity({exact_routes, _, Ref, _, _}) -> ref_identity(Ref);
+verification_identity({current_identity, _, Identity, _ProbeTimeout}) -> Identity;
+verification_identity({follow, Identity, _, _Deadline}) -> Identity.
+
+verification_reference({exact, _, _, Ref, Phase}) -> {Ref, Phase};
+verification_reference({exact_routes, _, Ref, Phase, _}) -> {Ref, Phase};
+verification_reference(_) -> none.
+
+worker_trace_attributes(Resident, Meta) ->
+    OldHeight = resident_height(Resident),
+    NewHeight = maps:get(height, Meta, OldHeight),
+    CommitteeSize = trace_committee_size(
+                      maps:get(projection, Meta, undefined)),
+    CommitteeEras = trace_committee_eras(
+                      maps:get(projection, Meta, undefined)),
+    PhaseRows = maps:get(phase_index_rows, Meta, 0),
+    PhaseBytes = maps:get(phase_index_bytes, Meta, 0),
+    #{'quod.foreign.resident_start_height' => OldHeight,
+      'quod.foreign.final_verified_height' => NewHeight,
+      'quod.foreign.committee_size' => CommitteeSize,
+      'quod.foreign.committee_eras' => CommitteeEras,
+      'quod.foreign.phase_index_rows' => PhaseRows,
+      'quod.foreign.phase_index_bytes' => PhaseBytes}.
+
+resident_height({verified_session, Height, _Projection,
+                 _PhaseSession, _CacheSession}) -> Height;
+resident_height(_) -> 0.
+
+trace_committee_size(Projection) when is_map(Projection) ->
+    try length(quod_simplex:history_committee(Projection))
+    catch _:_ -> 0
+    end;
+trace_committee_size(_) -> 0.
+
+trace_committee_eras(#{committee_views := Views}) when is_list(Views) ->
+    length(Views);
+trace_committee_eras(_) -> 0.
+
+foreign_result({ok, _}) -> ok;
+foreign_result({error, retry}) -> uncertain;
+foreign_result({error, {unreachable, _}}) -> uncertain;
+foreign_result({error, _}) -> failed.
+
+observe_foreign_stage(Stage, Result, StartedNative)
+  when is_integer(StartedNative) ->
+    quod_metrics:observe_foreign_history_stage(
+      Stage, Result, erlang:monotonic_time() - StartedNative).
+
+measure_foreign_stage(Stage, Fun) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = trace_foreign_stage(Stage, Fun),
+    observe_foreign_stage(
+      Stage, foreign_stage_result(foreign_stage_observation(Stage, Result)), StartedNative),
+    Result.
+
+measure_foreign_ok(Stage, Fun) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = trace_foreign_stage(Stage, Fun),
+    observe_foreign_stage(Stage, ok, StartedNative),
+    Result.
+
+trace_foreign_stage(Stage, Fun) ->
+    trace_foreign_stage(Stage, #{}, Fun).
+
+trace_foreign_stage(Stage, Attributes, Fun) ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true ->
+            Ordinal = trace_count(stage_started, 1),
+            Name = <<"quod.foreign.", (atom_to_binary(Stage, utf8))/binary>>,
+            quod_trace:with_span(
+              quod_trace:context(), Name, internal,
+              Attributes#{'quod.foreign.stage_ordinal' => Ordinal,
+                          'quod.foreign.stage_process' => list_to_binary(pid_to_list(self()))},
+              fun(SpanCtx) ->
+                  try
+                      Result = Fun(),
+                      trace_foreign_result(SpanCtx, foreign_stage_observation(Stage, Result)),
+                      Result
+                  catch Class:Reason:Stack ->
+                      %% Closed labels only; preserve the exact production
+                      %% exception class, reason and stack without exporting it.
+                      trace_foreign_exception(SpanCtx, Class),
+                      erlang:raise(Class, Reason, Stack)
+                  after
+                      trace_count(stage_completed, 1)
+                  end
+              end);
+        _ -> Fun()
+    end.
+
+trace_foreign_exception(SpanCtx, Class) ->
+    _ = quod_trace:set_attributes(
+          SpanCtx, #{'quod.foreign.exception_class' => atom_to_binary(Class)}),
+    trace_foreign_result(SpanCtx, {error, unclassified_exception}).
+
+trace_foreign_result(undefined, _Result) -> ok;
+trace_foreign_result(SpanCtx, Result) ->
+    Reason = foreign_trace_reason(Result),
+    Status = case foreign_stage_result(Result) of
+                 failed -> {error, Reason};
+                 uncertain -> {error, Reason};
+                 ok -> ok
+             end,
+    _ = quod_trace:result(SpanCtx, Status),
+    _ = quod_trace:set_attributes(
+          SpanCtx, #{'quod.foreign.reason' => atom_to_binary(Reason)}),
+    ok.
+
+foreign_trace_reason({{error, Reason}, _Meta}) -> foreign_trace_reason({error, Reason});
+foreign_trace_reason({error, Reason, #verified_cursor{}}) -> foreign_trace_reason({error, Reason});
+foreign_trace_reason({error, {unavailable, network_identity, _}}) -> network_identity_unavailable;
+foreign_trace_reason({error, {unreachable, _}}) -> unreachable;
+foreign_trace_reason({error, Reason})
+  when Reason =:= retry; Reason =:= timeout; Reason =:= cache_corrupt;
+       Reason =:= cache_io; Reason =:= cache_unavailable;
+       Reason =:= phase_mismatch; Reason =:= invalid_foreign_reference;
+       Reason =:= bad_foreign_reference; Reason =:= invalid_history;
+       Reason =:= invalid_page; Reason =:= unavailable;
+       Reason =:= bad_frame; Reason =:= link_down;
+       Reason =:= unclassified_exception -> Reason;
+foreign_trace_reason({error, _}) -> unclassified;
+foreign_trace_reason(false) -> rejected;
+foreign_trace_reason(new) -> new_cache;
+foreign_trace_reason({not_found, _}) -> not_found;
+foreign_trace_reason({_, error}) -> projection_unavailable;
+foreign_trace_reason(Result) ->
+    case foreign_stage_result(Result) of ok -> ok; _ -> unclassified end.
+
+%% Worker-local observation only. Counts never enter work equality, authority
+%% or checkpoints. Probe children have their own sequence and report it on
+%% their own parent span; they are not silently added to this worker's totals.
+trace_count(Key, Increment) ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true ->
+            Counts = case get({?MODULE, trace_counts}) of
+                         undefined -> #{};
+                         Existing -> Existing
+                     end,
+            Value = maps:get(Key, Counts, 0) + Increment,
+            put({?MODULE, trace_counts}, Counts#{Key => Value}),
+            Value;
+        _ -> 0
+    end.
+
+trace_first_height(Height) ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true ->
+            Counts = get({?MODULE, trace_counts}),
+            case maps:is_key(disk_start_height, Counts) of
+                true -> ok;
+                false -> put({?MODULE, trace_counts}, Counts#{disk_start_height => Height})
+            end;
+        _ -> ok
+    end.
+
+trace_count_attributes() ->
+    Counts = case get({?MODULE, trace_counts}) of
+                 undefined -> #{};
+                 Existing -> Existing
+             end,
+    #{'quod.foreign.stages_started' => maps:get(stage_started, Counts, 0),
+      'quod.foreign.stages_completed' => maps:get(stage_completed, Counts, 0),
+      'quod.foreign.disk_start_height' => maps:get(disk_start_height, Counts, -1),
+      'quod.foreign.disk_replayed_entries' => maps:get(replayed_entries, Counts, 0),
+      'quod.foreign.cold_opens' => maps:get(cold_opens, Counts, 0),
+      'quod.foreign.resume_failures' => maps:get(resume_failures, Counts, 0),
+      'quod.foreign.network_advance_verified_entries' => maps:get(network_entries, Counts, 0),
+      'quod.foreign.local_advance_verified_entries' => maps:get(local_entries, Counts, 0),
+      'quod.foreign.hint_verified_entries' => maps:get(hint_entries, Counts, 0),
+      'quod.foreign.probe_children_started' => maps:get(probes_started, Counts, 0),
+      'quod.foreign.probe_results_received' => maps:get(probe_results, Counts, 0),
+      'quod.foreign.probe_children_cancelled' => maps:get(probes_cancelled, Counts, 0)}.
+
+trace_verified_page({local, _Identity}, Count) -> trace_count(local_entries, Count);
+trace_verified_page(_Peer, Count) -> trace_count(network_entries, Count).
+
+foreign_stage_result(true) -> ok;
+foreign_stage_result(ok) -> ok;
+foreign_stage_result({ok, _}) -> ok;
+foreign_stage_result({ok, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _, _, _}) -> ok;
+foreign_stage_result({{ok, _}, _Meta}) -> ok;
+foreign_stage_result({{error, _} = Error, _Meta}) -> foreign_stage_result(Error);
+foreign_stage_result({error, Reason, #verified_cursor{}}) -> foreign_stage_result({error, Reason});
+foreign_stage_result(new) -> ok;
+foreign_stage_result(false) -> failed;
+foreign_stage_result({error, retry}) -> uncertain;
+foreign_stage_result({error, {unreachable, _}}) -> uncertain;
+foreign_stage_result({error, _}) -> failed;
+foreign_stage_result(_) -> failed.
+
+%% Normalize only observation, never the helper's return value. These shapes
+%% mean completion at their named stage, not successful verification. A
+%% suspended session stays opaque to this layer. Other stages and unknown
+%% shapes keep the failing catch-all.
+foreign_stage_observation(page_wait, {decode_page, {_, _, _, _, _}, Parts, Height, _Continuation, Deadline, _})
+  when is_list(Parts), is_integer(Height), Height >= 0, is_integer(Deadline) -> ok;
+foreign_stage_observation(Stage, {error, Reason, _Retained})
+  when Stage =:= page_fetch; Stage =:= page_consume -> {error, Reason};
+foreign_stage_observation(page_fetch, {ok, {error, Reason, _Retained}, _Height, _Continuation}) ->
+    {error, Reason};
+foreign_stage_observation(probe_collection, {error, Reason, _Verified}) -> {error, Reason};
+foreign_stage_observation(ledger_suspend, #{cache_session := _} = Meta)
+  when not is_map_key(cache_store, Meta) -> ok;
+foreign_stage_observation(_Stage, Result) -> Result.
+
+%% A point claim or a progress subscription needs certified evidence, not a
+%% reconstructed foreign material projection. They retain authority in this
+%% same owner; only projection demand acquires a contiguous archive.
+evidence_work_deadline(#request{work = {follow, _, _, Deadline}}) -> Deadline;
+evidence_work_deadline(#request{}) ->
+    %% Callers can join or detach after custody transfer. Their individual
+    %% timers cancel shared work only when its last owner leaves; they do not
+    %% shorten the fixed page/probe budget of an existing acquisition.
+    infinity.
+
+material_work({initialize, _, _}, _H) -> true;
+material_work({follow, _, _, _}, H) -> needs_projection(H);
+material_work(_, _) -> false.
+
+verification_evidence_work({exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
+                           FetchFun, PageTimeout, Context) ->
+    exact_evidence_sources([{Peer, Endpoint}], Ref, Phase, Owner, RequestRef,
+                           FetchFun, evidence_deadline(Context, PageTimeout), Context);
+verification_evidence_work({exact_routes, Routes, Ref, Phase, _Hint}, Owner, RequestRef,
+                           FetchFun, PageTimeout, Context) ->
+    exact_evidence_sources(Routes, Ref, Phase, Owner, RequestRef,
+                           FetchFun, evidence_deadline(Context, PageTimeout), Context);
+verification_evidence_work({current_identity, Sources, Identity, Timeout}, Owner, RequestRef,
+                           FetchFun, _PageTimeout, Context) ->
+    current_evidence(Sources, Identity, Owner, RequestRef, FetchFun,
+                     evidence_deadline(Context, Timeout), Context);
+verification_evidence_work({follow, Identity, Sources, Deadline}, Owner, RequestRef,
+                           FetchFun, _PageTimeout, Context) ->
+    case quod_simplex:history_view(Identity, any, Deadline) of
+        {ok, #{identity := Identity, slot := Height, projection := Projection} = View}
+          when Height > 0 ->
+            case gen_server:call(Owner, {borrow_local_view, RequestRef, View},
+                                 max(1, Deadline - quod_time:mono_ms())) of
+                ok ->
+                    case with_local_view_owner(View, fun() ->
+                        {Height, Hash} = history_head(Projection),
+                        Tip = #{height => Height, hash => Hash, authority =>
+                                  maps:with([identity, committee, committee_id, validator_routes], Projection)},
+                        {{ok, current_view_evidence(Identity, Height, Projection,
+                                  current_route_candidates(Sources, Projection))},
+                         #{certified_tip => Tip, authorities => #{}}}
+                    end) of
+                        {error, _} = Error -> {Error, #{}};
+                        Result -> Result
+                    end;
+                _ -> {{error, retry}, #{}}
+            end;
+        {error, _} -> current_evidence(Sources, Identity, Owner, RequestRef,
+                                     FetchFun, Deadline, Context);
+        _ -> {{error, retry}, #{}}
+    end.
+
+evidence_deadline(Context, Timeout) ->
+    min(maps:get(deadline, Context), quod_time:mono_ms() + Timeout).
+
+exact_evidence_sources([], _Ref, _Phase, _Owner, _RequestRef, _Fetch, _Deadline, _Context) ->
+    {{error, retry}, #{}};
+exact_evidence_sources([{Peer, Endpoint} | Rest], Ref, Phase, Owner, RequestRef,
+                       Fetch, Deadline, Context) ->
+    Era = case ref_slot(Ref) of
+        1 -> genesis;
+        _ -> {ok, #cert{era = E}} = quod_ledger:decode_finality_head(element(8, Ref)), E
+    end,
+    Selection = {exact, ref_slot(Ref), Era},
+    Authority = maps:get(Era, maps:get(authorities, Context), none),
+    case trace_foreign_stage(exact_route, fun() ->
+             fetch_evidence(Owner, RequestRef, Peer, [Endpoint], ref_identity(Ref),
+                            Authority, Selection, Fetch, Deadline)
+         end) of
+        {ok, #{entry := Entry, authority := AuthorityAtEntry} = Verified} ->
+            {verify_exact_reference_entry(Ref, Phase, Entry, AuthorityAtEntry), evidence_meta(Verified)};
+        {error, _} -> exact_evidence_sources(Rest, Ref, Phase, Owner, RequestRef,
+                                            Fetch, Deadline, Context)
+    end.
+
+current_evidence(Sources, Identity, Owner, RequestRef, Fetch, Deadline, Context) ->
+    Authority = latest_authority(maps:get(authorities, Context)),
+    Discovery = [{Peer, [Endpoint]} || {Peer, Endpoint} <- history_source_candidates(Sources)],
+    Candidates = confirmation_candidates(Discovery, [Peer || {Peer, _} <- Discovery]),
+    Collection = #{authority => Authority,
+      candidates => fun(A) -> current_route_candidates(Sources, A) end,
+      feed => fun(#{authority := A, entry := Entry}) ->
+          Height = quod_ledger:entry_index(Entry),
+          worker_feed_tip(Owner, RequestRef, Height, A, Deadline)
+      end},
+    Result = parallel_probes(Candidates,
+      fun({Peer, Endpoints}, A) ->
+          fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, A, tip, Fetch, Deadline)
+      end, Deadline, Collection),
+    _ = confirmation_collected(element(1, Result) =:= ok),
+    case Result of
+        {ok, Verified = #{authority := A, entry := Entry}} ->
+            Height = quod_ledger:entry_index(Entry),
+            Routes = current_route_candidates(Sources, A),
+            {{ok, current_view_evidence(Identity, Height, A, Routes)}, evidence_meta(Verified)};
+        {error, retry, none} -> {{error, retry}, #{}};
+        {error, retry, Verified} -> {{error, retry}, evidence_meta(Verified)}
+    end.
+
+latest_authority(Authorities) when map_size(Authorities) =:= 0 -> none;
+latest_authority(Authorities) ->
+    lists:foldl(fun(A, none) -> A;
+                  (#{height := H} = A, #{height := Old}) when H > Old -> A;
+                  (_, Best) -> Best
+                end, none, maps:values(Authorities)).
+
+same_evidence_tip(#{entry := A}, #{entry := B}) ->
+    quod_ledger:entry_index(A) =:= quod_ledger:entry_index(B) andalso
+        quod_simplex:entry_history_hash(A) =:= quod_simplex:entry_history_hash(B).
+
+evidence_meta(#{authority := Authority, authorities := Authorities, entry := Entry}) ->
+    #{authorities => Authorities, certified_tip =>
+        #{height => quod_ledger:entry_index(Entry), hash => quod_simplex:entry_history_hash(Entry),
+          authority => Authority}}.
+
+fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, Selection, Fetch, Deadline) ->
+    KnownEra = evidence_known_era(Authority),
+    Receiver = quod_catchup:evidence_begin(Identity, Authority, Selection),
+    Query = {evidence, KnownEra, Selection},
+    case Fetch =:= undefined andalso application:get_env(quod, node_pubkey) =:= {ok, Peer} of
+        true ->
+            %% Self is one authenticated answerer, not a quorum shortcut. The
+            %% collector still verifies this evidence and counts only members
+            %% of its certified committee under the original deadline.
+            case quod_simplex:history_view(Identity, committed, Deadline) of
+                {ok, #{snapshot := Snapshot} = View} ->
+                    with_local_view_owner(View, fun() ->
+                        with_snapshot_store(Snapshot, element(1, Identity), fun(Store) ->
+                            LocalFetch = fun(_, _, _, Q, D, Consume) ->
+                                local_view_fetch(View, Store, Q, D, Consume)
+                            end,
+                            fetch_evidence_pages(Owner, RequestRef, {local, Identity}, local,
+                                Identity, Query, Receiver, LocalFetch, Deadline)
+                        end)
+                    end);
+                {error, _} -> {error, retry}
+            end;
+        false -> quod_peer_route:walk(Endpoints, Deadline,
+      fun(Endpoint, _Remaining) ->
+          fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity, Query, Receiver, Fetch, Deadline)
+      end,
+      fun({ok, _} = Ok, _) -> {done, Ok}; (Error, _) -> {next, Error} end,
+      {error, retry})
+    end.
+
+evidence_known_era(none) -> genesis;
+evidence_known_era(#{protocol_root := {Era, _, _}}) -> Era.
+
+fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity = {Ns, _}, Query, Receiver, Fetch, Deadline) ->
+    Consume = fun(Parts, Height, Continuation) ->
+        End = case Continuation of done -> done; {_, _} -> more end,
+        quod_catchup:evidence_accept(Receiver, Parts, Height, End)
+    end,
+    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, Fetch, Deadline, Consume) of
+        {ok, {ok, Next}, _Height, done} -> quod_catchup:evidence_result(Next);
+        {ok, {ok, Next}, _Height, {Token, Sequence}} ->
+            fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity,
+                                 {continue, Token, Sequence}, Next, Fetch, Deadline);
+        _ -> {error, retry}
+    end.
+
+verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident, Context) ->
+    Identity = verification_identity(Work),
+    %% All work, including a follow that loses its source before borrowing,
+    %% returns through this one cursor scope after custody transfer. No early
+    %% selection failure can strand a still-suspended resident session.
+    OpenMode = case Work of
+        {initialize, Identity, Cause} -> {initialize, Cause};
+        _ -> Resident
+    end,
+    with_verified_cache(Owner, RequestRef, Identity, Root, OpenMode,
+      fun(Cursor) ->
+          verification_cursor_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Cursor, Context)
+      end).
+
+verification_cursor_work({initialize, Identity, _Cause}, _Owner, _RequestRef,
+                          _Root, _FetchFun, _PageTimeout, Cursor, _Context) ->
+    {{ok, #{identity => Identity, slot => Cursor#verified_cursor.height}}, Cursor, #{}};
+verification_cursor_work(
+  {follow, Identity, Sources, Deadline}, Owner, RequestRef,
+  Root, FetchFun, PageTimeout, Cursor, Context) ->
+    follow_identity(Owner, RequestRef, Identity, Sources, Root, FetchFun,
+                    PageTimeout, Deadline, Cursor, Context).
+
+%% The one worker opens/resumes once, and every route receives its cursor.
+%% Existing corrupt-cache recovery is an admission boundary, never a fallback
+%% from a partially mutated cursor into a next-peer attempt.
+with_verified_cache(Owner, RequestRef, Identity, Root, Resident, Work) ->
+    case open_verified_cache(Owner, RequestRef, Identity, Root, Resident, false) of
+        {ok, Store, Height, Projection, PhaseIndex} ->
+            Cursor = #verified_cursor{store = Store, height = Height,
+                                      projection = Projection, phase_index = PhaseIndex},
+            try Work(Cursor) of
+                {Result, #verified_cursor{} = Final, Evidence} ->
+                    {Result, Evidence#{cache_cursor => Final,
+                               bytes => cache_persisted_bytes(
+                                          Root, cache_namespace(Identity))}}
+            catch Class:Reason:Stack ->
+                %% Closing the original handle also closes its shared file
+                %% descriptor after a later append; no mutable cursor escapes.
+                _ = close_cache(Store, PhaseIndex, cache_corrupt),
+                erlang:raise(Class, Reason, Stack)
+            end;
+        {error, cache_corrupt} ->
+            {{error, retry}, #{reconstruction_required => cache_corrupt}};
+        {error, network_identity} ->
+            {{error, network_identity}, #{}};
+        {error, {unsupported_foreign_cache_format, _}} = Error -> {Error, #{}};
+        {error, {unsupported_foreign_checkpoint_format, _}} = Error -> {Error, #{}};
+        {error, {unsupported_ledger_format, _, _}} = Error -> {Error, #{}};
+        {error, _} ->
+            {{error, retry}, #{}}
+    end.
+
+open_verified_cache(Owner, RequestRef, Identity, Root, Resident, Retried) ->
+    case open_cache(Owner, RequestRef, Identity, Root, Resident) of
+        {error, cache_corrupt} when not Retried, element(1, Resident) =:= initialize ->
+            logger:error("foreign history integrity failure; rebuilding identity=~p", [Identity]),
+            case gen_server:call(Owner, {reset_cache, RequestRef}) of
+                ok ->
+                    _ = file:del_dir_r(cache_dir(Root, cache_namespace(Identity))),
+                    open_verified_cache(Owner, RequestRef, Identity, Root, none, true);
+                {error, _} -> {error, cache_corrupt}
+            end;
+        Result -> Result
+    end.
+
+normalize_worker_result({{ok, _} = Result, Meta}) when is_map(Meta) ->
+    {Result, Meta};
+normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
+    {Result, Meta}.
+
+%% Neither a mutable ledger nor an active phase index crosses the worker
+%% boundary. Suspend once, regardless of whether the caller's claim was valid.
+close_worker_cache(#{cache_cursor := #verified_cursor{
+                       state = verified, store = Store, height = Height,
+                       projection = Projection, phase_index = PhaseIndex}} = Meta0)
+  when Height > 0 ->
+    Meta = maps:remove(cache_cursor, Meta0),
+    PhaseStats = phase_session_stats(PhaseIndex),
+    PhaseSession = suspend_phase_session(PhaseIndex),
+    measure_foreign_ok(ledger_suspend,
+      fun() ->
+          Session = quod_ledger_store:snapshot(Store),
+          _ = quod_ledger_store:close(Store),
+          Retained = maps:merge(Meta#{height => Height, projection => Projection,
+                          phase_session => PhaseSession, cache_session => Session,
+                          resident_verified => PhaseSession =/= none}, PhaseStats),
+          case PhaseSession of
+              none -> Retained#{reconstruction_required => phase_index_lost};
+              _ -> Retained
+          end
+      end);
+close_worker_cache(#{cache_cursor := #verified_cursor{
+                       state = State, store = Store, phase_index = PhaseIndex}} = Meta) ->
+    %% An empty cache has no certified prefix at all. Retaining its initial
+    %% projection would let a failed fabricated identity become resident.
+    Disposition = case State of verified -> ok; invalid -> {error, cache_corrupt} end,
+    _ = release_cache(Store, PhaseIndex, Disposition),
+    Closed = (maps:remove(cache_cursor, Meta))#{resident_verified => false,
+                                      phase_session => none, cache_session => none},
+    case State of
+        verified -> Closed;
+        invalid -> Closed#{reconstruction_required => cache_corrupt}
+    end;
+close_worker_cache(Meta) ->
+    Meta.
+
+follow_identity(Owner, RequestRef, Identity, Sources, Root,
+                FetchFun, PageTimeout, Deadline, Cursor, Context) ->
+    case quod_simplex:history_view(Identity, any, Deadline) of
+        {ok, #{identity := Identity, slot := Tip} = SourceView} ->
+            Remaining = max(0, Deadline - quod_time:mono_ms()),
+            Borrow = try gen_server:call(
+                           Owner, {borrow_local_view, RequestRef, SourceView}, Remaining)
+                     catch exit:_ -> {error, retry}
+                     end,
+            {Result, Next} = case Borrow of
+                ok -> follow_borrowed_local_view(
+                        Owner, RequestRef, Identity, Tip, SourceView, Root,
+                        PageTimeout, Deadline, Cursor);
+                {error, _} -> {{error, {unreachable, unavailable}}, Cursor}
+            end,
+            {Result, Next, #{}};
+        {error, _} ->
+            case current_evidence(Sources, Identity, Owner, RequestRef,
+                                  FetchFun, Deadline, Context) of
+                {{ok, #{slot := Tip, route_candidates := Routes}}, Evidence} ->
+                    Remaining = max(0, Deadline - quod_time:mono_ms()),
+                    Target = min(Tip, Cursor#verified_cursor.height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                    Fallback = [{Peer, [Endpoint]} || {Peer, Endpoint} <-
+                                   history_fallback_sources(Sources, Routes)],
+                    case advance_snapshot_to_height(Routes ++ Fallback, Owner, RequestRef,
+                           Identity, Cursor, Root, Target, FetchFun, min(PageTimeout, Remaining)) of
+                        {ok, Next = #verified_cursor{height = Height, projection = P}} ->
+                            Reply = (current_view_evidence(Identity, Height, P, Routes))#{hinted_height => Tip},
+                            {{ok, Reply}, Next, Evidence};
+                        {error, _Reason, Next} -> {{error, retry}, Next, Evidence}
+                    end;
+                {Error, Evidence} -> {Error, Cursor, Evidence}
+            end
+    end.
+
+follow_borrowed_local_view(Owner, RequestRef, Identity = {Ns, _}, Tip, SourceView, Root,
+                           PageTimeout, Deadline, Cursor) ->
+    case quod_ledger_store:open_ro_snapshot(maps:get(snapshot, SourceView)) of
+        {ok, Store} ->
+            try
+                LocalFetch = fun(_Peer, _Endpoint, RequestedNs, Query, PullDeadline, Consume)
+                                  when RequestedNs =:= Ns ->
+                    local_view_fetch(SourceView, Store, Query, min(Deadline, PullDeadline), Consume)
+                end,
+                {Result, Next} = follow_local_snapshot(
+                  Owner, RequestRef, {local, Identity}, Tip, Identity, Root, LocalFetch, PageTimeout, Cursor),
+                case quod_simplex:history_view_live(SourceView) andalso quod_time:mono_ms() < Deadline of
+                    true -> {Result, Next};
+                    false -> {{error, {unreachable, unavailable}}, Next}
+                end
+            after quod_ledger_store:close(Store) end;
+        {error, _} -> {{error, retry}, Cursor}
+    end.
+
+follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
+                      Root, FetchFun, PageTimeout, Cursor = #verified_cursor{height = Height}) ->
+    Target = min(Tip, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+    case advance_snapshot_to_height(
+           [{LocalPeer, [local]}], Owner, RequestRef, Identity, Cursor,
+           Root, Target, FetchFun, PageTimeout) of
+        {ok, Final = #verified_cursor{height = FinalHeight, projection = Projection}} ->
+            Evidence = (current_view_evidence(
+                          Identity, FinalHeight, Projection,
+                          current_route_candidates(empty_route_sources(), Projection)))#{
+                         hinted_height => Tip},
+            {{ok, Evidence}, Final};
+        {error, _Reason, Final} -> {{error, retry}, Final}
+    end.
+
+open_cache(Owner, RequestRef, Identity, Root, Resident) ->
+    StartedNative = erlang:monotonic_time(),
+    Mode = case Resident of
+               {verified_session, _, _, _, _} -> <<"resident_resume">>;
+               {initialize, _} -> <<"owner_initialization">>;
+               none -> <<"new_empty_history">>
+           end,
+    Result = trace_foreign_stage(cache_open,
+               #{'quod.foreign.cache_open_mode' => Mode},
+               fun() ->
+                   open_cache_raw(
+                     Owner, RequestRef, Identity, Root, Resident)
+               end),
+    observe_foreign_stage(cache_open, foreign_stage_result(Result), StartedNative),
+    Result.
+
+%% The running owner retains the ledger session, projection and phase index
+%% together. Exact lookups still bind slot/hash/digest to the retained entry
+%% and select its committee era; resuming the certified prefix adds no new
+%% authority and does not replay unfinished DTX groups.
+open_cache_raw(_Owner, _RequestRef, Identity, _Root,
+               {verified_session, Height, Projection,
+                PhaseSession, CacheSession}) ->
+    CacheNs = cache_namespace(Identity),
+    case measure_foreign_stage(
+           ledger_resume,
+           fun() -> quod_ledger_store:resume(CacheSession) end) of
+        {ok, Store} ->
+            trace_first_height(quod_ledger_store:last(Store)),
+            Matches = measure_foreign_stage(
+                        projection_validate,
+                        fun() ->
+                            retained_cache_matches(
+                              Store, CacheNs, Height, Projection, Identity)
+                        end),
+            case Matches of
+                true ->
+                    case measure_foreign_stage(
+                           phase_resume,
+                           fun() ->
+                               quod_dtx_phase_index:resume(PhaseSession)
+                           end) of
+                        {ok, PhaseIndex} ->
+                            {ok, Store, Height, Projection, PhaseIndex};
+                        {error, _} ->
+                            _ = quod_ledger_store:close(Store),
+                            {error, cache_corrupt}
+                    end;
+                false ->
+                    _ = quod_ledger_store:close(Store),
+                    {error, cache_corrupt}
+            end;
+        {error, _} ->
+            trace_count(resume_failures, 1),
+            close_phase_session(PhaseSession),
+            {error, cache_corrupt}
+    end;
+open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
+  when Mode =:= none; element(1, Mode) =:= initialize ->
+    CacheNs = cache_namespace(Identity),
+    case ensure_manifest(Owner, RequestRef, Root, Identity, CacheNs) of
+        ok ->
+            trace_count(cold_opens, 1),
+            try measure_foreign_stage(
+                  ledger_open,
+                  fun() -> quod_ledger_store:open(CacheNs, Root, wrapped) end) of
+                {ok, Store} ->
+                    Height = quod_ledger_store:last(Store),
+                    trace_first_height(Height),
+                    Checkpoint = measure_foreign_stage(
+                                   checkpoint_read,
+                                   fun() ->
+                                       load_checkpoint(
+                                         Root, Identity, CacheNs, Store)
+                                   end),
+                    case Checkpoint of
+                        {error, {unsupported_foreign_checkpoint_format, _}} = Error ->
+                            _ = quod_ledger_store:close(Store),
+                            Error;
+                        {ok, CheckpointProjection} when Mode =/= none ->
+                            open_replayed_cache(
+                              Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store,
+                              Height, CheckpointProjection);
+                        new when Mode =/= none, Height > 0 ->
+                            open_replayed_cache(Owner, RequestRef, Root, CacheNs, Ns, Anchor,
+                                                Store, Height, none);
+                        new when Height =:= 0 ->
+                            case measure_foreign_stage(
+                                   phase_open,
+                                   fun() -> fresh_phase_index(Owner, RequestRef, Root, CacheNs) end) of
+                                {ok, PhaseIndex} ->
+                                    Projection = quod_simplex:history_projection(
+                                                   {Ns, Anchor}),
+                                    {ok, Store, 0, Projection, PhaseIndex};
+                                {error, _} ->
+                                    _ = quod_ledger_store:close(Store),
+                                    {error, cache_io}
+                            end;
+                        _ ->
+                            _ = quod_ledger_store:close(Store),
+                            {error, cache_corrupt}
+                    end
+            catch error:{unsupported_ledger_format, _, _} = Reason ->
+                {error, Reason};
+            _:_ ->
+                {error, cache_corrupt}
+            end;
+        {error, {unsupported_foreign_cache_format, _}} = Error -> Error;
+        {error, _} ->
+            {error, cache_corrupt}
+    end.
+
+retained_cache_matches(Store, CacheNs, Height, Projection, Identity) ->
+    try quod_ledger_store:namespace(Store) =:= CacheNs andalso
+        quod_ledger_store:last(Store) =:= Height andalso
+        valid_projection(Projection, Identity)
+    catch _:_ -> false
+    end.
+
+open_replayed_cache(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
+    trace_foreign_stage(cache_reconstruction,
+      #{'quod.foreign.disk_height' => Height},
+      fun() ->
+          open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height,
+                                  CheckpointProjection)
+      end).
+
+open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
+    case measure_foreign_stage(
+           phase_open,
+           fun() -> fresh_phase_index(Owner, RequestRef, Root, CacheNs) end) of
+        {ok, PhaseIndex} ->
+            Projection0 = quod_simplex:history_projection({Ns, Anchor}),
+            ReplayResult = measure_foreign_stage(cache_replay,
+                             fun() ->
+                                 replay_cache(
+                                   Store, Ns, Anchor, Height,
+                                   Projection0, PhaseIndex, CheckpointProjection)
+                             end),
+            case ReplayResult of
+                {ok, Projection} ->
+                    %% Replaying this explicit startup verifies an older checkpoint at
+                    %% its own group boundary and preserves every complete suffix group.
+                    case write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) of
+                        ok -> {ok, Store, Height, Projection, PhaseIndex};
+                        {error, _} -> close_cache(Store, PhaseIndex, cache_io)
+                    end;
+                {error, network_identity} ->
+                    close_cache(Store, PhaseIndex, network_identity);
+                {error, _} ->
+                    close_cache(Store, PhaseIndex, cache_corrupt)
+            end;
+        {error, _} ->
+            _ = quod_ledger_store:close(Store),
+            {error, cache_io}
+    end.
+
+fresh_phase_index(Owner, RequestRef, Root, CacheNs) ->
+    case quod_dtx_phase_index:open(Root, CacheNs) of
+        {ok, Index} ->
+            %% Creation is worker I/O; the existing owner attaches its read
+            %% lifetime while the table is still empty, before any replay.
+            case gen_server:call(Owner, {retain_phase_index, RequestRef, Index}, infinity) of
+                ok -> {ok, Index};
+                {error, _} = Error ->
+                    _ = quod_dtx_phase_index:close(Index), Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+close_cache(Store, PhaseIndex, Reason) ->
+    release_cache(Store, PhaseIndex, {error, Reason}).
+
+release_cache(Store, PhaseIndex, Result) ->
+    trace_foreign_stage(cache_cleanup,
+      fun() ->
+          _ = quod_dtx_phase_index:close(PhaseIndex),
+          _ = quod_ledger_store:close(Store),
+          Result
+      end).
+
+-ifdef(TEST).
+test_replay_cache(Store, {Ns, Anchor}, Projection, Index) ->
+    replay_cache(Store, Ns, Anchor, quod_ledger_store:last(Store), Projection, Index, none).
+-endif.
+
+replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex, Checkpoint) ->
+    %% Startup consumes each archive group's selected ancestry once. Material
+    %% page boundaries are not proof boundaries: one witness may span many
+    %% network pages and certify several entries. Exact foreign claims need
+    %% no authority to restart a validator beyond the stored material prefix.
+    try
+        Height = quod_ledger_store:last(Store),
+        Projection = quod_ledger_store:fold_groups(Store,
+          fun(Entries, Proof, P0) ->
+              Source = {fun(C) -> quod_ledger_store:proof_next(Store, C) end, Proof},
+              case quod_catchup:verify_forward_group({Ns, Anchor}, Entries, P0, PhaseIndex, Source) of
+                  {ok, P1, Delta, _Custody} ->
+                      case valid_projection(P1, {Ns, Anchor}) of
+                          true -> ok;
+                          false -> throw({cache_replay, cache_corrupt})
+                      end,
+                      ok = verify_replayed_checkpoint(Checkpoint, P1),
+                      ok = quod_dtx_phase_index:commit_delta(PhaseIndex, Delta),
+                      trace_count(replayed_entries, length(Entries)),
+                      current_era_projection(P1);
+                  {error, {unavailable, network_identity, _}} ->
+                      throw({cache_replay, network_identity});
+                  {error, _} -> throw({cache_replay, cache_corrupt})
+              end
+          end, Projection0),
+        case valid_projection(Projection, {Ns, Anchor}) of
+            true -> {ok, Projection};
+            false -> {error, cache_corrupt}
+        end
+    catch
+        throw:{cache_replay, Reason} -> {error, Reason};
+        _:_ -> {error, cache_corrupt}
+    end.
+
+verify_replayed_checkpoint({Height, Saved}, #{history_head := {Height, _}} = Projection) ->
+    case checkpoint_projection(Projection) =:= Saved of
+        true -> ok;
+        false -> throw({cache_replay, cache_corrupt})
+    end;
+verify_replayed_checkpoint(_, _) -> ok.
+
+fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
+                     Cursor = #verified_cursor{height = Height, projection = P, phase_index = Index},
+                     Root, To, FetchFun, PageTimeout) ->
+    Deadline = quod_time:mono_ms() + PageTimeout,
+    Result = with_request_proof_stage(Owner, RequestRef, fun(Stage) ->
+        Working = Cursor#verified_cursor{batch = quod_ledger_store:batch_begin(Cursor#verified_cursor.store)},
+        Range = quod_catchup:range_begin(Identity, To, wrapped, Stage, Working, P, Index),
+        Install = fun(Group, Current) ->
+            case persist_verified_group(Owner, RequestRef, Identity, Current, Root, Group) of
+                {ok, Next} ->
+                    trace_verified_page(Peer, length(maps:get(entries, Group))),
+                    {ok, Next, Next#verified_cursor.projection,
+                     Next#verified_cursor.phase_index, maps:get(delta, Group)};
+                {error, Why, Failed} -> {error, Why, Failed}
+            end
+        end,
+        fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, {range, Height + 1, To},
+                    Deadline, FetchFun, Range, Install)
+    end),
+    Outcome = case Result of
+        {ok, Final} ->
+            Next = quod_catchup:range_context(Final),
+            case finish_verified_range(Next, quod_catchup:range_delta(Final)) of
+                {ok, Durable} -> {ok, Durable};
+                {error, Failed} -> {error, cache_corrupt, Failed}
+            end;
+        {error, Why, Final} ->
+            Next = quod_catchup:range_context(Final),
+            case finish_verified_range(Next, quod_catchup:range_delta(Final)) of
+                {ok, Durable} -> {error, Why, Durable};
+                {error, Failed} -> {error, cache_corrupt, Failed}
+            end;
+        {error, Why} -> {error, Why, Cursor}
+    end,
+    Retained = case Outcome of
+        {ok, C} -> C;
+        {error, _, C} -> C
+    end,
+    case checkpoint_range(Height, Retained, Identity, Root, Owner, RequestRef) of
+        ok -> Outcome;
+        {error, _} -> {error, cache_corrupt, Retained#verified_cursor{state = invalid}}
+    end.
+
+%% Proof staging may be reused after each copied group. The existing writer
+%% retains the unpublished batch and preview delta until this one durable sink.
+finish_verified_range(Cursor = #verified_cursor{state = invalid}, _Delta) ->
+    {error, Cursor};
+finish_verified_range(Cursor = #verified_cursor{batch = Batch, phase_index = Index}, Delta) ->
+    try
+        {ok, Store} = persistence_stage(ledger_sync,
+                       fun() -> quod_ledger_store:batch_sync(Batch) end),
+        ok = persistence_stage(phase_commit,
+               fun() -> quod_dtx_phase_index:commit_delta(Index, Delta) end),
+        {ok, Cursor#verified_cursor{store = Store, batch = none}}
+    catch _:_ -> {error, Cursor#verified_cursor{state = invalid}}
+    end.
+
+%% The bounded acquisition owns its unpublished cursor. Checkpoint its synced
+%% prefix once before returning it, including a partial transport result.
+checkpoint_range(_Before, #verified_cursor{state = invalid}, _, _, _, _) -> ok;
+checkpoint_range(Height, #verified_cursor{height = Height}, _, _, _, _) -> ok;
+checkpoint_range(_Before, #verified_cursor{height = Height, projection = Projection},
+                 Identity, Root, Owner, RequestRef) ->
+    try
+        ok = persistence_stage(checkpoint_write,
+               fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
+                                         Height, Projection) end),
+        Bytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
+        ok = persistence_stage(cache_accounting,
+               fun() -> gen_server:call(Owner, {set_cache_size, RequestRef, Bytes}) end)
+    catch _:_ -> {error, cache_corrupt}
+    end.
+
+
+fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, Query, Deadline, FetchFun, Range, Install) ->
+    Consume = fun(Parts, H, Continuation) ->
+        quod_catchup:range_accept(Range, Parts, H, Continuation, Install)
+    end,
+    %% Only a failure before consumption selects another address of this peer.
+    %% A received page fixes the source and its original deadline for every
+    %% continuation; invalid or insufficient history is for the peer walk.
+    Result = quod_peer_route:walk(Endpoints, Deadline,
+      fun(Endpoint, Timeout) ->
+          AttemptDeadline = min(Deadline, quod_time:mono_ms() + Timeout),
+          {Endpoint, AttemptDeadline,
+           fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, FetchFun, AttemptDeadline, Consume)}
+      end,
+      fun({_, _, {error, _} = Error}, _) -> {next, Error};
+         (Reply, _) -> {done, Reply}
+      end, {error, retry}),
+    case Result of
+        {_, _, {ok, {ok, Next}, _, done}} -> {ok, Next};
+        {Endpoint, SelectedDeadline, {ok, {ok, Next}, _, {Token, Sequence}}} ->
+            fetch_range(Owner, RequestRef, Peer, [Endpoint], Ns, {continue, Token, Sequence},
+                        SelectedDeadline, FetchFun, Next, Install);
+        {_, _, {ok, {error, Why, Retained}, _, _}} -> {error, Why, Retained};
+        {_, _, {error, Why, {ok, Retained}}} -> {error, Why, Retained};
+        {_, _, {error, _, {error, Why, Retained}}} -> {error, Why, Retained};
+        {error, Why} -> {error, Why, Range}
+    end.
+
+persist_verified_group(
+  Owner, RequestRef, Identity,
+  Cursor = #verified_cursor{batch = Batch},
+  _Root, #{entries := Entries, proof := Proof, projection := Projection,
+           finality := Finality})
+  when Finality =:= genesis; map_get(complete_group, Finality) =:= true ->
+    %% No mutation precedes reservation. After append is attempted, any
+    %% failure invalidates the cursor, including failures after durable I/O.
+    StoredBytes = quod_ledger_store:group_size(Proof, Entries),
+    Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
+    case valid_projection(Projection, Identity) andalso
+         persistence_reservation(measure_foreign_stage(cache_accounting,
+           fun() -> gen_server:call(Owner, {reserve_page, RequestRef, Reservation}) end)) of
+        ok ->
+            try
+                {ok, NextBatch} = persistence_stage(ledger_append,
+                                   fun() -> quod_ledger_store:batch_append(Batch, {Proof, Entries}) end),
+                {NextHeight, _} = maps:get(history_head, Projection),
+                {ok, Cursor#verified_cursor{batch = NextBatch, height = NextHeight,
+                                            projection = current_era_projection(Projection)}}
+            catch _:_ ->
+                {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
+            end;
+        false -> {error, invalid_history, Cursor};
+        {error, _} -> {error, cache_unavailable, Cursor}
+    end;
+persist_verified_group(_Owner, _RequestRef, _Identity, Cursor, _Root, _Partial) ->
+    {error, incomplete_finality_group, Cursor}.
+
+persistence_stage(Stage, Fun) ->
+    Result = measure_foreign_stage(Stage, Fun),
+    persistence_boundary(Stage),
+    Result.
+
+-ifdef(TEST).
+%% Fault injection is worker-owned and consumed once, after the real mutation.
+%% The production branch is inert; no timing, outcome or recovery policy lives here.
+persistence_reservation(Result) ->
+    case get({?MODULE, persistence_failure}) of
+        reserve_page ->
+            erase({?MODULE, persistence_failure}),
+            {error, test_reservation_refused};
+        _ -> Result
+    end.
+
+persistence_boundary(Stage) ->
+    case get({?MODULE, persistence_failure}) of
+        Stage ->
+            erase({?MODULE, persistence_failure}),
+            error(test_persistence_failure);
+        _ -> ok
+    end.
+-else.
+persistence_reservation(Result) -> Result.
+persistence_boundary(_Stage) -> ok.
+-endif.
+
+current_route_candidates(
+  #{request := Request, live := Live, supplied := Supplied,
+    bootstrap := Bootstrap}, Projection) ->
+    Committee = quod_simplex:history_committee(Projection),
+    case Committee of
+        [] -> discovery_route_candidates(Request, Live, Supplied, Bootstrap);
+        [_ | _] ->
+            Certified = quod_simplex:history_validator_routes(Projection),
+            CertifiedEndpoints = maps:from_keys(
+                                   maps:values(Certified), true),
+            lists:filtermap(
+              fun(Peer) ->
+                  Endpoints = current_peer_endpoints(
+                                Peer, Request, Bootstrap, Live, Supplied,
+                                Certified, CertifiedEndpoints),
+                  case Endpoints of
+                      [] -> false;
+                      [_ | _] -> {true, {Peer, Endpoints}}
+                  end
+              end, Committee)
+    end.
+
+current_peer_endpoints(Peer, Request, Bootstrap, Live, Supplied,
+                       Certified, CertifiedEndpoints) ->
+    RequestEndpoint = first_peer_endpoint(Peer, Request),
+    Historical = maps:get(Peer, Certified, none),
+    LiveEndpoint = first_live_endpoint(Peer, Bootstrap, Live),
+    ThirdParty = permitted_supplied_endpoint(
+                   Peer, Historical, Supplied, CertifiedEndpoints),
+    lists:sublist(
+      lists:uniq(
+        [Endpoint || Endpoint <- [RequestEndpoint, LiveEndpoint,
+                                  Historical, ThirdParty],
+                     Endpoint =/= none]),
+      2).
+
+empty_route_sources() ->
+    #{request => [], live => [], supplied => [], bootstrap => [],
+      projection => undefined}.
+
+first_live_endpoint(Peer, Bootstrap, Directory) ->
+    case first_peer_endpoint(Peer, Bootstrap) of
+        none ->
+            case quod_quic:resolve(Peer) of
+                {ok, Endpoint} -> Endpoint;
+                _ -> first_peer_endpoint(Peer, Directory)
+            end;
+        Endpoint -> Endpoint
+    end.
+
+first_peer_endpoint(Peer, Routes) ->
+    case lists:keyfind(Peer, 1, Routes) of
+        {Peer, Endpoint} -> Endpoint;
+        false -> none
+    end.
+
+permitted_supplied_endpoint(_Peer, Historical, _Supplied,
+                            _CertifiedEndpoints)
+  when Historical =/= none ->
+    none;
+permitted_supplied_endpoint(Peer, none, Supplied, CertifiedEndpoints) ->
+    case first_peer_endpoint(Peer, Supplied) of
+        none -> none;
+        Endpoint ->
+            case maps:is_key(Endpoint, CertifiedEndpoints) of
+                true -> none;
+                false -> Endpoint
+            end
+    end.
+
+stable_unique_routes(Routes) ->
+    lists:uniq(fun({PeerKey, _Endpoint}) -> PeerKey end, Routes).
+
+flatten_route_candidates(Candidates) ->
+    [{Peer, Endpoint}
+     || {Peer, Endpoints} <- Candidates,
+        Endpoint <- Endpoints].
+
+%% A completed tip proof establishes both the exact head and its authority.
+%% Discovery and confirmation share these observations, counted only for the
+%% proven committee. A higher proof changes the question under the same deadline.
+parallel_probes(Items, Probe, Deadline, Context) ->
+    trace_foreign_stage(probe_collection,
+      #{'quod.foreign.expected_probe_children' => length(Items)},
+      fun() -> parallel_probes_raw(Items, Probe, Deadline, Context) end).
+
+parallel_probes_raw(Items, Probe, Deadline, Context) ->
+    Tag = make_ref(),
+    Collection = Context#{probe => Probe, items => Items, expected => none,
+                          first_height => 0, minimum_height => 0,
+                          results => #{}, feed_confirmed => false},
+    collect_probes(Tag, #{}, Deadline, Collection).
+
+start_current_probes(Tag, Pending, Collection) ->
+    Parent = self(),
+    TraceCtx = quod_trace:context(),
+    TraceStages = get(?TRACE_STAGE_ACTIVE),
+    #{probe := Probe, authority := Authority, items := Candidates} = Collection,
+    Question = {current_candidate_height(Collection), current_question_height(Collection),
+                evidence_known_era(Authority)},
+    Active = maps:from_keys([Peer || {_MRef, {Peer, _}, _Question} <- maps:values(Pending)], true),
+    Items = [{Peer, Endpoints} || {Peer, _} = Item <- Candidates,
+             not is_map_key(Peer, Active),
+             Endpoints <- [current_probe_endpoints(Item, Collection)], Endpoints =/= []],
+    trace_count(probes_started, length(Items)),
+    lists:foldl(
+                fun({Ordinal, Item}, Acc) ->
+                    {Pid, MRef} = spawn_opt(
+                                    fun() ->
+                                        Result = traced_probe_work(
+                                                   TraceCtx, TraceStages, Ordinal,
+                                                   fun() -> Probe(Item, Authority) end),
+                                        Parent ! {foreign_probe, Tag, self(),
+                                                  Item, Result}
+                                    end, [link, monitor]),
+                    Acc#{Pid => {MRef, Item, Question}}
+                end, Pending, lists:enumerate(Items)).
+
+current_probe_endpoints({Peer, Endpoints}, Collection = #{results := Results,
+                        expected := Expected, first_height := FirstHeight, authority := Authority}) ->
+    case maps:find(Peer, Results) of
+        error -> Endpoints;
+        {ok, {{PriorProven, PriorHeight, PriorEra}, Tried, Result}} ->
+            Proven = current_candidate_height(Collection),
+            Height = current_question_height(Collection),
+            ChangedEra = evidence_known_era(Authority) =/= PriorEra,
+            case Result of
+                {ok, Verified} ->
+                    case Height =:= quod_ledger:entry_index(maps:get(entry, Verified))
+                         andalso same_evidence_tip(Verified, Expected) of
+                        true -> [];
+                        false when Height > PriorHeight; Proven > PriorProven; ChangedEra -> Endpoints;
+                        false -> Endpoints -- Tried
+                    end;
+                _ when Height > max(PriorHeight, FirstHeight);
+                       Proven > max(PriorProven, FirstHeight); ChangedEra -> Endpoints;
+                _ -> Endpoints -- Tried
+            end
+    end.
+
+current_candidate_height(#{expected := none}) -> 0;
+current_candidate_height(#{expected := #{entry := Entry}}) -> quod_ledger:entry_index(Entry).
+
+current_question_height(Collection = #{minimum_height := Minimum}) ->
+    max(current_candidate_height(Collection), Minimum).
+
+traced_probe_work(TraceCtx, true, Ordinal, Fun) ->
+    quod_trace:with_span(
+      TraceCtx, <<"quod.foreign.probe_worker">>, internal,
+      #{'quod.foreign.probe_ordinal' => Ordinal},
+      fun(SpanCtx) ->
+          Previous = put(?TRACE_STAGE_ACTIVE, true),
+          PreviousCounts = put({?MODULE, trace_counts}, #{}),
+          try
+              Result = Fun(),
+              trace_foreign_result(SpanCtx, Result),
+              Result
+          catch Class:Reason:Stack ->
+              trace_foreign_exception(SpanCtx, Class),
+              erlang:raise(Class, Reason, Stack)
+          after
+              Counts = get({?MODULE, trace_counts}),
+              _ = quod_trace:set_attributes(SpanCtx,
+                    #{'quod.foreign.stages_started' => maps:get(stage_started, Counts, 0),
+                      'quod.foreign.stages_completed' => maps:get(stage_completed, Counts, 0)}),
+              restore_trace_counts(PreviousCounts),
+              restore_trace_stage(Previous)
+          end
+      end);
+traced_probe_work(TraceCtx, _Inactive, _Ordinal, Fun) ->
+    quod_trace:with_context(TraceCtx, Fun).
+
+collect_probes(Tag, Pending0, Deadline, Collection0) ->
+    %% A notice may arrive after candidate selection while its peer replies
+    %% are pending. Validate freshness once at quorum completion so that a
+    %% newer installed demand continues this job instead of being parked.
+    Collection = case Deadline > quod_time:mono_ms() andalso
+                      probe_collection_complete(Collection0) andalso
+                      not maps:get(feed_confirmed, Collection0) of
+        true -> refresh_current_feed(Collection0);
+        false -> Collection0
+    end,
+    Complete = probe_collection_complete(Collection),
+    Expired = Deadline =< quod_time:mono_ms(),
+    Pending = case Complete orelse Expired of
+        true -> Pending0;
+        false -> start_current_probes(Tag, Pending0, Collection)
+    end,
+    case Complete orelse Expired orelse map_size(Pending) =:= 0 of
+        true ->
+            stop_current_probes(Pending),
+            probe_collection_result(Collection, Complete andalso not Expired);
+        false ->
+            Wait = max(0, Deadline - quod_time:mono_ms()),
+            receive
+                {foreign_probe, Tag, Pid, Item, Result}
+                  when is_map_key(Pid, Pending) ->
+                    case maps:get(Pid, Pending) of
+                        {MRef, Item, Question} ->
+                            trace_count(probe_results, 1),
+                            _ = erlang:demonitor(MRef, [flush]),
+                            collect_probes(
+                              Tag, maps:remove(Pid, Pending), Deadline,
+                              collect_probe_result(Collection, Item, Question, Result));
+                        _ ->
+                            collect_probes(Tag, Pending, Deadline, Collection)
+                    end;
+                {'DOWN', MRef, process, Pid, _Reason}
+                  when is_map_key(Pid, Pending) ->
+                    case maps:get(Pid, Pending) of
+                        {MRef, Item, Question} ->
+                            collect_probes(
+                              Tag, maps:remove(Pid, Pending), Deadline,
+                              collect_probe_result(Collection, Item, Question, {error, retry}));
+                        _ ->
+                            collect_probes(Tag, Pending, Deadline, Collection)
+                    end
+            after Wait ->
+                stop_current_probes(Pending),
+                probe_collection_result(Collection, false)
+            end
+    end.
+
+probe_collection_complete(#{expected := none}) -> false;
+probe_collection_complete(#{expected := #{authority := #{committee := Committee},
+                                         entry := Entry} = Expected,
+                            results := Results, minimum_height := Minimum,
+                            feed_confirmed := FeedConfirmed}) ->
+    Confirmed = maps:from_keys([Peer || Peer <- Committee,
+        {_Question, _Tried, {ok, Verified}} <- [maps:get(Peer, Results, none)],
+        same_evidence_tip(Verified, Expected)], true),
+    quod_ledger:entry_index(Entry) >= Minimum andalso
+        (FeedConfirmed orelse confirmation_sufficient(quod_simplex:quorum(length(Committee)), Confirmed)).
+
+collect_probe_result(Collection = #{results := Results}, {Peer, Endpoints}, Question, Result) ->
+    Tried = case maps:find(Peer, Results) of
+        error -> Endpoints;
+        {ok, {_PriorQuestion, PriorEndpoints, _PriorResult}} -> lists:uniq(PriorEndpoints ++ Endpoints)
+    end,
+    Next = Collection#{results := Results#{Peer => {Question, Tried, Result}}},
+    case Result of
+        {ok, Verified} -> select_current_evidence(Verified, Next);
+        _ -> Next
+    end.
+
+select_current_evidence(#{entry := Entry} = Verified, Collection = #{expected := none}) ->
+    install_current_candidate(Verified, Collection#{first_height := quod_ledger:entry_index(Entry)});
+select_current_evidence(#{entry := Entry} = Verified,
+                        Collection = #{expected := #{entry := Prior}}) ->
+    case quod_ledger:entry_index(Entry) > quod_ledger:entry_index(Prior) of
+        true -> install_current_candidate(Verified, Collection);
+        false -> Collection
+    end.
+
+install_current_candidate(#{authority := Authority} = Verified,
+                          Collection = #{candidates := Candidates}) ->
+    Committee = maps:get(committee, Authority),
+    refresh_current_feed(Collection#{expected := Verified, authority := Authority,
+      items := confirmation_candidates(Candidates(Authority), Committee)}).
+
+refresh_current_feed(Collection = #{expected := #{entry := Entry} = Verified,
+                                    feed := Feed, minimum_height := Minimum}) ->
+    Height = quod_ledger:entry_index(Entry),
+    FeedTip = Feed(Verified),
+    %% A newer installed observation raises the required proof height. It
+    %% supplies neither that proof nor permission to renew the deadline.
+    Required = case FeedTip of
+        H when is_integer(H) -> H;
+        {behind, H} -> H;
+        _ -> Height
+    end,
+    Collection#{minimum_height := max(Minimum, Required),
+                feed_confirmed := FeedTip =:= Height}.
+
+probe_collection_result(#{expected := Expected}, true) -> {ok, Expected};
+probe_collection_result(#{expected := Expected}, false) -> {error, retry, Expected}.
+
+%% Both live feeds and authenticated probes count distinct admitted members.
+%% Their source-specific checks establish each observation before this quorum.
+confirmation_sufficient(Needed, Members) -> map_size(Members) >= Needed.
+
+stop_current_probes(Pending) ->
+    trace_count(probes_cancelled, map_size(Pending)),
+    maps:foreach(
+      fun(Pid, {MRef, _Item, _Question}) ->
+          _ = erlang:demonitor(MRef, [flush]),
+          _ = unlink(Pid),
+          exit(Pid, kill)
+      end, Pending).
+
+advance_snapshot_to_height(_Sources, _Owner, _RequestRef, _Identity,
+                           Cursor = #verified_cursor{height = Height},
+                           _Root, Target, _FetchFun, _PageTimeout) when Height >= Target ->
+    {ok, Cursor};
+advance_snapshot_to_height(Sources, Owner, RequestRef, Identity,
+                           Cursor = #verified_cursor{height = Height},
+                           Root, Target, FetchFun, PageTimeout) ->
+    PageTarget = min(Target, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+    case advance_snapshot_sources(Sources, Owner, RequestRef, Identity, Cursor,
+                                  Root, PageTarget, FetchFun, PageTimeout) of
+        {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
+            advance_snapshot_to_height(Sources, Owner, RequestRef, Identity, Next,
+                                       Root, Target, FetchFun, PageTimeout);
+        {ok, Next} -> {error, invalid_history, Next};
+        {error, _, _} = Error -> Error
+    end.
+
+advance_snapshot_sources([], _Owner, _RequestRef, _Identity, Cursor,
+                         _Root, _Target, _FetchFun, _PageTimeout) ->
+    {error, invalid_history, Cursor};
+advance_snapshot_sources([{Peer, Endpoints} | Rest], Owner, RequestRef,
+                         Identity, Cursor = #verified_cursor{height = Height},
+                         Root, Target, FetchFun, PageTimeout) ->
+    case fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity, Cursor,
+                              Root, Target, FetchFun, PageTimeout) of
+        {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
+            {ok, Next};
+        {ok, Next} ->
+            advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
+                                     Root, Target, FetchFun, PageTimeout);
+        {error, _, #verified_cursor{state = invalid}} = Invalid -> Invalid;
+        {error, {unavailable, network_identity, _}, _} = Global -> Global;
+        {error, _, Next} ->
+            advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
+                                     Root, Target, FetchFun, PageTimeout)
+    end.
+
+%% Reachability rows can repeat; neither another endpoint nor another hint is
+%% another possible confirmer. Preserve the existing first-seen endpoint walk.
+confirmation_candidates(Hints, Committee) ->
+    Members = maps:from_keys(Committee, true),
+    {Order, Grouped} = lists:foldl(
+      fun({Peer, Endpoints}, {Keys, Rows} = Acc) ->
+          case maps:is_key(Peer, Members) of
+              false -> Acc;
+              true ->
+                  case maps:find(Peer, Rows) of
+                      error -> {[Peer | Keys], Rows#{Peer => Endpoints}};
+                      {ok, Prior} -> {Keys, Rows#{Peer := Prior ++ Endpoints}}
+                  end
+          end
+      end, {[], #{}}, Hints),
+    [{Peer, lists:uniq(maps:get(Peer, Grouped))}
+     || Peer <- lists:reverse(Order)].
+
+-ifdef(TEST).
+test_parallel_probes(Items, Probe, TimeoutMs, Completion) ->
+    parallel_probes(Items, Probe, quod_time:mono_ms() + TimeoutMs, Completion).
+
+test_confirmation_candidates(Hints, Committee) ->
+    confirmation_candidates(Hints, Committee).
+
+%% Pause after the real collector, while the enclosing request is still live.
+%% Whole-request cancellation must not conceal a leaked immediate-puller row.
+confirmation_collected(Result) ->
+    case erase({?MODULE, confirmation_gate}) of
+        {TestPid, Token} ->
+            TestPid ! {foreign_confirmation_returned, Token, self(), Result},
+            receive {release_foreign_confirmation, Token} -> ok end;
+        _ -> ok
+    end,
+    Result.
+-else.
+confirmation_collected(Result) -> Result.
+-endif.
+
+current_view_evidence(Identity, Height, Projection, Routes) ->
+    #{identity => Identity,
+      slot => Height,
+      committee => quod_simplex:history_committee(Projection),
+      committee_id => maps:get(committee_id, Projection),
+      route_candidates => Routes}.
+
+fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, FetchFun, Deadline, Consume) ->
+    StartedNative = erlang:monotonic_time(),
+    Source = case Peer of {local, _} -> <<"local">>; _ -> <<"network">> end,
+    Result = trace_foreign_stage(page_fetch,
+               #{'quod.foreign.page_source' => Source},
+               fun() ->
+                   ObservedConsume = fun(Parts, Height, Continuation) ->
+                       trace_foreign_stage(page_consume,
+                         fun() -> Consume(Parts, Height, Continuation) end)
+                   end,
+                   fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, Query,
+                                  FetchFun, Deadline, ObservedConsume)
+               end),
+    observe_foreign_stage(page_fetch,
+      foreign_stage_result(foreign_stage_observation(page_fetch, Result)), StartedNative),
+    Result.
+
+fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, Query, undefined, Deadline, Consume) ->
+    TraceCtx = page_trace_context(),
+    Raw = trace_foreign_stage(page_wait, fun() ->
+        page_owner_call(Owner, {pull_page, RequestRef, Peer, Endpoint, Ns, Query,
+                                Deadline, TraceCtx}, Deadline)
+    end),
+    case Raw of
+        {decode_page, Key, Parts, Height, Continuation, PullDeadline, Gate} ->
+            consume_pulled_page(Owner, Key, Parts, Height, Continuation,
+                                min(Deadline, PullDeadline), Gate, Consume);
+        {error, _} = Error -> Error
+    end;
+fetch_page_raw(_Owner, _RequestRef, Peer, Endpoint, Ns, Query, FetchFun, Deadline, Consume) ->
+    %% The adapter owns only byte delivery. Consumer faults must escape to
+    %% monitored worker cleanup, never become a retry with a stale cursor.
+    FetchFun(Peer, Endpoint, Ns, Query, Deadline, Consume).
+
+consume_pulled_page(Owner, Key, Parts, Height, Continuation, Deadline, Gate, Consume) ->
+    page_decode_gate(before_decode, Gate, Key),
+    case Deadline > quod_time:mono_ms() of
+        false -> page_wait_failure(page_expired);
+        true ->
+            Consumed = Consume(Parts, Height, Continuation),
+            Verdict = case Consumed of
+                          {error, _, _} -> malformed;
+                          {error, _} -> malformed;
+                          _ -> decoded
+                      end,
+            page_decode_gate(before_completion, Gate, Key),
+            Completion = trace_foreign_stage(page_completion, fun() ->
+                page_owner_call(Owner, {complete_page_decode, Key, Verdict}, Deadline)
+            end),
+            case Completion of
+                ok ->
+                    page_decode_gate(after_accept, Gate, Key),
+                    case Deadline > quod_time:mono_ms() of
+                        true -> {ok, Consumed, Height, Continuation};
+                        false -> {error, retry, Consumed}
+                    end;
+                {error, Why} ->
+                    %% Consumption may have committed earlier groups on this
+                    %% page. Retain that result even if credit handoff failed.
+                    {error, Why, Consumed}
+            end
+    end.
+
+%% Discovery only nominates a source. It never imports a partial proof, and
+%% releases an unfinished source cursor instead of leaving it until expiry.
+page_trace_context() ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true -> quod_trace:context();
+        _ -> undefined
+    end.
+
+page_owner_call(Owner, Request, Deadline) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            %% Both local calls share the page's original absolute budget.
+            %% In particular, an owner stalled after removing the row cannot
+            %% leave the completion caller waiting on an already-cancelled timer.
+            Reply = try gen_server:call(Owner, Request, Remaining)
+                    catch
+                        exit:{timeout, _} -> page_wait_failure(page_expired);
+                        exit:_ -> page_wait_failure(owner_call_failed)
+                    end,
+            case Deadline > quod_time:mono_ms() of
+                true -> Reply;
+                false -> page_wait_failure(page_expired)
+            end;
+        _ -> page_wait_failure(page_expired)
+    end.
+
+%% This observation belongs to the calling verifier/probe, which alone mutates
+%% its wait/completion/fetch span. The owner may retire its page row after this
+%% span has already ended; that separate terminal child uses the retained parent
+%% context rather than trying to annotate an exported worker span.
+page_wait_failure(Cause) ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true ->
+            _ = quod_trace:set_attributes(
+                  otel_tracer:current_span_ctx(quod_trace:context()),
+                  #{'quod.foreign.page_wait_cause' => atom_to_binary(Cause)});
+        _ -> ok
+    end,
+    {error, retry}.
+
+-ifdef(TEST).
+take_page_decode_gate() -> erase({?MODULE, page_decode_gate}).
+
+page_decode_gate(Stage, {TestPid, Token, Stage}, Key = {Owner, _, _, _, _}) ->
+    TestPid ! {foreign_page_decode, Stage, Token, self(), Key},
+    wait_page_decode_gate(TestPid, Token, Owner);
+page_decode_gate(_Stage, _Gate, _Key) -> ok.
+
+wait_page_decode_gate(TestPid, Token, Owner) ->
+    receive
+        {continue_foreign_page_decode, Token} -> ok;
+        {test_complete_foreign_page, Token, Key, Verdict} ->
+            Result = gen_server:call(Owner, {complete_page_decode, Key, Verdict}),
+            TestPid ! {foreign_page_completion, Token, Result},
+            wait_page_decode_gate(TestPid, Token, Owner)
+    end.
+-else.
+take_page_decode_gate() -> undefined.
+page_decode_gate(_Stage, _Gate, _Key) -> ok.
+-endif.
+
+
+
+verify_exact_reference_entry(
+  Ref, ExpectedPhase, Entry, Projection) ->
+    trace_foreign_stage(exact_validate,
+      fun() ->
+          verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection)
+      end).
+
+verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
+    case quod_ledger:select_entry(
+           Entry, {digest, ref_slot(Ref), ref_record_digest(Ref)}, wrapped) of
+        {ok, Selected} -> verify_exact_selection(Ref, ExpectedPhase, Selected, Projection);
+        {error, _} -> {error, invalid_foreign_reference}
+    end.
+
+verify_exact_selection(Ref, ExpectedPhase, Selected, Projection) ->
+    case quod_ledger:selected_record(Selected) of
+        #transaction{} = Transaction
+          when ExpectedPhase =:= transaction; ExpectedPhase =:= entry ->
+            verify_exact_record(Ref, Selected, Transaction, transaction, transaction, Projection);
+        none -> {error, invalid_foreign_reference};
+        #transaction{} -> {error, invalid_foreign_reference};
+        Control ->
+            case quod_atomic:control_kind(Control) of
+                Phase when ExpectedPhase =:= Phase; ExpectedPhase =:= entry ->
+                    verify_exact_record(Ref, Selected, Control, Phase, control, Projection);
+                _ -> {error, phase_mismatch}
+            end
+    end.
+
+verify_exact_record(Ref, Entry, Record, Phase, Field, Authority) ->
+    Identity = ref_identity(Ref),
+    %% The caller has already authenticated finality and historical authority:
+    %% a retained complete prefix or the shared exact-evidence verifier.
+    case quod_dtx:certified_entry_claim_matches(Identity, Entry, Record, Ref) of
+        true ->
+            {ok, #{identity => Identity, slot => ref_slot(Ref),
+                   block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
+                   phase => Phase, Field => Record, entry => Entry,
+                   committee => maps:get(committee, Authority),
+                   committee_id => maps:get(committee_id, Authority),
+                   routes => maps:get(validator_routes, Authority)}};
+        false -> {error, invalid_foreign_reference}
+    end.
+
+%%%===================================================================
+%%% Durable cache
+%%%===================================================================
+
+cache_namespace({Ns, Anchor}) ->
+    crypto:hash(
+      sha256,
+      term_to_binary({quod_foreign_log, ?CACHE_VERSION, Ns, Anchor},
+                     [deterministic])).
+
+cache_dir(Root, CacheNs) ->
+    quod_ledger_store:ns_dir(Root, CacheNs).
+
+manifest_path(Root, CacheNs) ->
+    filename:join(cache_dir(Root, CacheNs), ?MANIFEST).
+
+checkpoint_path(Root, CacheNs) ->
+    filename:join(cache_dir(Root, CacheNs), ?CHECKPOINT).
+
+cache_log_bytes(Root, CacheNs) ->
+    case file:read_file_info(filename:join(cache_dir(Root, CacheNs), ?LOG)) of
+        {ok, Info} -> element(2, Info);
+        {error, _} -> 0
+    end.
+
+cache_persisted_bytes(Root, CacheNs) ->
+    Dir = cache_dir(Root, CacheNs),
+    file_bytes(filename:join(Dir, ?LOG)) +
+        file_bytes(filename:join(Dir, ?MANIFEST)) +
+        file_bytes(filename:join(Dir, ?CHECKPOINT)).
+
+file_bytes(Path) ->
+    case file:read_file_info(Path) of
+        {ok, Info} -> element(2, Info);
+        {error, _} -> 0
+    end.
+
+ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
+    Path = manifest_path(Root, CacheNs),
+    Expected = {quod_foreign_log_cache, ?CACHE_VERSION,
+                Ns, Anchor, CacheNs},
+    case read_small_term(Path) of
+        {ok, Expected} -> ok;
+        {error, enoent} ->
+            case gen_server:call(
+                   Owner,
+                   {reserve_page, RequestRef, ?MANIFEST_RESERVE_BYTES}) of
+                ok ->
+                    atomic_write(
+                      Path, term_to_binary(Expected, [deterministic]));
+                {error, _} ->
+                    {error, cache_unavailable}
+            end;
+        {ok, {quod_foreign_log_cache, Version, _, _, _}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION ->
+            {error, {unsupported_foreign_cache_format, Version}};
+        _ ->
+            {error, corrupt_manifest}
+    end.
+
+write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
+    Bytes = cache_log_bytes(Root, CacheNs),
+    Term = {quod_foreign_log_checkpoint, ?CACHE_VERSION,
+            Ns, Anchor, Height, Bytes, checkpoint_projection(Projection)},
+    Blob = term_to_binary(Term, [deterministic]),
+    case byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+        true -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
+        false -> {error, checkpoint_too_large}
+    end.
+
+load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Store) ->
+    Path = checkpoint_path(Root, CacheNs),
+    case read_small_term(Path) of
+        {ok, {quod_foreign_log_checkpoint, ?CACHE_VERSION,
+              Ns, Anchor, Height, StoredBytes, Projection}}
+          when is_integer(StoredBytes), StoredBytes >= 0 ->
+            case quod_ledger_store:committed_boundary(Store, Height) =:= {ok, StoredBytes}
+                 andalso valid_projection(Projection, Identity) of
+                true -> {ok, {Height, Projection}};
+                false -> {error, corrupt_checkpoint}
+            end;
+        {ok, {quod_foreign_log_checkpoint, Version, _, _, _, _, _}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION ->
+            {error, {unsupported_foreign_checkpoint_format, Version}};
+        {error, enoent} -> new;
+        _ -> {error, corrupt_checkpoint}
+    end.
+
+read_small_term(Path) ->
+    case file:read_file_info(Path) of
+        {ok, Info} when element(2, Info) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
+            case file:read_file(Path) of
+                {ok, Bin} ->
+                    %% Read the version even when a superseded projection
+                    %% names symbols no longer loaded by this code. Wrapped
+                    %% decoding proves canonical bytes without atom creation.
+                    case quod_safe_term:decode_wrapped(
+                           Bin, ?QUOD_MAX_FOREIGN_PAGE_BYTES) of
+                        {ok, Term} -> {ok, Term};
+                        {error, _} -> {error, bad_term}
+                    end;
+                {error, Reason} -> {error, Reason}
+            end;
+        {ok, _} -> {error, too_large};
+        {error, Reason} -> {error, Reason}
+    end.
+
+atomic_write(Path, Blob) ->
+    ok = quod_file:ensure_parent(Path),
+    Token = integer_to_list(erlang:unique_integer([positive, monotonic])),
+    Tmp = Path ++ ".new." ++ Token,
+    case file:open(Tmp, [write, raw, binary, exclusive]) of
+        {ok, Fd} ->
+            Result =
+                try
+                    ok = file:write(Fd, Blob),
+                    ok = file:datasync(Fd),
+                    ok
+                catch _:_ -> {error, write_failed}
+                after _ = file:close(Fd)
+                end,
+            case Result of
+                ok ->
+                    case file:rename(Tmp, Path) of
+                        ok -> quod_file:sync_dir(filename:dirname(Path));
+                        {error, _} = Error -> _ = file:delete(Tmp), Error
+                    end;
+                {error, _} = Error ->
+                    _ = file:delete(Tmp),
+                    Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+
+%% Catalogue only bounded identity manifests at node-owner startup. Actual
+%% reconstruction runs under the existing per-identity writer custody, not
+%% inside this mailbox and not on the first proof request. F6 will replace
+%% this counted startup replay with bound-save restoration plus a suffix.
+initialize_retained_histories(S0 = #s{root = Root}) ->
+    case file:list_dir(Root) of
+        {ok, Names} ->
+            lists:foldl(fun(Name, S) ->
+                case load_history_dir(Root, filename:join(Root, Name)) of
+                    {ok, H = #history{identity = Identity, bytes = Bytes}} ->
+                        S1 = put_history(Identity, H, S#s{total_bytes = S#s.total_bytes + Bytes}),
+                        start_history_initialization(Identity, startup, S1);
+                    error -> S
+                end
+            end, S0, Names);
+        {error, enoent} -> S0;
+        {error, Reason} -> error({foreign_history_catalogue, Reason})
+    end.
+
+start_history_initialization(Identity, Cause, S0) ->
+    {ok, S1} = start_distinct_worker(none, Identity, infinity,
+        {initialize, Identity, Cause}, undefined, {initialize, Identity}, S0),
+    S1.
+
+finish_history_initialization(Identity, {ok, _}, S0) ->
+    %% install_verified_progress already releases route waits ONLY for actual
+    %% prefix advancement. Restoring the same prefix is not a fresh retry edge.
+    ensure_materializer_advanced(Identity, S0);
+finish_history_initialization(Identity, {error, Reason}, S0) ->
+    logger:error("foreign history initialization unavailable identity=~p reason=~p",
+                 [Identity, Reason]),
+    H0 = maps:get(Identity, S0#s.histories),
+    %% No retry timer and no caller-triggered replay. Keep this existing work
+    %% row in front of callers; an actual dependency edge can resume it.
+    Queued = #request{ref = make_ref(), from = {initialize, Identity},
+        identity = Identity, peer = none, work = {initialize, Identity, Reason},
+        parked = true, enqueued_native = erlang:monotonic_time()},
+    put_history(Identity, H0#history{waiting = queue:in_r(Queued, H0#history.waiting)}, S0).
+
+schedule_history_reconstruction(RequestRef, Identity, Cause, S0) ->
+    logger:error("foreign history integrity unavailable identity=~p cause=~p", [Identity, Cause]),
+    {ok, Identity} = request_identity(RequestRef, S0),
+    H0 = maps:get(Identity, S0#s.histories),
+    %% Losing a cursor does not erase previously verified facts/height. It
+    %% revokes the resumable capability until the explicit reconstruction.
+    %% Only a diagnosed corrupt store is discarded by its initialization writer.
+    close_phase_session(H0#history.phase_session),
+    Queued = #request{ref = make_ref(), from = {initialize, Identity},
+        identity = Identity, peer = none, work = {initialize, Identity, Cause},
+        enqueued_native = erlang:monotonic_time()},
+    put_history(Identity, H0#history{resident_verified = false, phase_session = none,
+        cache_session = none, waiting = queue:in_r(Queued, H0#history.waiting)},
+        count_history_integrity_loss(Cause, S0)).
+
+count_history_integrity_loss(custody_lost, S) ->
+    S#s{history_custody_losses = S#s.history_custody_losses + 1};
+count_history_integrity_loss(cache_corrupt, S) ->
+    S#s{history_corruptions = S#s.history_corruptions + 1};
+count_history_integrity_loss(phase_index_lost, S) ->
+    S#s{history_index_losses = S#s.history_index_losses + 1}.
+
+resume_history_initializations(S0) ->
+    maps:fold(fun(Identity, H, S) ->
+        Waiting = queue:from_list([case Q of
+            #request{work = {initialize, Identity, network_identity}, parked = true} ->
+                Q#request{parked = false};
+            _ -> Q
+        end || Q <- queue:to_list(H#history.waiting)]),
+        start_next_request(Identity, put_history(Identity, H#history{waiting = Waiting}, S))
+    end, S0, S0#s.histories).
+
+load_history_dir(Root, Dir) ->
+    case read_small_term(filename:join(Dir, ?MANIFEST)) of
+        {ok, {quod_foreign_log_cache, ?CACHE_VERSION,
+              Ns, <<_:256>> = Anchor, <<_:256>> = CacheNs}}
+          when is_binary(Ns), byte_size(Ns) > 0,
+               byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+            Identity = {Ns, Anchor},
+            Bytes = cache_persisted_bytes(Root, CacheNs),
+            case CacheNs =:= cache_namespace(Identity) andalso
+                cache_dir(Root, CacheNs) =:= Dir of
+                true ->
+                    %% Neither disk presence nor an unbound checkpoint grants
+                    %% a verified height. The initialization worker establishes it.
+                    {ok, #history{identity = Identity, cache_ns = CacheNs,
+                                  bytes = Bytes, last_used = 0}};
+                false -> error
+            end;
+        {ok, {quod_foreign_log_cache, Version, Ns, <<_:256>>, <<_:256>>}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION,
+               is_binary(Ns) ->
+            %% A clean break is not corruption or an unknown cold identity.
+            %% Refuse before requests can refetch this known retained prefix.
+            %% Deployment must explicitly retire the old derived cache; no
+            %% legacy decoder, automatic deletion or request-time rebuild.
+            error({unsupported_foreign_cache_format, Version});
+        _ -> error
+    end.
+
+cleanup_proof_stages(Stages) ->
+    maps:foreach(fun(Path, _) -> _ = file:delete(Path) end, Stages).
+
+with_request_proof_stage(Owner, RequestRef, Fun) ->
+    case gen_server:call(Owner, {proof_stage, RequestRef}) of
+        {ok, Path} ->
+            try quod_ledger_store:with_proof_stage(Path, Fun)
+            after gen_server:cast(Owner, {release_proof_stage, RequestRef, Path, self()}) end;
+        {error, _} = Error -> Error
+    end.
+
+cleanup_cache_temps(Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Names} ->
+            _ = [file:delete(filename:join(Dir, Name))
+                 || Name <- Names, is_cache_temp(Name)],
+            ok;
+        {error, _} -> ok
+    end.
+
+is_cache_temp(Name) when is_list(Name) ->
+    lists:prefix(?MANIFEST ++ ".new.", Name) orelse
+        lists:prefix(?CHECKPOINT ++ ".new.", Name) orelse
+        lists:prefix(".proof-", Name).
+
+%%%===================================================================
+%%% Shared bounded-shape checks and ref accessors
+%%%===================================================================
+
+valid_projection(
+  #{committee := Committee, validator_routes := Routes,
+    committee_id := CommitteeId,
+    admissions := Admissions, sequences := Sequences,
+    timestamp := _Timestamp, history_head := Head,
+    identity := ExpectedIdentity, protocol_root := ProtocolRoot,
+    dtx := Dtx, dtx_lanes := DtxLanes} = Projection,
+  ExpectedIdentity)
+  when is_map(Routes), is_map(Admissions), is_map(Sequences),
+       is_map(DtxLanes),
+       map_size(Routes) =< ?MAX_VALIDATORS,
+       map_size(Admissions) =< ?MAX_VALIDATORS,
+       map_size(Sequences) =< ?MAX_VALIDATORS,
+       map_size(DtxLanes) =< ?MAX_VALIDATORS ->
+    bounded_committee(Committee, 0) andalso
+        valid_validator_routes(Routes, Committee) andalso
+        (CommitteeId =:= undefined orelse
+         (is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32)) andalso
+        valid_dtx_target(Dtx, ExpectedIdentity) andalso
+        valid_protocol_root(ProtocolRoot, Head) andalso
+        valid_committee_views(Projection, ExpectedIdentity);
+valid_projection(_, _) -> false.
+
+valid_protocol_root(none, none) -> true;
+valid_protocol_root({<<_:256>>, View, <<_:256>>}, {Height, <<_:256>>})
+  when is_integer(View), View >= 0, is_integer(Height), Height > 0 -> true;
+valid_protocol_root(_, _) -> false.
+
+%% Committee eras are retained only by the running certified-history owner.
+%% The durable checkpoint stays at the fixed current-projection shape; after a
+%% restart the existing one-time replay rebuilds both the DTX phase session and
+%% these eras together. This avoids both per-reference genesis replay and an
+%% ever-growing checkpoint envelope.
+checkpoint_projection(Projection) ->
+    maps:without([committee_views, history_index], Projection).
+
+valid_committee_views(#{committee_views := Views, history_index := Index,
+                        history_head := {Height, _}} = Projection, _ExpectedIdentity)
+  when is_list(Views), map_size(Projection) =:= 13 ->
+    quod_dtx_phase_index:is_capture(Index, Height) andalso
+        valid_committee_view_rows(Views);
+valid_committee_views(#{committee_views := Views} = Projection,
+                      _ExpectedIdentity)
+  when is_list(Views), map_size(Projection) =:= 12 ->
+    valid_committee_view_rows(Views);
+valid_committee_views(Projection, _ExpectedIdentity) ->
+    %% Compact persisted checkpoints deliberately omit the resident-only era
+    %% index and retain the exact eleven-field committed-only shape. Local
+    %% pending Vote custody belongs to the signing journal, never history.
+    map_size(Projection) =:= 11.
+
+valid_committee_view_rows([]) -> true;
+valid_committee_view_rows(
+  [{Start, Committee, <<_:256>>, Routes} | Rest])
+  when is_integer(Start), Start > 0, is_map(Routes) ->
+    bounded_committee(Committee, 0) andalso
+        valid_validator_routes(Routes, Committee) andalso
+        valid_committee_view_rows(Rest, Start);
+valid_committee_view_rows(_) -> false.
+
+valid_committee_view_rows([], _PreviousStart) -> true;
+valid_committee_view_rows(
+  [{Start, Committee, <<_:256>>, Routes} | Rest], PreviousStart)
+  when is_integer(Start), Start > 0, Start < PreviousStart,
+       is_map(Routes) ->
+    bounded_committee(Committee, 0) andalso
+        valid_validator_routes(Routes, Committee) andalso
+        valid_committee_view_rows(Rest, Start);
+valid_committee_view_rows(_, _) -> false.
+
+reference_projection(Slot, Height, Projection)
+  when is_integer(Slot), Slot > 0, Slot =< Height ->
+    case quod_simplex:history_committee_view(Slot, Projection) of
+        {ok, Committee, CommitteeId, Routes} ->
+            {ok, Projection#{committee := Committee,
+                             committee_id := CommitteeId,
+                             validator_routes := Routes}};
+        error -> error
+    end;
+reference_projection(_Slot, _Height, _Projection) ->
+    error.
+
+current_era_projection(Projection = #{committee_views := Views}) ->
+    Projection#{committee_views := lists:sublist(Views, 1)}.
+
+valid_validator_routes(Routes, Committee) ->
+    maps:fold(
+      fun(<<_:256>> = Key, Endpoint, Valid) ->
+              Valid andalso lists:member(Key, Committee) andalso
+                  quod_quic:valid_endpoint(Endpoint);
+         (_Key, _Endpoint, _Valid) ->
+              false
+      end, true, Routes).
+
+bounded_committee([], _Count) -> true;
+bounded_committee([<<_:256>> | Rest], Count) when Count < ?MAX_VALIDATORS ->
+    bounded_committee(Rest, Count + 1);
+bounded_committee(_, _Count) -> false.
+
+valid_dtx_target(
+  #{target := Identity, generation := Generation}, Identity)
+  when is_integer(Generation), Generation >= 0,
+       Generation =< ?MAX_UINT64 -> true;
+valid_dtx_target(_, _) -> false.
+
+ref_identity(
+  {quod_dtx_ref, 3, Ns, Anchor, _Slot, _BlockHash, _Digest, _Proof}) ->
+    {Ns, Anchor};
+ref_identity(_) -> invalid.
+
+ref_slot({quod_dtx_ref, 3, _Ns, _Anchor, Slot, _BlockHash, _Digest, _Proof}) ->
+    Slot.
+
+ref_block_hash(
+  {quod_dtx_ref, 3, _Ns, _Anchor, _Slot, BlockHash, _Digest, _Proof}) ->
+    BlockHash.
+
+ref_record_digest(
+  {quod_dtx_ref, 3, _Ns, _Anchor, _Slot, _BlockHash, Digest, _Proof}) ->
+    Digest.

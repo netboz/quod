@@ -1,0 +1,4 @@
+retained_genesis_accepted=true descriptor={query,live_observation,
+                                           quod_physics_predicates,
+                                           physics_body_state}
+STOP: retained interpreted definition displaced by shared registration

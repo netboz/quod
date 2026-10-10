@@ -1,10 +1,9 @@
 // Ontology projections over the existing signed read path. These helpers only
 // build ordinary goals; exact references are checked inside the selected scope.
-import { binary, compound, atom, renderTerm, variable } from './prolog-term.js'
+import { binary, compound, atom, renderTerm, variable, list, number } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
-import { readMarks } from './marks.js'
 import { signedGoal } from './signed-client.js'
-import { b64url } from './key-provider.js'
+import { b64url, fromB64url } from './key-provider.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -19,25 +18,41 @@ export function anchoredGoal(reference, goal) {
   return `${renderTerm(ns)} :: (${renderTerm(guard)}, ${renderTerm(goal)}).`
 }
 
-export async function readPersonalLobby(identity, agent, mode = 'playing', options = {}) {
+export async function readPersonalLobby(identity, agent, options = {}) {
   const reply = await signedGoal(identity, {
-    mode: 'read', agent, goal: 'lobby_reference(Lobby).',
+    mode: 'read', agent, goal: 'lobby_navigation(Lobby,Modes).',
   }, options)
   if (reply.result === 'fail') return null
-  const reference = readReference(singleBinding(reply, 'Lobby'))
-  const scene = await signedGoal(identity, {
-    mode: 'read', agent,
-    goal: anchoredGoal(reference, compound(',', [
-      compound('lobby_modes', [variable('Modes')]),
-      compound('lobby_view', [atom(mode), variable('Scene')]),
-    ])),
-  }, options)
-  const modes = readTerm(singleBinding(scene, 'Modes'))
+  const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Lobby')), 'entity_ref', 3)
+  const reference = { namespace: textValue(ns), anchor: anchor.value, instance }
+  anchoredGoal(reference, instance)
+  const modes = readTerm(singleBinding(reply, 'Modes'))
   if (modes.type !== 'list' || modes.tail !== null || modes.items.some(item => item.type !== 'atom')) {
     throw new Error('invalid lobby eidolons')
   }
-  return { reference, marks: readMarks(singleBinding(scene, 'Scene')), height: scene.height,
-    modes: modes.items.map(item => item.value) }
+  // Keep every navigation dependency, including foreign policy. The next
+  // signed view visits and fences this exact set before installing anything.
+  const dependencies = reply.dependencies
+  viewDependencies(dependencies)
+  if (!dependencies.length) throw new Error('missing navigation dependencies')
+  return { reference, dependencies, modes: modes.items.map(item => item.value) }
+}
+
+export function viewDependencies(dependencies) {
+  if (!Array.isArray(dependencies)) throw new Error('missing navigation dependencies')
+  let previous = null
+  return list(dependencies.map(({ ns, genesis_anchor, height }) => {
+    const anchor = fromB64url(genesis_anchor)
+    const bytes = encoder.encode(ns)
+    const difference = previous?.findIndex((byte, i) => byte !== bytes[i]) ?? -1
+    const ordered = !previous || (difference === -1 ? previous.length < bytes.length
+      : difference < bytes.length && previous[difference] < bytes[difference])
+    if (typeof ns !== 'string' || !ns.length || !ordered ||
+        anchor.length !== 32 || typeof height !== 'string' || !/^(0|[1-9][0-9]*)$/.test(height) ||
+        BigInt(height) > 18446744073709551615n) throw new Error('invalid navigation dependency')
+    previous = bytes
+    return compound('dependency', [text(ns), binary(anchor), number(BigInt(height))])
+  }))
 }
 
 export async function readDeviceMenu(identity, agent, subject, options = {}) {

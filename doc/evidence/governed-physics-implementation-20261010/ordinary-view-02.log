@@ -1,0 +1,95 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 194 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 672 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+     │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 672 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+     │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_physics_tests:-ordinary_space_views_test_/0-fun-12-/0: ordinary-workshop
+[0;31m     Failure/Error: ?assertMatch(# { << "selection" >> := Expected }, simulation_reply ( Socket , << "projection" >> ))
+       expected: = # { << "selection" >> := Expected }
+            got: #{<<"expires_ms">> => <<"1791667169013">>,
+                   <<"height">> => <<"1">>,<<"marks">> => <<"[]">>,
+                   <<"selection">> => <<"nonphysical">>,
+                   <<"type">> => <<"projection">>,
+                   <<"view">> =>
+                       <<"mxxpHcGr9B7nriVFWVpN2WUeDioDKmxXKLcjvxeGAFM">>}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_09E8EC73B67D1B3B
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_09E8EC73B67D1B3B
+[0m
+  2) quod_physics_tests:-ordinary_space_views_test_/0-fun-12-/0: ordinary-observatory
+[0;31m     Failure/Error: ?assertMatch(# { << "selection" >> := Expected }, simulation_reply ( Socket , << "projection" >> ))
+       expected: = # { << "selection" >> := Expected }
+            got: #{<<"expires_ms">> => <<"1791667169925">>,
+                   <<"height">> => <<"1">>,<<"marks">> => <<"[]">>,
+                   <<"selection">> => <<"nonphysical">>,
+                   <<"type">> => <<"projection">>,
+                   <<"view">> =>
+                       <<"ERTLlLv3O2IOEjZUL3F71DXUflEWN3SQNpCNqEKrxWQ">>}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F811CEB56BB6DA3A
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F811CEB56BB6DA3A
+[0m
+  3) quod_physics_tests:-navigation_dependencies_fence_view_test_/0-fun-11-/0
+[0;31m     Failure/Error: {error,
+                        {unexpected_simulation_reply,<<"projection">>,
+                            #{<<"reason">> =>
+                                  <<"view_not_authorized_or_ready">>,
+                              <<"type">> => <<"unavailable">>}},
+                        [{quod_physics_tests,simulation_reply,2,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                              {line,1222}]},
+                         {quod_physics_tests,
+                             '-navigation_dependencies_fence_view_test_/0-fun-10-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                              {line,901}]},
+                         {quod_physics_tests,'-with_world/3-fun-0-',3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                              {line,1273}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_agent_hosting_tests.erl"},
+                              {line,1483}]},
+                         {quod_physics_tests,with_world,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                              {line,1276}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_083158020CE3DF84
+[0m
+
+Finished in 8.916 seconds
+[0;31m9 tests, 3 failures
+[0m===> Error running tests

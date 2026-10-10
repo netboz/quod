@@ -6,7 +6,7 @@ signed_binding_switch_and_release_test_() ->
         ?assertMatch({normalized,{committed,_,_}}, action(F, bind(0,none,compact,eye))),
         ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(Ns,
             {physics_control,room,Human,1,{controlled,compact,eye}})),
-        ?assertMatch({normalized,{answers,_,[_]}}, read(F)),
+        ?assertMatch({normalized,{read,_,{answers,_,[_]}}}, read(F)),
         ?assertMatch({normalized,{failed,_}}, action(F, bind(0,none,wide,cockpit))),
         ?assertMatch({normalized,{committed,_,_}},
             action(F, bind(1,{controlled,compact,eye},wide,cockpit))),
@@ -17,7 +17,7 @@ signed_binding_switch_and_release_test_() ->
             maps:get('C',Configuration)),
         ?assertMatch({normalized,{committed,_,_}}, action(F,
             {physics_control_agent,room,2,{controlled,wide,cockpit},none})),
-        ?assertMatch({normalized,{failed,_}}, read(F)),
+        ?assertMatch({normalized,{read,_,{failed,_}}}, read(F)),
         %% Release retains its epoch: the original bind never becomes valid again.
         ?assertMatch({normalized,{failed,_}}, action(F,bind(0,none,compact,eye))),
         ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(Ns,{physics_control,room,Human,3,none})),
@@ -33,7 +33,7 @@ binding_permission_and_geometry_guards_test_() ->
         commit(Ns,{assertz,{can_control_physics_agent,room,Human,compact}}),
         ?assertMatch({normalized,{committed,_,_}}, action(F,bind(0,none,compact,eye))),
         commit(Ns,{retract,{can_control_physics_agent,room,Human,compact}}),
-        ?assertMatch({normalized,{failed,_}},read(F)),
+        ?assertMatch({normalized,{read,_,{failed,_}}},read(F)),
         %% Revocation does not prevent releasing one's own existing selection.
         ?assertMatch({normalized,{committed,_,_}},action(F,
             {physics_control_agent,room,1,{controlled,compact,eye},none})),

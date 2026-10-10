@@ -1,0 +1,17 @@
+{
+  "scope": "independently checked after review, not reviewed by Fable in this packet",
+  "files": [
+    {
+      "file": "src/quod_foreign_projection.erl",
+      "sha256": "e4e82c1ac2da2aa4067f5a7199a89d356d7a8e84420853dc82cd20346f0082bf"
+    },
+    {
+      "file": "src/quod_ledger_store.erl",
+      "sha256": "463b29b6a0be9e607f4e71e229166b585d80bfab887685e207cfc88cef00ac3b"
+    },
+    {
+      "file": "native/quod_physics/src/lib.rs",
+      "sha256": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 -module(quod_physics_predicates).
 -import(quod_predicates, [fail_reason/2]).
--moduledoc "Governed live body queries and signed sample custody for physics.".
+-moduledoc "System physics bridges; each world's Prolog policy governs use and allocation.".
 -include_lib("erlog/src/erlog_int.hrl").
 -export([quod_predicate_module/0, load/1, physics_observation/3, signed_physics_request/3, current_signed_request/3]).
 -export([physics_body_state/3, physics_motion_query/3, sample_physics/3]).

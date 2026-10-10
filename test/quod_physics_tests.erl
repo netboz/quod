@@ -1,6 +1,126 @@
 -module(quod_physics_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+supported_geometry_signed_edit_test_() ->
+    Tetrahedron = [{vector,0,0,0},{vector,500,0,0},{vector,0,500,0},{vector,0,0,500}],
+    Shapes = [{box,fixed,{box,500,500,500}}, {ball,fixed,{ball,500}}, {capsule,fixed,{capsule,500,250}},
+        {convex,fixed,{convex,Tetrahedron}},
+        {dynamic_ball,dynamic,{ball,500}}, {controlled_capsule,controlled,{capsule,500,250}},
+        {dynamic_convex,dynamic,{convex,Tetrahedron}},
+        {parts,fixed,{parts,[{part,{pose,{vector,-750,0,0},{rotation,0,100,0}},{box,250,500,250}},
+                       {part,{vector,750,0,0},{ball,250}}]}},
+        {surface,fixed,{surface,[{vector,-500,0,-500},{vector,500,0,-500},{vector,0,0,500}],
+                           [{triangle,0,2,1}]}}],
+    [{atom_to_list(Name),{timeout,60,fun() ->
+        with_world(fun(F = #{namespace := Ns,node := Principal}) ->
+            {Pid,World} = enable(F),
+            #{World := #{spec := Spec}} = worlds(Ns), Fence = quod_physics:fence(Spec),
+            Expected = #{fence => Fence,structure => 1,tick => -1},
+            {ok,Before,_} = quod_physics:snapshot(Pid,Expected),
+            {2,1,world,_,Rotation,_} = lists:keyfind(2,1,maps:get(poses,Before)),
+            Move = {physics_move_body,room,2,1,1,{vector,4000,3000,0}},
+            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
+            commit(Ns,{assertz,{can_edit_physics,room,Principal}}),
+            MoveResult = door_action(Ns,Move),
+            ?assertMatch({ok,_,{normalized,{committed,_,_}}},MoveResult),
+            {Pid,World} = installed(Ns),
+            {ok,After,#{installs := Installs}} = quod_physics:snapshot(Pid,Expected#{structure => 2}),
+            {2,2,world,Position,Rotation,_} = lists:keyfind(2,1,maps:get(poses,After)),
+            ?assertEqual({4.0,3.0,0.0},Position),
+            ?assertEqual({error,unavailable},quod_physics:snapshot(Pid,Expected)),
+            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
+            await_source_receipt(MoveResult),
+            assert_no_physics_io(fun() ->
+                reconcile(Ns), reconcile(Ns),
+                ?assertMatch(#{installs := Installs},gen_server:call(Pid,status))
+            end)
+        end,fun(Rules) -> [case Rule of
+            {physics_body,room,2,1,_,_,_,_} ->
+                {physics_body,room,2,1,Kind,{pose,{vector,0,3000,0},{rotation,0,250,0}},Shape,1};
+            {physics_allowances,W,Limits,Step,_,Budget} ->
+                {physics_allowances,W,Limits,Step,0,Budget};
+            _ -> Rule
+        end || Rule <- Rules] end)
+    end}} || {Name,Kind,Shape} <- Shapes].
+
+invalid_geometry_signed_edit_leaves_state_unchanged_test_() ->
+    Surface = {surface,[{vector,0,0,0},{vector,500,0,0},{vector,0,0,500}],[{triangle,0,1,2}]},
+    Invalid = [{dynamic,Surface}, {controlled,Surface}, {fixed,{box,0,500,500}},
+        {fixed,{ball,1000001}}, {fixed,{capsule,0,100}}, {fixed,{parts,[]}},
+        {fixed,{parts,[{part,{vector,0,0,0},Surface}]}},
+        {fixed,{parts,[{part,{pose,{vector,0,0,0},{rotation,bad,0,0}},{ball,100}}]}},
+        {fixed,{convex,[{vector,0,0,0},{vector,500,0,0},{vector,0,0,500}]}},
+        {fixed,setelement(3,Surface,[{triangle,0,1,3}])},
+        {fixed,setelement(3,Surface,[{triangle,0,1,1}])}],
+    {timeout,60,fun() -> with_world(fun(#{namespace := Ns,node := Principal}) ->
+        commit(Ns,{assertz,{can_edit_physics,room,Principal}}),
+        lists:foreach(fun({Kind,Shape}) ->
+            Body = {physics_body,room,2,1,Kind,{vector,0,3000,0},Shape,1},
+            commit(Ns,{',',{retract,{physics_body,room,2,{'_'},{'_'},{'_'},{'_'},{'_'}}},
+                          {assertz,Body}}),
+            Height = quod_prolog:applied(Ns),
+            assert_reason({invalid_physics_body,2},door_action(Ns,
+                {physics_move_body,room,2,1,1,{vector,4000,3000,0}})),
+            ?assertEqual(Height,quod_prolog:applied(Ns)),
+            ?assertMatch({ok,[_],Height},quod_prolog:prove_ro(Ns,{',',Body,{physics_structure,room,1}})),
+            ?assertEqual(#{},worlds(Ns))
+        end,Invalid)
+    end) end}.
+
+numeric_geometry_and_hinge_refusals_test_() ->
+    {timeout,60,fun() -> with_door(fun(#{namespace := Ns}) ->
+        Huge = 1 bsl 2048,
+        Position = {vector,0,3000,0}, Shape = {box,500,500,500},
+        Bodies = [{physics_body,room,2,1,fixed,Position,Shape,Huge},
+            {physics_body,room,2,1,fixed,{pose,Position,{rotation,0,Huge,0}},Shape,1},
+            {physics_body,room,2,1,fixed,Position,
+                {parts,[{part,{vector,1000001,0,0},{ball,100}}]},1},
+            {physics_body,room,18446744073709551616,1,fixed,Position,Shape,1}],
+        lists:foreach(fun(Body) ->
+            commit(Ns,{assertz,Body}), Height = quod_prolog:applied(Ns), Id = element(3,Body),
+            assert_reason({invalid_physics_body,Id},door_action(Ns,
+                {physics_move_body,room,Id,1,2,{vector,4000,3000,0}})),
+            ?assertEqual(Height,quod_prolog:applied(Ns)), commit(Ns,{retract,Body})
+        end,Bodies),
+        Body = {physics_body,room,2,1,fixed,Position,Shape,1}, commit(Ns,{assertz,Body}),
+        BeforeRange = quod_prolog:applied(Ns),
+        assert_reason({coordinate_allowance,1000000},door_action(Ns,
+            {physics_move_body,room,2,1,2,{vector,1000001,3000,0}})),
+        ?assertEqual(BeforeRange,quod_prolog:applied(Ns)), commit(Ns,{retract,Body}),
+        Height = quod_prolog:applied(Ns),
+        assert_reason(unsupported_hinge_definition,door_action(Ns,
+            {physics_add_door,room,12,13,{local,basic_door,1},
+                {pose,Position,{rotation,0,250,0}},2})),
+        assert_reason(unsupported_hinge_definition,door_action(Ns,
+            {physics_move_door,room,10,0,2,{pose,Position,{rotation,0,250,0}}})),
+        ?assertEqual(Height,quod_prolog:applied(Ns)),
+        commit(Ns,{assertz,{physics_door_class,non_box,1,
+            {door,{box,50,1000,50},{ball,500},1,1500,{motor,100,10,1000,20}}}}),
+        AfterClass = quod_prolog:applied(Ns),
+        assert_reason(unsupported_hinge_definition,door_action(Ns,
+            {physics_add_door,room,12,13,{local,non_box,1},Position,2})),
+        ?assertEqual(AfterClass,quod_prolog:applied(Ns)),
+        ?assertEqual(#{},worlds(Ns))
+    end,false) end}.
+
+native_hinge_refuses_authored_rotation_test() ->
+    lists:foreach(fun(Rotated) ->
+        {ok,R} = quod_physics_native:new_world({2,2,4,100.0,2,0,0},1/60,0.0),
+        try
+            Frame = {1,1,fixed,{{0.0,0.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.05,1.0,0.05}},1.0},
+            Leaf = {2,1,dynamic,{{1.0,1.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0,1.0,0.1}},1.0},
+            Rows = [case Row of
+                {Rotated,Rev,Kind,{P,_},Shape,Density} ->
+                    {Rotated,Rev,Kind,{P,{0.0,0.25,0.0}},Shape,Density};
+                _ -> Row end || Row <- [Frame,Leaf]],
+            ?assertEqual({ok,2},quod_physics_native:install(R,Rows)),
+            Hinge = {2,1,1,{0.0,1.0,0.0},1.5,{100.0,10.0,1000.0,0.02}},
+            ?assertEqual({error,invalid_hinge},quod_physics_native:install_hinges(R,[{Hinge,1.5}])),
+            ?assertEqual({error,retired},quod_physics_native:hinge_samples(R)),
+            ?assertEqual({error,retired},quod_physics_native:sample(R))
+        after quod_physics_native:retire(R) end
+    end,[1,2]).
+
 optional_retained_world_test_() ->
     {timeout, 90, fun() ->
         with_world(fun(#{namespace := Ns, node := Node, key := Key}) ->
@@ -41,21 +161,66 @@ optional_retained_world_test_() ->
         end)
     end}.
 
+system_physics_world_policy_test_() ->
+    [{binary_to_list(Ns), {timeout, 60, fun() ->
+        with_world(Ns, fun(F = #{node := Principal}) ->
+            {ok, [#{'Manifest' := Manifest}], _} = quod_prolog:prove_ro(
+                Ns, {external_predicate_modules, {'Manifest'}}),
+            ?assertNot(lists:keymember(quod_physics_predicates, 1, Manifest)),
+            ?assertEqual(#{}, worlds(Ns)),
+            {Pid, World} = enable(F),
+            ?assertEqual({world_ref, Ns, quod_simplex:genesis_hash(Ns), room}, World),
+            #{World := #{spec := #{gravity := InstalledGravity}}} = worlds(Ns),
+            ?assertEqual(Gravity / 1000, InstalledGravity),
+            Goal = {physics_body_state, room, 1, {0}},
+            ?assertMatch({ok, _, {normalized,{read,_,{failed, _}}}}, body_read(Ns, Goal)),
+            case Permission of
+                allowed ->
+                    commit(Ns, {assertz, {can_read_physics_body, room, Principal, 1}}),
+                    ?assertMatch({ok, _, {normalized,{read,_,{answers, _, [_]}}}}, body_read(Ns, Goal));
+                denied ->
+                    commit(Ns, {assertz, {can_read_physics_body, another_space, Principal, 1}}),
+                    ?assertMatch({ok, _, {normalized,{read,_,{failed, _}}}}, body_read(Ns, Goal))
+            end,
+            %% A real instance-property edit reaches the retained resource selector.
+            %% Gravity requires a replacement run; the world identity stays fixed.
+            Monitor = monitor(process, Pid),
+            commit(Ns, {',', {retract, {attribute, room, gravity, Gravity}},
+                             {assertz, {attribute, room, gravity, 0}}}),
+            receive {'DOWN', Monitor, process, Pid, _} -> ok
+            after 10000 -> error(gravity_change_did_not_retire_run) end,
+            {Replacement, World} = installed(Ns),
+            ?assertNotEqual(Pid, Replacement),
+            #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(
+                Ns, {external_predicate_modules, Manifest}))
+        end, fun(Rules) ->
+            [case Rule of
+                 {physics_allowances, room, Limits, Step, _, Budget} ->
+                     {':-', {physics_allowances, {'W'}, Limits, Step, {'G'}, Budget},
+                            {attribute, {'W'}, gravity, {'G'}}};
+                 _ -> Rule
+             end || Rule <- Rules] ++ [{attribute, room, gravity, Gravity}]
+        end)
+    end}} || {Ns, Gravity, Permission} <-
+        [{<<"physics-policy-earth">>, -9800, allowed},
+         {<<"physics-policy-moon">>, -1620, denied}]].
+
 signed_live_body_predicate_test_() ->
     {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
         {Pid,World} = enable(F),
         Goal = {physics_body_state,room,1,{0}},
         commit(Ns,{assertz,{can_invoke,{physics_body_state,{'_'},{'_'},{'_'}},Human,{'_'},Ns}}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal)),
         commit(Ns,{assertz,{can_read_physics_body,room,Human,1}}),
         #{World := #{spec := Spec}} = worlds(Ns),
         Expected = #{fence => quod_physics:fence(Spec),structure => 1,
                      incarnation => maps:get(run_token,Spec)},
         ?assertMatch({ok,_,{1,1,world,_,_,_}},quod_physics:body_state(Pid,Expected,{1,1},1000)),
-        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         #{installs := Installs,queries := Queries} = gen_server:call(Pid,status),
         assert_no_physics_io(fun() ->
-            [?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal))
+            [?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal))
              || _ <- lists:seq(1,3)]
         end),
         ?assertMatch(#{installs := Installs,queries := Q} when Q =:= Queries+3,
@@ -67,10 +232,10 @@ signed_live_body_predicate_test_() ->
         commit(Ns,{assertz,{can_invoke,{'$quod_sample_physics',{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Human,{'_'},Ns}}),
         Frame = {physics_frame,World,maps:get(authority,Spec),maps:get(epoch,Spec),
                  maps:get(generation,Spec),maps:get(run_token,Spec),1},
-        ?assertMatch({ok,_,{normalized,{error,_}}},
+        ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},
                      body_read(Ns,{'$quod_sample_physics',forged,{physics_body_state,room,1},Frame,1,none,{0}})),
         commit(Ns,{retract,{can_read_physics_body,room,Human,1}}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Goal))
+        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal))
     end) end}.
 
 body_read(Ns,Goal) ->
@@ -78,10 +243,14 @@ body_read(Ns,Goal) ->
         crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
     quod_client_goal_ingress:submit(Bytes,Signature).
 
+assert_reason(Reason,{ok,E,{normalized,{read,_,Outcome}}}) ->
+    assert_reason(Reason,{ok,E,{normalized,Outcome}});
 assert_reason(Reason,{ok,_,{normalized,{failed,Blob}}}) ->
     {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
     ?assert(lists:member(Reason,Reasons)).
 
+assert_reason_count(Reason, Count, {ok,E,{normalized,{read,_,Outcome}}}) ->
+    assert_reason_count(Reason,Count,{ok,E,{normalized,Outcome}});
 assert_reason_count(Reason, Count, {ok,_,{normalized,{failed,Blob}}}) ->
     {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
     ?assertEqual(Count,length([R || R <- Reasons,R =:= Reason])).
@@ -132,6 +301,13 @@ hot_control_policy_reasons_test_() ->
         assert_reason_count({ambiguous_agent,pilot},0,body_read(Ns,
             {physics_agent_configuration,room,Human,pilot,eye,setelement(3,Definition,99)})),
         Go = {physics_control_input,room,Frame,1,1,{drive,{vector,0,0,0},{angular,0,0,0}},{0}},
+        [begin
+            {ok,_,{normalized,{failed,Reasons}}} = control_goal({'::',Ns,setelement(6,Go,Input)}),
+            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+            ?assertEqual([],[R || R = {coordinate_allowance,_} <- Decoded])
+        end || Input <- [{drive,{vector,2001,0,0},{angular,0,0,0}},
+                         {drive,{vector,0,0,0},{angular,0,1601,0}},
+                         {push,{body,3,1},{vector,5001,0,0}}]],
         Checkpoint = {physics_checkpoint_body,room,3,1,0,<<209:256>>},
         assert_reason({control_conflict,1},door_action(Ns,{physics_control_agent,room,0,none,none})),
         Other = {agent_instance_ref,<<"other">>,<<99:256>>,someone},
@@ -198,7 +374,7 @@ hot_control_policy_reasons_test_() ->
         commit(Ns,{assertz,PushPolicy}),
         SmallPush = {physics_push_allowances,room,{'_'},3,{push_limits,1,5000}},
         commit(Ns,{asserta,SmallPush}),
-        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,{',',
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,{',',
             {physics_push_configuration,room,Human,3,1,{0},5000},
             {'>',{0},1000}})),
         commit(Ns,{'$quod_retract_exact',SmallPush}),
@@ -208,12 +384,16 @@ hot_control_policy_reasons_test_() ->
         QueryPolicy = {physics_query_allowances,room,Human,{query_allowances,2,0,8,128,1,1000}},
         commit(Ns,{',',{assertz,QueryPolicy},
             {assertz,setelement(4,QueryPolicy,{query_allowances,2,0,8,128,2000,1000})}}),
-        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,
             setelement(4,Query,{travel,{vector,1000,0,0},{angular,0,0,0}}))),
+        {ok,_,{normalized,{read,_,{failed,QueryReasons}}}} = body_read(Ns,
+            setelement(4,Query,{travel,{vector,2001,0,0},{angular,0,0,0}})),
+        {ok,DecodedQueryReasons} = quod_wire_term:decode_failure_reasons(QueryReasons),
+        ?assertEqual([],[R || R = {coordinate_allowance,_} <- DecodedQueryReasons]),
         Allowances = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
         commit(Ns,{retract,Allowances}),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{physics_view,room,[]}}}),
-        assert_reason({allowances_missing,room},body_read(Ns,{physics_client_view,{0}}))
+        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        assert_view_selection(unavailable,body_read(Ns,{client_world_view,room,playing,[],{0}}))
         after sys:resume(Runtime) end
     end) end}.
 
@@ -227,14 +407,14 @@ hot_control_error_and_owner_results_test_() ->
         Go = {physics_control_input,room,ControlFrame,1,1,Drive,{0}},
         Read = {physics_body_state,room,1,{0}},
         commit(Ns,{assertz,{can_read_physics_body,room,Human,1}}),
-        [?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Goal)) || Goal <-
+        [?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Goal)) || Goal <-
             [{physics_body_state,room,{0},{1}}, {physics_body_state,room,bad_body,{0}},
              {physics_body_state,room,-1,{0}},
              {physics_motion_query,room,1,{0},{1}},
              {'$quod_sample_physics',forged,{physics_body_state,room,1},Frame,1,none,{0}}]],
         ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,setelement(6,Go,{0})})),
         ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Read)),
-        ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Go)),
+        ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Go)),
         ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Go)),
         ?assertMatch({ok,_,{normalized,{error,_}}},control_goal({'::',Ns,
             {'$quod_stage_physics_input',forged,Go,none,500,{query_limits,2,0,8,128},{0}}})),
@@ -244,15 +424,15 @@ hot_control_error_and_owner_results_test_() ->
             remove_physics_policy(Ns,physics_body_read_projection),
             Policy = fun(Fence,Revision) -> {physics_body_read_projection,room,1,Fence,Revision} end,
             Bad = Policy(invalid_frame,1), commit(Ns,{assertz,Bad}),
-            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
+            ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Read)),
             commit(Ns,{retract,Bad}), WrongWorld = setelement(2,Frame,setelement(4,World,other)),
             Wrong = Policy(WrongWorld,1), commit(Ns,{assertz,Wrong}),
-            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
+            ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Read)),
             commit(Ns,{retract,Wrong}), BadRevision = Policy(Frame,0), commit(Ns,{assertz,BadRevision}),
-            ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Read)),
+            ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Read)),
             commit(Ns,{retract,BadRevision}), MissingSample = Policy(Frame,2), commit(Ns,{assertz,MissingSample}),
             %% Missing body/revision is an explicit sample answer, not owner loss.
-            {ok,_,{normalized,{answers,_,[SampleBinding]}}} = body_read(Ns,Read),
+            {ok,_,{normalized,{read,_,{answers,_,[SampleBinding]}}}} = body_read(Ns,Read),
             {ok,SamplePairs} = quod_client_result:decode_binding(SampleBinding),
             ?assertEqual([unavailable],[Value || {_,Value} <- SamplePairs]),
             commit(Ns,{retract,MissingSample}), commit(Ns,{assertz,Policy(Frame,1)}),
@@ -298,9 +478,9 @@ signed_motion_query_owner_test_() ->
         Goal = {physics_motion_query,room,2,{travel,{vector,5000,0,2000},{angular,0,0,0}},{0}},
         commit(Ns,{',',{assertz,{can_invoke,{physics_motion_query,{'_'},{'_'},{'_'},{'_'}},Human,{'_'},Ns}},
             {assertz,{physics_query_allowances,room,Human,{query_allowances,2,0,8,128,20000,3141}}}}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal)),
         commit(Ns,{assertz,{can_query_physics_motion,room,Human,2,{'_'}}}),
-        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         %% A write-mode proof cannot use a live query to admit a durable edit.
         ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Goal)),
         #{World := #{spec := Spec}} = worlds(Ns),
@@ -312,7 +492,7 @@ signed_motion_query_owner_test_() ->
         ?assert(X < 1.4 andalso X > 1.39), ?assert(abs(Z-2.0) < 0.001),
         {ok,_,Before} = quod_physics:body_state(Pid,Expected,{2,1},1000),
         assert_no_physics_io(fun() ->
-            [?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal)) || _ <- lists:seq(1,3)]
+            [?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)) || _ <- lists:seq(1,3)]
         end),
         ?assertMatch({ok,_,Before},quod_physics:body_state(Pid,Expected,{2,1},1000)),
         ?assertMatch({ok,_,{occupied,3,_}},quod_physics:motion_query(Pid,Expected,{2,1},
@@ -320,9 +500,9 @@ signed_motion_query_owner_test_() ->
         ?assertMatch({ok,_,exhausted},quod_physics:motion_query(Pid,Expected,{2,1},Query,{query_limits,2,0,8,1},1000)),
         ?assertMatch({ok,_,unavailable},quod_physics:motion_query(Pid,Expected,{2,0},Query,Limits,1000)),
         ?assertMatch({error,unavailable},quod_physics:motion_query(Pid,Expected#{structure => 0},{2,1},Query,Limits,1000)),
-        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         commit(Ns,{retract,{can_query_physics_motion,room,Human,2,{'_'}}}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},body_read(Ns,Goal))
+        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal))
     end,fun(Rules) ->
         [case Rule of
             {physics_body,room,2,1,_,_,_,_} ->
@@ -345,7 +525,7 @@ signed_control_releases_only_successful_proof_test_() ->
              {Drive,Limits},quod_time:now_ms()+500,quod_time:mono_ms()-1})),
         Command = fun(Seq,Input) -> {physics_control_input,room,Frame,1,Seq,Input,{0}} end,
         Go = Command(10,Drive),
-        ?assertMatch({ok,_,{normalized,{error,_}}},body_read(Ns,Go)),
+        ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Go)),
         ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Go)),
         ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,{',',Go,fail}})),
         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
@@ -520,13 +700,11 @@ foreign_signed_control_view_and_reconnect_test_() ->
         Motion = {motion,free,2000,1600,500,{query_limits,2,0,8,128},[]},
         {_,_,_,Ref,_} = install_test_control(F,Pid,World,Motion),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{physics_view,room,[]}}}),
+        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
         reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
             Session = simulation_session(Identity),
-            Socket ! {client,simulation_open(F,Session,{agent_instance_ref,<<"absent-signer">>,<<77:256>>,human})},
-            ?assertMatch(#{<<"reason">> := <<"local_authority_required">>},simulation_reply(Socket,<<"unavailable">>)),
             Open = fun() -> Socket ! {client,simulation_open(F,Session,Human)} end,
             Open(), First = simulation_reply(Socket,<<"projection">>),
             Frame = maps:get(<<"frame">>,First),
@@ -546,7 +724,7 @@ foreign_signed_control_view_and_reconnect_test_() ->
             _ = simulation_reply(Socket,<<"refresh">>),
             commit(Ns,{assertz,{physics_agent,room,pilot,2,2,Motion}}),
             Open(),
-            ?assertMatch(#{<<"reason">> := <<"view_not_authorized_or_ready">>},simulation_reply(Socket,<<"unavailable">>))
+            ?assertMatch(#{<<"selection">> := <<"unavailable">>},simulation_reply(Socket,<<"projection">>))
         after Socket ! stop end
     end,fun(Rules) -> [case R of
         {physics_body,room,2,1,_,_,_,_} ->
@@ -573,7 +751,7 @@ changed_control_view_retains_sequence_test_() ->
                 {drive,{vector,0,0,0},{angular,0,0,0}},{0}}})),
         _ = input_frame(Pid,Ref,Human,7),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
-        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{physics_view,room,[]}}}),
+        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,
             {physics_move_body,room,2,1,1,{vector,-3000,1000,0}})),
         {Pid,World} = installed(Ns),
@@ -675,6 +853,186 @@ current_view_credit_and_revision_test_() ->
         quod_physics:unwatch(Pid, Fresh)
     end) end}.
 
+ordinary_space_views_test_() ->
+    [{binary_to_list(Ns),{timeout,60,fun() -> with_world(Ns,
+      fun(F = #{namespace := N,node := Human,identity := Identity}) ->
+        Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        Session = simulation_session(Identity),
+        Open = fun() -> Socket ! {client,simulation_open(F,Session,Human)} end,
+        Selection = fun(Expected) ->
+            Open(), ?assertEqual(Expected,maps:get(<<"selection">>,simulation_reply(Socket,<<"projection">>)))
+        end,
+        Change = fun(Goal) -> commit(N,Goal), _ = simulation_reply(Socket,<<"refresh">>) end,
+        try
+            Selection(<<"disabled">>),
+            ?assertEqual(#{},worlds(N)),
+            #{timer := Timer,installed := true} = simulation_state(Socket),
+            Socket ! {timeout,Timer,expired}, _ = simulation_reply(Socket,<<"refresh">>),
+            Selection(<<"disabled">>),
+            Change({retract,{can_view_physics,room,{'_'}}}), Selection(<<"denied">>),
+            Change({assertz,{can_view_physics,room,{'_'}}}), Selection(<<"disabled">>),
+            {_Pid,_World} = enable(F), _ = simulation_reply(Socket,<<"refresh">>),
+            Selection(<<"active">>),
+            Change({',',{retract,{instance_of,physical_space,room}},
+                        {assertz,{instance_of,space,room}}}),
+            reconcile(N), ?assertEqual(#{},worlds(N)),
+            ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(N,{agent_hosting_projection,all,Human,all,[]})),
+            Selection(<<"nonphysical">>),
+            Change({assertz,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
+            Selection(<<"unavailable">>),
+            Change({retract,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
+            Selection(<<"nonphysical">>),
+            Change({assertz,{world_view,room,playing,[{mark,<<"other">>,<<"group">>,[],
+                {transform,0,0,0,0,0,0},no_surface,unlabelled,depicts_nothing}]}}), Selection(<<"unavailable">>),
+            Socket ! {client,simulation_open(F#{space => absent},Session,Human)},
+            ?assertMatch(#{<<"selection">> := <<"unavailable">>},simulation_reply(Socket,<<"projection">>))
+        after Socket ! stop end
+      end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},{world_view,room,playing,[]}] end)
+    end}} || Ns <- [<<"ordinary-workshop">>,<<"ordinary-observatory">>]].
+
+navigation_dependencies_fence_view_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human,identity := Identity}) ->
+        Rendering = <<"physics-test-rendering">>, Anchor = quod_simplex:genesis_hash(Rendering),
+        Height = quod_prolog:applied(Rendering), OriginHeight = quod_prolog:applied(element(2,Human)),
+        Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        Session = simulation_session(Identity),
+        Open = fun(H) -> Socket ! {client,simulation_open(F#{dependencies =>
+            [{dependency,Rendering,Anchor,H}]},Session,Human)} end,
+        try
+            Open(Height), _ = simulation_reply(Socket,<<"projection">>),
+            commit(Rendering,{assertz,{navigation_policy,changed}}),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            ?assertEqual(OriginHeight,quod_prolog:applied(element(2,Human))),
+            Open(Height), ?assertMatch(#{<<"reason">> := <<"navigation_changed">>},simulation_reply(Socket,<<"refresh">>)),
+            ?assertNot(maps:is_key(installed,simulation_state(Socket))),
+            Open(quod_prolog:applied(Rendering)), _ = simulation_reply(Socket,<<"projection">>),
+            Open(18446744073709551615),
+            ?assertMatch(#{<<"reason">> := <<"navigation_changed">>},simulation_reply(Socket,<<"refresh">>)),
+            Fenced = F#{dependencies => [{dependency,Rendering,<<99:256>>,0}]},
+            Socket ! {client,simulation_open(Fenced,Session,Human)},
+            ?assertMatch(#{<<"reason">> := <<"navigation_changed">>},simulation_reply(Socket,<<"refresh">>)),
+            ?assertNot(maps:is_key(installed,simulation_state(Socket))),
+            ?assertEqual(#{},worlds(Ns))
+        after Socket ! stop end
+    end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},{world_view,room,playing,[]}] end) end}.
+
+opening_worker_cancellation_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{node := Human,identity := Identity}) ->
+        Parent = self(), Socket = spawn(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        Session = simulation_session(Identity), Source = quod_reg:where({quod_prolog,element(2,Human)}),
+        ok = sys:suspend(Source),
+        try
+            Open = fun() -> Socket ! {client,simulation_open(F,Session,Human)} end,
+            Socket ! {client,simulation_open(F#{expires => 18446744073709551615},Session,Human)},
+            ?assertMatch(#{<<"reason">> := <<"invalid_view_deadline">>},simulation_reply(Socket,<<"unavailable">>)),
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+            Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
+            M = monitor(process,Worker),
+            Socket ! {timeout,Timer,expired},
+            ?assertMatch(#{<<"reason">> := <<"expired">>},simulation_reply(Socket,<<"unavailable">>)),
+            receive {'DOWN',M,process,Worker,killed} -> ok after 5000 -> error(opening_not_cancelled) end,
+            receive {simulation_opening_down,Socket,Worker} -> ok after 5000 -> error(socket_cleanup_missing) end,
+            Socket ! {view_opened,Ref,retired_result},
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+            Open(), #{opening := {_,Fresh,_}} = simulation_state(Socket),
+            Open(),
+            ?assertMatch(#{<<"reason">> := <<"dependency_recovering">>},simulation_reply(Socket,<<"unavailable">>)),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            receive {simulation_opening_down,Socket,Fresh} -> ok after 5000 -> error(reopen_cleanup_missing) end,
+            Open(), #{opening := {_,Last,_}} = simulation_state(Socket),
+            LastMonitor = monitor(process,Last), exit(Socket,kill),
+            receive {'DOWN',LastMonitor,process,Last,killed} -> ok
+            after 5000 -> error(socket_did_not_reap_opening) end
+        after catch sys:resume(Source), exit(Socket,kill) end
+    end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},{world_view,room,playing,[]}] end) end}.
+
+assert_view_selection(Selection,{ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
+    {ok,Pairs} = quod_client_result:decode_binding(Blob),
+    ?assert(lists:any(fun({_,{world_view,_,_,S}}) -> S =:= Selection; (_) -> false end,Pairs)).
+
+signed_mixed_view_uses_rendering_policy_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns}) ->
+        _ = enable(F),
+        Body = {mark,<<"body">>,<<"group">>,[],{body_pose,1,1},no_surface,unlabelled,
+                {depicts,<<"source-instance">>,<<91:256>>,object}},
+        Decoration = {mark,<<"decoration">>,<<"group">>,[],
+                       {relative,<<"body">>,{transform,0,1000,0,0,0,0}},
+                       no_surface,unlabelled,depicts_nothing},
+        Read = fun(Marks) ->
+            commit(Ns,{assertz,{world_view,room,playing,Marks}}),
+            Result = body_read(Ns,{client_world_view,room,playing,[],{0}}),
+            commit(Ns,{retract,{world_view,room,playing,Marks}}), Result
+        end,
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},Read([Body,Decoration])),
+        Twin = setelement(2,Body,<<"second-occurrence">>),
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},Read([Body,Twin,Decoration])),
+        lists:foreach(fun(Marks) ->
+            assert_view_selection(unavailable,Read(Marks))
+        end,[[Decoration,Body], [Body,Body], [setelement(8,Body,depicts_nothing)],
+             [setelement(5,Body,{body_pose,1,2})],
+             [Body,setelement(5,Decoration,{relative,<<"body">>,{transform,0,0.5,0,0,0,0}})]]),
+        RenderingNs = <<"physics-test-rendering">>,
+        commit(RenderingNs,{',',{retract,{limit,<<"scene">>,512}},
+                               {assertz,{limit,<<"scene">>,2}}}),
+        ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},Read([Body,Decoration])),
+        assert_view_selection(unavailable,Read([Body,Twin,Decoration]))
+    end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}}] end) end}.
+
+registered_view_dependency_waits_for_replay_test_() ->
+    {timeout,30,fun() -> with_world(fun(#{namespace := Ns}) ->
+        %% Enter at the retained-view dependency seam, after proof admission.
+        %% Hold the real consensus owner so a restarted engine registers while
+        %% still unable to reconstruct its committed projection.
+        Sup = quod_reg:where({quod_ns,Ns}),
+        Simplex = quod_reg:where({quod_simplex,Ns}),
+        Anchor = quod_simplex:genesis_hash(Ns), Height = quod_prolog:applied(Ns),
+        [ok = supervisor:terminate_child(Sup,Child) ||
+            Child <- [quod_runtime,quod_feed,quod_catchup,quod_prolog]],
+        ?assertEqual(undefined,quod_reg:where({quod_prolog,Ns})),
+        ok = sys:suspend(Simplex),
+        Parent = self(),
+        Socket = spawn_link(fun() ->
+            true = quod_reg:subscribe({runtime,Ns}),
+            Name = quod_reg:monitor_name({quod_prolog,Ns},follow),
+            Timer = erlang:start_timer(10000,self(),expired),
+            State = #{peer => {127,0,0,1},timer => Timer,
+                pending => {<<0:256>>,quod_time:now_ms()+10000,fail},
+                heights => #{Ns => Height},anchors => #{Ns => Anchor},owners => #{},
+                local_ready => #{Ns => false},dependency_monitors => #{},
+                dependency_names => #{Name => Ns},follows => #{},
+                follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
+            Parent ! {dependency_following,self()},
+            simulation_socket(Parent,State)
+        end),
+        Monitor = monitor(process,Socket),
+        try
+            receive {dependency_following,Socket} -> ok
+            after 1000 -> error(dependency_follow_not_installed) end,
+            {ok,Engine} = supervisor:restart_child(Sup,quod_prolog),
+            Paused = simulation_reply(Socket,<<"unavailable">>),
+            ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,Paused)),
+            State = simulation_state(Socket),
+            ?assertEqual(#{Engine => Ns},maps:get(owners,State)),
+            ?assertEqual(#{Ns => {recovering,{Engine,boot}}},maps:get(local_ready,State)),
+            ?assertEqual(#{},maps:get(dependency_names,State)),
+            ?assertNot(maps:is_key(pid,State)),
+            ok = sys:resume(Simplex),
+            %% Boot readiness becomes the exact replay run before ready. Both
+            %% notifications come from the actual engine, not the test.
+            Replaying = simulation_reply(Socket,<<"unavailable">>),
+            ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,Replaying)),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+            ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns)),
+            ?assert(quod_prolog:applied(Ns) >= Height)
+        after
+            _ = catch sys:resume(Simplex),
+            Socket ! stop,
+            receive {'DOWN',Monitor,process,Socket,_} -> ok
+            after 1000 -> error(dependency_socket_not_stopped) end
+        end
+    end) end}.
+
 signed_client_view_lifecycle_test_() ->
     {timeout, 90, fun() -> with_door(fun(F = #{namespace := Ns, identity := Identity}) ->
         {Pid, World} = enable(F),
@@ -691,6 +1049,52 @@ signed_client_view_lifecycle_test_() ->
             FirstFrame = maps:get(<<"frame">>, First),
             ?assertEqual(1, length(maps:get(<<"poses">>, FirstFrame))),
             ?assertEqual(<<"10">>, maps:get(<<"body">>, hd(maps:get(<<"poses">>, FirstFrame)))),
+            {ok, #{goal := ParsedMarks}} = quod_client_goal_parser:parse(
+                <<(maps:get(<<"marks">>, First))/binary, ".">>, 3),
+            {ok, ProjectedMarks} = quod_wire_term:materialize_symbols(ParsedMarks),
+            ?assertMatch([{mark,<<"frame">>,_,_,{transform,5000,2000,3000,0,90,0},_,_,depicts_nothing},
+                          {mark,<<"door">>,_,_,{relative,<<"frame">>,{body_pose,10,_}},_,_,
+                           {depicts,<<"foreign-subject">>,<<99:256>>,door}},
+                          {mark,<<"decoration">>,_,_,{relative,<<"door">>,_},_,_,depicts_nothing}], ProjectedMarks),
+            %% The shared rendering policy is a real third proof dependency.
+            %% Denial retains its subscription, so a grant wakes the same view.
+            Rendering = <<"physics-test-rendering">>,
+            #{heights := ViewHeights} = simulation_state(Socket),
+            ?assertEqual(quod_prolog:applied(Rendering),maps:get(Rendering,ViewHeights)),
+            commit(Rendering,{',',{retract,{limit,<<"scene">>,512}},
+                                  {assertz,{limit,<<"scene">>,2}}}),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            Open(), ?assertMatch(#{<<"selection">> := <<"unavailable">>},simulation_reply(Socket,<<"projection">>)),
+            ?assertNot(maps:is_key(pid,simulation_state(Socket))),
+            commit(Rendering,{',',{retract,{limit,<<"scene">>,2}},
+                                  {assertz,{limit,<<"scene">>,512}}}),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            Open(), _ = simulation_reply(Socket,<<"projection">>),
+            %% Hold the real engine's snapshot reply. The socket must still
+            %% process expiry and cancel its request without re-proving.
+            RenderingEngine = quod_reg:where({quod_prolog,Rendering}),
+            SnapshotGate = fun(armed,{in,{'$gen_call',_,get_stats}},_) ->
+                Parent ! {snapshot_waiting,self()},
+                receive release_snapshot -> released end;
+                (State,_,_) -> State
+            end,
+            ok = sys:install(RenderingEngine,{SnapshotGate,armed}),
+            try
+                Open(),
+                receive {snapshot_waiting,RenderingEngine} -> ok
+                after 5000 -> error(snapshot_not_requested) end,
+                #{timer := SnapshotTimer,snapshots := Requests} = simulation_state(Socket),
+                ?assert(gen_server:reqids_size(Requests) > 0),
+                ?assertNot(maps:is_key(pid,simulation_state(Socket))),
+                Socket ! {timeout,SnapshotTimer,expired},
+                ?assertEqual(<<"expired">>,maps:get(<<"reason">>,
+                    simulation_reply(Socket,<<"unavailable">>))),
+                ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket))
+            after
+                RenderingEngine ! release_snapshot,
+                sys:remove(RenderingEngine,SnapshotGate)
+            end,
+            Open(), _ = simulation_reply(Socket,<<"projection">>),
             %% Appearance is a durable view change, never a physical reset.
             Before = gen_server:call(Pid, status),
             commit(Ns, {',', {retract, {view_colour, <<"#FFFFFF">>}},
@@ -721,7 +1125,7 @@ signed_client_view_lifecycle_test_() ->
                 ?assertEqual(<<"waiting_for_installation">>,
                     maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
                 #{timer := WaitingTimer} = simulation_state(Socket),
-                Socket ! {timeout, WaitingTimer, waiting_expired},
+                Socket ! {timeout, WaitingTimer, expired},
                 ?assertEqual(<<"expired">>,
                     maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
                 ?assertEqual(#{peer => {127,0,0,1}}, simulation_state(Socket))
@@ -754,9 +1158,10 @@ signed_client_view_lifecycle_test_() ->
             commit(Ns, {retract, {can_view_physics, room, {'_'}}}),
             _ = simulation_reply(Socket, <<"refresh">>),
             Open(),
-            ?assertEqual(<<"view_not_authorized_or_ready">>,
-                         maps:get(<<"reason">>, simulation_reply(Socket, <<"unavailable">>))),
+            ?assertEqual(<<"denied">>,
+                         maps:get(<<"selection">>, simulation_reply(Socket, <<"projection">>))),
             commit(Ns, {assertz, {can_view_physics,room,{'_'}}}),
+            _ = simulation_reply(Socket, <<"refresh">>),
             commit(Ns, {',', {retract, {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000}},
                             {assertz, {physics_allowances,room,{limits,1,1,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000}}}),
             receive {physics_status,_,_,World,_,{failed,body_allowance}} -> ok
@@ -767,14 +1172,18 @@ signed_client_view_lifecycle_test_() ->
         after Socket ! stop end
     end, false, fun(Rules) ->
         Ns = <<"host-test-agent">>,
-        Marks = [{mark, <<"door">>, <<"box">>,
+        Marks = [{mark, <<"frame">>, <<"group">>, [],
+                  {transform,5000,2000,3000,0,90,0},no_surface,unlabelled,depicts_nothing},
+                 {mark, <<"door">>, <<"box">>,
                   [{f,<<"width">>,2000},{f,<<"height">>,2000},{f,<<"depth">>,200}],
-                  {body_pose,10,{'R'}}, {surface,{'Colour'},0,900,0,[]}, unlabelled,
-                  {depicts,Ns,{'Anchor'},door}}],
-        Rules ++ [{can_invoke,{',',{current_ontology_identity,Ns,{'_'}},{physics_client_view,{'_'}}},
+                  {relative,<<"frame">>,{body_pose,10,{'R'}}}, {surface,{'Colour'},0,900,0,[]}, unlabelled,
+                  {depicts,<<"foreign-subject">>,<<99:256>>,door}},
+                 {mark,<<"decoration">>,<<"group">>,[],
+                  {relative,<<"door">>,{transform,1000,0,0,0,0,45}},no_surface,unlabelled,depicts_nothing}],
+        Rules ++ [{can_invoke,{',',{current_ontology_identity,Ns,{'_'}},{client_world_view,room,playing,{'_'},{'_'}}},
                     {agent_instance_ref,Ns,{'_'},viewer},{'_'},Ns},
                   {can_view_physics,room,{'_'}}, {view_colour,<<"#FFFFFF">>},
-                  {':-', {physics_view,room,Marks},
+                  {':-', {world_view,room,playing,Marks},
                     {',', {current_ontology_identity,Ns,{'Anchor'}},
                       {',', {view_colour,{'Colour'}},
                             {physics_body,room,10,{'R'},{'_'},{'_'},{'_'},{'_'}}}}}]
@@ -792,16 +1201,18 @@ simulation_session(Identity = #{pubkey := Pub}) ->
 simulation_open(#{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session) ->
     simulation_open(#{namespace => Ns,reference => {agent_instance_ref,Ns,Anchor,viewer},identity => Identity},
                     Session,{agent_instance_ref,Ns,Anchor,viewer}).
-simulation_open(#{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session,
+simulation_open(F = #{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session,
                 {agent_instance_ref,Source,SourceAnchor,Instance}) ->
     %% Render a named View binding with the same anchored goal as the client.
     Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns)," :: (current_ontology_identity(",
-        quod_client_goal_parser:value_text(Ns),",",quod_client_goal_parser:value_text(Anchor),"), physics_client_view(View))."]),
+        quod_client_goal_parser:value_text(Ns),",",quod_client_goal_parser:value_text(Anchor),"), client_world_view(",
+        quod_client_goal_parser:value_text(maps:get(space,F,room)),",playing,",
+        quod_client_goal_parser:value_text(maps:get(dependencies,F,[])),",View))."]),
     {ok,InstanceText} = quod_client_goal_parser:format(Instance),
     Request = #{network_identity => <<42:256>>, agent_namespace => Source,
         agent_genesis_anchor => SourceAnchor, agent_instance_text => InstanceText,
         signing_public_key => maps:get(pubkey, Identity), operation_id => crypto:strong_rand_bytes(32),
-        not_after_ms => quod_time:now_ms()+30000, mode => read, parser_version => 3,
+        not_after_ms => maps:get(expires,F,quod_time:now_ms()+30000), mode => read, parser_version => 3,
         goal_text => Goal},
     {ok, Bytes} = quod_client_goal:encode(Request),
     Enc = fun(B) -> base64:encode(B, #{mode => urlsafe, padding => false}) end,
@@ -829,6 +1240,10 @@ simulation_socket(Parent, S) ->
                 {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
                 Other -> error({invalid_socket_result, Other})
             end,
+            case {Message,S} of
+                {{'DOWN',M,process,P,_},#{opening := {_,P,M}}} -> Parent ! {simulation_opening_down,self(),P};
+                _ -> ok
+            end,
             simulation_socket(Parent, Next)
     end.
 
@@ -839,9 +1254,11 @@ simulation_state(Socket) ->
 
 with_world(Fun) -> with_world(Fun, fun(Rules) -> Rules end).
 with_world(Fun, Transform) ->
-    Ns = <<"host-test-agent">>,
+    with_world(<<"host-test-agent">>, Fun, Transform).
+with_world(Ns, Fun, Transform) ->
     Actor = {agent_instance_ref, Ns, {'_'}, actor},
     Rules = quod_prolog:read_terms("priv/ontologies/quod_physics.pl") ++
+        quod_prolog:read_terms("priv/ontologies/space.pl") ++ [{instance_of,physical_space,room}] ++
         [{can_invoke, {physics_store_request, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {can_invoke, {physics_activate, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {can_invoke, {physics_cancel_activation, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
@@ -850,7 +1267,17 @@ with_world(Fun, Transform) ->
          {physics_allowances, room, {limits, 64, 64, 256, 1000000,{geometry,256,4096,4096}}, 16667, -9810, 10000},
          {physics_body, room, 1, 1, fixed, {vector,0,-500,0}, {box,10000,500,10000}, 1},
          {physics_body, room, 2, 1, dynamic, {vector,0,3000,0}, {box,500,500,500}, 1}],
-    try quod_agent_hosting_tests:with_host(Fun, Transform(Rules))
+    WithRendering = fun(F = #{directory := Dir, identity := Identity}) ->
+        RenderingNs = <<"physics-test-rendering">>,
+        Rendering = quod_agent_hosting_tests:start_ontology(RenderingNs, Dir, Identity,
+            quod_prolog:genesis_diff("priv/ontologies/quod_rendering.pl"),
+            [{can_invoke,{'_'},{node,maps:get(pubkey,Identity)},{'_'},RenderingNs}]),
+        try
+            commit(Ns, {assertz, {rendering_vocabulary, RenderingNs, quod_simplex:genesis_hash(RenderingNs)}}),
+            Fun(F)
+        after quod_agent_hosting_tests:stop_ontology(Rendering) end
+    end,
+    try quod_agent_hosting_tests:with_host(WithRendering, Transform(Rules), current, Ns)
     after catch quod_reg:unsubscribe({physics, Ns}) end.
 
 worlds(Ns) -> gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds).
@@ -921,10 +1348,11 @@ sleeping_world_and_unchanged_cost_test_() ->
 assert_no_physics_io(Fun) ->
     Collector = spawn_link(fun() -> trace_calls([]) end),
     Trace = trace:session_create(physics_unchanged, Collector, []),
-    Watched = [{quod_physics_native,new_world,3}, {quod_ledger_store,fold,5},
+    Watched = [{quod_physics_native,new_world,3}, {quod_ledger_store,append,2}, {quod_ledger_store,fold,5},
                {quod_ledger_store,fold_groups,3}, {quod_ledger_store,open,3},
                {quod_file,write_atomic,3}, {dets,insert,2}, {dets,sync,1}, {file,write,2}, {file,sync,1}, {file,datasync,1}],
-    [trace:function(Trace, MFA, true, [local]) || MFA <- Watched],
+    Match = [{'_',[],[{message,{caller}}]}],
+    [trace:function(Trace, MFA, Match, [local]) || MFA <- Watched],
     trace:process(Trace, all, true, [call]),
     try
         Fun(),
@@ -996,8 +1424,40 @@ enable(#{namespace := Ns, node := Node, key := Key}) ->
     installed(Ns).
 trace_calls(Acc) ->
     receive
-        {trace, _, call, Call} -> trace_calls([Call | Acc]);
+        {trace, Pid, call, {M,F,Args}, Caller} ->
+            Keys = case catch gproc:info(Pid,gproc) of
+                {gproc,Entries} -> [Key || {Key,_} <- Entries];
+                _ -> []
+            end,
+            trace_calls([#{pid => Pid,call => {M,F,length(Args)},
+                           caller => Caller,registered_keys => Keys} | Acc]);
         {finish,From,Ref} -> From ! {trace_calls,Ref,lists:reverse(Acc)}
+    end.
+
+%% Target application finality can precede its source's durable receipt. Wait
+%% for that original operation before measuring unrelated unchanged checks.
+await_source_receipt({ok,#{operation_ref := Op = {operation,Ns,_,_,_}},
+                     {normalized,{committed,_,Target}}}) ->
+    Engine = quod_reg:where({quod_prolog,Ns}),
+    Monitor = monitor(process,Engine),
+    true = quod_reg:subscribe({runtime,Ns}),
+    try await_source_receipt(Engine,Monitor,Ns,Op,Target,quod_time:mono_ms()+5000)
+    after demonitor(Monitor,[flush]), quod_reg:unsubscribe({runtime,Ns}) end.
+
+await_source_receipt(Engine,Monitor,Ns,Op,Target,Deadline) ->
+    Remaining = Deadline-quod_time:mono_ms(),
+    ?assert(Remaining > 0),
+    {ok,#{applied_floor := Floor,outcome := Outcome}} =
+        quod_prolog:outcome_snapshot(Ns,Op,Remaining),
+    case Outcome of
+        #{operation_state := terminal,receipt_height := Height,
+          outcome_ref := {applications,[Target]}} when Height =< Floor -> ok;
+        #{operation_state := unresolved,outcome_ref := {applications,[Target]}} ->
+            receive
+                {projection_advanced,Engine,Height} when Height > Floor ->
+                    await_source_receipt(Engine,Monitor,Ns,Op,Target,Deadline);
+                {'DOWN',Monitor,process,Engine,Reason} -> error({source_down,Reason})
+            after max(0,Deadline-quod_time:mono_ms()) -> error(source_receipt_not_installed) end
     end.
 
 uncertain_activation_keeps_original_custody_test_() ->
@@ -2179,7 +2639,7 @@ same_namespace_signed_chair_push_test_() ->
             {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]}),
         quod_physics:unwatch(Pid,OldRef), _ = gen_server:call(Pid,status),
         commit(Ns,{',',{assertz,{can_view_physics,room,Principal}},
-                       {assertz,{physics_view,room,[]}}}), reconcile(Ns),
+                       {assertz,{world_view,room,playing,[]}}}), reconcile(Ns),
         Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
             Socket ! {client,simulation_open(F,simulation_session(Identity),Principal)},

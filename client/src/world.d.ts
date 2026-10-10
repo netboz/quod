@@ -24,7 +24,11 @@ import type { PrologTerm } from './prolog-term.js'
 export type Subject = { kind?: 'ontology'; ontology: string; anchor: Uint8Array | null; entity: PrologTerm }
 export type WorldMark = { id: string; depicts: Subject | null }
 export type MenuEntry = { id: string; label: string; view: string }
-export function readPersonalLobby(identity: SignedIdentity, agent: AgentReference, mode?: string): Promise<{ reference: { namespace: string; anchor: Uint8Array }; marks: WorldMark[]; height: number; modes: string[] } | null>
+export type SpaceReference = OntologyReference & { instance: PrologTerm }
+export type ViewDependency = { ns: string; genesis_anchor: string; height: string }
+export function readPersonalLobby(identity: SignedIdentity, agent: AgentReference): Promise<{
+  reference: SpaceReference; dependencies: ViewDependency[]; modes: string[]
+} | null>
 export function readDeviceMenu(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<MenuEntry[]>
 export function readEntityEidolons(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<EidolonChoice[]>
 export function readEidolonWorkspace(identity: SignedIdentity, agent: AgentReference, subject: Subject, choice: EidolonChoice): Promise<EidolonWorkspace>

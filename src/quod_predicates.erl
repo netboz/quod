@@ -112,7 +112,8 @@ registration and context-checking machinery.
 -spec load(tuple()) -> tuple().
 load(Est) ->
     load_modules(
-      Est, [quod_committee_predicates, quod_runtime_predicates]).
+      Est, [quod_committee_predicates, quod_runtime_predicates,
+            quod_physics_predicates]).
 
 -doc "Load the application's common bridge modules in their explicit order.".
 -spec load_modules(tuple(), [module()]) -> tuple().

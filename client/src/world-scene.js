@@ -96,8 +96,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     if (node?.metadata?.depicts?.anchor) onPick(node.metadata.depicts)
   }, PointerEventTypes.POINTERPICK)
   let painted = new Map()
-  let poses = new Map()
-  let simulationMarks = null
+  let currentMarks = null
   let xr = null
 
   function closeMenu() {
@@ -211,18 +210,15 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   window.addEventListener('resize', resize)
   engine.runRenderLoop(() => scene.render())
   return {
-    paint(marks) {
-      painted = paintMarks(scene, marks, painted, resources, onResourceError)
-      paintBodyPoses(painted, poses)
-    },
-    simulation(current) {
-      playerNavigation.update(current)
-      poses = current?.poses ?? new Map()
-      if (current && current.marks !== simulationMarks) {
+    update(current) {
+      const observer = current?.selection === 'nonphysical' ||
+        (current?.selection === 'active' && current.control === null)
+      playerNavigation.update(observer ? undefined : current?.selection === 'active' ? current : null)
+      if (current && current.marks !== currentMarks) {
         painted = paintMarks(scene, current.marks, painted, resources, onResourceError)
+        currentMarks = current.marks
       }
-      simulationMarks = current?.marks ?? null
-      paintBodyPoses(painted, poses)
+      if (current) paintBodyPoses(painted, current.poses ?? new Map())
     },
     setActionMenu(entries, activate) {
       closeMenu()

@@ -254,11 +254,11 @@ sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instanc
     {ok, SignBytes, SignSignature} = quod_node_actor:signed_goal(
       read, SignGoal, crypto:strong_rand_bytes(32), Expires),
     case quod_client_goal_ingress:submit(SignBytes, SignSignature) of
-        {ok, _, {normalized, {answers, _Height, [Answer]}}} ->
+        {ok, _, {normalized, {read, _Dependencies, {answers, _Height, [Answer]}}}} ->
             {ok, [{<<"V0">>, Signature}]} = quod_client_result:decode_binding(Answer),
             {ok, Bytes} = quod_client_goal:encode(Request),
             {ok, Bytes, Signature};
-        {ok, _, {normalized, {failed, _}}} -> {error, signing_not_authorized};
+        {ok, _, {normalized, {read, _, {failed, _}}}} -> {error, signing_not_authorized};
         {error, _} = Error -> Error;
         _ -> {error, signing_unavailable}
     end.
@@ -276,6 +276,8 @@ trace_result(Span, Result) ->
     _ = catch quod_trace:set_attributes(Span, #{'quod.agent.result' => result_class(Result)}),
     ok.
 
+result_class({ok, Evidence, {normalized, {read, _, Outcome}}}) ->
+    result_class({ok, Evidence, {normalized, Outcome}});
 result_class({ok, _, {normalized, {committed, _, _}}}) -> <<"committed">>;
 result_class({ok, _, {normalized, {pending, _}}}) -> <<"pending">>;
 result_class({ok, _, {normalized, {answers, _, _}}}) -> <<"answers">>;

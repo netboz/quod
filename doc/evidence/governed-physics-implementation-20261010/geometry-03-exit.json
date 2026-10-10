@@ -1,0 +1,24 @@
+{
+  "started": "2026-10-10T17:13:00.827982+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:supported_geometry_signed_edit_test_+invalid_geometry_signed_edit_leaves_state_unchanged_test_+numeric_geometry_and_hinge_refusals_test_",
+    "--test=quod_physics_tests:native_hinge_refuses_authored_rotation_test"
+  ],
+  "source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "ca5c754b6bce701cca434e91bab1bbfd5c113275b9a11f6711dfacabaf985f77"
+  },
+  "reason": "Verified Fable findings: vector-only hinge authoring, native rotated-hinge refusal, finite numeric encoding, field/resource refusal reasons; dynamic and controlled coverage",
+  "finished": "2026-10-10T17:13:14.448805+00:00",
+  "exit_code": 1,
+  "final_source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "ca5c754b6bce701cca434e91bab1bbfd5c113275b9a11f6711dfacabaf985f77"
+  }
+}

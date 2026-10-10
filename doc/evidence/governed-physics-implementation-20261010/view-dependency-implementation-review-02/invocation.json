@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-10T20:23:31.947967+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "cwd": "/home/yan/src/quod/doc/evidence/governed-physics-implementation-20261010/view-dependency-implementation-review-02",
+  "scope": "signed-view review corrections: audited source/spec/unit-test packet and prior source review, no deployment scripts or credentials"
+}

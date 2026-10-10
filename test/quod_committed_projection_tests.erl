@@ -231,6 +231,38 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
         ok = quod_outcome:close(Outcomes)
     end.
 
+system_physics_preserves_genesis_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"projection-system-physics:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Anchor = <<0:256>>, Self = <<0:256>>,
+    Genesis = quod_simplex:test_genesis_tx(
+        #{node_id => Self, mode => create, committee => [],
+          external_predicate_modules => [],
+          genesis_diff => diff_for({retained_instance, original})}, Ns, Self, <<98:256>>),
+    {ok, Manifest} = quod_simplex:genesis_predicate_manifest(Genesis),
+    %% Apply the exact same genesis to two independently created projection bases.
+    %% No founding fact is added or rewritten to make the bridge available.
+    lists:foreach(fun(_) ->
+        {ok, Outcomes} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+        Base = quod_committed_projection:new_est(),
+        #est{db = #db{ref = Ref}} = Base,
+        Projection0 = quod_committed_projection:new({Ns, Anchor}, 0, Base, Outcomes, none),
+        try
+            Descriptor = {query, live_observation, quod_physics_predicates, physics_body_state},
+            ?assertEqual(Descriptor, quod_predicates:descriptor(Base, {physics_body_state, 3})),
+            {ok, Projection1, #{kind := content}} = project(1, {batch, [Genesis]}, Projection0),
+            ?assertEqual(1, quod_committed_projection:applied(Projection1)),
+            ?assert(proves({retained_instance, original}, Projection1)),
+            ?assert(proves({external_predicate_modules, Manifest}, Projection1)),
+            ?assertEqual(Descriptor, quod_predicates:descriptor(
+                quod_committed_projection:est(Projection1), {physics_body_state, 3}))
+        after
+            quod_erlog_db_mvcc:delete(Ref),
+            ok = quod_outcome:close(Outcomes)
+        end
+    end, [first, repeat]).
+
 genesis_manifest_loads_the_same_predicates_in_projection_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"projection-manifest:",

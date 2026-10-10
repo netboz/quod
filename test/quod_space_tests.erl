@@ -207,8 +207,7 @@ start(#{directory := Dir, identity := Identity}, Ns, Terms, Options) ->
     {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
         #{node_id => maps:get(pubkey, Identity), identity => Identity,
           data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
-          external_predicate_modules => [quod_agent_predicates, quod_physics_predicates,
-                                         quod_agent_hosting_tests],
+          external_predicate_modules => [quod_agent_predicates, quod_agent_hosting_tests],
           genesis_diff => quod_prolog:terms_to_diff(Terms)}, Options)),
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({not_ready, Ns}) end,

@@ -742,10 +742,10 @@ personal_lobbies_use_shared_creation_and_recovery(
             {',', {current_ontology_identity, FirstLobby, FirstAnchor},
                   {lobby_view, playing, {0}}}},
         {SceneBytes, SceneSig} = lobby_user_request(First, read, SceneGoal),
-        ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
                      quod_client_goal_ingress:submit(SceneBytes, SceneSig)),
         {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
-        ?assertMatch({ok, _, {normalized, {failed, _}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                      quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
         {ok, _, _} = quod_prolog:execute(ActorNs,
             {retract, {hosts_ontology, Node, FirstLobby, FirstAnchor, discoverable}}),
@@ -764,7 +764,7 @@ personal_lobbies_use_shared_creation_and_recovery(
         ok = wait_ready(FirstLobby, 300),
         ?assertEqual(FirstRef, lobby_user_reference(First)),
         {ResumedBytes, ResumedSig} = lobby_user_request(First, read, SceneGoal),
-        ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
                      quod_client_goal_ingress:submit(ResumedBytes, ResumedSig))
     after stop_process(Auth) end.
 
@@ -885,7 +885,7 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                 %% The signup ontology retains unfinished receipts, not a
                 %% permanent table of human-user instances.
                 {Status, StatusSig} = lobby_user_request(Applicant, read, {signup_status, Token, {0}}),
-                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                              quod_client_goal_ingress:submit(Status, StatusSig)),
                 User
             end || _ <- [first, second]],
@@ -1073,7 +1073,7 @@ lobby_user_request(#{reference := {agent_instance_ref, Ns, Anchor, Instance},
 
 lobby_user_reference(User) ->
     {Bytes, Signature} = lobby_user_request(User, read, {lobby_reference, {0}}),
-    {ok, _, {normalized, {answers, _, [Answer]}}} =
+    {ok, _, {normalized, {read, _, {answers, _, [Answer]}}}} =
         quod_client_goal_ingress:submit(Bytes, Signature),
     {ok, [{<<"V0">>, Reference}]} = quod_durable_term:decode_result(Answer),
     Reference.

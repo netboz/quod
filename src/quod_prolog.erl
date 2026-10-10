@@ -296,7 +296,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% Runtime lifecycle for the post-apply event layer (doc/runtime-and-agents.md): `live`
             %% normally; `{replaying, Id}` while catching up (boot rebuild or a runtime gap-fill), so
             %% replay applies suppress live events and the started/ready boundaries carry a correlating Id.
-            runtime_mode = live :: live | {replaying, reference()},
+            runtime_mode = live :: live | {replaying, {pid(), reference()}},
             %% A committed signed record can arrive while this node cannot
             %% resolve the root-network anchor. The ledger remains the sole
             %% queue: stop serving proofs, retain no entry bytes here, and ask
@@ -499,6 +499,7 @@ execute_async({TargetNs, <<_:256>> = Anchor}, Goal, Owner, CallRef, Deadline)
 
 -doc "Execute one already-verified signed request through the ordinary proof boundary.".
 -spec execute_signed(quod_client_goal:evidence(), term(), {agent, binary()}) ->
+          {read, [{binary(), <<_:256>>, non_neg_integer()}], term()} |
           {ok, [map()], log_index() |
                {transaction, binary(), binary(), binary()} | map()} |
           {error, term()} | fail | {fail, [term()]}.
@@ -1274,6 +1275,7 @@ handle_call({cancel_dtx_vote, Ref, GroupRef}, _From = {Pid, _Tag}, S) ->
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
     {reply, #{applied   => S#s.applied,  applies => S#s.applies,
+              readiness => projection_readiness(S),
               rejects   => S#s.rejects,  proves  => S#s.proves,
               conflicts => S#s.conflicts,
               parked    => map_size(S#s.parked),        %% in-flight writes awaiting commit (liveness gauge)
@@ -1531,7 +1533,7 @@ handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied 
 %% re-cast mark_ready, and an unguarded `boot` edge (a constant, not a RecoveryId) would cost
 %% the runtime a spurious full reconciliation each time.
 handle_cast(mark_ready, S = #s{ready = false, ns = Ns, applied = H}) ->
-    publish_runtime(Ns, {replay_ready, boot, H}),
+    publish_runtime(Ns, {replay_ready, {self(), boot}, H}),
     acknowledge_ready(S#s{ready = true});
 handle_cast(mark_ready, S) -> acknowledge_ready(S);
 %% Monotone floor raise from the attached runtime (runtime_floor/2); a stale or foreign
@@ -1758,6 +1760,10 @@ handle_info(
 handle_info(Info, S) ->
     handle_response_info(Info, S).
 
+projection_readiness(#s{ready = true,runtime_mode = live}) -> ready;
+projection_readiness(#s{runtime_mode = {replaying,Id}}) -> {recovering,Id};
+projection_readiness(_) -> {recovering,{self(),boot}}.
+
 open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                    Principal, RequestContext,
                    S = #s{scope_sessions = Sessions}) ->
@@ -1771,7 +1777,10 @@ open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                     {reply, {error, scope_mode_conflict}, S};
                 {_Ns, Anchor} ->
                     case is_process_alive(quod_scope_session:pid(Handle)) of
-                        true -> {reply, {ok, Handle}, S};
+                        true ->
+                            #scope_worker{height = Height} =
+                                maps:get(WorkerMRef, S#s.scope_workers),
+                            {reply, {ok, Handle, Height}, S};
                         false -> open_new_scope_session(
                                    Origin, ScopeId, ProofId, Anchor, ReadOnly,
                                    DeadlineMs, Principal, RequestContext,
@@ -1957,7 +1966,7 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
             Worker = new_scope_worker(
                        Pid, WorkerMRef, OwnerMRef, Key, Height,
                        ScopeLifetime),
-            {reply, {ok, Handle},
+            {reply, {ok, Handle, Height},
              bump_proves(
                S#s{scope_workers =
                        (S#s.scope_workers)#{WorkerMRef => Worker},
@@ -4384,7 +4393,7 @@ run_pinned_origin(
                           Est, OverlayOpts#{scope_id => NewScopeId}),
                         {ok, self(),
                          {local_scope, NewScopeId, Ns, Anchor,
-                          Applied, NewSession}}
+                          Applied, NewSession}, Applied}
                     end)
               end),
         Origin = #pinned_origin{
@@ -4394,7 +4403,13 @@ run_pinned_origin(
                     deadline_ms = Deadline, kind = Kind,
                     namespace = Ns, anchor = Anchor, height = Applied,
                     context = Context, session = Session},
-        try finalize_request_result(RequestEvidence,RunFun(Origin),Deadline)
+        try
+            Result = finalize_request_result(RequestEvidence,RunFun(Origin),Deadline),
+            case RequestEvidence of
+                #{request := #{mode := read}} ->
+                    {read, quod_proof_context:read_dependencies(), Result};
+                _ -> Result
+            end
         after
             quod_trace:with_span(
               quod_trace:context(), <<"quod.prolog.session_stop">>, internal,
@@ -5543,21 +5558,18 @@ finish_proof(Ref, Result, S) ->
     case take_proof_worker(Ref, S) of
         error -> S;
         {{From, Applied}, S1} ->
-            case Result of
-                {fail, []} -> reply_client(From, fail), S1;
-                {fail, Reasons} -> reply_client(From, {fail, Reasons}), S1;
-                {error, _} = E -> reply_client(From, E), S1;
-                {ok, Bindings, [], _ReadSet} ->
-                    reply_client(From, {ok, [Bindings], Applied}), S1;
-                {committed, Bindings, Handle} ->
-                    reply_client(From, {ok, [Bindings], Handle}), S1;
-                cursor_stopped ->
-                    reply_client(From, {ok, stopped}), S1;
-                _Other ->
-                    reply_client(
-                      From, {error, {protocol_error, proof_engine}}), S1
-            end
+            reply_client(From, proof_reply(Result, Applied)), S1
     end.
+
+proof_reply({read, Dependencies, Result}, Applied) ->
+    {read, Dependencies, proof_reply(Result, Applied)};
+proof_reply({fail, []}, _) -> fail;
+proof_reply({fail, Reasons}, _) -> {fail, Reasons};
+proof_reply({error, _} = Error, _) -> Error;
+proof_reply({ok, Bindings, [], _ReadSet}, Applied) -> {ok, [Bindings], Applied};
+proof_reply({committed, Bindings, Handle}, _) -> {ok, [Bindings], Handle};
+proof_reply(cursor_stopped, _) -> {ok, stopped};
+proof_reply(_, _) -> {error, {protocol_error, proof_engine}}.
 
 retain_group_waiter(
   Ref,
@@ -6979,7 +6991,8 @@ oldest_snapshot(Current, #s{workers = Workers, agent_attesters = Attesters,
 %% effect-only transaction with an empty D diff), `{rejected_live,
 %% Env}` (one per live transaction that committed but was OCC-rejected at apply), and the
 %% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run (`Id` is
-%% `boot` for the quiet-boot ready edge). `{projection_advanced, EnginePid, Height}` reports
+%% `{EnginePid, RunRef}`, or `{EnginePid, boot}` for the quiet-boot ready edge).
+%% `{projection_advanced, EnginePid, Height}` reports
 %% every successfully advanced P floor, including metadata/no-op/replay blocks; it is only a
 %% snapshot-read wake, never an E event or reaction input. The ATTACHED runtime (`attach_runtime/1`) additionally
 %% receives each applied envelope as a direct `{applied_live, Env, Est}` and a
@@ -7018,7 +7031,7 @@ oldest_snapshot(Current, #s{workers = Workers, agent_attesters = Attesters,
 %% and keeps the dependency/failure guards. A quiet head needs no later live block to close replay.
 note_origin(_Origin, false, _Before, S) -> S;   %% apply did not advance ⇒ no lifecycle change
 note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
-    Id = make_ref(),
+    Id = {self(), make_ref()},
     publish_runtime(Ns, {replay_started, Id, Before}),
     %% Keep the pin until quod_runtime has killed and reaped every reader of its old snapshot.
     %% It then calls runtime_detach/1; the next replay commit can prune released history. An
@@ -7451,7 +7464,7 @@ wait_for_apply_dependency(_Reason, S) ->
 
 begin_dependency_replay(
   S = #s{runtime_mode = live, ns = Ns, applied = Applied}) ->
-    Id = make_ref(),
+    Id = {self(), make_ref()},
     publish_runtime(Ns, {replay_started, Id, Applied}),
     %% The runtime owns detaching its old MVCC pin after it has stopped every
     %% reader, exactly as for an ordinary catch-up replay.

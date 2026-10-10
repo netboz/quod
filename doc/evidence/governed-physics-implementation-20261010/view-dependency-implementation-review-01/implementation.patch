@@ -1,0 +1,879 @@
+diff --git a/src/predicates/quod_ask.erl b/src/predicates/quod_ask.erl
+index 790e858..7fc3180 100644
+--- a/src/predicates/quod_ask.erl
++++ b/src/predicates/quod_ask.erl
+@@ -351,9 +351,9 @@ open_local_scope(Target, Anchor, ScopeId) ->
+                                    quod_proof_context:principal(),
+                                    Authentication, quod_trace:context()},
+                                   RemainingMs) of
+-                                {ok, Handle} ->
++                                {ok, Handle, Height} ->
+                                     {ok, quod_scope_session:pid(Handle),
+-                                     Handle};
++                                     Handle, Height};
+                                 {error, TargetReason} ->
+                                     {error, TargetReason}
+                             catch exit:_ ->
+@@ -533,8 +533,8 @@ open_remote_routes(Target, Anchor, ScopeId,
+                fun(_SpanCtx) ->
+                    ensure_remote_scope(Endpoint, Binding, Authentication)
+                end) of
+-        {ok, Handle} ->
+-            {ok, quod_scope_session:pid(Handle), Handle};
++        {ok, Handle, Height} ->
++            {ok, quod_scope_session:pid(Handle), Handle, Height};
+         {error, Reason} ->
+             case remote_open_error(Target, Reason) of
+                 unavailable ->
+@@ -561,7 +561,7 @@ ensure_remote_scope(Endpoint, Binding, Authentication) ->
+         RemainingMs ->
+             case quod_ask_router:ensure_scope(
+                    Endpoint, Binding, Authentication, RemainingMs) of
+-                {ok, Handle} -> bind_open_handle(Target, Handle);
++                {ok, Handle, Height} -> bind_open_handle(Target, Handle, Height);
+                 {pending, Router, Generation, OpenRef} ->
+                     await_remote_scope_open(
+                       Target, Router, Generation, OpenRef);
+@@ -571,12 +571,12 @@ ensure_remote_scope(Endpoint, Binding, Authentication) ->
+ 
+ bind_open_handle(
+   Target,
+-  {remote_scope, Router, Generation, _Binding, _RequestLink} = Handle) ->
++  {remote_scope, Router, Generation, _Binding, _RequestLink} = Handle, Height) ->
+     case quod_proof_context:bind_router(Router, Generation, Target) of
+-        {ok, _MRef} -> {ok, Handle};
++        {ok, _MRef} -> {ok, Handle, Height};
+         {error, _} = Error -> Error
+     end;
+-bind_open_handle(_Target, _Handle) ->
++bind_open_handle(_Target, _Handle, _Height) ->
+     {error, {protocol_error, session_binding}}.
+ 
+ await_remote_scope_open(Target, Router, Generation, OpenRef) ->
+@@ -584,8 +584,8 @@ await_remote_scope_open(Target, Router, Generation, OpenRef) ->
+         {ok, MRef} ->
+             receive
+                 {quod_scope_open, OpenRef,
+-                 {ok, Handle, _BaseHeight, _OverlayGeneration, false}} ->
+-                    bind_open_handle(Target, Handle);
++                 {ok, Handle, BaseHeight, _OverlayGeneration, false}} ->
++                    bind_open_handle(Target, Handle, BaseHeight);
+                 {quod_scope_open, OpenRef, {ok, _Handle, _BaseHeight,
+                                             _OverlayGeneration, true}} ->
+                     {error, {protocol_error, bad_dirty}};
+diff --git a/src/quod_agent.erl b/src/quod_agent.erl
+index 34b0896..1aa9e23 100644
+--- a/src/quod_agent.erl
++++ b/src/quod_agent.erl
+@@ -254,11 +254,11 @@ sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instanc
+     {ok, SignBytes, SignSignature} = quod_node_actor:signed_goal(
+       read, SignGoal, crypto:strong_rand_bytes(32), Expires),
+     case quod_client_goal_ingress:submit(SignBytes, SignSignature) of
+-        {ok, _, {normalized, {answers, _Height, [Answer]}}} ->
++        {ok, _, {normalized, {read, _Dependencies, {answers, _Height, [Answer]}}}} ->
+             {ok, [{<<"V0">>, Signature}]} = quod_client_result:decode_binding(Answer),
+             {ok, Bytes} = quod_client_goal:encode(Request),
+             {ok, Bytes, Signature};
+-        {ok, _, {normalized, {failed, _}}} -> {error, signing_not_authorized};
++        {ok, _, {normalized, {read, _, {failed, _}}}} -> {error, signing_not_authorized};
+         {error, _} = Error -> Error;
+         _ -> {error, signing_unavailable}
+     end.
+@@ -276,6 +276,8 @@ trace_result(Span, Result) ->
+     _ = catch quod_trace:set_attributes(Span, #{'quod.agent.result' => result_class(Result)}),
+     ok.
+ 
++result_class({ok, Evidence, {normalized, {read, _, Outcome}}}) ->
++    result_class({ok, Evidence, {normalized, Outcome}});
+ result_class({ok, _, {normalized, {committed, _, _}}}) -> <<"committed">>;
+ result_class({ok, _, {normalized, {pending, _}}}) -> <<"pending">>;
+ result_class({ok, _, {normalized, {answers, _, _}}}) -> <<"answers">>;
+diff --git a/src/quod_ask_router.erl b/src/quod_ask_router.erl
+index 10bb318..28c0720 100644
+--- a/src/quod_ask_router.erl
++++ b/src/quod_ask_router.erl
+@@ -62,6 +62,7 @@ for a peer or connection that produces neither signal.
+     request_link = undefined :: undefined | pid(),
+     return_link = undefined :: undefined | pid(),
+     status = opening :: opening | active,
++    base_height = undefined :: undefined | non_neg_integer(),
+     next_command_seq = 2 :: pos_integer(),
+     last_command_seq = 1 :: non_neg_integer(),
+     last_request_id :: binary(),
+@@ -160,7 +161,7 @@ start_link() ->
+ 
+ -spec ensure_scope(term(), binding(), quod_scope_wire:authentication(),
+                    non_neg_integer()) ->
+-          {ok, remote_handle()} | pending() | {error, term()}.
++          {ok, remote_handle(), non_neg_integer()} | pending() | {error, term()}.
+ ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
+     with_router(
+       fun(Router) ->
+@@ -169,7 +170,7 @@ ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
+ 
+ -spec ensure_scope(gen_server:server_ref(), term(), binding(),
+                    quod_scope_wire:authentication(), non_neg_integer()) ->
+-          {ok, remote_handle()} | pending() | {error, term()}.
++          {ok, remote_handle(), non_neg_integer()} | pending() | {error, term()}.
+ ensure_scope(Router, Endpoint, Binding, Authentication, RemainingMs) ->
+     TraceCarrier = quod_trace:inject(quod_trace:context()),
+     guarded_call(
+@@ -344,7 +345,7 @@ handle_call(
+            Owner, Endpoint, Binding, Authentication, RemainingMs,
+            TraceCarrier, S0) of
+         {reuse, #scope{status = active} = Scope} ->
+-            {reply, {ok, handle(Scope, S0)}, S0};
++            {reply, {ok, handle(Scope, S0), Scope#scope.base_height}, S0};
+         {reuse, #scope{open_ref = OpenRef}} ->
+             {reply, pending(OpenRef, S0), S0};
+         {new, Fields, OpenFrame} ->
+@@ -1494,7 +1495,8 @@ first_failed([{Reason, false} | _]) -> Reason.
+ route_valid_event({scope_opened, BaseHeight}, _RequestId, _Deliver,
+                   Scope0 = #scope{status = opening, owner = Owner,
+                                   open_ref = OpenRef}, S0) ->
+-    Scope1 = Scope0#scope{status = active, open_frame = <<>>},
++    Scope1 = Scope0#scope{status = active, open_frame = <<>>,
++                          base_height = BaseHeight},
+     S1 = put_scope(Scope1, S0#s{opens = maps:remove(OpenRef, S0#s.opens)}),
+     Owner ! {quod_scope_open, OpenRef,
+              {ok, handle(Scope1, S1), BaseHeight,
+diff --git a/src/quod_client_result.erl b/src/quod_client_result.erl
+index 0b2a193..aa82016 100644
+--- a/src/quod_client_result.erl
++++ b/src/quod_client_result.erl
+@@ -42,12 +42,15 @@ where the proof ran.
+         independent_nesting | independent_mixed_writes |
+         independent_scope_required.
+ -type result() ::
++        {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
+         {answers, non_neg_integer(), [binary()]} |
+         {solution, <<_:256>>, non_neg_integer(), binary()} |
+         stopped | fail | {failed, binary()} |
+         {committed, [binary()], outcome()} |
+         {pending, transaction_ref() | group_ref() | operation_ref()} |
+         {error, public_error()}.
++-type read_outcome() :: {answers, non_neg_integer(), [binary()]} |
++        fail | {failed, binary()} | {error, public_error()}.
+ 
+ -doc "Normalize one target-engine result and enforce the aggregate reply cap.".
+ -spec normalize(quod_client_goal:evidence(), term()) -> result().
+@@ -108,6 +111,16 @@ outcome_ref_log_fields(
+ outcome_ref_log_fields(_Ref) ->
+     error.
+ 
++normalize_unbounded(Evidence, {read, Dependencies, Raw}) ->
++    case normalize_unbounded(Evidence, Raw) of
++        {ok, Outcome} ->
++            Result = {read, Dependencies, Outcome},
++            case valid_result(Result) of
++                true -> {ok, Result};
++                false -> error
++            end;
++        Error -> Error
++    end;
+ normalize_unbounded(Evidence, {ok, Bindings, Height})
+   when is_list(Bindings), is_integer(Height), Height >= 0,
+        Height =< ?MAX_UINT64 ->
+@@ -269,6 +282,8 @@ decode(Blob) when is_binary(Blob) ->
+ decode(_Blob) ->
+     {error, invalid_result}.
+ 
++valid_result({read, Dependencies, Outcome}) ->
++    valid_dependencies(Dependencies, none, 0) andalso valid_read_outcome(Outcome);
+ valid_result({answers, Height, Blobs}) ->
+     valid_uint64(Height) andalso valid_binding_blobs(Blobs);
+ valid_result({solution, <<_:256>>, Height, Blob}) ->
+@@ -286,6 +301,20 @@ valid_result({pending, Ref}) -> valid_outcome_ref(Ref);
+ valid_result({error, Reason}) -> valid_public_error(Reason);
+ valid_result(_) -> false.
+ 
++valid_read_outcome({answers, _, _} = Outcome) -> valid_result(Outcome);
++valid_read_outcome(fail) -> true;
++valid_read_outcome({failed, _} = Outcome) -> valid_result(Outcome);
++valid_read_outcome({error, _} = Outcome) -> valid_result(Outcome);
++valid_read_outcome(_) -> false.
++
++valid_dependencies([], _, _) -> true;
++valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous, Count)
++  when is_binary(Ns), byte_size(Ns) > 0,
++       (Previous =:= none orelse Previous < Ns),
++       Count < ?QUOD_MAX_SCOPES_PER_PROOF ->
++    valid_uint64(Height) andalso valid_dependencies(Rest, Ns, Count + 1);
++valid_dependencies(_, _, _) -> false.
++
+ valid_binding_blobs(Blobs) ->
+     valid_binding_blobs(Blobs, 0).
+ 
+@@ -367,6 +396,11 @@ valid_public_error(Reason) ->
+ -doc "Render one already-normalized local or forwarded result.".
+ -spec http_normalized(quod_client_goal:evidence(), result()) ->
+           {pos_integer(), map()}.
++http_normalized(Evidence, {read, Dependencies, Outcome}) ->
++    {Status, Body} = http_normalized(Evidence, Outcome),
++    {Status, Body#{dependencies =>
++        [#{ns => Ns, genesis_anchor => b64url(Anchor), height => Height}
++         || {Ns, Anchor, Height} <- Dependencies]}};
+ http_normalized(Evidence, {answers, Height, Blobs}) ->
+     {200, evidence_json(
+             Evidence,
+diff --git a/src/quod_client_simulation.erl b/src/quod_client_simulation.erl
+index dc2c284..1a5e55c 100644
+--- a/src/quod_client_simulation.erl
++++ b/src/quod_client_simulation.erl
+@@ -46,13 +46,9 @@ command({open, Session, Bytes, Signature, Ns, Anchor}, S0) ->
+                  quod_client_goal_target:available({Ns, Anchor}) =:= ok andalso
+                  quod_client_goal_target:available({Source, SourceAnchor}) =:= ok of
+                 true ->
+-                    Namespaces = lists:usort([Source,Ns]),
+-                    [true = quod_reg:subscribe({runtime, N}) || N <- Namespaces],
+                     true = quod_reg:subscribe({physics, Ns}),
+-                    Heights = maps:from_list([{N,quod_prolog:applied(N)} || N <- Namespaces]),
+-                    Owners = maps:from_list([{quod_reg:where({quod_prolog,N}),N} || N <- Namespaces]),
+                     Subscribed = S#{namespace => Ns, anchor => Anchor, source => Source,
+-                                    heights => Heights, owners => Owners},
++                                    source_anchor => SourceAnchor},
+                     Result = quod_client_goal_ingress:submit(read, Session, Bytes, Signature, maps:get(peer, S)),
+                     open_result(Result, Subscribed);
+                 _ -> reply(#{type => unavailable, reason => local_authority_required}, S)
+@@ -77,7 +73,72 @@ valid_view_request(#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
+     end.
+ 
+ open_result({ok, #{request_digest := Digest, request := #{not_after_ms := Expiry}},
+-             {normalized, {answers, Height, [Binding]}}}, S) ->
++             {normalized, {read, Dependencies, Outcome}}}, S) ->
++    case Outcome of
++        {error, _} -> reply(#{type => unavailable, reason => proof_unavailable}, release(S));
++        _ ->
++            Remaining = Expiry - quod_time:now_ms(),
++            case Remaining > 0 andalso lists:keyfind(maps:get(source,S),1,Dependencies) of
++                {_, SourceAnchor, _} when SourceAnchor =:= map_get(source_anchor,S) ->
++                    Timer = erlang:start_timer(Remaining, self(), expired),
++                    Pending = S#{pending => {Digest, Expiry, Outcome}, timer => Timer,
++                                 heights => #{}, owners => #{}, anchors => #{},
++                                 follows => #{}, dependency_monitors => #{}},
++                    case follow_dependencies(Dependencies, Pending) of
++                        {ok, Followed} -> resume_projection(Followed);
++                        {error, Followed} ->
++                            reply(#{type => unavailable, reason => dependency_unavailable}, release(Followed))
++                    end;
++                _ -> reply(#{type => unavailable, reason => invalid_dependencies}, release(S))
++            end
++    end;
++open_result(_, S) -> reply(#{type => unavailable, reason => view_not_authorized_or_ready}, release(S)).
++
++%% Register every dependency before taking any current snapshot. These are
++%% the scopes actually opened by the proof, including failed alternatives.
++follow_dependencies([], S) -> {ok, S};
++follow_dependencies([{Ns, Anchor, Height} | Rest], S) ->
++    case quod_reg:where({quod_prolog,Ns}) of
++        Pid when is_pid(Pid) ->
++            true = quod_reg:subscribe({runtime,Ns}),
++            M = monitor(process,Pid),
++            follow_dependencies(Rest, S#{
++                heights := (maps:get(heights,S))#{Ns => Height},
++                anchors := (maps:get(anchors,S))#{Ns => Anchor},
++                owners := (maps:get(owners,S))#{Pid => Ns},
++                dependency_monitors := (maps:get(dependency_monitors,S))#{M => Pid}});
++        undefined ->
++            case quod_foreign_log:follow({Ns,Anchor},progress) of
++                {ok, Ref} ->
++                    Pid = quod_reg:where({foreign_log,node}),
++                    M = monitor(process,Pid),
++                    follow_dependencies(Rest, S#{
++                        follows := (maps:get(follows,S))#{Ref => {Ns,Anchor,Height,false}},
++                        dependency_monitors := (maps:get(dependency_monitors,S))#{M => Pid}});
++                {error, _} -> {error, S}
++            end
++    end.
++
++local_dependencies_current(S) ->
++    maps:fold(fun(Pid,Ns,Valid) ->
++        Valid andalso quod_reg:where({quod_prolog,Ns}) =:= Pid andalso
++        quod_simplex:genesis_hash(Ns) =:= maps:get(Ns,maps:get(anchors,S)) andalso
++        maps:get(applied,quod_prolog:stats(Ns),undefined) =:= maps:get(Ns,maps:get(heights,S))
++    end,true,maps:get(owners,S)).
++
++resume_projection(S = #{pending := {Digest, Expiry, Outcome}}) ->
++    case local_dependencies_current(S) of
++        false -> refresh(S,durable_gap);
++        true ->
++            Ready = lists:all(fun({_,_,_,R}) -> R end,maps:values(maps:get(follows,S))),
++            case Ready of
++                true -> open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
++                false -> reply(#{type => unavailable, reason => waiting_for_dependencies},S)
++            end
++    end;
++resume_projection(S) -> {ok,S}.
++
++open_view({answers, Height, [Binding]}, Digest, Expiry, S) ->
+     {ok, Pairs} = quod_client_result:decode_binding(Binding),
+     case proplists:get_value(<<"View">>, Pairs) of
+         {simulation_view, World = {world_ref, Ns, Anchor, _}, Authority,
+@@ -88,11 +149,12 @@ open_result({ok, #{request_digest := Digest, request := #{not_after_ms := Expiry
+             case quod_reg:where({physics_world, World}) of
+                 Pid when is_pid(Pid) ->
+                     attach(Pid, Expected, Marks, Digest, Height, Expiry, S);
+-                _ -> waiting(S, World, Height, Expiry)
++                _ -> waiting(S, World)
+             end;
+         _ -> reply(#{type => unavailable, reason => invalid_projection}, release(S))
+     end;
+-open_result(_, S) -> reply(#{type => unavailable, reason => view_not_authorized_or_ready}, release(S)).
++open_view(_, _, _, S) ->
++    reply(#{type => unavailable, reason => view_not_authorized_or_ready}, S).
+ 
+ attach(Pid, Expected, Marks, Digest, Height, Expiry, S) ->
+     M = monitor(process, Pid),
+@@ -103,15 +165,12 @@ attach(Pid, Expected, Marks, Digest, Height, Expiry, S) ->
+             case body_bindings(Marks, maps:get(control,Expected), Frame) of
+                 {ok, Bodies} ->
+                     Remaining = Expiry - quod_time:now_ms(),
+-                    case Remaining > 0 andalso Height =:= maps:get(maps:get(source,S),maps:get(heights,S))
+-                         andalso maps:fold(fun(N,H,Valid) -> Valid andalso quod_prolog:applied(N) =:= H end,
+-                                           true,maps:get(heights,S)) of
++                    case Remaining > 0 andalso local_dependencies_current(S) of
+                         true ->
+-                            Timer = erlang:start_timer(Remaining, self(), expired),
+                             View = b64(Digest), Tick = decimal(maps:get(tick, Frame)),
+                             Next = Watched#{view => View, tick => Tick, height => Height,
+                                 bodies => Bodies, control => maps:get(control,Expected),
+-                                world => element(1, maps:get(fence, Expected)), timer => Timer},
++                                world => element(1, maps:get(fence, Expected))},
+                             reply(#{type => projection, view => View, height => decimal(Height),expires_ms => decimal(Expiry),
+                                     marks => quod_client_goal_parser:value_text(Marks),
+                                     control => quod_client_goal_parser:value_text(maps:get(control,Expected)),
+@@ -123,45 +182,58 @@ attach(Pid, Expected, Marks, Digest, Height, Expiry, S) ->
+         {error, Reason} when Reason =:= view_busy; Reason =:= simulation_failed ->
+             demonitor(M, [flush]), reply(#{type => unavailable, reason => Reason}, release(S));
+         _ ->
+-            demonitor(M, [flush]), waiting(S, element(1, maps:get(fence, Expected)), Height, Expiry)
++            demonitor(M, [flush]), waiting(S, element(1, maps:get(fence, Expected)))
+     end.
+ 
+-waiting(S, World, Height, Expiry) ->
+-    Remaining = Expiry - quod_time:now_ms(),
+-    case Remaining > 0 of
+-        true ->
+-            Timer = erlang:start_timer(Remaining, self(), waiting_expired),
+-            reply(#{type => unavailable, reason => waiting_for_installation},
+-                  S#{world => World, height => Height, timer => Timer});
+-        false -> reply(#{type => unavailable, reason => expired}, release(S))
+-    end.
++waiting(S, World) ->
++    reply(#{type => unavailable, reason => waiting_for_installation}, S#{world => World}).
+ 
+ %% The ontology's subject and the body identity remain separate. Duplicate
+ %% occurrences may depict one body, but every occurrence has exactly one source.
+ body_bindings(Marks, Control, #{poses := Poses}) ->
+     try
+         Available = maps:from_list([{{Id, R}, true} || {Id, R, world, _, _, _} <- Poses]),
+-        Rows = [{Mark, {Id, R}} || {mark, Mark, _, _, {body_pose, Id, R}, _, _,
+-                                  {depicts, _, <<_:256>>, _}} <- Marks],
++        Rows = [{Mark, mark_body(Pose, Depicts)} ||
++                  {mark, Mark, _, _, Pose, _, _, Depicts} <- Marks],
+         true = length(Rows) =:= length(Marks),
+         true = map_size(maps:from_list(Rows)) =:= length(Rows),
+-        true = lists:all(fun({Mark, Body}) -> is_binary(Mark) andalso maps:is_key(Body, Available) end, Rows),
++        true = lists:all(fun({Mark, Body}) -> is_binary(Mark) andalso
++                            (Body =:= none orelse maps:is_key(Body, Available)) end, Rows),
+         Controlled = case Control of
+             none -> [];
+             {control,_,_,{controlled_agent,_,_,Id,Revision,_,_}} ->
+                 true = maps:is_key({Id,Revision},Available), [{{Id,Revision},true}]
+         end,
+-        {ok, maps:from_list(Controlled ++ [{Body, true} || {_, Body} <- Rows])}
++        {ok, maps:from_list(Controlled ++ [{Body, true} || {_, Body} <- Rows, Body =/= none])}
+     catch error:_ -> error end.
+ 
++mark_body({relative, _, Pose}, Depicts) -> mark_body(Pose, Depicts);
++mark_body({body_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
++mark_body({transform, _, _, _, _, _, _}, _) -> none.
++
+ websocket_info({physics_frame, Pid, Ref, Frame}, S = #{pid := Pid, ref := Ref, view := View, bodies := Bodies,control := Control}) ->
+     Tick = decimal(maps:get(tick, Frame)),
+     reply(#{type => simulation_frame, view => View, frame => frame_json(Frame, Bodies,Control)}, S#{tick => Tick});
+ websocket_info({physics_refresh, Pid, Ref}, S = #{pid := Pid, ref := Ref}) -> refresh(S, structure_changed);
+ websocket_info({'DOWN', M, process, _, _}, S = #{monitor := M}) -> refresh(S, owner_changed);
+ websocket_info({timeout, Timer, expired}, S = #{timer := Timer}) -> refresh(S, expired);
+-websocket_info({timeout, Timer, waiting_expired}, S = #{timer := Timer}) ->
+-    reply(#{type => unavailable, reason => expired}, release(S));
++websocket_info({'DOWN', M, process, _, _}, S = #{dependency_monitors := Monitors})
++  when is_map_key(M,Monitors) -> refresh(S,dependency_owner_changed);
++websocket_info({quod_foreign_follow, Ref, NoticeRef, {Ns,Anchor}, Notice},
++               S = #{follows := Follows}) ->
++    quod_foreign_log:ack(Ref,NoticeRef),
++    case maps:get(Ref,Follows,none) of
++        {Ns,Anchor,Height,Ready} ->
++            case Notice of
++                {certified,H,_} when H > Height -> refresh(S,durable_gap);
++                {certified,Height,_} when Ready =:= false ->
++                    resume_projection(S#{follows := Follows#{Ref => {Ns,Anchor,Height,true}}});
++                {certified,Height,_} -> {ok,S};
++                _ when Ready -> refresh(S,dependency_recovering);
++                _ -> {ok,S}
++            end;
++        _ -> {ok,S}
++    end;
+ websocket_info({projection_advanced, Owner, Height}, S = #{owners := Owners}) ->
+     durable_advance(maps:get(Owner,Owners,undefined),Height,S);
+ websocket_info({applied_live, #{ns := Ns,height := Height}}, S = #{heights := _}) ->
+@@ -224,8 +296,9 @@ release(S) ->
+     case S of #{pid := Pid, ref := Ref, monitor := M} ->
+         quod_physics:unwatch(Pid, Ref), demonitor(M, [flush]); _ -> ok end,
+     _ = case S of #{timer := T} -> erlang:cancel_timer(T); _ -> ok end,
+-    case S of #{namespace := Ns,heights := Heights} ->
+-        [quod_reg:unsubscribe({runtime, N}) || N <- maps:keys(Heights)],
+-        quod_reg:unsubscribe({physics, Ns}); _ -> ok end,
++    [quod_reg:unsubscribe({runtime,N}) || N <- maps:keys(maps:get(heights,S,#{}))],
++    [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
++    [quod_foreign_log:unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
++    case S of #{namespace := Ns} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
+     maps:with([peer], S).
+ terminate(_, _, S) -> _ = release(S), ok.
+diff --git a/src/quod_namespace_manager.erl b/src/quod_namespace_manager.erl
+index b9c215e..2afe797 100644
+--- a/src/quod_namespace_manager.erl
++++ b/src/quod_namespace_manager.erl
+@@ -867,7 +867,7 @@ finish_enrollment({unresolved, _}, S) -> S#s{enrollment_status = unresolved};
+ finish_enrollment(Status, S) -> S#s{enrollment_status = Status}.
+ 
+ enrollment_result_kind({ok, _, {normalized, {committed, _, _}}}) -> committed;
+-enrollment_result_kind({ok, _, {normalized, {answers, _, _}}}) -> answered;
++enrollment_result_kind({ok, _, {normalized, {read, _, {answers, _, _}}}}) -> answered;
+ enrollment_result_kind(_) -> unresolved.
+ 
+ enrollment_policy_changed(_Envelope, #s{enrollment_status = complete}) -> false;
+diff --git a/src/quod_prolog.erl b/src/quod_prolog.erl
+index 1378a0d..9d0bfe4 100644
+--- a/src/quod_prolog.erl
++++ b/src/quod_prolog.erl
+@@ -499,6 +499,7 @@ execute_async({TargetNs, <<_:256>> = Anchor}, Goal, Owner, CallRef, Deadline)
+ 
+ -doc "Execute one already-verified signed request through the ordinary proof boundary.".
+ -spec execute_signed(quod_client_goal:evidence(), term(), {agent, binary()}) ->
++          {read, [{binary(), <<_:256>>, non_neg_integer()}], term()} |
+           {ok, [map()], log_index() |
+                {transaction, binary(), binary(), binary()} | map()} |
+           {error, term()} | fail | {fail, [term()]}.
+@@ -1771,7 +1772,10 @@ open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
+                     {reply, {error, scope_mode_conflict}, S};
+                 {_Ns, Anchor} ->
+                     case is_process_alive(quod_scope_session:pid(Handle)) of
+-                        true -> {reply, {ok, Handle}, S};
++                        true ->
++                            #scope_worker{height = Height} =
++                                maps:get(WorkerMRef, S#s.scope_workers),
++                            {reply, {ok, Handle, Height}, S};
+                         false -> open_new_scope_session(
+                                    Origin, ScopeId, ProofId, Anchor, ReadOnly,
+                                    DeadlineMs, Principal, RequestContext,
+@@ -1957,7 +1961,7 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
+             Worker = new_scope_worker(
+                        Pid, WorkerMRef, OwnerMRef, Key, Height,
+                        ScopeLifetime),
+-            {reply, {ok, Handle},
++            {reply, {ok, Handle, Height},
+              bump_proves(
+                S#s{scope_workers =
+                        (S#s.scope_workers)#{WorkerMRef => Worker},
+@@ -4384,7 +4388,7 @@ run_pinned_origin(
+                           Est, OverlayOpts#{scope_id => NewScopeId}),
+                         {ok, self(),
+                          {local_scope, NewScopeId, Ns, Anchor,
+-                          Applied, NewSession}}
++                          Applied, NewSession}, Applied}
+                     end)
+               end),
+         Origin = #pinned_origin{
+@@ -4394,7 +4398,13 @@ run_pinned_origin(
+                     deadline_ms = Deadline, kind = Kind,
+                     namespace = Ns, anchor = Anchor, height = Applied,
+                     context = Context, session = Session},
+-        try finalize_request_result(RequestEvidence,RunFun(Origin),Deadline)
++        try
++            Result = finalize_request_result(RequestEvidence,RunFun(Origin),Deadline),
++            case RequestEvidence of
++                #{request := #{mode := read}} ->
++                    {read, quod_proof_context:read_dependencies(), Result};
++                _ -> Result
++            end
+         after
+             quod_trace:with_span(
+               quod_trace:context(), <<"quod.prolog.session_stop">>, internal,
+@@ -5543,21 +5553,18 @@ finish_proof(Ref, Result, S) ->
+     case take_proof_worker(Ref, S) of
+         error -> S;
+         {{From, Applied}, S1} ->
+-            case Result of
+-                {fail, []} -> reply_client(From, fail), S1;
+-                {fail, Reasons} -> reply_client(From, {fail, Reasons}), S1;
+-                {error, _} = E -> reply_client(From, E), S1;
+-                {ok, Bindings, [], _ReadSet} ->
+-                    reply_client(From, {ok, [Bindings], Applied}), S1;
+-                {committed, Bindings, Handle} ->
+-                    reply_client(From, {ok, [Bindings], Handle}), S1;
+-                cursor_stopped ->
+-                    reply_client(From, {ok, stopped}), S1;
+-                _Other ->
+-                    reply_client(
+-                      From, {error, {protocol_error, proof_engine}}), S1
+-            end
+-    end.
++            reply_client(From, proof_reply(Result, Applied)), S1
++    end.
++
++proof_reply({read, Dependencies, Result}, Applied) ->
++    {read, Dependencies, proof_reply(Result, Applied)};
++proof_reply({fail, []}, _) -> fail;
++proof_reply({fail, Reasons}, _) -> {fail, Reasons};
++proof_reply({error, _} = Error, _) -> Error;
++proof_reply({ok, Bindings, [], _ReadSet}, Applied) -> {ok, [Bindings], Applied};
++proof_reply({committed, Bindings, Handle}, _) -> {ok, [Bindings], Handle};
++proof_reply(cursor_stopped, _) -> {ok, stopped};
++proof_reply(_, _) -> {error, {protocol_error, proof_engine}}.
+ 
+ retain_group_waiter(
+   Ref,
+diff --git a/src/quod_proof_context.erl b/src/quod_proof_context.erl
+index 9d21d41..f494b32 100644
+--- a/src/quod_proof_context.erl
++++ b/src/quod_proof_context.erl
+@@ -19,7 +19,7 @@ the scope wire as Erlang references.
+          read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
+          finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
+          bind_router/3,
+-         get_or_open_scope/2,
++         get_or_open_scope/2, read_dependencies/0,
+          scope_owner/1,
+          register_invocation/2, unregister_invocation/1,
+          registered_invocation/2,
+@@ -37,7 +37,8 @@ the scope wire as Erlang references.
+ -record(scope, {id :: scope_id(),
+                 owner :: pid(),
+                 mref = undefined :: undefined | reference(),
+-                handle :: term()}).
++                handle :: term(),
++                height :: non_neg_integer()}).
+ 
+ -record(router, {pid :: pid(),
+                  generation :: opaque_id(),
+@@ -566,7 +567,7 @@ demonitor_router(undefined) ->
+ 
+ -doc "Return an existing pinned scope or open and register it exactly once.".
+ -spec get_or_open_scope(identity(), fun((scope_id()) ->
+-                                               {ok, pid(), term()} |
++                                               {ok, pid(), term(), non_neg_integer()} |
+                                                {error, term()})) ->
+           {ok, scope_id(), term()} | {error, term()}.
+ get_or_open_scope({Ns, <<_:256>> = Anchor} = Identity, OpenFun)
+@@ -596,16 +597,22 @@ get_or_open_active_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
+ open_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
+     ScopeId = new_scope_id(Ctx0),
+     case OpenFun(ScopeId) of
+-        {ok, Pid, Scope} when is_pid(Pid) ->
++        {ok, Pid, Scope, Height}
++          when is_pid(Pid), is_integer(Height), Height >= 0,
++               Height =< 16#FFFFFFFFFFFFFFFF ->
++            %% Opening can bind the authenticated router. Keep that state
++            %% when registering the new pinned scope.
++            Ctx = context(),
+             MRef = monitor_scope(Pid, Scope),
+-            Scopes1 = (Ctx0#ctx.scopes)#{
++            Scopes1 = (Ctx#ctx.scopes)#{
+                         Identity => #scope{id = ScopeId,
+                                            owner = Pid,
+                                            mref = MRef,
+-                                           handle = Scope}},
+-            Namespaces1 = (Ctx0#ctx.namespaces)#{Ns => Anchor},
+-            ScopeIds1 = (Ctx0#ctx.scope_ids)#{ScopeId => Identity},
+-            put_context(Ctx0#ctx{scopes = Scopes1,
++                                           handle = Scope,
++                                           height = Height}},
++            Namespaces1 = (Ctx#ctx.namespaces)#{Ns => Anchor},
++            ScopeIds1 = (Ctx#ctx.scope_ids)#{ScopeId => Identity},
++            put_context(Ctx#ctx{scopes = Scopes1,
+                                  namespaces = Namespaces1,
+                                  scope_ids = ScopeIds1}),
+             {ok, ScopeId, Scope};
+@@ -615,6 +622,13 @@ open_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
+             {error, {protocol_error, proof_engine}}
+     end.
+ 
++-doc "Exact pinned reads, including scopes visited by failed alternatives.".
++-spec read_dependencies() -> [{binary(), <<_:256>>, non_neg_integer()}].
++read_dependencies() ->
++    lists:sort([{Ns, Anchor, Height} ||
++                 {{Ns, Anchor}, #scope{height = Height}} <-
++                     maps:to_list((context())#ctx.scopes)]).
++
+ monitor_scope(
+   Pid, {quod_scope_session, Pid, _ScopeId, _ProofId,
+         _SessionRef, _Ns, _Anchor}) ->
+diff --git a/test/quod_ask_router_tests.erl b/test/quod_ask_router_tests.erl
+index fc0f438..96cf798 100644
+--- a/test/quod_ask_router_tests.erl
++++ b/test/quod_ask_router_tests.erl
+@@ -216,7 +216,7 @@ pending_precedes_send_and_scope_is_reused_test() ->
+                    end,
+           ReuseBinding = setelement(
+                            3, setelement(5, Binding, id(99)), key(99)),
+-          ?assertEqual({ok, Handle},
++          ?assertEqual({ok, Handle, 42},
+                        quod_ask_router:ensure_scope(
+                          Router, {"different.invalid", 9999},
+                          ReuseBinding, node, 1)),
+diff --git a/test/quod_ask_tests.erl b/test/quod_ask_tests.erl
+index a4ee54d..55ea837 100644
+--- a/test/quod_ask_tests.erl
++++ b/test/quod_ask_tests.erl
+@@ -125,7 +125,7 @@ nested_source_binding_test() ->
+             quod_proof_context:get_or_open_scope(
+               {<<"quod:nested-source-test">>, Anchor},
+               fun(_ScopeId) ->
+-                  {ok, Registered, registered_scope}
++                  {ok, Registered, registered_scope, 7}
+               end),
+         ok = quod_proof_context:register_invocation(
+                {ScopeId, InvocationId}, Selection),
+@@ -751,7 +751,7 @@ t_repeated_follow_queries_are_independent(#{pets := P}) ->
+ %% choice-point ownership keeps both live invocations isolated.
+ t_cut_follow_dedup_does_not_cross_invocations(
+   #{animals := A, pets := P}) ->
+-    {ok, Handle} = open_test_scope(A, false, 10),
++    {ok, Handle, _Height} = open_test_scope(A, false, 10),
+     Follow = {once, {diet, {':', animals, dog}, kibble}},
+     Chain = [{P, quod_simplex:genesis_hash(P)}],
+     First = invocation_id(10),
+@@ -930,8 +930,8 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
+                                      OriginIdentity,
+                                      quod_proof_context:principal(), node,
+                                      quod_trace:context()}) of
+-                                 {ok, Opened} ->
+-                                     {ok, quod_scope_session:pid(Opened), Opened};
++                                 {ok, Opened, Height} ->
++                                     {ok, quod_scope_session:pid(Opened), Opened, Height};
+                                  {error, _} = Error ->
+                                      Error
+                              end
+@@ -1320,7 +1320,7 @@ assert_foreign_transaction(
+ %% A scope may be deriving an unproductive goal without blocking its owning
+ %% ontology engine. Killing that isolated worker leaves the engine healthy.
+ t_scope_engine_stays_responsive(#{slow := Slow, pets := P}) ->
+-    {ok, Handle} = open_test_scope(Slow, false, 6),
++    {ok, Handle, _Height} = open_test_scope(Slow, false, 6),
+     InvocationId = invocation_id(6),
+     {ok, OpenRef} = quod_scope_session:invoke_open(
+                       Handle, InvocationId, loop,
+@@ -1337,7 +1337,7 @@ t_scope_engine_stays_responsive(#{slow := Slow, pets := P}) ->
+     ?assertEqual(ok, wait_workers(Slow, 0, ?WAIT_RETRIES)).
+ 
+ t_target_crash_kills_scope(#{slow := Slow}) ->
+-    {ok, Handle} = open_test_scope(Slow, false, 7),
++    {ok, Handle, _Height} = open_test_scope(Slow, false, 7),
+     ScopePid = quod_scope_session:pid(Handle),
+     ScopeMRef = monitor(process, ScopePid),
+     Engine = quod_reg:where({quod_prolog, Slow}),
+@@ -1350,7 +1350,7 @@ t_target_crash_kills_scope(#{slow := Slow}) ->
+ 
+ t_scope_worker_limit(#{animals := A}) ->
+     Handles = [begin
+-                   {ok, Handle} = open_test_scope(A, false, N),
++                   {ok, Handle, _Height} = open_test_scope(A, false, N),
+                    Handle
+                end || N <- lists:seq(100, 163)],
+     Anchor = quod_simplex:genesis_hash(A),
+@@ -1367,7 +1367,7 @@ t_scope_worker_limit(#{animals := A}) ->
+ %% A scope remains pinned to its committed base while a later transaction
+ %% advances the ontology. Subsequent answers cannot observe that new fact.
+ t_frozen_scope_view(#{animals := A, pets := P}) ->
+-    {ok, Handle} = open_test_scope(A, false, 8),
++    {ok, Handle, _Height} = open_test_scope(A, false, 8),
+     try
+         InvocationId = invocation_id(8),
+         {ok, OpenRef} = quod_scope_session:invoke_open(
+diff --git a/test/quod_client_result_tests.erl b/test/quod_client_result_tests.erl
+index 4fe88f4..00f4c26 100644
+--- a/test/quod_client_result_tests.erl
++++ b/test/quod_client_result_tests.erl
+@@ -2,6 +2,29 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include("quod_client_goal_limits.hrl").
++-include("quod_proof_limits.hrl").
++
++signed_read_dependencies_survive_answers_failure_and_errors_test() ->
++    Evidence = maps:get(evidence,fixture()),
++    Deps = [{<<"a">>,<<1:256>>,7},{<<"b">>,<<2:256>>,9}],
++    lists:foreach(fun(Raw) ->
++        Outcome = quod_client_result:normalize(Evidence,Raw),
++        Read = {read,Deps,Outcome},
++        ?assertEqual(Read,quod_client_result:normalize(Evidence,{read,Deps,Raw})),
++        {ok,Blob} = quod_client_result:encode(Read),
++        ?assertEqual({ok,Read},quod_client_result:decode(Blob)),
++        {_,Json} = quod_client_result:http_normalized(Evidence,Read),
++        ?assertEqual([#{ns => N,genesis_anchor => b64url(A),height => H}
++                      || {N,A,H} <- Deps],maps:get(dependencies,Json))
++    end,[{ok,[#{0 => bob}],7},fail,{fail,[denied]},{error,read_only}]),
++    BadDeps = [lists:reverse(Deps),Deps++Deps,[{<<"a">>,<<1:256>>,-1}],
++               [{<<"a">>,<<1:256>>,1 bsl 64}],[{<<"a">>,<<1>>,1}],
++               [{<<>>,<<1:256>>,0}],
++               [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}],
++               [{<<I:32>>,<<I:256>>,I} || I <- lists:seq(1,?QUOD_MAX_SCOPES_PER_PROOF+1)]],
++    [?assertEqual({error,invalid_result},quod_client_result:encode({read,D,fail})) || D <- BadDeps],
++    [?assertEqual({error,invalid_result},quod_client_result:encode({read,Deps,R})) || R <-
++        [{read,Deps,fail},stopped,{pending,{transaction,<<"a">>,<<1:256>>,<<2:256>>}}]].
+ 
+ independent_refusals_remain_typed_through_the_client_boundary_test() ->
+     lists:foreach(fun({Reason, Status}) ->
+diff --git a/test/quod_proof_context_tests.erl b/test/quod_proof_context_tests.erl
+index 4b1c7fa..cb029a8 100644
+--- a/test/quod_proof_context_tests.erl
++++ b/test/quod_proof_context_tests.erl
+@@ -5,6 +5,7 @@
+ context_test_() ->
+     [?_test(with_context(fun reuses_exact_identity/1)),
+      ?_test(with_context(fun rejects_anchor_conflict/1)),
++     ?_test(with_context(fun retains_exact_read_heights/1)),
+      ?_test(with_context(fun bounds_distinct_scopes/1)),
+      ?_test(with_context(fun bounds_invocation_proxies/1)),
+      ?_test(with_context(fun binds_proxies_to_registered_owner/1)),
+@@ -34,7 +35,7 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
+     try
+         {ok, ScopeId, first} = quod_proof_context:get_or_open_scope(
+                                  Identity,
+-                                 fun(_Id) -> {ok, ScopePid, first} end),
++                                 fun(_Id) -> {ok, ScopePid, first, 7} end),
+         {ok, ScopeId, first} = quod_proof_context:get_or_open_scope(
+                                  Identity,
+                                  fun(_Id) -> error(opened_twice) end),
+@@ -46,12 +47,28 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
+         ScopePid ! stop
+     end.
+ 
++retains_exact_read_heights(_Ctx) ->
++    A = {<<"a">>, <<11:256>>}, B = {<<"b">>, <<12:256>>},
++    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
++        fun(_) -> {ok,self(),b,42} end),
++    {ok, _, a} = quod_proof_context:get_or_open_scope(A,
++        fun(_) -> {ok,self(),a,17} end),
++    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
++        fun(_) -> error(must_reuse_pinned_height) end),
++    Dependencies = [{<<"a">>,<<11:256>>,17},{<<"b">>,<<12:256>>,42}],
++    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()),
++    ?assertEqual({error,{protocol_error,proof_engine}},
++        quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
++            fun(_) -> {ok,self(),missing,-1} end)),
++    ?assertEqual(ok,quod_proof_context:finalize(abort)),
++    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()).
++
+ rejects_anchor_conflict(_Ctx) ->
+     ScopePid = spawn(fun wait/0),
+     try
+         {ok, _ScopeId, first} = quod_proof_context:get_or_open_scope(
+                         {<<"b">>, <<1:256>>},
+-                        fun(_Id) -> {ok, ScopePid, first} end),
++                        fun(_Id) -> {ok, ScopePid, first, 7} end),
+         ?assertEqual(
+            {error, {anchor_conflict, <<"b">>}},
+            quod_proof_context:get_or_open_scope(
+@@ -70,7 +87,7 @@ bounds_distinct_scopes(_Ctx) ->
+               Anchor = <<Index:256>>,
+               {ok, _ScopeId, Index} = quod_proof_context:get_or_open_scope(
+                               {Ns, Anchor},
+-                              fun(_Id) -> {ok, Pid, Index} end)
++                              fun(_Id) -> {ok, Pid, Index, 7} end)
+           end,
+           lists:zip(lists:seq(1, 8), lists:sublist(Pids, 8))),
+         Ninth = lists:nth(9, Pids),
+@@ -78,7 +95,7 @@ bounds_distinct_scopes(_Ctx) ->
+            {error, {scope_limit_exceeded, ?QUOD_MAX_SCOPES_PER_PROOF}},
+            quod_proof_context:get_or_open_scope(
+              {<<"9">>, <<9:256>>},
+-             fun(_Id) -> {ok, Ninth, 9} end))
++             fun(_Id) -> {ok, Ninth, 9, 7} end))
+     after
+         lists:foreach(fun(Pid) -> Pid ! stop end, Pids)
+     end.
+@@ -102,7 +119,7 @@ binds_proxies_to_registered_owner(_Ctx) ->
+     try
+         {ok, ScopeId, scope} = quod_proof_context:get_or_open_scope(
+                         {<<"b">>, <<1:256>>},
+-                        fun(_Id) -> {ok, ScopePid, scope} end),
++                        fun(_Id) -> {ok, ScopePid, scope, 7} end),
+         Owner = {ScopeId, opaque_id()},
+         OtherInvocation = {ScopeId, opaque_id()},
+         StrangerActor = {opaque_id(), opaque_id()},
+@@ -148,7 +165,7 @@ local_typed_death_wins_finalization(#{proof_id := ProofId}) ->
+                                    Handle = {quod_scope_session, ScopePid,
+                                              ScopeId, ProofId, make_ref(),
+                                              Ns, Anchor},
+-                                   {ok, ScopePid, Handle}
++                                   {ok, ScopePid, Handle, 7}
+                                end),
+     receive {scope_answer, ScopePid, ok} -> ok
+     after 1000 -> error(scope_answer_missing)
+@@ -179,7 +196,7 @@ live_local_scope_is_closed_at_finalization(#{proof_id := ProofId}) ->
+                                    Handle = {quod_scope_session, ScopePid,
+                                              ScopeId, ProofId, make_ref(),
+                                              Ns, Anchor},
+-                                   {ok, ScopePid, Handle}
++                                   {ok, ScopePid, Handle, 7}
+                                end),
+     ?assertEqual(ok, quod_proof_context:finalize(commit)),
+     receive {scope_closed, ScopePid} -> ok
+@@ -218,11 +235,13 @@ finalizes_remote_router_once(#{proof_id := ProofId}) ->
+     RequestLink = spawn(fun wait/0),
+     Owner = self(),
+     try
+-        {ok, _} = bind_remote_router(Router),
+         Remote = remote_handle(Router, RequestLink, ProofId, 1),
+         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
+                                   {<<"remote">>, <<11:256>>},
+-                                  fun(_Id) -> {ok, Router, Remote} end),
++                                  fun(_Id) ->
++                                      {ok, _} = bind_remote_router(Router),
++                                      {ok, Router, Remote, 7}
++                                  end),
+         ?assertEqual(ok, quod_proof_context:finalize(commit)),
+         receive {router_finalized, Router, Owner, ProofId} -> ok
+         after 1000 -> error(finalize_not_called)
+@@ -254,7 +273,7 @@ retains_finalization_poison(#{proof_id := ProofId}) ->
+         Remote = remote_handle(Router, RequestLink, ProofId, 2),
+         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
+                                   {<<"remote">>, <<13:256>>},
+-                                  fun(_Id) -> {ok, Router, Remote} end),
++                                  fun(_Id) -> {ok, Router, Remote, 7} end),
+         ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
+         ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
+         receive {router_finalized, Router, Owner, ProofId} -> ok
+@@ -281,7 +300,7 @@ maps_dead_router_to_target(#{proof_id := ProofId}) ->
+         Remote = remote_handle(Router, RequestLink, ProofId, 3),
+         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
+                                   {<<"remote">>, <<11:256>>},
+-                                  fun(_Id) -> {ok, Router, Remote} end),
++                                  fun(_Id) -> {ok, Router, Remote, 7} end),
+         ?assertEqual(
+            {error, {ontology_unreachable, <<"remote">>}},
+            quod_proof_context:finalize(commit))
+@@ -295,10 +314,10 @@ closes_each_scope_once(_Ctx) ->
+     Pid2 = spawn(fun wait/0),
+     {ok, _ScopeId1, one} = quod_proof_context:get_or_open_scope(
+                   {<<"b">>, <<1:256>>},
+-                  fun(_Id) -> {ok, Pid1, one} end),
++                  fun(_Id) -> {ok, Pid1, one, 7} end),
+     {ok, _ScopeId2, two} = quod_proof_context:get_or_open_scope(
+                   {<<"c">>, <<2:256>>},
+-                  fun(_Id) -> {ok, Pid2, two} end),
++                  fun(_Id) -> {ok, Pid2, two, 7} end),
+     NoProxy = fun(_Proxy) -> ok end,
+     ok = quod_proof_context:stop(
+            fun(Scope) -> Parent ! {closed, Scope} end, NoProxy),
+@@ -344,7 +363,7 @@ process_monitors() ->
+ 
+ register_actor(Pid, Ns, Anchor) ->
+     {ok, ScopeId, scope} = quod_proof_context:get_or_open_scope(
+-                    {Ns, Anchor}, fun(_Id) -> {ok, Pid, scope} end),
++                    {Ns, Anchor}, fun(_Id) -> {ok, Pid, scope, 7} end),
+     Actor = {ScopeId, opaque_id()},
+     ok = quod_proof_context:register_invocation(
+            Actor, quod_transaction_scope:empty_selection()),

@@ -1,0 +1,174 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:39:43.649208 ===
+foreign history integrity failure; rebuilding identity={<<"foreign:test:424">>,
+                                                        <<233,100,36,30,20,98,
+                                                          175,207,44,177,57,
+                                                          243,3,19,217,36,101,
+                                                          199,3,230,34,60,32,
+                                                          10,105,21,121,234,
+                                                          200,108,198,198>>}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:39:49.041575 ===
+foreign history integrity unavailable identity={<<"foreign:test:1010">>,
+                                                <<34,121,150,93,77,132,123,
+                                                  115,220,190,23,28,211,154,
+                                                  232,201,156,108,123,1,235,
+                                                  98,69,235,242,178,155,26,96,
+                                                  32,9,195>>} cause=cache_corrupt
+[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:39:49.196699 ===
+foreign history integrity unavailable identity={<<"foreign:test:1017">>,
+                                                <<142,77,17,36,26,194,254,1,
+                                                  140,83,150,208,33,54,138,5,
+                                                  151,75,11,87,136,147,148,92,
+                                                  197,69,231,183,130,185,227,
+                                                  22>>} cause=cache_corrupt
+=ERROR REPORT==== 10-Oct-2026::23:39:49.210648 ===
+foreign history integrity failure; rebuilding identity={<<"foreign:test:1017">>,
+                                                        <<142,77,17,36,26,194,
+                                                          254,1,140,83,150,
+                                                          208,33,54,138,5,151,
+                                                          75,11,87,136,147,
+                                                          148,92,197,69,231,
+                                                          183,130,185,227,22>>}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:39:53.360360 ===
+foreign history integrity unavailable identity={<<"foreign:test:1102">>,
+                                                <<227,186,216,213,251,195,238,
+                                                  196,21,217,49,8,241,219,53,
+                                                  136,193,184,85,145,233,228,
+                                                  148,181,226,107,231,55,124,
+                                                  4,1,185>>} cause=custody_lost
+=ERROR REPORT==== 10-Oct-2026::23:39:53.360175 ===
+Error in process <0.4254.0> with exit value:
+{{resident_fetch_crash,{evidence,<<52,240,125,154,183,254,195,119,4,230,238,
+                                   107,171,56,193,146,127,97,235,234,19,75,36,
+                                   22,25,88,244,86,131,72,147,183>>,
+                                 tip}},
+ [{quod_foreign_log_tests,'-worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test/0-fun-0-',
+                          8,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,3111}]},
+  {quod_foreign_log,fetch_page,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,6490}]},
+  {quod_foreign_log,fetch_evidence_pages,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,5545}]},
+  {quod_peer_route,walk,5,
+                   [{file,"/home/yan/src/quod/src/quod_peer_route.erl"},
+                    {line,23}]},
+  {quod_trace,with_context,2,
+              [{file,"/home/yan/src/quod/src/quod_trace.erl"},{line,59}]},
+  {quod_foreign_log,'-start_current_probes/3-fun-4-',8,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,6223}]}]}
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:40:01.388772 ===
+foreign history integrity unavailable identity={<<"foreign:test:1449">>,
+                                                <<122,197,63,234,37,82,91,142,
+                                                  120,94,247,8,170,216,213,
+                                                  138,220,177,145,89,222,124,
+                                                  192,48,93,77,44,101,183,124,
+                                                  81,243>>} cause=custody_lost
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:40:07.534498 ===
+foreign history integrity failure; rebuilding identity={<<"foreign:test:1596">>,
+                                                        <<242,15,239,97,222,
+                                                          93,122,248,205,194,
+                                                          190,159,76,249,99,
+                                                          226,33,118,108,194,
+                                                          162,29,217,31,126,
+                                                          214,178,139,228,54,
+                                                          60,243>>}
+[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:40:07.583882 ===
+Error in process <0.5940.0> with exit value:
+{{badmatch,{error,{bad_cert,2}}},
+ [{quod_foreign_log_tests,'-fixture_evidence_sender/4-fun-1-',6,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7724}]},
+  {quod_ledger_store,fold_groups,5,
+                     [{file,"/home/yan/src/quod/src/quod_ledger_store.erl"},
+                      {line,643}]},
+  {quod_foreign_log_tests,fixture_evidence_sender,4,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7722}]},
+  {quod_foreign_log_tests,fixture_evidence_parts,4,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7699}]},
+  {quod_foreign_log_tests,'-chain_fetch/2-fun-1-',9,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7664}]},
+  {quod_foreign_log,fetch_page,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,6490}]},
+  {quod_foreign_log,fetch_evidence_pages,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,5545}]},
+  {quod_peer_route,walk,5,
+                   [{file,"/home/yan/src/quod/src/quod_peer_route.erl"},
+                    {line,23}]}]}
+
+=ERROR REPORT==== 10-Oct-2026::23:40:07.584854 ===
+Error in process <0.5946.0> with exit value:
+{{badmatch,{error,{bad_cert,2}}},
+ [{quod_foreign_log_tests,'-fixture_evidence_sender/4-fun-1-',6,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7724}]},
+  {quod_ledger_store,fold_groups,5,
+                     [{file,"/home/yan/src/quod/src/quod_ledger_store.erl"},
+                      {line,643}]},
+  {quod_foreign_log_tests,fixture_evidence_sender,4,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7722}]},
+  {quod_foreign_log_tests,fixture_evidence_parts,4,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7699}]},
+  {quod_foreign_log_tests,'-chain_fetch/2-fun-1-',9,
+                          [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+                           {line,7664}]},
+  {quod_foreign_log,fetch_page,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,6490}]},
+  {quod_foreign_log,fetch_evidence_pages,9,
+                    [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},
+                     {line,5545}]},
+  {quod_peer_route,walk,5,
+                   [{file,"/home/yan/src/quod/src/quod_peer_route.erl"},
+                    {line,23}]}]}
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 10-Oct-2026::23:40:07.648725 ===
+Error in process <0.6014.0> with exit value:
+{foreign_fetch_dependency_fault,
+    [{quod_foreign_log_tests,'-fetch_dependency_failure_case/2-fun-0-',8,
+         [{file,"/home/yan/src/quod/test/quod_foreign_log_tests.erl"},
+          {line,7245}]},
+     {quod_foreign_log,fetch_page,9,
+         [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},{line,6490}]},
+     {quod_foreign_log,fetch_evidence_pages,9,
+         [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},{line,5545}]},
+     {quod_peer_route,walk,5,
+         [{file,"/home/yan/src/quod/src/quod_peer_route.erl"},{line,23}]},
+     {quod_trace,with_context,2,
+         [{file,"/home/yan/src/quod/src/quod_trace.erl"},{line,59}]},
+     {quod_foreign_log,'-start_current_probes/3-fun-4-',8,
+         [{file,"/home/yan/src/quod/src/quod_foreign_log.erl"},{line,6223}]}]}
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_foreign_projection_tests:snapshot_reader_retains_old_versions_across_real_updates_test/0
+[0;31m     Failure/Error: ?assertEqual({ok,2,#{{materializer_value,1} => [{{materializer_value,one},true}]}}, quod_foreign_projection : clauses ( Pid , Gen , [ { materializer_value , 1 } ] , 1000 ))
+       expected: {ok,2,
+                     #{{materializer_value,1} =>
+                           [{{materializer_value,one},true}]}}
+            got: {ok,2,
+                     #{{materializer_value,1} =>
+                           [{{materializer_value,one},{[],false}}]}}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 44.256 seconds
+[0;31m216 tests, 1 failures
+[0m===> Error running tests

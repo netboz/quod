@@ -1217,7 +1217,8 @@ ready_boundary_waits_for_resource_snapshot_reader_test_() ->
         {Caller, Ref} = resource_request(Ns, H, block),
         {Reader, H, initial} = resource_snapshot(),
         Monitor = monitor(process, Reader),
-        quod_reg:where({quod_runtime, Ns}) ! {replay_ready, {boundary, make_ref()}, H},
+        Engine = quod_reg:where({quod_prolog,Ns}),
+        quod_reg:where({quod_runtime, Ns}) ! {replay_ready, {Engine,make_ref()}, H},
         %% This call is processed after the ready message. The old reader still
         %% pins its snapshot; replacement cannot occur until it finishes.
         ?assertEqual(R0, maps:get(reconciles, quod_runtime:stats(Ns))),

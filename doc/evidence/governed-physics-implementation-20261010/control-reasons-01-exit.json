@@ -1,0 +1,24 @@
+{
+  "started": "2026-10-10T17:56:26.326024+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:hot_control_policy_reasons_test_"
+  ],
+  "source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "04380cde63a1ea65244f59af3e462c0b9062f0889aefa9919070368c39dde754",
+    "doc/physics-native.md": "fee4754f6a1a660f8aaae82f86fbac77a1f407fc81a15fae3b40d92a8f1efc24"
+  },
+  "finished": "2026-10-10T17:56:31.134596+00:00",
+  "exit_code": 1,
+  "final_source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "04380cde63a1ea65244f59af3e462c0b9062f0889aefa9919070368c39dde754",
+    "doc/physics-native.md": "fee4754f6a1a660f8aaae82f86fbac77a1f407fc81a15fae3b40d92a8f1efc24"
+  }
+}

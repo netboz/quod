@@ -2,6 +2,43 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_client_goal_limits.hrl").
+-include("quod_proof_limits.hrl").
+
+signed_read_dependencies_survive_answers_failure_and_errors_test() ->
+    Evidence = maps:get(evidence,fixture()),
+    Deps = [{<<"a">>,<<1:256>>,7},{<<"b">>,<<2:256>>,9}],
+    lists:foreach(fun(Raw) ->
+        Outcome = quod_client_result:normalize(Evidence,Raw),
+        Read = {read,Deps,Outcome},
+        ?assertEqual(Read,quod_client_result:normalize(Evidence,{read,Deps,Raw})),
+        {ok,Blob} = quod_client_result:encode(Read),
+        ?assertEqual({ok,Read},quod_client_result:decode(Blob)),
+        {_,Json} = quod_client_result:http_normalized(Evidence,Read),
+        ?assertEqual([#{ns => N,genesis_anchor => b64url(A),height => integer_to_binary(H)}
+                      || {N,A,H} <- Deps],maps:get(dependencies,Json))
+    end,[{ok,[#{0 => bob}],7},fail,{fail,[denied]},{error,read_only}]),
+    BadDeps = [lists:reverse(Deps),Deps++Deps,[{<<"a">>,<<1:256>>,-1}],
+               [{<<"a">>,<<1:256>>,1 bsl 64}],[{<<"a">>,<<1>>,1}],
+               [{<<>>,<<1:256>>,0}],
+               [{binary:copy(<<"n">>,?DIRECTORY_MAX_NAMESPACE_BYTES+1),<<1:256>>,0}],
+               [{<<"a">>,<<1:256>>,0},{<<"a">>,<<2:256>>,0}],
+               [{<<I:32>>,<<I:256>>,I} || I <- lists:seq(1,?QUOD_MAX_SCOPES_PER_PROOF+1)]],
+    [?assertEqual({error,invalid_result},quod_client_result:encode({read,D,fail})) || D <- BadDeps],
+    [?assertEqual({error,invalid_result},quod_client_result:encode({read,Deps,R})) || R <-
+        [{read,Deps,fail},stopped,{pending,{transaction,<<"a">>,<<1:256>>,<<2:256>>}}]].
+
+read_dependency_heights_are_lossless_json_test() ->
+    Evidence = maps:get(evidence,fixture()),
+    %% A browser Number cannot distinguish these last two uint64 values.
+    lists:foreach(fun(Height) ->
+        Read = {read,[{<<"a">>,<<1:256>>,Height}],fail},
+        {200,Body} = quod_client_result:http_normalized(Evidence,Read),
+        #{<<"dependencies">> := [#{<<"height">> := Decimal}]} =
+            json:decode(iolist_to_binary(json:encode(Body))),
+        ?assertEqual(integer_to_binary(Height),Decimal),
+        ?assertEqual(Height,binary_to_integer(Decimal))
+    end,[0,9007199254740991,9007199254740993,
+          18446744073709551614,18446744073709551615]).
 
 independent_refusals_remain_typed_through_the_client_boundary_test() ->
     lists:foreach(fun({Reason, Status}) ->
@@ -125,6 +162,30 @@ aggregate_result_bound_is_identical_before_transport_test() ->
     ?assertEqual({error, result_too_large}, Result),
     ?assertEqual({413, #{error => result_too_large}},
                  quod_client_result:http_normalized(Evidence, Result)).
+
+read_envelope_survives_payload_and_envelope_overflow_test() ->
+    Evidence = maps:get(evidence,fixture()),
+    Deps = [{<<"a">>,<<1:256>>,7}],
+    Huge = binary:copy(<<"x">>,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+    lists:foreach(fun({Raw,Reason}) ->
+        Result = quod_client_result:normalize(Evidence,{read,Deps,Raw}),
+        ?assertEqual({read,Deps,{error,Reason}},Result),
+        {ok,Bytes} = quod_client_result:encode(Result),
+        ?assertEqual({ok,Result},quod_client_result:decode(Bytes))
+    end,[{{ok,[#{0 => Huge}],7},result_too_large},
+          {{ok,[#{0 => self()}],7},proof_unavailable}]),
+    %% An otherwise admissible answer can overflow only after dependencies
+    %% are added; the complete envelope owns the byte limit.
+    Payload = binary:part(Huge,0,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES - 256),
+    LargeDeps = [{<<I,(binary:copy(<<"n">>,254))/binary>>,<<I:256>>,7}
+                 || I <- lists:seq(1,?QUOD_MAX_SCOPES_PER_PROOF)],
+    ?assertMatch({answers,7,[_]},quod_client_result:normalize(Evidence,{ok,[#{0 => Payload}],7})),
+    ?assertEqual({read,LargeDeps,{error,result_too_large}},
+        quod_client_result:normalize(Evidence,{read,LargeDeps,{ok,[#{0 => Payload}],7}})),
+    ?assertEqual({read,[],{error,proof_unavailable}},
+        quod_client_result:normalize(Evidence,{read,[{Huge,<<1:256>>,7}],fail})),
+    ?assertEqual({read,[],{error,proof_unavailable}},
+        quod_client_result:normalize(Evidence,{read,[{<<"a">>,bad_anchor,7}],fail})).
 
 transient_bindings_use_the_complete_reply_contract_test() ->
     Evidence = maps:get(evidence, fixture()),

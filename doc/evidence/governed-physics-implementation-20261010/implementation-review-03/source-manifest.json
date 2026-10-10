@@ -1,0 +1,90 @@
+{
+  "head": "77a0b1e046be11a14fdef2139149296d6ca377e6",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636,
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/proofs.md",
+      "bytes": 7371,
+      "sha256": "2f76d43e0a1e15b2d1613f4a8e8c2ac390c25426ce2ebad7b0c74d17c89c8cfd"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "bytes": 42877,
+      "sha256": "b521717a514e4ff974e58c3927c7a68df8d1b68541fcf91306e9ed83af51a670"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "bytes": 38881,
+      "sha256": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231"
+    },
+    {
+      "file": "native/quod_physics/src/lib.rs",
+      "bytes": 31134,
+      "sha256": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9"
+    },
+    {
+      "file": "native/quod_physics/src/geometry.rs",
+      "bytes": 8496,
+      "sha256": "3ab51b0ec968a653ccf0748c89dfc80e05b5d765a790887546853e741fa792ae"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "bytes": 51244,
+      "sha256": "495e93da98f016dbb9d8306696807f2b1583b1a630f99bed008ae1cf2d559a64"
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "bytes": 13326,
+      "sha256": "90f291c986da1a50dd9c88471deca68fb6470da781c62e9d8b7a11f7098ffa55"
+    },
+    {
+      "file": "src/quod_client_goal_ingress.erl",
+      "bytes": 22922,
+      "sha256": "7d0eea3a5dd9e5d4853ff24b8c92bb4bd9d5d23a47b41a4fa4961aea19b7a0a5"
+    },
+    {
+      "file": "src/quod_wire_term.erl",
+      "bytes": 33619,
+      "sha256": "f80c85433c494e661f577d11b2063d44e2a39aa085e92ec5e1fbf44f836a881d"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "bytes": 164282,
+      "sha256": "de7a7aea87c1603c8d7f32a1690d194fa3bdbba4fba3a22387ccb5cfdb7306e9"
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "bytes": 7426,
+      "sha256": "ec4d9a193ab0c4434fe57492bf6aed44ac432e9fd17d890ef363c018e6b5e6ee"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/implementation-geometry-03.md",
+      "bytes": 2512,
+      "sha256": "d651e4bb489764f0efe3000609a7e6f40b2f0a855307d8b7a0f4acfdfe0ade24"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/implementation-review-02/fable-review.md",
+      "bytes": 8383,
+      "sha256": "c9f3dd26a6090f0fa053940cc3966c31b58353f15a3c74dbf53a6676c2a2c415"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/capability-review-disposition.md",
+      "bytes": 3431,
+      "sha256": "ef14b8d4586c42bc4e2396858aae04e60119ae907a2a7ed2e26cae23e4c5d6b6"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/control-reasons-03-exit.json",
+      "bytes": 1355,
+      "sha256": "db4864ea7687fffcabc8bdaf656fb55c6604c58047d18ad2ba77a4b5646e8199"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/owners-geometry-03-exit.json",
+      "bytes": 1168,
+      "sha256": "8ee24026602ebcf9f058ff70dd413b1ed2f15174a21a013f89766ed59a65efff"
+    }
+  ]
+}

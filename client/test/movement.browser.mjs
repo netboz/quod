@@ -13,25 +13,25 @@ export async function runMovementSmoke(canvas) {
   const rendered = async () => { scene.render() }
   const check = (condition, message) => { if (!condition) throw new Error(message) }
   try {
-    const current = { fence: 'fixture', marks: [],
+    const current = { selection: 'active', fence: 'fixture', marks: [],
       control: readControl('control(human,1,controlled_agent(vehicle,1,2,1,motion(grounded(700),2000,1600,500,query_limits(2,0,8,128),[snap(785),teleport(6000,2000,700)]),viewpoint(cockpit,pose(vector(500,300,0),rotation(0,785,0)),tracking(view_only,500))))'),
       poses: new Map([['2:1', { position: [0, 1, 0], rotation: [0, 0, 0, 1] }]]),
       feedback: { sequence: '-1', result: 'idle' }, clearance: 0.4,
       command: async input => { inputs.push(input); return true } }
-    world.simulation(current)
+    world.update(current)
     await rendered()
     const camera = scene.getCameraByName('observer')
     check(Object.keys(camera.inputs.attached).join() === 'mouse', 'direct camera translation remains attached')
     check(Math.abs(camera.globalPosition.x - 0.5) < 0.001, 'authored camera X offset was lost')
     check(Math.abs(camera.globalPosition.y - 1.3) < 0.001, 'authored camera Y offset was lost')
     current.poses.set('2:1', { position: [2, 1, 0], rotation: [0, 0, 0, 1] })
-    world.simulation(current)
+    world.update(current)
     await rendered()
     check(Math.abs(camera.globalPosition.x - 2.5) < 0.001, 'accepted physical correction did not reach the camera')
-    world.simulation(null)
+    world.update(null)
     await rendered()
     check(Object.keys(camera.inputs.attached).join() === 'mouse', 'unavailable world enabled observer travel')
-    world.simulation(undefined)
+    world.update({ marks: [], selection: 'nonphysical' })
     await rendered()
     check(Boolean(camera.inputs.attached.keyboard), 'leaving physical view did not restore observer input')
     check(errors.length === 0, `scene resource failure: ${errors.join(', ')}`)

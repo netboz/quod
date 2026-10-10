@@ -42,15 +42,28 @@ where the proof ran.
         independent_nesting | independent_mixed_writes |
         independent_scope_required.
 -type result() ::
+        {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
         {answers, non_neg_integer(), [binary()]} |
         {solution, <<_:256>>, non_neg_integer(), binary()} |
         stopped | fail | {failed, binary()} |
         {committed, [binary()], outcome()} |
         {pending, transaction_ref() | group_ref() | operation_ref()} |
         {error, public_error()}.
+-type read_outcome() :: {answers, non_neg_integer(), [binary()]} |
+        fail | {failed, binary()} | {error, public_error()}.
 
 -doc "Normalize one target-engine result and enforce the aggregate reply cap.".
 -spec normalize(quod_client_goal:evidence(), term()) -> result().
+normalize(Evidence, {read, Dependencies, Raw}) ->
+    case valid_dependencies(Dependencies, none, 0) of
+        true ->
+            Outcome = normalize(Evidence, Raw),
+            case valid_read_outcome(Outcome) of
+                true -> bounded({read, Dependencies, Outcome});
+                false -> bounded({read, Dependencies, {error, proof_unavailable}})
+            end;
+        false -> {read, [], {error, proof_unavailable}}
+    end;
 normalize(Evidence, Raw) ->
     case normalize_unbounded(Evidence, Raw) of
         {ok, Result} -> bounded(Result);
@@ -154,9 +167,15 @@ normalize_unbounded(_Evidence, _Raw) ->
 bounded(Result) ->
     case encode(Result) of
         {ok, _Blob} -> Result;
-        {error, result_too_large} -> {error, result_too_large};
-        {error, _} -> {error, proof_unavailable}
+        {error, result_too_large} -> bounded_error(Result, result_too_large);
+        {error, _} -> bounded_error(Result, proof_unavailable)
     end.
+
+bounded_error({read, Dependencies, _}, Reason) ->
+    %% Valid dependencies are bounded by both scope count and namespace size;
+    %% their error envelope always fits the aggregate reply limit.
+    {read, Dependencies, {error, Reason}};
+bounded_error(_, Reason) -> {error, Reason}.
 
 encode_bindings(Evidence, Bindings) ->
     encode_bindings(Evidence, Bindings, 0, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, []).
@@ -269,6 +288,8 @@ decode(Blob) when is_binary(Blob) ->
 decode(_Blob) ->
     {error, invalid_result}.
 
+valid_result({read, Dependencies, Outcome}) ->
+    valid_dependencies(Dependencies, none, 0) andalso valid_read_outcome(Outcome);
 valid_result({answers, Height, Blobs}) ->
     valid_uint64(Height) andalso valid_binding_blobs(Blobs);
 valid_result({solution, <<_:256>>, Height, Blob}) ->
@@ -285,6 +306,21 @@ valid_result({committed, Blobs, Outcome}) ->
 valid_result({pending, Ref}) -> valid_outcome_ref(Ref);
 valid_result({error, Reason}) -> valid_public_error(Reason);
 valid_result(_) -> false.
+
+valid_read_outcome({answers, _, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome(fail) -> true;
+valid_read_outcome({failed, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome({error, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome(_) -> false.
+
+valid_dependencies([], _, _) -> true;
+valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous, Count)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       (Previous =:= none orelse Previous < Ns),
+       Count < ?QUOD_MAX_SCOPES_PER_PROOF ->
+    valid_uint64(Height) andalso valid_dependencies(Rest, Ns, Count + 1);
+valid_dependencies(_, _, _) -> false.
 
 valid_binding_blobs(Blobs) ->
     valid_binding_blobs(Blobs, 0).
@@ -367,6 +403,11 @@ valid_public_error(Reason) ->
 -doc "Render one already-normalized local or forwarded result.".
 -spec http_normalized(quod_client_goal:evidence(), result()) ->
           {pos_integer(), map()}.
+http_normalized(Evidence, {read, Dependencies, Outcome}) ->
+    {Status, Body} = http_normalized(Evidence, Outcome),
+    {Status, Body#{dependencies =>
+        [#{ns => Ns, genesis_anchor => b64url(Anchor), height => integer_to_binary(Height)}
+         || {Ns, Anchor, Height} <- Dependencies]}};
 http_normalized(Evidence, {answers, Height, Blobs}) ->
     {200, evidence_json(
             Evidence,

@@ -1,0 +1,36 @@
+{
+  "started": "2026-10-10T18:55:53.392254+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_physics_tests,quod_physics_control_tests,quod_space_tests"
+  ],
+  "source_hashes": {
+    "src/quod_predicates.erl": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+    "src/predicates/quod_physics_predicates.erl": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a",
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "5eb38c3ab0e6eebacf27ffbf497d7f28c65456fdddd7f71695031e3c5008c141",
+    "doc/physics-native.md": "cbd656f458e447e1bf127fc5b6115488816814369d3baddf20bf7e2c3e60af65",
+    "test/quod_committed_projection_tests.erl": "146b51f6eafb7d7a5a3df2dab4eb81dbacec9fac235d230560b31e2473650ac0",
+    "test/quod_predicate_failure_tests.erl": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b",
+    "test/quod_agent_hosting_tests.erl": "cccadb31d77f198c2b55baaed079b6252151ca0e3aea69e7ac5df5900e47a565",
+    "test/quod_space_tests.erl": "a469cfdb65b52fbed3da637cf9162a18e39d7d8d8ef384afdc53340e51a4f21b"
+  },
+  "finished": "2026-10-10T18:57:27.639854+00:00",
+  "exit_code": 1,
+  "final_source_hashes": {
+    "src/quod_predicates.erl": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+    "src/predicates/quod_physics_predicates.erl": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a",
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "5eb38c3ab0e6eebacf27ffbf497d7f28c65456fdddd7f71695031e3c5008c141",
+    "doc/physics-native.md": "cbd656f458e447e1bf127fc5b6115488816814369d3baddf20bf7e2c3e60af65",
+    "test/quod_committed_projection_tests.erl": "146b51f6eafb7d7a5a3df2dab4eb81dbacec9fac235d230560b31e2473650ac0",
+    "test/quod_predicate_failure_tests.erl": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b",
+    "test/quod_agent_hosting_tests.erl": "cccadb31d77f198c2b55baaed079b6252151ca0e3aea69e7ac5df5900e47a565",
+    "test/quod_space_tests.erl": "a469cfdb65b52fbed3da637cf9162a18e39d7d8d8ef384afdc53340e51a4f21b"
+  }
+}

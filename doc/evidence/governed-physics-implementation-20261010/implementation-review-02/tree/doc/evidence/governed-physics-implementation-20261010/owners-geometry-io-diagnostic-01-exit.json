@@ -1,0 +1,23 @@
+{
+  "started": "2026-10-10T17:35:29.912738+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_physics_tests,quod_physics_control_tests,quod_runtime_tests,quod_space_tests"
+  ],
+  "source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "26b3ca6699db234540c290cc37d6907a34b90d35b3101e6fc14dd4bd826ef142"
+  },
+  "reason": "Attribute unresolved owners-geometry-02 global file:datasync/1 observation with process/caller/registry keys. Targeted geometry-io-diagnostic-01 passed without reproduction; no assertion weakened and no production change since failed broad run.",
+  "finished": "2026-10-10T17:36:38.591409+00:00",
+  "exit_code": 0,
+  "final_source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "26b3ca6699db234540c290cc37d6907a34b90d35b3101e6fc14dd4bd826ef142"
+  }
+}

@@ -63,7 +63,7 @@ runtime_edge_queued_before_owner_decision_is_not_lost_test() ->
         Ns = maps:get(ns, F),
         %% The subscription precedes the query. This ready edge arrives while
         %% the helper still awaits its first reply, before parent parking.
-        quod_reg:publish({runtime, Ns}, {replay_ready, make_ref(), 3}),
+        quod_reg:publish({runtime, Ns}, {replay_ready, {self(),make_ref()}, 3}),
         gen_server:reply(From, {error, {ontology_rebuilding, Ns}}),
         await_result(F, {error, not_ready}),
         {Worker, From2} = snapshot_call(F),

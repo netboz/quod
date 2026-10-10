@@ -3,6 +3,39 @@
 %% This file contains framework mechanics only. Domain rules belong in the
 %% ontology that owns them.
 
+%% One signed selection at the visible space. Navigation dependencies are
+%% opened under ordinary scope ACLs; the client endpoint checks their exact
+%% heights against the proof's retained dependency envelope before installation.
+client_world_view(Space, Mode, Dependencies,
+        world_view(entity_ref(Ns, Anchor, Space), Marks, Selection)) :-
+    term_variables([Space, Mode, Dependencies], []), atom(Mode),
+    client_view_dependencies(Dependencies),
+    current_ontology_identity(Ns, Anchor),
+    (space_instance(Space, space),
+     findall(Scene, world_view(Space, Mode, Scene), [Marks]),
+     term_variables(Marks, []),
+     findall(ontology_ref(R, A), rendering_vocabulary(R, A),
+             [ontology_ref(Rendering, RenderingAnchor)]),
+     Rendering::(current_ontology_identity(Rendering, RenderingAnchor),
+                 well_formed_scene(Marks)) ->
+        client_space_selection(Space, Marks, Selection)
+    ; Marks = [], Selection = unavailable).
+
+client_view_dependencies([]).
+client_view_dependencies([dependency(Ns, Anchor, _) | Rest]) :-
+    Ns::current_ontology_identity(Ns, Anchor),
+    client_view_dependencies(Rest).
+
+client_space_selection(Space, Marks, Selection) :-
+    (space_instance(Space, physical_space) ->
+        (findall(S, physics_client_view(Space, Marks, S), [Selection]) -> true
+        ; Selection = unavailable)
+    ; current_principal(Principal),
+      findall(S, physics_control(Space, Principal, _, S), Bindings),
+      (Bindings = [] -> Selection = nonphysical
+      ; Bindings = [none] -> Selection = nonphysical
+      ; Selection = unavailable)).
+
 %% Code is an eidolon of every class. The root catalogue supplies the exact
 %% recipe identity; an absent editing ontology simply offers no such recipe.
 %% This is a recipe association, never permission to change the target.
@@ -24,6 +57,9 @@ ontology_eidolons(Eidolons) :-
     sort(Choices, Eidolons).
 
 %% Discovery grants no invocation or mutation authority.
+%% Ontologies opting into public source discovery also expose their identity;
+%% this permits an anchored dependency read without granting source access.
+public_source_query(current_ontology_identity(_, _)).
 public_source_query(ontology_eidolons(_)).
 public_source_query(entity_eidolons(_, _)).
 

@@ -1,0 +1,12 @@
+{
+  "started": "2026-10-10T16:58:39.187995+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:supported_geometry_signed_edit_test_+invalid_geometry_signed_edit_rolls_back_test_"
+  ],
+  "finished": "2026-10-10T16:58:44.940518+00:00",
+  "exit_code": 1
+}

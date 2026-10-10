@@ -1060,10 +1060,10 @@ open_source_cursor(Ctx, Goal) ->
 
 read(Ctx, Goal) ->
     case submit(Ctx, read, Goal) of
-        {ok, _, {normalized, {answers, Height, Blobs}}} ->
+        {ok, _, {normalized, {read, _, {answers, Height, Blobs}}}} ->
             {ok, [begin {ok, Pairs} = quod_client_result:decode_binding(B), maps:from_list(Pairs) end
                   || B <- Blobs], Height};
-        {ok, _, {normalized, {failed, Reasons}}} ->
+        {ok, _, {normalized, {read, _, {failed, Reasons}}}} ->
             {ok, Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
             {fail, Decoded};
         Other -> Other

@@ -8,7 +8,7 @@ import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
-import { Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector.js'
+import { Vector3, Quaternion, Matrix } from '@babylonjs/core/Maths/math.vector.js'
 
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js'
@@ -76,8 +76,9 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
   return next
 }
 
-// Poses use metres and world-space XYZW quaternions. Body-driven occurrences
-// are roots; authored child transforms may still compose beneath those roots.
+// Poses use metres and world-space XYZW quaternions. Preserve authored parents
+// by expressing a body's world pose in its parent's current frame. Marks are
+// ordered parent-first, so attached decoration follows the same pose writer.
 export function paintBodyPoses(painted, poses) {
   for (const entry of painted.values()) {
     if (!entry.body) continue
@@ -86,6 +87,11 @@ export function paintBodyPoses(painted, poses) {
     if (!pose) continue
     entry.node.position.set(...pose.position)
     entry.node.rotationQuaternion = new Quaternion(...pose.rotation)
+    if (entry.node.parent) {
+      const world = Matrix.Compose(Vector3.One(), entry.node.rotationQuaternion, entry.node.position)
+      const inverseParent = entry.node.parent.computeWorldMatrix(true).clone().invert()
+      world.multiply(inverseParent).decompose(entry.node.scaling, entry.node.rotationQuaternion, entry.node.position)
+    }
   }
 }
 

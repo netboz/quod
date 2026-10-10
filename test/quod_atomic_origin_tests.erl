@@ -236,7 +236,7 @@ with_scopes(N, Options, Fun) ->
                 {false, {solution, _}} -> ok
             end,
             {ok, _, Handle} = quod_proof_context:get_or_open_scope(Target,
-              fun(ScopeId) -> {ok, self(), {local_scope, ScopeId, Ns, Anchor, 1, Session}} end),
+              fun(ScopeId) -> {ok, self(), {local_scope, ScopeId, Ns, Anchor, 1, Session}, 1} end),
             {Target, Handle}
         end || {Target, Session} <- Sessions]),
         Fun(Origin, Targets, Handles)

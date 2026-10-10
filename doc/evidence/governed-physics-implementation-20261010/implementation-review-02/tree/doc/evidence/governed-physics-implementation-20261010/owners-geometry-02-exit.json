@@ -1,0 +1,23 @@
+{
+  "started": "2026-10-10T17:22:13.442319+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_physics_tests,quod_physics_control_tests,quod_runtime_tests,quod_space_tests"
+  ],
+  "source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "f48c0ffe68fc745de79ca4d53af460cc3d9e4ea667b9daf34db2359c739925ed"
+  },
+  "focused_receipt": "geometry-04-exit.json",
+  "finished": "2026-10-10T17:23:21.636642+00:00",
+  "exit_code": 1,
+  "final_source_hashes": {
+    "priv/ontologies/quod_physics.pl": "c6a3d60a15f08aacd71170d6528a34b0605f846b7ed6b1173cb4e5f362463098",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "f48c0ffe68fc745de79ca4d53af460cc3d9e4ea667b9daf34db2359c739925ed"
+  }
+}

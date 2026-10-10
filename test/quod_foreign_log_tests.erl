@@ -3907,6 +3907,27 @@ progress_follow_never_materializes_facts_test() ->
         ok = quod_foreign_log:unfollow(Ref2)
     end).
 
+projection_handle_requires_actual_follow_consumer_test() ->
+    with_follow_demand_fixture(fun(Identity, Owner) ->
+        {ok, Ref} = quod_foreign_log:follow(Identity, projection),
+        {Notice, _} = receive_follow_resnapshot(Ref, Identity),
+        ok = quod_foreign_log:ack(Ref, Notice),
+        Parent = self(),
+        {Reader, Monitor} = spawn_monitor(fun() ->
+            Parent ! {borrowed_follow, self(),
+                      gen_server:call(Owner, {projection_handle, Ref})}
+        end),
+        receive {borrowed_follow, Reader, Result} ->
+            ?assertEqual({error, not_found}, Result)
+        after 1000 -> error(missing_follow_refusal)
+        end,
+        receive {'DOWN', Monitor, process, Reader, normal} -> ok
+        after 1000 -> error(reader_not_finished)
+        end,
+        ?assertMatch({ok, 2, #{}}, quod_foreign_log:projection_clauses(Ref, [], 1000)),
+        ok = quod_foreign_log:unfollow(Ref)
+    end).
+
 projection_demand_can_join_and_leave_a_progress_follow_test() ->
     with_follow_demand_fixture(fun(Identity, _Pid) ->
         {ok, Progress} = quod_foreign_log:follow(Identity, progress),
@@ -4259,7 +4280,7 @@ root_readiness_resumes_parked_projection_without_polling_test() ->
           Desired0#{content =>
                         Content0#{RootNs => #{genesis_hash => Network}}}),
         _ = quod_reg:publish(
-              {runtime, RootNs}, {replay_ready, boot, 1}),
+              {runtime, RootNs}, {replay_ready, {self(),boot}, 1}),
         ok = quod_foreign_log:ack(FollowRef, element(1, Waiting)),
         Ready = receive_follow_resnapshot(FollowRef, Identity),
         ?assertMatch({resnapshot, 2, _, _}, element(2, Ready)),
@@ -5986,9 +6007,10 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
         ?assertNot(
            lists:member(
              StaticBridgeHead, maps:get(changed_heads, Result))),
-        {ok, 1, Clauses} = quod_foreign_projection:clauses(
-                          Pid, Generation,
-                          [{agent_key, 3}, {hosts_ontology, 4}], 1000),
+        {ok, 1, Clauses} = quod_foreign_projection:read(
+                          Pid, Generation, quod_time:mono_ms() + 1000,
+                          fun(Snapshot) -> quod_foreign_projection:clauses(
+                              [{agent_key, 3}, {hosts_ontology, 4}], Snapshot) end),
         ?assert(lists:any(
                   fun({Head, {[], false}}) -> Head =:= AgentKey;
                      (_) -> false

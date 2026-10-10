@@ -189,13 +189,13 @@ local_process_uses_signed_ingress_without_a_session(
     application:set_env(quod, node_pubkey, <<16#73:256>>),
     try
         {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
-        ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
                      quod_client_goal_ingress:submit(Bytes, Signature)),
         ?assertEqual({error, invalid_signature},
                      quod_client_goal_ingress:submit(Bytes, <<0:512>>)),
         {Write, WriteSig} = signed_read(Ns, ?ANCHOR, KeyPair, Session,
                                         <<"assertz(local_process_must_not_write).">>),
-        ?assertMatch({ok, _, {normalized, {error, read_only}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {error, read_only}}}},
                      quod_client_goal_ingress:submit(Write, WriteSig)),
         {WrongAnchor, AnchorSig} = signed_read(Ns, <<0:256>>, KeyPair, Session, <<"true.">>),
         ?assertEqual({error, wrong_target},
@@ -212,7 +212,7 @@ local_read_uses_agent_acl_and_returns_named_bindings(
                            Ns, ?ANCHOR, KeyPair, Session,
                            <<"lookup(X).">>),
     {ok, #{variables := [{<<"X">>, 0}]},
-     {normalized, {answers, 1, [_]}}} =
+     {normalized, {read, _, {answers, 1, [_]}}}} =
         quod_client_goal_ingress:submit(read,
           maps:get(session_id, Session), Bytes, Signature, ?PEER).
 
@@ -237,21 +237,21 @@ read_mode_cannot_write_or_open_a_foreign_scope(
                                      Ns, ?ANCHOR, KeyPair, Session,
                                      <<"assertz(should_not_exist).">>),
     ?assertMatch(
-       {ok, _, {normalized, {error, read_only}}},
+       {ok, _, {normalized, {read, _, {error, read_only}}}},
        quod_client_goal_ingress:submit(read,
          SessionId, WriteBytes, WriteSignature, ?PEER)),
     {AbsentBytes, AbsentSignature} = signed_read(
                                        Ns, ?ANCHOR, KeyPair, Session,
                                        <<"should_not_exist.">>),
     ?assertMatch(
-       {ok, _, {normalized, {failed, _Reasons}}},
+       {ok, _, {normalized, {read, _, {failed, _Reasons}}}},
        quod_client_goal_ingress:submit(read,
          SessionId, AbsentBytes, AbsentSignature, ?PEER)),
     {ScopeBytes, ScopeSignature} = signed_read(
                                      Ns, ?ANCHOR, KeyPair, Session,
                                      <<"\"foreign\"::true.">>),
     ?assertMatch(
-       {ok, _, {normalized, {error, proof_unavailable}}},
+       {ok, _, {normalized, {read, _, {error, proof_unavailable}}}},
        quod_client_goal_ingress:submit(read,
          SessionId, ScopeBytes, ScopeSignature, ?PEER)).
 
@@ -261,7 +261,7 @@ same_ontology_scope_keeps_the_agent_principal(
     Text = <<$", Ns/binary, "\"::lookup(X).">>,
     {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
     ?assertMatch(
-       {ok, _, {normalized, {answers, 1, [_]}}},
+       {ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
        quod_client_goal_ingress:submit(read,
          maps:get(session_id, Session), Bytes, Signature, ?PEER)).
 
@@ -275,7 +275,7 @@ opaque_data_binding_renders_as_the_original_symbol(
     {ok, Evidence, Result} = quod_client_goal_ingress:submit(read,
                                maps:get(session_id, Session), Bytes,
                                Signature, ?PEER),
-    ?assertMatch({normalized, {answers, 1, [_]}}, Result),
+    ?assertMatch({normalized, {read, _, {answers, 1, [_]}}}, Result),
     ?assertMatch(
        {200, #{bindings := [#{<<"X">> := Symbol}]}},
        quod_client_http:signed_goal_result({ok, Evidence, Result})),
@@ -410,10 +410,10 @@ route_eligible_refusals_advance_to_the_next_validator(
                  (#{node_key := <<2:256>>}, _Owner, Ev, _Req, _Sig,
                   _Cursor, _Trace, _Expires, _Timeout) ->
                       Parent ! {attempt, Refusal, second},
-                      {ok, Ev, {normalized, fail}}
+                      {ok, Ev, {normalized, {read, [{Ns,?ANCHOR,1}], fail}}}
               end,
           ?assertEqual(
-             {ok, Evidence, {normalized, fail}},
+             {ok, Evidence, {normalized, {read, [{Ns,?ANCHOR,1}], fail}}},
              quod_client_goal_ingress:test_forward_routes(
                [First, Second], Evidence, Submit)),
           receive {attempt, Refusal, first} -> ok
@@ -489,7 +489,7 @@ new_local_target_wakes_on_its_installed_ready_edge(
                          {proof_ready, {Ns, ?ANCHOR}, Engine, Engine, 1}),
         receive
             {route_wait_result, Caller, Result} ->
-                ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}}, Result)
+                ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}}, Result)
         after 2000 -> error(route_wait_did_not_execute_locally)
         end,
         ?assertNot(lists:member(Caller, gproc:lookup_pids(

@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-10T15:33:14.163106+00:00",
+  "args": [
+    "claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "cwd": "/home/yan/src/quod/doc/evidence/governed-physics-implementation-20261010/plan-review-01/tree",
+  "reason": "Prior labelled attempt ended with ENOTFOUND; same frozen inputs, network-authorized invocation."
+}

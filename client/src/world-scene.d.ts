@@ -1,7 +1,7 @@
 import type { Subject } from './world.js'
 import type { MenuEntry } from './world.js'
 import type { GuiView } from './world.js'
-import type { SimulationView } from './simulation.js'
+import type { WorldView } from './simulation.js'
 export type WorkspacePanelModel = {
   view: GuiView
   scope: string
@@ -14,8 +14,7 @@ export type WorkspacePanelModel = {
   close(): void
 }
 export type WorldScene = {
-  paint(marks: unknown[]): void
-  simulation(view: SimulationView | null | undefined): void
+  update(view: WorldView | { marks: unknown[]; selection: 'nonphysical' | 'unavailable' } | null): void
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
   setWorkspace(model: WorkspacePanelModel | null): void
   releaseNavigation(): void

@@ -215,7 +215,7 @@ automatic_joining_node(Config, NodeAnchor,
         [Ns, {hosts_ontology, Ref, Ns, Anchor, discoverable}])),
     {ok, Bytes, Sig} = peer:call(Applicant, quod_node_actor, signed_goal,
         [read, true, crypto:strong_rand_bytes(32), quod_time:now_ms() + 30000]),
-    ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+    ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
         peer:call(Applicant, quod_client_goal_ingress, submit, [Bytes, Sig], 60000)),
     %% The custodian must validate an observer's publication even though its
     %% own local member is the identity's sole current-tip answerer.
@@ -880,7 +880,7 @@ remote_signed_fresh_nested_symbol(Config) ->
     Results = collect_gateway_race(RaceRef, 2, []),
     lists:foreach(
       fun({_Label,
-           {ok, _, {normalized, {answers, _Height, [_Answer]}}}}) -> ok;
+           {ok, _, {normalized, {read, _, {answers, _Height, [_Answer]}}}}}) -> ok;
          ({Label, Other}) -> error({fresh_symbol_race_failed, Label, Other})
       end, Results).
 
@@ -1040,11 +1040,16 @@ remote_signed_gateway_read_execute_cursor(Config) ->
                                    maps:get(expires_ms, Session), read,
                                    <<"\"animals\"::diet(dog, D).">>),
     {ok, ReadEvidence,
-     {normalized, {answers, _ReadHeight, ReadBlobs}}} =
+     {normalized, {read, ReadDependencies, {answers, ReadHeight, ReadBlobs}}}} =
         peer:call(
           Asker, quod_client_goal_ingress, submit,
           [read, maps:get(session_id, Session), ReadBytes, ReadSignature, Peer],
           60000),
+    ?assertEqual({?ASKER_NS,AgentAnchor,ReadHeight},
+        lists:keyfind(?ASKER_NS,1,ReadDependencies)),
+    ?assertEqual({?NS,?config(target_anchor,Config),
+                  peer:call(?config(target,Config),quod_prolog,applied,[?NS])},
+        lists:keyfind(?NS,1,ReadDependencies)),
     ?assertEqual(ReadBytes, maps:get(request_bytes, ReadEvidence)),
     ?assertEqual(ReadSignature, maps:get(signature, ReadEvidence)),
     ?assertEqual(

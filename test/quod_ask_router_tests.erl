@@ -216,7 +216,7 @@ pending_precedes_send_and_scope_is_reused_test() ->
                    end,
           ReuseBinding = setelement(
                            3, setelement(5, Binding, id(99)), key(99)),
-          ?assertEqual({ok, Handle},
+          ?assertEqual({ok, Handle, 42},
                        quod_ask_router:ensure_scope(
                          Router, {"different.invalid", 9999},
                          ReuseBinding, node, 1)),

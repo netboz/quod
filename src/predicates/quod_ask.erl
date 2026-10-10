@@ -351,9 +351,9 @@ open_local_scope(Target, Anchor, ScopeId) ->
                                    quod_proof_context:principal(),
                                    Authentication, quod_trace:context()},
                                   RemainingMs) of
-                                {ok, Handle} ->
+                                {ok, Handle, Height} ->
                                     {ok, quod_scope_session:pid(Handle),
-                                     Handle};
+                                     Handle, Height};
                                 {error, TargetReason} ->
                                     {error, TargetReason}
                             catch exit:_ ->
@@ -533,8 +533,8 @@ open_remote_routes(Target, Anchor, ScopeId,
                fun(_SpanCtx) ->
                    ensure_remote_scope(Endpoint, Binding, Authentication)
                end) of
-        {ok, Handle} ->
-            {ok, quod_scope_session:pid(Handle), Handle};
+        {ok, Handle, Height} ->
+            {ok, quod_scope_session:pid(Handle), Handle, Height};
         {error, Reason} ->
             case remote_open_error(Target, Reason) of
                 unavailable ->
@@ -561,7 +561,7 @@ ensure_remote_scope(Endpoint, Binding, Authentication) ->
         RemainingMs ->
             case quod_ask_router:ensure_scope(
                    Endpoint, Binding, Authentication, RemainingMs) of
-                {ok, Handle} -> bind_open_handle(Target, Handle);
+                {ok, Handle, Height} -> bind_open_handle(Target, Handle, Height);
                 {pending, Router, Generation, OpenRef} ->
                     await_remote_scope_open(
                       Target, Router, Generation, OpenRef);
@@ -571,12 +571,12 @@ ensure_remote_scope(Endpoint, Binding, Authentication) ->
 
 bind_open_handle(
   Target,
-  {remote_scope, Router, Generation, _Binding, _RequestLink} = Handle) ->
+  {remote_scope, Router, Generation, _Binding, _RequestLink} = Handle, Height) ->
     case quod_proof_context:bind_router(Router, Generation, Target) of
-        {ok, _MRef} -> {ok, Handle};
+        {ok, _MRef} -> {ok, Handle, Height};
         {error, _} = Error -> Error
     end;
-bind_open_handle(_Target, _Handle) ->
+bind_open_handle(_Target, _Handle, _Height) ->
     {error, {protocol_error, session_binding}}.
 
 await_remote_scope_open(Target, Router, Generation, OpenRef) ->
@@ -584,8 +584,8 @@ await_remote_scope_open(Target, Router, Generation, OpenRef) ->
         {ok, MRef} ->
             receive
                 {quod_scope_open, OpenRef,
-                 {ok, Handle, _BaseHeight, _OverlayGeneration, false}} ->
-                    bind_open_handle(Target, Handle);
+                 {ok, Handle, BaseHeight, _OverlayGeneration, false}} ->
+                    bind_open_handle(Target, Handle, BaseHeight);
                 {quod_scope_open, OpenRef, {ok, _Handle, _BaseHeight,
                                             _OverlayGeneration, true}} ->
                     {error, {protocol_error, bad_dirty}};

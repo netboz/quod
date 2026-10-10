@@ -1,28 +1,14 @@
 import { readMarks } from './marks.js'
 import { goalRequestBytes, signedGoal } from './signed-client.js'
 import { b64url, fromB64url } from './key-provider.js'
-import { anchoredGoal, singleBinding } from './world.js'
-import { readTerm } from './prolog-read.js'
-import { compound, variable } from './prolog-term.js'
+import { anchoredGoal, viewDependencies } from './world.js'
+import { atom, compound, variable } from './prolog-term.js'
 import { readControl, movementGoal } from './locomotion.js'
 
 const integer = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value)
 const fence = frame => JSON.stringify([frame.world, frame.authority, frame.epoch,
   frame.generation, frame.incarnation, frame.structure])
 const bodyKey = pose => `${pose.body}:${pose.revision}`
-
-// The acting agent's ontology chooses the world to view. This reference does
-// not create a control binding or substitute the target world's principal.
-export async function readSimulationWorld(identity, agent, options = {}) {
-  const reply = await signedGoal(identity, { mode: 'read', agent, goal: 'physics_client_world(World).' }, options)
-  if (reply.result === 'fail') throw new Error('No physical world is selected for this agent.')
-  const term = readTerm(singleBinding(reply, 'World'))
-  if (term.type !== 'compound' || term.functor !== 'ontology_ref' || term.args.length !== 2 ||
-      term.args.some(t => t.type !== 'binary') || term.args[1].value.length !== 32) {
-    throw new Error('The selected physical world reference is invalid.')
-  }
-  return { namespace: new TextDecoder('utf-8', { fatal: true }).decode(term.args[0].value), anchor: term.args[1].value }
-}
 
 function readFrame(frame) {
   if (!frame || frame.schema !== 1 || frame.units !== 'metres_seconds' || frame.space !== 'world' ||
@@ -47,13 +33,25 @@ function readFrame(frame) {
     received: performance.now(), physicalFrame: frame }
 }
 
-export function simulationProjection(message) {
-  const current = readFrame(message.frame)
+export function worldProjection(message) {
   const marks = readMarks(message.marks)
-  if (typeof message.view !== 'string' || !integer(message.height) || !integer(message.expires_ms) || marks.some(mark =>
-    !mark.body || mark.parent !== null || !mark.depicts?.anchor ||
-    !current.poses.has(`${mark.body.id}:${mark.body.revision}`))) throw new Error('invalid simulation projection')
-  const bodies = new Set(marks.map(mark => `${mark.body.id}:${mark.body.revision}`))
+  if (typeof message.view !== 'string' || !integer(message.height) || !integer(message.expires_ms)) {
+    throw new Error('invalid world projection')
+  }
+  if (!Number.isSafeInteger(Number(message.expires_ms)) || Number(message.expires_ms) <= Date.now()) {
+    throw new Error('World authorization expired.')
+  }
+  const ordinary = { marks, view: message.view, selection: message.selection, expires: Number(message.expires_ms) }
+  if (message.selection !== 'active') {
+    if (!['nonphysical', 'disabled', 'denied', 'recovering', 'unavailable'].includes(message.selection) ||
+        message.frame !== undefined || message.control !== undefined) throw new Error('invalid world selection')
+    return { ...ordinary, poses: new Map(), control: null, feedback: null }
+  }
+  const current = readFrame(message.frame)
+  if (marks.some(mark =>
+    mark.body && (!mark.depicts?.anchor ||
+    !current.poses.has(`${mark.body.id}:${mark.body.revision}`)))) throw new Error('invalid simulation projection')
+  const bodies = new Set(marks.filter(mark => mark.body).map(mark => `${mark.body.id}:${mark.body.revision}`))
   const control = readControl(message.control ?? 'none')
   if (control) {
     if (typeof message.frame.registration !== 'string' || fromB64url(message.frame.registration).length !== 32) {
@@ -64,11 +62,11 @@ export function simulationProjection(message) {
   } else if (current.feedback) throw new Error('unexpected control feedback')
   if (bodies.size !== current.poses.size) throw new Error('unexpected projected body')
   if ([...bodies].some(key => !current.poses.has(key))) throw new Error('missing controlled body')
-  return { ...current, marks, view: message.view, bodies, control, expires: Number(message.expires_ms) }
+  return { ...ordinary, ...current, bodies, control }
 }
 
 export function advanceSimulation(current, message) {
-  if (!current || message.view !== current.view) return current
+  if (!current || current.selection !== 'active' || message.view !== current.view) return current
   const next = readFrame(message.frame)
   if (next.fence !== current.fence || next.tick <= current.tick) return current
   if (next.poses.size !== current.bodies.size || [...next.poses.keys()].some(key => !current.bodies.has(key))) {
@@ -80,13 +78,16 @@ export function advanceSimulation(current, message) {
 // Each open signs a fresh read. Disconnect and durable gaps discard all motion
 // acceptance state. Reconnect is explicit (or follows a browser online event),
 // never a readiness polling timer. Expiry refresh is requested by the server.
-export function connectSimulation(identity, agent, { projection, frame, unavailable, refused = () => {}, refreshing = () => {} }, options = {}) {
+export function connectWorldView(identity, agent, { projection, frame, unavailable, refused = () => {}, refreshing = () => {} }, options) {
+  const world = { ...options.world }
+  if (typeof world.anchor === 'string') world.anchor = fromB64url(world.anchor)
+  if (!world.instance) throw new Error('an exact space instance is required')
+  const goal = anchoredGoal(world, compound('client_world_view', [world.instance, atom(options.mode),
+    viewDependencies(options.dependencies), variable('View')]))
   const Socket = options.WebSocket ?? WebSocket
   const url = options.url ?? new URL('/api/simulation', globalThis.location.href)
   if (url instanceof URL) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const socket = new Socket(String(url))
-  const world = { ...(options.world ?? agent) }
-  if (typeof world.anchor === 'string') world.anchor = fromB64url(world.anchor)
   let active = true, opening = 0, expected = null, current = null
   let sequence = -1n, sending = false, commandEpoch = 0, discreteSequence = null
   let expiryTimer = null
@@ -100,8 +101,7 @@ export function connectSimulation(identity, agent, { projection, frame, unavaila
     commandEpoch++
     discreteSequence = null
     try {
-      const request = goalRequestBytes(identity, { mode: 'read', agent,
-        goal: anchoredGoal(world, compound('physics_client_view', [variable('View')])) })
+      const request = goalRequestBytes(identity, { mode: 'read', agent, goal })
       const signature = new Uint8Array(await identity.provider.sign(request))
       const view = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', request)))
       if (!active || version !== opening) return
@@ -149,23 +149,28 @@ export function connectSimulation(identity, agent, { projection, frame, unavaila
         commandEpoch++
         current = null
         clearExpiry()
-        if (refreshing() !== false) void open()
+        if (refreshing(message.reason) !== false) {
+          if (message.reason === 'navigation_changed') failed(new Error('The selected space changed. Reload the view.'))
+          else void open()
+        }
       } else if (message.type === 'unavailable') {
         clearExpiry()
+        commandEpoch++
         current = null
         unavailable(message.reason)
       } else if (message.type === 'projection' && message.view === expected) {
-        current = simulationProjection(message)
+        commandEpoch++
+        current = worldProjection(message)
         clearExpiry()
         expiryTimer = setTimeout(() => failed(new Error('Simulation authorization expired.')), Math.max(0, current.expires - Date.now()))
         sequence = current.feedback ? BigInt(current.feedback.sequence) : -1n
         current.command = command
         projection(current)
-        send({ type: 'ack', view: current.view, tick: String(current.tick) })
+        if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
       } else if (message.type === 'simulation_frame' && current && message.view === expected) {
         const next = advanceSimulation(current, message)
         if (next !== current) { current = next; frame(current) }
-        send({ type: 'ack', view: current.view, tick: String(current.tick) })
+        if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
       }
     } catch (error) { failed(error); socket.close() }
   }

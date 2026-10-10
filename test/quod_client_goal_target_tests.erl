@@ -26,7 +26,7 @@ forwarded_request_uses_the_existing_target_executor(
           ?FORWARDER, Link, none),
     ?assertMatch({agent, _}, Principal),
     ?assertMatch(
-       {ok, Evidence, {normalized, {answers, 1, [_]}}},
+       {ok, Evidence, {normalized, {read, _, {answers, 1, [_]}}}},
        quod_client_goal_target:execute(
          Evidence, Goal, Principal,
          {forwarder, ?FORWARDER, Link, SigningKey}, none)).

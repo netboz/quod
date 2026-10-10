@@ -16,6 +16,10 @@ lobby_reference(Reference) :-
     Owner = agent_instance_ref(_, _, Instance),
     lobby_provisioning(Instance, linked(Reference)).
 
+lobby_navigation(entity_ref(Ns, Anchor, Space), Modes) :-
+    findall(Reference, lobby_reference(Reference), [ontology_ref(Ns, Anchor)]),
+    Ns::(current_ontology_identity(Ns, Anchor), lobby_space(Space, Modes)).
+
 action(provision_lobby(Instance),
        [current_principal(Owner), human_user_owner(Owner),
         Owner = agent_instance_ref(_, _, Instance),

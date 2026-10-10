@@ -19,7 +19,7 @@ monopolizes the foreign-log owner.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/4, advance/3, clauses/4, stop/1]).
+-export([start_monitor/4, advance/3, clauses/2, read/4, stop/1]).
 
 -ifdef(TEST).
 -export([test_result_heads/1, test_result_publications/2]).
@@ -31,6 +31,8 @@ monopolizes the foreign-log owner.
           view :: map(),
           projection :: quod_committed_projection:projection(),
           generation :: reference(),
+          projection_id = none :: none | binary(),
+          readers = #{} :: map(),
           target_height = 0 :: non_neg_integer(),
           target_head = none :: none | {non_neg_integer(), <<_:256>>},
           from_height = 0 :: non_neg_integer(),
@@ -54,25 +56,44 @@ advance(Pid, Generation, View)
     Pid ! {advance, Generation, View},
     ok.
 
--doc "Read exact interpreted clauses and their applied height in one materializer turn.".
--spec clauses(pid(), reference(), [{term(), non_neg_integer()}], pos_integer()) ->
-          {ok, non_neg_integer(), map()} | {error, term()}.
-clauses(Pid, Generation, Functors, TimeoutMs)
-  when is_pid(Pid), is_reference(Generation), is_list(Functors),
-       is_integer(TimeoutMs), TimeoutMs > 0 ->
-    Ref = make_ref(),
-    MRef = monitor(process, Pid),
-    Pid ! {clauses, self(), Ref, Generation, Functors},
-    receive
-        {foreign_projection_clauses, Ref, Result} ->
-            demonitor(MRef, [flush]),
-            Result;
-        {'DOWN', MRef, process, Pid, _Reason} -> {error, unavailable}
-    after TimeoutMs ->
-        demonitor(MRef, [flush]),
-        {error, unavailable}
-    end;
-clauses(_, _, _, _) -> {error, bad_request}.
+-doc """
+Evaluate in the caller, over the retained owner's shared MVCC snapshot.
+The consumer must own a bounded worker; its death or this call's cleanup releases
+the floor. Deadline expiry never prunes a snapshot while its reader is alive.
+This is an internal read handle, not authority to invoke source Prolog policy.
+""".
+-spec read(pid(), reference(), integer(), fun((map()) -> T)) -> T | {error, term()}.
+read(Pid, Generation, Deadline, Read)
+  when is_pid(Pid), is_reference(Generation), is_integer(Deadline),
+       is_function(Read, 1) ->
+    Ref = monitor(process, Pid, [{alias, demonitor}]),
+    Pid ! {snapshot, self(), Ref, Generation, Deadline},
+    try
+        receive
+            {foreign_projection_snapshot, Ref, {ok, Snapshot}} ->
+                case Deadline > quod_time:mono_ms() of
+                    true ->
+                        Result = Read(Snapshot),
+                        case Deadline > quod_time:mono_ms() andalso is_process_alive(Pid) of
+                            true -> Result;
+                            false -> {error, unavailable}
+                        end;
+                    false -> {error, unavailable}
+                end;
+            {foreign_projection_snapshot, Ref, {error, _} = Error} -> Error;
+            {'DOWN', Ref, process, Pid, _} -> {error, unavailable}
+        after max(0, Deadline - quod_time:mono_ms()) -> {error, unavailable}
+        end
+    catch
+        error:badarg:Stack ->
+            case is_process_alive(Pid) of
+                false -> {error, unavailable};
+                true -> erlang:raise(error, badarg, Stack)
+            end
+    after
+        Pid ! {release_snapshot, self(), Ref},
+        demonitor(Ref, [flush])
+    end.
 
 -spec stop(pid()) -> ok.
 stop(Pid) when is_pid(Pid) ->
@@ -115,17 +136,15 @@ loop(S = #s{generation = Generation}) ->
             end;
         {advance, _StaleGeneration, _View} ->
             loop(S);
-        {clauses, Caller, Ref, Generation, Functors} when is_pid(Caller) ->
-            Caller ! {foreign_projection_clauses, Ref,
-                      stored_clauses(Functors, S#s.projection)},
-            loop(S);
-        {clauses, Caller, Ref, _StaleGeneration, _Functors}
-          when is_pid(Caller) ->
-            Caller ! {foreign_projection_clauses, Ref, {error, stale}},
-            loop(S);
+        {snapshot, Caller, Ref, Requested, Deadline} when is_pid(Caller) ->
+            loop(pin_snapshot(Caller, Ref, Requested, Deadline, S));
+        {release_snapshot, Caller, Ref} ->
+            loop(release_snapshot(Caller, Ref, S));
         {'DOWN', _MRef, process, Owner, _Reason}
           when Owner =:= S#s.owner ->
             ok;
+        {'DOWN', MRef, process, _Reader, _Reason} ->
+            loop(reader_down(MRef, S));
         stop ->
             ok
     end.
@@ -142,7 +161,7 @@ advance_requested(Height, Head,
         _ ->
             Resnapshot = S#s.resnapshot orelse Applied =:= 0 orelse
                          Height - Applied > ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
-            S1 = S#s{target_height = Height, target_head = Head,
+            S1 = S#s{target_height = Height, target_head = Head, projection_id = none,
                      from_height = Applied, changed = [],
                      publications = case Resnapshot of
                                         true -> resnapshot;
@@ -167,7 +186,9 @@ materialize_turn(S = #s{identity = {Ns, _Anchor}, view = View,
             case Result of
                 {ok, [_ | _] = Entries, Target}
                   when length(Entries) =< To - From + 1 ->
-                    case apply_entries(Entries, Projection0, [], []) of
+                    Floor = maps:fold(fun(_, {_, _, H}, Acc) -> min(H, Acc) end,
+                                      Target, S#s.readers),
+                    case apply_entries(Entries, Projection0, Floor, [], []) of
                         {ok, Projection1, Changed, Publications} ->
                             Changed1 = merge_changed(S#s.changed, Changed),
                             Resnapshot1 = S#s.resnapshot
@@ -215,16 +236,15 @@ continue_loop(S = #s{generation = Generation}) ->
             end;
         {advance, _StaleGeneration, _View} ->
             continue_loop(S);
-        {clauses, Caller, Ref, Generation, _Functors} when is_pid(Caller) ->
-            Caller ! {foreign_projection_clauses, Ref, {error, building}},
-            continue_loop(S);
-        {clauses, Caller, Ref, _StaleGeneration, _Functors}
-          when is_pid(Caller) ->
-            Caller ! {foreign_projection_clauses, Ref, {error, stale}},
-            continue_loop(S);
+        {snapshot, Caller, Ref, Requested, Deadline} when is_pid(Caller) ->
+            continue_loop(pin_snapshot(Caller, Ref, Requested, Deadline, S));
+        {release_snapshot, Caller, Ref} ->
+            continue_loop(release_snapshot(Caller, Ref, S));
         {'DOWN', _MRef, process, Owner, _Reason}
           when Owner =:= S#s.owner ->
             ok;
+        {'DOWN', MRef, process, _Reader, _Reason} ->
+            continue_loop(reader_down(MRef, S));
         stop -> ok
     end.
 
@@ -235,8 +255,43 @@ source_view(#{owner := Owner, identity := Identity, slot := Height,
     {ok, Height, {Height, Hash}};
 source_view(_View, _S) -> error.
 
-stored_clauses(Functors, Projection) ->
-    Est = quod_committed_projection:est(Projection),
+pin_snapshot(Caller, Ref, Generation, Deadline, S) ->
+    Error = if
+        Generation =/= S#s.generation -> stale;
+        S#s.projection_id =:= none -> building;
+        true -> none
+    end,
+    case {Error, Deadline > quod_time:mono_ms()} of
+        {none, true} ->
+            Height = quod_committed_projection:applied(S#s.projection),
+            Monitor = monitor(process, Caller),
+            Snapshot = #{identity => S#s.identity, height => Height,
+                         projection_id => S#s.projection_id,
+                         generation => Generation,
+                         est => quod_committed_projection:est(S#s.projection)},
+            Ref ! {foreign_projection_snapshot, Ref, {ok, Snapshot}},
+            S#s{readers = (S#s.readers)#{Ref => {Caller, Monitor, Height}}};
+        {_, false} ->
+            Ref ! {foreign_projection_snapshot, Ref, {error, unavailable}}, S;
+        {Reason, true} ->
+            Ref ! {foreign_projection_snapshot, Ref, {error, Reason}}, S
+    end.
+
+release_snapshot(Caller, Ref, S = #s{readers = Readers}) ->
+    case maps:get(Ref, Readers, none) of
+        {Caller, Monitor, _} ->
+            demonitor(Monitor, [flush]),
+            S#s{readers = maps:remove(Ref, Readers)};
+        _ -> S
+    end.
+
+reader_down(Monitor, S = #s{readers = Readers}) ->
+    S#s{readers = maps:filter(fun(_, {_, M, _}) -> M =/= Monitor end, Readers)}.
+
+-doc "Select exact interpreted clauses from a snapshot held by read/4.".
+-spec clauses([{term(), non_neg_integer()}], map()) ->
+          {ok, non_neg_integer(), map()} | {error, term()}.
+clauses(Functors, #{height := Height, est := Est}) ->
     Result = lists:foldl(
       fun(Functor, {ok, Acc}) ->
               case valid_functor(Functor) of
@@ -250,7 +305,7 @@ stored_clauses(Functors, Projection) ->
          (_Functor, {error, _} = Error) -> Error
       end, {ok, #{}}, Functors),
     case Result of
-        {ok, Clauses} -> {ok, quod_committed_projection:applied(Projection), Clauses};
+        {ok, Clauses} -> {ok, Height, Clauses};
         {error, _} = Error -> Error
     end.
 
@@ -259,15 +314,15 @@ valid_functor({Name, Arity}) ->
         andalso is_integer(Arity) andalso Arity >= 0;
 valid_functor(_) -> false.
 
-apply_entries([], Projection, Changed, Publications) ->
+apply_entries([], Projection, _Floor, Changed, Publications) ->
     {ok, Projection, Changed, Publications};
-apply_entries([Entry | Rest], Projection0,
+apply_entries([Entry | Rest], Projection0, Floor,
               Changed0, Publications0) ->
     #entry{index = Index} = quod_ledger:entry_view(Entry),
-    case quod_committed_projection:apply_entry(Entry, Index, Projection0) of
+    case quod_committed_projection:apply_entry(Entry, min(Index, Floor), Projection0) of
         {ok, Projection1, Result} ->
             apply_entries(
-              Rest, Projection1,
+              Rest, Projection1, Floor,
               merge_changed(Changed0, result_heads(Result)),
               Publications0 ++ result_publications(Index, Result));
         {wait, network_identity, Reason, Projection1} ->
@@ -354,7 +409,7 @@ publish_ready({Height, <<_:256>> = Head},
                changed_heads => PublishedHeads, resnapshot => Resnapshot,
                publications => Publications,
                memory_bytes => projection_memory_bytes(Projection)}},
-    loop(S#s{changed = [], publications = [], resnapshot = false,
+    loop(S#s{changed = [], publications = [], resnapshot = false, projection_id = ProjectionId,
              from_height = Height});
 publish_ready(_BadHead, S) ->
     loop(S).

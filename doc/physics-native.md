@@ -13,14 +13,20 @@ there is no silent baseline fallback.
 
 ## Installation and policy
 
-Load [quod_physics.pl](../priv/ontologies/quod_physics.pl) with the existing agent
-hosting ontology, and include `quod_physics_predicates` in the ontology's founding
-external-predicate manifest. Give the selected actor explicit `can_invoke`
+Physics bridges are registered in every ontology's common startup base. This
+allocates no simulation and grants no invocation or control rights. Compose
+[quod_physics.pl](../priv/ontologies/quod_physics.pl) with the existing agent
+hosting rules in the world owner. Give the selected actor explicit `can_invoke`
 grants for `physics_store_request/6` and `physics_activate/3` through ordinary
 signing policy. The real-owner server fixture in
 [quod_physics_tests.erl](../test/quod_physics_tests.erl) supplies those grants,
 a ground collider and one falling body; run `rebar3 as test eunit
 --module=quod_physics_tests`.
+
+Deploy the shared startup base through the existing release authority, with
+participating validators and projection consumers on the same implementation.
+Founding manifests remain immutable provenance. World rules, authority custody
+and enablement remain Prolog state, installed through ordinary edits and actions.
 
 `physics_space(World, disabled, Instance)` suppresses both hosting that physics
 agent and allocating its native world. Enabling it selects only the node in the
@@ -60,6 +66,15 @@ degenerate triangles fail installation. This is an explicitly authored physical
 surface, independent of rendered meshes, picking bounds and voxel indexing.
 It represents sloped/non-cubic terrain without introducing a grid controller.
 Surface geometry cannot be used as a moving solid body.
+
+Governed body edits share the Prolog `physics_valid_body/6` schema for body
+identity, kind, authored pose, geometry, density and coordinate allowance.
+It accepts every shape above; the supported hinge requires box solids and a
+`vector/3` baseline, with no authored frame or leaf rotation. Integer rotations,
+density, motor scalars and dimensions must fit the adapter's finite binary32 representation;
+this encoding envelope is independent of coordinate and geometry policy.
+Native installation additionally checks numeric representation, convex volume,
+triangle area, compound bounds and supported joint mechanics.
 
 Geometry allowances count all installed parts, convex/surface vertices, and
 surface triangles across the world, including unchanged retained bodies.
@@ -219,8 +234,8 @@ becomes collision authority.
 
 ### Desktop and tracked viewing
 
-The desktop adapter removes Babylon's translating inputs in the Simulation
-scene. Keys submit bounded desired travel through the predicate; the camera
+The desktop adapter removes Babylon's translating inputs for a controlled
+physical space in the ordinary view. Keys submit bounded desired travel through the predicate; the camera
 mount follows accepted poses without interpolation through walls. Look remains
 local. Unknown/unavailable worlds freeze commanded travel instead of enabling
 observer flight.
@@ -545,30 +560,62 @@ provides a remotely authorized contact-proof interface.
 
 ## One client view
 
-The browser's **Simulation** scene first reads
-`physics_client_world(ontology_ref(Namespace, Anchor))` in the signer's ontology.
-The containing world supplies a local reference; a human ontology can author a
-foreign reference. This is view selection, never a control grant. The client
-then opens `/api/simulation` on the existing TLS listener. Both the signer's
-ontology and the selected world must be local, and the simulation authority
-must be hosted here. There is still one viewer; a second receives `view_busy`.
+The ordinary browser view opens `/api/simulation` with an exact visible
+space reference, representation mode and the dependencies of its signed
+navigation read. Physics is selected at that space's owner. The acting agent
+retains its identity and ordinary local or remote signed ingress route. Only an
+active pose authority must be hosted here. There is still one native viewer;
+a second receives `view_busy`.
 
-The world defines `physics_view(World, Marks)`, `can_view_physics(World, Principal)`
-and an ordinary `can_invoke/4` grant for the complete guarded view goal:
+The space defines `world_view(Instance, Mode, Marks)`, its ordinary
+`can_invoke/4` policy and a pinned rendering vocabulary. The common wrapper
+requires one complete, valid scene and established `space_instance/2`
+classification. Composed physics policy supplies `physics_space/3`, per-world
+gravity/budgets, viewing and control grants. One derived `physics_enabled/2`
+rule governs native resource selection, authority hosting and live input.
+Classification alone allocates nothing. The canonical signed goal is:
 
 ```prolog
-Namespace::(current_ontology_identity(Namespace, Anchor), physics_client_view(View)).
+Namespace::(current_ontology_identity(Namespace, Anchor),
+            client_world_view(Instance, Mode, ExpectedDependencies, View)).
 ```
 
-There is no default grant. The endpoint accepts exactly that parsed goal with
-one `View` variable; an arbitrary proof cannot manufacture a projection.
-It subscribes to both source and world before reading, and verifies unchanged
-heights and the installed physical frame before attaching. An advance or replay
-in either scope revokes the view. Invocation permission and keys remain under
-ordinary signed ingress; the source principal is preserved in the world scope.
+`ExpectedDependencies` is a sorted list of `dependency(Namespace, Anchor,
+Height)` from the navigation proof. The wrapper visits these scopes under their
+ordinary ACLs; the endpoint compares every triple with the actual signed proof
+envelope before installation. Public vocabulary ontologies opting into
+`public_source_query/1` expose the identity read; other owners must grant that
+read explicitly. This grants neither private source access nor body control.
+Direct navigation can supply an empty list. Derived navigation must retain its
+complete list and reread navigation after a mismatch.
 
-Marks are world-root `mark/7` occurrences using `body_pose(Id, Revision)` and
-anchored `depicts/3`. Occurrence identity and body identity remain distinct.
+The endpoint accepts this fixed parsed goal with one named `View` variable.
+It uses one monitored opening worker calling existing signed ingress; socket
+cancellation, death or the original expiry reaps that worker. Another opening
+waits for its death and pending subscription cleanup. No second proof executor
+or alternative admission route is introduced.
+
+The result distinguishes nonphysical, disabled, denied, recovering, unavailable
+and active selections. Inactive selections retain actual proof dependencies and
+renew at authorization expiry. A retained controller in a space whose physical
+classification was removed cannot become an observer; authorized unbinding and
+withdrawal remain domain transitions. An active view checks installed state
+separately from its committed selection.
+
+Marks may mix authored transforms and body-driven `mark/7` occurrences using
+`body_pose(Id, Revision)` and anchored `depicts/3`. Occurrence identity and body
+identity remain distinct. The depicted subject may belong to another ontology;
+that reference grants no permission there. Decorative marks need no body.
+Both kinds preserve parent order. `relative(Parent, transform(...))` retains an
+authored local frame; `relative(Parent, body_pose(Id, Revision))` retains the
+parent while expressing the body's world pose in that parent's current frame.
+Decorative children then follow the body, including their authored offsets.
+Only the body pose writer updates a body-driven occurrence. Missing poses hide
+that occurrence and its attached children instead of restoring an authored pose.
+The world pins its ordinary `rendering_vocabulary(Namespace, Anchor)`; the
+signed view proves `well_formed_scene/1` there for the shared scene budget,
+descriptor schema and parent ordering. Physics adds only exact body binding.
+The ordinary modelling vocabulary accepts both body-pose forms in recipes.
 The selected controlled body is also projected when it has no visible mark.
 The endpoint checks the complete body set against the current owner. Numeric
 identities, heights and sequences use decimal strings in JSON, preserving uint64
@@ -576,8 +623,8 @@ values beyond JavaScript's safe integer range.
 
 `open` carries `session_id`, signed `request`, `signature`, `world_namespace`
 and base64url `world_anchor`. `projection` returns the signed-request digest as
-`view`, `height`, `expires_ms`, marks, optional Prolog control configuration and
-a current frame. Schema 1 frames carry world/authority/run/structure/tick,
+`view`, `height`, `expires_ms`, marks and an explicit `selection`. An active
+selection additionally carries its Prolog control configuration and current frame. Schema 1 frames carry world/authority/run/structure/tick,
 metre positions, XYZW quaternions, this view's random registration, selected
 control's last accepted sequence and operation outcome, and optional sensory
 clearance. Other principals' inputs are not exposed.
@@ -590,14 +637,26 @@ not durable acknowledgement. The original signed expiry is enforced by server
 and browser; a lost connection cannot keep an authorized view indefinitely.
 
 Durable changes, owner death, expiry and structural invalidation require a fresh
-signed read. Installation waits use owner notices, not polling. The Simulation
-scene rereads the signer's selected world when refreshing. Unavailable poses are
-hidden and commanded travel pauses. Leaving the Simulation scene restores the
-separate local observer camera. Old view IDs, registrations, physical fences and
-non-increasing ticks cannot drive the current scene. Each namespace commit
-conservatively costs a new read/watch; a busy namespace can still starve view
-availability. Narrow dependency watches for arbitrary view proofs are outside
-this profile.
+signed read. Installation waits use owner notices, not polling. The ordinary
+view rereads navigation when refreshing. One scene update owner installs marks
+and poses, preserving authored parents and camera mounts. Unavailable selection
+pauses commanded travel without enabling observer flight. Observer travel is
+explicitly selected by nonphysical or active unbound views. Old view IDs,
+registrations, physical fences and non-increasing ticks cannot drive the current
+scene. The socket subscribes to every actual proof scope before sampling
+current state. A local scope must still have the same ready engine incarnation,
+anchor and height. Engine registration alone is not readiness. Recovery detaches
+native poses while retaining dependency subscriptions until the exact engine/run
+publishes ready; stale or duplicate notices cannot renew the view. The same
+asynchronous snapshot checks an engine registered after a name follow.
+A foreign scope follows the existing verifier's progress;
+attachment waits for its certified height to equal the pinned read height.
+Higher heights invalidate the view, lower/building states wait under the original
+expiry. Follow notices are acknowledged and follows released with the view.
+Logical denial retains dependencies so a later policy grant can wake the view.
+Each commit in a read dependency conservatively costs a new read/watch; a busy
+ontology can still starve view availability. This does not claim row-level
+invalidation or alter per-predicate OCC.
 
 Replay, runtime queue collapse, actor death, changed assignment and explicit
 disable retire the current simulator. Replay reconstructs desired resources

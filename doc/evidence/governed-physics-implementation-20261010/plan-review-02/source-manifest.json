@@ -1,0 +1,232 @@
+{
+  "head": "77a0b1e046be11a14fdef2139149296d6ca377e6",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636,
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "bytes": 41450,
+      "sha256": "c6cb76a1124dc97a053e693b0f2868e310bfa80ed6c1e4f0f1d4c0b3ced090f2"
+    },
+    {
+      "file": "doc/spaces.md",
+      "bytes": 10507,
+      "sha256": "9a177d4994b8d94b26fe7f9d3d638d73bd33b31daf81898526d617bc1f5d53ea"
+    },
+    {
+      "file": "doc/proofs.md",
+      "bytes": 7371,
+      "sha256": "2f76d43e0a1e15b2d1613f4a8e8c2ac390c25426ce2ebad7b0c74d17c89c8cfd"
+    },
+    {
+      "file": "doc/lifecycle-and-routing.md",
+      "bytes": 4561,
+      "sha256": "33352a2467a2dd998f1c65b757c2bb24d6e9f50c0c15925478ad1570cf84ec53"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "bytes": 3414,
+      "sha256": "26eb5a4d819311dbcdbbd37b1ae97de4667b73cc5b94e119027225e3e186ca75"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "bytes": 5404,
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "bytes": 42261,
+      "sha256": "6d62b0ac902d716510971751a036a8fa0f10e7c9b90556ce7d8ae13e6120d4f1"
+    },
+    {
+      "file": "doc/governed-physics-plan.md",
+      "bytes": 19985,
+      "sha256": "b5e944e5f992156425a2678073ca58b4bd45fa14e3d1f83957e6eaf5703ecf92"
+    },
+    {
+      "file": "doc/outdated/ontology-actor-architecture.md",
+      "bytes": 49037,
+      "sha256": "341e68138895913a7c23a2f0cb5d8eb794de4c368fd8e555f0c2b63e68cdcff7"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/plan-01.md",
+      "bytes": 14699,
+      "sha256": "4551d9026e352e29b478df0bc96eae8d7e3e7c7e428fa1dd8f037d6c300fb87d"
+    },
+    {
+      "file": "doc/evidence/hot-controls/deployment-256-refound/README.md",
+      "bytes": 4276,
+      "sha256": "293b8587a8f0481fb47bf3f8879f3c91981f7af183e32fb7d0d1b4537c422fd5"
+    },
+    {
+      "file": "doc/evidence/player-movement/live-lobby-20261009/README.md",
+      "bytes": 4764,
+      "sha256": "974cd6232c53f8332eecfd0da58e2f2c01a410dac144601f8bbcaabfbdb3d05f"
+    },
+    {
+      "file": "doc/evidence/player-movement/cleanup-20261009/README.md",
+      "bytes": 4064,
+      "sha256": "662347b92fe191b1931df112b157b44160ed3855e4bcbc8536290cd402881660"
+    },
+    {
+      "file": "priv/ontologies/space.pl",
+      "bytes": 7022,
+      "sha256": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "bytes": 35125,
+      "sha256": "56793e8074e31ab06596bbf7344eeb39fb56d82156be746c00ddaae396b7ec67"
+    },
+    {
+      "file": "priv/ontologies/quod_root.pl",
+      "bytes": 8292,
+      "sha256": "9e025c546c82e46837285a28e6ba0cf4e183de9bc8e1758b5359a3ea23a633ad"
+    },
+    {
+      "file": "priv/ontologies/quod_lobby.pl",
+      "bytes": 13040,
+      "sha256": "9be812ab020665b691bcdf9e5058f1555703a027f7c99c7deacea510cbb0bfcb"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "bytes": 3376,
+      "sha256": "d8e128ce67a2168dd7b6fee9d805ebce76aee78768c540549635f877928491f4"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "bytes": 14293,
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "bytes": 10101,
+      "sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683"
+    },
+    {
+      "file": "src/quod_ontology.erl",
+      "bytes": 36649,
+      "sha256": "ff6e612d49207e5f313d06e1e751645db91aa256ab20372de1197800ee475bb1"
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "bytes": 21619,
+      "sha256": "f9d12c07aa7689a2f4758fea50d101126a9b3c14c2d22547f003f2347a9144c8"
+    },
+    {
+      "file": "src/quod_committed_projection.erl",
+      "bytes": 27882,
+      "sha256": "20d9e862a5a5eab1e8f25ba398d1403a6bcb0214b1e82040e712d9a1c3311fad"
+    },
+    {
+      "file": "src/quod_commit_validation.erl",
+      "bytes": 39365,
+      "sha256": "b4a98d21f4c88d2db1ca105597e89c22768a6849130c773e1001a5fc5273f1d1"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "bytes": 147962,
+      "sha256": "0e35abd2874adf27d59ef9d02f862da4d02bc3c7180cd6515e7e781efea22ebd"
+    },
+    {
+      "file": "src/quod_foreign_log.erl",
+      "bytes": 324340,
+      "sha256": "594784c99db1ea89d224eb4cca98996ca38c01178523e259ed3674a0b89fd740"
+    },
+    {
+      "file": "src/quod_foreign_projection.erl",
+      "bytes": 16291,
+      "sha256": "e4e82c1ac2da2aa4067f5a7199a89d356d7a8e84420853dc82cd20346f0082bf"
+    },
+    {
+      "file": "src/quod_resource_basis.erl",
+      "bytes": 3771,
+      "sha256": "9b610f005d26e8c145d6ed9e25907653a8cfba44b332cdad28a39097a9bd4c46"
+    },
+    {
+      "file": "src/quod_observation.erl",
+      "bytes": 1341,
+      "sha256": "6b7a46c3331afa1628ae4889cbd6ec46136209a1f692d1cbbd28a059eefb4598"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "bytes": 51244,
+      "sha256": "495e93da98f016dbb9d8306696807f2b1583b1a630f99bed008ae1cf2d559a64"
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "bytes": 42846,
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b"
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "bytes": 13133,
+      "sha256": "c5e530452754ea5b8a996d03326eda91b75049e3cc6026012989abf00f10b5b6"
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "bytes": 13326,
+      "sha256": "90f291c986da1a50dd9c88471deca68fb6470da781c62e9d8b7a11f7098ffa55"
+    },
+    {
+      "file": "src/predicates/quod_ontology_predicates.erl",
+      "bytes": 14307,
+      "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51"
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "bytes": 21176,
+      "sha256": "3dd142b8fd8bae6e01d732e4140d3e26140443c34d09f03d2cf500697cc88576"
+    },
+    {
+      "file": "client/src/world.js",
+      "bytes": 8778,
+      "sha256": "3a9850072d8a13829d7b3bfd1c186fe8cd2390d6ed8168a61565eb3628c18d3a"
+    },
+    {
+      "file": "client/src/simulation.js",
+      "bytes": 9878,
+      "sha256": "6d98f3b1a68c589ea02ed5cb9e07fc041cc40921779095d430fd390d78a1623a"
+    },
+    {
+      "file": "client/src/world-scene.js",
+      "bytes": 11800,
+      "sha256": "e60e6da2698feb67f9b25042d2dafb0fd1e3c2a2f6318c5599cecf62324acdee"
+    },
+    {
+      "file": "client/src/marks.js",
+      "bytes": 9436,
+      "sha256": "17ee83cb5880fb847e28b4cfb3c413804d1e5e1e7cf2e54e30eb147bf6eb7f65"
+    },
+    {
+      "file": "client/src/locomotion.js",
+      "bytes": 5745,
+      "sha256": "047ae48448992b3988197790223530368af1d3671334c1d10aa903dde3d9c315"
+    },
+    {
+      "file": "test/quod_space_tests.erl",
+      "bytes": 18234,
+      "sha256": "ac88ca9355fe4d4c401395a66f57120bb6751fb237de0de52bdb958a91b6ba36"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "bytes": 155952,
+      "sha256": "2504cf57d7c1d055344284e8d5f5f2b896c6d462da473d5e62236bed68de5a82"
+    },
+    {
+      "file": "test/quod_runtime_tests.erl",
+      "bytes": 69512,
+      "sha256": "97b767389c4e1e1a4dac36390b1b06f16fe8a48060b92bbadd97795f4f0be38c"
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "bytes": 7426,
+      "sha256": "ec4d9a193ab0c4434fe57492bf6aed44ac432e9fd17d890ef363c018e6b5e6ee"
+    }
+  ],
+  "request_sha256": "5378bf8ca28c43245ddc791ee01399ef4ffd3f62e186d4d66e4b222d634284a4",
+  "frozen_tree": "../plan-review-01/tree"
+}

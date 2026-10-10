@@ -40,6 +40,17 @@ scope. At commit, the owning validators check the staged read dependencies
 against the committed parent. An absent or unavailable route is not an ACL
 grant, a proved absence or a write outcome.
 
+Signed reads return the exact namespace, genesis anchor and pinned height of
+every scope opened by the proof, including scopes visited by failed alternatives
+or denied invocations. This retained evidence travels with the read outcome;
+logical failure does not erase it. An error can carry only partial dependencies
+and cannot establish a retained negative selection. The canonical result bounds
+and validates the dependency list alongside the ordinary answer/failure payload.
+The HTTP dependency heights are decimal strings, preserving exact uint64 values
+in browser clients. These whole-ontology dependencies support view invalidation;
+they do not replace per-predicate transaction read checks or certify native
+installation.
+
 A single writer uses its ordinary transaction. The [multiwrite contract](multiwrite-architecture.md)
 covers several writers and explicit independent intent. An expired caller
 may receive `outcome_unknown` with an anchored operation reference. Resolution

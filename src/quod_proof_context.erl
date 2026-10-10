@@ -19,7 +19,7 @@ the scope wire as Erlang references.
          read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
          finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
          bind_router/3,
-         get_or_open_scope/2,
+         get_or_open_scope/2, read_dependencies/0,
          scope_owner/1,
          register_invocation/2, unregister_invocation/1,
          registered_invocation/2,
@@ -37,7 +37,8 @@ the scope wire as Erlang references.
 -record(scope, {id :: scope_id(),
                 owner :: pid(),
                 mref = undefined :: undefined | reference(),
-                handle :: term()}).
+                handle :: term(),
+                height :: non_neg_integer()}).
 
 -record(router, {pid :: pid(),
                  generation :: opaque_id(),
@@ -566,7 +567,7 @@ demonitor_router(undefined) ->
 
 -doc "Return an existing pinned scope or open and register it exactly once.".
 -spec get_or_open_scope(identity(), fun((scope_id()) ->
-                                               {ok, pid(), term()} |
+                                               {ok, pid(), term(), non_neg_integer()} |
                                                {error, term()})) ->
           {ok, scope_id(), term()} | {error, term()}.
 get_or_open_scope({Ns, <<_:256>> = Anchor} = Identity, OpenFun)
@@ -596,16 +597,22 @@ get_or_open_active_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
 open_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
     ScopeId = new_scope_id(Ctx0),
     case OpenFun(ScopeId) of
-        {ok, Pid, Scope} when is_pid(Pid) ->
+        {ok, Pid, Scope, Height}
+          when is_pid(Pid), is_integer(Height), Height >= 0,
+               Height =< 16#FFFFFFFFFFFFFFFF ->
+            %% Opening can bind the authenticated router. Keep that state
+            %% when registering the new pinned scope.
+            Ctx = context(),
             MRef = monitor_scope(Pid, Scope),
-            Scopes1 = (Ctx0#ctx.scopes)#{
+            Scopes1 = (Ctx#ctx.scopes)#{
                         Identity => #scope{id = ScopeId,
                                            owner = Pid,
                                            mref = MRef,
-                                           handle = Scope}},
-            Namespaces1 = (Ctx0#ctx.namespaces)#{Ns => Anchor},
-            ScopeIds1 = (Ctx0#ctx.scope_ids)#{ScopeId => Identity},
-            put_context(Ctx0#ctx{scopes = Scopes1,
+                                           handle = Scope,
+                                           height = Height}},
+            Namespaces1 = (Ctx#ctx.namespaces)#{Ns => Anchor},
+            ScopeIds1 = (Ctx#ctx.scope_ids)#{ScopeId => Identity},
+            put_context(Ctx#ctx{scopes = Scopes1,
                                  namespaces = Namespaces1,
                                  scope_ids = ScopeIds1}),
             {ok, ScopeId, Scope};
@@ -614,6 +621,13 @@ open_scope(Identity, Ns, Anchor, OpenFun, Ctx0) ->
         _ ->
             {error, {protocol_error, proof_engine}}
     end.
+
+-doc "Exact pinned reads, including scopes visited by failed alternatives.".
+-spec read_dependencies() -> [{binary(), <<_:256>>, non_neg_integer()}].
+read_dependencies() ->
+    lists:sort([{Ns, Anchor, Height} ||
+                 {{Ns, Anchor}, #scope{height = Height}} <-
+                     maps:to_list((context())#ctx.scopes)]).
 
 monitor_scope(
   Pid, {quod_scope_session, Pid, _ScopeId, _ProofId,

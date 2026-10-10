@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.05s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_foreign_lifecycle_tests.erl failed
+     ┌─ test/quod_foreign_lifecycle_tests.erl:
+     │
+ 889 │                      {ok,Next} -> Await(Next);
+     │                          ╰── variable 'Next' unsafe in 'try' (line 866, column 19)
+
+

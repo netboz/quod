@@ -13,7 +13,7 @@ import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm
   readEntityEidolons, readEidolonWorkspace, singleBinding, GoalFailure } from '../../client/src/world.js'
 import type { EidolonChoice, EidolonWorkspace, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
-import { connectSimulation, readSimulationWorld } from '../../client/src/simulation.js'
+import { connectWorldView } from '../../client/src/simulation.js'
 
 export default function World() {
   const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
@@ -113,48 +113,16 @@ export default function World() {
     return () => { active = false; world?.dispose() }
   }, [])
 
-  useEffect(() => { scene?.paint(marks) }, [scene, marks])
-
-  useEffect(() => {
-    if (view !== 'physics' || !scene || !identity || !agent) return
-    scene.simulation(null)
-    let active = true
-    let stream: ReturnType<typeof connectSimulation> | undefined
-    void readSimulationWorld(identity, agent).then(world => {
-      if (!active) return
-      stream = connectSimulation(identity, agent, {
-        projection(current) {
-          scene.simulation(current)
-          setMarks(current.marks)
-          setStatus('Live simulation. VR: left grip + pad for travel; left pad click for turn or teleport; right pad for actions.')
-        },
-        frame(current) { scene.simulation(current) },
-        refused(reason, reasons) { setStatus([reason, ...reasons].join(' ')) },
-        refreshing() {
-          scene.simulation(null); setStatus('World updating. Movement paused…')
-          setRevision(value => value + 1)
-          return false
-        },
-        unavailable(reason) { scene.simulation(null); setStatus(reason) },
-      }, { world })
-    }).catch(error => { if (active) setStatus(String(error)) })
-    const online = () => setRevision(value => value + 1)
-    window.addEventListener('online', online)
-    return () => {
-      window.removeEventListener('online', online)
-      active = false
-      stream?.close()
-      scene.simulation(undefined)
-    }
-  }, [view, scene, identity, agent, revision])
-
   useEffect(() => {
     let active = true
+    let stream: ReturnType<typeof connectWorldView> | undefined
+    scene?.update(null)
     const previous = projection.current
     const sameScope = previous.identity === identity && previous.agent === agent && previous.view === view
     projection.current = { identity, agent, view }
     if (!sameScope) {
       setMarks([])
+      scene?.update({ marks: [], selection: 'unavailable' })
       setWorkspace(null)
       setFocused(false)
     }
@@ -172,32 +140,49 @@ export default function World() {
       return
     }
     setStatus('Reading the ontology…')
-    if (view === 'physics') return
     const load = async () => {
       try {
         if (view === 'lobby') {
-          const result = await readPersonalLobby(identity, agent, mode)
+          const result = await readPersonalLobby(identity, agent)
           if (!active) return
-          setMarks(result?.marks ?? [])
           setModes(result?.modes ?? [])
           setMissingLobby(result === null)
-          setStatus(result
-            ? 'Your lobby is ready.'
-            : 'This agent has no personal lobby yet.')
+          if (!result) { setStatus('This agent has no personal lobby yet.'); return }
+          stream = connectWorldView(identity, agent, {
+            projection(current) {
+              if (!active) return
+              scene?.update(current)
+              setMarks(current.marks)
+              setStatus({ active: 'Physical space ready.', nonphysical: 'Space ready. Observer travel.',
+                disabled: 'Physics is disabled. Body travel paused.', denied: 'Physics access denied. Body travel paused.',
+                recovering: 'Physics is recovering. Body travel paused.', unavailable: 'Physics unavailable. Body travel paused.'
+              }[current.selection])
+            },
+            frame(current) { if (active) scene?.update(current) },
+            refused(reason, reasons) { if (active) setStatus([reason, ...reasons].join(' ')) },
+            refreshing() {
+              if (active) { scene?.update(null); setStatus('Space updating. Movement paused…'); setRevision(n => n + 1) }
+              return false
+            },
+            unavailable(reason) { if (active) { scene?.update(null); setStatus(reason) } },
+          }, { world: result.reference, dependencies: result.dependencies, mode })
         } else {
           const result = await readLensView(identity, agent, 'work_licences', ['quod'])
           if (!active) return
           setMarks(result.marks ?? [])
+          scene?.update({ marks: result.marks ?? [], selection: 'nonphysical' })
           setStatus(result.marks ? 'Licence lens · Quod release dependencies.'
             : 'The licence lens has no compatible representation for this data.')
         }
       } catch (error) {
-        if (active) { setMarks([]); setStatus(`Could not open this view: ${String(error)}`) }
+        if (active) { scene?.update(null); setStatus(`Could not open this view: ${String(error)}`) }
       }
     }
     void load()
-    return () => { active = false }
-  }, [identity, agent, view, mode, revision, viewUnavailable])
+    const online = () => setRevision(n => n + 1)
+    window.addEventListener('online', online)
+    return () => { active = false; stream?.close(); scene?.update(null); window.removeEventListener('online', online) }
+  }, [identity, agent, view, mode, revision, viewUnavailable, scene])
 
   useEffect(() => {
     let active = true
@@ -344,7 +329,6 @@ export default function World() {
         <div className="world-controls">
           <label>Scene <select aria-label="Scene" value={view} onChange={event => setView(event.target.value)}>
             <option value="lobby">Personal lobby</option>
-            <option value="physics">Simulation</option>
             <option value="licence" disabled={licenceUnavailable !== null}>Software licences</option>
           </select></label>
           {view === 'lobby' && <label>Appearance <select aria-label="Appearance" value={mode} onChange={event => setMode(event.target.value)}>

@@ -125,7 +125,7 @@ nested_source_binding_test() ->
             quod_proof_context:get_or_open_scope(
               {<<"quod:nested-source-test">>, Anchor},
               fun(_ScopeId) ->
-                  {ok, Registered, registered_scope}
+                  {ok, Registered, registered_scope, 7}
               end),
         ok = quod_proof_context:register_invocation(
                {ScopeId, InvocationId}, Selection),
@@ -582,6 +582,29 @@ t_signed_nested_scope_uses_target_policy(#{pets := Pets}) ->
           ?assert(lists:member({not_allowed, <<"private">>}, Reasons))
       end).
 
+signed_read_dependencies_test_() ->
+    {setup,fun setup/0,fun cleanup/1,fun(#{chain_b := B,chain_c := C}) ->
+        {timeout,30,fun() ->
+            {ok,Network} = quod_ontology:network_identity(),
+            BA = quod_simplex:genesis_hash(B), CA = quod_simplex:genesis_hash(C),
+            lists:foreach(fun(Text) ->
+                F = quod_ct:signed_goal_fixture(#{mode => read,network => Network,
+                    target => {B,BA},goal_text => Text}),
+                [KeyFact] = quod_ct:signed_agent_facts(F),
+                ?assertMatch({ok,[_],_},quod_prolog:execute(B,{assertz,KeyFact})),
+                BH = quod_prolog:applied(B), CH = quod_prolog:applied(C),
+                #{goal := Frozen} = maps:get(evidence,F),
+                {ok,Goal} = quod_wire_term:materialize_symbols(Frozen),
+                {read,Deps,_} = quod_prolog:execute_signed(
+                    maps:get(evidence,F),Goal,maps:get(principal,F)),
+                ?assertEqual([{B,BA,BH},{C,CA,CH}],Deps)
+            end,[<<"chain_c::true.">>,<<"(chain_c::true, fail).">>,
+                  <<"((chain_c::true, fail); true).">>,
+                  <<"chain_c::assertz(read_must_not_write).">>]),
+            ?assertMatch({fail,_},prove(C,read_must_not_write))
+        end}
+    end}.
+
 independent_integration_test_() ->
     {setup, fun setup/0, fun cleanup/1, fun(Ctx) ->
         [{timeout, 60, ?_test(t_independent_signed_routes(Ctx))},
@@ -751,7 +774,7 @@ t_repeated_follow_queries_are_independent(#{pets := P}) ->
 %% choice-point ownership keeps both live invocations isolated.
 t_cut_follow_dedup_does_not_cross_invocations(
   #{animals := A, pets := P}) ->
-    {ok, Handle} = open_test_scope(A, false, 10),
+    {ok, Handle, _Height} = open_test_scope(A, false, 10),
     Follow = {once, {diet, {':', animals, dog}, kibble}},
     Chain = [{P, quod_simplex:genesis_hash(P)}],
     First = invocation_id(10),
@@ -930,8 +953,8 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
                                      OriginIdentity,
                                      quod_proof_context:principal(), node,
                                      quod_trace:context()}) of
-                                 {ok, Opened} ->
-                                     {ok, quod_scope_session:pid(Opened), Opened};
+                                 {ok, Opened, Height} ->
+                                     {ok, quod_scope_session:pid(Opened), Opened, Height};
                                  {error, _} = Error ->
                                      Error
                              end
@@ -1026,7 +1049,7 @@ t_scope_session_binding(#{animals := A}) ->
     Anchor = quod_simplex:genesis_hash(A),
     ProofId = crypto:strong_rand_bytes(32),
     ScopeId = scope_id(1),
-    {ok, Handle} = gen_server:call(
+    {ok, Handle, Height} = gen_server:call(
                      Engine,
                      scope_open_request(
                        A, ScopeId, ProofId, Anchor, false)),
@@ -1060,8 +1083,11 @@ t_scope_session_binding(#{animals := A}) ->
         ?assertMatch({solution, 1, {diet, cat, fish}, false, false},
                      receive_scope_reply(Handle, NextRef)),
         ok = quod_scope_session:invoke_cancel(Handle, InvocationId),
+        ?assertEqual(Height,quod_prolog:applied(A)),
+        ?assertMatch({ok,[_],_},prove(A,{assertz,{scope_height_advanced,true}})),
+        ?assert(quod_prolog:applied(A) > Height),
         ?assertEqual(
-           {ok, Handle},
+           {ok, Handle, Height},
            gen_server:call(
              Engine, scope_open_request(
                        A, ScopeId, ProofId, Anchor, false))),
@@ -1094,7 +1120,7 @@ t_stateless_scope_error_keeps_published_revision(
     Anchor = quod_simplex:genesis_hash(ChainB),
     ProofId = crypto:strong_rand_bytes(32),
     ScopeId = scope_id(3),
-    {ok, Handle} = gen_server:call(
+    {ok, Handle, _Height} = gen_server:call(
                      Engine,
                      scope_open_request(
                        ChainB, ScopeId, ProofId, Anchor, false)),
@@ -1139,7 +1165,7 @@ t_scope_owner_death_reaps_session(#{animals := A}) ->
         Parent ! {owner_scope, self(), Result},
         receive stop -> ok end
     end),
-    {ok, Handle} = receive
+    {ok, Handle, _Height} = receive
                        {owner_scope, Owner, Result} -> Result
                    after 1000 -> error(scope_open_timeout)
                    end,
@@ -1157,7 +1183,7 @@ t_scope_worker_crash_is_protocol_error(#{pets := P, slow := Slow}) ->
     Anchor = quod_simplex:genesis_hash(Slow),
     ProofId = crypto:strong_rand_bytes(32),
     ScopeId = scope_id(5),
-    {ok, Handle} = gen_server:call(
+    {ok, Handle, _Height} = gen_server:call(
                      Engine,
                      scope_open_request(
                        Slow, ScopeId, ProofId, Anchor, false)),
@@ -1320,7 +1346,7 @@ assert_foreign_transaction(
 %% A scope may be deriving an unproductive goal without blocking its owning
 %% ontology engine. Killing that isolated worker leaves the engine healthy.
 t_scope_engine_stays_responsive(#{slow := Slow, pets := P}) ->
-    {ok, Handle} = open_test_scope(Slow, false, 6),
+    {ok, Handle, _Height} = open_test_scope(Slow, false, 6),
     InvocationId = invocation_id(6),
     {ok, OpenRef} = quod_scope_session:invoke_open(
                       Handle, InvocationId, loop,
@@ -1337,7 +1363,7 @@ t_scope_engine_stays_responsive(#{slow := Slow, pets := P}) ->
     ?assertEqual(ok, wait_workers(Slow, 0, ?WAIT_RETRIES)).
 
 t_target_crash_kills_scope(#{slow := Slow}) ->
-    {ok, Handle} = open_test_scope(Slow, false, 7),
+    {ok, Handle, _Height} = open_test_scope(Slow, false, 7),
     ScopePid = quod_scope_session:pid(Handle),
     ScopeMRef = monitor(process, ScopePid),
     Engine = quod_reg:where({quod_prolog, Slow}),
@@ -1350,7 +1376,7 @@ t_target_crash_kills_scope(#{slow := Slow}) ->
 
 t_scope_worker_limit(#{animals := A}) ->
     Handles = [begin
-                   {ok, Handle} = open_test_scope(A, false, N),
+                   {ok, Handle, _Height} = open_test_scope(A, false, N),
                    Handle
                end || N <- lists:seq(100, 163)],
     Anchor = quod_simplex:genesis_hash(A),
@@ -1367,7 +1393,7 @@ t_scope_worker_limit(#{animals := A}) ->
 %% A scope remains pinned to its committed base while a later transaction
 %% advances the ontology. Subsequent answers cannot observe that new fact.
 t_frozen_scope_view(#{animals := A, pets := P}) ->
-    {ok, Handle} = open_test_scope(A, false, 8),
+    {ok, Handle, _Height} = open_test_scope(A, false, 8),
     try
         InvocationId = invocation_id(8),
         {ok, OpenRef} = quod_scope_session:invoke_open(

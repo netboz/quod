@@ -1,0 +1,11 @@
+{
+  "started": "2026-10-10T19:56:20.752559+00:00",
+  "finished": "2026-10-10T20:04:29.230059+00:00",
+  "child_exit": 0,
+  "is_error": false,
+  "models": [
+    "claude-fable-5-1"
+  ],
+  "frozen_count": 24,
+  "changed_frozen_inputs": []
+}

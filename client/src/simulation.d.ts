@@ -1,8 +1,10 @@
 import type { SignedIdentity, AgentReference } from './signed-client.js'
-import type { WorldMark } from './world.js'
+import type { WorldMark, SpaceReference, ViewDependency } from './world.js'
 import type { PhysicsControl } from './locomotion.js'
 import type { PrologTerm } from './prolog-term.js'
 export type SimulationView = {
+  selection: 'active'
+
   marks: WorldMark[]
   poses: Map<string, { position: number[]; rotation: number[] }>
   tick: bigint
@@ -14,16 +16,21 @@ export type SimulationView = {
   expires: number
   command?(input: PrologTerm): Promise<boolean>
 }
-export function readSimulationWorld(identity: SignedIdentity, agent: AgentReference): Promise<{
-  namespace: string; anchor: Uint8Array
-}>
-export function connectSimulation(identity: SignedIdentity, agent: AgentReference, callbacks: {
-  projection(view: SimulationView): void
+export type WorldView = SimulationView | {
+  selection: 'nonphysical' | 'disabled' | 'denied' | 'recovering' | 'unavailable'
+  marks: WorldMark[]
+  poses: Map<string, { position: number[]; rotation: number[] }>
+  view: string
+  expires: number
+  control: null
+}
+export function connectWorldView(identity: SignedIdentity, agent: AgentReference, callbacks: {
+  projection(view: WorldView): void
   frame(view: SimulationView): void
   unavailable(reason: string): void
   refused?(reason: string, reasons: string[]): void
-  refreshing(): void | boolean
-}, options?: { world?: { namespace: string; anchor: Uint8Array } }): {
+  refreshing(reason: string): void | boolean
+}, options: { world: SpaceReference; dependencies: ViewDependency[]; mode: string }): {
   command(input: PrologTerm): Promise<boolean>
   close(): void
 }

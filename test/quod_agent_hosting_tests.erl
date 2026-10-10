@@ -3,7 +3,8 @@
 -include_lib("erlog/src/erlog_int.hrl").
 -export([quod_predicate_module/0, load/1, test_host_barrier/3, test_fill_agents/3,
          test_fill_work_queue/3, test_local_wait/3,
-         with_host/1, with_host/2, domain_agents/1]).
+         with_host/1, with_host/2, with_host/4, domain_agents/1,
+         start_ontology/5, stop_ontology/1]).
 
 quod_predicate_module() -> true.
 load(Est) ->
@@ -962,7 +963,7 @@ signed_node_request_expiry_survives_foreign_scope_test_() ->
         {ok, WrongBytes, WrongSignature} = quod_node_actor:signed_goal(
             read, {'::', Ns, {current_request_expiry, Expiry + 1}},
             crypto:strong_rand_bytes(32), Expiry),
-        ?assertMatch({ok, _, {normalized, {failed, _}}},
+        ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                      quod_client_goal_ingress:submit(WrongBytes, WrongSignature))
     end) end}.
 
@@ -1408,6 +1409,9 @@ with_host(Fun) -> with_host(Fun, []).
 with_host(Fun, ExtraFacts) -> with_host(Fun, ExtraFacts, current).
 
 with_host(Fun, ExtraFacts, NodePolicy) ->
+    with_host(Fun, ExtraFacts, NodePolicy, <<"host-test-agent">>).
+
+with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
     BeamPath = filename:join(filename:dirname(code:which(quod_predicates)),
                              atom_to_list(?MODULE) ++ ".beam"),
     {ok, _} = file:copy(code:which(?MODULE), BeamPath),
@@ -1433,7 +1437,7 @@ with_host(Fun, ExtraFacts, NodePolicy) ->
     Unlock = filename:join(Dir, "unlock"),
     ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
     {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "keys"), unlock_file => Unlock}),
-    NodeNs = <<"host-test-node">>, Ns = <<"host-test-agent">>,
+    NodeNs = <<"host-test-node">>,
     NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
     NodeDiff = case NodePolicy of
         current -> quod_prolog:genesis_diff(NodeExecution);
@@ -1512,8 +1516,7 @@ start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
     {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
       #{node_id => maps:get(pubkey, Identity), identity => Identity,
         data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
-        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates,
-                                       quod_physics_predicates, ?MODULE],
+        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates, ?MODULE],
         genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}, BootConfig)),
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,

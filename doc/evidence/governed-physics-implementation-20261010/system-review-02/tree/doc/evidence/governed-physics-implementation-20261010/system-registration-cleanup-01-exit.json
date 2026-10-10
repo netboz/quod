@@ -1,0 +1,36 @@
+{
+  "started": "2026-10-10T19:09:44.437354+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_committed_projection_tests"
+  ],
+  "source_hashes": {
+    "src/quod_predicates.erl": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+    "src/predicates/quod_physics_predicates.erl": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a",
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "a47723f447a2b389eb0998b80588624287277876be5b54dfaa6c19e41a79431e",
+    "doc/physics-native.md": "5b2fea876529bc917930612272847959a887b205b4f98adc6b6f74a7c72f2d64",
+    "test/quod_committed_projection_tests.erl": "1abe40d3ea451b5bf77c746131b8983cbd43ca1caeee34d6ccb1a7ef4a5d58e9",
+    "test/quod_predicate_failure_tests.erl": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b",
+    "test/quod_agent_hosting_tests.erl": "cccadb31d77f198c2b55baaed079b6252151ca0e3aea69e7ac5df5900e47a565",
+    "test/quod_space_tests.erl": "a469cfdb65b52fbed3da637cf9162a18e39d7d8d8ef384afdc53340e51a4f21b"
+  },
+  "finished": "2026-10-10T19:09:47.094265+00:00",
+  "exit_code": 0,
+  "final_source_hashes": {
+    "src/quod_predicates.erl": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+    "src/predicates/quod_physics_predicates.erl": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a",
+    "priv/ontologies/quod_physics.pl": "15559860cc4b8c4b5a8758e314fc85bf7a739ed2f58728732301ea09f7047231",
+    "native/quod_physics/src/lib.rs": "dc38ff0e72120aef6c70be3124995c93e2b28583c19e16e1850d945c5a5aafc9",
+    "test/quod_physics_tests.erl": "a47723f447a2b389eb0998b80588624287277876be5b54dfaa6c19e41a79431e",
+    "doc/physics-native.md": "5b2fea876529bc917930612272847959a887b205b4f98adc6b6f74a7c72f2d64",
+    "test/quod_committed_projection_tests.erl": "1abe40d3ea451b5bf77c746131b8983cbd43ca1caeee34d6ccb1a7ef4a5d58e9",
+    "test/quod_predicate_failure_tests.erl": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b",
+    "test/quod_agent_hosting_tests.erl": "cccadb31d77f198c2b55baaed079b6252151ca0e3aea69e7ac5df5900e47a565",
+    "test/quod_space_tests.erl": "a469cfdb65b52fbed3da637cf9162a18e39d7d8d8ef384afdc53340e51a4f21b"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "file_count": 24,
+  "files": [
+    "AGENTS.md",
+    "doc/world.md",
+    "doc/multiwrite-architecture.md",
+    "doc/evidence/governed-physics-implementation-20261010/view-dependency-plan.md",
+    "src/quod_prolog.erl",
+    "src/quod_proof_context.erl",
+    "src/quod_proof_session.erl",
+    "src/quod_scope_session.erl",
+    "src/quod_ask_router.erl",
+    "src/quod_client_goal_target.erl",
+    "src/quod_client_goal_ingress.erl",
+    "src/quod_client_result.erl",
+    "src/quod_scope_wire.erl",
+    "src/quod_client_goal.erl",
+    "src/quod_agent_identity.erl",
+    "src/quod_client_simulation.erl",
+    "src/quod_foreign_log.erl",
+    "src/quod_predicates.erl",
+    "src/predicates/quod_ask.erl",
+    "src/quod_transaction_scope.erl",
+    "src/quod_client_goal_router.erl",
+    "priv/ontologies/quod_physics.pl",
+    "client/src/simulation.js",
+    "ui/src/World.tsx"
+  ],
+  "credential_markers": [],
+  "deployment_refound_scripts": [],
+  "browser_or_environment_files": [],
+  "authorization": "Yan explicitly requested Claude review of plan and regular implementation reviews."
+}

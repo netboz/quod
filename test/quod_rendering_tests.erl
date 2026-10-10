@@ -230,6 +230,13 @@ parent_order_prevents_cycles_and_dangling_children_test() ->
         Child = setelement(5, box(<<"child">>),
                            {relative, <<"root">>, {transform, 0, 0, 0, 0, 0, 0}}),
         holds({well_formed_scene, [Group, Child]}, St),
+        Driven = setelement(5, Child, {relative, <<"root">>, {body_pose, 10, 2}}),
+        holds({well_formed_scene, [Group, Driven]}, St),
+        fails({well_formed_scene, [Driven, Group]}, St),
+        fails({well_formed_scene, [Group, setelement(5, Driven,
+            {relative, <<"root">>, {body_pose, 10, 0}})]}, St),
+        fails({well_formed_scene, [Group, setelement(5, Driven,
+            {relative, <<"root">>, {relative, <<"root">>, {body_pose, 10, 2}}})]}, St),
         fails({well_formed_scene, [Child]}, St),
         fails({well_formed_scene, [Child, Group]}, St),
         Cycle = setelement(5, Group,
@@ -237,6 +244,20 @@ parent_order_prevents_cycles_and_dangling_children_test() ->
         fails({well_formed_scene, [Cycle, Child]}, St),
         fails({well_formed_scene, [Group, Group]}, St),
         fails({well_formed_scene, [setelement(6, Group, {surface, <<"#FFFFFF">>, 0, 900, 0, []})]}, St)
+    end).
+
+model_recipes_preserve_body_and_attachment_references_test() ->
+    {ok, Modelling} = file:read_file("priv/ontologies/quod_modelling.pl"),
+    with_committed_rendering(Modelling, fun(_Committed, St) ->
+        Body = {part,<<"body">>,group,{body_pose,42,7},no_surface,unlabelled,
+                {depicts,<<"objects">>,<<7:256>>,object}},
+        Child = {part,<<"child">>,group,{relative,<<"body">>,{body_pose,43,8}},
+                 no_surface,unlabelled,{depicts,<<"objects">>,<<7:256>>,child}},
+        [Marks] = solutions({'Marks'},{model_parts,[Body,Child],{'Marks'}},St),
+        ?assertMatch([{mark,<<"body">>,_,_,{body_pose,42,7},_,_,_},
+                      {mark,<<"child">>,_,_,{relative,<<"body">>,{body_pose,43,8}},_,_,_}],Marks),
+        holds({well_formed_scene,Marks},St),
+        fails({model_transform,{relative,<<"body">>,{relative,<<"body">>,{body_pose,43,8}}},{'_'}},St)
     end).
 
 pbr_factors_are_bounded_integers_test() ->

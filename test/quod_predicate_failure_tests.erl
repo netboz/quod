@@ -111,7 +111,7 @@ overlay(Base,Opts) -> quod_erlog_db_local_prove:wrap_state(Base,Opts).
 with_state(Fun) -> with_state([],Fun).
 with_state(Facts,Fun) ->
     Est0 = quod_predicates:load_modules(quod_committed_projection:new_est(),
-        [quod_physics_predicates,quod_agent_work_predicates,quod_ontology_predicates]),
+        [quod_agent_work_predicates,quod_ontology_predicates]),
     Est = lists:foldl(fun(Fact,State) ->
         {succeed,Next} = erlog_int:prove_goal({assertz,Fact},State),Next
     end,Est0,Facts),

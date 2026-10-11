@@ -1,0 +1,10 @@
+{
+  "reason": "route_changed",
+  "child_exit": 1,
+  "exec_session": 61839,
+  "completed_cycles": 4,
+  "planned_cycles": 42,
+  "scope": "Partial recording, not long-run acceptance",
+  "captured": "2026-10-11T23:02:34.762249+00:00",
+  "keys_released": true
+}

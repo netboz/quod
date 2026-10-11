@@ -1,0 +1,10 @@
+{
+  "actions_returned": true,
+  "completed_cycles": 4,
+  "observation_stopped": {
+    "ended": true,
+    "reason": "route_changed"
+  },
+  "elapsed_seconds": 7.669898850959726,
+  "release_completed": true
+}

@@ -51,7 +51,7 @@ init_per_testcase(TestCase, Config0) ->
         install_contacts(Nodes, Nodes, RootAnchor, AgentAnchor, Administrator),
         AgentRef = {agent_instance_ref, ?NS, AgentAnchor, actor},
         {ok, Blob} = quod_wire_term:encode_canonical(AgentRef),
-        {ok, OldKey} = call(Old, quod_agent_vault, generate, [Blob]),
+        {ok, OldKey} = call(Old, quod_agent_vault, prepare, [Blob, 0]),
         OldRef = maps:get(reference, Old),
         committed(call(Administrator, ?MODULE, submit_node,
             [{node_authorized_goal, ?NS, AgentAnchor,

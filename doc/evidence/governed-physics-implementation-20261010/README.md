@@ -1,11 +1,23 @@
 # Governed physics: partial implementation evidence
 
 [QUD.27](nimbalyst://QUD.27) remains open. The latest deployed release is
-[0.7.261](deployment-261/README.md), with eight healthy candidate nodes and the
+[0.7.262](release-262-deployment/README.md), with eight healthy candidate nodes and the
 existing ledgers retained. The separate main job was unchanged.
 [Real remote collider propagation](remote-collider-259-06/README.md) passed
 admission, unrelated edit, geometry edit and withdrawal, including 80 unchanged
 checks with no measured rebuild or write/sync work.
+
+The [signed-view renewal correction](renewal-implementation-resolution.md)
+preserves movement while an unchanged view is renewed. Fable reviewed the main
+implementation, and Opus 5.5 reviewed the follow-up after Fable exhausted its
+credits. The [final clean release checks](release-262-gates-03/README.md) passed
+all eleven gates, including 3,884 EUnit tests and 146 Common Test cases. The old
+native registration API was removed; no compatibility path or ledger change
+was needed. The [first deployed recording](desktop-262-01/README.md) stopped at
+its conservative route guard after 7.64 seconds because the starting position
+was too close to the margin. Its evidence and stop marker are preserved. No
+renewal projection occurred in that partial recording, so sustained movement
+across renewal remains unverified. The test browser is closed.
 
 The [actual signed personal world](personal-world-259-01/README.md) now has an
 established identity/history baseline, complete atomic physics activation and
@@ -216,9 +228,10 @@ and reported root/system-vocabulary anchors do not identify the current personal
 world. The 0.7.257 release below freshly verified the reported job state before
 executing Yan's separately authorized refound.
 
-Still open: completion of real signed desktop collision acceptance after the
-native floor-slide defect is corrected and deployed. Remote collider propagation/work
-measurements and the signed personal-world baseline have been established.
+Still open: sustained real signed desktop movement across permission renewal
+with the deployed correction. Floor, console, tall-opening and low-roof contact,
+remote collider propagation/work measurements and the signed personal-world
+baseline have been established in the scoped evidence linked above.
 Separate Vive/WebXR and durable real-door
 acceptance are not claimed by local fixtures or release smoke checks.
 

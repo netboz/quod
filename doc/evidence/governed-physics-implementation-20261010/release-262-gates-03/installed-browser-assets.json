@@ -1,0 +1,30 @@
+{
+  "source": "frozen gate-03 output",
+  "changes": [
+    {
+      "path": "priv/explorer/assets/World-DZvYH6ot.js",
+      "status": "deleted"
+    },
+    {
+      "path": "priv/explorer/assets/main-BJ42boXd.js",
+      "status": "deleted"
+    },
+    {
+      "path": "priv/explorer/index.html",
+      "status": "modified"
+    },
+    {
+      "path": "priv/explorer/world.html",
+      "status": "modified"
+    },
+    {
+      "path": "priv/explorer/assets/main-cK6cYXD5.js",
+      "status": "added"
+    },
+    {
+      "path": "priv/explorer/assets/World-DJrN7vr7.js",
+      "status": "added"
+    }
+  ],
+  "all_hashes_match": true
+}

@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-11T22:24:42.549619+00:00",
+  "args": [
+    "/home/yan/src/quod/_build/quod27-opus-review-cli/node_modules/@anthropic-ai/claude-code-linux-x64/claude",
+    "--print",
+    "--model",
+    "claude-opus-5-5",
+    "--effort",
+    "max",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "payload_sha256": "db8f7663f797f4fd02f64365d7af7d1e629b417b9f8259adb40b16b43f9003d5",
+  "scope": "QUD.27 renewal follow-up: release fixture and Fable review refinements"
+}

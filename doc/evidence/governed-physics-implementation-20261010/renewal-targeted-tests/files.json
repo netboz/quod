@@ -1,0 +1,202 @@
+[
+  {
+    "file": "quod27-renewal-baseline-01/STOP.json",
+    "sha256": "1bccf527c3f472fb9b0791032aecfb37074558373275bedcf8dc581aae765d05",
+    "bytes": 331
+  },
+  {
+    "file": "quod27-renewal-baseline-01/client-exit.json",
+    "sha256": "679c8cdf5e8d9590f25888c20c33d92e7e0b75a00a2dcdc30460fa35a6d1f60b",
+    "bytes": 128
+  },
+  {
+    "file": "quod27-renewal-baseline-01/client.log",
+    "sha256": "b778c2c0fc2936524684ad8af2ee336bd3c05c3c90ee5b6e84b3eced6956424e",
+    "bytes": 12303
+  },
+  {
+    "file": "quod27-renewal-baseline-01/physics.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "file": "quod27-renewal-baseline-01/run.py",
+    "sha256": "3a929f3bffce8db1fccfb69d162c0915f87a6a22b54e6a8c02a77b5846e79903",
+    "bytes": 888
+  },
+  {
+    "file": "quod27-renewal-baseline-02/physics-exit.json",
+    "sha256": "2598927409d14c6f78106a04facbdbbb8e123876527b0879a5e7a1327abb4e4c",
+    "bytes": 198
+  },
+  {
+    "file": "quod27-renewal-baseline-02/physics.log",
+    "sha256": "a84fce03b4a319e139205a140437cb903cd931ef0b0cd261c2019013450b6c77",
+    "bytes": 742373
+  },
+  {
+    "file": "quod27-renewal-baseline-02/preflight.json",
+    "sha256": "d4925c7f0c641e92f83f20ed5bc6701d46369b1bc9433a275c70acd668b53434",
+    "bytes": 142
+  },
+  {
+    "file": "quod27-renewal-baseline-02/run.py",
+    "sha256": "acdc40e866ec98dd0fe0cbe418dc71cab7e42a37442df85ecff4617048dd1cd5",
+    "bytes": 840
+  },
+  {
+    "file": "quod27-renewal-tests-01/STOP.json",
+    "sha256": "f17d2201fad7aff3b91bc62d2f2f2f342549b4ce3376339b46e04ee70dc4bed6",
+    "bytes": 198
+  },
+  {
+    "file": "quod27-renewal-tests-01/client-exit.json",
+    "sha256": "d252fb1cfb1778462ce065179693c2a766bcb2566486fcf7e22150eec955e4de",
+    "bytes": 129
+  },
+  {
+    "file": "quod27-renewal-tests-01/client.log",
+    "sha256": "5084f89affd9c3ca1c4771998799489148b1cc257c1c94edd8f0cec2e16257f5",
+    "bytes": 12940
+  },
+  {
+    "file": "quod27-renewal-tests-01/failure-resolution.md",
+    "sha256": "a79c0e4ca4e1177c0764a61bc57b4d20401b79deaab93581dcb373c2e485245e",
+    "bytes": 518
+  },
+  {
+    "file": "quod27-renewal-tests-01/physics-exit.json",
+    "sha256": "f17d2201fad7aff3b91bc62d2f2f2f342549b4ce3376339b46e04ee70dc4bed6",
+    "bytes": 198
+  },
+  {
+    "file": "quod27-renewal-tests-01/physics.log",
+    "sha256": "ed52db8a4c91920eb532182f31eecd5e82d7ed27b56b9a7fd1001f7d9010e849",
+    "bytes": 748829
+  },
+  {
+    "file": "quod27-renewal-tests-01/run.py",
+    "sha256": "9616a8be5a462c41272cd37e00a04c7d77bd551106157b8c6319a811041c5bd4",
+    "bytes": 875
+  },
+  {
+    "file": "quod27-renewal-tests-02/client-exit.json",
+    "sha256": "78666b1545c5a6ca8f4407cbc5240eed4a5e6df4d6d0bf1ffc90101a48b66038",
+    "bytes": 129
+  },
+  {
+    "file": "quod27-renewal-tests-02/client.log",
+    "sha256": "7a64270c35a77424b55bc12a9da690cf98c41b848b720d3daa8d73a997e3f2f2",
+    "bytes": 13010
+  },
+  {
+    "file": "quod27-renewal-tests-02/physics-exit.json",
+    "sha256": "504deb532b7bc61d1090a5decfee829e2123a71a700aa013f0b5905767fcaab8",
+    "bytes": 198
+  },
+  {
+    "file": "quod27-renewal-tests-02/physics.log",
+    "sha256": "07e571ce2f95bda95b8c736b674b286a6b16ae5728ad47e33924aaa88c15b1b3",
+    "bytes": 746255
+  },
+  {
+    "file": "quod27-renewal-tests-02/run.py",
+    "sha256": "9616a8be5a462c41272cd37e00a04c7d77bd551106157b8c6319a811041c5bd4",
+    "bytes": 875
+  },
+  {
+    "file": "quod27-renewal-tests-02/source-hashes.json",
+    "sha256": "561422c5f6f1daf2043eb7519fd2bed15aac76e84d894926f01a13e89014ced1",
+    "bytes": 714
+  },
+  {
+    "file": "quod27-renewal-tests-03/physics-exit.json",
+    "sha256": "16bb3335d28d78233bcc5d4b6b1e4104ac218a284ab19cbc70d5feed1e8b1d91",
+    "bytes": 198
+  },
+  {
+    "file": "quod27-renewal-tests-03/physics.log",
+    "sha256": "b9fc704891cb296d94fe837a92f9bbcb6da54fa8ebd36d916065478b8764f4e5",
+    "bytes": 745315
+  },
+  {
+    "file": "quod27-renewal-tests-03/run.py",
+    "sha256": "acdc40e866ec98dd0fe0cbe418dc71cab7e42a37442df85ecff4617048dd1cd5",
+    "bytes": 840
+  },
+  {
+    "file": "quod27-renewal-tests-03/source-hashes.json",
+    "sha256": "9820effb8ea97e1cdd12c49c358c4322bf16d4097b2f5e53bf9d9503271f2b6e",
+    "bytes": 714
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-01/STOP.json",
+    "sha256": "42426a4f85fc68182b2e03adf6922e1695ae554252e9f5062c231a54ece99c85",
+    "bytes": 180
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-01/physics-exit.json",
+    "sha256": "b0d67d07b6f34794eb5e73e172e00334d4ca840fb454b57718cb04057a77dfcc",
+    "bytes": 220
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-01/physics.log",
+    "sha256": "2e6825b139ce83eb2dc3d84297391fc911c0de52d2585fc73205d9233586553e",
+    "bytes": 1304
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-01/run.py",
+    "sha256": "fac14485533d73f7bcc76a841ffcaf791d4206afdb2b953cdb96152499fe79c1",
+    "bytes": 862
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-02/STOP.json",
+    "sha256": "cfb45256d75895f4f6ab214d9b02146d7fa209a3c5ba4d895c05b2deca6eae1e",
+    "bytes": 226
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-02/failure-resolution.md",
+    "sha256": "83261273d2851eb286508e320cd80d7a34eec7820e8e98fba7345a9e5f12e1ba",
+    "bytes": 351
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-02/physics-exit.json",
+    "sha256": "cfb45256d75895f4f6ab214d9b02146d7fa209a3c5ba4d895c05b2deca6eae1e",
+    "bytes": 226
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-02/physics.log",
+    "sha256": "e69bb710c99102f6f376984a9bf8dc93641a60dab8f777289b7aa10e8c741a87",
+    "bytes": 1637
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-02/run.py",
+    "sha256": "bffaf556e4843b4024c4eaafe86fc57aad5d045842d05836205c3349a1d80b72",
+    "bytes": 867
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-03/STOP.json",
+    "sha256": "ab89c18ba178dc1bbf8973a667232b54843acad67d8049f1d93556f2f21e4ce5",
+    "bytes": 226
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-03/failure-resolution.md",
+    "sha256": "9e243becf3728ca6349f0ebf1c3d36fe0d9a464a79fd024202cc3fe7c3b0f215",
+    "bytes": 411
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-03/physics-exit.json",
+    "sha256": "ab89c18ba178dc1bbf8973a667232b54843acad67d8049f1d93556f2f21e4ce5",
+    "bytes": 226
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-03/physics.log",
+    "sha256": "3e0c6c3c6af7127cfaf25f917127296ee28b3c673e0f25bc168a4dd7ed363118",
+    "bytes": 1905
+  },
+  {
+    "file": "quod27-renewal-foreign-regression-03/run.py",
+    "sha256": "bffaf556e4843b4024c4eaafe86fc57aad5d045842d05836205c3349a1d80b72",
+    "bytes": 867
+  }
+]

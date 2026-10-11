@@ -1,0 +1,4 @@
+{
+  "reason": "Claude refused the follow-up review: out of usage credits. No model was invoked. Main implementation review01 remains GO, but this narrow follow-up has no external review result.",
+  "child_exit": 1
+}

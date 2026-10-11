@@ -1,0 +1,151 @@
+[
+  {
+    "name": "native-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-11T22:27:27.426486+00:00",
+    "exit": 0,
+    "seconds": 4.37,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-release-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--release",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-11T22:27:32.087123+00:00",
+    "exit": 0,
+    "seconds": 3.82,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started": "2026-10-11T22:27:36.173085+00:00",
+    "exit": 0,
+    "seconds": 0.72,
+    "sources_unchanged": true
+  },
+  {
+    "name": "client-tests",
+    "command": [
+      "npm",
+      "--prefix",
+      "client",
+      "test"
+    ],
+    "started": "2026-10-11T22:27:37.120210+00:00",
+    "exit": 0,
+    "seconds": 1.69,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "started": "2026-10-11T22:27:39.040901+00:00",
+    "exit": 0,
+    "seconds": 4.69,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "started": "2026-10-11T22:27:43.958016+00:00",
+    "exit": 0,
+    "seconds": 0.22,
+    "sources_unchanged": true
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit"
+    ],
+    "started": "2026-10-11T22:27:44.405856+00:00",
+    "exit": 0,
+    "seconds": 571.68,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ct",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "ct"
+    ],
+    "started": "2026-10-11T22:37:16.321851+00:00",
+    "exit": 0,
+    "seconds": 545.63,
+    "sources_unchanged": true
+  },
+  {
+    "name": "xref",
+    "command": [
+      "rebar3",
+      "xref"
+    ],
+    "started": "2026-10-11T22:46:22.182922+00:00",
+    "exit": 0,
+    "seconds": 8.56,
+    "sources_unchanged": true
+  },
+  {
+    "name": "dialyzer",
+    "command": [
+      "rebar3",
+      "dialyzer"
+    ],
+    "started": "2026-10-11T22:46:30.978060+00:00",
+    "exit": 0,
+    "seconds": 85.74,
+    "sources_unchanged": true
+  },
+  {
+    "name": "release",
+    "command": [
+      "rebar3",
+      "as",
+      "prod",
+      "release"
+    ],
+    "started": "2026-10-11T22:47:56.954916+00:00",
+    "exit": 0,
+    "seconds": 9.97,
+    "sources_unchanged": true
+  }
+]

@@ -7,7 +7,7 @@ fence, rather than flooding its event queue.
 """.
 -behaviour(gen_server).
 -export([start/2, snapshot/2, body_state/4, motion_query/6, accepts/2, projection/2, fence/1,
-         watch/2, unwatch/2, ack/3]).
+         watch/3, unwatch/2, ack/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([input/7]).
 -record(s, {owner, monitor, spec, token, native = none, phase = activating,
@@ -28,7 +28,7 @@ input(Pid,Expected,Control,Sequence,Input,Expiry,Deadline) ->
             gen_server:call(Pid,{physics_input,Expected,Control,Sequence,Input,Expiry,Deadline},Remaining);
         _ -> {error,expired}
     end.
-watch(Pid, Expected) -> gen_server:call(Pid, {watch, Expected}).
+watch(Pid, Expected, Previous) -> gen_server:call(Pid, {watch, Expected, Previous}).
 unwatch(Pid, Ref) -> Pid ! {physics_unwatch, self(), Ref}, ok.
 ack(Pid, Ref, Tick) -> Pid ! {physics_ack, self(), Ref, Tick}, ok.
 accepts(#{fence := Fence, structure := S, tick := Tick},
@@ -47,7 +47,7 @@ init({Owner, Spec = #{navigation_guard := {_,_}}}) ->
 
 handle_call(Request,From,S) ->
     NeedsNavigation = case Request of
-        {watch,_} -> true;
+        {watch,_,_} -> true;
         {snapshot,_} -> true;
         {body_state,_,_} -> true;
         {motion_query,_,_,_,_} -> true;
@@ -60,18 +60,26 @@ handle_call(Request,From,S) ->
         false -> handle_current_call(Request,From,S)
     end.
 
-handle_current_call({watch, Expected}, {Pid, _}, S = #s{phase = active, viewer = none, frame = Frame}) ->
-    case current_projection(Frame, Expected) andalso current_control(Expected, S#s.spec) of
+handle_current_call({watch, Expected, Previous}, {Pid, _}, S = #s{phase = active, frame = Frame}) ->
+    Ownership = case S#s.viewer of
+        none when Previous =:= none -> true;
+        #{pid := Pid, ref := Previous, expected := Installed} ->
+            maps:remove(registration, Installed) =:= Expected;
+        _ -> false
+    end,
+    case Ownership andalso current_projection(Frame, Expected) andalso current_control(Expected, S#s.spec) of
         true ->
-            Ref = make_ref(), M = monitor(process, Pid),
+            Ref = make_ref(),
+            M = case S#s.viewer of none -> monitor(process, Pid); #{monitor := Existing} -> Existing end,
             Registered = Expected#{registration => crypto:strong_rand_bytes(32)},
+            %% Replacing this socket's exact registration changes delivery
+            %% custody, not admitted inputs or their original deadlines.
             {reply, {ok, Ref, view_frame(Frame#{inputs => input_feedback(S)},Registered,S)}, S#s{viewer = #{pid => Pid, ref => Ref,
                 monitor => M, expected => Registered, tick => maps:get(tick, Frame), credit => false}}};
+        false when not Ownership, S#s.viewer =/= none -> {reply, {error, view_busy}, S};
         false -> {reply, {error, unavailable}, S}
     end;
-handle_current_call({watch, _}, _, S = #s{viewer = V}) when V =/= none ->
-    {reply, {error, view_busy}, S};
-handle_current_call({watch, _}, _, S = #s{phase = {failed, _}}) ->
+handle_current_call({watch, _, _}, _, S = #s{phase = {failed, _}}) ->
     {reply, {error, simulation_failed}, S};
 handle_current_call({body_state, Expected, {Id, Revision}}, _, S = #s{phase = active, frame = Frame}) ->
     Reply = case current_projection(Frame, Expected) of

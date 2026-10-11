@@ -1300,7 +1300,7 @@ signed_control_releases_only_successful_proof_test_() ->
         %% Even a higher-sequence command from the disconnected view cannot
         %% control its replacement registration.
         assert_reason(stale_registration,control_goal({'::',Ns,Command(100,Drive)})),
-        {ok,FreshRef,FreshView} = quod_physics:watch(Pid,Expected),
+        {ok,FreshRef,FreshView} = quod_physics:watch(Pid,Expected,none),
         {control_frame,BaseFrame,_} = Frame,
         FreshFrame = {control_frame,BaseFrame,maps:get(registration,FreshView)},
         assert_reason(stale_registration,control_goal({'::',Ns,Command(100,Drive)})),
@@ -1332,7 +1332,7 @@ install_test_control(#{namespace := Ns,node := Human},Pid,World,Motion,Body) ->
              maps:get(generation,Spec),maps:get(run_token,Spec),maps:get(structure,Spec)},
     Expected = #{fence => quod_physics:fence(Spec),incarnation => maps:get(run_token,Spec),
                  structure => maps:get(structure,Spec),control => {control,Human,1,Definition}},
-    {ok,Ref,Initial} = quod_physics:watch(Pid,Expected),
+    {ok,Ref,Initial} = quod_physics:watch(Pid,Expected,none),
     {Definition,Expected,{control_frame,Frame,maps:get(registration,Initial)},Ref,Initial}.
 
 grounded_reinstall_and_wedge_settling_test_() ->
@@ -1451,6 +1451,15 @@ foreign_signed_control_view_and_reconnect_test_() ->
             Open(), Second = simulation_reply(Socket,<<"projection">>),
             ?assertNotEqual(maps:get(<<"registration">>,Frame),
                 maps:get(<<"registration">>,maps:get(<<"frame">>,Second))),
+            %% A different signed session must retire the old subscription,
+            %% even for the same actor, world and goal.
+            SameScope = simulation_state(Socket), OtherSession = simulation_session(Identity),
+            Socket ! {client,simulation_open(F,OtherSession,Human)},
+            _ = simulation_reply(Socket,<<"projection">>),
+            ChangedScope = simulation_state(Socket),
+            ?assertNotEqual(maps:get(monitor,SameScope),maps:get(monitor,ChangedScope)),
+            ?assertNotEqual(maps:get(dependency_monitors,SameScope),maps:get(dependency_monitors,ChangedScope)),
+            ?assertEqual(false,erlang:read_timer(maps:get(timer,SameScope))),
             #{inputs := Inputs} = gen_server:call(Pid,status), ?assertEqual(#{},Inputs),
             %% An advance in the foreign signer's ontology invalidates this
             %% projection too, even if the world's height is much higher.
@@ -1502,7 +1511,7 @@ changed_control_view_retains_sequence_test_() ->
             receive {'DOWN',Monitor,process,Socket,normal} -> ok
             after 5000 -> error(socket_not_released) end,
             {ok,FreshRef,FreshView} = quod_physics:watch(Pid,Expected#{structure => 2,
-                control => {control,Human,1,setelement(5,Definition,2)}}),
+                control => {control,Human,1,setelement(5,Definition,2)}},none),
             quod_physics:ack(Pid,FreshRef,maps:get(tick,FreshView)),
             #{World := #{spec := Spec}} = worlds(Ns),
             ControlFrame = {control_frame,{physics_frame,World,maps:get(authority,Spec),maps:get(epoch,Spec),
@@ -1536,7 +1545,7 @@ control_only_installation_and_revocation_test_() ->
         {Pid, World} = installed(Ns),
         Expected = #{fence => quod_physics:fence(Spec), structure => 1,
             incarnation => maps:get(run_token,Spec), control => Control},
-        {ok, Ref, _} = quod_physics:watch(Pid,Expected),
+        {ok, Ref, _} = quod_physics:watch(Pid,Expected,none),
         #{installs := Installs} = gen_server:call(Pid,status),
         assert_no_physics_io(fun() -> reconcile(Ns) end),
         ?assertMatch(#{installs := Installs},gen_server:call(Pid,status)),
@@ -1544,15 +1553,75 @@ control_only_installation_and_revocation_test_() ->
         receive {physics_refresh,Pid,Ref} -> ok
         after 5000 -> error(control_not_revoked) end,
         {Pid,World} = installed(Ns),
-        ?assertEqual({error,unavailable},quod_physics:watch(Pid,Expected)),
+        ?assertEqual({error,unavailable},quod_physics:watch(Pid,Expected,none)),
         ?assertMatch(#{installs := Installs},gen_server:call(Pid,status)),
         %% Grant dependencies are retained by the real runtime selector. Their
         %% restoration installs a fresh view opportunity without touching bodies.
         commit(Ns,{assertz,{can_control_physics_agent,room,Principal,pilot}}),
         {Pid,World} = installed(Ns),
-        {ok,Fresh,_} = quod_physics:watch(Pid,Expected),
+        {ok,Fresh,_} = quod_physics:watch(Pid,Expected,none),
         quod_physics:unwatch(Pid,Fresh)
     end) end}.
+
+renewed_control_preserves_input_and_fences_registration_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
+        {Pid,World} = enable(F),
+        Motion = {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[{snap,785}]},
+        {_,Expected,OldFrame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        Input = {drive,{vector,1000,0,0},{angular,0,0,0}},
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,
+            {physics_control_input,room,OldFrame,1,7,Input,{0}}})),
+        {Moving,_} = input_frame(Pid,Ref,Human,7),
+        %% Inspect the actual retained row without duplicating the owner's
+        %% record definition or creating a second input-state interface.
+        Row = fun() ->
+            [Inputs] = [M || M <- tuple_to_list(sys:get_state(Pid)),
+                            is_map(M),is_map_key(Human,M)],
+            maps:get(Human,Inputs)
+        end,
+        Original = maps:with([control,sequence,input,expiry],Row()),
+        {ok,Fresh,Renewed} = quod_physics:watch(Pid,Expected,Ref),
+        ?assertEqual(Original,maps:with([control,sequence,input,expiry],Row())),
+        ?assertNotEqual(Ref,Fresh),
+        ?assertNotEqual(maps:get(registration,Initial),maps:get(registration,Renewed)),
+        ?assertEqual({error,view_busy},quod_physics:watch(Pid,Expected,Ref)),
+        ?assertEqual({error,view_busy},quod_physics:watch(Pid,Expected#{structure => 99},Fresh)),
+        Parent = self(),
+        Other = spawn(fun() -> Parent ! {foreign_watch,self(),quod_physics:watch(Pid,Expected,Fresh)} end),
+        receive {foreign_watch,Other,Reply} -> ?assertEqual({error,view_busy},Reply)
+        after 5000 -> error(foreign_watch_missing) end,
+        %% Retired acknowledgements and detach messages have no authority over
+        %% the replacement. Only its own acknowledgement releases credit.
+        quod_physics:ack(Pid,Ref,maps:get(tick,Moving)),
+        quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
+        receive {physics_frame,Pid,Fresh,_} -> error(uncredited_renewal_frame) after 0 -> ok end,
+        ?assertEqual(Original,maps:with([control,sequence,input,expiry],Row())),
+        quod_physics:ack(Pid,Fresh,maps:get(tick,Renewed)),
+        {Continued,_} = input_frame(Pid,Fresh,Human,7),
+        {2,1,world,{X0,_,_},_,_} = lists:keyfind(2,1,maps:get(poses,Renewed)),
+        {2,1,world,{X1,_,_},_,_} = lists:keyfind(2,1,maps:get(poses,Continued)),
+        ?assert(X1 > X0),
+        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,
+            {physics_control_input,room,OldFrame,1,8,Input,{0}}})),
+        {control_frame,Physical,_} = OldFrame,
+        CurrentFrame = {control_frame,Physical,maps:get(registration,Renewed)},
+        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,
+            {physics_control_input,room,CurrentFrame,1,7,Input,{0}}})),
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,
+            {physics_control_input,room,CurrentFrame,1,8,{snap,785},{0}}})),
+        _ = input_frame(Pid,Fresh,Human,8),
+        assert_no_physics_io(fun() ->
+            {ok,Final,_} = quod_physics:watch(Pid,Expected,Fresh),
+            ?assertEqual(8,maps:get(sequence,Row())),
+            quod_physics:unwatch(Pid,Final), _ = gen_server:call(Pid,status)
+        end),
+        ?assertEqual(0,maps:get(expiry,Row())),
+        ?assertEqual(disconnected,maps:get(result,Row()))
+    end,fun(Rules) -> [case R of
+        {physics_body_definition,room,2,1,_,_,{owned,_,_}} ->
+            {physics_body_definition,room,2,1,controlled,{vector,0,1002,0},{owned,{box,500,1000,500},1}};
+        _ -> R end || R <- Rules] end) end}.
 
 current_view_credit_and_revision_test_() ->
     {timeout, 60, fun() -> with_world(fun(F = #{namespace := Ns}) ->
@@ -1560,8 +1629,8 @@ current_view_credit_and_revision_test_() ->
         #{World := #{spec := Spec}} = worlds(Ns),
         Expected = #{fence => quod_physics:fence(Spec), structure => 1,
                      incarnation => maps:get(run_token, Spec)},
-        {ok, Ref, First} = quod_physics:watch(Pid, Expected),
-        ?assertEqual({error, view_busy}, quod_physics:watch(Pid, Expected)),
+        {ok, Ref, First} = quod_physics:watch(Pid, Expected,none),
+        ?assertEqual({error, view_busy}, quod_physics:watch(Pid, Expected,none)),
         %% Processing the owner's sleeping notice proves many actual steps
         %% completed while the initial frame held the only delivery credit.
         receive {physics_status, _, Pid, World, _, sleeping} -> ok
@@ -1583,9 +1652,9 @@ current_view_credit_and_revision_test_() ->
                         {assertz, {physics_structure, room, 2}}}),
         receive {physics_refresh, Pid, Ref} -> ok
         after 5000 -> error(no_revision_invalidation) end,
-        ?assertEqual({error, unavailable}, quod_physics:watch(Pid, Expected)),
+        ?assertEqual({error, unavailable}, quod_physics:watch(Pid, Expected,none)),
         {Pid,World} = installed(Ns),
-        {ok, Fresh, _} = quod_physics:watch(Pid, Expected#{structure => 2}),
+        {ok, Fresh, _} = quod_physics:watch(Pid, Expected#{structure => 2},none),
         quod_physics:unwatch(Pid, Fresh)
     end) end}.
 
@@ -1601,6 +1670,7 @@ ordinary_space_views_test_() ->
         Change = fun(Goal) -> commit(N,Goal), _ = simulation_reply(Socket,<<"refresh">>) end,
         try
             Selection(<<"disabled">>),
+            renew_simulation(Socket,Open,20),
             ?assertEqual(#{},worlds(N)),
             #{timer := Timer,installed := true} = simulation_state(Socket),
             Socket ! {timeout,Timer,expired}, _ = simulation_reply(Socket,<<"refresh">>),
@@ -1609,11 +1679,13 @@ ordinary_space_views_test_() ->
             Change({assertz,{can_view_physics,room,{'_'}}}), Selection(<<"disabled">>),
             {_Pid,_World} = enable(F), _ = simulation_reply(Socket,<<"refresh">>),
             Selection(<<"active">>),
+            renew_simulation(Socket,Open,20),
             Change({',',{retract,{instance_of,physical_space,room}},
                         {assertz,{instance_of,space,room}}}),
             reconcile(N), ?assertEqual(#{},worlds(N)),
             ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(N,{agent_hosting_projection,all,Human,all,[]})),
             Selection(<<"nonphysical">>),
+            renew_simulation(Socket,Open,20),
             Change({assertz,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
             Selection(<<"unavailable">>),
             Change({retract,{physics_control,room,Human,1,{controlled,pilot,eye}}}),
@@ -1625,6 +1697,27 @@ ordinary_space_views_test_() ->
         after Socket ! stop end
       end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},{world_view,room,playing,[]}] end)
     end}} || Ns <- [<<"ordinary-workshop">>,<<"ordinary-observatory">>]].
+
+renew_simulation(Socket,Open,Count) ->
+    Before = simulation_state(Socket),
+    Retained = [heights,anchors,owners,follows,dependency_monitors,dependency_names,local_ready,monitor,pid],
+    assert_no_physics_io(fun() ->
+        lists:foreach(fun(_) ->
+            Old = simulation_state(Socket),
+            Open(), _ = simulation_reply(Socket,<<"projection">>),
+            Current = simulation_state(Socket),
+            ?assertEqual(maps:with(Retained,Before),maps:with(Retained,Current)),
+            ?assertNotEqual(maps:get(timer,Old),maps:get(timer,Current)),
+            ?assertNot(maps:is_key(candidate_timer,Current)),
+            ?assertEqual(false,erlang:read_timer(maps:get(timer,Old))),
+            case maps:find(ref,Old) of
+                {ok,Ref} -> ?assertNotEqual(Ref,maps:get(ref,Current));
+                error -> ?assertNot(maps:is_key(ref,Current))
+            end,
+            Socket ! {timeout,maps:get(timer,Old),expired},
+            ?assertEqual(Current,simulation_state(Socket))
+        end,lists:seq(1,Count))
+    end).
 
 navigation_dependencies_fence_view_test_() ->
     {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human,identity := Identity}) ->
@@ -1686,6 +1779,147 @@ opening_worker_cancellation_test_() ->
             receive {'DOWN',LastMonitor,process,Last,killed} -> ok
             after 5000 -> error(socket_did_not_reap_opening) end
         after gproc:unreg(quod_reg:name({host_test,local_proof})), exit(Socket,kill) end
+    end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},
+        {':-',{world_view,room,playing,[]},test_physics_snapshot}] end) end}.
+
+uncertain_renewal_attachment_closes_and_releases_test_() ->
+    {timeout,30,fun() -> with_world(fun(F = #{namespace := Ns,node := Human,identity := Identity}) ->
+        {Pid,World} = enable(F),
+        Motion = {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]},
+        {_,Expected,_,Ref,_} = install_test_control(F,Pid,World,Motion),
+        quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
+        commit(Ns,{',',{assertz,{can_view_physics,room,Human}},{assertz,{world_view,room,playing,[]}}}),
+        reconcile(Ns),
+        Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        SocketMonitor = monitor(process,Socket), Session = simulation_session(Identity),
+        Open = fun() -> Socket ! {client,simulation_open(F,Session,Human)} end,
+        Open(), _ = simulation_reply(Socket,<<"projection">>),
+        Gate = fun(armed,{in,{'$gen_call',_,{watch,_,_}}},_) ->
+                Parent ! {attachment_waiting,self()},
+                receive resume_attachment -> released end;
+            (released,{in,{'DOWN',_,process,Who,_}},_) when Who =:= Socket ->
+                Parent ! {attachment_owner_down,self()}, observed;
+            (State,_,_) -> State
+        end,
+        ok = sys:install(Pid,{Gate,armed}),
+        try
+            Open(),
+            receive {attachment_waiting,Pid} -> ok after 5000 -> error(attachment_not_requested) end,
+            %% Let the real local call time out with an unknown result. The
+            %% socket must close; a late native registration must not survive it.
+            receive {simulation_closed,Socket,1011,_} -> ok
+            after 10000 -> error(uncertain_attachment_did_not_close) end,
+            receive {'DOWN',SocketMonitor,process,Socket,normal} -> ok
+            after 5000 -> error(uncertain_socket_not_terminated) end,
+            Pid ! resume_attachment,
+            receive {attachment_owner_down,Pid} -> ok
+            after 5000 -> error(late_registration_not_released) end,
+            {ok,Fresh,_} = quod_physics:watch(Pid,Expected,none),
+            quod_physics:unwatch(Pid,Fresh), _ = gen_server:call(Pid,status)
+        after Pid ! resume_attachment, sys:remove(Pid,Gate), Socket ! stop end
+    end) end}.
+
+renewal_retains_certified_foreign_dependency_test_() ->
+    {timeout,30,fun() ->
+        Fixture = quod_foreign_log_tests:foreign_fixture(<<"renewed-remote-view">>),
+        Ns = maps:get(ns,Fixture), Anchor = maps:get(anchor,Fixture), Identity = {Ns,Anchor},
+        Dir = quod_foreign_log_tests:temp_dir("renewed-view"),
+        Foreign = quod_foreign_log_tests:start_owner(Dir,
+            quod_foreign_log_tests:chain_fetch(Ns,maps:get(chain,Fixture))),
+        try
+            ?assertMatch({ok,#{slot := 2}},quod_foreign_log:current(
+                [{maps:get(pub,Fixture),[{"127.0.0.1",19000}]}],Identity,1000)),
+            {ok,Follow} = quod_foreign_log:follow(Identity,progress),
+            await_foreign_view(Follow,Identity),
+            Monitor = monitor(process,Foreign),
+            true = quod_reg:subscribe({physics,Ns}),
+            Timer = erlang:start_timer(30000,self(),expired),
+            State = #{peer => {127,0,0,1},namespace => Ns,anchor => Anchor,instance => room,
+                source => Ns,source_anchor => Anchor,expected_dependencies => [],
+                installed => true,expires => quod_time:now_ms()+30000,timer => Timer,
+                heights => #{},anchors => #{},owners => #{},local_ready => #{},dependency_names => #{},
+                dependency_monitors => #{Monitor => Foreign},follows => #{Follow => {Ns,Anchor,2,true}},
+                follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
+            {ok,Binding} = quod_wire_term:encode_bindings(#{<<"View">> =>
+                {world_view,{entity_ref,Ns,Anchor,room},[],nonphysical}},10000),
+            %% Enter at the trusted signed-proof completion seam. The foreign
+            %% reference, certified progress and lifetime are the real owner's;
+            %% this isolates retention from signature/ACL admission tests.
+            try assert_no_physics_io(fun() ->
+                Final = lists:foldl(fun(I,S) ->
+                    Expiry = quod_time:now_ms()+30000+I, Ref = make_ref(), M = make_ref(),
+                    Candidate = erlang:start_timer(Expiry-quod_time:now_ms(),self(),expired),
+                    Pending = S#{candidate_timer => Candidate,opening => {Ref,self(),M}},
+                    Result = {ok,#{request_digest => crypto:strong_rand_bytes(32),request => #{not_after_ms => Expiry}},
+                        {normalized,{read,[{Ns,Anchor,2}],{answers,2,[Binding]}}}},
+                    {ok,Completed} = quod_client_simulation:websocket_info({view_opened,Ref,Result},Pending),
+                    {reply,{text,Json},Renewed} = quod_client_simulation:websocket_info(
+                        {'DOWN',M,process,self(),normal},Completed),
+                    ?assertMatch(#{<<"type">> := <<"projection">>,<<"selection">> := <<"nonphysical">>},json:decode(Json)),
+                    ?assertEqual(maps:get(follows,State),maps:get(follows,Renewed)),
+                    ?assertEqual(maps:get(dependency_monitors,State),maps:get(dependency_monitors,Renewed)),
+                    ?assertEqual(false,erlang:read_timer(maps:get(timer,S))),
+                    Renewed
+                end,State,lists:seq(1,20)),
+                ?assertMatch(#{follow_consumers := 1},quod_foreign_log:stats()),
+                quod_client_simulation:terminate(normal,unused,Final),
+                ?assertMatch(#{follow_consumers := 0},quod_foreign_log:stats())
+            end)
+            after catch quod_client_simulation:terminate(normal,unused,State) end
+        after quod_foreign_log_tests:stop_owner(Foreign), file:del_dir_r(Dir) end
+    end}.
+
+await_foreign_view(Follow,Identity) ->
+    receive {quod_foreign_follow,Follow,Notice,Identity,State} ->
+        quod_foreign_log:ack(Follow,Notice),
+        case State of
+            {certified,2,_} -> ok;
+            {building,_} -> await_foreign_view(Follow,Identity);
+            _ -> error({unexpected_foreign_view_state,State})
+        end
+    after 3000 -> error(foreign_view_not_certified) end.
+
+renewal_worker_cancellation_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human,identity := Identity}) ->
+        _ = enable(F),
+        Session = simulation_session(Identity), Parent = self(),
+        true = quod_reg:reg({host_test,local_proof}),
+        try lists:foreach(fun(Reason) ->
+            Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+            Open = fun() ->
+                Socket ! {client,simulation_open(F,Session,Human)},
+                receive {local_proof_waiting,Proof} -> Proof
+                after 5000 -> error(renewal_proof_missing) end
+            end,
+            try
+                InitialProof = Open(), InitialProof ! release,
+                _ = simulation_reply(Socket,<<"projection">>),
+                Installed = simulation_state(Socket),
+                Proof = Open(),
+                Pending = #{opening := {Ref,Worker,_},timer := Old,candidate_timer := Candidate} = simulation_state(Socket),
+                ?assertEqual(maps:with([pid,ref,monitor,timer,follows,dependency_monitors],Installed),
+                             maps:with([pid,ref,monitor,timer,follows,dependency_monitors],Pending)),
+                WorkerMonitor = monitor(process,Worker), ProofMonitor = monitor(process,Proof),
+                {Type,ExpectedReason} = case Reason of
+                    expired -> Socket ! {timeout,Old,expired}, {<<"refresh">>,<<"expired">>};
+                    candidate_expired -> Socket ! {timeout,Candidate,expired}, {<<"unavailable">>,<<"expired">>};
+                    proof_failed -> exit(Worker,kill), {<<"unavailable">>,<<"proof_unavailable">>};
+                    revoked -> commit(Ns,{retract,{can_view_physics,room,{'_'}}}), {<<"refresh">>,<<"durable_gap">>}
+                end,
+                ?assertEqual(ExpectedReason,maps:get(<<"reason">>,simulation_reply(Socket,Type))),
+                receive {'DOWN',WorkerMonitor,process,Worker,_} -> ok
+                after 5000 -> error(renewal_worker_not_cancelled) end,
+                receive {'DOWN',ProofMonitor,process,Proof,_} -> ok
+                after 5000 -> error(renewal_proof_not_cancelled) end,
+                receive {simulation_opening_down,Socket,Worker} -> ok
+                after 5000 -> error(renewal_cleanup_missing) end,
+                ?assertEqual(false,erlang:read_timer(Old)),
+                ?assertEqual(false,erlang:read_timer(Candidate)),
+                Socket ! {view_opened,Ref,retired_result},
+                ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket))
+            after Socket ! stop end
+        end,[expired,candidate_expired,proof_failed,revoked])
+        after gproc:unreg(quod_reg:name({host_test,local_proof})) end
     end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},
         {':-',{world_view,room,playing,[]},test_physics_snapshot}] end) end}.
 
@@ -1835,10 +2069,11 @@ signed_client_view_lifecycle_test_() ->
                 after 5000 -> error(snapshot_not_requested) end,
                 #{timer := SnapshotTimer,snapshots := Requests} = simulation_state(Socket),
                 ?assert(gen_server:reqids_size(Requests) > 0),
-                ?assertNot(maps:is_key(pid,simulation_state(Socket))),
+                ?assertEqual(Pid,maps:get(pid,simulation_state(Socket))),
+                ?assert(maps:is_key(candidate_timer,simulation_state(Socket))),
                 Socket ! {timeout,SnapshotTimer,expired},
                 ?assertEqual(<<"expired">>,maps:get(<<"reason">>,
-                    simulation_reply(Socket,<<"unavailable">>))),
+                    simulation_reply(Socket,<<"refresh">>))),
                 ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket))
             after
                 RenderingEngine ! release_snapshot,
@@ -1988,13 +2223,16 @@ simulation_socket(Parent, S) ->
             Next = case Result of
                 {ok, State} -> State;
                 {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
+                {reply,{close,Code,Reason},State} ->
+                    Parent ! {simulation_closed,self(),Code,Reason},
+                    quod_client_simulation:terminate(normal,unused,State), closed;
                 Other -> error({invalid_socket_result, Other})
             end,
             case {Message,S} of
                 {{'DOWN',M,process,P,_},#{opening := {_,P,M}}} -> Parent ! {simulation_opening_down,self(),P};
                 _ -> ok
             end,
-            simulation_socket(Parent, Next)
+            case Next of closed -> ok; _ -> simulation_socket(Parent,Next) end
     end.
 
 simulation_state(Socket) ->
@@ -2098,7 +2336,8 @@ sleeping_world_and_unchanged_cost_test_() ->
 assert_no_physics_io(Fun) ->
     Collector = spawn_link(fun() -> trace_calls([]) end),
     Trace = trace:session_create(physics_unchanged, Collector, []),
-    Watched = [{quod_physics_native,new_world,3}, {quod_ledger_store,append,2}, {quod_ledger_store,fold,5},
+    Watched = [{quod_physics_native,new_world,3}, {quod_physics_native,install,2},
+               {quod_physics_native,install_hinges,2}, {quod_ledger_store,append,2}, {quod_ledger_store,fold,5},
                {quod_ledger_store,fold_groups,3}, {quod_ledger_store,open,3},
                {quod_file,write_atomic,3}, {dets,insert,2}, {dets,sync,1}, {file,write,2}, {file,sync,1}, {file,datasync,1}],
     Match = [{'_',[],[{message,{caller}}]}],
@@ -2157,7 +2396,7 @@ native_failure_does_not_retry_definition_test_() ->
         [reconcile(Ns) || _ <- lists:seq(1, 5)],
         ?assertEqual(Before, gen_server:call(Pid, status)),
         ?assertEqual({error, unavailable}, quod_physics:snapshot(Pid, ignored)),
-        ?assertEqual({error, simulation_failed}, quod_physics:watch(Pid, ignored)),
+        ?assertEqual({error, simulation_failed}, quod_physics:watch(Pid, ignored,none)),
         commit(Ns, {',', {retract, {physics_allowances, room, {limits,1,1,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000}},
                           {assertz, {physics_allowances, room, {limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000}}}),
         {Replacement, _} = installed(Ns),
@@ -3459,7 +3698,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             ?assertMatch({ok,_,{normalized,{failed,_}}},OldCommand(0,Push)),
             commit(Ns,{assertz,{can_push_physics_body,room,{'_'},3}}), reconcile(Ns),
             assert_reason(stale_registration,OldCommand(1,Push)),
-            {ok,Ref,Initial} = quod_physics:watch(Pid,Expected),
+            {ok,Ref,Initial} = quod_physics:watch(Pid,Expected,none),
             Frame = setelement(3,OldFrame,maps:get(registration,Initial)),
             Command = fun(Seq,Input) -> Send(Frame,Seq,Input) end,
             ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,
@@ -3508,7 +3747,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             end),
             %% A second, uncheckpointed push is deliberately lost on runtime
             %% collapse. Recovery must use the rest checkpoint, not this motion.
-            {ok,ResumeRef,ResumeView} = quod_physics:watch(Pid,Expected),
+            {ok,ResumeRef,ResumeView} = quod_physics:watch(Pid,Expected,none),
             ResumeFrame = setelement(3,Frame,maps:get(registration,ResumeView)),
             quod_physics:ack(Pid,ResumeRef,maps:get(tick,ResumeView)),
             ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Send(ResumeFrame,3,Push)),

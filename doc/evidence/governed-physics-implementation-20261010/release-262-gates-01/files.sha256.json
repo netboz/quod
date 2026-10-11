@@ -1,0 +1,15 @@
+{
+  "STOP.json": "c00e1a415aad6f6b0695afbde31e94264eed61a171bb02db9ebc928fb4ad0dcc",
+  "cargo-clean-exit.json": "e64f262b117924d345269b0b7108b5897a39e11a3da6dcd2a1a2981855198729",
+  "cargo-clean.log": "3f13b280ee5ceb0e720b60f6e7fed98bbf0ab7a7a113219052803c12434153b6",
+  "failure-resolution.md": "4ceb6ed5fdc01be79437e1413375e33d039cf61d700a8cf02d2be0fd680a7804",
+  "freeze.json": "2dcff4dfc67bbcbad4ca0313878d5a1e5803bc982c96ff136223c6826093fcab",
+  "frozen-inputs.tar.gz": "8b44b59f903ee0413e8aebaa24cc20abbfd167ef6e8b174bfd6e135637d24afa",
+  "full-logs.tar.gz": "cc679877628b5650fee689ef35c2bf147397a106b64a97af2b0082ab32a9c56c",
+  "prepare-gates.py": "646190a4919129945856d02f1e07b371c641ec5340ab4ee997e8d5a4700c5337",
+  "process-exit.json": "7b2da8eece98ecb230ddcc32fadd979ec4d367ef8e47840bfda83e6fdb0a2212",
+  "results.json": "d0e7fd25b48be18fdcc769054c8dd6b2c8cf76dda7ece99ca3433d6fd6c42fc2",
+  "run-gates.py": "910a404263739d046530c416ed0c44a91cd2a2f553a935a7470ad7e784b0ccf9",
+  "source-manifest.json": "57c1da1f0038ef80928c0d3b16af53c1abaca5db0c4443c583653e60145aa6d9",
+  "tool-paths.json": "6c3d5b723c1a87db0683597af6f1eadbce6ec2a58ab24c334fdf563a97d19eee"
+}

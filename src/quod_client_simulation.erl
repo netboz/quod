@@ -38,13 +38,8 @@ decode_command(Bytes) ->
         end
     catch error:_ -> error end.
 
-command({open, Session, Bytes, Signature, Ns, Anchor}, S0) ->
-    S = release(S0),
-    case maps:is_key(follow_requests,S) orelse maps:is_key(opening,S) of
-        true -> reply(#{type => unavailable,reason => dependency_recovering},
-                      S#{awaiting_cleanup => true});
-        false -> open_request(Session,Bytes,Signature,Ns,Anchor,S)
-    end;
+command({open, Session, Bytes, Signature, Ns, Anchor}, S) ->
+    open_request(Session,Bytes,Signature,Ns,Anchor,S);
 command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick},
         S = #{view := View, pid := Pid, ref := Ref, tick := Tick}) ->
     quod_physics:ack(Pid, Ref, binary_to_integer(Tick)), {ok, S};
@@ -57,22 +52,37 @@ open_request(Session,Bytes,Signature,Ns,Anchor,S) ->
                not_after_ms := Expiry} = Request} ->
             case {view_request(Request,Ns,Anchor),Expiry - quod_time:now_ms()} of
                 {{ok,Instance,Dependencies},Remaining} when Remaining > 0 ->
-                    open_worker(Session,Bytes,Signature,Remaining,S#{namespace => Ns,anchor => Anchor,
-                        source => Source,source_anchor => SourceAnchor,instance => Instance,
-                        expected_dependencies => Dependencies});
-                _ -> reply(#{type => unavailable, reason => invalid_view_request}, S)
+                    Scope = {Session,Ns,Anchor,maps:without([operation_id,not_after_ms],Request)},
+                    Renew = maps:get(installed,S,false) andalso
+                        maps:get(request_scope,S,none) =:= Scope andalso
+                        maps:get(expires,S,0) > quod_time:now_ms() andalso
+                        not maps:is_key(opening,S) andalso not maps:is_key(candidate_timer,S) andalso
+                        dependencies_ready(S) andalso dependency_owners_current(S),
+                    Next = case Renew of true -> S; false -> release(S) end,
+                    case Renew orelse not (maps:is_key(follow_requests,Next) orelse maps:is_key(opening,Next)) of
+                        true -> open_worker(Session,Bytes,Signature,Expiry,
+                            Next#{namespace => Ns,anchor => Anchor,source => Source,
+                                source_anchor => SourceAnchor,instance => Instance,
+                                request_scope => Scope,expected_dependencies => Dependencies});
+                        false -> reply(#{type => unavailable,reason => dependency_recovering},
+                                       Next#{awaiting_cleanup => true})
+                    end;
+                _ -> reply(#{type => unavailable, reason => invalid_view_request}, release(S))
             end;
-        _ -> reply(#{type => unavailable, reason => invalid_view_request}, S)
+        _ -> reply(#{type => unavailable, reason => invalid_view_request}, release(S))
     end.
 
-open_worker(Session,Bytes,Signature,Remaining,S = #{namespace := Ns}) ->
+open_worker(Session,Bytes,Signature,Expiry,S = #{namespace := Ns}) ->
     %% Reject a deadline outside the VM timer representation before allocating
     %% an opening worker. Ingress still owns signature/session admission.
-    TimerResult = try {ok,erlang:start_timer(Remaining,self(),expired)}
+    TimerResult = try {ok,erlang:start_timer(Expiry-quod_time:now_ms(),self(),expired)}
                   catch error:badarg -> error end,
     case TimerResult of
         {ok,Timer} ->
-            true = quod_reg:subscribe({physics, Ns}),
+            Timed = case maps:get(installed,S,false) of
+                true -> S#{candidate_timer => Timer};
+                false -> true = quod_reg:subscribe({physics, Ns}), S#{timer => Timer}
+            end,
             Owner = self(), Ref = make_ref(), Peer = maps:get(peer,S),
             {Pid,M} = spawn_monitor(fun() ->
                 receive {open,Ref} ->
@@ -82,8 +92,8 @@ open_worker(Session,Bytes,Signature,Remaining,S = #{namespace := Ns}) ->
             end),
             _ = quod_process:kill_when_owner_dies(Owner,Pid),
             Pid ! {open,Ref},
-            {ok,S#{opening => {Ref,Pid,M},timer => Timer}};
-        error -> reply(#{type => unavailable,reason => invalid_view_deadline},maps:with([peer],S))
+            {ok,Timed#{opening => {Ref,Pid,M}}};
+        error -> reply(#{type => unavailable,reason => invalid_view_deadline},release(S))
     end.
 
 %% The endpoint accepts exactly this anchored read, not arbitrary goals which
@@ -117,22 +127,40 @@ open_result({ok, #{request_digest := Digest, request := #{not_after_ms := Expiry
             Matches = lists:all(fun(D) -> lists:member(D,Dependencies) end,Expected),
             case {Remaining > 0,Matches,lists:keyfind(maps:get(source,S),1,Dependencies)} of
                 {true,true,{_, SourceAnchor, _}} when SourceAnchor =:= map_get(source_anchor,S) ->
-                    Pending = S#{pending => {Digest, Expiry, Outcome},
-                                 heights => #{}, owners => #{}, anchors => #{},
-                                 follows => #{}, dependency_monitors => #{}, dependency_names => #{},
-                                 follow_requests => gen_server:reqids_new(),
-                                 local_ready => #{}, snapshots => gen_server:reqids_new()},
-                    case follow_dependencies(Dependencies, Pending) of
-                        {ok, Followed} -> snapshot_dependencies(Followed);
-                        {error, Followed} ->
-                            reply(#{type => unavailable, reason => dependency_unavailable}, release(Followed))
-                    end;
+                    install_dependencies(Dependencies,{Digest,Expiry,Outcome},S);
                 {false,_,_} -> reply(#{type => unavailable, reason => expired}, release(S));
                 {true,false,_} -> refresh(S,navigation_changed);
                 _ -> reply(#{type => unavailable, reason => invalid_dependencies}, release(S))
             end
     end;
 open_result(_, S) -> reply(#{type => unavailable, reason => view_not_authorized_or_ready}, release(S)).
+
+%% A fresh proof may replace an unchanged view without retiring its consumer.
+%% Actual dependency changes still take the ordinary invalidation/read path.
+install_dependencies(Dependencies,Pending,S = #{candidate_timer := _}) ->
+    Retained = lists:sort([{Ns,maps:get(Ns,maps:get(anchors,S)),H} ||
+        {Ns,H} <- maps:to_list(maps:get(heights,S))] ++
+        [{Ns,Anchor,H} || {Ns,Anchor,H,_} <- maps:values(maps:get(follows,S))]),
+    case lists:sort(Dependencies) =:= Retained andalso dependencies_ready(S)
+         andalso dependency_owners_current(S) of
+        true -> snapshot_dependencies(S#{pending => Pending});
+        false -> refresh(S,durable_gap)
+    end;
+install_dependencies(Dependencies,Pending,S) ->
+    Next = S#{pending => Pending,heights => #{},owners => #{},anchors => #{},follows => #{},
+        dependency_monitors => #{},dependency_names => #{},follow_requests => gen_server:reqids_new(),
+        local_ready => #{},snapshots => gen_server:reqids_new()},
+    case follow_dependencies(Dependencies,Next) of
+        {ok,Followed} -> snapshot_dependencies(Followed);
+        {error,Followed} -> reply(#{type => unavailable,reason => dependency_unavailable},release(Followed))
+    end.
+
+dependency_owners_current(S) ->
+    Owners = maps:get(owners,S),
+    maps:fold(fun(Pid,Ns,Ready) -> Ready andalso quod_reg:where({quod_prolog,Ns}) =:= Pid
+        andalso quod_simplex:genesis_hash(Ns) =:= maps:get(Ns,maps:get(anchors,S)) end,true,Owners)
+    andalso lists:all(fun(Pid) -> maps:is_key(Pid,Owners) orelse
+        Pid =:= quod_reg:where({foreign_log,node}) end,maps:values(maps:get(dependency_monitors,S))).
 
 %% Register every dependency before taking any current snapshot. These are
 %% the scopes actually opened by the proof, including failed alternatives.
@@ -253,7 +281,7 @@ snapshot_response(Message,S = #{snapshots := Requests}) ->
 snapshot_response(_,S) -> {ok,S}.
 
 resume_projection(S = #{pending := {Digest, Expiry, Outcome}}) ->
-    case {Expiry > quod_time:now_ms(),dependencies_ready(S)} of
+    case {Expiry > quod_time:now_ms() andalso candidate_live(S),dependencies_ready(S)} of
         {false,_} -> reply(#{type => unavailable,reason => expired},release(S));
         {true,true} -> open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
         {true,false} -> {ok,S}
@@ -279,7 +307,7 @@ open_view({answers, Height, [Binding]}, Digest, Expiry, S) ->
         _ -> reply(#{type => unavailable, reason => invalid_projection}, release(S))
     end;
 open_view(_, _, _, S) ->
-    reply(#{type => unavailable, reason => view_not_authorized_or_ready}, S).
+    reply(#{type => unavailable, reason => view_not_authorized_or_ready}, release(S)).
 
 open_selection({simulation_view,World = {world_ref,Ns,Anchor,Instance},Authority,
                 Epoch,Generation,Token,Structure,Control},Marks,Digest,Height,Expiry,S)
@@ -290,29 +318,38 @@ open_selection({simulation_view,World = {world_ref,Ns,Anchor,Instance},Authority
             case quod_reg:where({physics_world, World}) of
                 Pid when is_pid(Pid) ->
                     attach(Pid, Expected, Marks, Digest, Height, Expiry, S);
-                _ -> waiting(S, World)
+                _ -> waiting(projection_deadline(detach(S),Expiry),World)
             end;
 open_selection(Selection,Marks,Digest,Height,Expiry,S)
   when Selection =:= nonphysical; Selection =:= disabled; Selection =:= denied;
        Selection =:= recovering; Selection =:= unavailable ->
+    Next = projection_deadline(detach(S),Expiry),
     reply(#{type => projection,view => b64(Digest),height => decimal(Height),
             expires_ms => decimal(Expiry),selection => Selection,
-            marks => quod_client_goal_parser:value_text(Marks)},S#{installed => true});
+            marks => quod_client_goal_parser:value_text(Marks)},Next#{installed => true});
 open_selection(_,_,_,_,_,S) ->
     reply(#{type => unavailable,reason => invalid_projection},release(S)).
 
 attach(Pid, Expected, Marks, Digest, Height, Expiry, S) ->
-    M = monitor(process, Pid),
-    Result = try quod_physics:watch(Pid, Expected) catch exit:_ -> {error, unavailable} end,
+    case {candidate_live(S),maps:get(pid,S,Pid) =:= Pid} of
+        {false,_} -> reply(#{type => unavailable,reason => expired},release(S));
+        {true,true} -> attach_current(Pid,Expected,Marks,Digest,Height,Expiry,S);
+        {true,false} -> refresh(S,owner_changed)
+    end.
+
+attach_current(Pid,Expected,Marks,Digest,Height,Expiry,S) ->
+    M = case maps:find(monitor,S) of {ok,Existing} -> Existing; error -> monitor(process,Pid) end,
+    Result = try quod_physics:watch(Pid,Expected,maps:get(ref,S,none))
+             catch exit:_ -> unknown end,
     case Result of
         {ok, Ref, Frame} ->
             Watched = S#{pid => Pid, ref => Ref, monitor => M},
             case body_bindings(Marks, maps:get(control,Expected), Frame) of
                 {ok, Bodies} ->
-                    case Expiry > quod_time:now_ms() of
+                    case Expiry > quod_time:now_ms() andalso candidate_live(S) of
                         true ->
                             View = b64(Digest), Tick = decimal(maps:get(tick, Frame)),
-                            Next = Watched#{installed => true,view => View, tick => Tick, height => Height,
+                            Next = (projection_deadline(Watched,Expiry))#{installed => true,view => View, tick => Tick, height => Height,
                                 bodies => Bodies, control => maps:get(control,Expected),
                                 world => element(1, maps:get(fence, Expected))},
                             reply(#{type => projection,selection => active,view => View, height => decimal(Height),expires_ms => decimal(Expiry),
@@ -325,12 +362,28 @@ attach(Pid, Expected, Marks, Digest, Height, Expiry, S) ->
             end;
         {error, Reason} when Reason =:= view_busy; Reason =:= simulation_failed ->
             demonitor(M, [flush]), reply(#{type => unavailable, reason => Reason}, release(S));
+        unknown ->
+            %% A timed-out local call may still install a reference whose reply
+            %% was lost. Socket death releases that registration by its monitor.
+            demonitor(M,[flush]),
+            {reply,{close,1011,<<"simulation attachment unavailable">>},release(S)};
         _ ->
-            demonitor(M, [flush]), waiting(S, element(1, maps:get(fence, Expected)))
+            demonitor(M, [flush]), waiting(projection_deadline(detach(S),Expiry),
+                                           element(1, maps:get(fence, Expected)))
     end.
 
 waiting(S, World) ->
-    reply(#{type => unavailable, reason => waiting_for_installation}, S#{world => World}).
+    reply(#{type => unavailable, reason => waiting_for_installation},
+          (maps:remove(installed,S))#{world => World}).
+
+candidate_live(#{candidate_timer := _,expires := Expiry}) -> Expiry > quod_time:now_ms();
+candidate_live(_) -> true.
+
+projection_deadline(S,Expiry) ->
+    case maps:take(candidate_timer,S) of
+        {Timer,Rest} -> _ = erlang:cancel_timer(maps:get(timer,Rest)), Rest#{timer := Timer,expires => Expiry};
+        error -> S#{expires => Expiry}
+    end.
 
 %% The ontology's subject and the body identity remain separate. Duplicate
 %% occurrences may depict one body, but every occurrence has exactly one source.
@@ -374,6 +427,8 @@ websocket_info({'DOWN', M, process, _, _}, S = #{monitor := M}) -> refresh(S, ow
 websocket_info({timeout, Timer, expired}, S = #{timer := Timer, installed := true}) -> refresh(S, expired);
 websocket_info({timeout, Timer, expired}, S = #{timer := Timer}) ->
     reply(#{type => unavailable, reason => expired}, release(S));
+websocket_info({timeout,Timer,expired},S = #{candidate_timer := Timer}) ->
+    reply(#{type => unavailable,reason => expired},release(S));
 websocket_info({'DOWN', M, process, _, _}, S = #{dependency_monitors := Monitors})
   when is_map_key(M,Monitors) -> refresh(S,dependency_owner_changed);
 websocket_info({quod_foreign_follow, Ref, NoticeRef, {Ns,Anchor}, Notice},
@@ -492,7 +547,7 @@ detach(S) ->
 release(S) ->
     _ = detach(S),
     case S of #{opening := {_,Worker,_}} -> exit(Worker,kill); _ -> ok end,
-    _ = case S of #{timer := T} -> erlang:cancel_timer(T); _ -> ok end,
+    _ = [erlang:cancel_timer(T) || Key <- [timer,candidate_timer],{ok,T} <- [maps:find(Key,S)]],
     [quod_reg:unsubscribe({runtime,N}) || N <- maps:keys(maps:get(heights,S,#{}))],
     [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
     [quod_reg:demonitor_name({quod_prolog,Ns},M) ||
@@ -500,7 +555,7 @@ release(S) ->
     _ = [catch gen_server:receive_response(Request,0) ||
         {Request,_} <- gen_server:reqids_to_list(maps:get(snapshots,S,gen_server:reqids_new()))],
     [unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
-    case S of #{namespace := Ns} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
+    case S of #{namespace := Ns,timer := _} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
     case maps:find(follow_requests,S) of
         {ok, Requests} ->
             case gen_server:reqids_size(Requests) of

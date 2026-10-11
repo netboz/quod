@@ -1,0 +1,12 @@
+{
+  "reserved_desktop_at": 1791752841602,
+  "choice": "Run now; the desktop is yours",
+  "nominal_movement_ms": 36100,
+  "existing_origin": "https://192.168.1.10:30519/",
+  "source_hashes": {
+    "long-movement.py": "ebf0ce172729cd311ea9b75d56e46084f0dd72f09011c0905bc53ad86832c5f5",
+    "browser.py": "ee68699b4401210c2bd825ebbdf4ad0750e45b71782f71bbdabca3e4d09fe30c",
+    "run.py": "3a1b6932c6c3f2e8af44a1f7ace554f66fd0ba7cf36ada0c1a4b1107ec29ba2d",
+    "capture.py": "5ec0d4d25e4742a087ca4df11b9b9f113f92084ead84f65ae4778fc03a4d560c"
+  }
+}

@@ -679,8 +679,8 @@ waits for its death and pending subscription cleanup. No second proof executor
 or alternative admission route is introduced.
 
 The result distinguishes nonphysical, disabled, denied, recovering, unavailable
-and active selections. Inactive selections retain actual proof dependencies and
-renew at authorization expiry. A retained controller in a space whose physical
+and active selections. Every selection retains actual proof dependencies and
+can renew before authorization expiry. A retained controller in a space whose physical
 classification was removed cannot become an observer; authorized unbinding and
 withdrawal remain domain transitions. An active view checks installed state
 separately from its committed selection.
@@ -718,6 +718,24 @@ send nothing; repeated acknowledgements neither step nor write. Command outcomes
 advance feedback even when the body does not move. This is transport credit,
 not durable acknowledgement. The original signed expiry is enforced by server
 and browser; a lost connection cannot keep an authorized view indefinitely.
+
+The browser signs one replacement read halfway through the view's remaining
+lifetime, unless the view already reaches sign-in expiry. An unchanged ready
+view remains usable while that proof runs, under its original expiry. The
+socket retains exact dependency subscriptions and monitors; equal proof
+dependencies undergo fresh asynchronous local snapshots before replacement.
+The same session, principal, anchored actor, world and goal are required. A
+changed dependency, denial, expiry or failed candidate takes the ordinary
+invalidation path. There is no renewal retry loop or extension of old authority.
+
+The native owner replaces only the same socket's exact previous reference and
+unchanged physical selection. It issues a new random registration and delivery
+reference, retains admitted input sequences and deadlines, and waits for the
+new projection acknowledgement. Old references cannot detach or acknowledge
+the replacement. Browser command sequence and pending discrete-command
+obligations survive renewal; uncertainty still stops control without resubmission.
+An uncertain attachment closes the socket, whose death releases any registration
+installed by a late local call. The socket alone owns the view expiry timer.
 
 Durable changes, owner death, expiry and structural invalidation require a fresh
 signed read. Installation waits use owner notices, not polling. The ordinary

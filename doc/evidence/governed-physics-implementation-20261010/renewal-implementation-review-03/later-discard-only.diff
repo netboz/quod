@@ -1,0 +1,11 @@
+--- reviewed/src/quod_client_simulation.erl
++++ gate-03/src/quod_client_simulation.erl
+@@ -547,7 +547,7 @@
+ release(S) ->
+     _ = detach(S),
+     case S of #{opening := {_,Worker,_}} -> exit(Worker,kill); _ -> ok end,
+-    [erlang:cancel_timer(T) || Key <- [timer,candidate_timer],{ok,T} <- [maps:find(Key,S)]],
++    _ = [erlang:cancel_timer(T) || Key <- [timer,candidate_timer],{ok,T} <- [maps:find(Key,S)]],
+     [quod_reg:unsubscribe({runtime,N}) || N <- maps:keys(maps:get(heights,S,#{}))],
+     [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
+     [quod_reg:demonitor_name({quod_prolog,Ns},M) ||

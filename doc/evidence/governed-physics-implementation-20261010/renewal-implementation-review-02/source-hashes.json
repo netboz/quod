@@ -1,0 +1,11 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "_build/quod27-renewal-implementation-review-01/fable-review.md": "f352a787f57fa90d1610b93a34ab2b6c0e96c9f8053dd5b791f2f8e0b5e00fb7",
+  "src/quod_client_simulation.erl": "5e48300811a17fb235cd7033150e940ff18ddc4abf269558080e94ea054d00f3",
+  "src/quod_physics.erl": "d9e068401257939c9be22d32af3a79044e2c188121d6d0fef1df3b33caffac2f",
+  "client/src/simulation.js": "ec89a1e616c66b79b05c709b044ef6f641005e5fd9f99b81cd990e605a280a3a",
+  "test/quod_physics_tests.erl": "8e11d222bc61e07e8aec7551de717397b5476a9b4ab5f94602f6168350c5d27a",
+  "test/quod_foreign_lifecycle_tests.erl": "448413fde74936992dbf7f4b751da0f5a1c811307e47712121a10ff51aa2d26a",
+  "_build/quod27-renewal-tests-04/physics-exit.json": "37d50101bb8f1094acee8db3e0d85bc42d7caa7e606f9d2063dd8608eb78a710",
+  "_build/quod27-renewal-tests-04/source-hashes.json": "6ae35c07f86cef1b95bd81648ec268814e406d4ea53152addfa84e4340a5f457"
+}

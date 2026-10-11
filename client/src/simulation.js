@@ -77,7 +77,8 @@ export function advanceSimulation(current, message) {
 
 // Each open signs a fresh read. Disconnect and durable gaps discard all motion
 // acceptance state. Reconnect is explicit (or follows a browser online event),
-// never a readiness polling timer. Expiry refresh is requested by the server.
+// never a readiness polling timer. Renew an unchanged view before its signed
+// expiry; the old authorization remains bounded while the new read is proved.
 export function connectWorldView(identity, agent, { projection, frame, unavailable, refused = () => {}, refreshing = () => {} }, options) {
   const world = { ...options.world }
   if (typeof world.anchor === 'string') world.anchor = fromB64url(world.anchor)
@@ -90,16 +91,18 @@ export function connectWorldView(identity, agent, { projection, frame, unavailab
   const socket = new Socket(String(url))
   let active = true, opening = 0, expected = null, current = null
   let sequence = -1n, sending = false, commandEpoch = 0, discreteSequence = null
-  let expiryTimer = null
-  const clearExpiry = () => { clearTimeout(expiryTimer); expiryTimer = null }
+  let expiryTimer = null, renewalTimer = null
+  const clearExpiry = () => {
+    clearTimeout(expiryTimer); clearTimeout(renewalTimer)
+    expiryTimer = null; renewalTimer = null
+  }
+  const discard = () => {
+    clearExpiry(); opening++; expected = null; current = null; commandEpoch++; discreteSequence = null
+  }
   const send = message => socket.send(JSON.stringify(message))
   async function open() {
     const version = ++opening
-    clearExpiry()
-    current = null
-    expected = null
-    commandEpoch++
-    discreteSequence = null
+    if (current && Date.now() >= current.expires) { failed(new Error('Simulation authorization expired.')); return }
     try {
       const request = goalRequestBytes(identity, { mode: 'read', agent, goal })
       const signature = new Uint8Array(await identity.provider.sign(request))
@@ -110,7 +113,7 @@ export function connectWorldView(identity, agent, { projection, frame, unavailab
         world_namespace: world.namespace, world_anchor: b64url(world.anchor) })
     } catch (error) { if (active && version === opening) failed(error) }
   }
-  const failed = error => { clearExpiry(); commandEpoch++; current = null; unavailable(error.message ?? String(error)) }
+  const failed = error => { discard(); unavailable(error.message ?? String(error)) }
   async function command(input) {
     if (!active || !current?.control || sending) return false
     if (Date.now() >= current.expires) { failed(new Error('Simulation authorization expired.')); return false }
@@ -146,28 +149,32 @@ export function connectWorldView(identity, agent, { projection, frame, unavailab
     try {
       const message = JSON.parse(event.data)
       if (message.type === 'refresh') {
-        commandEpoch++
-        current = null
-        clearExpiry()
+        discard()
         if (refreshing(message.reason) !== false) {
           if (message.reason === 'navigation_changed') failed(new Error('The selected space changed. Reload the view.'))
           else void open()
         }
       } else if (message.type === 'unavailable') {
-        clearExpiry()
-        commandEpoch++
-        current = null
-        unavailable(message.reason)
+        failed(new Error(message.reason))
       } else if (message.type === 'projection' && message.view === expected) {
-        commandEpoch++
-        current = worldProjection(message)
+        const next = worldProjection(message)
+        if (current && next.expires <= current.expires) throw new Error('World authorization did not advance.')
+        current = next
+        expected = null
         clearExpiry()
-        expiryTimer = setTimeout(() => failed(new Error('Simulation authorization expired.')), Math.max(0, current.expires - Date.now()))
-        sequence = current.feedback ? BigInt(current.feedback.sequence) : -1n
+        const remaining = current.expires - Date.now()
+        expiryTimer = setTimeout(() => failed(new Error('Simulation authorization expired.')), Math.max(0, remaining))
+        // Once the read is limited by sign-in expiry, another identical read
+        // cannot extend it. Keep the hard stop instead of shorter renewals.
+        if (current.expires < identity.session.expires_ms) {
+          renewalTimer = setTimeout(() => { renewalTimer = null; void open() }, Math.max(0, remaining / 2))
+        }
+        const observed = current.feedback ? BigInt(current.feedback.sequence) : -1n
+        sequence = sequence > observed ? sequence : observed
         current.command = command
         projection(current)
         if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
-      } else if (message.type === 'simulation_frame' && current && message.view === expected) {
+      } else if (message.type === 'simulation_frame' && current && message.view === current.view) {
         const next = advanceSimulation(current, message)
         if (next !== current) { current = next; frame(current) }
         if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
@@ -176,5 +183,5 @@ export function connectWorldView(identity, agent, { projection, frame, unavailab
   }
   socket.onclose = () => { if (active) failed(new Error('Simulation disconnected. Refresh to reconnect.')) }
   socket.onerror = () => { if (active) failed(new Error('Simulation connection unavailable.')) }
-  return { command, close() { clearExpiry(); active = false; opening++; commandEpoch++; current = null; socket.close() } }
+  return { command, close() { active = false; discard(); socket.close() } }
 }

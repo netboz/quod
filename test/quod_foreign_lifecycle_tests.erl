@@ -877,14 +877,22 @@ cancelled_view_foreign_registration(Completion) ->
             ?assertEqual(<<"expired">>,maps:get(<<"reason">>,json:decode(Expired))),
             %% A second open cannot accumulate another pending registration.
             %% No proof is admitted until the old owner has released custody.
+            Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns),
+                " :: (current_ontology_identity(",quod_client_goal_parser:value_text(Ns),",",
+                quod_client_goal_parser:value_text(Anchor),"), client_world_view(room,playing,[],View))."]),
+            {ok,Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
+                agent_namespace => Ns,agent_genesis_anchor => Anchor,agent_instance_text => <<"viewer.">>,
+                signing_public_key => <<0:256>>,operation_id => crypto:strong_rand_bytes(32),
+                not_after_ms => quod_time:now_ms()+10000,mode => read,parser_version => 3,goal_text => Goal}),
             Enc = fun(B) -> base64:encode(B,#{mode => urlsafe,padding => false}) end,
             Open = json:encode(#{type => open,session_id => Enc(<<0:256>>),
-                request => Enc(<<>>),signature => Enc(<<0:512>>),
+                request => Enc(Bytes),signature => Enc(<<0:512>>),
                 world_namespace => Ns,world_anchor => Enc(Anchor)}),
             {reply,{text,Recovering},Next} = quod_client_simulation:websocket_handle(
                 {text,iolist_to_binary(Open)},Cancelled),
             ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,json:decode(Recovering))),
             ?assertEqual(1,gen_server:reqids_size(maps:get(follow_requests,Next))),
+            ?assertNot(maps:is_key(opening,Next)),
             Next
         after
             case Completion of

@@ -1,0 +1,10 @@
+{
+  "src/quod_physics.erl": "d9e068401257939c9be22d32af3a79044e2c188121d6d0fef1df3b33caffac2f",
+  "src/quod_client_simulation.erl": "5e48300811a17fb235cd7033150e940ff18ddc4abf269558080e94ea054d00f3",
+  "client/src/simulation.js": "ec89a1e616c66b79b05c709b044ef6f641005e5fd9f99b81cd990e605a280a3a",
+  "test/quod_physics_tests.erl": "8e11d222bc61e07e8aec7551de717397b5476a9b4ab5f94602f6168350c5d27a",
+  "client/test/simulation.test.js": "261789b680200285014191edb3fabfc66015c47534acf003568873546ca1bd02",
+  "client/test/controlled-navigation.test.js": "9c9dc0abff5f48681b04febb13908e9417ab8a9dcf6dd5f800368e313b35481c",
+  "doc/physics-native.md": "e4da25e7d6778a620ac9c306f750414fcb2379d131956e3af4530f6f5dee77ac",
+  "test/quod_foreign_lifecycle_tests.erl": "448413fde74936992dbf7f4b751da0f5a1c811307e47712121a10ff51aa2d26a"
+}

@@ -258,6 +258,153 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   assert.equal(statuses.length, before)
 })
 
+function renewalFixture(t, selection = 'active') {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1800000000000 })
+  let socket, nextOpen, nextPost
+  const opens = [], posts = [], projections = [], frames = [], statuses = [], refreshes = []
+  const identity = { networkId: new Uint8Array(32), provider: {
+    publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),
+  }, session: { session_id: 'session', expires_ms: Date.now() + 600000 } }
+  class Socket {
+    constructor() { socket = this }
+    send(json) {
+      const message = JSON.parse(json)
+      if (message.type === 'open') { opens.push(message); nextOpen?.(message); nextOpen = null }
+    }
+    receive(message) { this.onmessage({ data: JSON.stringify(message) }) }
+    close() {}
+  }
+  const physical = sample({ world: `world_ref(<<"room">>,<<"${anchor}">>,room)`,
+    authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,
+    incarnation: Buffer.alloc(32).toString('base64url'), registration: Buffer.alloc(32, 1).toString('base64url'),
+    control_state: { sequence: '7', pending: false, result: 'idle' } })
+  const stream = connectWorldView(identity, { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }, {
+    projection: value => projections.push(value), frame: value => frames.push(value),
+    unavailable: value => statuses.push(value), refreshing: value => refreshes.push(value),
+  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation',
+    world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [],
+    post: (url, body) => new Promise((resolve, reject) => {
+      const post = { url, body, resolve, reject }; posts.push(post); nextPost?.(post); nextPost = null
+    }),
+  })
+  t.after(() => stream.close())
+  return { stream, socket, identity, opens, posts, projections, frames, statuses, refreshes, physical,
+    nextOpen: () => new Promise(resolve => { nextOpen = resolve }),
+    nextPost: () => new Promise(resolve => { nextPost = resolve }),
+    async install(open, expires = Date.now() + 30000, frame = physical) {
+      const view = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(open.request, 'base64url'))).toString('base64url')
+      socket.receive({ type: 'projection', selection, expires_ms: String(expires), view, height: '5',
+        marks: selection === 'active' ? `[${mark()}]` : '[]',
+        ...(selection === 'active' ? { frame,
+          control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' } : {}),
+      })
+      return view
+    },
+  }
+}
+
+test('early renewal keeps frames and controls live and never rolls sequence backwards', async t => {
+  const f = renewalFixture(t)
+  await f.socket.onopen()
+  const first = await f.install(f.opens[0])
+  let posted = f.nextPost(), command = f.stream.command(driveInput([1, 0, 0]))
+  ;(await posted).resolve({ result: 'ok' }); assert.equal(await command, true)
+  const opened = f.nextOpen()
+  t.mock.timers.tick(15000)
+  const candidate = await opened
+  f.socket.receive(motion({ ...f.physical, tick: '2' }, first))
+  assert.equal(f.frames.at(-1).tick, 2n, 'old frames remain current while the proof is pending')
+  posted = f.nextPost(); command = f.stream.command(driveInput([1, 0, 0]))
+  ;(await posted).resolve({ result: 'ok' }); assert.equal(await command, true)
+  const second = await f.install(candidate, Date.now() + 30000, {
+    ...f.physical, tick: '3', registration: Buffer.alloc(32, 2).toString('base64url'),
+  })
+  assert.notEqual(first, second)
+  f.socket.receive(motion({ ...f.physical, tick: '900' }, first))
+  assert.equal(f.frames.length, 1, 'retired frames cannot overwrite the new view')
+  posted = f.nextPost(); command = f.stream.command(driveInput([1, 0, 0]))
+  const fresh = await posted
+  assert.match(Buffer.from(fresh.body.request, 'base64url').toString(), /,2,10,drive\(/)
+  fresh.resolve({ result: 'ok' }); assert.equal(await command, true)
+  t.mock.timers.tick(15000)
+  assert.deepEqual(f.statuses, [], 'the retired expiry timer is cancelled')
+  assert.deepEqual(f.refreshes, [])
+  assert.equal(f.projections.length, 2)
+})
+
+for (const outcome of ['uncertain', 'refused']) {
+  test(`renewal preserves an in-flight discrete command's ${outcome} outcome`, async t => {
+    const f = renewalFixture(t)
+    await f.socket.onopen(); await f.install(f.opens[0])
+    const posted = f.nextPost(), command = f.stream.command(snapInput(785))
+    const request = await posted, opened = f.nextOpen()
+    t.mock.timers.tick(15000)
+    await f.install(await opened)
+    assert.equal(await f.stream.command(driveInput([1, 0, 0])), false)
+    assert.equal(f.posts.length, 1, 'renewal does not replay or overtake the pending input')
+    if (outcome === 'uncertain') request.reject(new Error('lost original response'))
+    else request.resolve({ result: 'fail', reasons: ['stale_registration'] })
+    assert.equal(await command, false)
+    if (outcome === 'uncertain') {
+      assert.deepEqual(f.statuses, ['lost original response'])
+      assert.equal(await f.stream.command(driveInput([1, 0, 0])), false)
+      assert.equal(f.posts.length, 1)
+    } else {
+      assert.deepEqual(f.statuses, [])
+      const nextPost = f.nextPost(), next = f.stream.command(driveInput([1, 0, 0]))
+      ;(await nextPost).resolve({ result: 'ok' }); assert.equal(await next, true)
+    }
+  })
+}
+
+for (const stop of ['expired', 'denied']) {
+  test(`a candidate cannot restore a view after ${stop}`, async t => {
+    const f = renewalFixture(t)
+    await f.socket.onopen(); await f.install(f.opens[0])
+    const opened = f.nextOpen()
+    t.mock.timers.tick(15000)
+    const candidate = await opened
+    if (stop === 'expired') t.mock.timers.tick(15000)
+    else f.socket.receive({ type: 'unavailable', reason: 'denied' })
+    await f.install(candidate)
+    assert.equal(f.projections.length, 1)
+    assert.equal(f.statuses.length, 1)
+    assert.equal(await f.stream.command(driveInput([1, 0, 0])), false)
+  })
+}
+
+test('a late digest cannot send or revive an expired candidate', async t => {
+  const f = renewalFixture(t)
+  await f.socket.onopen(); await f.install(f.opens[0])
+  let finishDigest, started
+  const hashing = new Promise(resolve => { started = resolve })
+  const digest = new Promise(resolve => { finishDigest = resolve })
+  t.mock.method(crypto.subtle, 'digest', () => { started(); return digest })
+  t.mock.timers.tick(15000)
+  await hashing
+  t.mock.timers.tick(15000)
+  finishDigest(new ArrayBuffer(32))
+  await Promise.resolve()
+  assert.equal(f.opens.length, 1)
+  assert.equal(f.statuses.length, 1)
+  assert.equal(f.projections.length, 1)
+})
+
+test('nonphysical renewal stops at sign-in expiry without repeated shorter renewals', async t => {
+  const f = renewalFixture(t, 'nonphysical')
+  f.identity.session.expires_ms = Date.now() + 45000
+  await f.socket.onopen(); await f.install(f.opens[0])
+  const opened = f.nextOpen()
+  t.mock.timers.tick(15000)
+  await f.install(await opened, f.identity.session.expires_ms)
+  t.mock.timers.tick(29999)
+  assert.equal(f.opens.length, 2)
+  assert.deepEqual(f.statuses, [])
+  t.mock.timers.tick(1)
+  assert.equal(f.statuses.length, 1)
+  assert.equal(f.opens.length, 2)
+})
+
 test('navigation returns an exact space and every signed dependency without changing the acting agent', async () => {
   const identity = { networkId: new Uint8Array(32), provider: {
     publicKey: new Uint8Array(32), sign: async () => new Uint8Array(64),

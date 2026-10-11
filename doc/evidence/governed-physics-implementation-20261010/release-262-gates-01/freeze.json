@@ -1,0 +1,24 @@
+{
+  "base_commit": "db25fc148bccab6bf71591582882e0ef1866dec7",
+  "version": "0.7.262",
+  "purpose": "candidate release 262; implementation frozen with proposed separate version label",
+  "label_files": [
+    "rebar.config",
+    "src/quod.app.src"
+  ],
+  "frozen_at": "2026-10-11T21:48:19.322606+00:00",
+  "owned_changes": [
+    "client/src/simulation.js",
+    "src/quod_client_simulation.erl",
+    "src/quod_physics.erl",
+    "client/test/simulation.test.js",
+    "client/test/controlled-navigation.test.js",
+    "test/quod_physics_tests.erl",
+    "doc/physics-native.md"
+  ],
+  "excluded_user_changes": [
+    "doc/README.md",
+    "untracked sibling native-client/planning files"
+  ],
+  "tree": "/home/yan/src/quod/_build/quod27-release-262/gates-01/tree"
+}

@@ -1,0 +1,1 @@
+{"action": {"actions_returned": true, "completed_cycles": 18, "observation_stopped": {"ended": true, "reason": "agent_turn_interrupted"}, "elapsed_seconds": 34.584046049043536, "release_completed": true}, "observations": 2215, "held_at_end": [], "position": [4.94210958480835, 1.4519055008888244, 2.680232524871826], "frames": 0, "control_responses": 0}

@@ -1,0 +1,15 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "doc/evidence/governed-physics-implementation-20261010/renewal-plan-resolution.md": "ba6026d33339bbdd3676dcde43084c40ad382d321535c524c137a93a1f440700",
+  "src/quod_client_simulation.erl": "3173716920f8cfa26d86eed4d4100a56c6c9ef112f28e437c3c28ec7279a95dd",
+  "src/quod_physics.erl": "d9e068401257939c9be22d32af3a79044e2c188121d6d0fef1df3b33caffac2f",
+  "client/src/simulation.js": "ec89a1e616c66b79b05c709b044ef6f641005e5fd9f99b81cd990e605a280a3a",
+  "client/src/controlled-navigation.js": "904b4a4613554510dbbbc5f7bd4f1e593b99e909eb9acc2c411fc0d18603a0c4",
+  "client/src/signed-client.js": "de0329c30484a7c5f57706745009f30c2086f668ec52410c9c7500155709ccee",
+  "ui/src/World.tsx": "f3fe9131ec65003fb7dad2b79199e443d576a6eab29df838a92a889182f57d1b",
+  "doc/physics-native.md": "e4da25e7d6778a620ac9c306f750414fcb2379d131956e3af4530f6f5dee77ac",
+  "client/test/simulation.test.js": "261789b680200285014191edb3fabfc66015c47534acf003568873546ca1bd02",
+  "client/test/controlled-navigation.test.js": "9c9dc0abff5f48681b04febb13908e9417ab8a9dcf6dd5f800368e313b35481c",
+  "test/quod_physics_tests.erl": "12b904b519c4c32856beca7274fc3112dc792e5e2e18376cb14c1d38bdbc1d5b",
+  "src/quod_client_result.erl": "44085c36657f66d5eff3f8d109513a145557576e9f59718adc31ad97f8e28224"
+}

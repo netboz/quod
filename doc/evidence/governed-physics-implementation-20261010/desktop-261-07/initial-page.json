@@ -1,0 +1,36 @@
+{
+  "buttons": [
+    {
+      "disabled": false,
+      "text": "Add agent"
+    },
+    {
+      "disabled": false,
+      "text": "Save encrypted key"
+    },
+    {
+      "disabled": false,
+      "text": "Export encrypted key"
+    },
+    {
+      "disabled": false,
+      "text": "Sign out"
+    },
+    {
+      "disabled": true,
+      "text": "Open console"
+    },
+    {
+      "disabled": true,
+      "text": "Enter VR"
+    },
+    {
+      "disabled": false,
+      "text": ""
+    }
+  ],
+  "inputs": [],
+  "text": "Click the world to explore \u00b7 ZQSD, WASD or arrows to move \u00b7 Shift for faster movement\nquod \u2234\nkey 7n_lHNMzUqS_\nhuman:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE \u00b7 me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer \u2197\n\nYOUR SPACE\n\nPersonal lobby\n\nReading the ontology\u2026\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nThe console is unavailable until its lobby view loads.\n\nAdvanced",
+  "title": "Quod \u00b7 personal lobby",
+  "url": "https://192.168.1.10:30519/"
+}

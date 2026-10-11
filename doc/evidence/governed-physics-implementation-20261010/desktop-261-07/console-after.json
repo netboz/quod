@@ -1,0 +1,8 @@
+[
+  {
+    "level": "INFO",
+    "message": "https://192.168.1.10:30519/assets/logger-CuBYPcDK.js 0:836 \"BJS - [23:08:09]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation\"",
+    "source": "console-api",
+    "timestamp": 1791752914896
+  }
+]

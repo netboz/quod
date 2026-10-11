@@ -42,6 +42,22 @@ test('backward desktop travel sends integer zero axes accepted by physics', () =
     assert.equal(formatClause(sent[0]), 'drive(vector(0, 0, 2000), angular(0, 0, 0)).')
   }))
 
+test('renewing the same binding preserves held travel and authored camera placement', () => fixture(
+  ({ camera, owner, navigation, current, sent }) => {
+    navigation.update(current)
+    const event = new Event('keydown'); Object.defineProperty(event, 'key', { value: 'w' })
+    owner.dispatchEvent(event)
+    navigation.render(0)
+    const placement = camera.parent.position.asArray()
+    navigation.update({ ...current, view: 'renewed', expires: Date.now() + 30000,
+      physicalFrame: { registration: 'renewed' } })
+    navigation.render(250)
+    assert.equal(sent.length, 2)
+    assert.deepEqual(sent[1], sent[0], 'renewal retains the held direction without another keydown')
+    assert.deepEqual(camera.parent.position.asArray(), placement)
+    assert.deepEqual(camera.position.asArray(), [0, 0, 0])
+  }))
+
 test('authored off-centre cockpit follows accepted body pose; commands cannot translate the camera', () => fixture(
   ({ camera, owner, navigation, current, sent }) => {
     navigation.update(current)

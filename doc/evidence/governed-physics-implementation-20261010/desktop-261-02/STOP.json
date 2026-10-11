@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-11T19:37:53.622104+00:00",
+  "reason": "Chrome main thread stuck in anon_pipe_write; internal pipe14/15 held61544 of65536bytes; DevTools unavailable. Output pipe was empty and its reader healthy, so output-pipe explanation is withdrawn.",
+  "unresolved": "Exact browser internal pipe purpose/cause unavailable; ptrace and syscall inspection denied by kernel, no security settings altered.",
+  "owned_browser_terminated": true,
+  "profile_preserved": true,
+  "no_failed_step_input_sent": true,
+  "passed": "User normal movement, console contact and explicit opening-outward01 strafe",
+  "remaining": "Low-roof collision and further movement checks",
+  "next": "Separately labeled clean launch without inherited Nimbalyst LD_LIBRARY_PATH; no claim this setting caused the hang."
+}

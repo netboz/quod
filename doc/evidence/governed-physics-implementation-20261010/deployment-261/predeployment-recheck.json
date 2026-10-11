@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-11T19:15:58.072952+00:00",
+  "jobs": {
+    "quod-finality-candidate-v6-20260926": {
+      "version": 65,
+      "job_modify_index": 846336,
+      "unchanged": true
+    },
+    "quod": {
+      "version": 246,
+      "job_modify_index": 826727,
+      "unchanged": true
+    },
+    "quod27-client-30519": {
+      "version": 1,
+      "job_modify_index": 846370,
+      "unchanged": true
+    }
+  },
+  "same_eight_allocations": true,
+  "zero_restarts": true
+}

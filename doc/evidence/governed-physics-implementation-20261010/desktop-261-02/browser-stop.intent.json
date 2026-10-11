@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-11T19:36:59.585932+00:00",
+  "browser_pid": 1641335,
+  "verified_profile": "_build/quod27-desktop-259-03/profile",
+  "signal": "SIGTERM",
+  "reason": "Browser main thread blocked in pipe write; browser DevTools endpoint timed out. No second movement input sent; preserve same profile."
+}

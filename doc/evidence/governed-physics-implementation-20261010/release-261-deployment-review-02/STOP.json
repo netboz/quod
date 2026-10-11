@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-11T18:48:51.496447+00:00",
+  "status": "not_invoked",
+  "reviewer": "automatic approval review",
+  "reason": "Reduced operator-source packet egress also rejected; reviewer requires explicit approval for this concrete payload. No Claude process or transmission occurred."
+}

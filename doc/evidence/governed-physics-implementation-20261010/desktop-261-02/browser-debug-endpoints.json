@@ -1,0 +1,29 @@
+[
+  {
+    "url": "http://127.0.0.1:34741/json/version",
+    "error": "TimeoutError",
+    "detail": "timed out"
+  },
+  {
+    "url": "http://127.0.0.1:34741/json/list",
+    "error": "TimeoutError",
+    "detail": "timed out"
+  },
+  {
+    "url": "http://127.0.0.1:34999/status",
+    "result": {
+      "value": {
+        "build": {
+          "version": "157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1})"
+        },
+        "message": "ChromeDriver ready for new sessions.",
+        "os": {
+          "arch": "x86_64",
+          "name": "Linux",
+          "version": "7.2.8-arch1-2"
+        },
+        "ready": true
+      }
+    }
+  }
+]

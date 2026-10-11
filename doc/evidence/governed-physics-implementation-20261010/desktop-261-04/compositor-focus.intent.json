@@ -1,0 +1,63 @@
+{
+  "at": "2026-10-11T19:46:42.132519+00:00",
+  "owned_browser": {
+    "pid": 1664934,
+    "address": "0x55ea4a34fa40",
+    "class": "nimbalyst",
+    "workspace": {
+      "id": 2,
+      "name": "2"
+    },
+    "at": [
+      1968,
+      1092
+    ],
+    "size": [
+      1850,
+      496
+    ],
+    "mapped": true,
+    "hidden": false,
+    "monitor": 1,
+    "xwayland": false
+  },
+  "monitors": [
+    {
+      "id": 2,
+      "name": "DP-3",
+      "x": 3840,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "activeWorkspace": {
+        "id": 3,
+        "name": "3"
+      }
+    },
+    {
+      "id": 1,
+      "name": "DP-2",
+      "x": 1920,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "activeWorkspace": {
+        "id": 2,
+        "name": "2"
+      }
+    },
+    {
+      "id": 0,
+      "name": "DP-1",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "activeWorkspace": {
+        "id": 1,
+        "name": "1"
+      }
+    }
+  ],
+  "action": "Focus only owned acceptance browser through actual compositor"
+}

@@ -1,0 +1,231 @@
+{
+  "at": "2026-10-11T19:56:12.356732+00:00",
+  "source": "_build/quod27-desktop-261-02",
+  "ongoing_browser": false,
+  "public_artifacts_only": true,
+  "excluded": [
+    "__pycache__"
+  ],
+  "files": [
+    {
+      "path": "STOP.json",
+      "bytes": 798,
+      "sha256": "7a5ac09e012ad98ea34705ef5bbd14a695fa0ccd83fcdcc1054c8f09889a9778"
+    },
+    {
+      "path": "before-controlled-checks.json",
+      "bytes": 1299521,
+      "sha256": "feab8bf97e31f599b8e3b9a0444ed02b9732a33f8b877b7ddf0cd82ffab63556"
+    },
+    {
+      "path": "before-controlled-checks.png",
+      "bytes": 347670,
+      "sha256": "24bb6bf62deb9a2db246e6faf751b6571ced81f4986f5d676001f67e78120d60"
+    },
+    {
+      "path": "browser-debug-endpoints.json",
+      "bytes": 665,
+      "sha256": "b7720586a0544b52a819e18f7c871890f0cb61baad86ae4d5975e93e4612991c"
+    },
+    {
+      "path": "browser-kill-result.json",
+      "bytes": 17,
+      "sha256": "5a0d80b0d4643eea7e917fc5f08c9c4d672900fe857189048e4ce85179eab2d6"
+    },
+    {
+      "path": "browser-kill.intent.json",
+      "bytes": 166,
+      "sha256": "64f50d967a6a5c1069213e7d0b6197b7e8110f08b3ef150b7a568895fd70d345"
+    },
+    {
+      "path": "browser-main-thread-backtrace-exit.json",
+      "bytes": 167,
+      "sha256": "b4ce869437bdb4c0be3e9f3179682718b30cb013d550b29a0ff243214006bf0c"
+    },
+    {
+      "path": "browser-main-thread-backtrace.txt",
+      "bytes": 178,
+      "sha256": "94e8a057f8334080d298427a1aac07fdfd82d814f50afba89fcdb6e1e8f96287"
+    },
+    {
+      "path": "browser-pipe-occupancy.json",
+      "bytes": 567,
+      "sha256": "b00594795b3e4a1709e7f5721dda6d05b199e009514d794cff1e92ea226676f4"
+    },
+    {
+      "path": "browser-processes.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "browser-stop-result.json",
+      "bytes": 56,
+      "sha256": "55891974f4b11ef783515ce4e66882b4644a3230d6ea0fa55e801ca59a42df7a"
+    },
+    {
+      "path": "browser-stop.intent.json",
+      "bytes": 307,
+      "sha256": "526584e16c064219a9db4f1d108a4f587bf4e88b650c6b55f5d07f39dca0957f"
+    },
+    {
+      "path": "browser-thread-waits.txt",
+      "bytes": 4032,
+      "sha256": "ff072b9a4d2e81b85543a6d76578d1ded8e46352af4ecf5c8a6eef586df4aa5e"
+    },
+    {
+      "path": "browser.py",
+      "bytes": 1962,
+      "sha256": "346ac08436b2bbdc34c36b100c26c077a7e3411c0cddf3769c65b63a15317872"
+    },
+    {
+      "path": "campaign.json",
+      "bytes": 279,
+      "sha256": "74c43a480a9834e2a2af5ecc1411ad27ca824cffda4438dab78258f73ace57d7"
+    },
+    {
+      "path": "capture.py",
+      "bytes": 1549,
+      "sha256": "5ec0d4d25e4742a087ca4df11b9b9f113f92084ead84f65ae4778fc03a4d560c"
+    },
+    {
+      "path": "chromedriver.log",
+      "bytes": 3172,
+      "sha256": "44d4a2d6af0d6ab887bf14cf08b691c82f81efe90094c200d1661a03981f4f9e"
+    },
+    {
+      "path": "desktop-step.py",
+      "bytes": 4835,
+      "sha256": "727731ee5b6fdef552165bfc00db9e68a15b734a18711c04dcaca88513657417"
+    },
+    {
+      "path": "hardware-renderer.json",
+      "bytes": 143,
+      "sha256": "1dd19fe064afc82a2c8b9db8f0c550b0272a2b96ae7f870c4e491cdfd7112ab3"
+    },
+    {
+      "path": "initial-movement-analysis.json",
+      "bytes": 223,
+      "sha256": "a508398af434249d87b2fb59164ce7e13017182526334e21a981a3436767812e"
+    },
+    {
+      "path": "initial-page.json",
+      "bytes": 1065,
+      "sha256": "ee968c5ea555b17d2de9aa775757f6d8c217e7d90f1bd0ead13b020be1801fff"
+    },
+    {
+      "path": "install-helper-retain-terminal.js",
+      "bytes": 1899,
+      "sha256": "fec25c90914a4af4b441ad5723551004fd99fb0ec9c92f04209c7737aeea9ac8"
+    },
+    {
+      "path": "live-user-movement-02-analysis.json",
+      "bytes": 99,
+      "sha256": "d7160f8bec9c79fd4cd8ff35aea065adb7392f95c529c132adad3918360e8502"
+    },
+    {
+      "path": "live-user-movement-02.json",
+      "bytes": 1970192,
+      "sha256": "18f47eb8483c03eb2c9132f29f7a23e84c50dc40c457fa7ffda1784b243a8cbc"
+    },
+    {
+      "path": "live-user-movement-02.png",
+      "bytes": 550738,
+      "sha256": "0d92d1df74495ce4f944e2df7d39fea962ee5cbdccea655d2553ee0871d1c522"
+    },
+    {
+      "path": "opening-heading.json",
+      "bytes": 208,
+      "sha256": "c8be206c29059d40ba2f025fb561ad67e9e738d59f5486513558ca0858d833b9"
+    },
+    {
+      "path": "opening-outward-01-before.png",
+      "bytes": 66596,
+      "sha256": "b89b2557dd9b09bf59566fdce081c293b990036142a5a836624b501a720a9218"
+    },
+    {
+      "path": "opening-outward-01-control-responses.json",
+      "bytes": 513,
+      "sha256": "95805283272db9a0e21817d4d6c778b8a7fc6d034bcbaf47fb4530a784b03cc2"
+    },
+    {
+      "path": "opening-outward-01-dom.json",
+      "bytes": 1103,
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca"
+    },
+    {
+      "path": "opening-outward-01-frames.json",
+      "bytes": 80111,
+      "sha256": "7e6c7dea52e002e6261a2f65cda9d0c1c086666fd78dcd3039f29e17daa474ba"
+    },
+    {
+      "path": "opening-outward-01-requests.json",
+      "bytes": 1037,
+      "sha256": "ccf83ca566f0315e7dfba6f8b58da1bc93cd5f5db6d7147bad14719402f08fb8"
+    },
+    {
+      "path": "opening-outward-01-summary.json",
+      "bytes": 1175,
+      "sha256": "631e0c571aebd3717b4d2e9c90495dde99c91c06f07c3f4d489453c5d610c429"
+    },
+    {
+      "path": "opening-outward-01.intent.json",
+      "bytes": 69,
+      "sha256": "5fa44b083856c401b77442af62099fae3b1165b2355b25692599c1428c009372"
+    },
+    {
+      "path": "opening-outward-01.png",
+      "bytes": 193964,
+      "sha256": "546fbf00b53ea03965a6f6b7f5032766be805d7a511a5fa6f18f093c2dc5fcad"
+    },
+    {
+      "path": "opening-return-02-STOP.json",
+      "bytes": 298,
+      "sha256": "772a8e4c095dcd7524b6a56c52722eaeb74f2a620acae43befeb60d69298e22f"
+    },
+    {
+      "path": "opening-return-02.intent.json",
+      "bytes": 70,
+      "sha256": "3e58fc7f961db419a40c4fd8c35bc56d62cc13a859cb8841336b5fd857bfe9ec"
+    },
+    {
+      "path": "plan.md",
+      "bytes": 2077,
+      "sha256": "43aa879cbfacd7b8f67c47cc852383d389774e522a23df8b06d79a74357d6e85"
+    },
+    {
+      "path": "profile-owner-check.json",
+      "bytes": 202,
+      "sha256": "1792d95003c30a9558a1e7f331d1c0731bd4975e509dd3ae5a99af4cc7e40655"
+    },
+    {
+      "path": "restored-physical-view.json",
+      "bytes": 2339883,
+      "sha256": "2b39f55112e3345c48e174cd7a4fd476b34ad7b6f4d2006524ad25b966f3e924"
+    },
+    {
+      "path": "restored-physical-view.png",
+      "bytes": 686000,
+      "sha256": "a884adf092d57b732e16bcbd2ea98c6eb6ea05b17cc99feabead5dff1ac3d53a"
+    },
+    {
+      "path": "retained-view-identities.json",
+      "bytes": 357,
+      "sha256": "c63485c5f487ad58610abee2cf6677b53ebefff8a1285d48cbc987a644df718b"
+    },
+    {
+      "path": "run.py",
+      "bytes": 5996,
+      "sha256": "97657bc63cdaca730a555bc5ace5fabb322d2e7681b56feced99901b4019dbd6"
+    },
+    {
+      "path": "session.json",
+      "bytes": 190,
+      "sha256": "e10b7c4eb19d8bfb86005298f65628cac51b7e72205399f43d66d13a4b06e178"
+    },
+    {
+      "path": "signed.py",
+      "bytes": 701,
+      "sha256": "8a62c76fd64f8b62f182e08cd4167953a2fe60c6a4a2eeeae254df599994d716"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-11T19:44:44.723058+00:00",
+  "reason": "Browser froze again at Page.bringToFront before third step; removing inherited library path did not prevent it.",
+  "observations": "Document visible/focused with RTX4090 renderer; animation cadence degraded. GPU snapshot6percent at255MHz, not evidence of saturation.",
+  "next": "Native Wayland on actual Hyprland desktop, same profile/hardware; X11 forced flag removed.",
+  "no_physics_regression_observed": true,
+  "remaining": "Low-roof collision and sustained ordinary motion acceptance"
+}

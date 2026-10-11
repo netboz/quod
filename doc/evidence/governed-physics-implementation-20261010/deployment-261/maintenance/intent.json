@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-11T19:19:59.933071+00:00",
+  "phase": "maintenance",
+  "job": "quod-finality-candidate-v6-20260926",
+  "expected_index": 846336,
+  "expected_version": 66,
+  "request_sha256": "48d2b72aa83dd8d9b3b4f055f73632d528a4188d023dd10c81834763510b1ecb"
+}

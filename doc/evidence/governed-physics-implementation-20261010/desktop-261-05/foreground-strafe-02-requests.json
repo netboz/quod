@@ -1,0 +1,97 @@
+[
+  {
+    "id": "1670028.125",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1670028.126",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1670028.128",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1670028.129",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1670028.131",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.132",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.133",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.134",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.135",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.136",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.137",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.138",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.139",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.140",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.141",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.142",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.143",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.144",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.145",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  }
+]

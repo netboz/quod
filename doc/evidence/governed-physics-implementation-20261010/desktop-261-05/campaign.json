@@ -1,0 +1,12 @@
+{
+  "reason": "Correct standalone browser launch identity after measured off-screen placement.",
+  "removed_inherited_environment": [
+    "LD_LIBRARY_PATH",
+    "CHROME_DESKTOP"
+  ],
+  "backend": "wayland",
+  "same_private_profile": true,
+  "hardware_acceleration": "default",
+  "server_and_geometry_unchanged": true,
+  "user_control_approval_at_ms": 1791746936228
+}

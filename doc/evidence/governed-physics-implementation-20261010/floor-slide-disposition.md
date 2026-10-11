@@ -83,6 +83,11 @@ has no outstanding blocker. Test/helper changes add a net 125 lines, including
 the native regressions, a real non-parent shutdown regression and failure
 diagnostics; the superseded local cleanup implementations are removed.
 
-The native correction is not yet deployed and desktop roof/opening acceptance
-remains open. Separate hardware XR and durable closed-door consequences are not
-claimed here.
+The native correction is [deployed in 0.7.261](deployment-261/README.md), with
+eight healthy allocations and the same personal world/history retained.
+[Signed desktop movement](desktop-261-02/README.md) records floor and console
+contact and passage through a tall opening without the old repeated floor stall.
+The [foreground strafe](desktop-261-05/README.md) also advances with accepted
+controls and active floor contact. Low-roof collision and longer visible movement
+checks remain open. Separate hardware XR and durable closed-door consequences
+are not claimed here.

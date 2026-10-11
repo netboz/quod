@@ -1,0 +1,10 @@
+{
+  "reason": "Continue authorized ordinary signed desktop acceptance after preserved Chrome hang02.",
+  "profile": "same private profile in place",
+  "changed_launch_setting": "Remove inherited Nimbalyst AppImage LD_LIBRARY_PATH from child environment",
+  "cause_claim": false,
+  "hardware_acceleration": "default hardware flags",
+  "server_changes": false,
+  "durable_actions": false,
+  "prior_control_approval_at_ms": 1791746936228
+}

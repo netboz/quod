@@ -1,0 +1,3944 @@
+[
+  {
+    "timestamp": 608970.268988,
+    "request_id": "1658001.114",
+    "data": {
+      "reason": "expired",
+      "type": "refresh"
+    }
+  },
+  {
+    "timestamp": 608970.613652,
+    "request_id": "1658001.122",
+    "data": {
+      "control": "control(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled_agent(pilot,3,2,1,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+      "type": "projection",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3021",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -1.0008810758590698,
+              0.7517722845077515,
+              6.245416641235352
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "disconnected",
+          "sequence": "905"
+        },
+        "units": "metres_seconds"
+      },
+      "selection": "active",
+      "height": "358",
+      "expires_ms": "1791747602040",
+      "marks": "[mark(<<\"sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],transform(0,0,0,0,75,0),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_sky)),mark(<<\"floor\">>,<<\"mesh\">>,mesh_asset(asset(<<\"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-450,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(1660388,1658880,46080,46080,1,2,1)),transform(0,0,0,0,0,0),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"console\">>,<<\"group\">>,[],transform(0,0,3850,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing)]"
+    }
+  },
+  {
+    "timestamp": 608971.415828,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3022",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -1.0008810758590698,
+              0.7517722845077515,
+              6.245416641235352
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-1.0008810758590698,0.7517722845077515,6.245416641235352),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9999999403953552,-6.72630631015636e-5))],8)",
+          "sequence": "906"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.598176,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3023",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.9683137536048889,
+              0.751771867275238,
+              6.23836612701416
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.9683137536048889,0.751771867275238,6.23836612701416),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9999999403953552,-6.72630631015636e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.616431,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3024",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.9357466697692871,
+              0.7517740726470947,
+              6.231315612792969
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.9357466697692871,0.7517740726470947,6.231315612792969),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.00567795522511e-5,1.0,-6.404542364180088e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.634299,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3025",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.9031793475151062,
+              0.7517738938331604,
+              6.2242655754089355
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.9031793475151062,0.7517738938331604,6.2242655754089355),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,-3.359763650223613e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.65242,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3026",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.8706120252609253,
+              0.7517729997634888,
+              6.217215061187744
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.8706120252609253,0.7517729997634888,6.217215061187744),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,-1.3440409384202212e-4))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.670135,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3027",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.8380447030067444,
+              0.7517730593681335,
+              6.210165023803711
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.8380447030067444,0.7517730593681335,6.210165023803711),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.688157,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3028",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.8054775595664978,
+              0.751774787902832,
+              6.2031145095825195
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.8054775595664978,0.751774787902832,6.2031145095825195),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-6.504594784928486e-5,0.9999999403953552,-6.504594784928486e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.706294,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3029",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.7729100584983826,
+              0.7517724633216858,
+              6.196064472198486
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.7729100584983826,0.7517724633216858,6.196064472198486),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(6.588746327906847e-5,0.9999999403953552,-3.2943731639534235e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.724436,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3030",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.7403426170349121,
+              0.7517704367637634,
+              6.189013957977295
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.7403426170349121,0.7517704367637634,6.189013957977295),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.9414556997362524e-5,1.0,-6.588607357116416e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.74261,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3031",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.7077752351760864,
+              0.7517691850662231,
+              6.181963920593262
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.7077752351760864,0.7517691850662231,6.181963920593262),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(3.2933225156739354e-5,1.0,-3.2933225156739354e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.76041,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3032",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.6752079129219055,
+              0.7517690062522888,
+              6.1749138832092285
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.6752079129219055,0.7517690062522888,6.1749138832092285),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.325410817633383e-6,0.9999999403953552,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.778988,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3033",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.6426404714584351,
+              0.7517679333686829,
+              6.167863845825195
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.6426404714584351,0.7517679333686829,6.167863845825195),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.2117324483115226e-5,1.0,3.3693861041683704e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.79781,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3034",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.6100732088088989,
+              0.7517690658569336,
+              6.160813808441162
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.6100732088088989,0.7517690658569336,6.160813808441162),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.4906159524107352e-5,1.0,3.32082126988098e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.81455,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3035",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.5775058269500732,
+              0.7517683506011963,
+              6.153763771057129
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.5775058269500732,0.7517683506011963,6.153763771057129),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.6846361177158542e-5,1.0,-3.3692722354317084e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.832539,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3036",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.5449385046958923,
+              0.7517691850662231,
+              6.146713733673096
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.5449385046958923,0.7517691850662231,6.146713733673096),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.426587555732112e-6,1.0,6.74127004458569e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.853169,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3037",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.5123711228370667,
+              0.7517687082290649,
+              6.1396636962890625
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.5123711228370667,0.7517687082290649,6.1396636962890625),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.646435703150928e-5,1.0,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.868692,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3038",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.4798038601875305,
+              0.7517697811126709,
+              6.132613658905029
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.4798038601875305,0.7517697811126709,6.132613658905029),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.641058588575106e-5,0.9999999403953552,6.564234354300424e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.886788,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3039",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.4472365379333496,
+              0.7517703175544739,
+              6.125563621520996
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.4472365379333496,0.7517703175544739,6.125563621520996),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,6.735821079928428e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.904505,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3040",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.4146689474582672,
+              0.7517668008804321,
+              6.118513107299805
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.4146689474582672,0.7517668008804321,6.118513107299805),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(9.633012814447284e-5,0.9999999403953552,-6.422008300432935e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.922692,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3041",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.3821016550064087,
+              0.751767098903656,
+              6.1114630699157715
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.3821016550064087,0.751767098903656,6.1114630699157715),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.09103948995471e-6,0.9999999403953552,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.940667,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3042",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.34953439235687256,
+              0.7517678141593933,
+              6.104413032531738
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.34953439235687256,0.7517678141593933,6.104413032531738),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.6065781892393716e-5,1.0,1.6065781892393716e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.958698,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3043",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.3169671297073364,
+              0.7517684102058411,
+              6.097362995147705
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.3169671297073364,0.7517684102058411,6.097362995147705),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.5924597391858697e-5,1.0,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.976817,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3044",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.28440001606941223,
+              0.7517704367637634,
+              6.090312480926514
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.28440001606941223,0.7517704367637634,6.090312480926514),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-7.475657912436873e-5,1.0,-6.645029498031363e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608994.994748,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3045",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.2518326938152313,
+              0.7517704963684082,
+              6.0832624435424805
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.2518326938152313,0.7517704963684082,6.0832624435424805),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.012766,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3046",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.21926537156105042,
+              0.7517710328102112,
+              6.076212406158447
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.21926537156105042,0.7517710328102112,6.076212406158447),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,6.733099871780723e-5))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.030835,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3047",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.1866980791091919,
+              0.7517714500427246,
+              6.069162368774414
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.1866980791091919,0.7517714500427246,6.069162368774414),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.413824616582133e-6,0.9999999403953552,8.413824616582133e-6))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.048966,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3048",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.1541307419538498,
+              0.7517711520195007,
+              6.062112331390381
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.1541307419538498,0.7517711520195007,6.062112331390381),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.411843737121671e-6,1.0,-8.411843737121671e-6))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.066682,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3049",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.12156344950199127,
+              0.7517715692520142,
+              6.055062294006348
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.12156344950199127,0.7517715692520142,6.055062294006348),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.41325891087763e-6,0.9999999403953552,8.41325891087763e-6))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.084626,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3050",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.12156346440315247,
+              0.7517715692520142,
+              6.055062770843506
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.12156346440315247,0.7517715692520142,6.055062770843506),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.203890057397075e-6,1.0,1.345244818367064e-4))],8)",
+          "sequence": "907"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.609816,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3051",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.08899615705013275,
+              0.7517712712287903,
+              6.0480122566223145
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.08899615705013275,0.7517712712287903,6.0480122566223145),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.203890512144426e-6,1.0,-6.726224819431081e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.627725,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3052",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.056428827345371246,
+              0.7517716884613037,
+              6.040962219238281
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.056428827345371246,0.7517716884613037,6.040962219238281),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.205935965728713e-6,1.0,6.729497545165941e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.645478,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3053",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              -0.023861516267061234,
+              0.7517722845077515,
+              6.033912181854248
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(-0.023861516267061234,0.7517722845077515,6.033912181854248),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.1026589820394292e-6,1.0,6.728508742526174e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.663798,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3054",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.008625737391412258,
+              0.7530428171157837,
+              6.026861667633057
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.008625737391412258,0.7530428171157837,6.026861667633057),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(5.254926804809656e-7,0.9999999403953552,-6.72630631015636e-5)),contact(1,normal(-0.06287112832069397,0.99802166223526,0.0))],10)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.682425,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3055",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.041193053126335144,
+              0.7520000338554382,
+              6.019811630249023
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.041193053126335144,0.7520000338554382,6.019811630249023),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.699381,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3056",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.07376037538051605,
+              0.7520558834075928,
+              6.01276159286499
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.07376037538051605,0.7520558834075928,6.01276159286499),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.8624592712512822e-6,1.0,-7.449836994055659e-5)),contact(1,normal(1.611390325706452e-4,0.9999468326568604,0.010312898084521294))],10)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.719171,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3057",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.10632780194282532,
+              0.7520222067832947,
+              6.005711078643799
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.10632780194282532,0.7520222067832947,6.005711078643799),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.593804624164477e-5,1.0,0.0)),contact(1,normal(-7.30178493540734e-4,0.9999997615814209,0.0))],10)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.735482,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3058",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.13889507949352264,
+              0.7520673871040344,
+              5.998661518096924
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.13889507949352264,0.7520673871040344,5.998661518096924),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0)),contact(1,normal(-3.365546581335366e-4,1.0,0.0)),contact(1,normal(-5.601994344033301e-4,0.9999597072601318,0.008963190950453281))],12)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.755033,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3059",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.17145965993404388,
+              0.7519252300262451,
+              5.9916181564331055
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.17145965993404388,0.7519252300262451,5.9916181564331055),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.0010566653218120337,0.9999964237213135,0.002459148410707712))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.772197,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3060",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.2040269523859024,
+              0.7519261240959167,
+              5.984568119049072
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.2040269523859024,0.7519261240959167,5.984568119049072),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.1605266990954988e-5,1.0,6.189475971041247e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.789656,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3061",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.23656348884105682,
+              0.7523674368858337,
+              5.977519512176514
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.23656348884105682,0.7523674368858337,5.977519512176514),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.3139182303566486e-5,0.9999999403953552,6.170448614284396e-5)),contact(1,normal(-0.0013590711168944836,0.9997627139091492,0.021745137870311737)),contact(1,normal(-0.12138403952121735,0.9925543665885925,-0.010082963854074478))],12)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.807734,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3062",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.26902148127555847,
+              0.7535204291343689,
+              5.9704270362854
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.26902148127555847,0.7535204291343689,5.9704270362854),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.1255278877797537e-5,0.9999998211860657,6.337843369692564e-4)),contact(1,normal(-0.07149342447519302,0.997032105922699,-0.028557706624269485))],10)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.825168,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3063",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.3015884459018707,
+              0.7521270513534546,
+              5.963376998901367
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.3015884459018707,0.7521270513534546,5.963376998901367),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.754198794718832e-4,0.9999999403953552,1.539614277135115e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.843267,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3064",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.3341546654701233,
+              0.7522773146629333,
+              5.9563703536987305
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.3341546654701233,0.7522773146629333,5.9563703536987305),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.9270657250890508e-5,0.9999998211860657,6.23221043497324e-4)),contact(1,normal(-0.0019769291393458843,0.9968665242195129,0.07907716929912567))],10)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.861204,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3065",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.36672163009643555,
+              0.751735270023346,
+              5.949319839477539
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.36672163009643555,0.751735270023346,5.949319839477539),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.6374723054468632e-4,1.0,-2.0297833543736488e-4))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.879099,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3066",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.39928892254829407,
+              0.7517370581626892,
+              5.942270278930664
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.39928892254829407,0.7517370581626892,5.942270278930664),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-8.58564908412518e-6,0.9999999403953552,2.0605558529496193e-4))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.897191,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3067",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.4318562150001526,
+              0.7517377734184265,
+              5.935220241546631
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.4318562150001526,0.7517377734184265,5.935220241546631),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.286424427846214e-6,1.0,6.858279084553942e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.91513,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3068",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.4644235372543335,
+              0.751737654209137,
+              5.928170204162598
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.4644235372543335,0.751737654209137,5.928170204162598),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,-2.572457742644474e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.933593,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3069",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.4969908893108368,
+              0.7517368197441101,
+              5.921119689941406
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.4969908893108368,0.7517368197441101,5.921119689941406),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.575447282055393e-6,1.0,-8.575447282055393e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.951412,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3070",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.5295582413673401,
+              0.7517367005348206,
+              5.914069652557373
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.5295582413673401,0.7517367005348206,5.914069652557373),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.579567293054424e-6,1.0,1.715913458610885e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.969663,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3071",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.5621257424354553,
+              0.7517343163490295,
+              5.907019138336182
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.5621257424354553,0.7517343163490295,5.907019138336182),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(5.955486267339438e-5,1.0,-6.806269811931998e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608995.987715,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3072",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.5946930646896362,
+              0.75173419713974,
+              5.899969100952148
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.5946930646896362,0.75173419713974,5.899969100952148),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.591950063419063e-6,0.9999999403953552,1.7183900126838125e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.009104,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3073",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.6272603273391724,
+              0.7517350912094116,
+              5.892919063568115
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.6272603273391724,0.7517350912094116,5.892919063568115),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.718508246995043e-5,0.9999999403953552,3.437016493990086e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.024091,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3074",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.6598280072212219,
+              0.7517303824424744,
+              5.885868549346924
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.6598280072212219,0.7517303824424744,5.885868549346924),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.324072654824704e-4,1.0,-6.725448474753648e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.047355,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3075",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.6923952698707581,
+              0.7517305016517639,
+              5.878818035125732
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.6923952698707581,0.7517305016517639,5.878818035125732),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.7222968381247483e-5,1.0,-6.889187352498993e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.059586,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3076",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.724962592124939,
+              0.7517310380935669,
+              5.871767997741699
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.724962592124939,0.7517310380935669,5.871767997741699),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,6.888712960062549e-5))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.078742,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3077",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.7575299143791199,
+              0.7517309784889221,
+              5.864717960357666
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.7575299143791199,0.7517309784889221,5.864717960357666),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.304111371311592e-6,0.9999999403953552,0.0))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.097821,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3078",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.7575300931930542,
+              0.7517309784889221,
+              5.864717483520508
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.7575300931930542,0.7517309784889221,5.864717483520508),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(6.758730160072446e-5,1.0,-1.2722316023427993e-4))],8)",
+          "sequence": "908"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.64999,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3079",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.7900974154472351,
+              0.7517310380935669,
+              5.857667446136475
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.7900974154472351,0.7517310380935669,5.857667446136475),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.652209,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3080",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.822664737701416,
+              0.7517310976982117,
+              5.850617408752441
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.822664737701416,0.7517310976982117,5.850617408752441),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.656416,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3081",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.8552321195602417,
+              0.7517308592796326,
+              5.843567371368408
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.8552321195602417,0.7517308592796326,5.843567371368408),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.700846951280255e-5,1.0,3.40169390256051e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.674546,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3082",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.8877990245819092,
+              0.7517358064651489,
+              5.836516857147217
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.8877990245819092,0.7517358064651489,5.836516857147217),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.627759775146842e-4,1.0,-6.200989446369931e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.6924,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3083",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.9203663468360901,
+              0.7517358660697937,
+              5.829466819763184
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.9203663468360901,0.7517358660697937,5.829466819763184),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,0.0))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.710553,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3084",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.9529339075088501,
+              0.7517327070236206,
+              5.82241678237915
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.9529339075088501,0.7517327070236206,5.82241678237915),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(9.209514973917976e-5,1.0,-3.348914469825104e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.729119,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3085",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              0.9855011701583862,
+              0.7517330646514893,
+              5.815366744995117
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.9855011701583862,0.7517330646514893,5.815366744995117),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.719986175885424e-5,0.9999999403953552,-3.439972351770848e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.746879,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3086",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.0180686712265015,
+              0.7517309784889221,
+              5.808316707611084
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.0180686712265015,0.7517309784889221,5.808316707611084),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(5.8387893659528345e-5,1.0,-3.3364511182298884e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.764828,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3087",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.0506359338760376,
+              0.751731276512146,
+              5.801266670227051
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.0506359338760376,0.751731276512146,5.801266670227051),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9999999403953552,3.348704558447935e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.782421,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3088",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.083193302154541,
+              0.7517489194869995,
+              5.794156551361084
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.083193302154541,0.7517489194869995,5.794156551361084),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.0037365134339779615,0.9997417330741882,-0.022419080138206482)),contact(1,normal(0.0,0.9999688863754272,0.00788898952305317))],10)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.800283,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3089",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.1157606840133667,
+              0.7517489194869995,
+              5.787106513977051
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.1157606840133667,0.7517489194869995,5.787106513977051),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.6416564903920516e-5,1.0,6.566625961568207e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.818199,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3090",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.1483279466629028,
+              0.7517489790916443,
+              5.780056476593018
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.1483279466629028,0.7517489790916443,5.780056476593018),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9999999403953552,0.0))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.836323,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3091",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.180895209312439,
+              0.751749575138092,
+              5.773006439208984
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.180895209312439,0.751749575138092,5.773006439208984),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-1.619216891413089e-5,0.9999999403953552,0.0))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.854655,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3092",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.2134625911712646,
+              0.7517488598823547,
+              5.765955924987793
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.2134625911712646,0.7517488598823547,5.765955924987793),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.517016794939991e-6,1.0,-6.813613435951993e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.872482,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3093",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.2460321187973022,
+              0.7516589164733887,
+              5.758898735046387
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.2460321187973022,0.7516589164733887,5.758898735046387),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(8.180612348951399e-4,0.9999955892562866,-0.0028632143512368202)),contact(1,normal(0.0024607523810118437,0.9999486207962036,0.009843009524047375)),contact(1,normal(2.4899149138946086e-5,1.0,8.299716864712536e-5))],12)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.890082,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3094",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.278599500656128,
+              0.7516555786132812,
+              5.751787185668945
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.278599500656128,0.7516555786132812,5.751787185668945),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9997116327285767,-0.024012871086597443)),contact(1,normal(-8.909483585739508e-5,1.0,-1.4255174028221518e-4))],10)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.908157,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3095",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.3111671209335327,
+              0.7516515254974365,
+              5.744736671447754
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.3111671209335327,0.7516515254974365,5.744736671447754),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.1256548168603331e-4,0.9999999403953552,-6.432313239201903e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.926615,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3096",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.3437345027923584,
+              0.7516516447067261,
+              5.737686634063721
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.3437345027923584,0.7516516447067261,5.737686634063721),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.353399784420617e-5,1.0,7.218131941044703e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.944318,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3097",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.3762900829315186,
+              0.7517753839492798,
+              5.730644226074219
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.3762900829315186,0.7517753839492798,5.730644226074219),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.004127818159759045,0.9999881386756897,0.0025798864662647247))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.962502,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3098",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.4088573455810547,
+              0.7516183853149414,
+              5.723597049713135
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.4088573455810547,0.7516183853149414,5.723597049713135),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,0.9999992847442627,0.0011720615439116955))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.980643,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3099",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.4414246082305908,
+              0.751617968082428,
+              5.716546535491943
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.4414246082305908,0.751617968082428,5.716546535491943),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,-6.445196777349338e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608996.998662,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3100",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.473991870880127,
+              0.7516174912452698,
+              5.709496021270752
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.473991870880127,0.7516174912452698,5.709496021270752),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,-7.367130456259474e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.016585,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3101",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.5063899755477905,
+              0.7525516748428345,
+              5.70249080657959
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.5063899755477905,0.7525516748428345,5.70249080657959),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-3.68497749150265e-5,1.0,-1.47399099660106e-4)),contact(1,normal(-0.1780596673488617,0.9828625917434692,0.04770612716674805))],10)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.03455,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3102",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.538958191871643,
+              0.7520871758460999,
+              5.695440769195557
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.538958191871643,0.7520871758460999,5.695440769195557),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(3.849105560220778e-4,0.9999998807907104,-7.21707328921184e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.052692,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3103",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.571524739265442,
+              0.7519897818565369,
+              5.688385963439941
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.571524739265442,0.7519897818565369,5.688385963439941),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-2.7572683757171035e-4,0.9999984502792358,-0.001683903275988996))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.070609,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3104",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.604092001914978,
+              0.7519902586936951,
+              5.681335926055908
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.604092001914978,0.7519902586936951,5.681335926055908),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0,1.0,5.988561315461993e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.088474,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3105",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.636662244796753,
+              0.751950204372406,
+              5.674294471740723
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.636662244796753,0.751950204372406,5.674294471740723),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.0011435922933742404,0.9999942779541016,0.0031734686344861984)),contact(1,normal(-7.488789851777256e-4,0.9999996423721313,2.3042430984787643e-4))],10)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.106489,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3106",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.6366623640060425,
+              0.751950204372406,
+              5.674294471740723
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.6366623640060425,0.751950204372406,5.674294471740723),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.573809201247059e-5,1.0,6.098412268329412e-5))],8)",
+          "sequence": "909"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 608997.64943,
+    "request_id": "1658001.122",
+    "data": {
+      "type": "simulation_frame",
+      "view": "7omXRbX8dEDaJ9OeTJ9k6QW0Orilcab15jgQuL5vqRE",
+      "frame": {
+        "tick": "3107",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.6366615295410156,
+              0.751950204372406,
+              5.674294948577881
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "oL5ZQxdzpLnrh7kMkqCEMSCzUatfIIAOd7m2uzsBwn8",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.6366615295410156,0.751950204372406,5.674294948577881),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-3.2557747908867896e-4,0.9999998807907104,2.3678361321799457e-4))],8)",
+          "sequence": "910"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  },
+  {
+    "timestamp": 609000.304218,
+    "request_id": "1658001.122",
+    "data": {
+      "reason": "expired",
+      "type": "refresh"
+    }
+  },
+  {
+    "timestamp": 609000.655083,
+    "request_id": "1658001.130",
+    "data": {
+      "control": "control(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled_agent(pilot,3,2,1,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+      "type": "projection",
+      "view": "fb2IHPlthySmazIW8bCAMlXR6sslzTIT5aJtB9SgOYw",
+      "frame": {
+        "tick": "3107",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.6366615295410156,
+              0.751950204372406,
+              5.674294948577881
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "gmUVppSawRGh-ulS9jHQfEn-fUI7KD1MkLGgof7uPyA",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "disconnected",
+          "sequence": "910"
+        },
+        "units": "metres_seconds"
+      },
+      "selection": "active",
+      "height": "358",
+      "expires_ms": "1791747632074",
+      "marks": "[mark(<<\"sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],transform(0,0,0,0,75,0),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_sky)),mark(<<\"floor\">>,<<\"mesh\">>,mesh_asset(asset(<<\"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-450,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(1660388,1658880,46080,46080,1,2,1)),transform(0,0,0,0,0,0),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"console\">>,<<\"group\">>,[],transform(0,0,3850,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing)]"
+    }
+  },
+  {
+    "timestamp": 609001.68446,
+    "request_id": "1658001.130",
+    "data": {
+      "type": "simulation_frame",
+      "view": "fb2IHPlthySmazIW8bCAMlXR6sslzTIT5aJtB9SgOYw",
+      "frame": {
+        "tick": "3108",
+        "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+        "generation": "3",
+        "schema": 1,
+        "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+        "structure": "1",
+        "poses": [
+          {
+            "position": [
+              1.6366616487503052,
+              0.751950204372406,
+              5.674294948577881
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "body": "2",
+            "revision": "1"
+          }
+        ],
+        "registration": "gmUVppSawRGh-ulS9jHQfEn-fUI7KD1MkLGgof7uPyA",
+        "view_clearance": 0.49799999594688416,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(1.6366616487503052,0.751950204372406,5.674294948577881),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(4.5738372136838734e-5,1.0,6.098449375713244e-5))],8)",
+          "sequence": "911"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  }
+]

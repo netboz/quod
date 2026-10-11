@@ -1,0 +1,22 @@
+[
+  {
+    "id": "1670028.121",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.122",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.123",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1670028.124",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  }
+]

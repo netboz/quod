@@ -1,0 +1,12 @@
+{
+  "approved": true,
+  "at": "2026-10-11T19:19:52.360443+00:00",
+  "mutation_manifest_sha256": "3b25035194c71cd914ea8d0998db9b7f11c591597fdcb1cfd3831704ecbc083f",
+  "review_payload_sha256": "51616a155dc70780d48f05592d5f54ac473dc91c4ac5dff43347f05d37fc74a9",
+  "review_receipt_sha256": "89fe1cee3f7277b8d15bf3daee887b14e0107904daa56931834304b89220e15d",
+  "independent_full_job_audit": true,
+  "auto_revert_disabled": true,
+  "update_health_checks_present": true,
+  "principal_probe_has_no_vault_mutation": true,
+  "scope": "Authorized candidate image upgrade on existing ledgers and stable browser origin"
+}

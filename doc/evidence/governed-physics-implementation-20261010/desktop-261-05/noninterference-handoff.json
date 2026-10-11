@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-11T19:52:18.440590+00:00",
+  "user_constraint": "Allow Project Zomboid play without stealing focus or sending desktop input",
+  "active_input_workers": [],
+  "last_completed_step": "foreground-strafe-02",
+  "last_step_key_up_completed": true,
+  "next": "Read-only background validation; interactive collision checks deferred"
+}

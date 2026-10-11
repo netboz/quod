@@ -1,0 +1,62 @@
+{
+  "active_window": {
+    "pid": 3789831,
+    "class": "nimbalyst",
+    "mapped": true,
+    "hidden": false,
+    "workspace": {
+      "id": 2,
+      "name": "2"
+    },
+    "at": [
+      1920,
+      0
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "xwayland": false
+  },
+  "monitors": [
+    {
+      "name": "DP-3",
+      "focused": false,
+      "dpmsStatus": true,
+      "disabled": false,
+      "activeWorkspace": {
+        "id": 3,
+        "name": "3"
+      },
+      "width": 1920,
+      "height": 1080,
+      "refreshRate": 60.0
+    },
+    {
+      "name": "DP-2",
+      "focused": true,
+      "dpmsStatus": true,
+      "disabled": false,
+      "activeWorkspace": {
+        "id": 2,
+        "name": "2"
+      },
+      "width": 1920,
+      "height": 1080,
+      "refreshRate": 59.939
+    },
+    {
+      "name": "DP-1",
+      "focused": false,
+      "dpmsStatus": true,
+      "disabled": false,
+      "activeWorkspace": {
+        "id": 1,
+        "name": "1"
+      },
+      "width": 1920,
+      "height": 1080,
+      "refreshRate": 60.0
+    }
+  ]
+}

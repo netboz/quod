@@ -1,0 +1,5 @@
+{
+  "at": "2026-10-11T19:22:27.117953+00:00",
+  "reason": "Existing browser session was closed; first pre-refresh log request returned invalid session id. No refresh or input was sent by this campaign.",
+  "next": "Separately labeled campaign02, same preserved private profile"
+}

@@ -1,0 +1,23 @@
+{
+  "document": {
+    "focused": true,
+    "height": 296,
+    "hidden": false,
+    "pointerLocked": true,
+    "screenX": 1968,
+    "screenY": 1092,
+    "visibility": "visible",
+    "width": 1850
+  },
+  "window": {
+    "bounds": {
+      "height": 496,
+      "left": 1968,
+      "top": 1092,
+      "width": 1850,
+      "windowState": "normal"
+    },
+    "windowId": 1724409837
+  },
+  "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL 4.5.0)"
+}

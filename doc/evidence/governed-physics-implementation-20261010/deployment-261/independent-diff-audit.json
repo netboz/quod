@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-11T18:51:30.760687+00:00",
+  "mutation_input_hashes_match": true,
+  "maintenance_diff": [
+    {
+      "path": "/TaskGroups/0/Count",
+      "before": 8,
+      "after": 0
+    }
+  ],
+  "release_diff": [
+    {
+      "path": "/TaskGroups/0/Tasks/0/Config/image",
+      "before": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+      "after": "192.168.1.11:5000/quod:0.7.261@sha256:980cfe97ea758747df118d41196a216463c8032abf79d3ee1bc0a36a2082e378"
+    },
+    {
+      "path": "/TaskGroups/0/Tasks/1/Config/image",
+      "before": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+      "after": "192.168.1.11:5000/quod:0.7.261@sha256:980cfe97ea758747df118d41196a216463c8032abf79d3ee1bc0a36a2082e378"
+    },
+    {
+      "path": "/TaskGroups/0/Tasks/2/Config/image",
+      "before": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+      "after": "192.168.1.11:5000/quod:0.7.261@sha256:980cfe97ea758747df118d41196a216463c8032abf79d3ee1bc0a36a2082e378"
+    },
+    {
+      "path": "/TaskGroups/1/Tasks/1/Config/image",
+      "before": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+      "after": "192.168.1.11:5000/quod:0.7.261@sha256:980cfe97ea758747df118d41196a216463c8032abf79d3ee1bc0a36a2082e378"
+    },
+    {
+      "path": "/TaskGroups/1/Tasks/2/Config/image",
+      "before": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+      "after": "192.168.1.11:5000/quod:0.7.261@sha256:980cfe97ea758747df118d41196a216463c8032abf79d3ee1bc0a36a2082e378"
+    }
+  ],
+  "rollback_exactly_original": true,
+  "volume_identity_fields_unchanged": true,
+  "all_other_configuration_unchanged": true,
+  "same_browser_origin": true,
+  "status": "independent local audit; external review decision pending"
+}

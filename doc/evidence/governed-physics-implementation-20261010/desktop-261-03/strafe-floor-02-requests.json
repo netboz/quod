@@ -1,0 +1,52 @@
+[
+  {
+    "id": "1658001.120",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1658001.121",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1658001.123",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1658001.124",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1658001.125",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1658001.126",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1658001.127",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1658001.128",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1658001.129",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1658001.131",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  }
+]

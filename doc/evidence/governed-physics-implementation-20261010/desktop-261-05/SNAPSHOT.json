@@ -1,0 +1,192 @@
+{
+  "at": "2026-10-11T19:56:12.356732+00:00",
+  "source": "_build/quod27-desktop-261-05",
+  "ongoing_browser": true,
+  "public_artifacts_only": true,
+  "excluded": [
+    "__pycache__",
+    "chromedriver.log"
+  ],
+  "files": [
+    {
+      "path": "browser.py",
+      "bytes": 1962,
+      "sha256": "dc9876326d69130dd364e6d6eac2b7b08e007ff646b3f62a473180a60cd79d5e"
+    },
+    {
+      "path": "campaign.json",
+      "bytes": 367,
+      "sha256": "2d5a1d11d6b15487a533443c1942ca9355c576c7758f8692b9406f91cf17a94b"
+    },
+    {
+      "path": "capture.py",
+      "bytes": 1549,
+      "sha256": "5ec0d4d25e4742a087ca4df11b9b9f113f92084ead84f65ae4778fc03a4d560c"
+    },
+    {
+      "path": "compositor-placement.json",
+      "bytes": 347,
+      "sha256": "be21e234b295662843941cbe1e3639ffeb311a90f242db8c5b38e76d87f89087"
+    },
+    {
+      "path": "desktop-step.py",
+      "bytes": 4835,
+      "sha256": "727731ee5b6fdef552165bfc00db9e68a15b734a18711c04dcaca88513657417"
+    },
+    {
+      "path": "focus-current-api-result.json",
+      "bytes": 184,
+      "sha256": "d1cb17fae1c756ebcdca517cbc7a64737d9b8f47bbd3bee2a4cf6cd887637708"
+    },
+    {
+      "path": "focus-current-api.intent.json",
+      "bytes": 205,
+      "sha256": "72e2d439cd368b0cebb331c8ef22734694aa4e3e40d24fdb340ec23ae1fbf850"
+    },
+    {
+      "path": "focus-window-result.json",
+      "bytes": 319,
+      "sha256": "b5c8169f846689ff36f16209fcaf5e40041a1ae69ee619e9d312977bb6dc3997"
+    },
+    {
+      "path": "focus-window.intent.json",
+      "bytes": 170,
+      "sha256": "ad03195412fc4a9046462242cc2b0c4b734e01fd7774fcdaa5c96835d0584b94"
+    },
+    {
+      "path": "foreground-strafe-02-before.png",
+      "bytes": 328771,
+      "sha256": "f725380a3b2a11fba4761cd559f7c4fd60353a6511f824542c8d60e7a0fd6b9a"
+    },
+    {
+      "path": "foreground-strafe-02-control-responses.json",
+      "bytes": 1082,
+      "sha256": "98fe9811b6df9d64f2fe1c773e89dfc1f3cff5055ac514e2c3dee278160f5b12"
+    },
+    {
+      "path": "foreground-strafe-02-dom.json",
+      "bytes": 1103,
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca"
+    },
+    {
+      "path": "foreground-strafe-02-frames.json",
+      "bytes": 64087,
+      "sha256": "ce60c4d79b96478c0ebc187ca93a60d0291630bd3ff85ad65a8ae456a52f4550"
+    },
+    {
+      "path": "foreground-strafe-02-requests.json",
+      "bytes": 2168,
+      "sha256": "d9ecba53eac6075240a5239162691e42e4c350f1598ad11354a0aac1609300ee"
+    },
+    {
+      "path": "foreground-strafe-02-summary.json",
+      "bytes": 1174,
+      "sha256": "88703d66de85d8ce58139f00e970f67f8b625152d8206e775e20a9d9bec4ff35"
+    },
+    {
+      "path": "foreground-strafe-02-visibility.json",
+      "bytes": 309,
+      "sha256": "f41e56cccdae2c88bfd4332ec6e91b9d201c66bd4db58c5685105f76678a12de"
+    },
+    {
+      "path": "foreground-strafe-02.intent.json",
+      "bytes": 69,
+      "sha256": "41d52ad1e3b32be1e22873506c5b5fdc740ec0b41cab90d98d195bcc6dcc4fde"
+    },
+    {
+      "path": "foreground-strafe-02.png",
+      "bytes": 326597,
+      "sha256": "6803e9d5672474cbaf5409624a5ee5a2fc85319ba4a2054206c3eec4703c3f1f"
+    },
+    {
+      "path": "initial-page.json",
+      "bytes": 1065,
+      "sha256": "ee968c5ea555b17d2de9aa775757f6d8c217e7d90f1bd0ead13b020be1801fff"
+    },
+    {
+      "path": "install-helper-retain-terminal.js",
+      "bytes": 1899,
+      "sha256": "fec25c90914a4af4b441ad5723551004fd99fb0ec9c92f04209c7737aeea9ac8"
+    },
+    {
+      "path": "noninterference-handoff.json",
+      "bytes": 347,
+      "sha256": "ddcd3f6aaeb64dfb819b94f232956b9f676ab7d8b77ca36ab043508949d5a3f6"
+    },
+    {
+      "path": "plan.md",
+      "bytes": 2077,
+      "sha256": "43aa879cbfacd7b8f67c47cc852383d389774e522a23df8b06d79a74357d6e85"
+    },
+    {
+      "path": "run.py",
+      "bytes": 6121,
+      "sha256": "3a1b6932c6c3f2e8af44a1f7ace554f66fd0ba7cf36ada0c1a4b1107ec29ba2d"
+    },
+    {
+      "path": "session.json",
+      "bytes": 190,
+      "sha256": "ad4458ffca2ac192b4d60a794a601c944ec5d92035e8d401beab4fbb9cafec49"
+    },
+    {
+      "path": "signed.py",
+      "bytes": 701,
+      "sha256": "8a62c76fd64f8b62f182e08cd4167953a2fe60c6a4a2eeeae254df599994d716"
+    },
+    {
+      "path": "visible-native-view.json",
+      "bytes": 35956,
+      "sha256": "91a96373bda56a1e09d95a4b9840cff37715723a84f6f0bf0b6537f304e830c1"
+    },
+    {
+      "path": "visible-native-view.png",
+      "bytes": 314133,
+      "sha256": "0ddfcb075cfb4dc6f95981e8067896601b88c7c3e6f4aadfa4c887a8cc861574"
+    },
+    {
+      "path": "visible-step.py",
+      "bytes": 1544,
+      "sha256": "b7548dbe77b6cbe1ba0b434a49fb46abf6bd71d112b810cb29781ae1ebe65416"
+    },
+    {
+      "path": "visible-strafe-01-before.png",
+      "bytes": 348611,
+      "sha256": "07f31c2b29d07cfa1fcf6757c32305557dce3156abe729637280bf1381ff88fe"
+    },
+    {
+      "path": "visible-strafe-01-control-responses.json",
+      "bytes": 290,
+      "sha256": "e614222d48be7d94373650dfa87a9e7392ccda1f3504c642369290512cc758a9"
+    },
+    {
+      "path": "visible-strafe-01-dom.json",
+      "bytes": 1103,
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca"
+    },
+    {
+      "path": "visible-strafe-01-frames.json",
+      "bytes": 55656,
+      "sha256": "bed98206cf9dde88645ddaedec0a5241486c0297fca6e9107572c95c53a04c3f"
+    },
+    {
+      "path": "visible-strafe-01-requests.json",
+      "bytes": 458,
+      "sha256": "236d91e7f6dcb2a7bb557135135c0ef0ddaf79b16fe7a6c7ecf47daf27151fbd"
+    },
+    {
+      "path": "visible-strafe-01-summary.json",
+      "bytes": 1258,
+      "sha256": "2108cd3030a0b37e2c6c3e8d229b3012da576d01e4a7cf08537a8e2440baec51"
+    },
+    {
+      "path": "visible-strafe-01.intent.json",
+      "bytes": 70,
+      "sha256": "7f251addc11236064feae2a8a318c6bd089dddada2dcc2a144e5ea7d5cc98c6b"
+    },
+    {
+      "path": "visible-strafe-01.png",
+      "bytes": 358436,
+      "sha256": "2c9fdc673c99d25dc2aebadb9947fbdc92283a508afa32647465e7c04cfb611e"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "reason": "Test native display backend after retained X11 browser hangs.",
+  "desktop": "Hyprland/Wayland",
+  "display_backend": "wayland",
+  "same_profile": true,
+  "same_hardware_acceleration": true,
+  "runtime_mutations": false,
+  "user_control_approval_at_ms": 1791746936228,
+  "reference": "https://chromium.googlesource.com/chromium/src/+/main/docs/ozone_overview.md"
+}

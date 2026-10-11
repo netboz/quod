@@ -1,0 +1,7 @@
+{
+  "reason": "Continue signed normal-view acceptance on deployed261 after original browser closed.",
+  "same_private_profile": "_build/quod27-desktop-259-03/profile",
+  "hardware_acceleration": "default hardware flags",
+  "domain_writes": false,
+  "server_version": "0.7.261"
+}

@@ -1,0 +1,90 @@
+{
+  "time": 1791740919430,
+  "slot": 182,
+  "cert": {
+    "kind": "commit",
+    "era": "680a468b9a57116e31b2d7f652b1ebad8b2c32c8f5ba0c716c80470943596e88",
+    "head_view": 181,
+    "signers": [
+      {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    ]
+  },
+  "kind": "content",
+  "txs": [
+    {
+      "time": 1791740919430,
+      "request": null,
+      "origin": {
+        "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+        "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2"
+      },
+      "signature": "fefebbb12569f871600f0b5f4ec474e28e8d3f4989ea4870a7839525128b547b658687c8aa921c316e03590b0fcaf23387bdca2a7d223500f7a44295c352a709",
+      "author": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "result": {
+        "P": "_2"
+      },
+      "ops": 1,
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "diff": [
+        {
+          "op": "assert",
+          "clause": "can_control_physics_agent(personal_lobby, agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>, kp_758f8aa1, me), pilot)"
+        }
+      ],
+      "role": "remote_application",
+      "goal": "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>::transaction((current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, kp_7082c150), current_principal(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>, kp_758f8aa1, me)), physics_control_state(personal_lobby, agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>, kp_758f8aa1, me), 1, controlled(pilot, eye)), physics_space(personal_lobby, enabled, physics_authority), findall(_0, can_control_physics_agent(personal_lobby, _0, pilot), []), assertz(can_control_physics_agent(personal_lobby, agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>, kp_758f8aa1, me), pilot))))",
+      "submitted_at": 1791740919401,
+      "effects": [],
+      "proof_id": "898f0695fdbd24c26e66cfb0022f92970a249e2bb59314f51430e5a1d41f072d",
+      "height": 182,
+      "tx_id": "51ad698d26c5e03939ad1b537e1260f49807aee404aaedaf1bf189229cea2545",
+      "plan_digest": "c8ece0a1c048ee43fcb2ce68c269f894409053509547de9241558230e2ecbdd6",
+      "role_details": {
+        "operation_ref": {
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+          "kind": "operation",
+          "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+          "agent": {
+            "reference": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>, kp_758f8aa1, me)",
+            "identity": {
+              "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+              "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2"
+            },
+            "kind": "agent",
+            "reference_wire": "g2gCYQRsAAAABGgCYQBtAAAAEmFnZW50X2luc3RhbmNlX3JlZmgCYQFtAAAAMWh1bWFuOjVwVTNYOGV2aGZIMDlnMWN0bDBMUlJQODB6bWhkNk03ZzhPUTdEeU9lYUVoAmEBbQAAACB1j4qhPVTPYmukk6a_vsJFSKyWtJ3Q_to7wIQ-CDjL8mgCYQBtAAAAAm1lag"
+          },
+          "operation_id": "2a7c989c29c155d3bd437375952505000eb943febd19823494cc2f57b59fdbd7"
+        },
+        "request_digest": "4e74b214335ae5d372a3fc4527120bdb320323bae16f733ab01edeb63bc16f18",
+        "source_claim": {
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+          "kind": "transaction",
+          "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+          "tx_id": "02d710cc5fbe573577eaa20a4f271b98e4f5cd73f26391e1be560757d5e1742d"
+        }
+      },
+      "author_seq": 181,
+      "effect_count": 0,
+      "effect_operations": [],
+      "fact_ops": 1,
+      "row_id": "51ad698d26c5e03939ad1b537e1260f49807aee404aaedaf1bf189229cea2545",
+      "row_type": "transaction",
+      "evidence_ref": {
+        "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+        "kind": "transaction",
+        "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+        "height": 357,
+        "tx_id": "02d710cc5fbe573577eaa20a4f271b98e4f5cd73f26391e1be560757d5e1742d"
+      },
+      "read_predicates": 7,
+      "root_facts_changed": true,
+      "signature_status": "verified"
+    }
+  ]
+}

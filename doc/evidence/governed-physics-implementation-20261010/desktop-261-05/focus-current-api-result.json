@@ -1,0 +1,15 @@
+{
+  "exit": 0,
+  "stdout": "ok\n",
+  "stderr": "",
+  "active_pid": 1669907,
+  "target_pid": 1669907,
+  "target_at": [
+    1968,
+    292
+  ],
+  "target_size": [
+    1850,
+    506
+  ]
+}

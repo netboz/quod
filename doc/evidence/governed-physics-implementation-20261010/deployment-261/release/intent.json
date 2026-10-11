@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-11T19:20:15.326381+00:00",
+  "phase": "release",
+  "job": "quod-finality-candidate-v6-20260926",
+  "expected_index": 846772,
+  "expected_version": 67,
+  "request_sha256": "72f3363f684240e5915d99987b0068526605f242cb2114969e4ed1600e651a9e"
+}

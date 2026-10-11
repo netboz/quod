@@ -1,0 +1,82 @@
+{
+  "at": "2026-10-11T19:58:11.140512+00:00",
+  "read_only_nomad_api": true,
+  "candidate": {
+    "version": 67,
+    "modify_index": 846780
+  },
+  "main": {
+    "version": 246,
+    "modify_index": 826727
+  },
+  "ingress": {
+    "version": 1,
+    "modify_index": 846370
+  },
+  "allocations": [
+    {
+      "id": "142233f5-1e39-d65d-654c-119b54dc03d3",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "36da74a2-e4f3-4367-d916-afc62bb96977",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "462815f9-eabe-c981-eaf6-c286308ce02d",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "5dd1b99f-8dd6-761f-c7aa-a1760f1b7ffd",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "8d3ceb69-fa90-3c54-96ff-1af643bca44a",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "96f2eed0-0465-a69c-fd19-3b27d86c60cd",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "9c194a24-93ab-8045-7a0e-cad36d335812",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    },
+    {
+      "id": "a0d1e587-f709-c2ec-89a4-0438ab82e857",
+      "job_version": 67,
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "client_status": "running",
+      "healthy": true,
+      "restarts": 0
+    }
+  ]
+}

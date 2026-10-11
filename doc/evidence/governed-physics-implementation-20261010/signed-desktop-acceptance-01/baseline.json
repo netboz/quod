@@ -1,0 +1,76 @@
+{
+  "captured_at": "2026-10-11T00:09:53.126508+00:00",
+  "root": "07D3A165757A429C29FC2345A31195B5AB512E93CDFF0359D7ABD1D712BAC7D0",
+  "origin": "https://192.168.1.10:27972",
+  "public_node_metadata": [
+    {
+      "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+      "role": "validator",
+      "committee_id": "be8fb4b4bbb921a4db37c35e6f030a77246988d42f00abfe9683264bdc659b97",
+      "committee": [
+        {
+          "id": "kp_71ca2c0d",
+          "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+        }
+      ],
+      "applied": 4,
+      "syncing": false,
+      "genesis": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3",
+      "protocol_era": "60374de4fe5833ab531c5d5a820ccf24a474a4819e16e869472a8522432465a8",
+      "height": 4,
+      "protocol_view": 4,
+      "proposal_slot": 4,
+      "notarized_view": 3,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_71ca2c0d",
+        "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+      },
+      "view_leader": {
+        "id": "kp_71ca2c0d",
+        "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+      }
+    },
+    {
+      "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+      "role": "validator",
+      "committee_id": "f68a9ca925cbd089c5658dc11c4b4861cb08301c5ec2fcbeceebaecafb85b7a8",
+      "committee": [
+        {
+          "id": "kp_71ca2c0d",
+          "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "82ee4cf1cd1a9605415a34c49a8d6a4f663b9ca96786a60afea0b4b0030d613b",
+      "protocol_era": "7f1adacc88f46cdc44b021d033fc99cafe227523f81bd64d94df531e493a8e31",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_71ca2c0d",
+        "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+      },
+      "view_leader": {
+        "id": "kp_71ca2c0d",
+        "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+      }
+    }
+  ],
+  "signed_user_observation": {
+    "query": "current_ontology_identity(Namespace, Anchor), findall(Class, space_instance(personal_lobby, Class), Classes), findall(ontology_ref(R,A), rendering_vocabulary(R,A), Rendering).",
+    "namespace": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+    "classes": [],
+    "rendering": [],
+    "displayed_provisional_origin_height": 4,
+    "view_status": "Physics unavailable. Body travel paused.",
+    "console_enabled": false
+  },
+  "agent_mutations": 0,
+  "personal_world_change_not_yet_submitted": true
+}

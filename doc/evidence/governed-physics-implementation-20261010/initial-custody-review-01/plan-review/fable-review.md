@@ -1,0 +1,30 @@
+I've finished tracing the plan against the vault, agent predicates, runtime selector, Prolog policy files and the fixtures. Writing up the verdict now.
+
+**Verdict: blocking corrections before implementation.** The design is sound (read-only bridge, shared Prolog eligibility, epoch-zero slot, no new owner), but the plan omits two obligations that would break production or weaken the authorization claim as written.
+
+## Blocking corrections
+
+1. **Live-source migration of the arity break is missing.** Founded ontologies carry their own copies of the `agent_instance.pl` and `agent_recovery_policy.pl` clauses. After deploy, the runtime selector at `tree/src/quod_runtime.erl:2817-2818` will query the five-argument policy on every hosting ontology, and any live ontology still holding the four-argument rule fails closed with `preparation_not_authorized` (line 2820), so recovery preparation stops there until its source is edited. The plan must enumerate the live ontologies composing these files, state that the per-predicate editor pass replacing `can_prepare_agent_key/4`, the shared absence helper and the amended `initialize_agent_host` action (`tree/priv/ontologies/agent_instance.pl:34-41`) precedes the activation transaction, and acknowledge the recovery gap between release and edit. "No compatibility clause" is right, but it makes this sequencing mandatory.
+
+2. **The policy evaluation context is underspecified and the cited pattern does not do what the plan says.** `sign_agent_request` evaluates its policy in the session's own proof context (`tree/src/predicates/quod_agent_predicates.erl:108-110`), not with governed calls disabled. Under `policy_verdict` every query bridge is refused (`tree/src/quod_predicates.erl:404`), so `current_principal` cannot run there, and `policy_verdict_context/2` carries no chain (lines 455-457), so any grant rule using `current_ontology_identity` fails via `scope_identity` (`tree/src/predicates/quod_runtime_predicates.erl:68-74`). The plan must specify: bind Caller via the principal bridge in the proof context, then re-prove the pure helper with Caller bound under `policy_verdict_context` plus `with_chain` on a read-only wrapped state with read-set cleanup, as `reprove_authorization` does (`tree/src/predicates/quod_ask.erl:1682-1699`). Also state that scope, anchor, destination and unbound-Key checks run before that re-proof.
+
+## Confirmed sound, with notes
+
+- **Read-only semantics.** `read_only_state/1` identifies a session founded read-only independent of frames (`tree/src/quod_proof_session.erl:336-342`); action prerequisites, reactions and verdicts are excluded by context class. Register the bridge as a plain `query` so its live-observation dependency is recorded (`tree/src/quod_predicates.erl:377-380`).
+- **No duplicate lifecycle.** Both entry paths end in `quod_agent_vault:prepare`; the vault stays sole key owner. Replace the selector goal at `quod_runtime.erl:2817-2818` with exactly the shared helper call, not a second conjunction. Keep `valid_resource_scope` (line 2711) and the reaction descriptor guard (`quod_runtime_predicates.erl:173`) positive-only.
+- **Epoch zero.** `prepare_key` already implements stable slot, preserve-old, stale-refuse (`tree/src/quod_agent_vault.erl:266-278`); only the guards at lines 53 and 135 and the spec change. An epoch-zero key prepared on a node that loses the initialization race remains an orphan alias forever, since `delete/2` needs a public key no fact references. Acceptable, but say so.
+- **Generate removal.** Only tests call it (`quod_agent_vault.erl:35-37,123-133`). Fixture mapping: first key becomes `prepare(Blob, 0)`, replacements become `prepare(Blob, OldEpoch)`; `quod_physics_tests.erl:2145` uses epoch 1 and line 2155 uses epoch 3.
+- **Durability.** The unchanged-sync is at `quod_agent_vault.erl:298-302`. The startup sync must cover the `eexist` branch of `private_directory` (lines 112-116), which syncs nothing today, and boot must fail on sync error. `delete_file` syncs on `enoent` (line 324); that is repair, keep it but note it.
+- **Provenance.** `valid_manifest` checks names only and the digest is unused except for shape (`tree/src/quod_predicates.erl:155-178,196-198`). The claim holds. Whether the live personal-world manifest names `quod_agent_predicates` is live evidence, not verified here.
+- **Staging.** Grants and inert helper clauses are preconditions, key preparation is read-only, and the state transition is one transaction. Legitimate, provided stage one never asserts `physics_space(W, enabled, I)` or `space_instance(W, physical_space)`: `agent_hosting_suspended` (`tree/priv/ontologies/quod_physics.pl:5`) bites as soon as a space row exists without full enablement (lines 9-13). The plan should list the pre-published predicates and name the ontology receiving the grants.
+
+## Test obligations
+
+- `quod_agent_vault_tests.erl:62` asserts epoch 0 invalid; change to a negative epoch. Line 25 assumes one file after `generate`; the slot plus alias makes two.
+- Five-argument policy in `quod_agent_custody_tests.erl:110`, `quod_agent_hosting_tests.erl:1031`, `quod_agent_actions_tests.erl:524`, plus `agent_recovery_policy.pl:18,98`.
+- New failure-before coverage per the plan, through signed ingress as in `quod_agent_vault_tests.erl:203-275`: write session, staged grant, foreign scope, wrong destination, bound Key, stale epoch, deadline, policy error yields `invalid` not `denied`.
+- Vault write/sync trace proving an unchanged repeat performs no link, rename or sync, a real epoch advance does, alias-only crash image recovers, and a forced sync failure sets and then clears the uncertainty flag.
+- Concurrent initialization from two destinations with one commit; revocation between preparation and assignment invalidating the write.
+- Document the bridge in the `quod_agent_predicates` and `quod_agent_vault` module docs (vault line 7 names only the signing bridge) and in `doc/runtime-and-agents.md` §Identity and hosting.
+
+Nothing ran and no deployment is approved; implementation review follows once the two corrections are in the plan.

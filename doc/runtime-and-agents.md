@@ -45,6 +45,25 @@ belongs to `quod_agent_vault`, not to the actor process. Host recovery and
 pending work converge from committed ontology facts and exact operation
 references; neither needs a private Prolog KB or a message ledger.
 
+`prepare_agent_key_custody(AgentRef, OldHost, OldEpoch, Destination, Key)`
+prepares a public key through an ordinary signed read in the agent's exact
+containing ontology. The destination must be the executing node's anchored
+agent. The pure Prolog policy
+`can_prepare_agent_key(Caller, Instance, OldHost, OldEpoch, Destination)`
+authorizes preparation against that session's committed snapshot. Staged
+permissions and external calls inside the policy cannot grant access.
+
+First preparation uses `none, 0` and requires no existing host or key rows.
+Recovery uses the exact positive prior assignment. Both reuse one encrypted
+vault slot: repeating an unchanged request returns the same key without disk
+writes or syncs, including after restart. Real changes retain directory
+durability; an interrupted mutation must be synchronized before success.
+Preparation neither assigns a host nor activates a key. Initial assignment
+still uses the existing authorized action and can commit atomically with its
+domain configuration. A lost assignment race may leave inert encrypted custody;
+it grants no authority and is not automatically deleted during an uncertain
+operation.
+
 The bundled internal FIPA Request rules in `priv/ontologies/fipa_request.pl`
 use two ordinary atomic transitions: the initiator's waiting state and
 receiver's pending state commit together; later the receiver's domain goal

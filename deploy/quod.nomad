@@ -129,6 +129,30 @@ variable "bootstrap" {
   description = "Found a fresh fleet: with an EMPTY genesis_hash this forces count=1 and mode=create. Ignored (join) whenever genesis_hash is set. Never use on an anchored fleet."
 }
 
+locals {
+  # Operator provisioning only: agent key creation and use remain governed.
+  # Keep the unlock file outside the vault; never replace existing custody.
+  agent_vault_init = <<-SCRIPT
+set -eu
+umask 077
+mkdir -p "$QUOD_DATA_DIR"
+vault_key="$QUOD_DATA_DIR/agent-vault.unlock"
+if [ ! -e "$vault_key" ] && [ ! -L "$vault_key" ]; then
+  vault_tmp=$(mktemp "$vault_key.XXXXXX")
+  trap 'rm -f "$vault_tmp"' EXIT
+  openssl rand -out "$vault_tmp" 32
+  sync "$vault_tmp"
+  ln "$vault_tmp" "$vault_key"
+  rm "$vault_tmp"
+  trap - EXIT
+fi
+test ! -L "$vault_key"
+test -f "$vault_key"
+test "$(stat -c '%a:%s' "$vault_key")" = '600:32'
+sync "$vault_key" "$QUOD_DATA_DIR"
+SCRIPT
+}
+
 # One homogeneous fleet, one durable volume family, one rolling-update domain.
 #
 # Fresh bootstrap (the ONLY destructive action — gated on the explicit `-var bootstrap=true`):
@@ -257,6 +281,30 @@ EOT
       }
     }
 
+    task "prepare-agent-vault" {
+      driver = "docker"
+      lifecycle {
+        hook    = "prestart"
+        sidecar = false
+      }
+      env { QUOD_DATA_DIR = "/quod/data" }
+      config {
+        image      = "${var.image_registry}/quod:${var.image_tag}"
+        force_pull = true
+        entrypoint = ["/bin/sh", "-c"]
+        args       = [local.agent_vault_init]
+      }
+      volume_mount {
+        volume      = "quod-data"
+        destination = "/quod/data"
+        read_only   = false
+      }
+      resources {
+        cpu    = 100
+        memory = 32
+      }
+    }
+
     task "quod" {
       driver = "docker"
 
@@ -281,6 +329,11 @@ node {
   consensus_owner_tracing = ${var.consensus_owner_tracing}
 }
 metrics { port = 14568 }
+agent_vault {
+  enabled = true
+  directory = "/quod/data/agent-keys"
+  unlock_file = "/quod/data/agent-vault.unlock"
+}
 # The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet
 # opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This
 # is a private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
@@ -528,6 +581,30 @@ EOT
       }
     }
 
+    task "prepare-agent-vault" {
+      driver = "docker"
+      lifecycle {
+        hook    = "prestart"
+        sidecar = false
+      }
+      env { QUOD_DATA_DIR = "/quod/data/${NOMAD_ALLOC_INDEX}" }
+      config {
+        image      = "${var.image_registry}/quod:${var.image_tag}"
+        force_pull = true
+        entrypoint = ["/bin/sh", "-c"]
+        args       = [local.agent_vault_init]
+      }
+      volume_mount {
+        volume      = "quod-data"
+        destination = "/quod/data"
+        read_only   = false
+      }
+      resources {
+        cpu    = 100
+        memory = 32
+      }
+    }
+
     task "quod" {
       driver = "docker"
 
@@ -552,6 +629,11 @@ node {
   consensus_owner_tracing = ${var.consensus_owner_tracing}
 }
 metrics { port = 14568 }
+agent_vault {
+  enabled = true
+  directory = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}/agent-keys"
+  unlock_file = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}/agent-vault.unlock"
+}
 # Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public
 # interface is firewalled, so 0.0.0.0 here never faces the internet.
 explorer {

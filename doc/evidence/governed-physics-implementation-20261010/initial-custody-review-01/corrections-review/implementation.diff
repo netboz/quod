@@ -1,0 +1,1530 @@
+diff --git a/deploy/quod.nomad b/deploy/quod.nomad
+index 4220933..c02c904 100644
+--- a/deploy/quod.nomad
++++ b/deploy/quod.nomad
+@@ -129,6 +129,30 @@ variable "bootstrap" {
+   description = "Found a fresh fleet: with an EMPTY genesis_hash this forces count=1 and mode=create. Ignored (join) whenever genesis_hash is set. Never use on an anchored fleet."
+ }
+ 
++locals {
++  # Operator provisioning only: agent key creation and use remain governed.
++  # Keep the unlock file outside the vault; never replace existing custody.
++  agent_vault_init = <<-SCRIPT
++set -eu
++umask 077
++mkdir -p "$QUOD_DATA_DIR"
++vault_key="$QUOD_DATA_DIR/agent-vault.unlock"
++if [ ! -e "$vault_key" ] && [ ! -L "$vault_key" ]; then
++  vault_tmp=$(mktemp "$vault_key.XXXXXX")
++  trap 'rm -f "$vault_tmp"' EXIT
++  openssl rand -out "$vault_tmp" 32
++  sync "$vault_tmp"
++  ln "$vault_tmp" "$vault_key"
++  rm "$vault_tmp"
++  trap - EXIT
++fi
++test ! -L "$vault_key"
++test -f "$vault_key"
++test "$(stat -c '%a:%s' "$vault_key")" = '600:32'
++sync "$vault_key" "$QUOD_DATA_DIR"
++SCRIPT
++}
++
+ # One homogeneous fleet, one durable volume family, one rolling-update domain.
+ #
+ # Fresh bootstrap (the ONLY destructive action — gated on the explicit `-var bootstrap=true`):
+@@ -257,6 +281,30 @@ EOT
+       }
+     }
+ 
++    task "prepare-agent-vault" {
++      driver = "docker"
++      lifecycle {
++        hook    = "prestart"
++        sidecar = false
++      }
++      env { QUOD_DATA_DIR = "/quod/data" }
++      config {
++        image      = "${var.image_registry}/quod:${var.image_tag}"
++        force_pull = true
++        entrypoint = ["/bin/sh", "-c"]
++        args       = [local.agent_vault_init]
++      }
++      volume_mount {
++        volume      = "quod-data"
++        destination = "/quod/data"
++        read_only   = false
++      }
++      resources {
++        cpu    = 100
++        memory = 32
++      }
++    }
++
+     task "quod" {
+       driver = "docker"
+ 
+@@ -281,6 +329,11 @@ node {
+   consensus_owner_tracing = ${var.consensus_owner_tracing}
+ }
+ metrics { port = 14568 }
++agent_vault {
++  enabled = true
++  directory = "/quod/data/agent-keys"
++  unlock_file = "/quod/data/agent-vault.unlock"
++}
+ # The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet
+ # opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This
+ # is a private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
+@@ -528,6 +581,30 @@ EOT
+       }
+     }
+ 
++    task "prepare-agent-vault" {
++      driver = "docker"
++      lifecycle {
++        hook    = "prestart"
++        sidecar = false
++      }
++      env { QUOD_DATA_DIR = "/quod/data/${NOMAD_ALLOC_INDEX}" }
++      config {
++        image      = "${var.image_registry}/quod:${var.image_tag}"
++        force_pull = true
++        entrypoint = ["/bin/sh", "-c"]
++        args       = [local.agent_vault_init]
++      }
++      volume_mount {
++        volume      = "quod-data"
++        destination = "/quod/data"
++        read_only   = false
++      }
++      resources {
++        cpu    = 100
++        memory = 32
++      }
++    }
++
+     task "quod" {
+       driver = "docker"
+ 
+@@ -552,6 +629,11 @@ node {
+   consensus_owner_tracing = ${var.consensus_owner_tracing}
+ }
+ metrics { port = 14568 }
++agent_vault {
++  enabled = true
++  directory = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}/agent-keys"
++  unlock_file = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}/agent-vault.unlock"
++}
+ # Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public
+ # interface is firewalled, so 0.0.0.0 here never faces the internet.
+ explorer {
+diff --git a/doc/runtime-and-agents.md b/doc/runtime-and-agents.md
+index 03f1948..730e4b7 100644
+--- a/doc/runtime-and-agents.md
++++ b/doc/runtime-and-agents.md
+@@ -45,6 +45,25 @@ belongs to `quod_agent_vault`, not to the actor process. Host recovery and
+ pending work converge from committed ontology facts and exact operation
+ references; neither needs a private Prolog KB or a message ledger.
+ 
++`prepare_agent_key_custody(AgentRef, OldHost, OldEpoch, Destination, Key)`
++prepares a public key through an ordinary signed read in the agent's exact
++containing ontology. The destination must be the executing node's anchored
++agent. The pure Prolog policy
++`can_prepare_agent_key(Caller, Instance, OldHost, OldEpoch, Destination)`
++authorizes preparation against that session's committed snapshot. Staged
++permissions and external calls inside the policy cannot grant access.
++
++First preparation uses `none, 0` and requires no existing host or key rows.
++Recovery uses the exact positive prior assignment. Both reuse one encrypted
++vault slot: repeating an unchanged request returns the same key without disk
++writes or syncs, including after restart. Real changes retain directory
++durability; an interrupted mutation must be synchronized before success.
++Preparation neither assigns a host nor activates a key. Initial assignment
++still uses the existing authorized action and can commit atomically with its
++domain configuration. A lost assignment race may leave inert encrypted custody;
++it grants no authority and is not automatically deleted during an uncertain
++operation.
++
+ The bundled internal FIPA Request rules in `priv/ontologies/fipa_request.pl`
+ use two ordinary atomic transitions: the initiator's waiting state and
+ receiver's pending state commit together; later the receiver's domain goal
+diff --git a/native/quod_physics/src/motion.rs b/native/quod_physics/src/motion.rs
+index fea5d42..a6455a2 100644
+--- a/native/quod_physics/src/motion.rs
++++ b/native/quod_physics/src/motion.rs
+@@ -325,6 +325,27 @@ mod tests {
+         assert!(p.1 > 1.01,"slope missed: {p:?}");
+     }
+ 
++    #[test]
++    fn explicit_surface_opening_remains_passable_with_solid_rim() {
++        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
++        let floor = (2,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
++            Geometry::Surface(
++                vec![(-5.0,0.0,-5.0),(5.0,0.0,-5.0),(5.0,0.0,5.0),(-5.0,0.0,5.0),
++                     (-1.0,0.0,-1.0),(1.0,0.0,-1.0),(1.0,0.0,1.0),(-1.0,0.0,1.0)],
++                vec![(0,4,1),(1,4,5),(1,5,2),(2,5,6),
++                     (2,6,3),(3,6,7),(3,7,0),(0,7,4)]),1.0);
++        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor]).unwrap();
++        world.step().unwrap();
++        assert!(matches!(travel(&world,(0.0,-6.0,0.0)),Answer::Clear(_,_)));
++        let moved = apply(&mut world,1,1,Query::Place(((3.0,3.0,0.0),(0.0,0.0,0.0))),LIMITS);
++        assert!(matches!(moved,Answer::Clear(_,_)));
++        world.step().unwrap();
++        let answer = travel(&world,(0.0,-6.0,0.0));
++        assert!(matches!(answer,Answer::Clipped(_,_,_)),"rim missed: {answer:?}");
++        let p = end(answer);
++        assert!(p.1 >= 1.0 && p.1 < 1.01,"rim contact: {p:?}");
++    }
++
+     #[test]
+     fn movement_stops_before_dynamic_objects_without_pushing_them() {
+         let mut world = world(vec![box_at(3,Kind::Dynamic,(2.0,1.002,0.0),(0.5,1.0,0.5))]);
+diff --git a/priv/ontologies/agent_instance.pl b/priv/ontologies/agent_instance.pl
+index ff81119..2ad98c9 100644
+--- a/priv/ontologies/agent_instance.pl
++++ b/priv/ontologies/agent_instance.pl
+@@ -31,11 +31,22 @@ agent_hosting_instances(all, Node, Instances) :-
+ agent_work_after(start, _).
+ agent_work_after(after(Previous), Key) :- Key @> Previous.
+ 
++%% First custody and recovery use the same exact prior-assignment policy.
++%% Preparing a key grants neither an assignment nor signing authority.
++agent_preparation_assignment(Instance, none, 0) :-
++    \+ agent_host(Instance, _, _, _), \+ agent_key(Instance, _, _).
++agent_preparation_assignment(Instance, Host, Epoch) :-
++    integer(Epoch), Epoch > 0,
++    agent_hosted(Instance, Host, Epoch, _).
++
++agent_key_preparation(Caller, Instance, OldHost, OldEpoch, Destination) :-
++    agent_preparation_assignment(Instance, OldHost, OldEpoch),
++    can_prepare_agent_key(Caller, Instance, OldHost, OldEpoch, Destination).
++
+ action(initialize_agent_host(Instance, NodeRef, PublicKey),
+        [current_principal(Administrator),
+         can_assign_agent_host(Administrator, Instance, none, 0, NodeRef, PublicKey),
+-        \+ agent_host(Instance, _, _, _),
+-        \+ agent_key(Instance, _, _),
++        agent_preparation_assignment(Instance, none, 0),
+         term_variables(Instance, []), term_variables(NodeRef, []),
+         agent_identifier(PublicKey)],
+        agent_hosted(Instance, NodeRef, 1, PublicKey)).
+@@ -114,9 +125,9 @@ resolve_agent_recovery(Instance, NodeRef, Epoch, Round) :-
+ %% assignment. Private keys remain in that node's vault, never in ontology facts.
+ action(prepare_agent_key(Instance, OldNode, OldEpoch, NodeRef, PublicKey),
+        [current_principal(NodeRef),
+-        can_prepare_agent_key(NodeRef, Instance, OldNode, OldEpoch),
+         term_variables(old(OldNode, OldEpoch), []),
+-        agent_hosted(Instance, OldNode, OldEpoch, _),
++        integer(OldEpoch), OldEpoch > 0,
++        agent_key_preparation(NodeRef, Instance, OldNode, OldEpoch, NodeRef),
+         agent_identifier(PublicKey),
+         \+ agent_key(Instance, PublicKey, _),
+         \+ agent_candidate_key(Instance, OldNode, OldEpoch, NodeRef, _)],
+diff --git a/priv/ontologies/agent_recovery_policy.pl b/priv/ontologies/agent_recovery_policy.pl
+index f26a429..799629a 100644
+--- a/priv/ontologies/agent_recovery_policy.pl
++++ b/priv/ontologies/agent_recovery_policy.pl
+@@ -15,8 +15,8 @@ agent_remote_observation_kind(suspected_unreachable).
+ agent_remote_observation_kind(reachable).
+ agent_remote_observation_kind(withdrawing).
+ 
+-can_prepare_agent_key(Destination, Instance, OldHost, Epoch) :-
+-    agent_hosted(Instance, OldHost, Epoch, _),
++can_prepare_agent_key(Destination, Instance, OldHost, Epoch, Destination) :-
++    integer(Epoch), Epoch > 0,
+     eligible_agent_host(Instance, Destination),
+     Destination \= OldHost.
+ 
+@@ -95,7 +95,7 @@ agent_recovery_data(Observer, I, Host, Epoch, Expected, Round, Kind,
+     agent_observation_expiry(I, Host, Epoch, Round, Observer, Kind,
+                              ObservedAt, Maximum, Expiry),
+     (Kind = suspected_unreachable,
+-     can_prepare_agent_key(Observer, I, Host, Epoch),
++     agent_key_preparation(Observer, I, Host, Epoch, Observer),
+      \+ agent_candidate_key(I, Host, Epoch, Observer, _) -> Preparation = required
+     ; agent_failure_report(I, Host, Epoch, Round, Observer,
+                            observation(_, _, ReportExpiry), Kind),
+diff --git a/src/predicates/quod_agent_predicates.erl b/src/predicates/quod_agent_predicates.erl
+index 9be2fbf..fa71db6 100644
+--- a/src/predicates/quod_agent_predicates.erl
++++ b/src/predicates/quod_agent_predicates.erl
+@@ -6,13 +6,17 @@ ontology explicitly declares this installed module; domain actions and policy re
+ `current_principal(-Principal)` reuses the authenticated-principal bridge.
+ Request signing uses the universal runtime bridge's exact proof scope; it
+ does not obtain identity from a live node observation.
++
++Key preparation is an explicitly authorized read-only service over that same
++scope. It retains stable encrypted custody without assigning or activating an
++agent. The destination is explicit and its preparation policy is pure Prolog.
+ """.
+ 
+ -include_lib("erlog/src/erlog_int.hrl").
+ 
+ -export([quod_predicate_module/0, load/1,
+          sign_agent_request/3, reconcile_agent_hosts/3, reconcile_agent_observers/3,
+-         local_node_agent/3]).
++         local_node_agent/3, prepare_agent_key_custody/3]).
+ 
+ quod_predicate_module() -> true.
+ 
+@@ -23,7 +27,9 @@ load(Est) ->
+                       quod_ontology_predicates, current_principal_predicate),
+     WithLocalNode = quod_predicates:register(WithPrincipal, {local_node_agent, 1}, query,
+                                              ?MODULE, local_node_agent),
+-    WithSigning = quod_predicates:register(WithLocalNode, {sign_agent_request, 2}, query,
++    WithCustody = quod_predicates:register(WithLocalNode, {prepare_agent_key_custody, 5}, query,
++                                           ?MODULE, prepare_agent_key_custody),
++    WithSigning = quod_predicates:register(WithCustody, {sign_agent_request, 2}, query,
+                                            ?MODULE, sign_agent_request),
+     WithHosting = quod_predicates:register(WithSigning, {reconcile_agent_hosts, 1}, query,
+                                             ?MODULE, reconcile_agent_hosts),
+@@ -33,9 +39,8 @@ load(Est) ->
+ -doc "Observe the installed local node identity; this is not committed proof authority.".
+ -spec local_node_agent(term(), term(), tuple()) -> term().
+ local_node_agent({local_node_agent, Node}, Next, St) ->
+-    case quod_node_actor:principal() of
+-        {ok, Principal} ->
+-            {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
++    case quod_node_actor:reference() of
++        {ok, NodeRef} ->
+             erlog_int:unify_prove_body(Node, NodeRef, Next, St);
+         _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+     end.
+@@ -47,6 +52,89 @@ reconcile_agent_hosts({reconcile_agent_hosts, Scope}, Next, St) ->
+ reconcile_agent_observers({reconcile_agent_observers, Scope}, Next, St) ->
+     quod_runtime_predicates:request_resource(agent_observers, Scope, Next, St).
+ 
++-doc "Prepare stable custody for an exact prior assignment, including none/0.".
++prepare_agent_key_custody({prepare_agent_key_custody, A0, H0, E0, N0, K0}, Next,
++                          St = #est{bs = Bs}) ->
++    Context = quod_predicates:context(St),
++    case quod_predicates:ctx_kind(Context) of
++        proof -> ok;
++        Kind -> erlog_int:erlog_error(
++            {context_violation, prepare_agent_key_custody, query, Kind}, St)
++    end,
++    case quod_proof_session:read_only_state(St) of
++        true -> ok;
++        false -> erlog_int:erlog_error(
++            {context_violation, prepare_agent_key_custody, query, write_proof}, St)
++    end,
++    [Agent, Host, Epoch, Node, Key] = erlog_int:dderef([A0,H0,E0,N0,K0], Bs),
++    case quod_wire_term:is_ground([Agent,Host,Epoch,Node]) of
++        true -> ok;
++        false -> erlog_int:instantiation_error(St)
++    end,
++    case {Agent, Epoch, Key} of
++        {{agent_instance_ref, Ns, <<_:256>> = Anchor, Instance}, E, {_}}
++          when is_binary(Ns), byte_size(Ns) > 0, is_integer(E), E >= 0, E < (1 bsl 64) ->
++            case quod_runtime_predicates:scope_identity(St) of
++                {ok, {Ns, Anchor}} ->
++                    case local_destination(Node) of
++                        true -> authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St);
++                        false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
++                    end;
++                _ -> erlog_int:erlog_error(
++                    {context_violation, prepare_agent_key_custody, query, foreign_scope}, St)
++            end;
++        _ -> erlog_int:domain_error(agent_key_preparation, {Agent,Host,Epoch,Node,Key}, St)
++    end.
++
++local_destination(Node) ->
++    quod_node_actor:reference() =:= {ok, Node}.
++
++authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = Vn}) ->
++    Blob = case quod_wire_term:encode_canonical(Agent) of
++        {ok, Encoded} ->
++            case quod_agent_ref:decode(Encoded) of
++                {ok, _} -> Encoded;
++                _ -> erlog_int:domain_error(agent_reference, Agent, St)
++            end;
++        _ -> erlog_int:domain_error(agent_reference, Agent, St)
++    end,
++    {succeed, PrincipalState} = erlog_int:prove_goal({current_principal, {Vn}}, St),
++    Caller = erlog_int:dderef({Vn}, PrincipalState#est.bs),
++    Policy = {agent_key_preparation, Caller, Instance, Host, Epoch, Node},
++    case custody_policy(Policy, St) of
++        allowed ->
++            Deadline = case quod_scope_session:remaining_ms() of
++                {ok, Remaining} -> quod_time:mono_ms() + Remaining;
++                error -> quod_proof_context:deadline_ms()
++            end,
++            case quod_agent_vault:prepare(Blob, Epoch, Deadline) of
++                {ok, PublicKey} ->
++                    %% The installed destination may have withdrawn while the
++                    %% vault was busy. Its staged key remains inert and reusable.
++                    case local_destination(Node) of
++                        true -> erlog_int:unify_prove_body(Key, PublicKey, Next, St);
++                        false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
++                    end;
++                {error, Reason} -> quod_predicates:fail_reason({agent_custody_unavailable, Reason}, St)
++            end;
++        denied -> erlog_int:fail(St);
++        invalid -> erlog_int:erlog_error(invalid_custody_policy, St)
++    end.
++
++custody_policy(Policy, St) ->
++    Context = quod_predicates:context(St),
++    Strict = quod_predicates:with_chain(quod_predicates:policy_verdict_context(
++        quod_predicates:ctx_ns(Context), quod_predicates:ctx_height(Context)),
++        quod_predicates:ctx_chain(Context)),
++    Committed = quod_predicates:set_context(quod_erlog_db_local_prove:committed_state(St), Strict),
++    Wrapped = #est{db = #db{ref = Overlay}} = quod_erlog_db_local_prove:wrap_state(Committed,
++        #{read_only => true, read_set => true, access_guard => quod_erlog_db_local_prove:access_guard(St)}),
++    try quod_ask:authorization_result(Policy, Wrapped)
++    after
++        try quod_erlog_db_local_prove:absorb_read_set(St, quod_erlog_db_local_prove:get_read_set(Overlay))
++        after quod_erlog_db_local_prove:cleanup_read_set(Wrapped) end
++    end.
++
+ -doc "Authorize one canonical request in a committed read-only session before releasing its signature.".
+ -spec sign_agent_request(term(), term(), tuple()) -> term().
+ sign_agent_request({sign_agent_request, Typed0, Signature}, Next, #est{bs = Bs} = St) ->
+diff --git a/src/quod_agent.erl b/src/quod_agent.erl
+index 1aa9e23..d51eec3 100644
+--- a/src/quod_agent.erl
++++ b/src/quod_agent.erl
+@@ -196,11 +196,8 @@ prepare_custody(Ns, {agent_instance_ref, Ns, _, _} = AgentRef,
+     end.
+ 
+ current_node(NodeRef, Key) ->
+-    case {quod_node_actor:principal(), application:get_env(quod, node_pubkey)} of
+-        {{ok, Principal}, {ok, Key}} ->
+-            quod_agent_ref:materialize_principal(Principal) =:= {ok, NodeRef};
+-        _ -> false
+-    end.
++    quod_node_actor:reference() =:= {ok, NodeRef} andalso
++    application:get_env(quod, node_pubkey) =:= {ok, Key}.
+ 
+ invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
+     quod_client_goal_ingress:resolve_operation(Bytes, Signature);
+diff --git a/src/quod_agent_vault.erl b/src/quod_agent_vault.erl
+index f9e57ca..488eea6 100644
+--- a/src/quod_agent_vault.erl
++++ b/src/quod_agent_vault.erl
+@@ -4,7 +4,7 @@ Node-local encrypted custody for ontology-backed agent keys.
+ 
+ The containing ontology owns assignments and active/revoked key state. This
+ service owns only secret files, bound to the network, exact agent reference and
+-public key. Its in-VM API is a trusted backend for the governed signing bridge;
++public key. Its in-VM API backs governed key preparation and signing;
+ it is not a public permission boundary. Requests use the existing signed-goal
+ schema and encoder. No arbitrary-byte signing operation exists.
+ 
+@@ -16,10 +16,11 @@ prevents accidental diagnostic disclosure, not inspection by code inside the VM.
+ 
+ -include_lib("kernel/include/file.hrl").
+ 
+--export([start_link/0, start_link/1, generate/1, prepare/2, prepare/3, sign/2, delete/2]).
++-export([start_link/0, start_link/1, prepare/2, prepare/3, sign/2, delete/2]).
+ -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, format_status/1]).
+ 
+--record(s, {directory :: file:filename(), unlock :: fun(() -> binary())}).
++-record(s, {directory :: file:filename(), unlock :: fun(() -> binary()),
++            sync_pending = false :: boolean()}).
+ -define(LISTENER, quod_agent_vault_listener).
+ -define(DOMAIN, <<"quod.agent.key.v2", 0>>).
+ 
+@@ -32,25 +33,22 @@ start_link() ->
+ -spec start_link(map()) -> gen_server:start_ret().
+ start_link(Config) -> gen_server:start_link(quod_reg:via({agent_vault, node}), ?MODULE, Config, []).
+ 
+--doc "Generate encrypted staged custody bound to one exact agent reference.".
+--spec generate(binary()) -> {ok, <<_:256>>} | {error, term()}.
+-generate(AgentRef) -> call({generate, AgentRef}).
+-
+ -doc """
+-Prepare stable custody for the next assignment after `ExpectedEpoch`.
++Prepare stable custody for the next assignment after `ExpectedEpoch` (zero for
++the first assignment).
+ One atomic slot per agent retains the same random key across a lost reply or
+ vault restart. Advancing the slot preserves previously published custody;
+ requests for an older epoch fail. The governing caller must verify the exact
+ committed assignment and candidate promise before publishing the public key.
+ This is secret custody metadata, not a signed-request or outcome journal.
+ """.
+--spec prepare(binary(), pos_integer()) -> {ok, <<_:256>>} | {error, term()}.
++-spec prepare(binary(), non_neg_integer()) -> {ok, <<_:256>>} | {error, term()}.
+ prepare(AgentRef, Epoch) -> prepare(AgentRef, Epoch, quod_time:mono_ms() + 5000).
+ 
+ -doc "Prepare within the caller's original absolute monotonic deadline.".
+--spec prepare(binary(), pos_integer(), integer()) -> {ok, <<_:256>>} | {error, term()}.
++-spec prepare(binary(), non_neg_integer(), integer()) -> {ok, <<_:256>>} | {error, term()}.
+ prepare(AgentRef, Epoch, Deadline)
+-  when is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
++  when is_integer(Epoch), Epoch >= 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
+     call({prepare, AgentRef, Epoch, Deadline}, Deadline);
+ prepare(_, _, _) -> {error, invalid_preparation_epoch}.
+ 
+@@ -112,7 +110,7 @@ private_directory(Dir) ->
+                 {error, eexist} ->
+                     case file:read_file_info(Dir) of
+                         {ok, #file_info{type = directory, mode = Mode}}
+-                          when Mode band 8#077 =:= 0 -> ok;
++                          when Mode band 8#077 =:= 0 -> quod_file:sync_dir(Dir);
+                         _ -> {error, insecure_vault_directory}
+                     end;
+                 {error, _} = Error -> Error
+@@ -120,34 +118,29 @@ private_directory(Dir) ->
+         {error, _} = Error -> Error
+     end.
+ 
+-handle_call({generate, AgentRef}, _From, S) ->
+-    Result = secret_operation(fun() -> case identity(AgentRef) of
+-        {ok, Network} ->
+-            {Pub, Bytes} = encrypted_key(Network, AgentRef, 0, S),
+-            case quod_file:write_atomic(path(binding(Network, AgentRef, Pub), S), Bytes, 8#600) of
+-                ok -> {ok, Pub};
+-                {error, _} -> {error, vault_storage_unavailable}
+-            end;
+-        {error, _} = Error -> Error
+-    end end),
+-    {reply, Result, S};
+ handle_call({prepare, AgentRef, Epoch, Deadline}, _From, S)
+-  when is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
+-    Result = within_deadline(Deadline, fun() ->
+-        secret_operation(fun() ->
+-            case identity(AgentRef) of
+-                {ok, Network} -> prepare_key(Network, AgentRef, Epoch, S);
+-                {error, _} = Error -> Error
+-            end
+-        end)
+-    end),
+-    {reply, Result, S};
++  when is_integer(Epoch), Epoch >= 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
++    case Deadline > quod_time:mono_ms() of
++        false -> {reply, {error, deadline_exceeded}, S};
++        true ->
++            {Result, Next} = custody_operation(S, fun() ->
++                case identity(AgentRef) of
++                    {ok, Network} -> prepare_key(Network, AgentRef, Epoch, S);
++                    {error, _} = Error -> Error
++                end
++            end),
++            Reply = case Deadline > quod_time:mono_ms() of
++                true -> Result;
++                false -> {error, deadline_exceeded}
++            end,
++            {reply, Reply, Next}
++    end;
+ handle_call({sign, Request, Deadline}, _From, S) ->
+     Result = within_deadline(Deadline,
+         fun() -> secret_operation(fun() -> sign_request(Request, S) end) end),
+     {reply, Result, S};
+ handle_call({delete, AgentRef, <<_:256>> = Pub}, _From, S) ->
+-    Result = secret_operation(fun() -> case identity(AgentRef) of
++    {Result, Next} = custody_operation(S, fun() -> case identity(AgentRef) of
+         {ok, Network} ->
+             case delete_preparation(Network, AgentRef, Pub, S) of
+                 ok -> delete_file(path(binding(Network, AgentRef, Pub), S));
+@@ -155,7 +148,7 @@ handle_call({delete, AgentRef, <<_:256>> = Pub}, _From, S) ->
+             end;
+         {error, _} = Error -> Error
+     end end),
+-    {reply, Result, S};
++    {reply, Result, Next};
+ handle_call(_Request, _From, S) -> {reply, {error, invalid_vault_request}, S}.
+ 
+ handle_cast(_Request, S) -> {noreply, S}.
+@@ -163,6 +156,30 @@ handle_info(_Info, S) -> {noreply, S}.
+ terminate(_Reason, _S) -> stop_provider().
+ format_status(Status) -> Status#{state => encrypted_custody}.
+ 
++%% Only a failed storage mutation can leave directory durability uncertain.
++%% Resolve it once; refusing an unchanged request cannot schedule an fsync.
++%% Startup also synchronizes the directory before accepting any requests.
++custody_operation(S, Fun) ->
++    Result = secret_operation(fun() ->
++        case S#s.sync_pending of
++            false -> Fun();
++            true -> case custody_mutation(fun() -> quod_file:sync_dir(S#s.directory) end) of
++                ok -> Fun();
++                Error -> Error
++            end
++        end
++    end),
++    case Result of
++        {uncertain_custody, Error} -> {Error, S#s{sync_pending = true}};
++        _ -> {Result, S#s{sync_pending = false}}
++    end.
++
++custody_mutation(Fun) ->
++    case secret_operation(Fun) of
++        ok -> ok;
++        {error, _} -> {uncertain_custody, {error, vault_storage_unavailable}}
++    end.
++
+ within_deadline(Deadline, Fun) ->
+     case Deadline > quod_time:mono_ms() of
+         false -> {error, deadline_exceeded};
+@@ -279,13 +296,13 @@ prepare_key(Network, AgentRef, Epoch, S) ->
+ 
+ new_preparation(Slot, Network, AgentRef, Epoch, S) ->
+     {Pub, Bytes} = encrypted_key(Network, AgentRef, Epoch, S),
+-    case quod_file:write_atomic(Slot, Bytes, 8#600) of
++    case custody_mutation(fun() -> quod_file:write_atomic(Slot, Bytes, 8#600) end) of
+         ok ->
+             case preserve_custody(Slot, path(binding(Network, AgentRef, Pub), S)) of
+                 ok -> {ok, Pub};
+                 Error -> Error
+             end;
+-        {error, _} -> {error, vault_storage_unavailable}
++        Error -> Error
+     end.
+ 
+ %% Both names reference one encrypted inode, not duplicate key records. The
+@@ -293,16 +310,16 @@ new_preparation(Slot, Network, AgentRef, Epoch, S) ->
+ %% custody when a later epoch atomically replaces the bounded slot. A crash
+ %% before this link is installed is repaired by the next explicit preparation.
+ preserve_custody(Slot, KeyPath) ->
+-    case file:make_link(Slot, KeyPath) of
+-        ok -> quod_file:sync_dir(filename:dirname(KeyPath));
+-        {error, eexist} ->
+-            case {file:read_file_info(Slot), file:read_file_info(KeyPath)} of
+-                {{ok, #file_info{inode = I, major_device = D}},
+-                 {ok, #file_info{inode = I, major_device = D}}} when I =/= 0 ->
+-                    quod_file:sync_dir(filename:dirname(KeyPath));
+-                _ -> {error, conflicting_vault_custody}
+-            end;
+-        {error, _} -> {error, vault_storage_unavailable}
++    case {file:read_file_info(Slot), file:read_file_info(KeyPath)} of
++        {{ok, #file_info{inode = I, major_device = D}},
++         {ok, #file_info{inode = I, major_device = D}}} when I =/= 0 -> ok;
++        {{ok, _}, {error, enoent}} ->
++            custody_mutation(fun() -> case file:make_link(Slot, KeyPath) of
++                ok -> quod_file:sync_dir(filename:dirname(KeyPath));
++                Error -> Error
++            end end);
++        {{ok, _}, {ok, _}} -> {error, conflicting_vault_custody};
++        _ -> {error, vault_storage_unavailable}
+     end.
+ 
+ preparation_path(Network, AgentRef, #s{directory = Dir}) ->
+@@ -319,11 +336,11 @@ delete_preparation(Network, AgentRef, Pub, S) ->
+     end.
+ 
+ delete_file(Path) ->
+-    case file:delete(Path) of
++    custody_mutation(fun() -> case file:delete(Path) of
+         ok -> quod_file:sync_dir(filename:dirname(Path));
+         {error, enoent} -> quod_file:sync_dir(filename:dirname(Path));
+-        {error, _} -> {error, vault_storage_unavailable}
+-    end.
++        Error -> Error
++    end end).
+ 
+ binding(Network, AgentRef, Pub) ->
+     <<?DOMAIN/binary, Network/binary, (crypto:hash(sha256, AgentRef))/binary, Pub/binary>>.
+diff --git a/src/quod_node_actor.erl b/src/quod_node_actor.erl
+index 8f6c900..b9dd669 100644
+--- a/src/quod_node_actor.erl
++++ b/src/quod_node_actor.erl
+@@ -9,7 +9,7 @@ through `quod_identity`, and verifies the resulting durable facts. It owns no pr
+ ACL evaluator, signer, route, or cache.
+ """.
+ 
+--export([reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
++-export([reference/0, reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
+          hosting_projection/5,
+          bootstrap/0, verify/2, enroll/0]).
+ -ifdef(TEST).
+@@ -60,6 +60,14 @@ principal() ->
+             {error, unavailable}
+     end.
+ 
++-doc "Return the exact reference of the currently verified local node actor.".
++-spec reference() -> {ok, term()} | {error, term()}.
++reference() ->
++    case principal() of
++        {ok, Principal} -> quod_agent_ref:materialize_principal(Principal);
++        Error -> Error
++    end.
++
+ -doc """
+ Construct one ordinary signed goal under this node's installed agent identity.
+ The caller owns the operation id and expiry; this helper neither submits nor
+diff --git a/src/quod_runtime.erl b/src/quod_runtime.erl
+index bd9e490..90aa230 100644
+--- a/src/quod_runtime.erl
++++ b/src/quod_runtime.erl
+@@ -2814,8 +2814,7 @@ select_resource_description(Ns, H, Est, agent_recovery,
+ select_resource_description(Ns, H, Est, agent_custody,
+                             {{agent_instance_ref, Ns, _Anchor, I}, Epoch, Observer}) ->
+     %% Exact identity and assignment are verified from the committed snapshot.
+-    Goal = {',', {agent_hosted, I, {'Host'}, Epoch, {'_'}},
+-                 {can_prepare_agent_key, Observer, I, {'Host'}, Epoch}},
++    Goal = {agent_key_preparation, Observer, I, {'Host'}, Epoch, Observer},
+     case select_resource(Ns, H, Est, Goal) of
+         fail -> {error, preparation_not_authorized};
+         _ -> authorized
+@@ -2848,9 +2847,8 @@ optional_selection(Ns, H, Est = #est{db = #db{mod = M, ref = R}}, Goal) ->
+     end.
+ 
+ local_node_reference() ->
+-    case quod_node_actor:principal() of
+-        {ok, Principal} ->
+-            {ok, Node} = quod_agent_ref:materialize_principal(Principal), Node;
++    case quod_node_actor:reference() of
++        {ok, Node} -> Node;
+         _ -> none
+     end.
+ 
+diff --git a/test/quod_agent_actions_tests.erl b/test/quod_agent_actions_tests.erl
+index c3499be..fea0590 100644
+--- a/test/quod_agent_actions_tests.erl
++++ b/test/quod_agent_actions_tests.erl
+@@ -20,6 +20,16 @@ initial_assignment_requires_inactive_instance_and_epoch_one_test() ->
+           {goal, {agent_hosted, actor, Node, 1, hash(7)}}, St))
+     end).
+ 
++initial_custody_grant_cannot_publish_recovery_candidate_test() ->
++    with_actor([], <<"can_prepare_agent_key(P, actor, none, 0, P).\n">>,
++      fun(St, Observer) ->
++        ?assertMatch({succeed, _}, erlog_int:prove_goal(
++          {agent_key_preparation, Observer, actor, none, 0, Observer}, St)),
++        {fail, Final} = erlog_int:prove_goal(
++          {goal, {agent_candidate_key, actor, none, 0, Observer, hash(7)}}, St),
++        ?assertEqual([], changes(Final))
++    end).
++
+ same_node_epoch_rotates_key_and_refuses_reuse_test() ->
+     Node = {agent_instance_ref, <<"node">>, hash(5), physical_node},
+     Facts = [{agent_host, actor, Node, 1, hash(6)},
+@@ -521,7 +531,7 @@ recovery_fixture(Fun) ->
+ recovery_fixture(Fun, Authority) ->
+     Old = {agent_instance_ref, <<"node">>, hash(5), physical_node},
+     Round = hash(10),
+-    Rules = iolist_to_binary([Authority, <<"can_prepare_agent_key(_, actor, _, _).\n"
++    Rules = iolist_to_binary([Authority, <<"can_prepare_agent_key(_, actor, _, _, _).\n"
+               "can_report_agent_failure(_, actor, _, _).\n"
+               "agent_recovery_candidate(_, I, H, E, R, _, 1) :- "
+               "findall(O, agent_failure_support(I,H,E,R,O,_), Os), "
+diff --git a/test/quod_agent_custody_tests.erl b/test/quod_agent_custody_tests.erl
+index a5f3daa..cf06954 100644
+--- a/test/quod_agent_custody_tests.erl
++++ b/test/quod_agent_custody_tests.erl
+@@ -107,7 +107,7 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
+     commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
+     Rules = [
+         {can_report_agent_failure, Node, actor, Old, {'_'}},
+-        {can_prepare_agent_key, Node, actor, Old, 1},
++        {can_prepare_agent_key, Node, actor, Old, 1, Node},
+         {can_assign_agent_host, Node, actor, Old, 1, Node, {'_'}},
+         {':-', {agent_recovery_candidate, Node, actor, Old, 1, {'Round'}, Node, 1},
+          {agent_failure_support, actor, Old, 1, {'Round'}, Node, suspected_unreachable}}],
+diff --git a/test/quod_agent_hosting_tests.erl b/test/quod_agent_hosting_tests.erl
+index 56f2e86..3a7509b 100644
+--- a/test/quod_agent_hosting_tests.erl
++++ b/test/quod_agent_hosting_tests.erl
+@@ -332,7 +332,7 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
+     Receiver = start_ontology(ReceiverNs, Dir, Identity, [], Terms ++ Rules),
+     ReceiverRef = {agent_instance_ref, ReceiverNs, quod_simplex:genesis_hash(ReceiverNs), receiver},
+     {ok, Blob} = quod_wire_term:encode_canonical(ReceiverRef),
+-    {ok, Key} = quod_agent_vault:generate(Blob),
++    {ok, Key} = quod_agent_vault:prepare(Blob, 0),
+     true = quod_reg:subscribe({agent, ReceiverRef}),
+     Id = crypto:strong_rand_bytes(32), Action = {reserve, object},
+     Waiting = {fipa_conversation, actor, Id, initiator, ReceiverRef, Action, waiting},
+@@ -425,7 +425,7 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
+                         _ = installed(ReceiverRef, 1),
+                         Reopened;
+                     rotate_proof ->
+-                        {ok, NextKey} = quod_agent_vault:generate(Blob),
++                        {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
+                         commit(ReceiverNs, {goal, {agent_assignment, receiver,
+                                                    Node, 1, Node, 2, NextKey}}),
+                         _ = installed(ReceiverRef, 2),
+@@ -650,7 +650,7 @@ unexpected_child_exit_enters_ontology_reaction_test_() ->
+                 1 = erlang:trace(Owner, true, [call]),
+                 try
+                     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-                    {ok, NextKey} = quod_agent_vault:generate(Blob),
++                    {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
+                     commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+                     {Owner, _} = installed(Ref, 2),
+                     Barrier = erlang:trace_delivered(Owner),
+@@ -1026,9 +1026,9 @@ atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key},
+     Round = crypto:strong_rand_bytes(32),
+     Expiry = quod_time:now_ms() + 10000,
+     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-    {ok, NextKey} = quod_agent_vault:generate(Blob),
++    {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
+     Policy = [{can_report_agent_failure, Node, actor, Node, {'_'}},
+-              {can_prepare_agent_key, Node, actor, Node, 1},
++              {can_prepare_agent_key, Node, actor, Node, 1, Node},
+               {':-', {agent_recovery_candidate, Node, actor, Node, 1, Round, Node, 1},
+                        {agent_failure_support, actor, Node, 1, Round, Node, process_down}}],
+     lists:foreach(fun(Fact) -> commit(Ns, {assertz, Fact}) end,
+@@ -1088,7 +1088,7 @@ host_teardown(#{namespace := Ns, reference := Ref, node := Node, key := Key}, Ho
+         commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+         {Owner, Child} = installed(Ref, 1),
+         {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-        {ok, NextKey} = quod_agent_vault:generate(Blob),
++        {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
+         ok = sys:suspend(Child),
+         1 = erlang:trace(Owner, true, ['receive']),
+         try
+@@ -1146,7 +1146,7 @@ host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+                  quod_client_goal_ingress:submit(Bytes, Signature)),
+     ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, stale})),
+     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-    {ok, NextKey} = quod_agent_vault:generate(Blob),
++    {ok, NextKey} = quod_agent_vault:prepare(Blob, 2),
+     commit(Ns, {goal, {agent_assignment, actor, Remote, 2, Node, 3, NextKey}}),
+     {Owner, NextChild} = installed(Ref, 3),
+     commit(Ns, {trigger_event, {do_work, returned}}),
+@@ -1289,7 +1289,7 @@ exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := K
+        {':-', {record_reply, {'Id'}}, {assertz, {answered, {'Id'}}}}]),
+     Ref = {agent_instance_ref, ReceiverNs, quod_simplex:genesis_hash(ReceiverNs), receiver},
+     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-    {ok, ReceiverKey} = quod_agent_vault:generate(Blob),
++    {ok, ReceiverKey} = quod_agent_vault:prepare(Blob, 0),
+     true = quod_reg:subscribe({agent, Ref}),
+     try
+         commit(ReceiverNs, {goal, {agent_hosted, receiver, Node, 1, ReceiverKey}}),
+@@ -1368,7 +1368,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+                              R =:= OtherRef andalso P =:= Other
+                      end, Children)),
+     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-    {ok, NextKey} = quod_agent_vault:generate(Blob),
++    {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
+     commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+     {Owner, Third} = installed(Ref, 2),
+     ?assertNot(is_process_alive(Second)),
+@@ -1477,7 +1477,7 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
+          {',', {assertz, {ping, {'Value'}}}, {trigger_event, {request, {'Value'}}}}}] ++ Additional),
+     Ref = {agent_instance_ref, Ns, quod_simplex:genesis_hash(Ns), actor},
+     {ok, RefBlob} = quod_wire_term:encode_canonical(Ref),
+-    {ok, Key} = quod_agent_vault:generate(RefBlob),
++    {ok, Key} = quod_agent_vault:prepare(RefBlob, 0),
+     true = quod_reg:subscribe({agent, Ref}),
+     Result = try
+         {ok, Fun(#{namespace => Ns, reference => Ref, node => Node, key => Key,
+diff --git a/test/quod_agent_trace_tests.erl b/test/quod_agent_trace_tests.erl
+index e89ef39..3374d20 100644
+--- a/test/quod_agent_trace_tests.erl
++++ b/test/quod_agent_trace_tests.erl
+@@ -89,7 +89,7 @@ custody_trace_uses_existing_node_worker_without_exporting_key_test_() ->
+           identity := #{pubkey := Pub}, key := Key} = Ctx,
+         Anchor = element(3, AgentRef),
+         commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+-        commit(Ns, {assertz, {can_prepare_agent_key, Node, actor, Node, 1}}),
++        commit(Ns, {assertz, {can_prepare_agent_key, Node, actor, Node, 1, Node}}),
+         commit(element(2, Node), {assertz, {can_execute_for, Ns, Anchor,
+                                           {record_preparation, {'_'}}}}),
+         %% Exercise already-matched work in the node's own behavior scope.
+diff --git a/test/quod_agent_vault_tests.erl b/test/quod_agent_vault_tests.erl
+index 17f977f..1890ca7 100644
+--- a/test/quod_agent_vault_tests.erl
++++ b/test/quod_agent_vault_tests.erl
+@@ -17,13 +17,12 @@ empty_custody_paths_refused_at_boot_test() ->
+ 
+ custody_survives_restart_and_binds_exact_request_test() ->
+     with_vault(fun(Config, Ref, Request0) ->
+-        {ok, Pub} = quod_agent_vault:generate(Ref),
++        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
+         Request = Request0#{signing_public_key => Pub},
+         {ok, Bytes, Signature} = sign(Request),
+         ?assertMatch({ok, #{agent_ref_blob := Ref}}, quod_client_goal:verify(Bytes, Signature)),
+         ?assertEqual({ok, Bytes}, quod_client_goal:encode(Request)),
+-        {ok, [File]} = file:list_dir(maps:get(directory, Config)),
+-        Path = filename:join(maps:get(directory, Config), File),
++        {_Slot, [Path]} = custody_files(Config),
+         {ok, #file_info{mode = Mode, size = 100}} = file:read_file_info(Path),
+         ?assertEqual(8#600, Mode band 8#777),
+         Vault = quod_reg:where({agent_vault, node}),
+@@ -59,7 +58,7 @@ preparation_is_stable_and_preserves_old_custody_test() ->
+         {ok, Second} = quod_agent_vault:prepare(Ref, 2),
+         ?assertNotEqual(First, Second),
+         ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 1)),
+-        ?assertEqual({error, invalid_preparation_epoch}, quod_agent_vault:prepare(Ref, 0)),
++        ?assertEqual({error, invalid_preparation_epoch}, quod_agent_vault:prepare(Ref, -1)),
+         ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => First})),
+         ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => Second})),
+         {Slot, [_, _]} = custody_files(Config),
+@@ -71,6 +70,150 @@ preparation_is_stable_and_preserves_old_custody_test() ->
+         ?assertEqual({ok, []}, file:list_dir(maps:get(directory, Config)))
+     end).
+ 
++initial_preparation_survives_restart_without_repeated_writes_test() ->
++    with_vault(fun(Config, Ref, _Request) ->
++        {ok, First} = quod_agent_vault:prepare(Ref, 0),
++        Repeat = fun() ->
++            [?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
++             || _ <- lists:seq(1, 20)]
++        end,
++        ?assertEqual([], vault_storage_calls(Repeat)),
++        ok = gen_server:stop(quod_reg:where({agent_vault, node})),
++        {ok, _} = quod_agent_vault:start_link(Config),
++        ?assertEqual([], vault_storage_calls(Repeat)),
++        Changed = vault_storage_calls(fun() ->
++            {ok, Second} = quod_agent_vault:prepare(Ref, 1),
++            ?assertNotEqual(First, Second)
++        end),
++        [?assert(lists:member(MFA, Changed)) || MFA <-
++            [{quod_file, write_atomic, 3}, {file, write, 2}, {file, sync, 1},
++             {file, rename, 2}, {file, make_link, 2}, {quod_file, sync_dir, 1}]],
++        ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 0))
++    end).
++
++unchanged_rejections_do_not_schedule_storage_test() ->
++    with_vault(fun(_Config, Ref, _Request) ->
++        {ok, Key} = quod_agent_vault:prepare(Ref, 1),
++        Calls = vault_storage_calls(fun() ->
++            ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 0)),
++            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1)),
++            ?assertEqual({error, invalid_agent_reference}, quod_agent_vault:prepare(<<>>, 0)),
++            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1)),
++            Vault = quod_reg:where({agent_vault, node}),
++            ?assertEqual({error, deadline_exceeded}, gen_server:call(Vault,
++                {prepare, Ref, 2, quod_time:mono_ms() - 1})),
++            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1))
++        end),
++        ?assertEqual([], Calls)
++    end).
++
++failed_mutation_requires_successful_directory_sync_test() ->
++    with_vault(fun(Config, Ref, _Request) ->
++        {ok, First} = quod_agent_vault:prepare(Ref, 0),
++        {Slot, [_]} = custody_files(Config), Tmp = Slot ++ ".tmp",
++        %% The real atomic writer cannot replace this directory with its file.
++        ok = file:make_dir(Tmp),
++        ?assertEqual({error, vault_storage_unavailable}, quod_agent_vault:prepare(Ref, 1)),
++        Dir = maps:get(directory, Config), Moved = Dir ++ "-moved",
++        ok = file:rename(Dir, Moved),
++        try
++            %% The vault must propagate a failed uncertainty-resolving sync.
++            ?assertEqual({error, vault_storage_unavailable}, quod_agent_vault:prepare(Ref, 0))
++        after ok = file:rename(Moved, Dir), ok = file:del_dir(Tmp) end,
++        Recovery = vault_storage_calls(fun() ->
++            ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
++        end),
++        ?assertEqual([{quod_file, sync_dir, 1}, {prim_file, sync, 1}], Recovery),
++        Unchanged = vault_storage_calls(fun() ->
++            ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
++        end),
++        ?assertEqual([], Unchanged)
++    end).
++
++vault_storage_calls(Fun) ->
++    %% MFA-only traces: encrypted bytes and unlock material never enter logs.
++    Trace = trace:session_create(vault_storage, self(), []),
++    Watched = [{quod_file, write_atomic, 3}, {quod_file, sync_dir, 1},
++               {file, write, 2}, {file, pwrite, 3}, {file, sync, 1},
++               {file, datasync, 1}, {prim_file, sync, 1},
++               {file, make_link, 2}, {file, rename, 2}],
++    [trace:function(Trace, MFA, true, [local]) || MFA <- Watched],
++    trace:process(Trace, quod_reg:where({agent_vault, node}), true, [call, arity]),
++    try
++        Fun(), vault_storage_calls(trace:delivered(Trace, all), [])
++    after trace:session_destroy(Trace) end.
++
++vault_storage_calls(Barrier, Acc) ->
++    receive
++        {trace, _, call, MFA} -> vault_storage_calls(Barrier, [MFA|Acc]);
++        {trace_delivered, all, Barrier} -> lists:reverse(Acc)
++    after 5000 -> error(vault_trace_not_delivered) end.
++
++initial_preparation_requires_exact_committed_pure_policy_test() ->
++    with_vault(fun(Config, Ref, _Request) ->
++        {ok, AgentRef} = quod_agent_ref:materialize(Ref),
++        #{principal := Caller, agent_reference := CallerRef, evidence := Evidence} =
++            quod_ct:signed_goal_fixture(#{agent_instance_text => <<"administrator.">>}),
++        #{principal := NodePrincipal, agent_reference := NodeRef} =
++            quod_ct:signed_goal_fixture(#{agent_instance_text => <<"node.">>}),
++        Previous = application:get_env(quod, node_actor_principal),
++        application:set_env(quod, node_actor_principal, NodePrincipal),
++        _ = quod_proof_context:start(crypto:strong_rand_bytes(32), true,
++            {<<"agents">>, <<3:256>>}, quod_time:mono_ms() + 5000, Caller, Evidence),
++        try
++            Goal = {prepare_agent_key_custody, AgentRef, none, 0, NodeRef, {'Key'}},
++            Grant = {can_prepare_agent_key, CallerRef, worker, none, 0, NodeRef},
++            ?assertEqual(fail, signing_proof([], true, Goal)),
++            ?assertEqual(fail, signing_proof([setelement(2, Grant, NodeRef)], true, Goal)),
++            ?assertEqual(fail, signing_proof([Grant], true, setelement(5, Goal, CallerRef))),
++            [?assertEqual(fail, signing_proof([Grant, Occupied], true, Goal)) || Occupied <-
++                [{agent_host, worker, NodeRef, 1, <<1:256>>},
++                 {agent_key, worker, <<1:256>>, revoked}]],
++            ?assertMatch({error, {erlog, {domain_error, agent_key_preparation, _}}},
++                signing_proof([Grant], true, setelement(6, Goal, <<1:256>>))),
++            ?assertMatch({error, {erlog, instantiation_error}},
++                signing_proof([Grant], true, setelement(4, Goal, {'Epoch'}))),
++            [?assertEqual({error, {erlog,
++                 {context_violation, prepare_agent_key_custody, query, foreign_scope}}},
++                signing_proof([Grant], true, Goal, #{identity => Foreign})) || Foreign <-
++                [{<<"foreign">>, <<3:256>>}, {<<"agents">>, <<4:256>>}]],
++            ?assertEqual({error, {erlog,
++                {context_violation, prepare_agent_key_custody, query, write_proof}}},
++                signing_proof([], false, {',', {assertz, Grant}, {'$quod_state_check', Goal}})),
++            ?assertEqual({error, {erlog,
++                {context_violation, prepare_agent_key_custody, query, reaction}}},
++                signing_proof([Grant], true, Goal, #{kind => reaction})),
++            ?assertEqual({error, {erlog,
++                {context_violation, {prepare_agent_key_custody, 5}, query, policy_verdict}}},
++                signing_proof([Grant], true, Goal, #{kind => policy_verdict})),
++            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl")),
++            [?assertEqual({error, {erlog, invalid_custody_policy}},
++                signing_proof([], true, Goal, #{source => <<Source/binary,
++                    "\ncan_prepare_agent_key(_,_,_,_,_) :- ", Body/binary, ".">>})) || Body <-
++                [<<"current_principal(_)">>, <<"local_node_agent(_)">>,
++                 <<"assertz(unauthorized)">>, <<"binary_codes(42,_)">>]],
++            ?assertEqual({ok, []}, file:list_dir(maps:get(directory, Config))),
++            {{ok, #{'Key' := Key}}, Reads, Bridges} =
++                signing_proof([Grant], true, Goal, #{dependencies => true}),
++            [?assert(maps:is_key(F, Reads)) || F <-
++                [{agent_host, 4}, {agent_key, 3}, {can_prepare_agent_key, 5}]],
++            ?assert(lists:member({prepare_agent_key_custody, 5}, Bridges)),
++            ?assertEqual({ok, #{'Key' => Key}}, signing_proof([Grant], true, Goal)),
++            ?assertEqual(fail, signing_proof([], true, Goal)),
++            %% Read preparation confers no assignment or active-key facts.
++            ?assertEqual(fail, signing_proof([Grant], true, {agent_host, worker, {'_'}, {'_'}, {'_'}})),
++            ?assertEqual(fail, signing_proof([Grant], true, {agent_key, worker, {'_'}, active})),
++            ?assertEqual({error, deadline_exceeded},
++                quod_agent_vault:prepare(Ref, 0, quod_time:mono_ms() - 1))
++        after
++            quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end),
++            case Previous of
++                undefined -> application:unset_env(quod, node_actor_principal);
++                {ok, Old} -> application:set_env(quod, node_actor_principal, Old)
++            end
++        end
++    end).
++
+ preparation_recovers_slot_only_crash_image_test() ->
+     with_vault(fun(Config, Ref, Request0) ->
+         {ok, Pub} = quod_agent_vault:prepare(Ref, 1),
+@@ -122,10 +265,9 @@ custody_files(Config) ->
+ 
+ wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
+     with_vault(fun(Config, Ref, Request0) ->
+-        {ok, Pub} = quod_agent_vault:generate(Ref),
++        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
+         Request = Request0#{signing_public_key => Pub},
+-        {ok, [Name]} = file:list_dir(maps:get(directory, Config)),
+-        Path = filename:join(maps:get(directory, Config), Name),
++        {_Slot, [Path]} = custody_files(Config),
+         {ok, <<Byte, Rest/binary>>} = file:read_file(Path),
+         ok = file:write_file(Path, <<(Byte bxor 1), Rest/binary>>),
+         ?assertEqual({error, invalid_vault_key}, sign(Request)),
+@@ -138,7 +280,7 @@ wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
+ 
+ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
+     with_vault(fun(_Config, Ref, Request0) ->
+-        {ok, Pub} = quod_agent_vault:generate(Ref),
++        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
+         {ok, AgentRef} = quod_agent_ref:materialize(Ref),
+         #{principal := Principal, agent_reference := NodeRef,
+           evidence := Evidence} = quod_ct:signed_goal_fixture(#{goal_text => <<"true.">>}),
+@@ -200,16 +342,18 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
+ 
+ %% Exercise the actual signed ingress and foreign read-only scope. The engine
+ %% owns both committed snapshots; only consensus transport is outside this seam.
+-signing_through_signed_ingress_and_foreign_scope_test() ->
++custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
+     with_vault(fun(Config, Ref, Request0) ->
+-        {ok, Pub} = quod_agent_vault:generate(Ref),
++        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
+         {ok, AgentRef} = quod_agent_ref:materialize(Ref),
+         NodeNs = <<"vault-node">>, NodeAnchor = <<5:256>>,
+         Fixture = #{principal := Principal, agent_reference := NodeRef,
+                     signing_key := NodeKey} = quod_ct:signed_goal_fixture(
+           #{target => {NodeNs, NodeAnchor}, network => <<1:256>>, mode => read,
+             deadline => quod_time:now_ms() + 30000,
+-            goal_text => <<"\"agents\"::(signing_request(R),sign_agent_request(R,S)).">>}),
++            goal_text => <<"\"agents\"::(initial_agent(A),custody_destination(N),"
++                           "prepare_agent_key_custody(A,none,0,N,K),"
++                           "signing_request(R),sign_agent_request(R,S)).">>}),
+         Request = Request0#{signing_public_key => Pub},
+         Typed = {agent_goal_v1, <<1:256>>, AgentRef, <<"worker.">>, Pub,
+                  maps:get(operation_id, Request), maps:get(not_after_ms, Request),
+@@ -229,6 +373,9 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
+           quod_prolog:genesis_diff(Source),
+           [{agent_host, worker, NodeRef, 1, Pub}, {agent_key, worker, Pub, active},
+            {can_request_agent_signature, NodeRef, worker, Typed},
++           {initial_agent, setelement(4, AgentRef, first_agent)},
++           {custody_destination, NodeRef},
++           {can_prepare_agent_key, NodeRef, first_agent, none, 0, NodeRef},
+            {signing_request, Typed},
+            {can_invoke, {'Goal'}, NodeRef, {'Chain'}, <<"agents">>}]),
+         try
+@@ -246,6 +393,11 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
+             {ok, Bytes} = quod_client_goal:encode(Request),
+             {ok, Decoded} = quod_durable_term:decode_result(Bindings),
+             ?assert(quod_identity:verify(proplists:get_value(<<"S">>, Decoded), Bytes, Pub)),
++            ?assertMatch(<<_:256>>, proplists:get_value(<<"K">>, Decoded)),
++            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
++                {agent_host, first_agent, {'_'}, {'_'}, {'_'}})),
++            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
++                {agent_key, first_agent, {'_'}, active})),
+             with_provider(Config, fun(Port, Options, Client, _Other) ->
+                 {ok, Socket} = provider_connect(Port, Options, Client),
+                 try
+@@ -300,13 +452,21 @@ signing_proof(Facts, ReadOnly, Goal, Options) ->
+     Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly}),
+     Id = crypto:strong_rand_bytes(16),
+     {Ns, _} = Identity = maps:get(identity, Options, {<<"agents">>, <<3:256>>}),
+-    Context = quod_predicates:proof_context(Ns, 1, undefined, [Identity]),
++    Context = case maps:get(kind, Options, proof) of
++        proof -> quod_predicates:proof_context(Ns, 1, undefined, [Identity]);
++        reaction -> quod_predicates:reaction_context(Ns, 1);
++        policy_verdict -> quod_predicates:policy_verdict_context(Ns, 1)
++    end,
+     try
+         ok = quod_proof_session:open(Session, Id, Goal, allowed, Context, quod_transaction_scope:empty_selection()),
+-        case quod_proof_session:next(Session, Id) of
++        Result = case quod_proof_session:next(Session, Id) of
+             {solution, _} -> quod_proof_session:bindings(Session, Id);
+             {complete, _} -> fail;
+             Other -> Other
++        end,
++        case maps:get(dependencies, Options, false) of
++            true -> {Result, quod_proof_session:read_set(Session), quod_proof_session:live_bridges(Session)};
++            false -> Result
+         end
+     after quod_proof_session:stop(Session) end.
+ 
+diff --git a/test/quod_common_primitives_tests.erl b/test/quod_common_primitives_tests.erl
+index 886e407..b41d246 100644
+--- a/test/quod_common_primitives_tests.erl
++++ b/test/quod_common_primitives_tests.erl
+@@ -144,6 +144,18 @@ authored_cold_predicate_has_empty_baseline_without_atom_allocation_test() ->
+         ?assertError(badarg, binary_to_existing_atom(Name, utf8))
+     end).
+ 
++admitted_cold_absence_guard_records_read_test() ->
++    Name = <<"source_guard_", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
++    with_authored([], fun(St) ->
++        ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
++        Goal = {'\\+', {{'$quod_symbol', Name}, {'X'}, {'Y'}, {'Z'}}},
++        {ok, Admitted} = quod_wire_term:materialize_goal_symbols(Goal),
++        ?assertMatch({succeed, _}, erlog_int:prove_goal(Admitted, St)),
++        Functor = {binary_to_existing_atom(Name, utf8), 3},
++        ?assert(maps:is_key(Functor, quod_erlog_db_local_prove:get_read_set(db_ref(St)))),
++        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
++    end).
++
+ predicate_source_compares_bound_text_without_parsing_or_unifying_code_test() ->
+     with_authored([{choice, {'X'}}], fun(St) ->
+         Source = value({'Source'}, {'$quod_predicate_source', {'/', choice, 1}, {'Source'}}, St),
+diff --git a/test/quod_lobby_tests.erl b/test/quod_lobby_tests.erl
+index 3d65b1e..fc566d5 100644
+--- a/test/quod_lobby_tests.erl
++++ b/test/quod_lobby_tests.erl
+@@ -2,6 +2,239 @@
+ -include_lib("eunit/include/eunit.hrl").
+ -export([start/1, stop/1, preview/1]).
+ 
++authored_space_composition_preserves_world_test_() ->
++    {timeout, 90, fun() ->
++        Dir = filename:join("/tmp", "quod-authored-space-" ++
++                            integer_to_list(erlang:unique_integer([positive]))),
++        Ctx = start(Dir),
++        {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
++        OtherNs = <<"authored-gallery">>,
++        {_, Base} = maps:get(LobbyNs, maps:get(ontologies, Ctx)),
++        {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
++        Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
++        {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
++            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
++        Other = start_namespace(OtherNs, Base#{
++            data_dir => filename:join(Dir, "gallery"),
++            genesis_diff => quod_prolog:terms_to_diff([
++                {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
++                {world_view, gallery, playing, Scene}])}),
++        try
++            lists:foreach(fun({Ns, Space}) ->
++                Anchor = quod_simplex:genesis_hash(Ns),
++                Setup = editor_conjunction([
++                    {assertz, {instance_of, space, Space}},
++                    {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
++                               quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
++                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
++                commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
++                View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
++                ?assertMatch({ok, [#{<<"V0">> := {world_view, _, [], unavailable}}], _},
++                             read(Ctx, View)),
++                Before = quod_prolog:applied(Ns),
++                Edit = editor_scope(Ns, authored_space_composition_goal()),
++                commit_editor_goal(Ctx, Edit),
++                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
++                ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
++                ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
++                ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
++                ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Ctx, execute, Edit)),
++                ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
++                ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds))
++            end, [{LobbyNs, personal_lobby}, {OtherNs, gallery}])
++        after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
++    end}.
++
++authored_space_composition_goal() ->
++    Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/space.pl")),
++    Heads = [case T of {':-', H, _} -> H; H -> H end || T <- Terms],
++    Indicators = lists:usort([erlog_int:functor(H) || H <- Heads]),
++    Checks = [{'$quod_predicate_source', {'/', F, A}, <<>>}
++              || {F, A} <- Indicators, F =/= isa],
++    Edges = [{'\\+', {clause, {isa, space, thing}, true}},
++             {'\\+', {clause, {isa, physical_space, space}, true}}],
++    {Assertions, _} = lists:mapfoldl(fun(T, Vn) ->
++        {Fresh, _, Next} = erlog_int:term_instance(T, Vn),
++        {{assertz, Fresh}, Next}
++    end, 0, Terms),
++    {transaction, balanced_space_goals(Checks ++ Edges ++ Assertions)}.
++
++balanced_space_goals([G]) -> G;
++balanced_space_goals(Gs) ->
++    {Left, Right} = lists:split(length(Gs) div 2, Gs),
++    {',', balanced_space_goals(Left), balanced_space_goals(Right)}.
++
++inactive_physics_source_authoring_preserves_world_test_() ->
++    {timeout, 300, fun() ->
++        Dir = filename:join("/tmp", "quod-inactive-physics-authoring-" ++
++                            integer_to_list(erlang:unique_integer([positive]))),
++        Ctx = start(Dir),
++        {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
++        {_, Base} = maps:get(LobbyNs, maps:get(ontologies, Ctx)),
++        {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
++        Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
++        OtherNs = <<"inactive-physics-gallery">>,
++        {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
++            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
++        Other = start_namespace(OtherNs, Base#{
++            data_dir => filename:join(Dir, "gallery"),
++            genesis_diff => quod_prolog:terms_to_diff([
++                {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
++                {world_view, gallery, playing, Scene}])}),
++        ColdName = <<"authored_physics_", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
++        ?assertError(badarg, binary_to_existing_atom(ColdName, utf8)),
++        Sources = [begin
++            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
++            Source
++        end || File <- ["agent_instance.pl", "quod_physics.pl"]],
++        Edits = source_predicate_drafts(iolist_to_binary(
++            [Sources, "\n", ColdName, "(ready).\n"])),
++        try
++            lists:foreach(fun({Ns, Space, {Sup, Config}}) ->
++                Anchor = quod_simplex:genesis_hash(Ns),
++                Target = {ontology_ref, Ns, Anchor},
++                Setup = editor_conjunction([
++                    {assertz, {instance_of, space, Space}},
++                    {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
++                               quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
++                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
++                commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
++                commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal())),
++                View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
++                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
++                Before = quod_prolog:applied(Ns),
++                CheckInactive = fun() ->
++                    ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
++                    ?assertEqual(ok, quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
++                        agent_hosts, all, quod_time:mono_ms() + 10000)),
++                    ?assertEqual(ok, quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
++                        physics_worlds, all, quod_time:mono_ms() + 10000)),
++                    ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds)),
++                    ?assertMatch({_, []}, quod_runtime:agents(Ns)),
++                    ?assertMatch(#{resource_failures := Failures, reaction_failures := 0,
++                                   reactions_executed := 0, reconcile_failures := 0}
++                                 when map_size(Failures) =:= 0, quod_runtime:stats(Ns))
++                end,
++                Publish = fun({Indicator, Draft}) ->
++                    Baseline = editor_source(Ctx, Target, Indicator),
++                    ?assertEqual(<<>>, Baseline),
++                    Edit = inactive_source_edit(
++                        compile_source_edit(Ctx, Target, Indicator, Baseline, Draft)),
++                    commit_editor_goal(Ctx, Edit),
++                    ?assertEqual(Draft, editor_source(Ctx, Target, Indicator)),
++                    CheckInactive()
++                end,
++                [First | Rest] = Edits,
++                {Indicator, Draft} = First,
++                Stale = inactive_source_edit(
++                    compile_source_edit(Ctx, Target, Indicator, <<>>, Draft)),
++                OtherOwner = Ctx#{instance => <<"human_user(other_agent).">>},
++                assert_editor_refusal(OtherOwner, Stale, {not_allowed, Ns}),
++                Publish(First),
++                assert_editor_refusal(Ctx, Stale, {edit_conflict, Indicator}),
++                {Part, Remaining} = lists:split(length(Rest) div 2, Rest),
++                lists:foreach(Publish, Part),
++                Partial = complete_source(Ctx, Target),
++                PartialHeight = quod_prolog:applied(Ns),
++                stop_process(Sup),
++                {Resumed, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
++                try
++                    ?assertEqual(PartialHeight, quod_prolog:applied(Ns)),
++                    ?assertEqual(Partial, complete_source(Ctx, Target)),
++                    CheckInactive(),
++                    lists:foreach(Publish, Remaining),
++                    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
++                    ?assertEqual(Before + length(Edits), quod_prolog:applied(Ns)),
++                    Cold = binary_to_existing_atom(ColdName, utf8),
++                    ?assertMatch({ok, [#{}], _}, read(Ctx, editor_scope(Ns, {Cold, ready}))),
++                    Complete = complete_source(Ctx, Target),
++                    assert_repeat_source_has_no_io(Ctx, Target, Complete),
++                    stop_process(Resumed),
++                    {FinalBoot, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
++                    try
++                        ?assertEqual(Before + length(Edits), quod_prolog:applied(Ns)),
++                        ?assertEqual(Complete, complete_source(Ctx, Target)),
++                        CheckInactive(),
++                        assert_repeat_source_has_no_io(Ctx, Target, Complete)
++                    after stop_process(FinalBoot) end
++                after stop_process(Resumed) end
++            end, [{LobbyNs, personal_lobby, maps:get(LobbyNs, maps:get(ontologies, Ctx))},
++                  {OtherNs, gallery, Other}])
++        after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
++    end}.
++
++inactive_source_edit({'::', Ns, {',', Identity, {transaction, Edit}}}) ->
++    %% Callable guards enter normal target symbol admission and capture even
++    %% absent predicates. Cold source introspection alone records no read.
++    Guards = [{'\\+', {physics_space, {'_'}, {'_'}, {'_'}}},
++              {'\\+', {agent_host, {'_'}, {'_'}, {'_'}, {'_'}}},
++              {'$quod_predicate_source', {'/', physics_space, 3}, <<>>},
++              {'$quod_predicate_source', {'/', agent_host, 4}, <<>>}],
++    {'::', Ns, {',', Identity, {transaction, editor_conjunction(Guards ++ [Edit])}}}.
++
++assert_editor_refusal(Ctx, Goal, Reason) ->
++    {ok, _, {normalized, {failed, Encoded}}} = submit(Ctx, execute, Goal),
++    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
++    ?assert(lists:member(quod_wire_term:encode_canonical(Reason),
++                         [quod_wire_term:encode_canonical(R) || R <- Reasons])).
++
++source_predicate_drafts(Source) ->
++    {ok, Program} = quod_client_goal_parser:parse_program(Source, 3),
++    Groups = lists:foldl(fun(#{goal := Clause}, Acc) ->
++        Head = case Clause of {':-', H, _} -> H; _ -> Clause end,
++        {ok, {Name, Arity}} = quod_wire_term:callable_functor(Head),
++        Indicator = {'/', Name, Arity},
++        {ok, Key} = quod_wire_term:encode_canonical(Indicator),
++        Rule = case Clause of {':-', _, _} -> Clause; _ -> {':-', Clause, true} end,
++        {Canonical, _, _} = erlog_int:term_instance(Rule, 0),
++        {ok, Text} = quod_client_goal_parser:format_clause(Canonical),
++        maps:update_with(Key, fun({I, Parts}) -> {I, [Parts, Text, $\n]} end,
++                         {Indicator, [Text, $\n]}, Acc)
++    end, #{}, Program),
++    Drafts = [{Indicator, iolist_to_binary(Parts)}
++              || {_, {Indicator, Parts}} <- lists:sort(maps:to_list(Groups))],
++    %% Publishing a selector makes it callable by the current runtime, even
++    %% with no configured space. Its helpers must already be complete.
++    EntryPoints = [<<"agent_hosting_projection">>, <<"physics_projection">>, <<"react_on">>],
++    {Helpers, Entries} = lists:partition(fun({{'/', Name, _}, _}) ->
++        {ok, [Symbol]} = quod_wire_term:symbol_names(Name),
++        not lists:member(Symbol, EntryPoints)
++    end, Drafts),
++    Helpers ++ Entries.
++
++incomplete_hosting_selector_is_not_inactive_test_() ->
++    {timeout, 60, fun() ->
++        Dir = filename:join("/tmp", "quod-incomplete-selector-" ++
++                            integer_to_list(erlang:unique_integer([positive]))),
++        Ctx = start(Dir),
++        try
++            {ontology_ref, Ns, _} = Target = maps:get(lobby, Ctx),
++            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod),
++                                                       "ontologies/agent_instance.pl")),
++            [{Indicator, Draft}] = [D || D = {{'/', {'$quod_symbol',
++                <<"agent_hosting_projection">>}, 4}, _} <- source_predicate_drafts(Source)],
++            commit_editor_goal(Ctx, inactive_source_edit(
++                compile_source_edit(Ctx, Target, Indicator, <<>>, Draft))),
++            ?assertEqual({error, {resource_selection_failed,
++                                  {no_solution, {agent_hosting_projection, 4}}}},
++                quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
++                    agent_hosts, all, quod_time:mono_ms() + 10000))
++        after stop(Ctx), file:del_dir_r(Dir) end
++    end}.
++
++physics_reactions_ignore_domain_notices_test() ->
++    Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod),
++                                                "ontologies/quod_physics.pl")),
++    Reactions = [T || T = {':-', {react_on, _, _}, _} <- Terms],
++    Binding = #{reference => {agent_instance_ref, <<"inactive-physics">>, <<1:256>>, observer},
++                epoch => 1, public_key => <<2:256>>, request_timeout_ms => 1000},
++    ?assertEqual(2, length(Reactions)),
++    lists:foreach(fun(Reaction) ->
++        ?assertEqual(unmatched, quod_runtime_predicates:run_reaction(
++            <<"inactive-physics">>, 1, Binding, Reaction, {observed, {ready, ontology, all}},
++            quod_committed_projection:new_est()))
++    end, Reactions).
++
+ lobby_projection_recovery_test_() ->
+     {timeout, 90, fun() ->
+         Dir = filename:join("/tmp", "quod-lobby-" ++ integer_to_list(erlang:unique_integer([positive]))),
+diff --git a/test/quod_physics_tests.erl b/test/quod_physics_tests.erl
+index 2b8a330..a1f4106 100644
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -1,6 +1,110 @@
+ -module(quod_physics_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ 
++first_host_and_complete_configuration_commit_together_test_() ->
++    [{binary_to_list(Ns),{timeout,90,fun() -> with_world(Ns,
++        fun(F) -> first_physical_configuration(F, Gravity) end,
++        fun(Rules) -> [R || R <- Rules, not lists:member(element(1,R),
++            [instance_of,physics_space,physics_run,physics_structure,
++             physics_next_body,physics_allowances,physics_body_definition])] end)
++    end}} || {Ns,Gravity} <- [{<<"gallery-first-physics">>,-9810},
++                             {<<"workshop-first-physics">>,-1620}]].
++
++first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,key := Key}, Gravity) ->
++    Anchor = element(3,Agent), Remote = setelement(2,Node,<<"remote-node">>),
++    Grant = {can_assign_agent_host,Node,actor,none,0,Node,Key},
++    RemoteGrant = {can_assign_agent_host,Node,actor,none,0,Remote,<<33:256>>},
++    commit(Ns,list_conjunction([{assertz,R} || R <-
++        [Grant,RemoteGrant,{can_prepare_agent_key,Node,actor,none,0,Node}]])),
++    {ok,ReadBytes,ReadSignature} = quod_node_actor:signed_goal(read,
++        {'::',Ns,{prepare_agent_key_custody,Agent,none,0,Node,{0}}},
++        crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
++    {ok,_,{normalized,{read,_,{answers,1,[Prepared]}}}} =
++        quod_client_goal_ingress:submit(ReadBytes,ReadSignature),
++    ?assertEqual({ok,[{<<"V0">>,Key}]},quod_durable_term:decode_result(Prepared)),
++    ?assertEqual(#{},worlds(Ns)),
++    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_instance,room,physical_space})),
++    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
++    Rows = first_physics_rows(Node,Gravity),
++    Goal = first_physics_goal(Ns,Anchor,Node,Key,Rows),
++    %% A real incomplete camera definition rolls back the host and all bodies.
++    MissingCamera = [R || R <- Rows, element(1,R) =/= physics_viewpoint],
++    ?assertMatch({ok,_,{normalized,{failed,_}}},
++        door_action(Ns,first_physics_goal(Ns,Anchor,Node,Key,MissingCamera))),
++    assert_unconfigured(Ns),
++    true = quod_reg:reg({host_test,local_proof}),
++    true = quod_reg:subscribe({physics,Ns}),
++    try
++        %% A prepared key reserves no assignment right. Revoke after proof,
++        %% before commit, and require the ordinary predicate OCC conflict.
++        Parent = self(), Tag = make_ref(),
++        {Caller,Monitor} = spawn_monitor(fun() -> Parent ! {first_assignment,Tag,
++            door_action(Ns,{',',Goal,test_local_wait})} end),
++        Proof = receive {local_proof_waiting,P} -> P after 5000 -> error(initial_proof_missing) end,
++        try
++            commit(Ns,{retract,Grant}), Proof ! release,
++            receive {first_assignment,Tag,Refused} ->
++                ?assertMatch({ok,_,{normalized,{error,conflict_retry}}},Refused)
++            after 10000 -> error(initial_revocation_not_resolved) end
++        after
++            Proof ! release, exit(Caller,kill),
++            receive {'DOWN',Monitor,process,Caller,_} -> ok after 1000 -> error(initial_caller_alive) end
++        end,
++        assert_unconfigured(Ns), commit(Ns,{assertz,Grant}),
++        %% Both candidates prove against the absent assignment. Releasing the
++        %% local candidate first makes the competing destination deterministic.
++        Results = live_compete(Ns,[Goal,first_physics_goal(Ns,Anchor,Remote,<<33:256>>,Rows)]),
++        ?assertMatch([{1,{ok,_,{normalized,{committed,_,_}}}},
++                      {2,{ok,_,{normalized,{error,conflict_retry}}}}],Results),
++        {Pid,World = {world_ref,Ns,Anchor,room}} = installed(Ns),
++        #{World := #{spec := Spec}} = worlds(Ns),
++        ?assertEqual(Gravity/1000,maps:get(gravity,Spec)),
++        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_hosted,actor,Node,1,Key})),
++        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
++            {physics_control,room,Node,1,{controlled,pilot,eye}})),
++        ?assertMatch({2,1,controlled,_,{solid,{capsule,0.5,0.25}},_},
++            lists:keyfind(2,1,maps:get(bodies,Spec))),
++        ?assertMatch(#{navigation_ready := true},gen_server:call(Pid,status)),
++        ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns))
++    after gproc:unreg(quod_reg:name({host_test,local_proof})) end.
++
++assert_unconfigured(Ns) ->
++    [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)) || Goal <-
++        [{space_instance,room,physical_space},
++         {agent_host,actor,{'_'},{'_'},{'_'}},{agent_key,actor,{'_'},active},
++         {physics_space,room,{'_'},{'_'}},{physics_body_definition,room,{'_'},{'_'},{'_'},{'_'},{'_'}}]],
++    reconcile(Ns), ?assertEqual(#{},worlds(Ns)).
++
++first_physics_goal(Ns,Anchor,Host,Key,Rows) ->
++    Checks = [{physics_checked_body,B,K,P,S,D,1000000} ||
++        {physics_body_definition,room,B,_,K,P,{owned,S,D}} <- Rows],
++    {transaction,list_conjunction([
++        {current_ontology_identity,Ns,Anchor},
++        {'\\+',{physics_space,room,{0},{1}}},
++        {goal,{agent_hosted,actor,Host,1,Key}}] ++ Checks ++
++        [{assertz,R} || R <- Rows] ++
++        [{physics_control_agent,room,0,none,{controlled,pilot,eye}}])}.
++
++first_physics_rows(Principal,Gravity) ->
++    [{instance_of,physical_space,room},{physics_space,room,enabled,actor},
++     {physics_run,room,0,none},{physics_structure,room,1},{physics_next_body,room,5},
++     {physics_allowances,room,{limits,16,16,128,1000000,{geometry,32,128,128}},16667,Gravity,10000},
++     {physics_body_definition,room,1,1,fixed,{vector,0,-250,0},{owned,{box,8000,250,8000},1}},
++     {physics_body_definition,room,2,1,controlled,{vector,0,1200,3000},{owned,{capsule,500,250},1}},
++     {physics_body_definition,room,3,1,fixed,{vector,-1500,550,0},{owned,
++         {parts,[{part,{vector,0,0,0},{box,600,100,300}},
++                 {part,{vector,0,-300,0},{box,150,300,150}}]},1}},
++     {physics_body_definition,room,4,1,fixed,{vector,0,0,-4000},{owned,
++         {parts,[{part,{vector,-2000,1500,0},{box,250,1500,250}},
++                 {part,{vector,2000,1500,0},{box,250,1500,250}},
++                 {part,{vector,0,3250,0},{box,2250,250,250}}]},1}},
++     {instance_of,agent,pilot},
++     {physics_agent,room,pilot,1,2,
++         {motion,{grounded,900},2000,1600,500,{query_limits,2,0,8,128},[]}},
++     {physics_viewpoint,room,pilot,eye,2,{pose,{vector,0,700,0},{rotation,0,100,0}},
++         {tracking,view_only,500}},
++     {can_view_physics,room,Principal},{can_control_physics_agent,room,Principal,pilot}].
++
+ live_source_control_continuity_test_() ->
+     {timeout,90,fun() -> with_live_source(<<"live-controls">>,fun(F =
+             #{namespace := Ns,source := Source,destination := Destination,subject := Subject}) ->
+@@ -124,7 +228,7 @@ live_source_failure_isolates_world_test_() ->
+         {First,World} = installed_structure(Ns,2), await_live_receipt(Admission),
+         Anchor = quod_simplex:genesis_hash(Ns), SecondWorld = {world_ref,Ns,Anchor,archive},
+         Actor = {agent_instance_ref,Ns,Anchor,other},
+-        {ok,Blob} = quod_wire_term:encode_canonical(Actor), {ok,Key} = quod_agent_vault:generate(Blob),
++        {ok,Blob} = quod_wire_term:encode_canonical(Actor), {ok,Key} = quod_agent_vault:prepare(Blob, 0),
+         commit(Ns,{goal,{agent_hosted,other,Node,1,Key}}),
+         Rules = [{can_invoke,{physics_store_request,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Actor,{'_'},Ns},
+                  {can_invoke,{physics_activate,{'_'},{'_'},{'_'}},Actor,{'_'},Ns},
+@@ -270,7 +374,7 @@ live_source_authority_replacement_test_() ->
+         #{World := #{spec := Before}} = worlds(Ns),
+         Authority = {agent_instance_ref,Ns,quod_simplex:genesis_hash(Ns),other},
+         {ok,Blob} = quod_wire_term:encode_canonical(Authority),
+-        {ok,Key} = quod_agent_vault:generate(Blob),
++        {ok,Key} = quod_agent_vault:prepare(Blob, 0),
+         commit(Ns,{goal,{agent_hosted,other,Node,1,Key}}),
+         commit(Ns,list_conjunction([{assertz,R} || R <- [
+             {can_invoke,{physics_store_request,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Authority,{'_'},Ns},
+@@ -551,11 +655,12 @@ live_compete(Source,Goals) ->
+     Parent = self(), Token = make_ref(),
+     Jobs = [begin
+         {Pid,Monitor} = spawn_monitor(fun() -> Parent ! {live_race,Token,N,
+-            door_action(Source,{',',Goal,test_local_wait})} end), {Pid,Monitor}
++            door_action(Source,{',',Goal,test_local_wait})} end),
++        Proof = receive {local_proof_waiting,P} -> P after 5000 -> error(race_proof_missing) end,
++        {Pid,Monitor,Proof}
+     end || {N,Goal} <- lists:zip(lists:seq(1,length(Goals)),Goals)],
+     try
+-        First = receive {local_proof_waiting,A} -> A after 5000 -> error(first_proof_missing) end,
+-        Second = receive {local_proof_waiting,B} -> B after 5000 -> error(second_proof_missing) end,
++        [{_,_,First},{_,_,Second}] = Jobs,
+         try
+             First ! release,
+             One = receive {live_race,Token,N1,R1} -> {N1,R1} after 10000 -> error(first_race_timeout) end,
+@@ -565,7 +670,7 @@ live_compete(Source,Goals) ->
+         after First ! release, Second ! release end
+     after
+         [begin exit(P,kill), receive {'DOWN',M,process,P,_} -> ok after 1000 -> error(race_caller_alive) end end
+-         || {P,M} <- Jobs]
++         || {P,M,_} <- Jobs]
+     end.
+ 
+ assert_live_conflict(Results) ->
+@@ -2142,7 +2247,7 @@ host_assignment_replacement_test_() ->
+     {timeout, 90, fun() -> with_world(fun(F = #{namespace := Ns, node := Node, reference := Ref}) ->
+         {First, World} = enable(F),
+         {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+-        {ok, Key2} = quod_agent_vault:generate(Blob),
++        {ok, Key2} = quod_agent_vault:prepare(Blob, 1),
+         commit(Ns, {goal, {agent_assignment,actor,Node,1,Node,2,Key2}}),
+         {Second, World} = installed(Ns),
+         ?assertNotEqual(First, Second),
+@@ -2152,7 +2257,7 @@ host_assignment_replacement_test_() ->
+         commit(Ns, {goal, {agent_assignment,actor,Node,2,Remote,3,<<75:256>>}}),
+         receive {'DOWN', M, process, Second, _} -> ok after 10000 -> error(old_host_running) end,
+         reconcile(Ns), ?assertEqual(#{}, worlds(Ns)),
+-        {ok, Key4} = quod_agent_vault:generate(Blob),
++        {ok, Key4} = quod_agent_vault:prepare(Blob, 3),
+         commit(Ns, {goal, {agent_assignment,actor,Remote,3,Node,4,Key4}}),
+         {Third, World} = installed(Ns),
+         ?assertNotEqual(Second, Third),

@@ -1,6 +1,110 @@
 -module(quod_physics_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+first_host_and_complete_configuration_commit_together_test_() ->
+    [{binary_to_list(Ns),{timeout,90,fun() -> with_world(Ns,
+        fun(F) -> first_physical_configuration(F, Gravity) end,
+        fun(Rules) -> [R || R <- Rules, not lists:member(element(1,R),
+            [instance_of,physics_space,physics_run,physics_structure,
+             physics_next_body,physics_allowances,physics_body_definition])] end)
+    end}} || {Ns,Gravity} <- [{<<"gallery-first-physics">>,-9810},
+                             {<<"workshop-first-physics">>,-1620}]].
+
+first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,key := Key}, Gravity) ->
+    Anchor = element(3,Agent), Remote = setelement(2,Node,<<"remote-node">>),
+    Grant = {can_assign_agent_host,Node,actor,none,0,Node,Key},
+    RemoteGrant = {can_assign_agent_host,Node,actor,none,0,Remote,<<33:256>>},
+    commit(Ns,list_conjunction([{assertz,R} || R <-
+        [Grant,RemoteGrant,{can_prepare_agent_key,Node,actor,none,0,Node}]])),
+    {ok,ReadBytes,ReadSignature} = quod_node_actor:signed_goal(read,
+        {'::',Ns,{prepare_agent_key_custody,Agent,none,0,Node,{0}}},
+        crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
+    {ok,_,{normalized,{read,_,{answers,1,[Prepared]}}}} =
+        quod_client_goal_ingress:submit(ReadBytes,ReadSignature),
+    ?assertEqual({ok,[{<<"V0">>,Key}]},quod_durable_term:decode_result(Prepared)),
+    ?assertEqual(#{},worlds(Ns)),
+    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_instance,room,physical_space})),
+    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
+    Rows = first_physics_rows(Node,Gravity),
+    Goal = first_physics_goal(Ns,Anchor,Node,Key,Rows),
+    %% A real incomplete camera definition rolls back the host and all bodies.
+    MissingCamera = [R || R <- Rows, element(1,R) =/= physics_viewpoint],
+    ?assertMatch({ok,_,{normalized,{failed,_}}},
+        door_action(Ns,first_physics_goal(Ns,Anchor,Node,Key,MissingCamera))),
+    assert_unconfigured(Ns),
+    true = quod_reg:reg({host_test,local_proof}),
+    true = quod_reg:subscribe({physics,Ns}),
+    try
+        %% A prepared key reserves no assignment right. Revoke after proof,
+        %% before commit, and require the ordinary predicate OCC conflict.
+        Parent = self(), Tag = make_ref(),
+        {Caller,Monitor} = spawn_monitor(fun() -> Parent ! {first_assignment,Tag,
+            door_action(Ns,{',',Goal,test_local_wait})} end),
+        Proof = receive {local_proof_waiting,P} -> P after 5000 -> error(initial_proof_missing) end,
+        try
+            commit(Ns,{retract,Grant}), Proof ! release,
+            receive {first_assignment,Tag,Refused} ->
+                ?assertMatch({ok,_,{normalized,{error,conflict_retry}}},Refused)
+            after 10000 -> error(initial_revocation_not_resolved) end
+        after
+            Proof ! release, exit(Caller,kill),
+            receive {'DOWN',Monitor,process,Caller,_} -> ok after 1000 -> error(initial_caller_alive) end
+        end,
+        assert_unconfigured(Ns), commit(Ns,{assertz,Grant}),
+        %% Both candidates prove against the absent assignment. Releasing the
+        %% local candidate first makes the competing destination deterministic.
+        Results = live_compete(Ns,[Goal,first_physics_goal(Ns,Anchor,Remote,<<33:256>>,Rows)]),
+        ?assertMatch([{1,{ok,_,{normalized,{committed,_,_}}}},
+                      {2,{ok,_,{normalized,{error,conflict_retry}}}}],Results),
+        {Pid,World = {world_ref,Ns,Anchor,room}} = installed(Ns),
+        #{World := #{spec := Spec}} = worlds(Ns),
+        ?assertEqual(Gravity/1000,maps:get(gravity,Spec)),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_hosted,actor,Node,1,Key})),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+            {physics_control,room,Node,1,{controlled,pilot,eye}})),
+        ?assertMatch({2,1,controlled,_,{solid,{capsule,0.5,0.25}},_},
+            lists:keyfind(2,1,maps:get(bodies,Spec))),
+        ?assertMatch(#{navigation_ready := true},gen_server:call(Pid,status)),
+        ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns))
+    after gproc:unreg(quod_reg:name({host_test,local_proof})) end.
+
+assert_unconfigured(Ns) ->
+    [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)) || Goal <-
+        [{space_instance,room,physical_space},
+         {agent_host,actor,{'_'},{'_'},{'_'}},{agent_key,actor,{'_'},active},
+         {physics_space,room,{'_'},{'_'}},{physics_body_definition,room,{'_'},{'_'},{'_'},{'_'},{'_'}}]],
+    reconcile(Ns), ?assertEqual(#{},worlds(Ns)).
+
+first_physics_goal(Ns,Anchor,Host,Key,Rows) ->
+    Checks = [{physics_checked_body,B,K,P,S,D,1000000} ||
+        {physics_body_definition,room,B,_,K,P,{owned,S,D}} <- Rows],
+    {transaction,list_conjunction([
+        {current_ontology_identity,Ns,Anchor},
+        {'\\+',{physics_space,room,{0},{1}}},
+        {goal,{agent_hosted,actor,Host,1,Key}}] ++ Checks ++
+        [{assertz,R} || R <- Rows] ++
+        [{physics_control_agent,room,0,none,{controlled,pilot,eye}}])}.
+
+first_physics_rows(Principal,Gravity) ->
+    [{instance_of,physical_space,room},{physics_space,room,enabled,actor},
+     {physics_run,room,0,none},{physics_structure,room,1},{physics_next_body,room,5},
+     {physics_allowances,room,{limits,16,16,128,1000000,{geometry,32,128,128}},16667,Gravity,10000},
+     {physics_body_definition,room,1,1,fixed,{vector,0,-250,0},{owned,{box,8000,250,8000},1}},
+     {physics_body_definition,room,2,1,controlled,{vector,0,1200,3000},{owned,{capsule,500,250},1}},
+     {physics_body_definition,room,3,1,fixed,{vector,-1500,550,0},{owned,
+         {parts,[{part,{vector,0,0,0},{box,600,100,300}},
+                 {part,{vector,0,-300,0},{box,150,300,150}}]},1}},
+     {physics_body_definition,room,4,1,fixed,{vector,0,0,-4000},{owned,
+         {parts,[{part,{vector,-2000,1500,0},{box,250,1500,250}},
+                 {part,{vector,2000,1500,0},{box,250,1500,250}},
+                 {part,{vector,0,3250,0},{box,2250,250,250}}]},1}},
+     {instance_of,agent,pilot},
+     {physics_agent,room,pilot,1,2,
+         {motion,{grounded,900},2000,1600,500,{query_limits,2,0,8,128},[]}},
+     {physics_viewpoint,room,pilot,eye,2,{pose,{vector,0,700,0},{rotation,0,100,0}},
+         {tracking,view_only,500}},
+     {can_view_physics,room,Principal},{can_control_physics_agent,room,Principal,pilot}].
+
 live_source_control_continuity_test_() ->
     {timeout,90,fun() -> with_live_source(<<"live-controls">>,fun(F =
             #{namespace := Ns,source := Source,destination := Destination,subject := Subject}) ->
@@ -124,7 +228,7 @@ live_source_failure_isolates_world_test_() ->
         {First,World} = installed_structure(Ns,2), await_live_receipt(Admission),
         Anchor = quod_simplex:genesis_hash(Ns), SecondWorld = {world_ref,Ns,Anchor,archive},
         Actor = {agent_instance_ref,Ns,Anchor,other},
-        {ok,Blob} = quod_wire_term:encode_canonical(Actor), {ok,Key} = quod_agent_vault:generate(Blob),
+        {ok,Blob} = quod_wire_term:encode_canonical(Actor), {ok,Key} = quod_agent_vault:prepare(Blob, 0),
         commit(Ns,{goal,{agent_hosted,other,Node,1,Key}}),
         Rules = [{can_invoke,{physics_store_request,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Actor,{'_'},Ns},
                  {can_invoke,{physics_activate,{'_'},{'_'},{'_'}},Actor,{'_'},Ns},
@@ -270,7 +374,7 @@ live_source_authority_replacement_test_() ->
         #{World := #{spec := Before}} = worlds(Ns),
         Authority = {agent_instance_ref,Ns,quod_simplex:genesis_hash(Ns),other},
         {ok,Blob} = quod_wire_term:encode_canonical(Authority),
-        {ok,Key} = quod_agent_vault:generate(Blob),
+        {ok,Key} = quod_agent_vault:prepare(Blob, 0),
         commit(Ns,{goal,{agent_hosted,other,Node,1,Key}}),
         commit(Ns,list_conjunction([{assertz,R} || R <- [
             {can_invoke,{physics_store_request,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}},Authority,{'_'},Ns},
@@ -551,11 +655,12 @@ live_compete(Source,Goals) ->
     Parent = self(), Token = make_ref(),
     Jobs = [begin
         {Pid,Monitor} = spawn_monitor(fun() -> Parent ! {live_race,Token,N,
-            door_action(Source,{',',Goal,test_local_wait})} end), {Pid,Monitor}
+            door_action(Source,{',',Goal,test_local_wait})} end),
+        Proof = receive {local_proof_waiting,P} -> P after 5000 -> error(race_proof_missing) end,
+        {Pid,Monitor,Proof}
     end || {N,Goal} <- lists:zip(lists:seq(1,length(Goals)),Goals)],
     try
-        First = receive {local_proof_waiting,A} -> A after 5000 -> error(first_proof_missing) end,
-        Second = receive {local_proof_waiting,B} -> B after 5000 -> error(second_proof_missing) end,
+        [{_,_,First},{_,_,Second}] = Jobs,
         try
             First ! release,
             One = receive {live_race,Token,N1,R1} -> {N1,R1} after 10000 -> error(first_race_timeout) end,
@@ -565,7 +670,7 @@ live_compete(Source,Goals) ->
         after First ! release, Second ! release end
     after
         [begin exit(P,kill), receive {'DOWN',M,process,P,_} -> ok after 1000 -> error(race_caller_alive) end end
-         || {P,M} <- Jobs]
+         || {P,M,_} <- Jobs]
     end.
 
 assert_live_conflict(Results) ->
@@ -2142,7 +2247,7 @@ host_assignment_replacement_test_() ->
     {timeout, 90, fun() -> with_world(fun(F = #{namespace := Ns, node := Node, reference := Ref}) ->
         {First, World} = enable(F),
         {ok, Blob} = quod_wire_term:encode_canonical(Ref),
-        {ok, Key2} = quod_agent_vault:generate(Blob),
+        {ok, Key2} = quod_agent_vault:prepare(Blob, 1),
         commit(Ns, {goal, {agent_assignment,actor,Node,1,Node,2,Key2}}),
         {Second, World} = installed(Ns),
         ?assertNotEqual(First, Second),
@@ -2152,7 +2257,7 @@ host_assignment_replacement_test_() ->
         commit(Ns, {goal, {agent_assignment,actor,Node,2,Remote,3,<<75:256>>}}),
         receive {'DOWN', M, process, Second, _} -> ok after 10000 -> error(old_host_running) end,
         reconcile(Ns), ?assertEqual(#{}, worlds(Ns)),
-        {ok, Key4} = quod_agent_vault:generate(Blob),
+        {ok, Key4} = quod_agent_vault:prepare(Blob, 3),
         commit(Ns, {goal, {agent_assignment,actor,Remote,3,Node,4,Key4}}),
         {Third, World} = installed(Ns),
         ?assertNotEqual(Second, Third),

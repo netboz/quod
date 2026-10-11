@@ -1,0 +1,57 @@
+{
+  "captured_at": "2026-10-11T00:26:05.936946+00:00",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_lobby_tests"
+  ],
+  "campaigns": [
+    {
+      "id": 1,
+      "exit": 1,
+      "cause": "Invalid rebar --test option; no tests ran. Crashdump retained."
+    },
+    {
+      "id": 2,
+      "exit": 1,
+      "tests": 12,
+      "failures": 1,
+      "cause": "New test used non-existent quod_reg:whereis; source composition and view checks passed before this test-only failure. Corrected to existing via registration."
+    },
+    {
+      "id": 3,
+      "exit": 0,
+      "tests": 12,
+      "failures": 0
+    }
+  ],
+  "production_changes": 0,
+  "test_added_lines": 62,
+  "world_identities": [
+    "lobby-test-personal",
+    "authored-gallery"
+  ],
+  "verified": [
+    "missing-composition unavailable",
+    "complete unchanged vocabulary signed atomic edit",
+    "nonphysical scene retains all six authored marks",
+    "genesis anchor unchanged",
+    "one append-only target height",
+    "guarded repeat refuses with zero additional writes",
+    "zero physics resources"
+  ],
+  "readable_submission_parser_equivalence": true,
+  "submission_sha256": "392751929daf94ee5f2766dfcaa194243efa30958dbdc48884518cb4e986f68b",
+  "bundle_sha256": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab",
+  "real_world_submission_pending": false,
+  "exact_personal_namespace_and_genesis_guard": true,
+  "actual_explorer_scoped_goal_parser_passed": true,
+  "additional_local_parser_attempt": {
+    "failed": "An initial anchor byte-list representation made the combined goal too_large under unchanged grammar. Nothing submitted.",
+    "corrected": "Use literal32-byte opaque anchor; actual normal Explorer-scoped final goal parses, exact transaction AST matches tested bundle.",
+    "limits_changed": false
+  },
+  "real_world_transaction": "58ad7cab3cf1ae9ce82fd1ac160b13f8f47c42f1d80bcde392b1ecb21870962e"
+}

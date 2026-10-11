@@ -326,6 +326,27 @@ mod tests {
     }
 
     #[test]
+    fn explicit_surface_opening_remains_passable_with_solid_rim() {
+        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
+        let floor = (2,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(
+                vec![(-5.0,0.0,-5.0),(5.0,0.0,-5.0),(5.0,0.0,5.0),(-5.0,0.0,5.0),
+                     (-1.0,0.0,-1.0),(1.0,0.0,-1.0),(1.0,0.0,1.0),(-1.0,0.0,1.0)],
+                vec![(0,4,1),(1,4,5),(1,5,2),(2,5,6),
+                     (2,6,3),(3,6,7),(3,7,0),(0,7,4)]),1.0);
+        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor]).unwrap();
+        world.step().unwrap();
+        assert!(matches!(travel(&world,(0.0,-6.0,0.0)),Answer::Clear(_,_)));
+        let moved = apply(&mut world,1,1,Query::Place(((3.0,3.0,0.0),(0.0,0.0,0.0))),LIMITS);
+        assert!(matches!(moved,Answer::Clear(_,_)));
+        world.step().unwrap();
+        let answer = travel(&world,(0.0,-6.0,0.0));
+        assert!(matches!(answer,Answer::Clipped(_,_,_)),"rim missed: {answer:?}");
+        let p = end(answer);
+        assert!(p.1 >= 1.0 && p.1 < 1.01,"rim contact: {p:?}");
+    }
+
+    #[test]
     fn movement_stops_before_dynamic_objects_without_pushing_them() {
         let mut world = world(vec![box_at(3,Kind::Dynamic,(2.0,1.002,0.0),(0.5,1.0,0.5))]);
         let obstacle = *world.bodies[world.rows[&3].1].position();

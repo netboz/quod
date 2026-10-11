@@ -1,0 +1,76 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/spaces.md",
+      "sha256": "289b489095a715c72998b7fcd49f2faa63f4c9899e1c8652100504042ef58cc3"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "47e822ed293c6856ac80ff92bfdab232922f5fe55984e2e0636668554cf34ec5"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog.pl",
+      "sha256": "da8e195d52072100f66ffe6ce2422b261aa3fc5c606a780a57effc61186e7174"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "08abfe881ae634a3139b4f21cccec899939a5a44a908b33a5903096c72648aff"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "sha256": "83042761ef87578df3ca7567e60582d68c4c7df24feddfab3a253d3dea95bb6d"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "sha256": "87f873c9f8216a504b8af3f4ce113a4af2fff5e77a0ea6501454764b94de08df"
+    },
+    {
+      "file": "client/src/prolog-edit.js",
+      "sha256": "8447a8aee1ec4ce4d7675e512aface1266d37ee91e53bb6a7b4b49afe16977e3"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "211b901933ee57437ececc81355e37b6f727970a813e67cbf50127ecafa70e05"
+    },
+    {
+      "file": "src/quod_erlog_db_local_prove.erl",
+      "sha256": "63011937e61f2a3eab8035d99c4d20d1f018a20903b2b9bc63619c45aa55717e"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "sha256": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6"
+    },
+    {
+      "file": "test/quod_prolog_ontology_tests.erl",
+      "sha256": "db4ad8a4d5fb3efb397bfc40a6259c55bd4e42bd75fed53648d33a4b55ea1902"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "8f77e9b5d1ad6b596f47a5727b1e2bb0b195796fabb7ad7f1a00a28ee6d5c445"
+    },
+    {
+      "file": "plan.txt",
+      "sha256": "c656b3511a56306a3fce10f9030c41872f36450d257e348458c22a3c78aaacc9"
+    },
+    {
+      "file": "predicate-edit-measurements.json",
+      "sha256": "315b55637ce066fffda0ccb16b8106083422e4817f108b3e9448f1caed15e6b0"
+    },
+    {
+      "file": "measure-predicate-edits.escript",
+      "sha256": "299332c15b942e1f2f09495d836c16069e480a2042c004f5b37e9f9e5b984218"
+    }
+  ]
+}

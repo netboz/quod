@@ -2,6 +2,239 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([start/1, stop/1, preview/1]).
 
+authored_space_composition_preserves_world_test_() ->
+    {timeout, 90, fun() ->
+        Dir = filename:join("/tmp", "quod-authored-space-" ++
+                            integer_to_list(erlang:unique_integer([positive]))),
+        Ctx = start(Dir),
+        {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
+        OtherNs = <<"authored-gallery">>,
+        {_, Base} = maps:get(LobbyNs, maps:get(ontologies, Ctx)),
+        {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
+        Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
+        {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
+            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
+        Other = start_namespace(OtherNs, Base#{
+            data_dir => filename:join(Dir, "gallery"),
+            genesis_diff => quod_prolog:terms_to_diff([
+                {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
+                {world_view, gallery, playing, Scene}])}),
+        try
+            lists:foreach(fun({Ns, Space}) ->
+                Anchor = quod_simplex:genesis_hash(Ns),
+                Setup = editor_conjunction([
+                    {assertz, {instance_of, space, Space}},
+                    {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
+                               quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
+                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
+                commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
+                View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
+                ?assertMatch({ok, [#{<<"V0">> := {world_view, _, [], unavailable}}], _},
+                             read(Ctx, View)),
+                Before = quod_prolog:applied(Ns),
+                Edit = editor_scope(Ns, authored_space_composition_goal()),
+                commit_editor_goal(Ctx, Edit),
+                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
+                ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
+                ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+                ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
+                ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Ctx, execute, Edit)),
+                ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
+                ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds))
+            end, [{LobbyNs, personal_lobby}, {OtherNs, gallery}])
+        after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
+    end}.
+
+authored_space_composition_goal() ->
+    Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/space.pl")),
+    Heads = [case T of {':-', H, _} -> H; H -> H end || T <- Terms],
+    Indicators = lists:usort([erlog_int:functor(H) || H <- Heads]),
+    Checks = [{'$quod_predicate_source', {'/', F, A}, <<>>}
+              || {F, A} <- Indicators, F =/= isa],
+    Edges = [{'\\+', {clause, {isa, space, thing}, true}},
+             {'\\+', {clause, {isa, physical_space, space}, true}}],
+    {Assertions, _} = lists:mapfoldl(fun(T, Vn) ->
+        {Fresh, _, Next} = erlog_int:term_instance(T, Vn),
+        {{assertz, Fresh}, Next}
+    end, 0, Terms),
+    {transaction, balanced_space_goals(Checks ++ Edges ++ Assertions)}.
+
+balanced_space_goals([G]) -> G;
+balanced_space_goals(Gs) ->
+    {Left, Right} = lists:split(length(Gs) div 2, Gs),
+    {',', balanced_space_goals(Left), balanced_space_goals(Right)}.
+
+inactive_physics_source_authoring_preserves_world_test_() ->
+    {timeout, 300, fun() ->
+        Dir = filename:join("/tmp", "quod-inactive-physics-authoring-" ++
+                            integer_to_list(erlang:unique_integer([positive]))),
+        Ctx = start(Dir),
+        {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
+        {_, Base} = maps:get(LobbyNs, maps:get(ontologies, Ctx)),
+        {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
+        Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
+        OtherNs = <<"inactive-physics-gallery">>,
+        {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
+            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
+        Other = start_namespace(OtherNs, Base#{
+            data_dir => filename:join(Dir, "gallery"),
+            genesis_diff => quod_prolog:terms_to_diff([
+                {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
+                {world_view, gallery, playing, Scene}])}),
+        ColdName = <<"authored_physics_", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+        ?assertError(badarg, binary_to_existing_atom(ColdName, utf8)),
+        Sources = [begin
+            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
+            Source
+        end || File <- ["agent_instance.pl", "quod_physics.pl"]],
+        Edits = source_predicate_drafts(iolist_to_binary(
+            [Sources, "\n", ColdName, "(ready).\n"])),
+        try
+            lists:foreach(fun({Ns, Space, {Sup, Config}}) ->
+                Anchor = quod_simplex:genesis_hash(Ns),
+                Target = {ontology_ref, Ns, Anchor},
+                Setup = editor_conjunction([
+                    {assertz, {instance_of, space, Space}},
+                    {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
+                               quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
+                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
+                commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
+                commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal())),
+                View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
+                Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
+                Before = quod_prolog:applied(Ns),
+                CheckInactive = fun() ->
+                    ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
+                    ?assertEqual(ok, quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
+                        agent_hosts, all, quod_time:mono_ms() + 10000)),
+                    ?assertEqual(ok, quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
+                        physics_worlds, all, quod_time:mono_ms() + 10000)),
+                    ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds)),
+                    ?assertMatch({_, []}, quod_runtime:agents(Ns)),
+                    ?assertMatch(#{resource_failures := Failures, reaction_failures := 0,
+                                   reactions_executed := 0, reconcile_failures := 0}
+                                 when map_size(Failures) =:= 0, quod_runtime:stats(Ns))
+                end,
+                Publish = fun({Indicator, Draft}) ->
+                    Baseline = editor_source(Ctx, Target, Indicator),
+                    ?assertEqual(<<>>, Baseline),
+                    Edit = inactive_source_edit(
+                        compile_source_edit(Ctx, Target, Indicator, Baseline, Draft)),
+                    commit_editor_goal(Ctx, Edit),
+                    ?assertEqual(Draft, editor_source(Ctx, Target, Indicator)),
+                    CheckInactive()
+                end,
+                [First | Rest] = Edits,
+                {Indicator, Draft} = First,
+                Stale = inactive_source_edit(
+                    compile_source_edit(Ctx, Target, Indicator, <<>>, Draft)),
+                OtherOwner = Ctx#{instance => <<"human_user(other_agent).">>},
+                assert_editor_refusal(OtherOwner, Stale, {not_allowed, Ns}),
+                Publish(First),
+                assert_editor_refusal(Ctx, Stale, {edit_conflict, Indicator}),
+                {Part, Remaining} = lists:split(length(Rest) div 2, Rest),
+                lists:foreach(Publish, Part),
+                Partial = complete_source(Ctx, Target),
+                PartialHeight = quod_prolog:applied(Ns),
+                stop_process(Sup),
+                {Resumed, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
+                try
+                    ?assertEqual(PartialHeight, quod_prolog:applied(Ns)),
+                    ?assertEqual(Partial, complete_source(Ctx, Target)),
+                    CheckInactive(),
+                    lists:foreach(Publish, Remaining),
+                    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+                    ?assertEqual(Before + length(Edits), quod_prolog:applied(Ns)),
+                    Cold = binary_to_existing_atom(ColdName, utf8),
+                    ?assertMatch({ok, [#{}], _}, read(Ctx, editor_scope(Ns, {Cold, ready}))),
+                    Complete = complete_source(Ctx, Target),
+                    assert_repeat_source_has_no_io(Ctx, Target, Complete),
+                    stop_process(Resumed),
+                    {FinalBoot, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
+                    try
+                        ?assertEqual(Before + length(Edits), quod_prolog:applied(Ns)),
+                        ?assertEqual(Complete, complete_source(Ctx, Target)),
+                        CheckInactive(),
+                        assert_repeat_source_has_no_io(Ctx, Target, Complete)
+                    after stop_process(FinalBoot) end
+                after stop_process(Resumed) end
+            end, [{LobbyNs, personal_lobby, maps:get(LobbyNs, maps:get(ontologies, Ctx))},
+                  {OtherNs, gallery, Other}])
+        after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
+    end}.
+
+inactive_source_edit({'::', Ns, {',', Identity, {transaction, Edit}}}) ->
+    %% Callable guards enter normal target symbol admission and capture even
+    %% absent predicates. Cold source introspection alone records no read.
+    Guards = [{'\\+', {physics_space, {'_'}, {'_'}, {'_'}}},
+              {'\\+', {agent_host, {'_'}, {'_'}, {'_'}, {'_'}}},
+              {'$quod_predicate_source', {'/', physics_space, 3}, <<>>},
+              {'$quod_predicate_source', {'/', agent_host, 4}, <<>>}],
+    {'::', Ns, {',', Identity, {transaction, editor_conjunction(Guards ++ [Edit])}}}.
+
+assert_editor_refusal(Ctx, Goal, Reason) ->
+    {ok, _, {normalized, {failed, Encoded}}} = submit(Ctx, execute, Goal),
+    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+    ?assert(lists:member(quod_wire_term:encode_canonical(Reason),
+                         [quod_wire_term:encode_canonical(R) || R <- Reasons])).
+
+source_predicate_drafts(Source) ->
+    {ok, Program} = quod_client_goal_parser:parse_program(Source, 3),
+    Groups = lists:foldl(fun(#{goal := Clause}, Acc) ->
+        Head = case Clause of {':-', H, _} -> H; _ -> Clause end,
+        {ok, {Name, Arity}} = quod_wire_term:callable_functor(Head),
+        Indicator = {'/', Name, Arity},
+        {ok, Key} = quod_wire_term:encode_canonical(Indicator),
+        Rule = case Clause of {':-', _, _} -> Clause; _ -> {':-', Clause, true} end,
+        {Canonical, _, _} = erlog_int:term_instance(Rule, 0),
+        {ok, Text} = quod_client_goal_parser:format_clause(Canonical),
+        maps:update_with(Key, fun({I, Parts}) -> {I, [Parts, Text, $\n]} end,
+                         {Indicator, [Text, $\n]}, Acc)
+    end, #{}, Program),
+    Drafts = [{Indicator, iolist_to_binary(Parts)}
+              || {_, {Indicator, Parts}} <- lists:sort(maps:to_list(Groups))],
+    %% Publishing a selector makes it callable by the current runtime, even
+    %% with no configured space. Its helpers must already be complete.
+    EntryPoints = [<<"agent_hosting_projection">>, <<"physics_projection">>, <<"react_on">>],
+    {Helpers, Entries} = lists:partition(fun({{'/', Name, _}, _}) ->
+        {ok, [Symbol]} = quod_wire_term:symbol_names(Name),
+        not lists:member(Symbol, EntryPoints)
+    end, Drafts),
+    Helpers ++ Entries.
+
+incomplete_hosting_selector_is_not_inactive_test_() ->
+    {timeout, 60, fun() ->
+        Dir = filename:join("/tmp", "quod-incomplete-selector-" ++
+                            integer_to_list(erlang:unique_integer([positive]))),
+        Ctx = start(Dir),
+        try
+            {ontology_ref, Ns, _} = Target = maps:get(lobby, Ctx),
+            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod),
+                                                       "ontologies/agent_instance.pl")),
+            [{Indicator, Draft}] = [D || D = {{'/', {'$quod_symbol',
+                <<"agent_hosting_projection">>}, 4}, _} <- source_predicate_drafts(Source)],
+            commit_editor_goal(Ctx, inactive_source_edit(
+                compile_source_edit(Ctx, Target, Indicator, <<>>, Draft))),
+            ?assertEqual({error, {resource_selection_failed,
+                                  {no_solution, {agent_hosting_projection, 4}}}},
+                quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
+                    agent_hosts, all, quod_time:mono_ms() + 10000))
+        after stop(Ctx), file:del_dir_r(Dir) end
+    end}.
+
+physics_reactions_ignore_domain_notices_test() ->
+    Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod),
+                                                "ontologies/quod_physics.pl")),
+    Reactions = [T || T = {':-', {react_on, _, _}, _} <- Terms],
+    Binding = #{reference => {agent_instance_ref, <<"inactive-physics">>, <<1:256>>, observer},
+                epoch => 1, public_key => <<2:256>>, request_timeout_ms => 1000},
+    ?assertEqual(2, length(Reactions)),
+    lists:foreach(fun(Reaction) ->
+        ?assertEqual(unmatched, quod_runtime_predicates:run_reaction(
+            <<"inactive-physics">>, 1, Binding, Reaction, {observed, {ready, ontology, all}},
+            quod_committed_projection:new_est()))
+    end, Reactions).
+
 lobby_projection_recovery_test_() ->
     {timeout, 90, fun() ->
         Dir = filename:join("/tmp", "quod-lobby-" ++ integer_to_list(erlang:unique_integer([positive]))),

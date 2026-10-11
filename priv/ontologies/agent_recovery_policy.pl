@@ -15,8 +15,8 @@ agent_remote_observation_kind(suspected_unreachable).
 agent_remote_observation_kind(reachable).
 agent_remote_observation_kind(withdrawing).
 
-can_prepare_agent_key(Destination, Instance, OldHost, Epoch) :-
-    agent_hosted(Instance, OldHost, Epoch, _),
+can_prepare_agent_key(Destination, Instance, OldHost, Epoch, Destination) :-
+    integer(Epoch), Epoch > 0,
     eligible_agent_host(Instance, Destination),
     Destination \= OldHost.
 
@@ -95,7 +95,7 @@ agent_recovery_data(Observer, I, Host, Epoch, Expected, Round, Kind,
     agent_observation_expiry(I, Host, Epoch, Round, Observer, Kind,
                              ObservedAt, Maximum, Expiry),
     (Kind = suspected_unreachable,
-     can_prepare_agent_key(Observer, I, Host, Epoch),
+     agent_key_preparation(Observer, I, Host, Epoch, Observer),
      \+ agent_candidate_key(I, Host, Epoch, Observer, _) -> Preparation = required
     ; agent_failure_report(I, Host, Epoch, Round, Observer,
                            observation(_, _, ReportExpiry), Kind),

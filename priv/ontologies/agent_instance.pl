@@ -31,11 +31,22 @@ agent_hosting_instances(all, Node, Instances) :-
 agent_work_after(start, _).
 agent_work_after(after(Previous), Key) :- Key @> Previous.
 
+%% First custody and recovery use the same exact prior-assignment policy.
+%% Preparing a key grants neither an assignment nor signing authority.
+agent_preparation_assignment(Instance, none, 0) :-
+    \+ agent_host(Instance, _, _, _), \+ agent_key(Instance, _, _).
+agent_preparation_assignment(Instance, Host, Epoch) :-
+    integer(Epoch), Epoch > 0,
+    agent_hosted(Instance, Host, Epoch, _).
+
+agent_key_preparation(Caller, Instance, OldHost, OldEpoch, Destination) :-
+    agent_preparation_assignment(Instance, OldHost, OldEpoch),
+    can_prepare_agent_key(Caller, Instance, OldHost, OldEpoch, Destination).
+
 action(initialize_agent_host(Instance, NodeRef, PublicKey),
        [current_principal(Administrator),
         can_assign_agent_host(Administrator, Instance, none, 0, NodeRef, PublicKey),
-        \+ agent_host(Instance, _, _, _),
-        \+ agent_key(Instance, _, _),
+        agent_preparation_assignment(Instance, none, 0),
         term_variables(Instance, []), term_variables(NodeRef, []),
         agent_identifier(PublicKey)],
        agent_hosted(Instance, NodeRef, 1, PublicKey)).
@@ -114,9 +125,9 @@ resolve_agent_recovery(Instance, NodeRef, Epoch, Round) :-
 %% assignment. Private keys remain in that node's vault, never in ontology facts.
 action(prepare_agent_key(Instance, OldNode, OldEpoch, NodeRef, PublicKey),
        [current_principal(NodeRef),
-        can_prepare_agent_key(NodeRef, Instance, OldNode, OldEpoch),
         term_variables(old(OldNode, OldEpoch), []),
-        agent_hosted(Instance, OldNode, OldEpoch, _),
+        integer(OldEpoch), OldEpoch > 0,
+        agent_key_preparation(NodeRef, Instance, OldNode, OldEpoch, NodeRef),
         agent_identifier(PublicKey),
         \+ agent_key(Instance, PublicKey, _),
         \+ agent_candidate_key(Instance, OldNode, OldEpoch, NodeRef, _)],

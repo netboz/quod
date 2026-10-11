@@ -144,6 +144,18 @@ authored_cold_predicate_has_empty_baseline_without_atom_allocation_test() ->
         ?assertError(badarg, binary_to_existing_atom(Name, utf8))
     end).
 
+admitted_cold_absence_guard_records_read_test() ->
+    Name = <<"source_guard_", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+    with_authored([], fun(St) ->
+        ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
+        Goal = {'\\+', {{'$quod_symbol', Name}, {'X'}, {'Y'}, {'Z'}}},
+        {ok, Admitted} = quod_wire_term:materialize_goal_symbols(Goal),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Admitted, St)),
+        Functor = {binary_to_existing_atom(Name, utf8), 3},
+        ?assert(maps:is_key(Functor, quod_erlog_db_local_prove:get_read_set(db_ref(St)))),
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
+    end).
+
 predicate_source_compares_bound_text_without_parsing_or_unifying_code_test() ->
     with_authored([{choice, {'X'}}], fun(St) ->
         Source = value({'Source'}, {'$quod_predicate_source', {'/', choice, 1}, {'Source'}}, St),

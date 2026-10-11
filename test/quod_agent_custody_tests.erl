@@ -107,7 +107,7 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
     commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
     Rules = [
         {can_report_agent_failure, Node, actor, Old, {'_'}},
-        {can_prepare_agent_key, Node, actor, Old, 1},
+        {can_prepare_agent_key, Node, actor, Old, 1, Node},
         {can_assign_agent_host, Node, actor, Old, 1, Node, {'_'}},
         {':-', {agent_recovery_candidate, Node, actor, Old, 1, {'Round'}, Node, 1},
          {agent_failure_support, actor, Old, 1, {'Round'}, Node, suspected_unreachable}}],

@@ -1,0 +1,166 @@
+{
+  "base_commit": "ce98595764711a2f6385194b09b544be531de934",
+  "frozen_at": "2026-10-11T11:09:29.522092+00:00",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "Dockerfile",
+      "sha256": "96c9b3b28ebb5871fa4aa91487ca273d815f0788767e50eaaca276d0542f41c6"
+    },
+    {
+      "file": "deploy/quod.nomad",
+      "sha256": "6c78056b5ee15ca40e8005b3056ae4782d22ddbb980de3142a67972902c6aad2"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/initial-custody-plan-01.md",
+      "sha256": "37892a8e759aee348d003c6a0be0e229c028a5c7d11c4c4e36f1d85f62829a07"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/initial-custody-review-01/plan-review/disposition.md",
+      "sha256": "ffe7f24fb746278a7b4f76e6f7110956a1f2c5033f069903d3dc0f915778f19b"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/outdated/multiwrite-architecture.md",
+      "sha256": "88686928ec5762528cb5fde8aac7a9a05819e8390af5e58a0391522253a0576b"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "47e822ed293c6856ac80ff92bfdab232922f5fe55984e2e0636668554cf34ec5"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "sha256": "f6a57e4f4e4b0bf18a815bff9f33e0e56741d5dce4630a5e9d5bbd36fc3a5b1f"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179"
+    },
+    {
+      "file": "native/quod_physics/src/motion.rs",
+      "sha256": "4bc4bb4f71e2253a13a98b527ab473a3b51cea21e593d8d661b3a9423f893757"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613"
+    },
+    {
+      "file": "priv/ontologies/agent_recovery_policy.pl",
+      "sha256": "9839cd3f6f49115391e00963f97401f34374f977d2b1b5054fb9e0e63400b865"
+    },
+    {
+      "file": "priv/ontologies/node_execution.pl",
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "08abfe881ae634a3139b4f21cccec899939a5a44a908b33a5903096c72648aff"
+    },
+    {
+      "file": "src/predicates/quod_agent_predicates.erl",
+      "sha256": "1c1b4ce3fedb97cd4d6bcacd394bffa1781de7ae01d4998c13c9e1dcda1668e2"
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "sha256": "020a6fb0defaa7ac0ef704eff255a297e8695d098ccf3f3c05eb4d18b2d65489"
+    },
+    {
+      "file": "src/predicates/quod_ontology_predicates.erl",
+      "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "src/quod_agent.erl",
+      "sha256": "a88aabb4b4acefb934856cf44ea0659a8d4079386fd6af62f15e85b545e3d32d"
+    },
+    {
+      "file": "src/quod_agent_ref.erl",
+      "sha256": "ca5065c341b9f2ac5303bc0ec01bc4dd4cb1a4ae3b0c6c4150bd33cfb4acd81c"
+    },
+    {
+      "file": "src/quod_agent_vault.erl",
+      "sha256": "56178e570601ce672b5e750ffed60a4c18f6fb4dca037799793c7dd2126ab2b1"
+    },
+    {
+      "file": "src/quod_app.erl",
+      "sha256": "1c4997684ec249525145715e5fc3c94d6a9075c07007a558171c6f9eb9ed7a4b"
+    },
+    {
+      "file": "src/quod_file.erl",
+      "sha256": "f2a0b5b6f4ee3dc5f16824a933f35a19d6a0f8a99c66a49b0a3241cc8b8937e2"
+    },
+    {
+      "file": "src/quod_node_actor.erl",
+      "sha256": "c3e97630898fd487f096fc4903268e994821f5e56a263a02205d5c2ae33b41a1"
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "sha256": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7"
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "dab686922d3775eb64596126aaf41a04bb5e16fc2e5011b7486ae2c55969c007"
+    },
+    {
+      "file": "src/quod_schema.erl",
+      "sha256": "48698bbe1a6d14f179ce10ec876d37b393842cf7257f9ededef31e34f439ff96"
+    },
+    {
+      "file": "test/quod_agent_actions_tests.erl",
+      "sha256": "8ca2532586ad46e5bfca0d04f8271ce68b15a483421d9aec7f40c7e805204899"
+    },
+    {
+      "file": "test/quod_agent_custody_tests.erl",
+      "sha256": "3751623388e6e1f89bdb56bf1d5497f27df9aab15fe8891b04a7255665a29d24"
+    },
+    {
+      "file": "test/quod_agent_hosting_tests.erl",
+      "sha256": "bb6fde5a105904464fdf76d1033e3d84c14d8bac7fdacf5b69ddf8d0eaf9c23c"
+    },
+    {
+      "file": "test/quod_agent_predicates_tests.erl",
+      "sha256": "24f1076a0ca2413e9471d51d3e61b60a70bca8ca72f2af593f871589faadda94"
+    },
+    {
+      "file": "test/quod_agent_trace_tests.erl",
+      "sha256": "8d31083f06f1fca3ddfa1825ae3a23dbf74104c055821c2283fccf61bd56fad8"
+    },
+    {
+      "file": "test/quod_agent_vault_tests.erl",
+      "sha256": "d0622bd8af8dd6ab15a67d64c2a920ab9cedcb2f433f174e7150cd775471cd5c"
+    },
+    {
+      "file": "test/quod_common_primitives_tests.erl",
+      "sha256": "40bd4baec062647471d85bb4f1b36369479e50605ce14b20d3fddc7e2de65e2a"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "87fe866ea65ead1e6343762a425a8419d5bffe65b84bd6cad4dcb6c08c6fc3e3"
+    },
+    {
+      "file": "test/quod_node_actor_tests.erl",
+      "sha256": "507f0a747d1e29fba56589dfa8f441b6c1c05fa7916a7e70b57a20fb9dfe9762"
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "sha256": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "sha256": "a49ee4fc7f8174b81452e8ce16e9ae0391a65a24b1fc900032606a5927fee568"
+    }
+  ]
+}

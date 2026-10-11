@@ -1,0 +1,36 @@
+{
+  "captured_at": "2026-10-11T00:52:43.520662+00:00",
+  "user_desktop_observations": {
+    "returned_to_original_world_tab_without_reload": true,
+    "scene": "visible",
+    "open_console": "enabled",
+    "console_opened_and_signed_read_succeeded": true,
+    "query": "current_ontology_identity(Namespace, Anchor), current_principal(Principal).",
+    "origin_height": 8,
+    "origin_namespace": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+    "origin_anchor": "43583F67A61EC2E962713A5B27B0CEF41A30593C685C5206866759549FD3B7B3",
+    "principal": {
+      "kind": "agent_instance_ref",
+      "namespace": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+      "anchor": "43583F67A61EC2E962713A5B27B0CEF41A30593C685C5206866759549FD3B7B3",
+      "instance": "me"
+    }
+  },
+  "source_change": {
+    "namespace": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+    "anchor": "82EE4CF1CD1A9605415A34C49A8D6A4F663B9CA96786A60AFEA0B4B0030D613B",
+    "transaction": "58ad7cab3cf1ae9ce82fd1ac160b13f8f47c42f1d80bcde392b1ecb21870962e",
+    "world_height": 3
+  },
+  "established": "Real ordinary desktop scene and console restoration through existing subscribed view; same anchored world and acting agent. No manual per-edit adoption/reload.",
+  "not_established": [
+    "native collider installation",
+    "controlled body travel",
+    "real desktop collision",
+    "physical roof/console/opening coverage",
+    "remote committed collider propagation and unchanged-work measurements",
+    "Vive/WebXR physics"
+  ],
+  "physics_enabled": false,
+  "agent_server_mutations": 0
+}

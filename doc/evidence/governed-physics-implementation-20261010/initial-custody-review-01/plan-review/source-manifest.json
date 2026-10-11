@@ -1,0 +1,116 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/outdated/multiwrite-architecture.md",
+      "sha256": "88686928ec5762528cb5fde8aac7a9a05819e8390af5e58a0391522253a0576b"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "sha256": "26eb5a4d819311dbcdbbd37b1ae97de4667b73cc5b94e119027225e3e186ca75"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "47e822ed293c6856ac80ff92bfdab232922f5fe55984e2e0636668554cf34ec5"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/initial-custody-plan-01.md",
+      "sha256": "25e98a95fecc59bd32f6a91ceb29892aeb9d7135fe9a9473e0c82b9f9dec240b"
+    },
+    {
+      "file": "src/quod_agent.erl",
+      "sha256": "037e20915e12b83e57f793c50b0cdb5a916f24de43892f9f3be980d3696c1ed4"
+    },
+    {
+      "file": "src/quod_agent_vault.erl",
+      "sha256": "da14fb6324ddab24fb9c430163815d2cb5364614e7a4f7de676f7a387c417777"
+    },
+    {
+      "file": "src/quod_file.erl",
+      "sha256": "f2a0b5b6f4ee3dc5f16824a933f35a19d6a0f8a99c66a49b0a3241cc8b8937e2"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "211b901933ee57437ececc81355e37b6f727970a813e67cbf50127ecafa70e05"
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "sha256": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7"
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b"
+    },
+    {
+      "file": "src/predicates/quod_agent_predicates.erl",
+      "sha256": "7269c3153ddd0c9ac7947f2ecfdf3a9f487ae0eea889057e39f695d23bb4e468"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "src/predicates/quod_ontology_predicates.erl",
+      "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51"
+    },
+    {
+      "file": "src/predicates/quod_ask.erl",
+      "sha256": "020a6fb0defaa7ac0ef704eff255a297e8695d098ccf3f3c05eb4d18b2d65489"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "priv/ontologies/agent_recovery_policy.pl",
+      "sha256": "0b37aceafd7c9401f1e24d84bb0b5a7ae4945cd54cc9b1a935973680972e94d3"
+    },
+    {
+      "file": "priv/ontologies/node_execution.pl",
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "08abfe881ae634a3139b4f21cccec899939a5a44a908b33a5903096c72648aff"
+    },
+    {
+      "file": "test/quod_agent_custody_tests.erl",
+      "sha256": "e14140665fbb8a462fa87840422b1402009861707b73635aae89dcf486c1ee63"
+    },
+    {
+      "file": "test/quod_agent_vault_tests.erl",
+      "sha256": "6a79d5f3712c6bb4e50b76518c73e33202a4d586e0285de9e351bc9dbd89f092"
+    },
+    {
+      "file": "test/quod_agent_hosting_tests.erl",
+      "sha256": "20df6b90211ff91a4a2f294a3f3e12578a6299dbe21225be9815e05541425f3c"
+    },
+    {
+      "file": "test/quod_agent_actions_tests.erl",
+      "sha256": "c1d812460d68fe305d139b16f06491fe3b1e0fd7184a6f2289dd74ceb9ebe312"
+    },
+    {
+      "file": "test/quod_agent_predicates_tests.erl",
+      "sha256": "24f1076a0ca2413e9471d51d3e61b60a70bca8ca72f2af593f871589faadda94"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "sha256": "e1dbb7e077e3af703334dd7a3f08582234845e03ef4cc12e39e6f3cde4656d29"
+    },
+    {
+      "file": "test/quod_physics_control_tests.erl",
+      "sha256": "cd458c7120f0d8badc9f68b1960bbb4fd25a81e06526765ccf1e5f37f43445d3"
+    }
+  ]
+}

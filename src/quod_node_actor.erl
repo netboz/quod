@@ -9,7 +9,7 @@ through `quod_identity`, and verifies the resulting durable facts. It owns no pr
 ACL evaluator, signer, route, or cache.
 """.
 
--export([reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
+-export([reference/0, reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
          hosting_projection/5,
          bootstrap/0, verify/2, enroll/0]).
 -ifdef(TEST).
@@ -58,6 +58,14 @@ principal() ->
             {ok, Principal};
         _ ->
             {error, unavailable}
+    end.
+
+-doc "Return the exact reference of the currently verified local node actor.".
+-spec reference() -> {ok, term()} | {error, term()}.
+reference() ->
+    case principal() of
+        {ok, Principal} -> quod_agent_ref:materialize_principal(Principal);
+        Error -> Error
     end.
 
 -doc """

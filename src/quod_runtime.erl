@@ -2814,8 +2814,7 @@ select_resource_description(Ns, H, Est, agent_recovery,
 select_resource_description(Ns, H, Est, agent_custody,
                             {{agent_instance_ref, Ns, _Anchor, I}, Epoch, Observer}) ->
     %% Exact identity and assignment are verified from the committed snapshot.
-    Goal = {',', {agent_hosted, I, {'Host'}, Epoch, {'_'}},
-                 {can_prepare_agent_key, Observer, I, {'Host'}, Epoch}},
+    Goal = {agent_key_preparation, Observer, I, {'Host'}, Epoch, Observer},
     case select_resource(Ns, H, Est, Goal) of
         fail -> {error, preparation_not_authorized};
         _ -> authorized
@@ -2848,9 +2847,8 @@ optional_selection(Ns, H, Est = #est{db = #db{mod = M, ref = R}}, Goal) ->
     end.
 
 local_node_reference() ->
-    case quod_node_actor:principal() of
-        {ok, Principal} ->
-            {ok, Node} = quod_agent_ref:materialize_principal(Principal), Node;
+    case quod_node_actor:reference() of
+        {ok, Node} -> Node;
         _ -> none
     end.
 

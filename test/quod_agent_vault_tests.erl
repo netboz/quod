@@ -17,13 +17,12 @@ empty_custody_paths_refused_at_boot_test() ->
 
 custody_survives_restart_and_binds_exact_request_test() ->
     with_vault(fun(Config, Ref, Request0) ->
-        {ok, Pub} = quod_agent_vault:generate(Ref),
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
         Request = Request0#{signing_public_key => Pub},
         {ok, Bytes, Signature} = sign(Request),
         ?assertMatch({ok, #{agent_ref_blob := Ref}}, quod_client_goal:verify(Bytes, Signature)),
         ?assertEqual({ok, Bytes}, quod_client_goal:encode(Request)),
-        {ok, [File]} = file:list_dir(maps:get(directory, Config)),
-        Path = filename:join(maps:get(directory, Config), File),
+        {_Slot, [Path]} = custody_files(Config),
         {ok, #file_info{mode = Mode, size = 100}} = file:read_file_info(Path),
         ?assertEqual(8#600, Mode band 8#777),
         Vault = quod_reg:where({agent_vault, node}),
@@ -59,7 +58,7 @@ preparation_is_stable_and_preserves_old_custody_test() ->
         {ok, Second} = quod_agent_vault:prepare(Ref, 2),
         ?assertNotEqual(First, Second),
         ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 1)),
-        ?assertEqual({error, invalid_preparation_epoch}, quod_agent_vault:prepare(Ref, 0)),
+        ?assertEqual({error, invalid_preparation_epoch}, quod_agent_vault:prepare(Ref, -1)),
         ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => First})),
         ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => Second})),
         {Slot, [_, _]} = custody_files(Config),
@@ -69,6 +68,150 @@ preparation_is_stable_and_preserves_old_custody_test() ->
         ok = quod_agent_vault:delete(Ref, Second),
         ?assertEqual({error, vault_key_unavailable}, sign(Request0#{signing_public_key => Second})),
         ?assertEqual({ok, []}, file:list_dir(maps:get(directory, Config)))
+    end).
+
+initial_preparation_survives_restart_without_repeated_writes_test() ->
+    with_vault(fun(Config, Ref, _Request) ->
+        {ok, First} = quod_agent_vault:prepare(Ref, 0),
+        Repeat = fun() ->
+            [?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
+             || _ <- lists:seq(1, 20)]
+        end,
+        ?assertEqual([], vault_storage_calls(Repeat)),
+        ok = gen_server:stop(quod_reg:where({agent_vault, node})),
+        {ok, _} = quod_agent_vault:start_link(Config),
+        ?assertEqual([], vault_storage_calls(Repeat)),
+        Changed = vault_storage_calls(fun() ->
+            {ok, Second} = quod_agent_vault:prepare(Ref, 1),
+            ?assertNotEqual(First, Second)
+        end),
+        [?assert(lists:member(MFA, Changed)) || MFA <-
+            [{quod_file, write_atomic, 3}, {file, write, 2}, {file, sync, 1},
+             {file, rename, 2}, {file, make_link, 2}, {quod_file, sync_dir, 1}]],
+        ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 0))
+    end).
+
+unchanged_rejections_do_not_schedule_storage_test() ->
+    with_vault(fun(_Config, Ref, _Request) ->
+        {ok, Key} = quod_agent_vault:prepare(Ref, 1),
+        Calls = vault_storage_calls(fun() ->
+            ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 0)),
+            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1)),
+            ?assertEqual({error, invalid_agent_reference}, quod_agent_vault:prepare(<<>>, 0)),
+            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1)),
+            Vault = quod_reg:where({agent_vault, node}),
+            ?assertEqual({error, deadline_exceeded}, gen_server:call(Vault,
+                {prepare, Ref, 2, quod_time:mono_ms() - 1})),
+            ?assertEqual({ok, Key}, quod_agent_vault:prepare(Ref, 1))
+        end),
+        ?assertEqual([], Calls)
+    end).
+
+failed_mutation_requires_successful_directory_sync_test() ->
+    with_vault(fun(Config, Ref, _Request) ->
+        {ok, First} = quod_agent_vault:prepare(Ref, 0),
+        {Slot, [_]} = custody_files(Config), Tmp = Slot ++ ".tmp",
+        %% The real atomic writer cannot replace this directory with its file.
+        ok = file:make_dir(Tmp),
+        ?assertEqual({error, vault_storage_unavailable}, quod_agent_vault:prepare(Ref, 1)),
+        Dir = maps:get(directory, Config), Moved = Dir ++ "-moved",
+        ok = file:rename(Dir, Moved),
+        try
+            %% The vault must propagate a failed uncertainty-resolving sync.
+            ?assertEqual({error, vault_storage_unavailable}, quod_agent_vault:prepare(Ref, 0))
+        after ok = file:rename(Moved, Dir), ok = file:del_dir(Tmp) end,
+        Recovery = vault_storage_calls(fun() ->
+            ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
+        end),
+        ?assertEqual([{quod_file, sync_dir, 1}, {prim_file, sync, 1}], Recovery),
+        Unchanged = vault_storage_calls(fun() ->
+            ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
+        end),
+        ?assertEqual([], Unchanged)
+    end).
+
+vault_storage_calls(Fun) ->
+    %% MFA-only traces: encrypted bytes and unlock material never enter logs.
+    Trace = trace:session_create(vault_storage, self(), []),
+    Watched = [{quod_file, write_atomic, 3}, {quod_file, sync_dir, 1},
+               {file, write, 2}, {file, pwrite, 3}, {file, sync, 1},
+               {file, datasync, 1}, {prim_file, sync, 1},
+               {file, make_link, 2}, {file, rename, 2}],
+    [trace:function(Trace, MFA, true, [local]) || MFA <- Watched],
+    trace:process(Trace, quod_reg:where({agent_vault, node}), true, [call, arity]),
+    try
+        Fun(), vault_storage_calls(trace:delivered(Trace, all), [])
+    after trace:session_destroy(Trace) end.
+
+vault_storage_calls(Barrier, Acc) ->
+    receive
+        {trace, _, call, MFA} -> vault_storage_calls(Barrier, [MFA|Acc]);
+        {trace_delivered, all, Barrier} -> lists:reverse(Acc)
+    after 5000 -> error(vault_trace_not_delivered) end.
+
+initial_preparation_requires_exact_committed_pure_policy_test() ->
+    with_vault(fun(Config, Ref, _Request) ->
+        {ok, AgentRef} = quod_agent_ref:materialize(Ref),
+        #{principal := Caller, agent_reference := CallerRef, evidence := Evidence} =
+            quod_ct:signed_goal_fixture(#{agent_instance_text => <<"administrator.">>}),
+        #{principal := NodePrincipal, agent_reference := NodeRef} =
+            quod_ct:signed_goal_fixture(#{agent_instance_text => <<"node.">>}),
+        Previous = application:get_env(quod, node_actor_principal),
+        application:set_env(quod, node_actor_principal, NodePrincipal),
+        _ = quod_proof_context:start(crypto:strong_rand_bytes(32), true,
+            {<<"agents">>, <<3:256>>}, quod_time:mono_ms() + 5000, Caller, Evidence),
+        try
+            Goal = {prepare_agent_key_custody, AgentRef, none, 0, NodeRef, {'Key'}},
+            Grant = {can_prepare_agent_key, CallerRef, worker, none, 0, NodeRef},
+            ?assertEqual(fail, signing_proof([], true, Goal)),
+            ?assertEqual(fail, signing_proof([setelement(2, Grant, NodeRef)], true, Goal)),
+            ?assertEqual(fail, signing_proof([Grant], true, setelement(5, Goal, CallerRef))),
+            [?assertEqual(fail, signing_proof([Grant, Occupied], true, Goal)) || Occupied <-
+                [{agent_host, worker, NodeRef, 1, <<1:256>>},
+                 {agent_key, worker, <<1:256>>, revoked}]],
+            ?assertMatch({error, {erlog, {domain_error, agent_key_preparation, _}}},
+                signing_proof([Grant], true, setelement(6, Goal, <<1:256>>))),
+            ?assertMatch({error, {erlog, instantiation_error}},
+                signing_proof([Grant], true, setelement(4, Goal, {'Epoch'}))),
+            [?assertEqual({error, {erlog,
+                 {context_violation, prepare_agent_key_custody, query, foreign_scope}}},
+                signing_proof([Grant], true, Goal, #{identity => Foreign})) || Foreign <-
+                [{<<"foreign">>, <<3:256>>}, {<<"agents">>, <<4:256>>}]],
+            ?assertEqual({error, {erlog,
+                {context_violation, prepare_agent_key_custody, query, write_proof}}},
+                signing_proof([], false, {',', {assertz, Grant}, {'$quod_state_check', Goal}})),
+            ?assertEqual({error, {erlog,
+                {context_violation, prepare_agent_key_custody, query, reaction}}},
+                signing_proof([Grant], true, Goal, #{kind => reaction})),
+            ?assertEqual({error, {erlog,
+                {context_violation, {prepare_agent_key_custody, 5}, query, policy_verdict}}},
+                signing_proof([Grant], true, Goal, #{kind => policy_verdict})),
+            {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl")),
+            [?assertEqual({error, {erlog, invalid_custody_policy}},
+                signing_proof([], true, Goal, #{source => <<Source/binary,
+                    "\ncan_prepare_agent_key(_,_,_,_,_) :- ", Body/binary, ".">>})) || Body <-
+                [<<"current_principal(_)">>, <<"local_node_agent(_)">>,
+                 <<"assertz(unauthorized)">>, <<"binary_codes(42,_)">>]],
+            ?assertEqual({ok, []}, file:list_dir(maps:get(directory, Config))),
+            {{ok, #{'Key' := Key}}, Reads, Bridges} =
+                signing_proof([Grant], true, Goal, #{dependencies => true}),
+            [?assert(maps:is_key(F, Reads)) || F <-
+                [{agent_host, 4}, {agent_key, 3}, {can_prepare_agent_key, 5}]],
+            ?assert(lists:member({prepare_agent_key_custody, 5}, Bridges)),
+            ?assertEqual({ok, #{'Key' => Key}}, signing_proof([Grant], true, Goal)),
+            ?assertEqual(fail, signing_proof([], true, Goal)),
+            %% Read preparation confers no assignment or active-key facts.
+            ?assertEqual(fail, signing_proof([Grant], true, {agent_host, worker, {'_'}, {'_'}, {'_'}})),
+            ?assertEqual(fail, signing_proof([Grant], true, {agent_key, worker, {'_'}, active})),
+            ?assertEqual({error, deadline_exceeded},
+                quod_agent_vault:prepare(Ref, 0, quod_time:mono_ms() - 1))
+        after
+            quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end),
+            case Previous of
+                undefined -> application:unset_env(quod, node_actor_principal);
+                {ok, Old} -> application:set_env(quod, node_actor_principal, Old)
+            end
+        end
     end).
 
 preparation_recovers_slot_only_crash_image_test() ->
@@ -122,10 +265,9 @@ custody_files(Config) ->
 
 wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
     with_vault(fun(Config, Ref, Request0) ->
-        {ok, Pub} = quod_agent_vault:generate(Ref),
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
         Request = Request0#{signing_public_key => Pub},
-        {ok, [Name]} = file:list_dir(maps:get(directory, Config)),
-        Path = filename:join(maps:get(directory, Config), Name),
+        {_Slot, [Path]} = custody_files(Config),
         {ok, <<Byte, Rest/binary>>} = file:read_file(Path),
         ok = file:write_file(Path, <<(Byte bxor 1), Rest/binary>>),
         ?assertEqual({error, invalid_vault_key}, sign(Request)),
@@ -138,7 +280,7 @@ wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
 
 governed_signing_requires_committed_host_key_and_read_only_session_test() ->
     with_vault(fun(_Config, Ref, Request0) ->
-        {ok, Pub} = quod_agent_vault:generate(Ref),
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
         {ok, AgentRef} = quod_agent_ref:materialize(Ref),
         #{principal := Principal, agent_reference := NodeRef,
           evidence := Evidence} = quod_ct:signed_goal_fixture(#{goal_text => <<"true.">>}),
@@ -200,16 +342,18 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
 
 %% Exercise the actual signed ingress and foreign read-only scope. The engine
 %% owns both committed snapshots; only consensus transport is outside this seam.
-signing_through_signed_ingress_and_foreign_scope_test() ->
+custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
     with_vault(fun(Config, Ref, Request0) ->
-        {ok, Pub} = quod_agent_vault:generate(Ref),
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
         {ok, AgentRef} = quod_agent_ref:materialize(Ref),
         NodeNs = <<"vault-node">>, NodeAnchor = <<5:256>>,
         Fixture = #{principal := Principal, agent_reference := NodeRef,
                     signing_key := NodeKey} = quod_ct:signed_goal_fixture(
           #{target => {NodeNs, NodeAnchor}, network => <<1:256>>, mode => read,
             deadline => quod_time:now_ms() + 30000,
-            goal_text => <<"\"agents\"::(signing_request(R),sign_agent_request(R,S)).">>}),
+            goal_text => <<"\"agents\"::(initial_agent(A),custody_destination(N),"
+                           "prepare_agent_key_custody(A,none,0,N,K),"
+                           "signing_request(R),sign_agent_request(R,S)).">>}),
         Request = Request0#{signing_public_key => Pub},
         Typed = {agent_goal_v1, <<1:256>>, AgentRef, <<"worker.">>, Pub,
                  maps:get(operation_id, Request), maps:get(not_after_ms, Request),
@@ -229,6 +373,9 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
           quod_prolog:genesis_diff(Source),
           [{agent_host, worker, NodeRef, 1, Pub}, {agent_key, worker, Pub, active},
            {can_request_agent_signature, NodeRef, worker, Typed},
+           {initial_agent, setelement(4, AgentRef, first_agent)},
+           {custody_destination, NodeRef},
+           {can_prepare_agent_key, NodeRef, first_agent, none, 0, NodeRef},
            {signing_request, Typed},
            {can_invoke, {'Goal'}, NodeRef, {'Chain'}, <<"agents">>}]),
         try
@@ -246,6 +393,11 @@ signing_through_signed_ingress_and_foreign_scope_test() ->
             {ok, Bytes} = quod_client_goal:encode(Request),
             {ok, Decoded} = quod_durable_term:decode_result(Bindings),
             ?assert(quod_identity:verify(proplists:get_value(<<"S">>, Decoded), Bytes, Pub)),
+            ?assertMatch(<<_:256>>, proplists:get_value(<<"K">>, Decoded)),
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+                {agent_host, first_agent, {'_'}, {'_'}, {'_'}})),
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+                {agent_key, first_agent, {'_'}, active})),
             with_provider(Config, fun(Port, Options, Client, _Other) ->
                 {ok, Socket} = provider_connect(Port, Options, Client),
                 try
@@ -300,13 +452,21 @@ signing_proof(Facts, ReadOnly, Goal, Options) ->
     Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly}),
     Id = crypto:strong_rand_bytes(16),
     {Ns, _} = Identity = maps:get(identity, Options, {<<"agents">>, <<3:256>>}),
-    Context = quod_predicates:proof_context(Ns, 1, undefined, [Identity]),
+    Context = case maps:get(kind, Options, proof) of
+        proof -> quod_predicates:proof_context(Ns, 1, undefined, [Identity]);
+        reaction -> quod_predicates:reaction_context(Ns, 1);
+        policy_verdict -> quod_predicates:policy_verdict_context(Ns, 1)
+    end,
     try
         ok = quod_proof_session:open(Session, Id, Goal, allowed, Context, quod_transaction_scope:empty_selection()),
-        case quod_proof_session:next(Session, Id) of
+        Result = case quod_proof_session:next(Session, Id) of
             {solution, _} -> quod_proof_session:bindings(Session, Id);
             {complete, _} -> fail;
             Other -> Other
+        end,
+        case maps:get(dependencies, Options, false) of
+            true -> {Result, quod_proof_session:read_set(Session), quod_proof_session:live_bridges(Session)};
+            false -> Result
         end
     after quod_proof_session:stop(Session) end.
 

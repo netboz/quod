@@ -4,7 +4,7 @@ Node-local encrypted custody for ontology-backed agent keys.
 
 The containing ontology owns assignments and active/revoked key state. This
 service owns only secret files, bound to the network, exact agent reference and
-public key. Its in-VM API is a trusted backend for the governed signing bridge;
+public key. Its in-VM API backs governed key preparation and signing;
 it is not a public permission boundary. Requests use the existing signed-goal
 schema and encoder. No arbitrary-byte signing operation exists.
 
@@ -16,10 +16,11 @@ prevents accidental diagnostic disclosure, not inspection by code inside the VM.
 
 -include_lib("kernel/include/file.hrl").
 
--export([start_link/0, start_link/1, generate/1, prepare/2, prepare/3, sign/2, delete/2]).
+-export([start_link/0, start_link/1, prepare/2, prepare/3, sign/2, delete/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, format_status/1]).
 
--record(s, {directory :: file:filename(), unlock :: fun(() -> binary())}).
+-record(s, {directory :: file:filename(), unlock :: fun(() -> binary()),
+            sync_pending = false :: boolean()}).
 -define(LISTENER, quod_agent_vault_listener).
 -define(DOMAIN, <<"quod.agent.key.v2", 0>>).
 
@@ -32,25 +33,22 @@ start_link() ->
 -spec start_link(map()) -> gen_server:start_ret().
 start_link(Config) -> gen_server:start_link(quod_reg:via({agent_vault, node}), ?MODULE, Config, []).
 
--doc "Generate encrypted staged custody bound to one exact agent reference.".
--spec generate(binary()) -> {ok, <<_:256>>} | {error, term()}.
-generate(AgentRef) -> call({generate, AgentRef}).
-
 -doc """
-Prepare stable custody for the next assignment after `ExpectedEpoch`.
+Prepare stable custody for the next assignment after `ExpectedEpoch` (zero for
+the first assignment).
 One atomic slot per agent retains the same random key across a lost reply or
 vault restart. Advancing the slot preserves previously published custody;
 requests for an older epoch fail. The governing caller must verify the exact
 committed assignment and candidate promise before publishing the public key.
 This is secret custody metadata, not a signed-request or outcome journal.
 """.
--spec prepare(binary(), pos_integer()) -> {ok, <<_:256>>} | {error, term()}.
+-spec prepare(binary(), non_neg_integer()) -> {ok, <<_:256>>} | {error, term()}.
 prepare(AgentRef, Epoch) -> prepare(AgentRef, Epoch, quod_time:mono_ms() + 5000).
 
 -doc "Prepare within the caller's original absolute monotonic deadline.".
--spec prepare(binary(), pos_integer(), integer()) -> {ok, <<_:256>>} | {error, term()}.
+-spec prepare(binary(), non_neg_integer(), integer()) -> {ok, <<_:256>>} | {error, term()}.
 prepare(AgentRef, Epoch, Deadline)
-  when is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
+  when is_integer(Epoch), Epoch >= 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
     call({prepare, AgentRef, Epoch, Deadline}, Deadline);
 prepare(_, _, _) -> {error, invalid_preparation_epoch}.
 
@@ -112,7 +110,7 @@ private_directory(Dir) ->
                 {error, eexist} ->
                     case file:read_file_info(Dir) of
                         {ok, #file_info{type = directory, mode = Mode}}
-                          when Mode band 8#077 =:= 0 -> ok;
+                          when Mode band 8#077 =:= 0 -> quod_file:sync_dir(Dir);
                         _ -> {error, insecure_vault_directory}
                     end;
                 {error, _} = Error -> Error
@@ -120,34 +118,29 @@ private_directory(Dir) ->
         {error, _} = Error -> Error
     end.
 
-handle_call({generate, AgentRef}, _From, S) ->
-    Result = secret_operation(fun() -> case identity(AgentRef) of
-        {ok, Network} ->
-            {Pub, Bytes} = encrypted_key(Network, AgentRef, 0, S),
-            case quod_file:write_atomic(path(binding(Network, AgentRef, Pub), S), Bytes, 8#600) of
-                ok -> {ok, Pub};
-                {error, _} -> {error, vault_storage_unavailable}
-            end;
-        {error, _} = Error -> Error
-    end end),
-    {reply, Result, S};
 handle_call({prepare, AgentRef, Epoch, Deadline}, _From, S)
-  when is_integer(Epoch), Epoch > 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
-    Result = within_deadline(Deadline, fun() ->
-        secret_operation(fun() ->
-            case identity(AgentRef) of
-                {ok, Network} -> prepare_key(Network, AgentRef, Epoch, S);
-                {error, _} = Error -> Error
-            end
-        end)
-    end),
-    {reply, Result, S};
+  when is_integer(Epoch), Epoch >= 0, Epoch < (1 bsl 64), is_integer(Deadline) ->
+    case Deadline > quod_time:mono_ms() of
+        false -> {reply, {error, deadline_exceeded}, S};
+        true ->
+            {Result, Next} = custody_operation(S, fun() ->
+                case identity(AgentRef) of
+                    {ok, Network} -> prepare_key(Network, AgentRef, Epoch, S);
+                    {error, _} = Error -> Error
+                end
+            end),
+            Reply = case Deadline > quod_time:mono_ms() of
+                true -> Result;
+                false -> {error, deadline_exceeded}
+            end,
+            {reply, Reply, Next}
+    end;
 handle_call({sign, Request, Deadline}, _From, S) ->
     Result = within_deadline(Deadline,
         fun() -> secret_operation(fun() -> sign_request(Request, S) end) end),
     {reply, Result, S};
 handle_call({delete, AgentRef, <<_:256>> = Pub}, _From, S) ->
-    Result = secret_operation(fun() -> case identity(AgentRef) of
+    {Result, Next} = custody_operation(S, fun() -> case identity(AgentRef) of
         {ok, Network} ->
             case delete_preparation(Network, AgentRef, Pub, S) of
                 ok -> delete_file(path(binding(Network, AgentRef, Pub), S));
@@ -155,13 +148,37 @@ handle_call({delete, AgentRef, <<_:256>> = Pub}, _From, S) ->
             end;
         {error, _} = Error -> Error
     end end),
-    {reply, Result, S};
+    {reply, Result, Next};
 handle_call(_Request, _From, S) -> {reply, {error, invalid_vault_request}, S}.
 
 handle_cast(_Request, S) -> {noreply, S}.
 handle_info(_Info, S) -> {noreply, S}.
 terminate(_Reason, _S) -> stop_provider().
 format_status(Status) -> Status#{state => encrypted_custody}.
+
+%% Only a failed storage mutation can leave directory durability uncertain.
+%% Resolve it once; refusing an unchanged request cannot schedule an fsync.
+%% Startup also synchronizes the directory before accepting any requests.
+custody_operation(S, Fun) ->
+    Result = secret_operation(fun() ->
+        case S#s.sync_pending of
+            false -> Fun();
+            true -> case custody_mutation(fun() -> quod_file:sync_dir(S#s.directory) end) of
+                ok -> Fun();
+                Error -> Error
+            end
+        end
+    end),
+    case Result of
+        {uncertain_custody, Error} -> {Error, S#s{sync_pending = true}};
+        _ -> {Result, S#s{sync_pending = false}}
+    end.
+
+custody_mutation(Fun) ->
+    case secret_operation(Fun) of
+        ok -> ok;
+        {error, _} -> {uncertain_custody, {error, vault_storage_unavailable}}
+    end.
 
 within_deadline(Deadline, Fun) ->
     case Deadline > quod_time:mono_ms() of
@@ -279,13 +296,13 @@ prepare_key(Network, AgentRef, Epoch, S) ->
 
 new_preparation(Slot, Network, AgentRef, Epoch, S) ->
     {Pub, Bytes} = encrypted_key(Network, AgentRef, Epoch, S),
-    case quod_file:write_atomic(Slot, Bytes, 8#600) of
+    case custody_mutation(fun() -> quod_file:write_atomic(Slot, Bytes, 8#600) end) of
         ok ->
             case preserve_custody(Slot, path(binding(Network, AgentRef, Pub), S)) of
                 ok -> {ok, Pub};
                 Error -> Error
             end;
-        {error, _} -> {error, vault_storage_unavailable}
+        Error -> Error
     end.
 
 %% Both names reference one encrypted inode, not duplicate key records. The
@@ -293,16 +310,16 @@ new_preparation(Slot, Network, AgentRef, Epoch, S) ->
 %% custody when a later epoch atomically replaces the bounded slot. A crash
 %% before this link is installed is repaired by the next explicit preparation.
 preserve_custody(Slot, KeyPath) ->
-    case file:make_link(Slot, KeyPath) of
-        ok -> quod_file:sync_dir(filename:dirname(KeyPath));
-        {error, eexist} ->
-            case {file:read_file_info(Slot), file:read_file_info(KeyPath)} of
-                {{ok, #file_info{inode = I, major_device = D}},
-                 {ok, #file_info{inode = I, major_device = D}}} when I =/= 0 ->
-                    quod_file:sync_dir(filename:dirname(KeyPath));
-                _ -> {error, conflicting_vault_custody}
-            end;
-        {error, _} -> {error, vault_storage_unavailable}
+    case {file:read_file_info(Slot), file:read_file_info(KeyPath)} of
+        {{ok, #file_info{inode = I, major_device = D}},
+         {ok, #file_info{inode = I, major_device = D}}} when I =/= 0 -> ok;
+        {{ok, _}, {error, enoent}} ->
+            custody_mutation(fun() -> case file:make_link(Slot, KeyPath) of
+                ok -> quod_file:sync_dir(filename:dirname(KeyPath));
+                Error -> Error
+            end end);
+        {{ok, _}, {ok, _}} -> {error, conflicting_vault_custody};
+        _ -> {error, vault_storage_unavailable}
     end.
 
 preparation_path(Network, AgentRef, #s{directory = Dir}) ->
@@ -319,11 +336,11 @@ delete_preparation(Network, AgentRef, Pub, S) ->
     end.
 
 delete_file(Path) ->
-    case file:delete(Path) of
+    custody_mutation(fun() -> case file:delete(Path) of
         ok -> quod_file:sync_dir(filename:dirname(Path));
         {error, enoent} -> quod_file:sync_dir(filename:dirname(Path));
-        {error, _} -> {error, vault_storage_unavailable}
-    end.
+        Error -> Error
+    end end).
 
 binding(Network, AgentRef, Pub) ->
     <<?DOMAIN/binary, Network/binary, (crypto:hash(sha256, AgentRef))/binary, Pub/binary>>.

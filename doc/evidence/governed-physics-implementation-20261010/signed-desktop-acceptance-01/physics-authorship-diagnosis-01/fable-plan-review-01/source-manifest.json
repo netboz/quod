@@ -1,0 +1,44 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/spaces.md",
+      "sha256": "289b489095a715c72998b7fcd49f2faa63f4c9899e1c8652100504042ef58cc3"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog.pl",
+      "sha256": "da8e195d52072100f66ffe6ce2422b261aa3fc5c606a780a57effc61186e7174"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "sha256": "86f55962af2c46609d81b4054632c8fe979cbe13e37e259637869e1a9c1388f6"
+    },
+    {
+      "file": "src/quod_wire_term.erl",
+      "sha256": "f80c85433c494e661f577d11b2063d44e2a39aa085e92ec5e1fbf44f836a881d"
+    },
+    {
+      "file": "src/quod_proof_session.erl",
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b"
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "sha256": "ac1a6fc7e8536e776759b27a5c2d58742e732f522bf96c40e3a30dfb60571009"
+    },
+    {
+      "file": "test/quod_prolog_ontology_tests.erl",
+      "sha256": "db4ad8a4d5fb3efb397bfc40a6259c55bd4e42bd75fed53648d33a4b55ea1902"
+    },
+    {
+      "file": "plan.txt",
+      "sha256": "2ab8443b920b03a9f74a42fb830b51ee308a3dacbb3c842598b0cfc376d21456"
+    }
+  ]
+}

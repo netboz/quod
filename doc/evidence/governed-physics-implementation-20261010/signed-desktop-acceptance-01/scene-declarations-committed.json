@@ -1,0 +1,123 @@
+{
+  "recorded_at": "2026-10-11T00:14:46.842475+00:00",
+  "namespace": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+  "anchor": "82EE4CF1CD1A9605415A34C49A8D6A4F663B9CA96786A60AFEA0B4B0030D613B",
+  "user_reported_signed_commit": "5b23ad0fc36acf383d7a99e8028f11618d912416c632585887d4db653e950628",
+  "public_original_transaction_receipt": {
+    "block": {
+      "time": 1791677636692,
+      "slot": 2,
+      "cert": {
+        "kind": "commit",
+        "era": "7f1adacc88f46cdc44b021d033fc99cafe227523f81bd64d94df531e493a8e31",
+        "head_view": 1,
+        "signers": [
+          {
+            "id": "kp_71ca2c0d",
+            "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+          }
+        ]
+      },
+      "kind": "content"
+    },
+    "tx": {
+      "time": 1791677636692,
+      "request": null,
+      "origin": {
+        "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+        "anchor": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3"
+      },
+      "signature": "de6164ed57c8ff8931d49d504e5c6819a07b8675bc8510ee4f36429a81c9489a99c7df74ff0d8c70270005514926c83fc20efe2fb5da0ac0cc859e3c1323a80d",
+      "author": {
+        "id": "kp_71ca2c0d",
+        "pubkey": "71ca2c0d17caf83a9288d565d9347ee33dc83c6ee70790ba3f39610431a69377"
+      },
+      "result": {
+        "A": "_7",
+        "C": "_5",
+        "N": "_6",
+        "RenderingAnchor": "kp_86944adf"
+      },
+      "ops": 2,
+      "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+      "diff": [
+        {
+          "op": "assert",
+          "clause": "rendering_vocabulary(<<\"quod:rendering\">>, kp_86944adf)"
+        },
+        {
+          "op": "assert",
+          "clause": "instance_of(space, personal_lobby)"
+        }
+      ],
+      "role": "remote_application",
+      "goal": "'human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby'::(quod:root::system_ontology(<<\"quod:rendering\">>, _0), transaction((findall(_1, space_instance(personal_lobby, _1), []), findall(ontology_ref(_2, _3), rendering_vocabulary(_2, _3), []), assertz(instance_of(space, personal_lobby)), assertz(rendering_vocabulary(<<\"quod:rendering\">>, _0)))))",
+      "proof_id": "10be00d06c412e7b50c57ce7a21ce595dfc926ca6859872a76c0d976e2b4db76",
+      "submitted_at": 1791677636662,
+      "effects": [],
+      "height": 2,
+      "tx_id": "5b23ad0fc36acf383d7a99e8028f11618d912416c632585887d4db653e950628",
+      "plan_digest": "386224cc8a6ce5668dfa3610d4d2ea5e290551176b20c3274f3374ce0e37ecf4",
+      "role_details": {
+        "operation_ref": {
+          "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+          "kind": "operation",
+          "anchor": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3",
+          "agent": {
+            "reference": "agent_instance_ref(<<\"human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk\">>, kp_43583f67, me)",
+            "identity": {
+              "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+              "anchor": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3"
+            },
+            "kind": "agent",
+            "reference_wire": "g2gCYQRsAAAABGgCYQBtAAAAEmFnZW50X2luc3RhbmNlX3JlZmgCYQFtAAAAMWh1bWFuOjdIbEdDM1JZTUhqUmpoUV9uWGNyMkMzckg1UHY1R0J3MGxYY09yeGVBTWtoAmEBbQAAACBDWD9nph7C6WJxOlsnsM70GjBZPGhcUgaGZ1lUn9O3s2gCYQBtAAAAAm1lag"
+          },
+          "operation_id": "9ec1ff86e6ccf3a6ce577fbadb49a4ed3f8527c999a6e2625513e1a04fde74db"
+        },
+        "request_digest": "a2365773609a35ab244342b7708c72fa1053a9180d1049fac703cebd42ea521d",
+        "source_claim": {
+          "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+          "kind": "transaction",
+          "anchor": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3",
+          "tx_id": "ddbb98f71e47b1d67d2c3b93e3a3b7d682f2995ffd334dcaa9b59b98e9ee4e28"
+        }
+      },
+      "author_seq": 1,
+      "effect_count": 0,
+      "effect_operations": [],
+      "fact_ops": 2,
+      "row_id": "5b23ad0fc36acf383d7a99e8028f11618d912416c632585887d4db653e950628",
+      "row_type": "transaction",
+      "evidence_ref": {
+        "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk",
+        "kind": "transaction",
+        "anchor": "43583f67a61ec2e962713a5b27b0cef41a30593c685c5206866759549fd3b7b3",
+        "height": 5,
+        "tx_id": "ddbb98f71e47b1d67d2c3b93e3a3b7d682f2995ffd334dcaa9b59b98e9ee4e28"
+      },
+      "read_predicates": 5,
+      "root_facts_changed": true,
+      "signature_status": "verified"
+    },
+    "outcome": {
+      "status": "committed",
+      "bindings": {
+        "A": "_7",
+        "C": "_5",
+        "N": "_6",
+        "RenderingAnchor": "kp_86944adf"
+      },
+      "ns": "human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby",
+      "anchor": "82ee4cf1cd1a9605415a34c49a8d6a4f663b9ca96786a60afea0b4b0030d613b",
+      "goal": "'human:7HlGC3RYMHjRjhQ_nXcr2C3rH5Pv5GBw0lXcOrxeAMk/lobby'::(quod:root::system_ontology(<<\"quod:rendering\">>, _0), transaction((findall(_1, space_instance(personal_lobby, _1), []), findall(ontology_ref(_2, _3), rendering_vocabulary(_2, _3), []), assertz(instance_of(space, personal_lobby)), assertz(rendering_vocabulary(<<\"quod:rendering\">>, _0)))))",
+      "height": 2,
+      "tx_id": "5b23ad0fc36acf383d7a99e8028f11618d912416c632585887d4db653e950628"
+    }
+  },
+  "declarations": [
+    "instance_of(space,personal_lobby)",
+    "rendering_vocabulary(exact root-catalogue rendering identity)"
+  ],
+  "physics_not_enabled_by_this_transition": true,
+  "agent_server_mutations": 0
+}

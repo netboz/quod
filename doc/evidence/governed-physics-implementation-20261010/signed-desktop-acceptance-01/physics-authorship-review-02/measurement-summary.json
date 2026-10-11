@@ -1,0 +1,30 @@
+{
+  "scope": "pure existing compiler and parser measurement; not live validator execution",
+  "clauses": 227,
+  "predicates": 168,
+  "maxima": {
+    "goal_bytes": 8156,
+    "callable_symbols": 25,
+    "cold_callable_symbols": 15,
+    "cold_material_symbols": 22
+  },
+  "limits": {
+    "material_symbols_per_admission": 512,
+    "client_cumulative_new_atoms": 16384,
+    "toplevel_goal_bytes": 131072,
+    "plan_envelope_bytes": 131072,
+    "retained_invocations_per_scope": 64,
+    "client_goal_tokens": 2048,
+    "plan_diff_ops": 1024
+  },
+  "owner_files": [
+    "include/quod_vm_limits.hrl",
+    "include/quod_client_goal_limits.hrl",
+    "include/quod_proof_limits.hrl",
+    "src/quod_wire_term.erl",
+    "src/quod_client_auth.erl",
+    "src/quod_proof_session.erl",
+    "src/quod_durable_term.erl",
+    "src/quod_dtx.erl"
+  ]
+}

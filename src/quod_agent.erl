@@ -196,11 +196,8 @@ prepare_custody(Ns, {agent_instance_ref, Ns, _, _} = AgentRef,
     end.
 
 current_node(NodeRef, Key) ->
-    case {quod_node_actor:principal(), application:get_env(quod, node_pubkey)} of
-        {{ok, Principal}, {ok, Key}} ->
-            quod_agent_ref:materialize_principal(Principal) =:= {ok, NodeRef};
-        _ -> false
-    end.
+    quod_node_actor:reference() =:= {ok, NodeRef} andalso
+    application:get_env(quod, node_pubkey) =:= {ok, Key}.
 
 invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
     quod_client_goal_ingress:resolve_operation(Bytes, Signature);

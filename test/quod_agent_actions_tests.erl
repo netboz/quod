@@ -20,6 +20,16 @@ initial_assignment_requires_inactive_instance_and_epoch_one_test() ->
           {goal, {agent_hosted, actor, Node, 1, hash(7)}}, St))
     end).
 
+initial_custody_grant_cannot_publish_recovery_candidate_test() ->
+    with_actor([], <<"can_prepare_agent_key(P, actor, none, 0, P).\n">>,
+      fun(St, Observer) ->
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_key_preparation, Observer, actor, none, 0, Observer}, St)),
+        {fail, Final} = erlog_int:prove_goal(
+          {goal, {agent_candidate_key, actor, none, 0, Observer, hash(7)}}, St),
+        ?assertEqual([], changes(Final))
+    end).
+
 same_node_epoch_rotates_key_and_refuses_reuse_test() ->
     Node = {agent_instance_ref, <<"node">>, hash(5), physical_node},
     Facts = [{agent_host, actor, Node, 1, hash(6)},
@@ -521,7 +531,7 @@ recovery_fixture(Fun) ->
 recovery_fixture(Fun, Authority) ->
     Old = {agent_instance_ref, <<"node">>, hash(5), physical_node},
     Round = hash(10),
-    Rules = iolist_to_binary([Authority, <<"can_prepare_agent_key(_, actor, _, _).\n"
+    Rules = iolist_to_binary([Authority, <<"can_prepare_agent_key(_, actor, _, _, _).\n"
               "can_report_agent_failure(_, actor, _, _).\n"
               "agent_recovery_candidate(_, I, H, E, R, _, 1) :- "
               "findall(O, agent_failure_support(I,H,E,R,O,_), Os), "

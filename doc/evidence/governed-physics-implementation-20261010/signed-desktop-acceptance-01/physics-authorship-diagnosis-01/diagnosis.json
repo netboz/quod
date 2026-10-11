@@ -1,0 +1,29 @@
+{
+  "scope": "local signed-production-owner diagnosis only; no real server writes",
+  "source_files": [
+    "priv/ontologies/agent_instance.pl",
+    "priv/ontologies/quod_physics.pl"
+  ],
+  "clauses": 227,
+  "expanded_assertion_goal_canonical_bytes": 169953,
+  "nested_and_toplevel_goal_limit_bytes": 131072,
+  "max_invocations_per_scope": 64,
+  "results": {
+    "01": "normalized proof_unavailable; full failure retained",
+    "02": "raw owner type_error callable: cold parsed symbol agent_identifier not admitted",
+    "03": "raw owner proof_limit_exceeded for world after repeated scoped assertions"
+  },
+  "cleanup": "Failing exploratory test archived here and removed from active tests; unrelated test serializer change reverted. Passing scene composition regression remains.",
+  "canonical_diff_bytes": 155293,
+  "canonical_diff_ops": 227,
+  "plan_envelope_limit_bytes": 131072,
+  "fable_review": {
+    "child_exit": 0,
+    "is_error": false,
+    "model": "claude-fable-5-1",
+    "verdict": "not approvable as written; candidate rejected pending precise owner/admission/policy/provenance/bounds design",
+    "frozen_inputs": 10,
+    "frozen_inputs_changed": []
+  },
+  "next_gate": "Review the appropriate composition/whole-program authoring contract before selecting or implementing a new capability. Compact request alone does not solve the oversized canonical diff."
+}

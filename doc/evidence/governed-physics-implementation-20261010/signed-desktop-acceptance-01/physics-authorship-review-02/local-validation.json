@@ -1,0 +1,86 @@
+{
+  "scope": "offline authored-source preparation and existing common primitive regressions; no production or live changes",
+  "campaigns": [
+    {
+      "id": "01",
+      "tests": 13,
+      "failures": 0,
+      "child_exit": 0,
+      "scope": "two identities, nonphysical intermediate scenes, native map and repeat-source IO"
+    },
+    {
+      "id": "02",
+      "tests": 13,
+      "failures": 0,
+      "child_exit": 0,
+      "scope": "adds partial restart and guarded source edits"
+    },
+    {
+      "id": "03",
+      "tests": 13,
+      "failures": 0,
+      "child_exit": 0,
+      "scope": "adds both resource-selector replies and runtime failure counters; old encoded-indicator order happened to be safe"
+    },
+    {
+      "id": "04",
+      "tests": 15,
+      "failures": 0,
+      "child_exit": 0,
+      "scope": "explicit helpers-before-selectors order, incomplete-selector regression and domain reaction matcher"
+    },
+    {
+      "id": "05",
+      "tests": 38,
+      "failures": 0,
+      "child_exit": 0,
+      "seconds": 189.928,
+      "scope": "final authoring tests plus common primitives; complete restart, canonical per-predicate readback, exact refusals and cold absence read dependency"
+    }
+  ],
+  "final_files": [
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "87fe866ea65ead1e6343762a425a8419d5bffe65b84bd6cad4dcb6c08c6fc3e3"
+    },
+    {
+      "file": "test/quod_common_primitives_tests.erl",
+      "sha256": "40bd4baec062647471d85bb4f1b36369479e50605ce14b20d3fddc7e2de65e2a"
+    }
+  ],
+  "cold_guard_reproduction": [
+    {
+      "id": "01",
+      "exit": 127,
+      "result": "test helper beam path missing; log retained"
+    },
+    {
+      "id": "02",
+      "exit": 0,
+      "result": "unknown source indicator returns empty source with no read dependency and no atom allocation"
+    }
+  ],
+  "delta_since_previous_commit": {
+    "production_lines": 0,
+    "test_lines_added": 245
+  },
+  "remaining": [
+    "initial authority key custody contract",
+    "full atomic activation and source-content guard",
+    "cold remote-validator publication",
+    "live remote collider installed update and unchanged-work measurement",
+    "real signed desktop collision"
+  ],
+  "additional_verification": {
+    "id": "absence-versions-01",
+    "modules": [
+      "quod_erlog_db_mvcc_tests",
+      "quod_read_set_tests"
+    ],
+    "tests": 15,
+    "failures": 0,
+    "child_exit": 0,
+    "seconds": 0.914
+  },
+  "final_unique_focused_tests": 53
+}

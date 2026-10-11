@@ -1,0 +1,59 @@
+{
+  "version": "0.7.262",
+  "source_commit": "f237b7e9a33e05358b186c6b07975a610294a6fa",
+  "implementation_commit": "fd2623ee93662d873315e78f2756e7d96c268fd4",
+  "job": "quod-finality-candidate-v6-20260926",
+  "job_version": 69,
+  "job_modify_index": 847378,
+  "deployment": "bcd1da01-578c-b838-067a-2e6394978158",
+  "image": "192.168.1.11:5000/quod:0.7.262@sha256:279a231f4344a2213da56661c22d72b9f2864afde7fe57363716757862b95386",
+  "healthy_allocations": 8,
+  "restarts": 0,
+  "root_anchor": "E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096",
+  "system_ontologies_ready_per_node": 18,
+  "retained_personal_history": [
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "height": 358,
+      "same_anchor": true,
+      "unchanged": true,
+      "current_applied": 358
+    },
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "height": 350,
+      "same_anchor": true,
+      "unchanged": true,
+      "current_applied": 358
+    },
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "height": 184,
+      "same_anchor": true,
+      "unchanged": true,
+      "current_applied": 186
+    },
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "height": 176,
+      "same_anchor": true,
+      "unchanged": true,
+      "current_applied": 186
+    }
+  ],
+  "world_physics": {
+    "phase": "active",
+    "navigation_ready": true,
+    "height": 186,
+    "structure": 1
+  },
+  "main_job": {
+    "version": 246,
+    "job_modify_index": 826727
+  },
+  "ingress_unchanged": true,
+  "no_refound": true,
+  "desktop_renewal_acceptance": "pending coordinated window",
+  "active_server_writer": false,
+  "queued_release_or_refound": false
+}

@@ -1,0 +1,19 @@
+{
+  "prior_release": "261",
+  "candidate_release": "262",
+  "source_tree_mutations": false,
+  "network_mutations": false,
+  "scripts": {
+    "build.py": "3f8400aba1561316a22634fcda2eeb723ab5dfea224e3b68a2a52ce4c4fb6beb",
+    "boot_probe.py": "d3f44aa3e984f7ca087802aa0c5a873025eb7a18ab48031be23d46add9a2ec2d",
+    "mutate_once.py": "e2eba4af9d849a95985030c8a7bfb28b06824674adbba5e1d485977090b79299",
+    "prepare_candidate.py": "c189ff35b412369ff2c650eb0473722f8962b0c71826e55079f63c8cc54f1961",
+    "fleet_probe.py": "8aaa9d86ee1dab7c39b2784a1808aa93bc6e33c98e37e56c742203299eb71e10",
+    "history_before.py": "db78ef03728143881fabf2abe1e06bc57ce379a01d6f1587fb5fc91afd4b7db7",
+    "history_after.py": "4c028b2c043e57fd1e98fa5dfbaff1c616f8e9da12fbaff8faa1d26e2770dceb",
+    "personal_owner_after.py": "ac220dcc42288c43041c0708ad2d39e0fa4303312739a719eeeb2833d1c62d38",
+    "fleet-expression.txt": "50e441383c48e141cf71fbe4cc6af3b91d2f1c30bb41e72fd44444c6ed451d70",
+    "quod_vault_boot_probe.erl": "3b4746e7274d2bfc70a2cb8de2219502f5cd00dcfbff8ff50acdc49eccfc3e70"
+  },
+  "gate_campaign": "262-03"
+}

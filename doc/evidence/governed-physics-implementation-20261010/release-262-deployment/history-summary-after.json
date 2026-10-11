@@ -1,0 +1,994 @@
+{
+  "node": {
+    "id": "kp_617e237f",
+    "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+  },
+  "namespaces": [
+    {
+      "ns": "acceptance:physics:259:04:gallery",
+      "role": "validator",
+      "committee_id": "5871d307c9ef945cf721125f5ade9662cc71df3469ab3f5531eaab95f324065d",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 18,
+      "syncing": false,
+      "genesis": "41ef1e056943b629ac1dca71b13ba0028abde7fb7b0f91756604334a2f07b69b",
+      "protocol_era": "2353cece663f4f64ac0d8a5b882dd7eb90dc2bdc434535cdf059c696de682c65",
+      "height": 18,
+      "protocol_view": 18,
+      "proposal_slot": 18,
+      "notarized_view": 17,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "role": "validator",
+      "committee_id": "9e53dcbbe5d76233c592f9915da9247612fbabe0c17a08d992d8f3086bbf4a1b",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 358,
+      "syncing": false,
+      "genesis": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+      "protocol_era": "e4adcacd7cff06cfd7595bb042cd0a29971390eff05e96a18ce75a2521cbd7eb",
+      "height": 358,
+      "protocol_view": 358,
+      "proposal_slot": 358,
+      "notarized_view": 357,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "role": "validator",
+      "committee_id": "b05855b69c9abf101607bc9cf8bb07a245e30b185c0d7e3164bde901a9f5aecf",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 186,
+      "syncing": false,
+      "genesis": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+      "protocol_era": "680a468b9a57116e31b2d7f652b1ebad8b2c32c8f5ba0c716c80470943596e88",
+      "height": 186,
+      "protocol_view": 186,
+      "proposal_slot": 186,
+      "notarized_view": 185,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:7ufvVecfVnYWp6_4ZMvKXUUd9JPpksRyVx1i4zecLS4",
+      "role": "validator",
+      "committee_id": "1533182c3c4e46a46f004521277574ebe0b8fed0925891d7e9df970dd20b8d81",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 4,
+      "syncing": false,
+      "genesis": "183cccfded1ecc6eb7d365a7a3b14a8439cbc183011a7799388d75b98560b152",
+      "protocol_era": "9883b51ba0f32a015917d815fb38e78b6b8021b2b0cfe6b4cdaf0961cc9e9482",
+      "height": 4,
+      "protocol_view": 4,
+      "proposal_slot": 4,
+      "notarized_view": 3,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:7ufvVecfVnYWp6_4ZMvKXUUd9JPpksRyVx1i4zecLS4/lobby",
+      "role": "validator",
+      "committee_id": "655127501f3bd9e726eafbc78af5a994bfa6074d87fbac092eb969174f5206e7",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "f22cebd272bfcf1302e6c506701147da4c13c02d57f8f5de28318090edb9bd48",
+      "protocol_era": "a7a379c093910bb9241c3470ef5ef47a861fc0fa74b044c8480297a1b7c12b4d",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:_Llu0OW_KFLO0OCdtYLExrLIWChhg4EfTF0eox_1vTE",
+      "role": "validator",
+      "committee_id": "c87d657a4e27fadba1a6fde80f5d3fbdac2a40179facd1cbf2eef6bab74393f3",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 4,
+      "syncing": false,
+      "genesis": "a36ce88e9a05f1f6667c7d33feeea8997618f56e8e04a80eaaa3dc4a0190e175",
+      "protocol_era": "88e09b455f17d0bc53ab31d3c4a100239f2cda8630d56bc8c6e8003a85785b71",
+      "height": 4,
+      "protocol_view": 4,
+      "proposal_slot": 4,
+      "notarized_view": 3,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "human:_Llu0OW_KFLO0OCdtYLExrLIWChhg4EfTF0eox_1vTE/lobby",
+      "role": "validator",
+      "committee_id": "bac4b5fcafef3b5e5d3bfdab7687afdab547ae31e8fce445a0d143240338f04e",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "f115b2e77d591d48ad416d603f7df263eaa4d44fcf6c1b45872c3f9bc312b571",
+      "protocol_era": "0601b9ccd284466e5b2fa0e66e280ab7acac4d04c8260ff594918fb09a87002a",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:3cda5ba2b8e1be2b29ff0a91817a025810c2ebc16cf4fd642026f5279e4cfd4d",
+      "role": "validator",
+      "committee_id": "2613c3f480b8c645db861f663714ad36f63031a50866fd8853cbf6c3bbf5fa03",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "7acc10ba4e3e0ec524b7729a6c89976dadcd461c81e4ebad64571b5c9807787e",
+      "protocol_era": "952558f4f17b7c5cf7f30c5ec4dd26b77acd1066251f5bea65c9419b6c1afc81",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:5246bbc0ec2d1a6d947ca3ccac7ca21c4b8ae0991260393e2a56f052c7c61cd8",
+      "role": "validator",
+      "committee_id": "330bc4895b83d24ffa02d24fecd4376231f2d16c79d0df1744efc99fffed0d83",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "4f6301a7be33ec7ac506ef94c93de20a91fdbf5843ac3e2f5a295e33a6ed4086",
+      "protocol_era": "8b9cef3aeb73312de552bbb80909ffb5bdcac7981b3995bf38e48206ae2e0574",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e",
+      "role": "validator",
+      "committee_id": "01f72b43e106d0925e5943dacf67606b94a11d9e3ad8b4cfacb08b9d6b91a257",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 44,
+      "syncing": false,
+      "genesis": "61bd2995aa7118b7e31ae3a4eea117d87eea4679940265b828e19ab92e235457",
+      "protocol_era": "991b2091cb0cb2b05a03f9f9e2fe8df3f38738847f0db540a9b95acce25dd665",
+      "height": 44,
+      "protocol_view": 44,
+      "proposal_slot": 44,
+      "notarized_view": 43,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:9ec1427d24366f1e7fe88ef078b9b8cd25538af1e42e1a817d0fef68240b6237",
+      "role": "validator",
+      "committee_id": "ae48fead2a2ac90979ab571de6bf7efda6d29336489ed47805b6cd9a12f110c9",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "71ccce5daab75caf6be20ddd7815ee5ea853e368a53d8737f035265083de440a",
+      "protocol_era": "02d3285e325cdd8fee7ea8c3aa4baf80147a4b647e3b8f3b67b4640395df315e",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:a344cab6562a85ea5f37e2a2874361258ce5c0f5ee20f8d05b71c776cb048a58",
+      "role": "validator",
+      "committee_id": "c2346d7e597407fb56e2c68afba7f68bbd5cdda85d7468e22399412edc181b56",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "1693d42ceb242e768bb7f5639fbed9cc1f5b5f8310e84969d96074a5a9acbdae",
+      "protocol_era": "2f6ca29043331586f1f095ab4732b59eb7ea7b13cc972ee66c9fbc4724147970",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:ddcd84f3aac95de54adba1b2c9333878a14061fb0cf95b9bb4f91a50816a1487",
+      "role": "validator",
+      "committee_id": "e5b57742b97a153f0ef9e80756cd448bcf33fcc42344bde7e66d307a6602488e",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "2f2f2538b9406171d2abe94b521f88ab0370a1d481a8dcb7f9b700f5a2269160",
+      "protocol_era": "d1eb785d9ee9885f15a084d8ed03f429ab6ad6025bf4e3338fa45b12c9cf5f4c",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:e47cbf54a87f5c5add6c143671af90b72030ebfbd780819e682556a62b637016",
+      "role": "validator",
+      "committee_id": "33b2a14bde8e43a831467f3462be97523e03fdf1207b9ed8901a9ab502bcc7f9",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 17,
+      "syncing": false,
+      "genesis": "699df1c52e89a50c2865989f90c693868102068d6153814b7c48c9b2106ef9e3",
+      "protocol_era": "072542861af4afdd6e030b6fb9083442dc0b0b0ee754f24fa8d028797f083e9d",
+      "height": 17,
+      "protocol_view": 17,
+      "proposal_slot": 17,
+      "notarized_view": 16,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "node:e84e4c20498387bc8d24d92f684ec9340544618f832ea57f390cb3528f7ad327",
+      "role": "validator",
+      "committee_id": "10050612650f41d0d0014dd291264378e4ffb22034324cc085b67835127c2bb5",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 2,
+      "syncing": false,
+      "genesis": "c66f7f93ca72f1e005e85ad6dc30d8d82507f9a3ab02dd43bfe00d23201a9059",
+      "protocol_era": "f6adcb8824a4c488a046dc2dafad715a1232138ace9b9182adfb29318b032df5",
+      "height": 2,
+      "protocol_view": 2,
+      "proposal_slot": 2,
+      "notarized_view": 1,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:agent",
+      "role": "validator",
+      "committee_id": "449dfc4391b7a20cfaed9b0327c8f7518c6edec0ba63185f1eaf1b33446ab991",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "d56ed4eeb708c8f9b467af2890ba537a0f1367d8e3fbee23e3265642a0ebacd0",
+      "protocol_era": "1ddd08e5015eb9a53fb4d4188f465cf90fc03e8b283fd33c6cb7235924d5a734",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:environment",
+      "role": "validator",
+      "committee_id": "265c1f7127ff4e9d667675e397093fac34401b45ce18ca7c7caa8e208f32215e",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "9766c1fb64e4032b17d9856e7eaf0b576cd7f1e4d4ca6e4ff4d39f46bd5f835d",
+      "protocol_era": "ea2ab93fde45cf90039c79fb1e241bd209bcbe49d07d961f58edd7c5a5eb1fa4",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:environment:eidolons",
+      "role": "validator",
+      "committee_id": "569d8bef743ae9b91939f707fb667fb0a96c8d44c340ef9f23d26900814d058c",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "656a0e1bf456ae3ad0d2ec02234c7f5ff94f85536789bc68c2cf1ea9ae6fc2bd",
+      "protocol_era": "daba6f6702de098628516a13970f0f64af307704413565646120e944850988ac",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:gui",
+      "role": "validator",
+      "committee_id": "97e3b6e58e206142c7e564f937057a9ad1f2f4d6e8f999dc27d02bd60453717d",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "0f1f7a6a32ac903eaa340850ca95ebcad5156d5460433047b7f54b774baae43a",
+      "protocol_era": "874435cff9ece4bae0ceb2422e07d0b4041290da069a3e539817fa3abcc89b49",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:human_user",
+      "role": "validator",
+      "committee_id": "d6b5d91f1d4ab05113acfde09f621992252801b61f2ed78f8481a861d08e20ab",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "e0c09c8350103ac26280e64f9e2ef1d016ac2c62bd92fd0c6690d2144dc104ab",
+      "protocol_era": "21924026d50ef9c13ccf1c6bc6603c7e5bdf3954c654ca8bc4a465d50db10c52",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:lens",
+      "role": "validator",
+      "committee_id": "87e349aee60cc7e2a6e099c5c34c2377c7f16b7e52de07e51557336b621a138e",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "699be96fabb5cc4856a25e0200196c43c345908b7132089c6acc06be65c29277",
+      "protocol_era": "ebee6ec74242e09ef42c0c5b3ff00f4f3ce636e957902efb20006a5cd15ff66f",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:licence",
+      "role": "validator",
+      "committee_id": "defc817f3f0b0f3fc50bbedf95ecb6472e23ff54c87dde0d09695b79e6f85962",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "51109a7475bfd515a1eb8a6e7769f600a8f4ea5c691d125d62410dd512adad43",
+      "protocol_era": "eaaf79eee4e7f04840fce171c694b987dc0e676c1dd17f2aec1767778d95ee93",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:lobby",
+      "role": "validator",
+      "committee_id": "609ec37f9d521d7c122eaa879e9972f310a0a0a0eec7f28028addf3ea932bde2",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 13,
+      "syncing": false,
+      "genesis": "539b1749d215aad6c7e0a5810bb30c0059c80d8da1fe729575a75b08394745a4",
+      "protocol_era": "c0d6a2679c17fe8021af85e97e4697505f1b5e89797320b916eff8628ccd2a0f",
+      "height": 13,
+      "protocol_view": 13,
+      "proposal_slot": 13,
+      "notarized_view": 12,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:material",
+      "role": "validator",
+      "committee_id": "7704fc1b9af5401fa38c43166a325c18c714c42995688c5066076b42ac2a3b29",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "db61dcb8cb248c77938fea8871adb6c879702797d2c5bc73ce0e7b676ec8c5de",
+      "protocol_era": "5a22cdaeb1df335dda992000f2614a7c88110ac6a1a15bcd75eeab2ec1d65c75",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:material:eidolons",
+      "role": "validator",
+      "committee_id": "9ce86323f0f703437ad000cbe2ecaa67185dd5dbd6d67301ec8e6dbf312b9203",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "2f6ace03a84f98386c8658fa53e7100801cfda26b23f30d18b205932aeb69569",
+      "protocol_era": "03761cfb82477b9ded0d94f671f1bff061971c033da909f8fdfd43cc00bde970",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:measure",
+      "role": "validator",
+      "committee_id": "d848bd537bf0fe74af720e581dace933ac559d769d24715ad56c54aa3f43a1d3",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "b1267ebef4e50fe16fe599923794021a87e490a5d70efa22d437dc7d80ebb61c",
+      "protocol_era": "7c003a75863c55829eb47517e147d55cadca8373fde4c5002d22c18929175f90",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:modelling",
+      "role": "validator",
+      "committee_id": "a523ac20e008fe68cf14b6267bdbc4418c337ff85f9bfd46055fc864f62575a0",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "61b6088552a4dcf83eb50697785b51576179b57daa86cdcc8b0104f460da9282",
+      "protocol_era": "9d3a3da70930d69111235119c04ef3520a3ae08796f14b87b2abd1d2dbe82e2a",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:names",
+      "role": "validator",
+      "committee_id": "05e2b3da621c5eb091ac2c1d1d017842b9ebe2dd2424b8b4d379229a220e1612",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "3f428db8dcff4f101440b89436c55135905f335c8c4799fe67570c6519c85d12",
+      "protocol_era": "570a49c40b1a4571e12f5d34956eef9ddd0a63ac210b0889d04043084de36835",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:node",
+      "role": "validator",
+      "committee_id": "a8f00933f95ff1a14f9bf66f3bd99cf1c2a9f0f2b314f8dac5eb59f17d5db4ab",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 44,
+      "syncing": false,
+      "genesis": "0c984b95994eef73740efaf89c7609d17ec5dc04c901826cb09ff69890895b6f",
+      "protocol_era": "cd29b1b932cfda5d84379caebcc8812c34840649065c624f62eb50c4c40c0bbf",
+      "height": 44,
+      "protocol_view": 44,
+      "proposal_slot": 44,
+      "notarized_view": 43,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:prolog",
+      "role": "validator",
+      "committee_id": "4ada3c418ee71914a58633da97f59323a811736eaf13bde4e1b20674346f0b4e",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "12c5c4b5f6f1b2c72a8e9469ab0036dce0cbbbd18c72faf85370c9ab1156f981",
+      "protocol_era": "93c6942a72e7b1a9ba3d6235115fd4b3a7bfd19989bbd9952e15318cfd77b61e",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:prolog:eidolons",
+      "role": "validator",
+      "committee_id": "0007bb8c64ada22162cede881e66c5c5e2dd8955b80219ebde16d3cae78afe93",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "ea58219d3d508f73b45177c173349388920a7a1ae5c216555427b715d1e9a0ae",
+      "protocol_era": "79b2ca6b2553d7ddd6423c4fbf527182947c729305894b69d7447560fcbb3f5f",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:rendering",
+      "role": "validator",
+      "committee_id": "93fa422755a52ff8d83de00b3bec00e40512e5bd4d928260014bb728a18c3f23",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 1,
+      "syncing": false,
+      "genesis": "59d5df07a7e6594434a76d5461a68f4dc3b5a48edbc1b8a602c99a487933a13d",
+      "protocol_era": "00b6ba8db85a14ba002777edb082261b35306c0f14ae06b6d24f50c75fd58035",
+      "height": 1,
+      "protocol_view": 1,
+      "proposal_slot": 1,
+      "notarized_view": 0,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:root",
+      "role": "validator",
+      "committee_id": "6afa290a605d02b9cae6a88a228f7d8ac448729ebd70d9073a7636bb997c59a6",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 87,
+      "syncing": false,
+      "genesis": "e9a485a929be605dc01e1bba7820ad956f84de6b502c24d1b45a5d4819111096",
+      "protocol_era": "d2306902daca6fccb5f4b2777fcc81479e959e000ab379bd90d815a8fe01152e",
+      "height": 87,
+      "protocol_view": 9,
+      "proposal_slot": 9,
+      "notarized_view": 8,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    },
+    {
+      "ns": "quod:signup",
+      "role": "validator",
+      "committee_id": "7c9812736748bbefd8e2b377a4c583cfcd38374430189dbd3714958ad4fd219a",
+      "committee": [
+        {
+          "id": "kp_617e237f",
+          "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+        }
+      ],
+      "applied": 16,
+      "syncing": false,
+      "genesis": "ed546dcb168191d801c85e446c886264c220a28a99981a23a02025f24a95bba2",
+      "protocol_era": "a27b920905de60c7917c6a53abebfafcdbada2b53c4070c2a8348eb798e5776e",
+      "height": 16,
+      "protocol_view": 16,
+      "proposal_slot": 16,
+      "notarized_view": 15,
+      "proposal_open": true,
+      "progress_phase": "idle",
+      "next_proposer": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      },
+      "view_leader": {
+        "id": "kp_617e237f",
+        "pubkey": "617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e"
+      }
+    }
+  ]
+}

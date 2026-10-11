@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-11T22:56:18.177217+00:00",
+  "image_builder": {
+    "exec_session": 12529,
+    "exit": 0
+  },
+  "maintenance": {
+    "exec_session": 28456,
+    "exit": 0
+  },
+  "release": {
+    "exec_session": 98930,
+    "exit": 0
+  },
+  "fleet_probe": {
+    "exec_session": 55248,
+    "exit": 0
+  },
+  "history_after": {
+    "exit": 0
+  },
+  "personal_owner_after": {
+    "exit": 0
+  }
+}

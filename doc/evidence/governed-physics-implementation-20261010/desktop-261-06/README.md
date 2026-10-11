@@ -69,3 +69,20 @@ and does not change authorization deadlines or claim hardware XR acceptance.
 log, private profile, compiled caches and an identical unused source copy are
 excluded. No production code, server configuration or ontology was changed in
 this campaign.
+
+## Gaming clarification and browser closure
+
+Yan clarified that he was still playing Project Zomboid: the test automation
+sometimes focused the browser, redirecting his game input into the world. Codex
+had wrongly interpreted the earlier status message as finishing the game.
+These interrupted runs are not evidence of a browser capture defect or of a
+renewal-induced movement pause.
+
+All automation stopped. The [normal browser shutdown](gaming-handoff-and-browser-close.json)
+exited zero, and a process check confirmed the exact owned browser had ended.
+The private profile was preserved. The formerly active driver log and final
+console log are appended under [completion hashes](completion-files.sha256.json);
+the original snapshot and failed measurements remain unchanged.
+
+The remaining sustained-movement test requires an available foreground desktop.
+No further focus, keyboard or mouse automation should run while Yan is gaming.

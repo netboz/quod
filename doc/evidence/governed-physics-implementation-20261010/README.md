@@ -38,9 +38,10 @@ result does not establish sustained smoothness. The
 contact clipping the body despite advancing accepted controls. Longer movement
 attempts lost mouse capture before the permission renewal; one also encountered
 an expired sign-in and reconnected normally with the same identity and position.
-Those failures are retained. Sustained visible movement across permission
-renewal remains unverified; no automatic input continues while capture loss is
-being clarified.
+Those failures are retained. Yan clarified he was still gaming while the test
+automation took browser focus. The test browser is now closed, with its profile
+preserved. Sustained visible movement across permission renewal remains
+unverified and needs an available foreground desktop.
 The [first release260 gate](release-260-gates-01/README.md) stopped at two EUnit
 failures. Their diagnostics and the separately labelled correction campaign
 are retained; passing isolated checks do not explain the unattributed write.

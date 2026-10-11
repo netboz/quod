@@ -1,0 +1,39 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 37229.
+[1704939:1704939:1011/222037.332352:WARNING:ui/ozone/platform/wayland/common/drm_render_node_path_finder.cc:178] Preferred drm_render_node not found, picking nvidia-drm
+[1704939:1704939:1011/222037.424871:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wl_shm version 1 but version 2 is available.
+[1704939:1704939:1011/222037.424914:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_cursor_shape_manager_v1 version 1 but version 2 is available.
+[1704939:1704939:1011/222037.424930:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_pointer_gestures_v1 version 1 but version 3 is available.
+[1704939:1704939:1011/222037.424949:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to ext_idle_notifier_v1 version 1 but version 2 is available.
+[1704939:1704939:1011/222037.424993:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_color_manager_v1 version 1 but version 3 is available.
+[1704939:1704939:1011/222037.425013:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_linux_dmabuf_v1 version 4 but version 5 is available.
+
+DevTools listening on ws://127.0.0.1:36569/devtools/browser/4f86ad37-d2ae-4bde-82c0-4e0c61761a57
+[1704939:1704939:1011/222037.788796:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+[1704939:1704939:1011/222037.788806:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+[1705025:1:1011/222037.813029:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1704988:1704988:1011/222037.843810:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+[1704988:1704988:1011/222037.848134:ERROR:ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc:248] '--ozone-platform=wayland' is not compatible with Vulkan. Consider switching to '--ozone-platform=x11' or disabling Vulkan
+[1704939:1704939:1011/222037.853681:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1704939:1704939:1011/222037.853769:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1705040:1:1011/222037.855147:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1705041:1:1011/222037.857647:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1704939:1704939:1011/222037.965252:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[1705098:1:1011/222038.226831:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1705109:1:1011/222038.254263:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1704939:1704939:1011/222038.466768:ERROR:components/page_load_metrics/browser/page_load_metrics_update_dispatcher.cc:187] Invalid first_paint (unset) for first_contentful_paint 0.247 s
+[1704939:1704939:1011/222038.974798:INFO:CONSOLE:1] "BJS - [22:20:38]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation", source: https://192.168.1.10:30519/assets/logger-CuBYPcDK.js (1)
+[1705194:1:1011/222041.864765:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1704939:1704939:1011/222120.345181:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 72 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 64 to 16 to fit dynamic offset allocation limit.
+[1704939:1704939:1011/222512.366885:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+[1704939:1704939:1011/223017.205541:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+[1704939:1704939:1011/223255.528105:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+[1704939:1704939:1011/223442.456500:INFO:CONSOLE:1] "BJS - [22:34:42]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation", source: https://192.168.1.10:30519/assets/logger-CuBYPcDK.js (1)
+[1704939:1704939:1011/223443.151244:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+[1704939:1704939:1011/223457.487092:WARNING:ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.cc:65] Cannot inhibit going idle when no window is focused
+[1732601:1:1011/224355.143027:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1732612:1:1011/224355.178512:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.

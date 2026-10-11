@@ -76,10 +76,13 @@ export function movementGoal(world, frame, control, sequence, input) {
     number(BigInt(control.epoch)), number(sequence), input, variable('Result')]))
 }
 
+// Quantized zero is an integer; generic Prolog numbers preserve -0 as a float.
+const milliUnits = value => number(Math.trunc(value * 1000) + 0)
+
 export function driveInput(velocity, angular = [0, 0, 0]) {
   const measured = values => values.map(value => {
     if (!Number.isFinite(value)) throw new Error('invalid movement input')
-    return number(Math.trunc(value * 1000))
+    return milliUnits(value)
   })
   if (velocity.length !== 3 || angular.length !== 3) throw new Error('invalid movement vector')
   return compound('drive', [compound('vector', measured(velocity)), compound('angular', measured(angular))])
@@ -88,7 +91,7 @@ export function driveInput(velocity, angular = [0, 0, 0]) {
 export const snapInput = angle => compound('snap', [number(angle)])
 export const teleportInput = position => {
   if (position.length !== 3 || !position.every(Number.isFinite)) throw new Error('invalid landing')
-  return compound('teleport', [compound('vector', position.map(n => number(Math.trunc(n * 1000))))])
+  return compound('teleport', [compound('vector', position.map(milliUnits))])
 }
 
 // Stable body identity/revision come from the authoritative projection, never
@@ -100,5 +103,5 @@ export function pushInput(body, revision, impulse) {
     throw new Error('invalid push input')
   }
   return compound('push', [compound('body', [number(id), number(rev)]),
-    compound('vector', impulse.map(n => number(Math.trunc(n * 1000))))])
+    compound('vector', impulse.map(milliUnits))])
 }

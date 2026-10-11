@@ -719,7 +719,7 @@ assert_repeat_source_has_no_io(Ctx, Target, Expected) ->
             {quod_simplex, history_view, 3}, {quod_ledger_store, open_ro_snapshot, 1},
             {quod_ledger_store, read_at, 2}, {file, write, 2}, {file, pwrite, 3},
             {file, write_file, 2}, {file, write_file, 3}, {file, sync, 1}, {file, datasync, 1}],
-    [trace:function(Trace, MFA, true, [local]) || MFA <- MFAs],
+    [trace:function(Trace, MFA, [{'_', [], [{message, {caller}}]}], [local]) || MFA <- MFAs],
     trace:process(Trace, all, true, [call]),
     try
         ?assertEqual(Expected, complete_source(Ctx, Target)),
@@ -740,8 +740,11 @@ source_trace_relay(Parent, Tag) ->
     end.
 
 source_io_calls(Tag, Calls) ->
-    receive {Tag, {trace, _, call, {M, F, Args}}} ->
-        source_io_calls(Tag, [{M, F, length(Args)} | Calls])
+    receive {Tag, {trace, Pid, call, {M, F, Args}, Caller}} ->
+        %% Keep ownership and caller attribution if background durability
+        %% overlaps a read. The zero-work assertion still covers every call.
+        Names = gproc:info(Pid, gproc),
+        source_io_calls(Tag, [{Pid, {M, F, length(Args)}, Caller, Names} | Calls])
     after 0 -> Calls end.
 
 public_system_ontology_source_is_readable_but_not_mutable_test_() ->

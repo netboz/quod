@@ -8,6 +8,7 @@ import '@babylonjs/core/Culling/ray.js'
 import { configureDesktopCamera } from '../src/navigation.js'
 import { createControlledNavigation } from '../src/controlled-navigation.js'
 import { readControl } from '../src/locomotion.js'
+import { formatClause } from '../src/prolog-term.js'
 
 const control = (mount = 'pose(vector(1000,200,0),rotation(0,1571,0))') => readControl(
   `control(human,4,controlled_agent(vehicle,2,10,3,motion(grounded(700),2000,1600,500,query_limits(2,0,8,128),[snap(785),teleport(6000,2000,700)]),viewpoint(cockpit,${mount},tracking(view_only,500))))`)
@@ -29,6 +30,17 @@ function fixture(run) {
   try { run({ scene, camera, owner, navigation, current, sent, masks }) }
   finally { navigation.dispose(); scene.dispose(); engine.dispose() }
 }
+
+test('backward desktop travel sends integer zero axes accepted by physics', () => fixture(
+  ({ owner, navigation, current, sent }) => {
+    current.control = control('pose(vector(0,700,0),rotation(0,0,0))')
+    navigation.update(current)
+    const event = new Event('keydown'); Object.defineProperty(event, 'key', { value: 's' })
+    owner.dispatchEvent(event)
+    navigation.render(0)
+    assert.equal(sent.length, 1)
+    assert.equal(formatClause(sent[0]), 'drive(vector(0, 0, 2000), angular(0, 0, 0)).')
+  }))
 
 test('authored off-centre cockpit follows accepted body pose; commands cannot translate the camera', () => fixture(
   ({ camera, owner, navigation, current, sent }) => {

@@ -1,0 +1,12 @@
+{
+  "started": "2026-10-11T16:00:30.886251+00:00",
+  "finished": "2026-10-11T16:03:48.190066+00:00",
+  "child_exit": 0,
+  "is_error": false,
+  "models": [
+    "claude-fable-5-1"
+  ],
+  "payload_unchanged": true,
+  "payload_sha256": "63093c57968583f36ba88b2183ce1325348a676c8281fee789dfc30764419c2e",
+  "tools": []
+}

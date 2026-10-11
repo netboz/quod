@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
+-include_lib("opentelemetry/src/otel_tracer.hrl").
 
 %% Real owner rows and SDK spans: the fetch gate blocks only the predecessor's
 %% ordinary certified read. Observation cannot release it or skip its custody.
@@ -10,6 +11,9 @@ current_queue_names_the_actual_exact_predecessor_test() ->
 
 unrecorded_predecessor_remains_identified_without_a_fabricated_link_test() ->
     queue_behind_exact(missing).
+
+published_predecessor_keeps_custody_until_worker_exit_test() ->
+    queue_behind_exact(held_exit).
 
 queue_behind_exact(Mode) ->
     quod_trace_tests:with_tracer(fun() ->
@@ -30,7 +34,11 @@ queue_behind_exact(Mode) ->
         with_owner(Fetch, fun(Owner) ->
             {FirstContext, FirstSpan} = parent(<<"test.queue.predecessor">>),
             {Context, Span} = parent(<<"test.queue.current">>),
-            TraceContext = case Mode of recorded -> FirstContext; missing -> undefined end,
+            TraceContext = case Mode of missing -> undefined; _ -> FirstContext end,
+            case Mode of
+                held_exit -> hold_worker_exit(FirstSpan, Gate);
+                _ -> ok
+            end,
             First = send_request(Owner, exact_request(Fixture, 5000), TraceContext),
             Worker = receive {held_exact, Gate, W} -> W
                      after 2000 -> error(exact_predecessor_not_held) end,
@@ -50,9 +58,22 @@ queue_behind_exact(Mode) ->
                 ?assertEqual(timeout, gen_server:wait_response(Current, 0)),
                 Worker ! {release_exact, Gate},
                 ?assertMatch({reply, {ok, _}}, gen_server:wait_response(First, 5000)),
+                HeldBlockers = case Mode of
+                    held_exit ->
+                        Custody = span(<<"quod.foreign.queue_blocker">>, Span),
+                        #{active := none, waiting := [#{job_id := CurrentJob,
+                                                        wait_reason := custody}]} =
+                            lifecycle(Owner, identity(Fixture)),
+                        ?assertEqual(CurrentJob,
+                            maps:get('quod.owner.blocker_job_id', attrs(Custody))),
+                        ?assertEqual(timeout, gen_server:wait_response(Current, 0)),
+                        Worker ! {release_worker_exit, Gate},
+                        [Custody];
+                    _ -> []
+                end,
                 ?assertMatch({reply, {ok, _}}, gen_server:wait_response(Current, 5000)),
                 case Mode of
-                    recorded ->
+                    Recorded when Recorded =/= missing ->
                         WorkerSpan = span(<<"quod.foreign.verification_worker">>, FirstSpan),
                         [Link] = otel_links:list(Blocker#span.links),
                         ?assertEqual(WorkerSpan#span.trace_id, Link#link.trace_id),
@@ -63,22 +84,59 @@ queue_behind_exact(Mode) ->
                         ?assertEqual(false, maps:get('quod.owner.blocker_trace_available', Attributes))
                 end,
                 Residence = span(<<"quod.foreign.caller_residence">>, Span),
-                ?assertEqual(1, maps:get('quod.owner.blockers_expected', attrs(Residence))),
+                Count = maps:get('quod.owner.blockers_expected', attrs(Residence)),
+                ?assert(lists:member(Count, [1, 2])),
+                case Mode of held_exit -> ?assertEqual(2, Count); _ -> ok end,
+                %% Result publication can precede release of the worker's
+                %% registry name. That real custody wait is a second blocker.
+                CustodyBlockers = HeldBlockers ++
+                    [span(<<"quod.foreign.queue_blocker">>, Span)
+                     || _ <- lists:seq(1, Count - 1 - length(HeldBlockers))],
+                lists:foreach(fun(S) ->
+                    A = attrs(S),
+                    ?assertEqual(<<"custody_wait">>, maps:get('quod.owner.blocker', A)),
+                    ?assertEqual(<<"current">>, maps:get('quod.owner.blocker_work', A)),
+                    ?assertEqual(2, maps:get('quod.owner.blocker_ordinal', A)),
+                    ?assertEqual(false, maps:get('quod.owner.blocker_trace_available', A)),
+                    ?assertEqual([], otel_links:list(S#span.links))
+                end, CustodyBlockers),
                 ?assertEqual(<<"finite">>, maps:get('quod.caller.budget_kind', attrs(Residence))),
                 Admission = maps:get('quod.caller.remaining_ms', attrs(Residence)),
                 Stages = owner_stages(Residence),
-                [Dispatch] = [S || S <- Stages,
+                Dispatches = [S || S <- Stages,
                     maps:get('quod.owner.stage', attrs(S)) =:= <<"acquiring">>],
-                ?assert(maps:get('quod.caller.remaining_ms', attrs(Dispatch)) =< Admission),
-                ?assertEqual(<<"shared_current">>,
-                             maps:get('quod.foreign.work_lifetime', attrs(Dispatch)))
+                ?assertEqual(Count, length(Dispatches)),
+                lists:foreach(fun(Dispatch) ->
+                    ?assert(maps:get('quod.caller.remaining_ms', attrs(Dispatch)) =< Admission),
+                    ?assertEqual(<<"shared_current">>,
+                                 maps:get('quod.foreign.work_lifetime', attrs(Dispatch)))
+                end, Dispatches)
             after
                 Worker ! {release_exact, Gate},
+                Worker ! {release_worker_exit, Gate},
                 quod_trace:finish_span(Span, ok),
                 quod_trace:finish_span(FirstSpan, ok)
             end
         end)
     end).
+
+%% The test SDK exporter holds the actual worker after it published its result.
+%% Its existing registry custody and the owner's ordinary wait remain intact.
+hold_worker_exit(ParentSpan, Gate) ->
+    Key = {opentelemetry, global, tracer, opentelemetry:get_application(quod_trace)},
+    {Module, Tracer = #tracer{on_end_processors = End}} = persistent_term:get(Key),
+    TraceId = otel_span:trace_id(ParentSpan),
+    Held = Tracer#tracer{on_end_processors = fun(Span) ->
+        Result = End(Span),
+        case Span of
+            #span{name = <<"quod.foreign.verification_worker">>, trace_id = TraceId} ->
+                receive {release_worker_exit, Gate} -> ok end;
+            _ -> ok
+        end,
+        Result
+    end},
+    true = opentelemetry:verify_and_set_term({Module, Held}, Key, otel_tracer),
+    ok.
 
 custody_wait_is_distinct_from_a_route_park_test() ->
     quod_trace_tests:with_tracer(fun() ->

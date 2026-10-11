@@ -1,0 +1,20 @@
+{
+  "base_commit": "a8924ed3cd6bc946dd52e696172668dc9431f4d8",
+  "version": "0.7.260",
+  "purpose": "candidate release 260; implementation frozen with proposed separate version label",
+  "label_files": [
+    "rebar.config",
+    "src/quod.app.src"
+  ],
+  "frozen_at": "2026-10-11T15:36:26.754388+00:00",
+  "owned_changes": [
+    "client/src/locomotion.js",
+    "client/test/controlled-navigation.test.js",
+    "client/test/locomotion.test.js"
+  ],
+  "excluded_user_changes": [
+    "doc/README.md",
+    "untracked sibling native-client/planning files"
+  ],
+  "tree": "/home/yan/src/quod/_build/quod27-release-260/gates-01/tree"
+}

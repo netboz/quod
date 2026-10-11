@@ -1,9 +1,25 @@
 # Governed physics: partial implementation evidence
 
-QUD.27 remains open. This folder records implementation stages and the
-[authorized candidate deployment/refound](deployment-257-refound/README.md),
-not acceptance of the full physics feature. Earlier local stages made no remote
-mutation; the release explicitly reset candidate ledgers as Yan requested.
+[QUD.27](nimbalyst://QUD.27) remains open. The latest deployed release is
+[0.7.259](deployment-259-refound/README.md), with eight healthy candidate nodes
+after the explicitly authorized refound. The separate main job was unchanged.
+[Real remote collider propagation](remote-collider-259-06/README.md) passed
+admission, unrelated edit, geometry edit and withdrawal, including 80 unchanged
+checks with no measured rebuild or write/sync work.
+
+The [actual signed personal world](personal-world-259-01/README.md) now has an
+established identity/history baseline, complete atomic physics activation and
+native floor contact in the normal view, with all six scene marks preserved.
+Desktop movement exposed a [negative-zero input defect](movement-zero-disposition.md).
+Its correction passed Fable plan/implementation reviews and the
+[complete release 0.7.260 checks](release-260-gates-02/README.md): 3,879 EUnit
+tests, 146 Common Test cases, native and client checks, static analysis and
+release packaging. Deployment and desktop collision acceptance remain open.
+The [first release260 gate](release-260-gates-01/README.md) stopped at two EUnit
+failures. Their diagnostics and the separately labelled correction campaign
+are retained; passing isolated checks do not explain the unattributed write.
+No further refound is planned. The sections below retain earlier implementation
+stages and their scoped evidence, not a claim of complete feature acceptance.
 
 The [system-registration slice](system-registration-slice.md) adds physics
 to the existing common startup base, proves separate gravity/permissions in two
@@ -45,8 +61,9 @@ inside the existing materializer owner. Its production directory caller is
 preserved, the obsolete clause-message path is removed, and unchanged reads
 perform no measured replay, projection apply or file write/sync. See the
 [independent review](projection-readers-disposition.md): 218 affected owner tests
-and 30 final focused tests passed, with failed campaigns retained. This is not
-the still-missing source-dependency-to-installed-collider wiring.
+and 30 final focused tests passed, with failed campaigns retained. That earlier
+prerequisite is now used by the live-collider implementation and the real remote
+installation evidence linked above.
 
 The [read-only signed-client access probe](signed-baseline-access-01.md) reached a
 certificate error and established no personal-lobby identity/history baseline.
@@ -67,7 +84,7 @@ The geometry slice's production changes were +71/-13 in Prolog and +2/-0 in
 the native adapter, net +60 lines. Common registration adds one production line
 and updates the bridge module description. No new process, propagation path or mutable collider
 store was introduced. The existing user-owned plan and other sessions' files
-were preserved. The changes are uncommitted.
+were preserved. These earlier production changes are committed and deployed.
 
 ## Claude/Fable review
 
@@ -155,11 +172,13 @@ correction received the scoped reuse-audit review above; shared registration
 is now implemented locally. The historical plan and compatibility diagnostics
 are not active requirements.
 
-The fresh signed personal-lobby identity/history baseline was not obtained.
+Earlier access probes did not obtain a signed personal-world baseline.
 Historical October 9 and system lobby anchors were not substituted. A read-only
 LAN endpoint probe reached TLS but failed hostname verification; localhost had
 no listener. An isolated headless browser showed an error page and was closed.
-No authenticated desktop collision acceptance was performed.
+Those probes performed no authenticated desktop collision acceptance. The
+October 11 baseline and physical activation linked above supersede that access
+limitation; collision acceptance remains unfinished.
 
 The completed 0.7.256 refound owner's coordination report names candidate job
 version 57 and deployment `82d460e6-edcc-49ee-89bc-d9fb3ab77da3`, with no active
@@ -170,9 +189,10 @@ and reported root/system-vocabulary anchors do not identify the current personal
 world. The 0.7.257 release below freshly verified the reported job state before
 executing Yan's separately authorized refound.
 
-Still open: real committed remote collider propagation and unchanged-work
-measurements, a fresh signed personal-world identity/history baseline and real
-signed desktop collision acceptance. Separate Vive/WebXR and durable real-door
+Still open: completion of real signed desktop collision acceptance after the
+reviewed client correction is deployed. Remote collider propagation/work
+measurements and the signed personal-world baseline have been established.
+Separate Vive/WebXR and durable real-door
 acceptance are not claimed by local fixtures or release smoke checks.
 
 ## Automatic live colliders: October 11 local stage
@@ -188,8 +208,8 @@ The handoff records each failed run, correction, frozen source and limitation.
 Implementation and version labels are committed. The
 [0.7.257 candidate release/refound](deployment-257-refound/README.md) passed all
 clean sequential release gates, then verified eight healthy nodes and signed
-source/authorization reads after the explicitly authorized wipe. Real remote
-collider propagation/work measurements, the fresh signed personal-world baseline
-and actual desktop collision acceptance remain open. No signed browser session
-was available through MCP. Local fixtures and release checks do not replace
-those acceptance obligations.
+source/authorization reads after the explicitly authorized wipe. At that stage,
+real remote measurements and signed personal acceptance were still missing.
+The 0.7.259 evidence above now supplies the remote measurements and actual-world
+baseline. Local fixtures and release checks do not replace the remaining desktop
+collision obligation.

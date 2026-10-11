@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "release": "0.7.259",
+  "scope": "candidate network only",
+  "signed_smoke_ledger_writes": 0
+}

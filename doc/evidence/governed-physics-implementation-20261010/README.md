@@ -16,8 +16,12 @@ native registration API was removed; no compatibility path or ledger change
 was needed. The [first deployed recording](desktop-262-01/README.md) stopped at
 its conservative route guard after 7.64 seconds because the starting position
 was too close to the margin. Its evidence and stop marker are preserved. No
-renewal projection occurred in that partial recording, so sustained movement
-across renewal remains unverified. The test browser is closed.
+renewal projection occurred in that partial recording. The separately authorized
+[second recording](desktop-262-02/README.md) completed 80.73 seconds and retained
+movement through six renewals. It also exposed three separate clear-floor
+pauses (383, 151 and 434 ms). Their exact captured poses reproduce native
+occupied-floor refusals in the [isolated investigation](floor-occupancy-investigation-01/README.md).
+Sustained smoothness remains unaccepted. The test browser is closed.
 
 The [actual signed personal world](personal-world-259-01/README.md) now has an
 established identity/history baseline, complete atomic physics activation and
@@ -228,8 +232,9 @@ and reported root/system-vocabulary anchors do not identify the current personal
 world. The 0.7.257 release below freshly verified the reported job state before
 executing Yan's separately authorized refound.
 
-Still open: sustained real signed desktop movement across permission renewal
-with the deployed correction. Floor, console, tall-opening and low-roof contact,
+Still open: correction and real signed desktop verification of the remaining
+clear-floor travel refusals. Movement through six permission renewals is now
+verified. Floor, console, tall-opening and low-roof contact,
 remote collider propagation/work measurements and the signed personal-world
 baseline have been established in the scoped evidence linked above.
 Separate Vive/WebXR and durable real-door

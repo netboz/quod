@@ -1,0 +1,30 @@
+{
+  "ordinary_keyboard_sequence": [
+    [
+      "\ue014",
+      500
+    ],
+    [
+      "\ue013",
+      450
+    ]
+  ],
+  "returned": true,
+  "keys_released": true,
+  "elapsed_seconds": 0.9629481059964746,
+  "view": {
+    "focused": true,
+    "forward": [
+      -0.2114481502615634,
+      0.06111573868905565,
+      -0.9754765739039839
+    ],
+    "hidden": false,
+    "pointerLocked": true,
+    "position": [
+      5.268584728240967,
+      1.4517849802970886,
+      1.887501835823059
+    ]
+  }
+}

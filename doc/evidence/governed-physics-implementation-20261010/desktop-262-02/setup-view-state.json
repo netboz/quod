@@ -1,0 +1,23 @@
+{
+  "assets": [
+    "https://192.168.1.10:30519/assets/World-DJrN7vr7.js"
+  ],
+  "focused": false,
+  "forward": [
+    0,
+    0,
+    -1
+  ],
+  "hidden": false,
+  "position": [
+    4.526455402374268,
+    1.4516995072364807,
+    2.8665997982025146
+  ],
+  "ready": true,
+  "rotation": [
+    0,
+    0,
+    0
+  ]
+}

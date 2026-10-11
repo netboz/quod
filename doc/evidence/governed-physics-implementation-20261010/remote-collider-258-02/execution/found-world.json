@@ -1,0 +1,3 @@
+{
+  "evaluation_error": "{error,{badmatch,{error,{erlog,{system_error,invalid_prepared_effect}}}},[{quod_remote_collider_evidence,found,3,[{file,\"_build/quod27-remote-collider-258-02/quod_remote_collider_evidence.erl\"},{line,130}]},{erl_eval,do_apply,7,[{file,\"erl_eval.erl\"},{line,920}]},{erl_eval,try_clauses,10,[{file,\"erl_eval.erl\"},{line,1530}]},{erl_eval,expr_list,7,[{file,\"erl_eval.erl\"},{line,1504}]},{erl_eval,expr,6,[{file,\"erl_eval.erl\"},{line,630}]},{erl_eval,expr_list,7,[{file,\"erl_eval.erl\"},{line,1504}]},{erl_eval,expr,6,[{file,\"erl_eval.erl\"},{line,641}]},{erl_eval,expr_list,7,[{file,\"erl_eval.erl\"},{line,1504}]}]}"
+}

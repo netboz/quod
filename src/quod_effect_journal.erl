@@ -10,7 +10,7 @@ row can execute only after its matching applied transaction releases it. On
 recovery the processed canonical-input frontier must cover the committed height before
 the journal may infer that release from the outcome index.
 
-Active custody follows the capacity projected from committed root
+Active custody and prepared bytes follow the limits projected from committed root
 policy. The journal starts unavailable for new reservations until that
 projection arrives, and persists the last projected value beside its rows so a
 journal-only restart cannot briefly restore a different policy. Every mutation
@@ -21,9 +21,8 @@ recovery and compaction to one format and one authority path.
 -behaviour(gen_server).
 
 -include("quod_ledger.hrl").
--include("quod_proof_limits.hrl").
 
--export([start_link/0, configure_capacity/1, capacity/0, stats/0,
+-export([start_link/0, configure_limits/2, withdraw_limits/0, limits/0, stats/0,
          reserve/1, release_reservation/1,
          stage/5, bind_reservation/5,
          bind_transaction/3, bind_group/5,
@@ -46,7 +45,8 @@ recovery and compaction to one format and one authority path.
 -define(HEADER_BYTES, 40).
 -define(DEFAULT_AWAIT_MS, 60000).
 
--type capacity() :: non_neg_integer() | unlimited.
+-type limit() :: non_neg_integer() | unlimited.
+-type limits() :: unconfigured | {limit(), limit()}.
 
 -record(row, {
     effect :: quod_effect:effect(),
@@ -77,7 +77,7 @@ recovery and compaction to one format and one authority path.
 
 -record(s, {
     path :: file:filename_all(),
-    capacity = unconfigured :: unconfigured | capacity(),
+    limits = unconfigured :: limits(),
     rows = #{} :: #{binary() => #row{}},
     reservations = #{} :: #{reference() => #reservation{}},
     waiters = #{} :: #{binary() => [{gen_server:from(), reference()}]},
@@ -114,17 +114,20 @@ journal_data_dir() ->
       quod, effect_journal_data_dir, quod_ledger_store:default_data_dir()).
 
 -doc "Install the exact committed root-policy projection used for new custody.".
--spec configure_capacity(capacity()) -> ok | {error, term()}.
-configure_capacity(Capacity) ->
-    call({configure_capacity, Capacity}).
+-spec configure_limits(limit(), limit()) -> ok | {error, term()}.
+configure_limits(Count, PreparedBytes) ->
+    call({configure_limits, Count, PreparedBytes}).
 
--spec capacity() -> unconfigured | capacity() | {error, unavailable}.
-capacity() ->
-    call(capacity).
+-doc "Stop new admission when the committed policy cannot supply valid limits.".
+-spec withdraw_limits() -> ok | {error, unavailable}.
+withdraw_limits() -> call(withdraw_limits).
+
+-spec limits() -> limits() | {error, unavailable}.
+limits() -> call(limits).
 
 -doc "Return the node-wide custody policy and current pressure in one snapshot.".
 -spec stats() ->
-          #{capacity := unconfigured | capacity(),
+          #{limits := limits(),
             active := non_neg_integer(), group_active := non_neg_integer(),
             operation_active := non_neg_integer(),
             reservations := non_neg_integer(),
@@ -266,30 +269,30 @@ call(Request) ->
 init(DataDir) ->
     Path = filename:join(DataDir, "direct_effects.qej"),
     ok = quod_file:ensure_parent(Path),
-    {Capacity, Rows0} = load(Path),
+    {Limits, Rows0} = load(Path),
     Rows = retire_unactivated_rows(Rows0),
-    S0 = #s{path = Path, capacity = Capacity, rows = Rows},
+    S0 = #s{path = Path, limits = Limits, rows = Rows},
     S1 = case Rows =:= Rows0 of
              true -> S0;
              false -> persist(S0)
          end,
     {ok, schedule_reconcile(S1)}.
 
-handle_call({configure_capacity, Capacity}, _From, S0)
-  when (is_integer(Capacity) andalso Capacity >= 0) orelse
-       Capacity =:= unlimited ->
-    S1 = install_capacity(Capacity, S0),
-    {reply, ok, S1};
-handle_call({configure_capacity, _Capacity}, _From, S) ->
-    {reply, {error, invalid_capacity}, S};
-handle_call(capacity, _From, S) ->
-    {reply, S#s.capacity, S};
+handle_call({configure_limits, Count, PreparedBytes}, _From, S) ->
+    case valid_limits({Count, PreparedBytes}) of
+        true -> {reply, ok, install_limits({Count, PreparedBytes}, S)};
+        false -> {reply, {error, invalid_limits}, install_limits(unconfigured, S)}
+    end;
+handle_call(withdraw_limits, _From, S) ->
+    {reply, ok, install_limits(unconfigured, S)};
+handle_call(limits, _From, S) ->
+    {reply, S#s.limits, S};
 handle_call(stats, _From,
-            S = #s{capacity = Capacity, rows = Rows,
+            S = #s{limits = Limits, rows = Rows,
                    reservations = Reservations}) ->
     Active = active_row_count(Rows),
     {reply,
-     #{capacity => Capacity,
+     #{limits => Limits,
        active => Active,
        group_active => active_group_row_count(Rows),
        operation_active => active_operation_row_count(Rows),
@@ -298,9 +301,9 @@ handle_call(stats, _From,
      S};
 
 handle_call({reserve, Owner}, _From,
-            S = #s{capacity = Capacity, rows = Rows,
+            S = #s{limits = Limits, rows = Rows,
                    reservations = Reservations}) ->
-    case capacity_allows(Capacity,
+    case capacity_allows(count_limit(Limits),
                          active_row_count(Rows) + map_size(Reservations)) of
         unavailable ->
             {reply, {error, unavailable}, S};
@@ -319,7 +322,7 @@ handle_call({stage, Token, Action, Desired, Effect, Prepared},
             {Owner, _}, S = #s{reservations = Reservations}) ->
     case maps:get(Token, Reservations, undefined) of
         #reservation{owner = Owner, staged = none} = Reservation ->
-            case encode_staged(Action, Desired, Effect, Prepared) of
+            case encode_staged(Action, Desired, Effect, Prepared, S#s.limits) of
                 {ok, Staged} ->
                     {reply, ok,
                      S#s{reservations =
@@ -554,7 +557,7 @@ terminate(_Reason, _S) -> ok.
 %%% staging + binding
 %%%===================================================================
 
-encode_staged(Action, Desired, Effect, Prepared) ->
+encode_staged(Action, Desired, Effect, Prepared, Limits) ->
     case {quod_effect:validate(Effect),
           quod_durable_term:encode_goal(Action),
           quod_durable_term:encode_goal(Desired),
@@ -564,12 +567,22 @@ encode_staged(Action, Desired, Effect, Prepared) ->
                      quod_effect:request_digest(Effect) andalso
                  crypto:hash(sha256, PreparedBytes) =:=
                      quod_effect:prepared_digest(Effect) of
-                true -> {ok, {Effect, ActionBytes, DesiredBytes, PreparedBytes}};
+                true ->
+                    case prepared_allows(Limits, byte_size(PreparedBytes)) of
+                        ok -> {ok, {Effect, ActionBytes, DesiredBytes, PreparedBytes}};
+                        {error, _} = Error -> Error
+                    end;
                 false -> {error, invalid_direct_effect}
             end;
         _ ->
             {error, invalid_direct_effect}
     end.
+
+prepared_allows(unconfigured, _) -> {error, unavailable};
+prepared_allows({_, unlimited}, _) -> ok;
+prepared_allows({_, Limit}, Actual) when Actual =< Limit -> ok;
+prepared_allows({_, Limit}, Actual) ->
+    {error, {effect_custody_limit, prepared_bytes, Actual, Limit}}.
 
 plan_effect(Plan) ->
     case quod_dtx:material(Plan) of
@@ -604,7 +617,7 @@ attested_staged(Token, Owner, Effect, PlanDigest, Reservations) ->
     end.
 
 bind_transaction_row(Effect, Transaction, Ref,
-                     S = #s{capacity = Capacity, rows = Rows,
+                     S = #s{limits = Limits, rows = Rows,
                             reservations = Reservations}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
@@ -624,7 +637,7 @@ bind_transaction_row(Effect, Transaction, Ref,
                             case effect_admission(Effect, Ref) of
                                 {ok, Admission} ->
                                     Rows1 = make_room_for_active_row(
-                                              Rows, Capacity),
+                                              Rows, count_limit(Limits)),
                                     Row = #row{effect = Effect, action = Action,
                                                desired = Desired,
                                                prepared = Prepared,
@@ -650,7 +663,7 @@ bind_transaction_row(Effect, Transaction, Ref,
 
 bind_group_row(
   Plan, GroupRef, Target, PlanDigest, Reservation, Owner,
-  S = #s{capacity = Capacity, rows = Rows,
+  S = #s{limits = Limits, rows = Rows,
          reservations = Reservations}) ->
     case {plan_effect(Plan), group_coordinator_binding(GroupRef)} of
         {{ok, Effect}, {ok, Coordinator}} ->
@@ -681,7 +694,7 @@ bind_group_row(
                          {ok, Admission}, {ok, PlanBlob}} ->
                             Ref = {group_effect, 2, GroupRef, Target,
                                    PlanDigest, ManifestDigest},
-                            Rows1 = make_room_for_active_row(Rows, Capacity),
+                            Rows1 = make_room_for_active_row(Rows, count_limit(Limits)),
                             Row = #row{effect = Effect, action = Action,
                                        desired = Desired, prepared = Prepared,
                                        commit = PlanBlob, ref = Ref,
@@ -715,7 +728,7 @@ bind_group_row(_Plan, _GroupRef, _Target, _PlanDigest,
 
 bind_operation_row(
   Reservation, Target, SubmissionBlob, Owner,
-  S = #s{capacity = Capacity, rows = Rows,
+  S = #s{limits = Limits, rows = Rows,
          reservations = Reservations}) ->
     case quod_transaction:decode_operation_submission(SubmissionBlob, Target) of
         {ok,
@@ -744,7 +757,7 @@ bind_operation_row(
                         {{ok, {Effect, Action, Desired, Prepared},
                           ManifestDigest, Coordinator, Target},
                          {ok, Admission}} ->
-                            Rows1 = make_room_for_active_row(Rows, Capacity),
+                            Rows1 = make_room_for_active_row(Rows, count_limit(Limits)),
                             Row = #row{effect = Effect, action = Action,
                                        desired = Desired, prepared = Prepared,
                                        commit = SubmissionBlob, ref = Ref,
@@ -1424,9 +1437,9 @@ retire_bound_owner_monitor(MRef, S = #s{bound_owners = Owners}) ->
 %%% durable snapshot
 %%%===================================================================
 
-persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
+persist(S = #s{path = Path, limits = Limits, rows = Rows}) ->
     Payload = term_to_binary(
-                {quod_effect_journal, 7, Capacity,
+                {quod_effect_journal, 8, Limits,
                  [encode_row(EffectId, Row)
                   || {EffectId, Row} <- lists:sort(maps:to_list(Rows))]},
                 [deterministic]),
@@ -1461,19 +1474,20 @@ load(Path) ->
         {error, Reason} -> error({effect_journal_io, Reason})
     end.
 
-decode_snapshot({quod_effect_journal, 7, Capacity, Encoded})
-  when ((is_integer(Capacity) andalso Capacity >= 0) orelse
-        Capacity =:= unlimited),
-       is_list(Encoded) ->
-    Rows = maps:from_list([decode_row(Row) || Row <- Encoded]),
-    case map_size(Rows) =:= length(Encoded) of
-        true -> {Capacity, Rows};
-        false -> error(effect_journal_conflict)
+decode_snapshot({quod_effect_journal, 8, Limits, Encoded}) when is_list(Encoded) ->
+    case valid_limits(Limits) of
+        true ->
+            Rows = maps:from_list([decode_row(Row) || Row <- Encoded]),
+            case map_size(Rows) =:= length(Encoded) of
+                true -> {Limits, Rows};
+                false -> error(effect_journal_conflict)
+            end;
+        false -> error(effect_journal_corrupt)
     end;
 decode_snapshot({quod_effect_journal, Version, _Encoded})
   when is_integer(Version) ->
     error({effect_journal_format_unsupported, Version});
-decode_snapshot({quod_effect_journal, Version, _Capacity, _Encoded})
+decode_snapshot({quod_effect_journal, Version, _Limits, _Encoded})
   when is_integer(Version) ->
     error({effect_journal_format_unsupported, Version});
 decode_snapshot(_) -> error(effect_journal_corrupt).
@@ -1553,7 +1567,6 @@ valid_row_payload(
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
-        byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
         decode_transaction(Commit, Ref, Admission) =/= error;
 valid_row_payload(
   #row{state = State, effect = Effect, action = Action,
@@ -1564,7 +1577,6 @@ valid_row_payload(
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
-        byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
         valid_group_commit(Commit, Effect, Target, PlanDigest);
 valid_row_payload(
   #row{state = operation_pending, effect = Effect, action = Action,
@@ -1573,7 +1585,6 @@ valid_row_payload(
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
-        byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
         case quod_transaction:decode_operation_submission(Commit, Target) of
             {ok, #{effect := Effect} = Binding} ->
                 operation_effect_ref(Binding) =:= Ref;
@@ -1662,14 +1673,25 @@ capacity_allows(Capacity, Active)
   when is_integer(Capacity), Capacity >= 0 ->
     Active < Capacity.
 
-install_capacity(Capacity,
-                 S = #s{capacity = OldCapacity, rows = Rows}) ->
-    Rows1 = trim_terminal_rows(Rows, Capacity),
-    case Capacity =:= OldCapacity andalso Rows1 =:= Rows of
+valid_limits(unconfigured) -> true;
+valid_limits({Count, Bytes}) -> valid_limit(Count) andalso valid_limit(Bytes);
+valid_limits(_) -> false.
+
+valid_limit(unlimited) -> true;
+valid_limit(Limit) -> is_integer(Limit) andalso Limit >= 0.
+
+count_limit(unconfigured) -> unconfigured;
+count_limit({Count, _}) -> Count.
+
+install_limits(Limits, S = #s{limits = OldLimits, rows = Rows}) ->
+    Rows1 = trim_terminal_rows(Rows, count_limit(Limits)),
+    case Limits =:= OldLimits andalso Rows1 =:= Rows of
         true -> S;
-        false -> persist(S#s{capacity = Capacity, rows = Rows1})
+        false -> persist(S#s{limits = Limits, rows = Rows1})
     end.
 
+trim_terminal_rows(Rows, unconfigured) ->
+    Rows;
 trim_terminal_rows(Rows, unlimited) ->
     Rows;
 trim_terminal_rows(Rows, Capacity) when map_size(Rows) =< Capacity ->

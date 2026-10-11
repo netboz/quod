@@ -1,0 +1,123 @@
+[
+  {
+    "name": "native-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-11T12:54:25.848557+00:00",
+    "exit": 0,
+    "seconds": 1.84,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started": "2026-10-11T12:54:27.887494+00:00",
+    "exit": 0,
+    "seconds": 0.51,
+    "sources_unchanged": true
+  },
+  {
+    "name": "client-tests",
+    "command": [
+      "npm",
+      "--prefix",
+      "client",
+      "test"
+    ],
+    "started": "2026-10-11T12:54:28.596782+00:00",
+    "exit": 0,
+    "seconds": 1.13,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "started": "2026-10-11T12:54:29.930865+00:00",
+    "exit": 0,
+    "seconds": 3.42,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "started": "2026-10-11T12:54:33.559235+00:00",
+    "exit": 0,
+    "seconds": 0.15,
+    "sources_unchanged": true
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit"
+    ],
+    "started": "2026-10-11T12:54:33.915546+00:00",
+    "exit": 0,
+    "seconds": 887.69,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ct",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "ct"
+    ],
+    "started": "2026-10-11T13:09:22.017821+00:00",
+    "exit": 0,
+    "seconds": 646.35,
+    "sources_unchanged": true
+  },
+  {
+    "name": "xref",
+    "command": [
+      "rebar3",
+      "xref"
+    ],
+    "started": "2026-10-11T13:20:08.736195+00:00",
+    "exit": 0,
+    "seconds": 15.63,
+    "sources_unchanged": true
+  },
+  {
+    "name": "dialyzer",
+    "command": [
+      "rebar3",
+      "dialyzer"
+    ],
+    "started": "2026-10-11T13:20:24.754184+00:00",
+    "exit": 1,
+    "seconds": 129.87,
+    "sources_unchanged": true
+  }
+]

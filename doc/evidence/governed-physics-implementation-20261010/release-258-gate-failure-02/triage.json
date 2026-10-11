@@ -1,0 +1,9 @@
+{
+  "failure": "EUnit command could not launch: env: escript: No such file or directory; child exit 127",
+  "cause": "Launcher PATH explicitly omitted /home/yan/.asdf/shims",
+  "tests_executed_in_failed_step": 0,
+  "source_changed": false,
+  "correction": "Use the current validated tool PATH including asdf Erlang shims, and assert all required executables resolve before the new campaign",
+  "next_campaign": "gates-03",
+  "original_logs_retained": true
+}

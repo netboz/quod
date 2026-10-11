@@ -1,0 +1,5 @@
+{
+  "src/quod_runtime.erl": "57450f54ff35b5edd8fbc0a3815ce7ecd0b8a8fa89c28a69b176155ddb1624d8",
+  "src/quod_effect_journal.erl": "3ba4e4196292872401341fcc977cda9340c087660023acf9fb2ef820115f3955",
+  "test/quod_resource_lifecycle_tests.erl": "afaff4eef2a181a52e27377670fb56ba376f2f177d2ae831615c3b030768a571"
+}

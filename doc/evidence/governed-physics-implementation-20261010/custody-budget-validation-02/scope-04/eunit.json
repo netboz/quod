@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--module=quod_effect_journal_tests,quod_root_resource_lifecycle_tests,quod_resource_lifecycle_tests,quod_lifecycle_single_path_tests,quod_node_context_tests,quod_client_result_tests,quod_scope_wire_tests,quod_proof_session_tests"
+  ],
+  "started": "2026-10-11T13:04:59.915520+00:00",
+  "finished": "2026-10-11T13:05:28.807597+00:00",
+  "child_exit": 0
+}

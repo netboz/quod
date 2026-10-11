@@ -32,7 +32,6 @@
 %% can raise the shared bound without another shape change.
 -define(QUOD_MAX_DIRECT_EFFECTS, 1).
 -define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
--define(QUOD_MAX_PREPARED_EFFECT_BYTES, (256 * 1024)).
 %% The committed envelope's durable top-level goal and selected result.
 -define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, ?QUOD_MAX_NESTED_GOAL_BYTES).
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).

@@ -567,7 +567,7 @@ init_per_suite(Config) ->
             history_view_at, [{?ROOT_NS, RootAnchor}, 1, RootDeadline])),
         start_join_namespace(RootPeer, RootPub, ?ROOT_NS, RootAnchor, [TargetAddr], Config),
         start_brahms(RootPeer, ?ROOT_NS, RootAddr, [TargetAddr]),
-        wait_ready(RootPeer, ?ROOT_NS, {effect_custody_capacity, 64}),
+        wait_ready(RootPeer, ?ROOT_NS, {effect_custody_limits, 64, unlimited}),
         ?assertMatch(#{role := observer},
             peer:call(RootPeer, quod_simplex, status, [?ROOT_NS]))
     end, [{Asker, AskerPub, AskerAddr}, {Third, ThirdPub, ThirdAddr}]),

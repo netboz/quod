@@ -40,7 +40,8 @@ where the proof ran.
         non_backtrackable_action | conflict_retry | proof_unavailable |
         result_too_large | independent_requires_signed_request |
         independent_nesting | independent_mixed_writes |
-        independent_scope_required.
+        independent_scope_required |
+        {effect_custody_limit, prepared_bytes, non_neg_integer(), non_neg_integer()}.
 -type result() ::
         {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
         {answers, non_neg_integer(), [binary()]} |
@@ -249,6 +250,11 @@ public_error(independent_requires_signed_request) -> independent_requires_signed
 public_error(independent_nesting) -> independent_nesting;
 public_error(independent_mixed_writes) -> independent_mixed_writes;
 public_error(independent_scope_required) -> independent_scope_required;
+public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
+    case quod_scope_wire:valid_public_error(Reason) of
+        true -> Reason;
+        false -> proof_unavailable
+    end;
 public_error(_Reason) -> proof_unavailable.
 
 -doc "Encode one canonical normalized result.".
@@ -386,6 +392,8 @@ valid_uint64(Value) ->
 
 valid_positive_slot(Value) -> valid_uint64(Value) andalso Value > 0.
 
+valid_public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
+    quod_scope_wire:valid_public_error(Reason);
 valid_public_error(Reason) ->
     Reason =:= read_only orelse Reason =:= target_unavailable orelse
         Reason =:= ontology_rebuilding orelse Reason =:= ontology_busy orelse
@@ -463,6 +471,9 @@ http_error({error, conflict_retry}) ->
     {409, #{error => conflict_retry}};
 http_error({error, result_too_large}) ->
     {413, #{error => result_too_large}};
+http_error({error, {effect_custody_limit, prepared_bytes, Actual, Limit}}) ->
+    {413, #{error => effect_custody_limit, resource => prepared_bytes,
+            actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}};
 http_error({error, independent_requires_signed_request}) ->
     {400, #{error => independent_requires_signed_request}};
 http_error({error, independent_nesting}) ->

@@ -1,0 +1,2576 @@
+-module(quod_lifecycle_single_path_tests).
+
+-include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+-include("quod_vm_limits.hrl").
+
+-define(ROOT_NS, <<"quod:root">>).
+-define(NODE_NS, <<"quod:node">>).
+
+lifecycle_single_path_test_() ->
+    {setup,
+     fun setup/0,
+     fun cleanup/1,
+     fun(Fixture) ->
+         [{timeout, 30, ?_test(effect_capacity_is_committed_root_policy(Fixture))},
+          {timeout, 30, ?_test(create_is_one_normal_effect_transaction(Fixture))},
+          {timeout, 30, ?_test(repeated_create_is_a_noop(Fixture))},
+          {timeout, 30, ?_test(failed_transaction_branch_discards_its_effect(Fixture))},
+          {timeout, 30, ?_test(join_uses_the_same_goal_path(Fixture))},
+          {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
+          {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
+          {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
+          {timeout, 30, ?_test(hosting_action_checks_policy_and_conflicts(Fixture))},
+          {timeout, 90, ?_test(personal_lobbies_use_shared_creation_and_recovery(Fixture))},
+          {timeout, 90, ?_test(open_signup_uses_policy_and_ordinary_signed_goals(Fixture))},
+          {timeout, 90, ?_test(node_enrollment_uses_signed_atomic_creation(Fixture))},
+          {timeout, 30, ?_test(bundled_agent_policy_uses_ordinary_creation(Fixture))},
+          {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
+          {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
+          {timeout, 30, ?_test(prepared_genesis_survives_journal_restart(Fixture))},
+          {timeout, 30, ?_test(malformed_present_prepared_genesis_fails_closed(Fixture))},
+          {timeout, 30, ?_test(action_timeout_returns_exact_outcome(Fixture))},
+          {timeout, 30, ?_test(effect_completion_survives_journal_restart(Fixture))},
+          {timeout, 30, ?_test(effect_execution_uses_its_generic_descriptor(Fixture))},
+          {timeout, 30, ?_test(stopped_ontology_resumes_same_anchor(Fixture))},
+          ?_test(wrong_anchor_is_not_a_satisfied_effect(Fixture)),
+          ?_test(ordinary_static_config_is_not_authority(Fixture)),
+          ?_test(structural_validation_is_total(Fixture)),
+          ?_test(current_principal_is_engine_owned(Fixture)),
+          ?_test(internal_staging_continuation_cannot_be_forged(Fixture)),
+          ?_test(foreign_prerequisite_uses_normal_scope_boundary(Fixture)),
+          ?_test(foreign_prerequisite_failure_keeps_its_reason(Fixture)),
+          ?_test(agent_is_gated_by_root_creation_policy(Fixture)),
+          ?_test(node_does_not_own_generic_creation_policy(Fixture)),
+          ?_test(invalid_create_never_reaches_hosting(Fixture)),
+          ?_test(reserved_initial_terms_never_reach_hosting(Fixture)),
+          ?_test(oversized_vocabulary_never_reaches_hosting(Fixture)),
+          ?_test(collisions_preserve_existing_state(Fixture)),
+          ?_test(failed_admission_rolls_back(Fixture)),
+          ?_test(failed_root_policy_does_not_read_or_stage(Fixture)),
+          ?_test(committed_agent_approval_uses_the_same_action(Fixture)),
+          {timeout, 30, ?_test(false_postcondition_is_reported(Fixture))},
+          ?_test(reconcile_republishes_running_content(Fixture)),
+          ?_test(aborted_hosting_fact_changes_nothing(Fixture)),
+          ?_test(retracted_hosting_fact_removes_restart_intent(Fixture)),
+          {timeout, 30,
+           ?_test(parked_hosting_starts_on_exact_directory_route(Fixture))},
+          {timeout, 30,
+           ?_test(dynamic_hosting_survives_content_tree_restart(Fixture))},
+          {timeout, 30,
+           ?_test(wrong_anchor_child_stops_then_exact_material_restarts(Fixture))},
+          ?_test(obsolete_desired_file_has_no_authority(Fixture)),
+          ?_test(parked_hosting_is_exact_event_driven_and_unsubscribes(Fixture)),
+          ?_test(catalogue_worker_failures_are_terminal_owner_failures(Fixture)),
+          {timeout, 60,
+           ?_test(system_names_is_created_hosted_and_registered(Fixture))}]
+     end}.
+
+effect_capacity_is_committed_root_policy(#{root_config := Config, actor_keypair := {Pub, _}}) ->
+    ?assertNot(lists:member(quod_agent_predicates,
+                           maps:get(external_predicate_modules, Config))),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?ROOT_NS, {me, {node, Pub}})),
+    ?assertEqual(64, quod_effect_journal:capacity()),
+    ?assertMatch(
+       {ok, [#{'Capacity' := 64}], _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS, {effect_custody_capacity, {'Capacity'}})),
+    try
+        %% A direct assertion invalidates the resource selector. The owning
+        %% journal installs the resulting committed policy without a reaction.
+        commit_root(
+          {assertz, {effect_custody_capacity_override, 3}}),
+        ok = wait_effect_capacity(3, 300),
+        ?assertMatch(
+           {ok, [#{'Capacity' := 3}], _},
+           quod_prolog:prove_ro(
+             ?ROOT_NS, {effect_custody_capacity, {'Capacity'}})),
+
+        %% The convenience predicate replaces the override atomically and has
+        %% no compiled maximum.
+        commit_root({set_effect_custody_capacity, unlimited}),
+        ok = wait_effect_capacity(unlimited, 300),
+        ?assertMatch(
+           {fail, _},
+           quod_prolog:execute(
+             ?ROOT_NS, {set_effect_custody_capacity, -1}))
+    after
+        commit_root({set_effect_custody_capacity, 64}),
+        ok = wait_effect_capacity(64, 300)
+    end.
+
+setup() -> setup(manual).
+
+setup(Mode) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Suffix = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
+    Dir = filename:join("/tmp", "quod_lifecycle_single_" ++ Suffix),
+    Saved = save_env(
+              [node_pubkey, identity_key, identity_dir, content_data_dir,
+               node_actor_principal, node_addr,
+               namespace_desired, namespace_static_content,
+               content_storage_dirs]),
+    {Pub, Seed} = quod_identity:generate(),
+    application:set_env(quod, node_pubkey, Pub),
+    application:set_env(
+      quod, identity_key, quod_identity:key_term({Pub, Seed})),
+    application:set_env(quod, identity_dir, Dir),
+    application:set_env(quod, content_data_dir, Dir),
+    application:set_env(quod, node_addr, {"127.0.0.1", 14567}),
+    application:set_env(
+      quod, namespace_desired, #{content => #{}, brahms => #{}}),
+    application:set_env(quod, content_storage_dirs, #{}),
+    {ok, Router} = quod_ask_router:start_link(),
+    unlink(Router),
+    {ok, ForeignLog} = quod_foreign_log:start_link(
+                         #{cache_dir => filename:join(Dir, "foreign-log"),
+                           page_timeout_ms => 1000}),
+    unlink(ForeignLog),
+    {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+    unlink(Journal),
+    {ok, BrahmsSup} = quod_brahms_sup:start_link(),
+    unlink(BrahmsSup),
+    {ok, NsSup} = quod_ns_sup:start_link(),
+    unlink(NsSup),
+    RootBlock =
+        #{namespace => ?ROOT_NS, mode => create,
+          genesis_file => <<"ontologies/quod_root.pl">>,
+          data_dir => list_to_binary(Dir), seeds => []},
+    {?ROOT_NS, RootConfig0} = quod_app:build_ns_config(RootBlock),
+    RootConfig = RootConfig0#{proof_timeout_ms => 5000},
+    application:set_env(
+      quod, namespace_static_content, #{?ROOT_NS => RootConfig}),
+    {ok, Manager} = quod_namespace_manager:start_link(),
+    unlink(Manager),
+    {ok, _} = quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
+    ok = wait_ready(?ROOT_NS, 300),
+    NodeSource = list_to_binary(
+                   filename:join(code:priv_dir(quod),
+                                 "ontologies/quod_node.pl")),
+    {ok, created, ?NODE_NS, _} =
+        quod_ontology:create(
+          ?NODE_NS,
+          [{source_file, NodeSource},
+           {external_predicate_modules, [quod_ontology_predicates]}]),
+    ok = wait_ready(?NODE_NS, 300),
+    ok = wait_effect_capacity(64, 300),
+    Base = #{dir => Dir, saved => Saved, manager => Manager,
+             ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
+             router => Router, foreign_log => ForeignLog,
+             root_config => RootConfig, actor_keypair => {Pub, Seed}},
+    case Mode of
+    automatic -> Base;
+    manual ->
+    ActorNs = unique_ns(<<"node-actor">>),
+    ActorInstanceText = <<"physical_node(primary).">>,
+    ActorOptions = quod_ct:node_identity_options(
+                       ActorNs, {physical_node, primary}, Pub),
+    {ok, [#{'ActorAnchor' := CreatedActorAnchor}], _} = quod_prolog:execute(
+                       ?ROOT_NS,
+                       {create_ontology, ActorNs, ActorOptions,
+                        {'ActorAnchor'}}),
+    ok = wait_ready(ActorNs, 300),
+    ActorAnchor = quod_simplex:genesis_hash(ActorNs),
+    ?assertEqual(ActorAnchor, CreatedActorAnchor),
+    {ok, ActorPrincipal} = quod_node_actor:bind(
+                             ActorNs, ActorAnchor, ActorInstanceText, 2),
+    ok = wait_node_actor_principal(ActorPrincipal, 300),
+    Base#{actor_ns => ActorNs,
+      actor_anchor => ActorAnchor, actor_principal => ActorPrincipal,
+      actor_instance_text => ActorInstanceText,
+      actor_keypair => {Pub, Seed}}
+    end.
+
+automatic_founder_enrollment_and_restart_test_() ->
+    {timeout, 90, fun() ->
+        F = setup(automatic),
+        #{dir := Dir, manager := Manager, actor_keypair := {Key, _}} = F,
+        {ok, Network} = quod_ontology:network_identity(),
+        {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
+        unlink(Auth),
+        true = quod_reg:subscribe({node_actor, node}),
+        try
+            observe_enrollment_completion(Manager),
+            NodeAnchor = quod_simplex:genesis_hash(?NODE_NS),
+            {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                         "ontologies/node_execution.pl")),
+            {ok, _, _} = quod_prolog:execute(?NODE_NS,
+                {assertz, {node_identity_template, Template}}),
+            commit_root({transaction, {',',
+                {assertz, {system_ontology, ?NODE_NS, NodeAnchor}},
+                {assertz, {ontology_creation_policy, ?NODE_NS, NodeAnchor}}}}),
+            ok = quod_namespace_manager:enroll_node(),
+            await_enrollment_completion(Manager),
+            {ok, Blob} = quod_identity:load_node_actor_pointer(Dir),
+            {ok, #{identity := {Ns, Anchor}, reference := Ref}} = quod_agent_ref:decode(Blob),
+            ?assertEqual({ok, {agent, Blob}}, quod_node_actor:principal()),
+            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+                {hosts_ontology, Ref, Ns, Anchor, discoverable})),
+            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+                {node_identity_allocation, Key, Ref, Ref})),
+            {ok, Before} = file:read_file(filename:join(Dir, "node.actor")),
+            stop_process(Manager),
+            application:set_env(quod, node_addr, {"127.0.0.1", 24567}),
+            {ok, NextManager} = quod_namespace_manager:start_link(),
+            unlink(NextManager),
+            receive
+                {node_actor_installed, NextManager, {ok, {agent, Blob}}} -> ok
+            after 10000 -> error(retained_node_not_installed)
+            end,
+            ?assertEqual({ok, Blob}, quod_identity:load_node_actor_pointer(Dir)),
+            ?assertEqual({ok, Before}, file:read_file(filename:join(Dir, "node.actor"))),
+            ?assertEqual(complete, maps:get(node_enrollment, quod_namespace_manager:stats())),
+            {ok, PointerInfo} = file:read_file_info(filename:join(Dir, "node.actor")),
+            RootCommits = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
+            %% Through the real owner: a completed repeat spawns no enrollment
+            %% worker, cannot rebuild an enrollment proof, and writes no pointer.
+            1 = erlang:trace(NextManager, true, [procs, {tracer, self()}]),
+            ok = quod_namespace_manager:enroll_node(),
+            ?assertEqual(complete, maps:get(node_enrollment, quod_namespace_manager:stats())),
+            Delivery = erlang:trace_delivered(NextManager),
+            receive {trace_delivered, NextManager, Delivery} -> ok end,
+            1 = erlang:trace(NextManager, false, [procs]),
+            receive {trace, NextManager, spawn, _, _} -> error(unchanged_enrollment_spawned)
+            after 0 -> ok end,
+            ?assertEqual(RootCommits, maps:get(committed, quod_simplex:stats(?ROOT_NS))),
+            ?assertEqual({ok, PointerInfo}, file:read_file_info(filename:join(Dir, "node.actor")))
+        after
+            quod_reg:unsubscribe({node_actor, node}),
+            stop_process(Auth), cleanup(F)
+        end
+    end}.
+
+observe_enrollment_completion(Manager) ->
+    Parent = self(),
+    Observer = fun(State, {in, {node_enrollment_result, _, complete}}, _) ->
+                       Parent ! {enrollment_complete, Manager}, State;
+                  (State, {in, {node_enrollment_result, _, {error, Reason}}}, _) ->
+                       Parent ! {enrollment_error, Manager, Reason}, State;
+                  (State, _, _) -> State
+               end,
+    ok = sys:install(Manager, {Observer, observing}).
+
+node_enrollment_crash_custody_test_() ->
+    [{atom_to_list(Stage), {timeout, 60, fun() -> enrollment_crash_custody(Stage) end}}
+     || Stage <- [before_send, after_commit, after_allocation, known_refusal, malformed_template,
+                  admission_refusal, auth_restart]].
+
+enrollment_crash_custody(Stage) ->
+    F = setup(automatic),
+    #{dir := Dir, manager := Manager, actor_keypair := {Key, _} = Pair} = F,
+    stop_process(Manager),
+    {ok, Network} = quod_ontology:network_identity(),
+    AuthOptions = case Stage of
+        admission_refusal -> #{goal_signing_key_limit =>
+            #{window_ms => 60000, max_total => 8, max_per_key => 1, max_keys => 8}};
+        _ -> #{}
+    end,
+    {ok, Auth} = quod_client_auth:start_link(AuthOptions#{network_id => Network, node_key => Key}),
+    unlink(Auth),
+    try
+        PolicyAnchor = quod_simplex:genesis_hash(?NODE_NS),
+        {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                     "ontologies/node_execution.pl")),
+        InitialTemplate = case Stage of malformed_template -> <<"broken(.">>; _ -> Template end,
+        {ok, _, _} = quod_prolog:execute(?NODE_NS,
+            {assertz, {node_identity_template, InitialTemplate}}),
+        {ok, _, _} = quod_prolog:execute(?ROOT_NS, {transaction, {',',
+            {assertz, {system_ontology, ?NODE_NS, PolicyAnchor}},
+            {assertz, {ontology_creation_policy, ?NODE_NS, PolicyAnchor}}}}),
+        Applicant = #{reference => {agent_instance_ref, ?NODE_NS, PolicyAnchor, {enrolling, Key}},
+                      keypair => Pair, network => Network},
+        {Bytes, Sig} = lobby_user_request(Applicant, execute, {enroll_node, {0}}),
+        case Stage of
+            auth_restart -> stop_process(Auth);
+            admission_refusal ->
+                ok = quod_client_auth:admit_forwarded_goal(Key, Key),
+                ?assertMatch({refused, {?NODE_NS, PolicyAnchor}}, quod_node_actor:enroll()),
+                ?assertMatch({pending, #{rejected := enrollment}},
+                    quod_identity:load_node_actor_pointer(Dir)),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+                    {node_identity_allocation, Key, {'_'}, {'_'}})),
+                %% A known refusal may recover when admission becomes ready;
+                %% no clock advance or expiry of an uncertain write is used.
+                stop_process(Auth),
+                {ok, NextAuth} = quod_client_auth:start_link(#{network_id => Network, node_key => Key}),
+                unlink(NextAuth);
+            known_refusal ->
+                %% A denied policy is a definite refusal. Malformed authored
+                %% source uses the error channel and cannot authorize retry.
+                CreationPolicy = [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
+                    quod_prolog:read_terms(filename:join(code:priv_dir(quod),
+                                                        "ontologies/quod_root.pl"))],
+                replace_root_policy(can_create_ontology, 3,
+                    [{':-', {can_create_ontology, {'_'}, {'_'}, {'_'}}, fail}]),
+                ?assertMatch({refused, {?NODE_NS, PolicyAnchor}}, quod_node_actor:enroll()),
+                ?assertMatch({pending, #{rejected := enrollment}},
+                    quod_identity:load_node_actor_pointer(Dir)),
+                replace_root_policy(can_create_ontology, 3, CreationPolicy);
+            malformed_template ->
+                ?assertMatch({submitted, {ok, _, {normalized, {error, _}}}},
+                    quod_node_actor:enroll()),
+                ?assertMatch({pending, #{rejected := none}},
+                    quod_identity:load_node_actor_pointer(Dir));
+            _ -> ok = quod_identity:begin_node_enrollment(Dir, Bytes, Sig)
+        end,
+        case Stage of
+            before_send -> ok;
+            known_refusal -> ok;
+            malformed_template -> ok;
+            admission_refusal -> ok;
+            auth_restart -> ok;
+            _ ->
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                    quod_client_goal_ingress:submit(Bytes, Sig)),
+                {ok, [#{'Ref' := Ref}], _} = quod_prolog:prove_ro(?NODE_NS,
+                    {node_identity_allocation, Key, {'Ref'}, {'_'}}),
+                {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+                case Stage of
+                    after_allocation -> ok = quod_identity:retain_node_allocation(Dir, Blob);
+                    after_commit -> ok
+                end
+        end,
+        case Stage of
+            Uncertain when Uncertain =:= before_send; Uncertain =:= malformed_template ->
+                {ok, Before} = file:read_file(filename:join(Dir, "node.actor")),
+                ?assertEqual(unresolved, quod_node_actor:enroll()),
+                ?assertEqual(unresolved, quod_node_actor:enroll()),
+                ?assertEqual({ok, Before}, file:read_file(filename:join(Dir, "node.actor"))),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+                    {node_identity_allocation, Key, {'_'}, {'_'}}));
+            _ ->
+                {ok, NextManager} = quod_namespace_manager:start_link(),
+                unlink(NextManager),
+                observe_enrollment_completion(NextManager),
+                case Stage of
+                    auth_restart ->
+                        ?assertEqual(none, quod_identity:load_node_actor_pointer(Dir)),
+                        %% This existing manager must wake from the new auth
+                        %% owner's notice, without an application restart or
+                        %% an explicit enrollment cast from the caller.
+                        {ok, RestartedAuth} = quod_client_auth:start_link(
+                            #{network_id => Network, node_key => Key}),
+                        unlink(RestartedAuth);
+                    _ -> ok = quod_namespace_manager:enroll_node()
+                end,
+                await_enrollment_completion(NextManager),
+                {ok, Bound} = quod_identity:load_node_actor_pointer(Dir),
+                {ok, #{reference := BoundRef}} = quod_agent_ref:decode(Bound),
+                ?assertMatch({ok, [#{'Refs' := [BoundRef]}], _},
+                    quod_prolog:prove_ro(?NODE_NS,
+                        {findall, {'R'}, {node_identity_allocation, Key, {'R'}, {'_'}}, {'Refs'}})),
+                ?assertEqual(complete, quod_node_actor:enroll())
+        end
+    after stop_process(whereis(quod_client_auth)), cleanup(F) end.
+
+await_enrollment_completion(Manager) ->
+    case maps:get(node_enrollment, quod_namespace_manager:stats()) of
+        complete -> ok;
+        _ -> await_enrollment_completion_event(Manager)
+    end.
+
+await_enrollment_completion_event(Manager) ->
+    receive
+        {enrollment_complete, Manager} ->
+            ?assertEqual(complete, maps:get(node_enrollment, quod_namespace_manager:stats()));
+        {enrollment_error, Manager, Reason} -> error({enrollment_failed, Reason})
+    after 30000 -> error({enrollment_timeout, quod_namespace_manager:stats()})
+    end.
+
+cleanup(#{dir := Dir, saved := Saved, manager := Manager,
+          ns_sup := NsSup, brahms_sup := BrahmsSup, journal := Journal,
+          router := Router, foreign_log := ForeignLog}) ->
+    CurrentManager = quod_reg:where({namespace_manager, node}),
+    %% Stop the reconciler before tearing down its policy dependencies. Root
+    %% withdrawal is a tested domain operation, not a fixture shutdown step.
+    stop_process(CurrentManager),
+    stop_process(Manager),
+    stop_process(quod_reg:where({quod_ns_sup, node})),
+    stop_process(NsSup),
+    stop_process(BrahmsSup),
+    stop_process(quod_reg:where({quod_effect_journal, node})),
+    stop_process(Journal),
+    stop_process(ForeignLog),
+    stop_process(Router),
+    restore_env(Saved),
+    _ = file:del_dir_r(Dir),
+    ok.
+
+create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
+    Ns = unique_ns(<<"created">>),
+    Goal =
+        {create_ontology, Ns,
+         [{source,
+           <<"can_invoke(_, _, _, _).\n"
+             "hello(world).\n">>}], {'_'}},
+    {ok, [#{}], Height} = quod_prolog:execute(?ROOT_NS, Goal),
+    ok = wait_ready(Ns, 300),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {hello, world})),
+    {ok, Store} = quod_ledger_store:open_ro(
+                    ?ROOT_NS, quod_ledger_store:ledger_dir(RootConfig)),
+    try
+        {ok, Entry} = quod_ledger_store:read_at(Store, Height),
+        #entry{data = {batch, Transactions}} = quod_ledger:entry_view(Entry),
+        ?assert(lists:any(
+                  fun(#transaction{diff = [], effects = [_]}) -> true;
+                     (_) -> false
+                  end, Transactions))
+    after
+        ok = quod_ledger_store:close(Store)
+    end,
+    EffectRows =
+        [Row || #{target := {RowNs, _}} = Row <-
+                    quod_effect_journal:rows(),
+                RowNs =:= Ns],
+    ?assertMatch([#{state := applied}], EffectRows).
+
+repeated_create_is_a_noop(_Fixture) ->
+    Ns = unique_ns(<<"repeated">>),
+    Goal = create_goal(Ns, []),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+    ok = wait_ready(Ns, 300),
+    Before = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+    ?assertEqual(Before, maps:get(committed, quod_simplex:stats(?ROOT_NS))).
+
+bundled_agent_policy_uses_ordinary_creation(_Fixture) ->
+    Ns = unique_ns(<<"bundled-agent-policy">>),
+    Options =
+        [{source_file, filename:join([code:priv_dir(quod), "ontologies", File])}
+         || File <- ["agent_instance.pl", "agent_recovery_policy.pl"]] ++
+        [{terms, [{instance_of, agent, <<"worker">>},
+                  {domain_state, <<"worker">>, <<"before-loss">>},
+                  {agent_recovery_threshold, <<"worker">>, 2}]},
+         {external_predicate_modules, [quod_agent_predicates]}],
+    %% Go through root's action, prepared effect and namespace manager. Direct
+    %% namespace startup with an already-parsed diff bypasses the cold guard.
+    {ok, [#{'Anchor' := Anchor}], _} = quod_prolog:execute(
+        ?ROOT_NS, {create_ontology, Ns, Options, {'Anchor'}}),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+        Ns, {domain_state, <<"worker">>, <<"before-loss">>})),
+    %% Bundled policies are ordinary, readable reaction clauses. Their actual
+    %% installation and recovery are covered through the hosting owner tests.
+    lists:foreach(fun(Service) ->
+        ?assertMatch({ok, [_ | _], _}, quod_prolog:prove_ro(Ns,
+            {clause, {react_on, {observed, {'Event'}}, {Service, {'Scope'}}}, {'Guard'}}))
+    end, [reconcile_agent_hosts, reconcile_agent_observers]),
+    ?assertMatch([#{state := applied}],
+        [Row || #{target := {Target, _}} = Row <- quod_effect_journal:rows(),
+                Target =:= Ns]).
+
+failed_transaction_branch_discards_its_effect(_Fixture) ->
+    FirstNs = unique_ns(<<"discarded">>),
+    SecondNs = unique_ns(<<"accepted">>),
+    Goal =
+        {';',
+         {transaction,
+          {',', create_goal(FirstNs, []), fail}},
+         create_goal(SecondNs, [])},
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+    ok = wait_ready(SecondNs, 300),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(FirstNs)),
+    ?assertEqual({ok, ready}, quod_ontology:local_state(SecondNs)).
+
+join_uses_the_same_goal_path(_Fixture) ->
+    Ns = unique_ns(<<"join">>),
+    Create = create_goal(
+               Ns,
+               [{source, <<"can_invoke(_, _, _, _).\njoined_fact(ok).\n">>}]),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Create)),
+    ok = wait_ready(Ns, 300),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ok = quod_namespace_manager:stop_content(Ns),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    Join = {join_ontology, Ns, binary:encode_hex(Anchor),
+            [{seed, "127.0.0.1", 14567}]},
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Join)),
+    ok = wait_ready(Ns, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {joined_fact, ok})).
+
+node_actor_uses_ordinary_creation(
+  #{actor_ns := Ns, actor_anchor := Anchor,
+    actor_principal := Principal, actor_instance_text := InstanceText,
+    manager := Manager}) ->
+    {ok, PublicKey} = application:get_env(quod, node_pubkey),
+    ?assertEqual({ok, Principal}, quod_node_actor:principal()),
+    Manager ! reconcile,
+    ok = wait_manager_idle(Manager, 300),
+    ?assertEqual({ok, Principal}, quod_node_actor:principal()),
+    Blob = element(2, Principal),
+    ?assertEqual({ok, Principal}, quod_node_actor:verify(Blob, PublicKey)),
+    ?assertEqual(
+       {error, node_actor_active_key_mismatch},
+       quod_node_actor:verify(Blob, <<99:256>>)),
+    {ok, WrongAnchorBlob} = quod_node_actor:reference(
+                              Ns, <<0:256>>, InstanceText, 2),
+    ?assertEqual(
+       {error, node_actor_anchor_mismatch},
+       quod_node_actor:verify(WrongAnchorBlob, PublicKey)),
+    {ok, WrongInstanceBlob} = quod_node_actor:reference(
+                                Ns, Anchor,
+                                <<"physical_node(other).">>, 2),
+    ?assertEqual(
+       {error, node_actor_instance_mismatch},
+       quod_node_actor:verify(WrongInstanceBlob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(
+         Ns, {instance_of, node, {physical_node, primary}})),
+    Instance = {physical_node, primary},
+    OtherInstance = {physical_node, duplicate},
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {assertz, {instance_of, node, OtherInstance}})),
+    ?assertEqual(
+       {error, node_actor_instance_mismatch},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {retract, {instance_of, node, OtherInstance}})),
+    RotatedKey = <<42:256>>,
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {retract, {agent_key, Instance, PublicKey, active}})),
+    ?assertEqual(
+       {error, node_actor_inactive_key},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {assertz, {agent_key, Instance, RotatedKey, active}})),
+    ?assertEqual(
+       {error, node_actor_active_key_mismatch},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertEqual({ok, Principal}, quod_node_actor:verify(Blob, RotatedKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns,
+         {',',
+          {retract, {agent_key, Instance, RotatedKey, active}},
+          {assertz, {agent_key, Instance, PublicKey, active}}})).
+
+signed_agent_create_uses_the_same_goal_path(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _} = KeyPair = quod_identity:generate(),
+    Agent = provision_agent(PublicKey, true),
+    NewNs = unique_ns(<<"signed-agent-created">>),
+    Peer = {127, 0, 0, 1},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        GoalText = iolist_to_binary(
+                     ["quod:root::create_ontology(\"", NewNs,
+                      "\", [], _)."]),
+        {RequestBytes, Signature} = signed_agent_goal(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
+        ok = wait_ready(NewNs, 300)
+    after
+        stop_process(AuthPid)
+    end.
+
+create_and_host_is_one_ordinary_goal(
+  #{actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_instance_text := InstanceText,
+    actor_keypair := {PublicKey, _} = KeyPair,
+    actor_principal := Principal}) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    NewNs = unique_ns(<<"composed-created">>),
+    Peer = {127, 0, 0, 7},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    ok = commit_root({assertz, {ontology_creator_agent, NodeRef}}),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Agent = #{namespace => ActorNs, anchor => ActorAnchor,
+                  instance_text => InstanceText},
+        GoalText = iolist_to_binary(
+                     ["quod:root::create_ontology(\"", NewNs,
+                      "\", [], Anchor), \"", ActorNs,
+                      "\"::host_ontology(",
+                      agent_ref_source(NodeRef, InstanceText), ", ",
+                      prolog_binary_literal(NewNs),
+                      ", Anchor, private)."]),
+        {RequestBytes, Signature} = signed_agent_goal_version(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText, 2),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
+        ok = wait_ready(NewNs, 300),
+        Anchor = quod_simplex:genesis_hash(NewNs),
+        ok = wait_desired_content(NewNs, Anchor, 300),
+        {ok, HostRows, _} = quod_prolog:prove_ro(
+                              ActorNs,
+                              {hosts_ontology, {'NodeRef'}, {'Namespace'},
+                               {'Anchor'}, private}),
+        ?assert(
+           lists:any(
+              fun(#{'NodeRef' := Ref, 'Namespace' := Ns,
+                    'Anchor' := A}) ->
+                      Ref =:= NodeRef andalso Ns =:= NewNs
+                          andalso A =:= Anchor
+              end, HostRows))
+    after
+        _ = quod_prolog:execute(
+              ?ROOT_NS, {retract, {ontology_creator_agent, NodeRef}}),
+        stop_process(AuthPid)
+    end.
+
+hosting_action_checks_policy_and_conflicts(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Ns = unique_ns(<<"hosting-action">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    Goal = {host_ontology, NodeRef, Ns, Anchor, private},
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, Goal)),
+    ok = wait_desired_content(Ns, Anchor, 300),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, Goal)),
+    ?assertMatch({ok, [#{'Rows' := [Host]}], _},
+       quod_prolog:prove_ro(ActorNs, {findall, Host, Host, {'Rows'}})),
+    %% No silent identity/visibility replacement, and malformed inputs cannot
+    %% enter the committed projection and strand its existing valid work.
+    [begin
+        ?assertMatch({fail, _}, quod_prolog:execute(ActorNs, Bad))
+     end || Bad <- [{host_ontology, NodeRef, Ns, <<1:256>>, private},
+                    {host_ontology, NodeRef, Ns, Anchor, discoverable},
+                    {host_ontology, NodeRef, <<>>, Anchor, private},
+                    {host_ontology, NodeRef, Ns, <<1>>, private},
+                    {host_ontology, NodeRef, Ns, Anchor, unknown},
+                    {host_ontology, NodeRef, {'Name'}, Anchor, private}]],
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {Public, _} = Pair = quod_identity:generate(),
+    Agent = provision_agent(Public, false),
+    AgentRef = maps:get(reference, Agent),
+    User = Agent#{keypair => Pair, network => Network},
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    Submit = fun(G) ->
+        {Bytes, Sig} = lobby_user_request(User, execute, {'::', ActorNs, G}),
+        quod_client_goal_ingress:submit(Bytes, Sig)
+    end,
+    DelegatedNs = unique_ns(<<"delegated-hosting-action">>),
+    DelegatedGoal = {host_ontology, NodeRef, DelegatedNs, Anchor, private},
+    Grant = {can_host_ontology, AgentRef, NodeRef, DelegatedNs, Anchor, private},
+    try
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(DelegatedGoal)),
+        ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs, {assertz, Grant})),
+        ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Submit(DelegatedGoal)),
+        ok = wait_desired_content(DelegatedNs, Anchor, 300),
+        ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs, {retract, Grant})),
+        %% Revocation is checked even when the requested hosting fact exists.
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(DelegatedGoal)),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(
+            {assertz, {hosts_ontology, NodeRef, Ns, <<2:256>>, private}}))
+    after stop_process(Auth) end,
+    ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs,
+       {retract, {hosts_ontology, NodeRef, DelegatedNs, Anchor, private}})),
+    ok = wait_desired_absent(DelegatedNs, 300),
+    RollbackNs = unique_ns(<<"rollback-hosting-action">>),
+    ?assertMatch({fail, _}, quod_prolog:execute(ActorNs,
+       {transaction, {',', {host_ontology, NodeRef, RollbackNs, Anchor, private}, fail}})),
+    ?assertEqual(false, desired_has_content(RollbackNs)),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs,
+       {hosts_ontology, NodeRef, RollbackNs, Anchor, private})),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_desired_absent(Ns, 300).
+
+personal_lobbies_use_shared_creation_and_recovery(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    try
+        Classes = found_lobby_classes(),
+        Users = [found_lobby_user(Classes, Network, Node) || _ <- [first, second]],
+        [begin
+             #{reference := Owner, lobby_name := Name} = User,
+             commit_root({assertz, {ontology_creator_agent, Owner}}),
+             {ok, _, _} = quod_prolog:execute(ActorNs, {assertz,
+                 {can_host_ontology, Owner, Node, Name, {'Anchor'}, discoverable}}),
+             Goal = {',', {provision_lobby, me}, {lobby_reference, {0}}},
+             {Bytes, Signature} = lobby_user_request(User, execute, Goal),
+             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                          quod_client_goal_ingress:submit(Bytes, Signature)),
+             ok = wait_ready(Name, 300),
+             Ref = {ontology_ref, Name, quod_simplex:genesis_hash(Name)},
+             ?assertEqual(Ref, lobby_user_reference(User)),
+             %% The committed operation is recoverable independently of the
+             %% live reply; no new signed creation is used for resolution.
+             Resolved = resolve_lobby_request(Bytes, Signature),
+             ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}}, Resolved),
+             {200, #{bindings := [Recovered]}} = quod_client_http:signed_goal_result(Resolved),
+             ?assertEqual(quod_client_goal_parser:value_text(Ref), maps:get(<<"V0">>, Recovered)),
+             {Again, AgainSignature} = lobby_user_request(User, execute, Goal),
+             ?assertMatch({ok, _, {normalized, {failed, _}}},
+                          quod_client_goal_ingress:submit(Again, AgainSignature)),
+             ?assertEqual(Ref, lobby_user_reference(User)),
+             commit_root({retract, {ontology_creator_agent, Owner}})
+         end || User <- Users],
+        [First, Second] = Users,
+        {ontology_ref, FirstLobby, FirstAnchor} = FirstRef = lobby_user_reference(First),
+        SecondRef = lobby_user_reference(Second),
+        ?assertNotEqual(FirstRef, SecondRef),
+        SceneGoal = {'::', FirstLobby,
+            {',', {current_ontology_identity, FirstLobby, FirstAnchor},
+                  {lobby_view, playing, {0}}}},
+        {SceneBytes, SceneSig} = lobby_user_request(First, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
+                     quod_client_goal_ingress:submit(SceneBytes, SceneSig)),
+        {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
+                     quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
+        {ok, _, _} = quod_prolog:execute(ActorNs,
+            {retract, {hosts_ontology, Node, FirstLobby, FirstAnchor, discoverable}}),
+        ok = wait_desired_absent(FirstLobby, 300),
+        LobbyPid = quod_reg:where({quod_prolog, FirstLobby}),
+        case LobbyPid of
+            undefined -> ok;
+            _ ->
+                LobbyMonitor = monitor(process, LobbyPid),
+                receive {'DOWN', LobbyMonitor, process, LobbyPid, _} -> ok
+                after 5000 -> error(lobby_not_stopped) end
+        end,
+        {ok, resumed, FirstLobby, FirstAnchor} = quod_ontology:join(
+            FirstLobby, binary:encode_hex(FirstAnchor, lowercase),
+            [{seed, "127.0.0.1", 14567}]),
+        ok = wait_ready(FirstLobby, 300),
+        ?assertEqual(FirstRef, lobby_user_reference(First)),
+        {ResumedBytes, ResumedSig} = lobby_user_request(First, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
+                     quod_client_goal_ingress:submit(ResumedBytes, ResumedSig))
+    after stop_process(Auth) end.
+
+open_signup_uses_policy_and_ordinary_signed_goals(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    try
+        {ClassNs, ClassAnchor} = found_lobby_classes(),
+        {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                     "ontologies/human_user_instance.pl")),
+        {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
+            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor},
+             {signup_host, Node}]),
+        {ok, _, _} = quod_prolog:execute(ActorNs,
+            {assertz, {ontology_hosting_policy, SignupNs, SignupAnchor}}),
+        Grants = [{ontology_creation_policy, ClassNs, ClassAnchor},
+                  {ontology_creation_policy, SignupNs, SignupAnchor}],
+        [commit_root({assertz, Grant}) || Grant <- Grants],
+        try
+            Users = [begin
+                {Public, _} = Pair = quod_identity:generate(),
+                Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
+                              keypair => Pair, network => Network},
+                Token = crypto:strong_rand_bytes(32),
+                Name = signup_namespace(Token),
+                Reserved = <<"quod:signup-test-reserved">>,
+                [begin
+                    {Bad, BadSig} = lobby_user_request(Applicant, execute,
+                        {signup, Token, BadName, {0}}),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Bad, BadSig)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(BadName))
+                 end || BadName <- [Reserved, signup_namespace(crypto:strong_rand_bytes(32))]],
+                {ok, [#{'Options' := SignupOptions}], _} = quod_prolog:prove_ro(SignupNs,
+                    {signup_options, maps:get(reference, Applicant), Name, Token, {'Options'}}),
+                %% Root must independently enforce the name even when callers
+                %% bypass signup/3 and supply otherwise valid founding options.
+                {Direct, DirectSig} = lobby_user_request(Applicant, execute,
+                    {'::', ?ROOT_NS, {create_ontology, Reserved, SignupOptions, {0}}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Direct, DirectSig)),
+                {Bytes, Signature} = lobby_user_request(Applicant, execute,
+                    {signup, Token, Name, {0}}),
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                             quod_client_goal_ingress:submit(Bytes, Signature)),
+                ok = wait_ready(Name, 300),
+                Owner = {agent_instance_ref, Name, quod_simplex:genesis_hash(Name), me},
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+                    {hosts_ontology, Node, Name, quod_simplex:genesis_hash(Name), discoverable})),
+                {200, #{bindings := [Recovered]}} = quod_client_http:signed_goal_result(
+                    resolve_lobby_request(Bytes, Signature)),
+                ?assertEqual(quod_client_goal_parser:value_text(Owner), maps:get(<<"V0">>, Recovered)),
+                %% A new key can obtain its own account, never arbitrary source
+                %% writes or authority to change root's policy.
+                [begin
+                    {BadBytes, BadSig} = lobby_user_request(Applicant, execute, BadGoal),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                                 quod_client_goal_ingress:submit(BadBytes, BadSig))
+                 end || BadGoal <- [{assertz, {unexpected, fact}},
+                       {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}]],
+                User = Applicant#{reference => Owner},
+                %% An enrollment receipt is not permission to host arbitrary
+                %% content, and a caller cannot supply someone else's identity.
+                [begin
+                    {Rejected, RejectedSig} = lobby_user_request(User, execute,
+                        {'::', ActorNs, Request}),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Rejected, RejectedSig))
+                 end || Request <- [
+                    {request_ontology_hosting, Owner, Node, <<"unrelated">>, <<1:256>>, discoverable},
+                    {request_ontology_hosting, maps:get(reference, Applicant), Node,
+                     Name, quod_simplex:genesis_hash(Name), discoverable}]],
+                {Escalation, EscalationSig} = lobby_user_request(User, execute,
+                    {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                             quod_client_goal_ingress:submit(Escalation, EscalationSig)),
+                {ok, [#{'Options' := LobbyOptions}], _} = quod_prolog:prove_ro(ClassNs,
+                    {lobby_options, Owner, {'Options'}}),
+                ExpectedLobby = <<Name/binary, "/lobby">>,
+                Pending = {lobby_provisioning, me, {pending, ExpectedLobby}},
+                CreateLobby = {'::', ?ROOT_NS,
+                    {create_ontology, ExpectedLobby, LobbyOptions, {0}}},
+                %% User-owned facts cannot grant arbitrary names. Missing
+                %% requirements and a nonhuman owner cannot use the policy.
+                [begin
+                    {Bad, BadSig} = lobby_user_request(User, execute, BadGoal),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Bad, BadSig)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Reserved)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(ExpectedLobby)),
+                    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name, Pending))
+                 end || BadGoal <- [
+                    {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}},
+                    {transaction, {',', {assertz, {lobby_provisioning, me, {pending, Reserved}}},
+                        {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}}}},
+                    {transaction, {',', {retract, Pending}, CreateLobby}},
+                    {transaction, {',', {retract, {instance_of, human_user, me}}, CreateLobby}}]],
+                {Provision, ProvisionSig} = lobby_user_request(User, execute, {provision_lobby, me}),
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                             quod_client_goal_ingress:submit(Provision, ProvisionSig)),
+                {ontology_ref, LobbyNs, LobbyAnchor} = lobby_user_reference(User),
+                ok = wait_ready(LobbyNs, 300),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+                    {hosts_ontology, Node, LobbyNs, LobbyAnchor, discoverable})),
+                {Unauthorized, UnauthorizedSig} = lobby_user_request(User, execute,
+                    {'::', ActorNs, {host_ontology, Node, LobbyNs, LobbyAnchor, discoverable}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Unauthorized, UnauthorizedSig)),
+                {Revoked, RevokedSig} = lobby_user_request(User, execute,
+                    {'::', ActorNs, {request_ontology_hosting, Owner, Node,
+                                    LobbyNs, LobbyAnchor, discoverable}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Revoked, RevokedSig)),
+                %% The signup ontology retains unfinished receipts, not a
+                %% permanent table of human-user instances.
+                {Status, StatusSig} = lobby_user_request(Applicant, read, {signup_status, Token, {0}}),
+                ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
+                             quod_client_goal_ingress:submit(Status, StatusSig)),
+                User
+            end || _ <- [first, second]],
+            [First, Second] = Users,
+            ?assertNotEqual(lobby_user_reference(First), lobby_user_reference(Second)),
+            %% A denied host request must roll back the prepared creation and
+            %% receipt, not leave an ontology with no restart authority.
+            Policy = {ontology_hosting_policy, SignupNs, SignupAnchor},
+            {ok, _, _} = quod_prolog:execute(ActorNs, {retract, Policy}),
+            try
+                {Public, _} = Pair = quod_identity:generate(),
+                Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
+                              keypair => Pair, network => Network},
+                Token = crypto:strong_rand_bytes(32),
+                Name = signup_namespace(Token),
+                {Rejected, RejectedSig} = lobby_user_request(Applicant, execute,
+                    {signup, Token, Name, {0}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Rejected, RejectedSig)),
+                ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Name)),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(SignupNs,
+                    {enrollment_receipt, Public, Token, {'_'}})),
+                ?assertEqual(false, desired_has_content(Name))
+            after {ok, _, _} = quod_prolog:execute(ActorNs, {assertz, Policy}) end
+        after [commit_root({retract, Grant}) || Grant <- Grants] end
+    after stop_process(Auth) end.
+
+node_enrollment_uses_signed_atomic_creation(
+  Fixture = #{actor_ns := ActorNs, actor_principal := Principal, actor_keypair := HostPair,
+    dir := Dir}) ->
+    {ok, Host} = quod_agent_ref:materialize_principal(Principal),
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    NodeAnchor = quod_simplex:genesis_hash(?NODE_NS),
+    {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                 "ontologies/node_execution.pl")),
+    Policy = {ontology_hosting_policy, ?NODE_NS, NodeAnchor},
+    Grant = {ontology_creation_policy, ?NODE_NS, NodeAnchor},
+    AdminGrant = {root_administrator_agent, Host},
+    Catalogue = {system_ontology, ?NODE_NS, NodeAnchor},
+    commit_root({transaction, {',', {assertz, AdminGrant}, {assertz, Catalogue}}}),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    try
+        %% Upgrade retained policy through a real administrator's signed
+        %% atomic source edit, preserving the founder's exact identity.
+        Admin = #{reference => Host, keypair => HostPair, network => Network},
+        {ok, PointerBefore} = file:read_file(filename:join(Dir, "node.actor")),
+        ClassEdit = {'::', ?NODE_NS, {',',
+            {current_ontology_identity, ?NODE_NS, NodeAnchor}, {',', system_prolog_edit,
+            {transaction, {',', {assertz, {node_identity_template, Template}},
+                                {assertz, {node_identity_allocation, NodeKey, Host, Host}}}}}}},
+        Upgrade = {transaction, {',', ClassEdit, {',',
+            {assertz, Policy}, {'::', ?ROOT_NS, {assertz, Grant}}}}},
+        {EditBytes, EditSig} = lobby_user_request(Admin, execute, Upgrade),
+        ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                     quod_client_goal_ingress:submit(EditBytes, EditSig)),
+        %% Restart the retained subtree, not its hosting policy. Removing a
+        %% desired system copy would race the catalogue owner's reconciliation.
+        NodeSup = quod_reg:where({quod_ns, ?NODE_NS}),
+        OldEngine = quod_reg:where({quod_prolog, ?NODE_NS}),
+        Restart = monitor(process, NodeSup),
+        EngineRestart = monitor(process, OldEngine),
+        exit(NodeSup, kill),
+        receive {'DOWN', Restart, process, NodeSup, killed} -> ok end,
+        receive {'DOWN', EngineRestart, process, OldEngine, _} -> ok end,
+        ok = await_enrolled_identity({?NODE_NS, NodeAnchor}),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+            {node_identity_allocation, NodeKey, Host, Host})),
+        ?assertEqual({ok, PointerBefore}, file:read_file(filename:join(Dir, "node.actor"))),
+        {Public, _} = Pair = quod_identity:generate(),
+        Applicant = #{reference => {agent_instance_ref, ?NODE_NS, NodeAnchor, {enrolling, Public}},
+                      keypair => Pair, network => Network},
+        {Bytes, Signature} = lobby_user_request(Applicant, execute, {enroll_node, {0}}),
+        ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                     quod_client_goal_ingress:submit(Bytes, Signature)),
+        {ok, [#{'Ref' := {agent_instance_ref, Name, Anchor, me} = Ref}], _} =
+            quod_prolog:prove_ro(?NODE_NS, {node_identity_allocation, Public, {'Ref'}, Host}),
+        %% The actual root executor keeps the new ontology alive and routable.
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+            {hosts_ontology, Host, Name, Anchor, discoverable})),
+        ok = await_enrolled_identity({Name, Anchor}),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
+            {agent_key, me, Public, active})),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(?ROOT_NS,
+            {peer_admitted, Public, {'_'}, {'_'}, Public})),
+        %% A caller duplicate returns the original allocation, never a second
+        %% genesis. Runtime recovery separately retains the original request.
+        {Duplicate, DupSig} = lobby_user_request(Applicant, execute, {enroll_node, {0}}),
+        ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+                     quod_client_goal_ingress:submit(Duplicate, DupSig)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+            {node_identity_allocation, Public, Ref, Host})),
+        {Bad, BadSig} = lobby_user_request(Applicant, execute,
+            {'::', ?ROOT_NS, {create_ontology, <<"node:unauthorized">>, [], {0}}}),
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+                     quod_client_goal_ingress:submit(Bad, BadSig))
+    after
+        stop_process(Auth),
+        %% Restore the initially empty system catalogue while preserving this
+        %% shared fixture's class as an ordinary, explicitly hosted copy.
+        ok = host_locally(Fixture, ?NODE_NS, NodeAnchor),
+        commit_root({transaction, {',', {retract, Grant}, {',',
+            {retract, AdminGrant}, {retract, Catalogue}}}}),
+        {ok, _, _} = quod_prolog:execute(ActorNs, {retract, Policy})
+    end.
+
+await_enrolled_identity({Name, _} = Identity) ->
+    true = quod_reg:subscribe({runtime, Name}),
+    try await_enrolled_identity(Identity, quod_time:mono_ms() + 10000)
+    after quod_reg:unsubscribe({runtime, Name})
+    end.
+
+await_enrolled_identity(Identity, Deadline) ->
+    case quod_client_goal_target:available(Identity) of
+        ok -> ok;
+        _ ->
+            receive
+                {proof_ready, Identity, _, _, _} ->
+                    await_enrolled_identity(Identity, Deadline);
+                {replay_ready, Identity, _} ->
+                    await_enrolled_identity(Identity, Deadline)
+            after max(0, Deadline - quod_time:mono_ms()) ->
+                error({enrolled_identity_not_ready, Identity})
+            end
+    end.
+
+signup_namespace(Token) ->
+    Encoded = base64:encode(Token, #{mode => urlsafe, padding => false}),
+    <<"human:", Encoded/binary>>.
+
+found_lobby_classes() ->
+    {RenderNs, RenderAnchor} = found_lobby_source(<<"rendering">>, "quod_rendering.pl", []),
+    {ModelNs, ModelAnchor} = found_lobby_source(<<"modelling">>, "quod_modelling.pl",
+        [{rendering_vocabulary, RenderNs, RenderAnchor}]),
+    {MeasureNs, MeasureAnchor} = found_lobby_source(<<"measure">>, "quod_measure.pl", []),
+    {MaterialNs, MaterialAnchor} = found_lobby_source(<<"material">>, "quod_material.pl",
+        [{measure_vocabulary, MeasureNs, MeasureAnchor}]),
+    {EidolonNs, EidolonAnchor} = found_lobby_source(<<"material-eidolons">>, "quod_material_eidolons.pl",
+        [{material_vocabulary, MaterialNs, MaterialAnchor}]),
+    {EnvironmentNs, EnvironmentAnchor} = found_lobby_source(
+        <<"environment">>, "quod_environment.pl", []),
+    {EnvironmentEidolonNs, EnvironmentEidolonAnchor} = found_lobby_source(
+        <<"environment-eidolons">>, "quod_environment_eidolons.pl",
+        [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
+    {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
+    {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
+    found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
+        [{modelling_vocabulary, ModelNs, ModelAnchor},
+         {material_eidolons, EidolonNs, EidolonAnchor},
+         {environment_vocabulary, EnvironmentNs, EnvironmentAnchor},
+         {environment_eidolons, EnvironmentEidolonNs, EnvironmentEidolonAnchor},
+         {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template}]).
+
+found_lobby_source(Prefix, File, Facts) ->
+    Ns = unique_ns(Prefix),
+    Source = list_to_binary(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
+    {ok, created, Ns, _} = quod_ontology:create(Ns,
+        [{source_file, Source}, {terms, Facts},
+         {external_predicate_modules, [quod_agent_predicates]}]),
+    ok = wait_ready(Ns, 300),
+    {Ns, quod_simplex:genesis_hash(Ns)}.
+
+found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
+    {Public, _} = Pair = quod_identity:generate(),
+    Name = unique_ns(<<"personal-lobby">>),
+    {Ns, Anchor} = found_lobby_source(<<"human-user">>, "human_user_instance.pl",
+        [{instance_of, human_user, me}, {agent_key, me, Public, active},
+         {lobby_vocabulary, ClassNs, ClassAnchor},
+         {hosting_node, Node},
+         {lobby_provisioning, me, {pending, Name}}]),
+    #{reference => {agent_instance_ref, Ns, Anchor, me},
+      keypair => Pair, network => Network, lobby_name => Name}.
+
+lobby_user_request(#{reference := {agent_instance_ref, Ns, Anchor, Instance},
+                     keypair := {Public, _} = Pair, network := Network}, Mode, Goal) ->
+    {ok, InstanceText} = quod_client_goal_parser:format(Instance),
+    {ok, GoalText} = quod_client_goal_parser:format(Goal),
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => Network,
+        signing_public_key => Public, operation_id => crypto:strong_rand_bytes(32),
+        agent_namespace => Ns, agent_genesis_anchor => Anchor,
+        agent_instance_text => InstanceText, mode => Mode, parser_version => 2,
+        not_after_ms => quod_time:now_ms() + 30000, goal_text => GoalText}),
+    {Bytes, quod_identity:sign(Bytes, quod_identity:key_term(Pair))}.
+
+lobby_user_reference(User) ->
+    {Bytes, Signature} = lobby_user_request(User, read, {lobby_reference, {0}}),
+    {ok, _, {normalized, {read, _, {answers, _, [Answer]}}}} =
+        quod_client_goal_ingress:submit(Bytes, Signature),
+    {ok, [{<<"V0">>, Reference}]} = quod_durable_term:decode_result(Answer),
+    Reference.
+
+resolve_lobby_request(Bytes, Signature) ->
+    {ok, #{agent_namespace := Ns}} = quod_client_goal:decode(Bytes),
+    true = quod_reg:subscribe({runtime, Ns}),
+    try
+        resolve_lobby_request(Bytes, Signature, quod_reg:where({quod_prolog, Ns}),
+                              quod_time:mono_ms() + 5000)
+    after quod_reg:unsubscribe({runtime, Ns}) end.
+
+resolve_lobby_request(Bytes, Signature, Engine, Deadline) ->
+    Result = quod_client_goal_ingress:resolve_operation(Bytes, Signature),
+    case Result of
+        {ok, _, {operation_outcome, _, #{status := committed}}} -> Result;
+        {ok, _, _} ->
+            receive {projection_advanced, Engine, _} ->
+                resolve_lobby_request(Bytes, Signature, Engine, Deadline)
+            after max(0, Deadline - quod_time:mono_ms()) -> error({unresolved, Result}) end;
+        Error -> Error
+    end.
+
+signed_root_create_obeys_entry_acl(_Fixture) ->
+    RootClauses = root_invocation_clauses(),
+    HostEntry = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
+    ok = replace_root_invocation_policy([HostEntry]),
+    try
+        {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+        {ok, NodeKey} = application:get_env(quod, node_pubkey),
+        {PublicKey, _} = KeyPair = quod_identity:generate(),
+        Agent = provision_agent(PublicKey, true),
+        DeniedNs = unique_ns(<<"entry-denied">>),
+        Peer = {127, 0, 0, 5},
+        {ok, AuthPid} = quod_client_auth:start_link(
+                          #{network_id => NetworkId, node_key => NodeKey,
+                            max_challenges => 4, max_sessions => 4}),
+        unlink(AuthPid),
+        try
+            #{session_id := SessionId, expires_ms := SessionExpires} =
+                open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+            GoalText = iolist_to_binary(
+                         ["quod:root::create_ontology(\"", DeniedNs,
+                          "\", [], _)."]),
+            {RequestBytes, Signature} = signed_agent_goal(
+                                          NetworkId, PublicKey, KeyPair,
+                                          Agent, execute, SessionExpires,
+                                          GoalText),
+            {ok, _, {normalized, {failed, ReasonsBlob}}} =
+                quod_client_goal_ingress:submit(
+                  execute, SessionId, RequestBytes, Signature, Peer),
+            {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+            ?assert(lists:member({not_allowed, ?ROOT_NS}, Reasons)),
+            ?assertEqual({ok, not_hosted}, quod_ontology:local_state(DeniedNs))
+        after
+            stop_process(AuthPid)
+        end
+    after
+        ok = replace_root_invocation_policy([HostEntry | RootClauses])
+    end.
+
+prepared_source_is_used_exactly_once(#{dir := Dir}) ->
+    Ns = unique_ns(<<"prepared-once">>),
+    SourcePath = filename:join(Dir, "prepared-once.pl"),
+    ok = file:write_file(
+           SourcePath,
+           <<"can_invoke(_, _, _, _).\nprepared_value(original).\n">>),
+    Action = {create_ontology, Ns,
+              [{source_file, list_to_binary(SourcePath)}]},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    ok = file:write_file(
+           SourcePath,
+           <<"can_invoke(_, _, _, _).\nprepared_value(changed).\n">>),
+    {ok, created, Ns, _} = quod_ontology:execute_prepared(Prepared),
+    ok = wait_ready(Ns, 300),
+    ?assertMatch({ok, [#{}], _},
+                 quod_prolog:prove_ro(Ns, {prepared_value, original})),
+    ?assertMatch({fail, _},
+                 quod_prolog:prove_ro(Ns, {prepared_value, changed})).
+
+%% Fixed incarnation and current genesis block grammar. The local prepared
+%% journal still excludes runtime caches from its stable native entry schema.
+prepared_genesis_native_format_golden_test() ->
+    Ns = <<"quod:cut2-prepared">>,
+    Executor = <<17:256>>,
+    Config0 = #{committee => [], genesis_diff => []},
+    %% Ambient node_addr must not enter the frozen vector. Pin only the
+    %% generation input; the serialized journal descriptor remains Config0.
+    Genesis = quod_simplex:test_genesis_tx(
+                Config0#{node_addr => undefined}, Ns, Executor, <<34:256>>),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [Genesis]}, 0),
+    {ok, GenesisBytes} = quod_transaction:encode_ledger_transaction(Genesis),
+    ?assertEqual(
+       {quod_block, 3, genesis, 0, none, 1,
+        {batch, [{transaction, GenesisBytes}]}, 0},
+       binary_to_term(quod_ledger:block_bytes(Block), [safe])),
+    Entry = quod_ledger:entry(1, Block, none),
+    Anchor = quod_simplex:block_hash(Block),
+    ?assertEqual(
+       <<157,246,183,25,41,169,120,216,19,142,234,148,83,169,7,95,
+         59,18,153,114,197,71,35,94,203,91,92,144,238,86,60,84>>,
+       Anchor),
+    Native = quod_ledger:entry_view(Entry),
+    Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
+    Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
+    {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    ?assertEqual(1792, byte_size(Bytes)),
+    ?assertEqual(
+       <<26,32,232,69,85,59,39,59,25,68,232,243,181,104,242,160,
+         143,151,56,239,201,201,76,221,168,223,148,171,18,158,196,154>>,
+       crypto:hash(sha256, Bytes)),
+    ?assertEqual({ok, Prepared}, quod_ontology:decode_prepared(Bytes)),
+    %% The private journal owns one fixed native schema, not the runtime
+    %% transaction tuple layout. Extra runtime fields are not a second format.
+    ?assertEqual({error, invalid_action}, quod_ontology:decode_prepared(
+        term_to_binary({quod_prepared_lifecycle, 1, Prepared}, [deterministic]))),
+    CachedNative = Native#entry{data = {batch,
+        [Genesis#transaction{claim_view = {untrusted_runtime_metadata}}]}},
+    CachedPrepared = setelement(5, Prepared,
+        Config#{prepared_genesis_entry => CachedNative}),
+    ?assertEqual({ok, Bytes}, quod_ontology:prepared_bytes(CachedPrepared)),
+    ?assertEqual({ok, Entry}, quod_ledger:from_entry_view(Native)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Native)),
+    Action = {create_ontology, Ns, []},
+    {ok, Effect0} = quod_ontology:prepared_effect(
+                      Action, Prepared, Executor, {node, Executor}),
+    %% Effect IDs are independently chosen, not derived from the preparation.
+    Effect = setelement(6, Effect0, <<51:256>>),
+    ?assert(quod_effect:validate(Effect)),
+    ?assertEqual(<<51:256>>, quod_effect:effect_id(Effect)),
+    ?assertEqual(Executor, quod_effect:executor(Effect)),
+    ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),
+    ?assertEqual({Ns, Anchor}, quod_effect:target(Effect)).
+
+prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
+    Ns = unique_ns(<<"prepared-journal-native">>),
+    Action = {create_ontology, Ns, []},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared0} = quod_ontology:prepare_action(Structural),
+    {prepared_lifecycle, create, Ns, _InitialAnchor, Config0, created} = Prepared0,
+    %% Ordinary preparation itself must freeze a native entry, not an artifact.
+    ?assertMatch(#entry{}, maps:get(prepared_genesis_entry, Config0)),
+    {ok, Executor} = application:get_env(quod, node_pubkey),
+    Incarnation = <<68:256>>,
+    Genesis = quod_simplex:test_genesis_tx(Config0, Ns, Executor, Incarnation),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [Genesis]}, 0),
+    Entry = quod_ledger:entry(1, Block, none),
+    Anchor = quod_simplex:block_hash(Block),
+    Native = quod_ledger:entry_view(Entry),
+    Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
+    Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
+    {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    {ok, Effect} = quod_ontology:prepared_effect(
+                     Action, Prepared, Executor, {node, Executor}),
+    EffectId = quod_effect:effect_id(Effect),
+    {ok, GoalBlob} = quod_durable_term:encode_goal(Action),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    Change = quod_transaction:bind_id(
+               {?ROOT_NS, RootAnchor},
+               #transaction{origin = {?ROOT_NS, RootAnchor},
+                            proof_id = crypto:strong_rand_bytes(32),
+                            plan_digest = crypto:strong_rand_bytes(32),
+                            goal = GoalBlob, result = ResultBlob,
+                            diff = [], read_check = #{}, effects = [Effect],
+                            author = Executor}),
+    Ref = {transaction, ?ROOT_NS, RootAnchor, Change#transaction.tx_id},
+    {ok, Reservation} = quod_effect_journal:reserve(self()),
+    ok = quod_effect_journal:stage(
+           Reservation, Action, {ontology_hosted, Ns}, Effect, Prepared),
+    ok = quod_effect_journal:bind_transaction(Effect, Change, Ref),
+    %% Activation retains durable custody across restart; an unactivated row
+    %% is intentionally retired by recovery and cannot exercise this contract.
+    ok = quod_effect_journal:activate(EffectId),
+    OldJournal = quod_reg:where({quod_effect_journal, node}),
+    ok = gen_server:stop(OldJournal),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    {ok, NewJournal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+    unlink(NewJournal),
+    ?assertMatch({ok, #{effect_id := EffectId, target := {Ns, Anchor}}},
+                 quod_effect_journal:status(EffectId)),
+    %% The existing ordered-apply release event activates the restored row.
+    quod_effect_journal:release_applied(2, [Effect]),
+    ok = wait_ready(Ns, 300),
+    ok = wait_effect_target_state(Ns, applied, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertMatch({ok, [#{'Incarnation' := Incarnation}], _},
+                 quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Incarnation'}})),
+    ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),
+    ?assertMatch({ok, #{effect_id := EffectId, state := applied}},
+                 quod_effect_journal:status(EffectId)).
+
+malformed_present_prepared_genesis_fails_closed(_Fixture) ->
+    lists:foreach(
+      fun(Mutation) ->
+          Ns = unique_ns(<<"bad-prepared-native">>),
+          {ok, Structural} = quod_ontology:validate_action({create_ontology, Ns, []}),
+          {ok, Prepared} = quod_ontology:prepare_action(Structural),
+          {prepared_lifecycle, create, Ns, _Anchor, Config, created} = Prepared,
+          BadConfig = Mutation(Config),
+          ?assertMatch({error, _}, quod_ontology:execute_prepared(
+                                    setelement(5, Prepared, BadConfig))),
+          ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)),
+          ?assertEqual(undefined, quod_reg:where({quod_simplex, Ns})),
+          {ok, Store} = quod_ledger_store:open_ro(
+                          Ns, quod_ledger_store:ledger_dir(Config)),
+          try ?assertEqual(0, quod_ledger_store:last(Store))
+          after ok = quod_ledger_store:close(Store)
+          end
+      end,
+      [fun(C) -> C#{prepared_genesis_entry => malformed} end,
+       fun(C) ->
+           View = maps:get(prepared_genesis_entry, C),
+           C#{prepared_genesis_entry => View#entry{timestamp = 1}}
+       end,
+       fun(C) ->
+           {ok, Artifact} = quod_ledger:from_entry_view(
+                              maps:get(prepared_genesis_entry, C)),
+           C#{prepared_genesis_entry => Artifact}
+       end,
+       fun(C) -> maps:remove(genesis_hash, C) end,
+       fun(C) -> C#{genesis_hash => <<85:256>>} end]).
+
+action_timeout_returns_exact_outcome(#{manager := Manager}) ->
+    Ns = unique_ns(<<"action-timeout">>),
+    ok = sys:suspend(Manager),
+    Result =
+        try quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))
+        after ok = sys:resume(Manager)
+        end,
+    ?assertMatch(
+       {error,
+        {outcome_unknown,
+         {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}},
+       Result),
+    {error, {outcome_unknown, Ref}} = Result,
+    ok = wait_ready(Ns, 300),
+    ?assertMatch({ok, #{status := committed}}, quod_prolog:outcome(Ref)),
+    ?assertMatch(<<_:256>>, quod_simplex:genesis_hash(Ns)).
+
+%% The namespace-manager mutation may finish immediately before the journal
+%% records its terminal row. Recovery must observe the already-satisfied
+%% desired state and must not found another incarnation.
+effect_completion_survives_journal_restart(#{dir := Dir}) ->
+    Ns = unique_ns(<<"journal-restart">>),
+    Tag = make_ref(),
+    Parent = self(),
+    application:set_env(quod, effect_test_after_execute, {Parent, Tag}),
+    {Caller, CallerMRef} =
+        spawn_monitor(
+          fun() ->
+              Parent !
+                  {journal_restart_result, self(),
+                   quod_prolog:execute(
+                     ?ROOT_NS, create_goal(Ns, []))}
+          end),
+    try
+        Worker =
+            receive
+                {effect_after_execute, Tag, EffectWorker} -> EffectWorker
+            after 5000 ->
+                error(effect_execution_timeout)
+            end,
+        OldJournal = quod_reg:where({quod_effect_journal, node}),
+        ?assert(is_pid(OldJournal)),
+        application:unset_env(quod, effect_test_after_execute),
+        JournalMRef = monitor(process, OldJournal),
+        exit(OldJournal, kill),
+        receive
+            {'DOWN', JournalMRef, process, OldJournal, _} -> ok
+        after 5000 ->
+            error(effect_journal_stop_timeout)
+        end,
+        WorkerMRef = monitor(process, Worker),
+        receive
+            {'DOWN', WorkerMRef, process, Worker, _} -> ok
+        after 5000 ->
+            error(effect_worker_stop_timeout)
+        end,
+        {ok, NewJournal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(NewJournal),
+        Result =
+            receive
+                {journal_restart_result, Caller, ActionResult} -> ActionResult
+            after 5000 ->
+                error(action_result_timeout)
+            end,
+        ?assertMatch(
+           {error,
+            {outcome_unknown,
+             {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}},
+           Result),
+        ok = wait_ready(Ns, 300),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        ?assertMatch(<<_:256>>, Anchor),
+        ok = wait_effect_target_state(Ns, applied, 300),
+        ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+        receive
+            {'DOWN', CallerMRef, process, Caller, normal} -> ok
+        after 5000 ->
+            error(action_caller_stop_timeout)
+        end
+    after
+        application:unset_env(quod, effect_test_after_execute),
+        exit(Caller, kill)
+    end.
+
+effect_execution_uses_its_generic_descriptor(_Fixture) ->
+    Ns = unique_ns(<<"descriptor-owned-effect">>),
+    Create = {create_ontology, Ns, []},
+    {ok, Structural} = quod_ontology:validate_action(Create),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    {ok, Executor} = application:get_env(quod, node_pubkey),
+    AuditLabel = deliberately_unrelated_audit_label,
+    Desired = {ontology_hosted, Ns},
+    {ok, Effect} = quod_ontology:prepared_effect(
+                     AuditLabel, Prepared, Executor, {node, Executor}),
+    {ok, GoalBlob} = quod_durable_term:encode_goal(AuditLabel),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    Change = quod_transaction:bind_id(
+               {?ROOT_NS, RootAnchor},
+               #transaction{origin = {?ROOT_NS, RootAnchor},
+                            proof_id = crypto:strong_rand_bytes(32),
+                            plan_digest = crypto:strong_rand_bytes(32),
+                            goal = GoalBlob, result = ResultBlob,
+                            diff = [], read_check = #{}, effects = [Effect],
+                            author = Executor}),
+    Ref = {transaction, ?ROOT_NS, RootAnchor,
+           Change#transaction.tx_id},
+    {ok, Reservation} = quod_effect_journal:reserve(self()),
+    ok = quod_effect_journal:stage(
+           Reservation, AuditLabel, Desired, Effect, Prepared),
+    ok = quod_effect_journal:bind_transaction(Effect, Change, Ref),
+    quod_effect_journal:release_applied(2, [Effect]),
+    ok = wait_ready(Ns, 300),
+    ok = wait_effect_target_state(Ns, applied, 300),
+    ?assertMatch({ok, #{state := applied, result := ok}},
+                 quod_effect_journal:status(quod_effect:effect_id(Effect))).
+
+stopped_ontology_resumes_same_anchor(_Fixture) ->
+    Ns = unique_ns(<<"resume-anchor">>),
+    Action = create_goal(Ns, []),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 300),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ?assertMatch(<<_:256>>, Anchor),
+    ok = quod_namespace_manager:stop_content(Ns),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)).
+
+wrong_anchor_is_not_a_satisfied_effect(_Fixture) ->
+    Ns = unique_ns(<<"wrong-anchor">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+    ok = wait_ready(Ns, 300),
+    Actual = quod_simplex:genesis_hash(Ns),
+    <<First, Rest/binary>> = Actual,
+    Wrong = <<(First bxor 1), Rest/binary>>,
+    {ok, Executor} = application:get_env(quod, node_pubkey),
+    Effect =
+        {quod_direct_effect, 2, local_durable,
+         ontology_lifecycle, create,
+         crypto:hash(sha256, <<"wrong-anchor-effect">>), Executor,
+         {node, Executor}, {Ns, Wrong},
+         crypto:hash(sha256, <<"wrong-anchor-request">>),
+         crypto:hash(sha256, <<"wrong-anchor-prepared">>)},
+    ?assertEqual(
+       incompatible,
+       quod_effect_journal:test_desired_state(
+         ?ROOT_NS, {ontology_hosted, Ns}, Effect)).
+
+structural_validation_is_total(_Fixture) ->
+    ?assertEqual({error, invalid_action},
+                 quod_ontology:validate_action({unknown, value})),
+    ?assertEqual({error, invalid_arguments},
+                 quod_ontology:validate_action(
+                   {create_ontology, {'Name'}, []})),
+    ?assertEqual({error, invalid_name},
+                 quod_ontology:validate_action(
+                   {create_ontology, <<>>, []})),
+    ?assertEqual({error, invalid_options},
+                 quod_ontology:validate_action(
+                   {create_ontology, <<"valid:name">>, malformed})),
+    ?assertEqual({error, invalid_genesis_hash},
+                 quod_ontology:validate_action(
+                   {join_ontology, <<"valid:name">>, <<"bad">>,
+                    [{seed, "127.0.0.1", 14567}]})),
+    ?assertEqual({error, invalid_seeds},
+                 quod_ontology:validate_action(
+                   {join_ontology, <<"valid:name">>,
+                    binary:encode_hex(crypto:strong_rand_bytes(32)), []})).
+
+current_principal_is_engine_owned(_Fixture) ->
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(?NODE_NS,
+                           {current_principal, {node, NodeKey}})),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {current_principal, {node, crypto:strong_rand_bytes(32)}})).
+
+internal_staging_continuation_cannot_be_forged(_Fixture) ->
+    Ns = unique_ns(<<"forged-continuation">>),
+    Goal = {'$quod_stage_ontology', forged_handle,
+            create_goal(Ns, []), {ontology_hosted, Ns}},
+    ?assertMatch({error,{erlog,{domain_error,ontology_request_handle,forged_handle}}},
+        quod_prolog:execute(?ROOT_NS,Goal)),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+
+ordinary_static_config_is_not_authority(_Fixture) ->
+    Ns = unique_ns(<<"static-anchor">>),
+    StaticAnchor = crypto:strong_rand_bytes(32),
+    DesiredAnchor = crypto:strong_rand_bytes(32),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    SavedStatic = application:get_env(quod, namespace_static_content),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    Static0 = application:get_env(quod, namespace_static_content, #{}),
+    try
+        application:set_env(
+          quod, namespace_desired,
+          Desired0#{content => maps:remove(Ns, Content0)}),
+        application:set_env(
+          quod, namespace_static_content,
+          Static0#{Ns => #{genesis_hash => StaticAnchor}}),
+        ?assertEqual({error, not_hosted}, quod_ontology:genesis_anchor(Ns)),
+
+        %% Once the manager publishes its desired mirror, that single runtime
+        %% owner remains authoritative over the earlier static input.
+        application:set_env(
+          quod, namespace_desired,
+          Desired0#{content =>
+                        Content0#{Ns => #{genesis_hash => DesiredAnchor}}}),
+        ?assertEqual({ok, DesiredAnchor}, quod_ontology:genesis_anchor(Ns))
+    after
+        restore_env([{namespace_desired, SavedDesired},
+                     {namespace_static_content, SavedStatic}])
+    end.
+
+foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
+    ForeignNs = unique_ns(<<"foreign-prerequisite">>),
+    {ok, created, ForeignNs, _} =
+        quod_ontology:create(
+          ForeignNs,
+          [{source,
+            <<"can_invoke(_, _, _, _).\n"
+              "lifecycle_ready(yes).\n">>}]),
+    ok = wait_ready(ForeignNs, 300),
+    Original = root_creation_action(),
+    {action, Transition, Prerequisites, Desired} = Original,
+    ForeignCheck = {'::', ForeignNs, {lifecycle_ready, yes}},
+    Modified = {action, Transition,
+                Prerequisites ++ [ForeignCheck], Desired},
+    ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
+    TargetNs = unique_ns(<<"effect-with-foreign-read">>),
+    try
+        {ok, [#{}], Height} = quod_prolog:execute(
+                                ?ROOT_NS,
+                                create_goal(TargetNs, [])),
+        ?assert(is_integer(Height) andalso Height > 0),
+        ok = wait_ready(TargetNs, 300),
+        ok = wait_effect_target_state(TargetNs, applied, 300),
+        ?assertMatch(
+           [#{state := applied,
+              ref := {transaction, ?ROOT_NS, _, _}}],
+           [Row || #{target := {RowNs, _}} = Row <-
+                       quod_effect_journal:rows(),
+                   RowNs =:= TargetNs])
+    after
+        ok = commit_root(
+               {',', {retract, Modified}, {assertz, Original}})
+    end.
+
+foreign_prerequisite_failure_keeps_its_reason(_Fixture) ->
+    ForeignNs = unique_ns(<<"foreign-prerequisite-failure">>),
+    {ok, created, ForeignNs, _} =
+        quod_ontology:create(
+          ForeignNs,
+          [{source,
+            <<"can_invoke(_, _, _, _).\n"
+              "lifecycle_ready(yes) :- "
+              "fail_with_reason(remote_lifecycle_denied).\n">>}]),
+    ok = wait_ready(ForeignNs, 300),
+    Original = root_creation_action(),
+    {action, Transition, Prerequisites, Desired} = Original,
+    Modified =
+        {action, Transition,
+         Prerequisites ++
+             [{'::', ForeignNs, {lifecycle_ready, yes}}],
+         Desired},
+    ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
+    TargetNs = unique_ns(<<"effect-with-refused-foreign-read">>),
+    BeforeRows = quod_effect_journal:rows(),
+    BeforeHeight = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
+    try
+        {fail, Reasons} = quod_prolog:execute(
+                            ?ROOT_NS,
+                            create_goal(TargetNs, [])),
+        ?assert(lists:member(remote_lifecycle_denied, Reasons)),
+        ?assertEqual(BeforeRows, quod_effect_journal:rows()),
+        ?assertEqual(BeforeHeight,
+                     maps:get(committed, quod_simplex:stats(?ROOT_NS))),
+        ?assertEqual({ok, not_hosted},
+                     quod_ontology:local_state(TargetNs))
+    after
+        ok = commit_root(
+               {',', {retract, Modified}, {assertz, Original}})
+    end.
+
+agent_is_gated_by_root_creation_policy(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _} = KeyPair = quod_identity:generate(),
+    Agent = provision_agent(PublicKey, false),
+    AgentRef = maps:get(reference, Agent),
+    DeniedNs = unique_ns(<<"denied-agent">>),
+    Peer = {127, 0, 0, 2},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        GoalText = iolist_to_binary(
+                     ["quod:root::create_ontology(\"", DeniedNs,
+                      "\", [], _)."]),
+        {RequestBytes, Signature} = signed_agent_goal(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText),
+        {ok, _, {normalized, {failed, ReasonsBlob}}} =
+            quod_client_goal_ingress:submit(
+              execute, SessionId, RequestBytes, Signature, Peer),
+        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+        ?assert(
+           lists:any(
+             fun({can_create_ontology, Ref, _, _})
+                   when Ref =:= AgentRef -> true;
+                (_) -> false
+             end, Reasons))
+    after
+        stop_process(AuthPid)
+    end.
+
+node_does_not_own_generic_creation_policy(_Fixture) ->
+    Ns = unique_ns(<<"wrong-owner">>),
+    ?assertMatch({error,{erlog,{context_violation,create_ontology,staging,wrong_ontology}}},
+        quod_prolog:execute(?NODE_NS,create_goal(Ns,[]))),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+
+invalid_create_never_reaches_hosting(_Fixture) ->
+    BadNs = <<>>,
+    ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
+        quod_prolog:execute(?ROOT_NS,create_goal(BadNs,[]))),
+    ?assertEqual({error, invalid_name}, quod_ontology:local_state(BadNs)),
+    ?assertEqual({error,{erlog,instantiation_error}},
+        quod_prolog:execute(?ROOT_NS,create_goal({'Namespace'},[]))).
+
+reserved_initial_terms_never_reach_hosting(#{dir := Dir}) ->
+    ReservedTerms =
+        [{consensus_incarnation, forged},
+         {peer_admitted, <<0:256>>, "127.0.0.1", 14567, <<0:256>>},
+         {external_predicate_modules, [quod_ontology_predicates]}],
+    lists:foreach(
+      fun(Term) ->
+          Ns = unique_ns(<<"reserved-genesis">>),
+          ?assertEqual(
+             {error, {invalid_initial_term, Term}},
+             quod_ontology:create(Ns, [{terms, [Term]}])),
+          ?assertMatch({error,{erlog,{domain_error,ontology_action,_}}},
+              quod_prolog:execute(?ROOT_NS,create_goal(Ns,[{terms,[Term]}]))),
+          ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+          ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
+      end, ReservedTerms),
+    lists:foreach(fun(Term) ->
+        [Head | Args] = tuple_to_list(Term),
+        Opaque = list_to_tuple([{'$quod_symbol', atom_to_binary(Head)} | Args]),
+        Ns = unique_ns(<<"reserved-remote-genesis">>),
+        ?assertEqual({error, {invalid_initial_term, Term}},
+            quod_ontology:create(Ns, [{terms, [Opaque]}])),
+        ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns))
+    end, ReservedTerms),
+    InlineNs = unique_ns(<<"reserved-inline">>),
+    ?assertMatch(
+       {error, {invalid_initial_term, _}},
+       quod_ontology:create(
+         InlineNs, [{source, <<"consensus_incarnation(forged).">>}])),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(InlineNs)).
+
+collisions_preserve_existing_state(_Fixture) ->
+    Ns = unique_ns(<<"collision">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         ?ROOT_NS,
+         create_goal(
+           Ns,
+           [{source,
+             <<"can_invoke(_, _, _, _).\nkept(true).\n">>}]))),
+    ok = wait_ready(Ns, 300),
+    Pid0 = quod_reg:where({quod_ns, Ns}),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    ?assertEqual(
+       {error, {already_configured, Ns}},
+       quod_ontology:create(Ns, [{terms, [{replacement, forbidden}]}])),
+    ?assertEqual(Pid0, quod_reg:where({quod_ns, Ns})),
+    ?assert(is_process_alive(Pid0)),
+    ?assertEqual(Desired0,
+                 application:get_env(quod, namespace_desired, #{})),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {kept, true})),
+    ?assertMatch({fail, _},
+                 quod_prolog:prove_ro(Ns, {replacement, forbidden})).
+
+failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
+    Ns = unique_ns(<<"failed-start">>),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    ?assertMatch(
+       {error, _},
+       quod_namespace_manager:start_new_content(Ns, #{data_dir => Dir})),
+    ?assertEqual(Desired0,
+                 application:get_env(quod, namespace_desired, #{})),
+    ?assertEqual(undefined, quod_reg:where({quod_ns, Ns})),
+    %% A rejected admission must not leave a retry timer pretending the
+    %% namespace entered the desired set.
+    ?assertEqual(undefined, element(7, sys:get_state(Manager))),
+
+    OrphanNs = unique_ns(<<"orphan">>),
+    Parent = self(),
+    Orphan = spawn(
+               fun() ->
+                   true = gproc:reg({n, l, {quod_ns, OrphanNs}}),
+                   Parent ! {orphan_ready, self()},
+                   receive stop -> ok end
+               end),
+    receive {orphan_ready, Orphan} -> ok
+    after 1000 -> error(orphan_timeout)
+    end,
+    try
+        ?assertEqual(
+           {error, {already_configured, OrphanNs}},
+           quod_namespace_manager:start_new_content(
+             OrphanNs, #{data_dir => Dir})),
+        ?assertEqual(Desired0,
+                     application:get_env(quod, namespace_desired, #{})),
+        ?assert(is_process_alive(Orphan))
+    after
+        Orphan ! stop
+    end.
+
+failed_root_policy_does_not_read_or_stage(_Fixture) ->
+    %% Root's entry ACL is currently open, while can_create_ontology/3 still
+    %% requires an exact durable creator-agent grant.
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _} = KeyPair = quod_identity:generate(),
+    Agent = provision_agent(PublicKey, false),
+    AgentRef = maps:get(reference, Agent),
+    Peer = {127, 0, 0, 3},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    Ns = unique_ns(<<"policy-denied-before-source">>),
+    Missing = <<"/this/path/must/not/be/read.pl">>,
+    BeforeHeight = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
+    BeforeRows = quod_effect_journal:rows(),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Goal = iolist_to_binary(
+                 ["create_ontology(\"", Ns,
+                  "\", [source_file(\"", Missing, "\")], _)."]),
+        RoutedGoal = <<"quod:root::", Goal/binary>>,
+        {RequestBytes, Signature} = signed_agent_goal(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      RoutedGoal),
+        {ok, _, {normalized, {failed, ReasonsBlob}}} =
+            quod_client_goal_ingress:submit(
+              execute, SessionId, RequestBytes, Signature, Peer),
+        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+        ?assert(
+           lists:any(
+             fun({can_create_ontology, Ref, _, _})
+                   when Ref =:= AgentRef -> true;
+                (_) -> false
+             end, Reasons)),
+        ?assertNot(
+           lists:any(
+             fun({ontology_creation_failed, {source_file_error, _}}) -> true;
+                (_) -> false
+             end, Reasons)),
+        ?assertEqual(BeforeHeight,
+                     maps:get(committed, quod_simplex:stats(?ROOT_NS))),
+        ?assertEqual(BeforeRows, quod_effect_journal:rows()),
+        ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns))
+    after
+        stop_process(AuthPid)
+    end.
+
+committed_agent_approval_uses_the_same_action(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _} = KeyPair = quod_identity:generate(),
+    Agent = provision_agent(PublicKey, false),
+    AgentRef = maps:get(reference, Agent),
+    Ns = unique_ns(<<"locally-approved-user">>),
+    ok = commit_root({assertz, {ontology_creator_agent, AgentRef}}),
+    Peer = {127, 0, 0, 4},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Goal = iolist_to_binary(
+                 ["create_ontology(\"", Ns,
+                  "\", [source(\"can_invoke(_, _, _, _)."
+                  "\\napproved(ok).\\n\")], _)."]),
+        RoutedGoal = <<"quod:root::", Goal/binary>>,
+        {RequestBytes, Signature} = signed_agent_goal(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      RoutedGoal),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
+        ok = wait_ready(Ns, 300),
+        ?assertMatch({ok, [#{}], _},
+                     quod_prolog:prove_ro(Ns, {approved, ok}))
+    after
+        stop_process(AuthPid)
+    end.
+
+false_postcondition_is_reported(_Fixture) ->
+    Original = root_creation_action(),
+    {action,
+     {'$quod_stage_ontology', Handle,
+      {create_ontology, Name, Options, Anchor}, _OriginalDesired},
+     Prerequisites, _Desired} = Original,
+    FalseDesired = {never_reached, Name},
+    Modified =
+        {action,
+         {'$quod_stage_ontology', Handle,
+          {create_ontology, Name, Options, Anchor}, FalseDesired},
+         Prerequisites, FalseDesired},
+    ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
+    Ns = unique_ns(<<"false-postcondition">>),
+    try
+        ?assertEqual(
+           {error, {operator_error, postcondition_failed}},
+           quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+        ok = wait_ready(Ns, 300),
+        ?assertEqual({ok, ready}, quod_ontology:local_state(Ns))
+    after
+        ok = commit_root(
+               {',', {retract, Modified}, {assertz, Original}})
+    end.
+
+reconcile_republishes_running_content(Fixture = #{manager := Manager}) ->
+    Ns = unique_ns(<<"reconcile-publish">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+    ok = wait_ready(Ns, 300),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(Fixture, Ns, Anchor),
+    Config = desired_content(Ns),
+    ExpectedDirs = #{data => quod_ledger_store:data_dir(Config),
+                     ledger => quod_ledger_store:ledger_dir(Config)},
+    application:set_env(quod, content_storage_dirs, #{}),
+    Manager ! reconcile,
+    ok = wait_storage_dirs(Ns, ExpectedDirs, 300).
+
+aborted_hosting_fact_changes_nothing(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"aborted-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:execute(ActorNs, {transaction, {',', {assertz, Host}, fail}})),
+    ?assertEqual(false, desired_has_content(Ns)),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs, Host)).
+
+retracted_hosting_fact_removes_restart_intent(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"retracted-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+    ok = wait_desired_content(Ns, Anchor, 300),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_desired_absent(Ns, 300),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+
+parked_hosting_starts_on_exact_directory_route(
+  #{dir := Dir, actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"route-arrival">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    NodeKey = crypto:strong_rand_bytes(32),
+    Identity = {Ns, Anchor},
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertEqual(undefined, quod_reg:where({directory, node})),
+    {ok, Directory} = quod_directory:start_link(
+                        #{identity_dir => Dir,
+                          expire_tick_ms => 60000, ttl_ms => 10000}),
+    unlink(Directory),
+    {ok, Control} = quod_directory_control:start_link(#{}),
+    unlink(Control),
+    try
+        ?assertMatch(
+           {ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+        ok = wait_route_wait(Identity, present, 300),
+        ok = wait_directory_demand(Identity, 300),
+        %% Installation publishes only the exact identity. The manager rereads
+        %% the directory, prepares the ordinary pinned join and starts it.
+        {ok, _} = quod_ct:install_directory_generation(
+                    NodeKey, {<<"route-host">>, 15432},
+                    [{Ns, Anchor, validator}], 1, 1),
+        ok = wait_namespace_started(Ns, 300),
+        ok = wait_route_wait(Identity, absent, 300),
+        ?assertEqual(Anchor, maps:get(genesis_hash, desired_content(Ns)))
+    after
+        ?assertMatch({ok, [_], _},
+                     quod_prolog:execute(ActorNs, {retract, Host})),
+        ok = wait_desired_absent(Ns, 300),
+        stop_process(Control),
+        stop_process(Directory)
+    end.
+
+parked_hosting_is_exact_event_driven_and_unsubscribes(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"parked-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    Other = crypto:strong_rand_bytes(32),
+    Identity = {Ns, Anchor},
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+    ok = wait_route_wait(Identity, present, 300),
+    Manager = quod_reg:where({namespace_manager, node}),
+    ?assert(lists:member(
+              Manager,
+              gproc:lookup_pids(
+                {p, l, {directory_route, Identity}}))),
+
+    %% Wait subscriptions are process state. A replacement manager must derive
+    %% the same park from the committed actor projection without a checkpoint.
+    stop_process(Manager),
+    {ok, NewManager} = quod_namespace_manager:start_link(),
+    unlink(NewManager),
+    ok = wait_route_wait(Identity, present, 300),
+    ?assertNot(lists:member(
+                 Manager,
+                 gproc:lookup_pids(
+                   {p, l, {directory_route, Identity}}))),
+    ?assert(lists:member(
+              NewManager,
+              gproc:lookup_pids(
+                {p, l, {directory_route, Identity}}))),
+
+    %% An unrelated anchored identity cannot wake this work. The exact wake
+    %% also cannot manufacture authority: without a route it merely rereads
+    %% the directory and remains parked.
+    NewManager ! {directory_route_available, {Ns, Other}},
+    NewManager ! {directory_route_available, Identity},
+    timer:sleep(350),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertMatch(#{route_waits := #{Identity := _}},
+                 quod_namespace_manager:test_recovery_state()),
+
+    %% 350 ms exceeds the deleted 250 ms retry. Time alone made no progress.
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_route_wait(Identity, absent, 300),
+    ?assertNot(lists:member(
+                 NewManager,
+                 gproc:lookup_pids(
+                   {p, l, {directory_route, Identity}}))).
+
+catalogue_worker_failures_are_terminal_owner_failures(
+  #{actor_principal := Principal}) ->
+    ok = wait_system_query_idle(300),
+    Manager1 = quod_reg:where({namespace_manager, node}),
+    ManagerRef1 = monitor(process, Manager1),
+    {Worker, _Token1} = quod_namespace_manager:test_arm_system_query(),
+    exit(Worker, kill),
+    receive
+        {'DOWN', ManagerRef1, process, Manager1,
+         {system_catalogue_worker_failed, killed}} -> ok
+    after 1000 -> error(catalogue_worker_failure_did_not_stop_manager)
+    end,
+    {ok, Manager2} = quod_namespace_manager:start_link(),
+    unlink(Manager2),
+    ok = wait_node_actor_principal(Principal, 300),
+    ok = wait_system_query_idle(300),
+
+    ManagerRef2 = monitor(process, Manager2),
+    {_Worker2, Token2} = quod_namespace_manager:test_arm_system_query(),
+    Manager2 ! {system_catalogue_timeout, Token2},
+    receive
+        {'DOWN', ManagerRef2, process, Manager2,
+         system_catalogue_query_timeout} -> ok
+    after 1000 -> error(catalogue_worker_timeout_did_not_stop_manager)
+    end,
+    {ok, Manager3} = quod_namespace_manager:start_link(),
+    unlink(Manager3),
+    ok = wait_node_actor_principal(Principal, 300).
+
+dynamic_hosting_survives_content_tree_restart(
+  #{manager := Manager, ns_sup := NsSup,
+    actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_principal := ActorPrincipal}) ->
+    Ns = unique_ns(<<"tree-restart">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+    ok = wait_ready(Ns, 300),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(
+           #{actor_ns => ActorNs, actor_principal => ActorPrincipal},
+           Ns, Anchor),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    %% Include the ordinary signup products in this real content-tree restart.
+    %% The only restart inventory after reset comes from committed hosting.
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(ActorPrincipal),
+    {ok, [#{'Refs' := Hosted}], _} = quod_prolog:prove_ro(ActorNs,
+        {findall, {ontology_ref, {'Ns'}, {'Anchor'}},
+         {hosts_ontology, NodeRef, {'Ns'}, {'Anchor'}, discoverable}, {'Refs'}}),
+    ?assert(length(Hosted) >= 4),
+    Profiles = [{Name, Anchor0, State} || {ontology_ref, Name, Anchor0} <- Hosted,
+        {ok, [#{'State' := State}], _} <-
+            [quod_prolog:prove_ro(Name, {lobby_provisioning, me, {'State'}})]],
+    ?assertEqual(2, length(Profiles)),
+
+    stop_process(Manager),
+    stop_process(NsSup),
+    application:set_env(
+      quod, namespace_desired, #{content => #{}, brahms => #{}}),
+    application:set_env(quod, content_storage_dirs, #{}),
+    {ok, NewNsSup} = quod_ns_sup:start_link(),
+    unlink(NewNsSup),
+    {ok, NewManager} = quod_namespace_manager:start_link(),
+    unlink(NewManager),
+    ok = wait_ready(?ROOT_NS, 300),
+    ok = wait_ready(Ns, 300),
+    ok = wait_ready(ActorNs, 300),
+    ?assertEqual(RootAnchor, quod_simplex:genesis_hash(?ROOT_NS)),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertEqual(ActorAnchor, quod_simplex:genesis_hash(ActorNs)),
+    ok = wait_node_actor_principal(ActorPrincipal, 300),
+    ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
+    [begin
+        ok = wait_ready(Name, 300),
+        ?assertEqual(Anchor0, quod_simplex:genesis_hash(Name)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
+            {lobby_provisioning, me, State})),
+        {linked, {ontology_ref, LobbyName, LobbyAnchor}} = State,
+        ok = wait_ready(LobbyName, 300),
+        ?assertEqual(LobbyAnchor, quod_simplex:genesis_hash(LobbyName)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(LobbyName,
+            {lobby_owner, {agent_instance_ref, Name, Anchor0, me}}))
+     end || {Name, Anchor0, State} <- Profiles],
+    Config = desired_content(Ns),
+    ?assertEqual(Anchor, maps:get(genesis_hash, Config)),
+    ?assertNot(maps:is_key(prepared_genesis_entry, Config)),
+    ?assertNot(maps:is_key(genesis_diff, Config)),
+    ok = wait_effect_capacity(64, 300).
+
+wrong_anchor_child_stops_then_exact_material_restarts(
+  Fixture = #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"anchor-swap">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+    ok = wait_ready(Ns, 300),
+    OldAnchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(Fixture, Ns, OldAnchor),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    OldHost = {hosts_ontology, NodeRef, Ns, OldAnchor, private},
+
+    %% Remove only this test-owned ledger directory while the old process still
+    %% holds its open fd. This lets us prepare a genuinely different genesis
+    %% for the same name before the committed hosting replacement stops it.
+    OldConfig = desired_content(Ns),
+    StoreDir = quod_ledger_store:ns_dir(
+                 quod_ledger_store:ledger_dir(OldConfig), Ns),
+    ok = file:del_dir_r(StoreDir),
+    {ok, Structural} = quod_ontology:validate_action(
+                         {create_ontology, Ns, []}),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    NewAnchor = quod_ontology:prepared_anchor(Prepared),
+    ?assertNotEqual(OldAnchor, NewAnchor),
+    NewHost = {hosts_ontology, NodeRef, Ns, NewAnchor, private},
+    ?assertMatch(
+       {ok, [_ | _], _},
+       quod_prolog:execute(
+         ActorNs,
+         {transaction, {',', {retract, OldHost}, {assertz, NewHost}}})),
+    ok = wait_route_wait({Ns, NewAnchor}, present, 300),
+    ok = wait_local_state(Ns, not_hosted, 300),
+
+    %% Material arrival uses the ordinary lifecycle entry. The parked desired
+    %% identity then becomes ready under the replacement anchor.
+    ?assertMatch(
+       {ok, created, Ns, NewAnchor},
+       quod_ontology:execute_prepared(Prepared)),
+    ok = wait_ready(Ns, 300),
+    ?assertEqual(NewAnchor, quod_simplex:genesis_hash(Ns)),
+    ok = wait_route_wait({Ns, NewAnchor}, absent, 300).
+
+obsolete_desired_file_has_no_authority(
+  #{dir := Dir, actor_principal := ActorPrincipal}) ->
+    GhostNs = unique_ns(<<"obsolete-desired">>),
+    GhostAnchor = crypto:strong_rand_bytes(32),
+    Path = filename:join(Dir, "hosted_namespaces.qnd"),
+    Payload = term_to_binary(
+                {quod_namespace_desired, 1,
+                 [{GhostNs, #{mode => join, genesis_hash => GhostAnchor}}]},
+                [deterministic]),
+    Bytes = <<16#514E4431:32/unsigned-big,
+              (byte_size(Payload)):32/unsigned-big,
+              (crypto:hash(sha256, Payload))/binary, Payload/binary>>,
+    ok = file:write_file(Path, Bytes),
+    ?assertMatch({ok, Bytes}, file:read_file(Path)),
+    SavedPath = application:get_env(quod, namespace_desired_path),
+    try
+        application:set_env(quod, namespace_desired_path, Path),
+        stop_process(quod_reg:where({namespace_manager, node})),
+        application:set_env(
+          quod, namespace_desired, #{content => #{}, brahms => #{}}),
+        {ok, NewManager} = quod_namespace_manager:start_link(),
+        unlink(NewManager),
+        ok = wait_node_actor_principal(ActorPrincipal, 300),
+        ?assertEqual(false, desired_has_content(GhostNs)),
+        ?assertEqual({ok, not_hosted}, quod_ontology:local_state(GhostNs))
+    after
+        restore_env([{namespace_desired_path, SavedPath}])
+    end.
+
+commit_root(Goal) ->
+    ?assertMatch({ok, [_ | _], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+    ok.
+
+root_creation_action() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Declaration] =
+        [Term || {action,
+                  {'$quod_stage_ontology', _, {create_ontology, _, _, _}, _},
+                  _, _} = Term <- quod_prolog:read_terms(File)],
+    Declaration.
+
+create_goal(Ns, Options) ->
+    {create_ontology, Ns, Options, {'_'}}.
+
+host_locally(#{actor_ns := ActorNs, actor_principal := Principal}, Ns, Anchor) ->
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    ?assertMatch(
+       {ok, [_ | _], _},
+       quod_prolog:execute(
+         ActorNs,
+         {host_ontology, NodeRef, Ns, Anchor, private})),
+    wait_desired_content(Ns, Anchor, 300).
+
+root_invocation_clauses() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Term || {':-', {can_invoke, _, _, _, _}, _} = Term <-
+                 quod_prolog:read_terms(File)].
+
+replace_root_invocation_policy(Clauses) ->
+    replace_root_policy(can_invoke, 4, Clauses).
+
+replace_root_policy(Functor, Arity, Clauses) ->
+    Assertions = [{assertz, Clause} || Clause <- Clauses],
+    Goal = lists:foldr(
+             fun(Assertion, Tail) -> {',', Assertion, Tail} end,
+             true, Assertions),
+    commit_root(
+      {',', {abolish, {'/', Functor, Arity}}, Goal}).
+
+open_client_session(NetworkId, NodeKey,
+                    KeyPair = {PublicKey, _Seed}, Peer) ->
+    LoginNonce = crypto:strong_rand_bytes(32),
+    {ok, Challenge} =
+        quod_client_auth:issue_challenge(PublicKey, LoginNonce, Peer),
+    ChallengeId = maps:get(challenge_id, Challenge),
+    {ok, ChallengeBytes} = quod_client_auth:challenge_bytes(
+                             NetworkId, NodeKey, ChallengeId, PublicKey,
+                             LoginNonce, maps:get(server_nonce, Challenge),
+                             maps:get(expires_ms, Challenge)),
+    LoginSignature = quod_identity:sign(
+                       ChallengeBytes, quod_identity:key_term(KeyPair)),
+    {ok, Session} =
+        quod_client_auth:complete_challenge(ChallengeId, LoginSignature),
+    Session.
+
+signed_agent_goal(NetworkId, PublicKey, KeyPair,
+                  #{namespace := AgentNs, anchor := AgentAnchor,
+                    instance_text := InstanceText},
+                  Mode, SessionExpires, GoalText) ->
+    signed_agent_goal_version(
+      NetworkId, PublicKey, KeyPair,
+      #{namespace => AgentNs, anchor => AgentAnchor,
+        instance_text => InstanceText},
+      Mode, SessionExpires, GoalText, 1).
+
+signed_agent_goal_version(
+  NetworkId, PublicKey, KeyPair,
+  #{namespace := AgentNs, anchor := AgentAnchor,
+    instance_text := InstanceText},
+  Mode, SessionExpires, GoalText, ParserVersion) ->
+    Request = #{network_identity => NetworkId,
+                signing_public_key => PublicKey,
+                operation_id => crypto:strong_rand_bytes(32),
+                agent_namespace => AgentNs,
+                agent_genesis_anchor => AgentAnchor,
+                agent_instance_text => InstanceText,
+                mode => Mode,
+                parser_version => ParserVersion,
+                not_after_ms => min(SessionExpires,
+                                    quod_time:now_ms() + 30000),
+                goal_text => GoalText},
+    {ok, RequestBytes} = quod_client_goal:encode(Request),
+    {RequestBytes,
+     quod_identity:sign(RequestBytes, quod_identity:key_term(KeyPair))}.
+
+assert_signed_action_result(
+  {ok, _, {normalized, {committed, [_],
+                        {transaction, _, _, _}}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    ok;
+assert_signed_action_result(
+  {ok, _, {normalized, {committed, [_],
+                        {group_outcome, _, _, _}}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    ok;
+assert_signed_action_result(
+  {ok, _, {normalized,
+           {pending, {operation, _, _, _, _}}}},
+  SessionId, RequestBytes, Signature, Peer) ->
+    wait_operation_result(SessionId, RequestBytes, Signature, Peer, 300);
+assert_signed_action_result(
+  {ok, _, {normalized, {failed, FailureBlob}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    {ok, FailureReasons} =
+        quod_wire_term:decode_failure_reasons(FailureBlob),
+    error({unexpected_signed_action_failure, FailureReasons});
+assert_signed_action_result(
+  Other, _SessionId, _RequestBytes, _Signature, _Peer) ->
+    error({unexpected_signed_action_reply, Other}).
+
+wait_operation_result(_SessionId, _RequestBytes, _Signature, _Peer, 0) ->
+    error(operation_resolution_timeout);
+wait_operation_result(SessionId, RequestBytes, Signature, Peer, Left) ->
+    case quod_client_goal_ingress:resolve_operation(
+           SessionId, RequestBytes, Signature, Peer) of
+        {ok, _, {operation_outcome, _, _}} -> ok;
+        {ok, _, {operation_pending, _}} ->
+            receive after 10 -> ok end,
+            wait_operation_result(
+              SessionId, RequestBytes, Signature, Peer, Left - 1);
+        Other ->
+            error({unexpected_operation_resolution, Other})
+    end.
+
+provision_agent(PublicKey, GrantCreation) ->
+    AgentNs = unique_ns(<<"agent">>),
+    InstanceText = iolist_to_binary(
+                     io_lib:format("human_user(~B).", [
+                       erlang:unique_integer([positive])])),
+    {ok, #{goal := Instance, variables := []}} =
+        quod_client_goal_parser:parse(InstanceText, 1),
+    InstanceSource = binary:part(InstanceText, 0, byte_size(InstanceText) - 1),
+    NamespaceSource = prolog_binary_literal(AgentNs),
+    KeySource = prolog_binary_literal(PublicKey),
+    InitialSource =
+        binary_to_list(
+          iolist_to_binary(
+            ["agent_key(", InstanceSource, ", ", KeySource,
+             ", active).\ncan_invoke(_, agent_instance_ref(",
+             NamespaceSource, ", _, ", InstanceSource, "), _, ",
+             NamespaceSource, ").\n"])),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         ?ROOT_NS,
+         create_goal(AgentNs, [{source, InitialSource}]))),
+    ok = wait_ready(AgentNs, 300),
+    AgentAnchor = quod_simplex:genesis_hash(AgentNs),
+    {ok, #{blob := AgentRefBlob}} =
+        quod_agent_ref:from_text(AgentNs, AgentAnchor, InstanceText, 1),
+    {ok, AgentRef} = quod_agent_ref:materialize(AgentRefBlob),
+    case GrantCreation of
+        true -> commit_root({assertz, {ontology_creator_agent, AgentRef}});
+        false -> ok
+    end,
+    #{namespace => AgentNs, anchor => AgentAnchor,
+      instance_text => InstanceText, reference => AgentRef,
+      instance => Instance}.
+
+prolog_binary_literal(Bytes) ->
+    iolist_to_binary(
+      ["<<\"",
+       [["\\x", io_lib:format("~2.16.0B", [Byte]), "\\"]
+        || <<Byte>> <= Bytes],
+       "\">>"]).
+
+agent_ref_source({agent_instance_ref, Ns, Anchor, _Instance}, InstanceText) ->
+    InstanceSource = binary:part(InstanceText, 0, byte_size(InstanceText) - 1),
+    ["agent_instance_ref(", prolog_binary_literal(Ns), ", ",
+     prolog_binary_literal(Anchor), ", ",
+     InstanceSource, ")"].
+
+desired_content(Ns) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    maps:get(Ns, maps:get(content, Desired)).
+
+wait_desired_content(_Ns, _Anchor, 0) -> error(hosting_projection_not_installed);
+wait_desired_content(Ns, Anchor, N) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    case maps:get(Ns, maps:get(content, Desired), undefined) of
+        #{genesis_hash := Anchor} -> ok;
+        _ -> receive after 10 -> wait_desired_content(Ns, Anchor, N - 1) end
+    end.
+
+wait_desired_absent(_Ns, 0) -> error(hosting_projection_not_removed);
+wait_desired_absent(Ns, N) ->
+    case desired_has_content(Ns) of
+        false -> ok;
+        true -> receive after 10 -> wait_desired_absent(Ns, N - 1) end
+    end.
+
+wait_route_wait(Identity, Expected, 0) ->
+    error({route_wait_state_timeout, Identity, Expected,
+           quod_namespace_manager:test_recovery_state()});
+wait_route_wait(Identity, Expected, N) ->
+    #{route_waits := Waits} = quod_namespace_manager:test_recovery_state(),
+    Present = maps:is_key(Identity, Waits),
+    case {Expected, Present} of
+        {present, true} -> ok;
+        {absent, false} -> ok;
+        _ -> receive after 10 ->
+                 wait_route_wait(Identity, Expected, N - 1)
+             end
+    end.
+
+wait_directory_demand(Identity, 0) ->
+    error({directory_demand_timeout, Identity,
+           quod_directory_control:test_control_state()});
+wait_directory_demand(Identity, N) ->
+    State = quod_directory_control:test_control_state(),
+    case lists:member(Identity, maps:get(route_demands, State)) of
+        true -> ok;
+        false -> receive after 10 ->
+                     wait_directory_demand(Identity, N - 1)
+                 end
+    end.
+
+wait_local_state(Ns, Expected, 0) ->
+    error({local_state_timeout, Ns, Expected,
+           quod_ontology:local_state(Ns)});
+wait_local_state(Ns, Expected, N) ->
+    case quod_ontology:local_state(Ns) of
+        {ok, Expected} -> ok;
+        _ -> receive after 10 -> wait_local_state(Ns, Expected, N - 1) end
+    end.
+
+wait_system_query_idle(0) -> error(system_query_idle_timeout);
+wait_system_query_idle(N) ->
+    case quod_namespace_manager:test_recovery_state() of
+        #{system_query := idle} -> ok;
+        _ -> receive after 10 -> wait_system_query_idle(N - 1) end
+    end.
+
+wait_namespace_started(_Ns, 0) -> error(namespace_start_timeout);
+wait_namespace_started(Ns, N) ->
+    case quod_reg:where({quod_ns, Ns}) of
+        Pid when is_pid(Pid) -> ok;
+        undefined -> receive after 10 -> wait_namespace_started(Ns, N - 1) end
+    end.
+
+desired_has_content(Ns) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    maps:is_key(Ns, maps:get(content, Desired)).
+
+wait_ready(_Ns, 0) -> error(namespace_not_ready);
+wait_ready(Ns, N) ->
+    case quod_prolog:prove_ro(Ns, true) of
+        {ok, _, _} -> ok;
+        _ -> receive after 10 -> wait_ready(Ns, N - 1) end
+    end.
+
+wait_node_actor_principal(_Principal, 0) ->
+    error(node_actor_activation_timeout);
+wait_node_actor_principal(Principal, N) ->
+    case quod_node_actor:principal() of
+        {ok, Principal} -> ok;
+        _ ->
+            receive after 10 -> ok end,
+            wait_node_actor_principal(Principal, N - 1)
+    end.
+
+wait_manager_idle(_Manager, 0) ->
+    error(namespace_manager_idle_timeout);
+wait_manager_idle(_Manager, N) ->
+    %% The call is ordered after the test's reconcile message, so observing the
+    %% manager-owned mutation lane idle proves that cycle completed.
+    case quod_namespace_manager:test_mutation_worker() of
+        undefined -> ok;
+        _ ->
+            receive after 10 -> ok end,
+            wait_manager_idle(undefined, N - 1)
+    end.
+
+wait_effect_target_state(_Ns, _Expected, 0) ->
+    error(effect_state_timeout);
+wait_effect_target_state(Ns, Expected, N) ->
+    case [State || #{target := {RowNs, _}, state := State} <-
+                       quod_effect_journal:rows(),
+                   RowNs =:= Ns] of
+        [Expected] -> ok;
+        _ -> receive after 10 ->
+                 wait_effect_target_state(Ns, Expected, N - 1)
+             end
+    end.
+
+wait_effect_capacity(Expected, Attempts) ->
+    Journal = quod_reg:where({quod_effect_journal, node}),
+    Parent = self(), Token = make_ref(),
+    Observe = fun(State, {in, {'$gen_call', _, {configure_capacity, _}}}, _) ->
+                      Parent ! {effect_capacity_input, Token}, State;
+                 (State, _, _) -> State end,
+    %% Subscribe before querying installed state. The following capacity call
+    %% joins a delivered configuration to completion of its real owner handler.
+    ok = sys:install(Journal, {Observe, none}),
+    try wait_effect_capacity_notice(Expected, Token, quod_time:mono_ms() + Attempts * 10)
+    after sys:remove(Journal, Observe) end.
+
+wait_effect_capacity_notice(Expected, Token, Deadline) ->
+    case quod_effect_journal:capacity() of
+        Expected -> ok;
+        _ -> receive
+            {effect_capacity_input, Token} ->
+                wait_effect_capacity_notice(Expected, Token, Deadline)
+        after max(0, Deadline - quod_time:mono_ms()) ->
+            error({effect_capacity_timeout, quod_runtime:stats(?ROOT_NS)})
+        end
+    end.
+
+wait_storage_dirs(_Ns, _Expected, 0) ->
+    error(storage_dirs_timeout);
+wait_storage_dirs(Ns, Expected, N) ->
+    Dirs = application:get_env(quod, content_storage_dirs, #{}),
+    case maps:get(Ns, Dirs, undefined) of
+        Expected -> ok;
+        _ -> receive after 10 ->
+                 wait_storage_dirs(Ns, Expected, N - 1)
+             end
+    end.
+
+unique_ns(Prefix) ->
+    <<Prefix/binary, "-", (integer_to_binary(
+                            erlang:unique_integer([positive])))/binary>>.
+
+stop_process(Pid) when is_pid(Pid) ->
+    case is_process_alive(Pid) of
+        true -> gen_server:stop(Pid, shutdown, 3000);
+        false -> ok
+    end;
+stop_process(_) -> ok.
+
+save_env(Keys) ->
+    [{Key, application:get_env(quod, Key)} || Key <- Keys].
+
+restore_env(Saved) ->
+    lists:foreach(
+      fun({Key, {ok, Value}}) -> application:set_env(quod, Key, Value);
+         ({Key, undefined}) -> application:unset_env(quod, Key)
+      end, Saved).
+
+%% The procedure that adds quod:names to a running network, end to end on
+%% one node and in the order the fleet uses: root creates it (an admitted
+%% node's ordinary creation), the node actor commits its discoverable
+%% hosting fact through its own signed goal, root registers the exact anchor,
+%% and the namespace manager adopts it as system content from the catalogue
+%% alone. Nothing is re-founded and no source is injected over a history.
+system_names_is_created_hosted_and_registered(
+  #{actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_instance_text := InstanceText,
+    actor_keypair := {PublicKey, _} = KeyPair,
+    actor_principal := Principal}) ->
+    Names = <<"quod:names">>,
+    Source = list_to_binary(
+               filename:join(code:priv_dir(quod), "ontologies/quod_names.pl")),
+    ?assertMatch({ok, _, [], #{}}, quod_system_ontology:catalog()),
+    {ok, [#{'Anchor' := Anchor}], _} =
+        quod_prolog:execute(
+          ?ROOT_NS,
+          {create_ontology, Names, [{source_file, Source}], {'Anchor'}}),
+    ok = wait_ready(Names, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Names)),
+    ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
+                 quod_prolog:prove(Names, {draw, before_registration, {'N'}})),
+    %% Created, hosted locally, but not yet a catalogue row.
+    ?assertMatch({ok, _, [], #{}}, quod_system_ontology:catalog()),
+    ?assertNotMatch(#{system_ontology := true}, desired_content_or_none(Names)),
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Peer = {127, 0, 0, 9},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Agent = #{namespace => ActorNs, anchor => ActorAnchor,
+                  instance_text => InstanceText},
+        GoalText = iolist_to_binary(
+                     ["\"", ActorNs, "\"::assertz(hosts_ontology(",
+                      agent_ref_source(NodeRef, InstanceText), ", ",
+                      prolog_binary_literal(Names), ", ",
+                      prolog_binary_literal(Anchor), ", discoverable))."]),
+        {RequestBytes, Signature} = signed_agent_goal_version(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText, 2),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer)
+    after
+        stop_process(AuthPid)
+    end,
+    ok = wait_desired_content(Names, Anchor, 300),
+    ok = commit_root({assertz, {system_ontology, {':', quod, names}, Anchor}}),
+    ?assertMatch({ok, _, [#{namespace := Names, anchor := Anchor}], #{}},
+                 quod_system_ontology:catalog()),
+    ok = wait_system_content(Names, Anchor, 300),
+    ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
+                 quod_prolog:prove(Names, {draw, after_registration, {'N'}})),
+    ?assertMatch({ok, [#{'C' := 384}], _},
+                 quod_prolog:prove(
+                   Names, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'C'}})).
+
+desired_content_or_none(Ns) ->
+    Desired = application:get_env(
+                quod, namespace_desired, #{content => #{}, brahms => #{}}),
+    maps:get(Ns, maps:get(content, Desired), none).
+
+wait_system_content(_Ns, _Anchor, 0) -> error(system_content_not_adopted);
+wait_system_content(Ns, Anchor, N) ->
+    case desired_content_or_none(Ns) of
+        #{genesis_hash := Anchor, system_ontology := true} -> ok;
+        _ -> receive after 10 -> wait_system_content(Ns, Anchor, N - 1) end
+    end.
+
+
+%% A genesis carrying more new symbols than a cold node admits per envelope
+%% would found here and never join or replay anywhere else: refused at the
+%% founding seam. A source inside the budget founds as before.
+oversized_vocabulary_never_reaches_hosting(#{dir := Dir}) ->
+    Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
+    Novel = fun(N) ->
+                    [{list_to_atom("cold_vocabulary_" ++ integer_to_list(I)), I}
+                     || I <- lists:seq(1, N)]
+            end,
+    TooMany = unique_ns(<<"oversized-vocabulary">>),
+    Over = Novel(Budget + 1),
+    ?assertEqual({error, {genesis_vocabulary, Budget + 1, Budget}},
+                 quod_ontology:create(TooMany, [{terms, Over}])),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(TooMany)),
+    ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, TooMany))),
+    AtBudget = unique_ns(<<"budget-vocabulary">>),
+    ?assertMatch({ok, created, AtBudget, _},
+                 quod_ontology:create(AtBudget, [{terms, Novel(Budget)}])),
+    ok = wait_ready(AtBudget, 300),
+    ?assertMatch({ok, [#{}], _},
+                 quod_prolog:prove(AtBudget, {cold_vocabulary_1, 1})).

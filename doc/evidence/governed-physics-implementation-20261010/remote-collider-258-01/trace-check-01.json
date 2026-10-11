@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-10-11T11:52:08.835442+00:00",
+  "true_child_exit": 0,
+  "check": "OTP arity-only tracing in two independent sessions, with runtime-style set_on_spawn inheritance",
+  "scope_calls": 1,
+  "node_calls": 1,
+  "recorded_fields": [
+    "pid",
+    "module/function/arity",
+    "caller module/function/arity"
+  ],
+  "captured_arguments": false,
+  "private_data_used": false,
+  "temporary_file_removed": true,
+  "server_mutation": false
+}

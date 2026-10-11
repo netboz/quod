@@ -923,6 +923,11 @@ validate_public_error(independent_mixed_writes) -> ok;
 validate_public_error(independent_scope_required) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
+validate_public_error({effect_custody_limit, prepared_bytes, Actual, Limit}) ->
+    case valid_uint64(Actual) andalso valid_uint64(Limit) andalso Actual > Limit of
+        true -> ok;
+        false -> protocol_error(bad_error_code)
+    end;
 validate_public_error({Tag, Value} = Reason) ->
     case namespaced_error_tag(Tag) of
         true ->

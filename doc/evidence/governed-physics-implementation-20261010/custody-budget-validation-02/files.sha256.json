@@ -1,0 +1,82 @@
+[
+  {
+    "file": "README.md",
+    "sha256": "1b3fca7c70108d2f8b3ef1a8631bc510a9f7f1980e15a100560407a2dc595fe5"
+  },
+  {
+    "file": "scope-04/PASSED.json",
+    "sha256": "40b7e2c7ebc683e345e47a0a6e2d72be4f4622b47cbca4acdafa78509e91907a"
+  },
+  {
+    "file": "scope-04/client.json",
+    "sha256": "ca3410c9040d6dd8f06e8842db3a7792399f06258493e33c44f1267bcf951649"
+  },
+  {
+    "file": "scope-04/eunit.json",
+    "sha256": "93ab40b59ac1e7165b8bad41e406e3f4276edec3892247b04553462bdf1f40a5"
+  },
+  {
+    "file": "scope-04/run.py",
+    "sha256": "07bab5583286c7b2db202df955d16e08b67fa794117ab84c279e8fdba83a0df9"
+  },
+  {
+    "file": "scope-04/source-manifest.json",
+    "sha256": "5126a4d79c06ee51511fdc95eb679718744edbe8b425ef1805f3710a5bba523a"
+  },
+  {
+    "file": "scope-04/tested.patch",
+    "sha256": "df379636e4b26509ebb0f77e3749fd43d2919f7d8f84ff90f6b22a7788d77398"
+  },
+  {
+    "file": "scope-04-logs.tar.gz",
+    "sha256": "b7058c949a23c2023e82198aa6388df563ba86d169ae0d20c28c30c8bb551b66"
+  },
+  {
+    "file": "scope-probe-01/probe.patch",
+    "sha256": "86673a5d05477a48998ba7e0069523941bf105440e1cbdcff49ee4bac462e20e"
+  },
+  {
+    "file": "scope-probe-01/receipt.json",
+    "sha256": "42d592b11084df547ca0c116ae2f03e13bcea3b855f3e9f25f3e0746e2c714bf"
+  },
+  {
+    "file": "scope-probe-01/run.py",
+    "sha256": "7aba21b95ee2656777f33b4e403e813481e437a1a8ca7f183dda6b070c1f64f6"
+  },
+  {
+    "file": "scope-probe-01/source-manifest.json",
+    "sha256": "0e29e96dff8a6fce2d1f04fbfe8b5f93144fe76cbba47e7a465eba391109c677"
+  },
+  {
+    "file": "scope-probe-01/triage.json",
+    "sha256": "fe9cccfbce04ddd95d503cf9c87f67dd5ca0f898ff93002d61bb32a5631ca64e"
+  },
+  {
+    "file": "scope-probe-01-logs.tar.gz",
+    "sha256": "2d313f689b1112fb303ac9f4344029baa69b6cb6bc33e848bd8058f8142f88f4"
+  },
+  {
+    "file": "scope-probe-02/probe.patch",
+    "sha256": "d1cadc9373627be988ebb7d12a5af1ca6b886f512a82d44fae4751cc3653eb9e"
+  },
+  {
+    "file": "scope-probe-02/receipt.json",
+    "sha256": "fbbf71bf5af6e14f9fa1b0f109c708e2a59959a7a854b40e9cae9ba45135054d"
+  },
+  {
+    "file": "scope-probe-02/run.py",
+    "sha256": "7aba21b95ee2656777f33b4e403e813481e437a1a8ca7f183dda6b070c1f64f6"
+  },
+  {
+    "file": "scope-probe-02/source-manifest.json",
+    "sha256": "d25facb357347dd149fe15c3c42cbc6212c91564964c3ec5efa6e8965e930987"
+  },
+  {
+    "file": "scope-probe-02/triage.json",
+    "sha256": "d51ec4df3170c0549b28713abecee0c7e437b06532ae3cb3fea6b3e0ea4876c8"
+  },
+  {
+    "file": "scope-probe-02-logs.tar.gz",
+    "sha256": "bdceab550daab4965daa5ca25eefdae876f63612b9d4b38ed35e911239ffe89f"
+  }
+]

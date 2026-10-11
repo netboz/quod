@@ -1,0 +1,18 @@
+{
+  "time": "2026-10-11T11:54:28.083181+00:00",
+  "command": [
+    "erlc",
+    "-Werror",
+    "-o",
+    "_build/quod27-remote-collider-258-01",
+    "_build/quod27-remote-collider-258-01/quod_remote_collider_evidence.erl"
+  ],
+  "child_exit": 0,
+  "python_parses": true,
+  "files": {
+    "run.py": "1131b071b824138c666d422aa9ce4cefae7f82fcca7b58ee8876868584220386",
+    "quod_remote_collider_evidence.erl": "826bf0b5258261477d4dce89b99ba938c698d06faeba02acea33cbc8a392e9b3",
+    "quod_remote_collider_evidence.beam": "d71605d8fd85179b063bc3b7458050b9d4073a1bdf1c112c87b75836e1553894"
+  },
+  "python_change_after_compile": "Remove the temporary loaded measurement module after successful completion; no Erlang source change."
+}

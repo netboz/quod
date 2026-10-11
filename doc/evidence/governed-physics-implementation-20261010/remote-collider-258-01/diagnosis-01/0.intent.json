@@ -1,0 +1,16 @@
+{
+  "command": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-i=false",
+    "-t=false",
+    "-address=http://192.168.1.10:4646",
+    "-task",
+    "quod",
+    "f3e961cb-1860-ff67-f99f-998872e1c7ba",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin Ns = <<\"acceptance:physics:258:gallery\">>, Source = <<\"acceptance:physics:258:objects\">>, {ok,Ref} = quod_node_actor:reference(), {ok,Key} = application:get_env(quod,node_pubkey), #{world_state => iolist_to_binary(io_lib:format(\"~0p\",[quod_ontology:local_state(Ns)])), source_state => iolist_to_binary(io_lib:format(\"~0p\",[quod_ontology:local_state(Source)])), world_genesis => iolist_to_binary(io_lib:format(\"~0p\",[quod_ontology:genesis_anchor(Ns)])), root_applied => quod_prolog:applied(<<\"quod:root\">>), node_create_policy => iolist_to_binary(io_lib:format(\"~0p\",[quod_prolog:prove_ro(<<\"quod:root\">>,{can_create_ontology,{node,Key},Ns,[]})])), agent_create_policy => iolist_to_binary(io_lib:format(\"~0p\",[quod_prolog:prove_ro(<<\"quod:root\">>,{can_create_ontology,Ref,Ns,[]})]))} end))))."
+  ]
+}

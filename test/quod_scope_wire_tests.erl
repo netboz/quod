@@ -186,6 +186,19 @@ all_events_carry_exact_state_and_roundtrip_test() ->
           ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded))
       end, lists:enumerate(Operations)).
 
+prepared_budget_error_is_bounded_and_survives_scope_wire_test() ->
+    Reason = {effect_custody_limit, prepared_bytes, 304774, 262144},
+    Event = event({scope_error, Reason}),
+    {ok, Bytes} = quod_scope_wire:encode_event(Event),
+    ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Bytes)),
+    ?assertEqual(Reason, quod_scope_wire:normalize_public_error(Reason, <<"quod:root">>)),
+    [?assertNot(quod_scope_wire:valid_public_error(Bad)) || Bad <-
+        [{effect_custody_limit, prepared_bytes, 1 bsl 64, 0},
+         {effect_custody_limit, prepared_bytes, 10, -1},
+         {effect_custody_limit, prepared_bytes, 10, 10},
+         {effect_custody_limit, prepared_bytes, 10, unlimited},
+         {effect_custody_limit, other, 10, 0}]].
+
 scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
     Target = <<"quod:target">>,
     Descendant = <<"quod:descendant">>,

@@ -235,6 +235,21 @@ client_binding_validation_retains_canonical_name_rules_test() ->
     end, [[{<<"same">>, 1}, {<<"same">>, 2}], [{<<>>, value}],
           [{<<"z">>, 1}, {<<"a">>, 2}]]).
 
+prepared_budget_error_survives_signed_normalization_and_http_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    lists:foreach(fun({Actual, Limit}) ->
+        Error = {error, {effect_custody_limit, prepared_bytes, Actual, Limit}},
+        ?assertEqual(Error, quod_client_result:normalize(Evidence, Error)),
+        {ok, Bytes} = quod_client_result:encode(Error),
+        ?assertEqual({ok, Error}, quod_client_result:decode(Bytes)),
+        ?assertEqual({413, #{error => effect_custody_limit, resource => prepared_bytes,
+                            actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}},
+                     quod_client_result:http_normalized(Evidence, Error))
+    end, [{304774, 262144}, {(1 bsl 64) - 1, (1 bsl 53) + 1}]),
+    Bad = {error, {effect_custody_limit, prepared_bytes, 1, -1}},
+    ?assertEqual({error, proof_unavailable}, quod_client_result:normalize(Evidence, Bad)),
+    ?assertEqual({error, invalid_result}, quod_client_result:encode(Bad)).
+
 conflict_retry_is_a_specific_public_conflict_test() ->
     ?assertEqual(
        {409, #{error => conflict_retry}},

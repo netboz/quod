@@ -1,0 +1,16 @@
+{
+  "time": "2026-10-11T12:00:45.281395+00:00",
+  "child_exit": 0,
+  "library_files": [
+    "agent_instance.pl",
+    "space.pl",
+    "quod_physics.pl"
+  ],
+  "library_clauses": 253,
+  "genesis_diff_bytes": 64090,
+  "genesis_diff_limit": 196608,
+  "cold_symbols": 259,
+  "cold_symbol_limit": 512,
+  "remaining_fact_bytes": 132518,
+  "scope": "Libraries only; separate measurement policy facts are small additional founding input. No founding or submission occurred."
+}

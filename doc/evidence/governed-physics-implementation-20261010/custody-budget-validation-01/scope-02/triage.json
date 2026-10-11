@@ -1,0 +1,8 @@
+{
+  "result": "failed",
+  "tests": 172,
+  "failures": 1,
+  "cause": "New interrupted-policy fixture attempted abolish/1 with an arity-zero indicator, which Erlog rejects. Existing resource tests and all budget/three-lane signed cases passed. Client step was not started.",
+  "next_scope": "Use a one-argument fixture helper, retain assertions, and strengthen large-preparation recovery coverage in existing lifecycle/group fixtures.",
+  "changed_inputs": []
+}

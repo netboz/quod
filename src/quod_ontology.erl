@@ -631,17 +631,12 @@ prepared_effect(Action,
 prepared_effect(_Action, _Prepared, _Executor, _Actor) ->
     {error, invalid_direct_effect}.
 
--doc "Canonical bounded bytes retained only in the local prepared-action journal.".
+-doc "Canonical bytes retained under the local prepared-action journal's policy.".
 -spec prepared_bytes(prepared_descriptor()) -> {ok, binary()} | {error, term()}.
 prepared_bytes(#prepared_lifecycle{} = Prepared) ->
     try
         Stored = prepared_descriptor(encode, Prepared),
-        Bytes = term_to_binary({quod_prepared_lifecycle, 1, Stored},
-                               [deterministic]),
-        case byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES of
-            true -> {ok, Bytes};
-            false -> {error, initial_content_too_large}
-        end
+        {ok, term_to_binary({quod_prepared_lifecycle, 1, Stored}, [deterministic])}
     catch error:_ -> {error, invalid_action}
     end;
 prepared_bytes(_) -> {error, invalid_action}.
@@ -649,8 +644,7 @@ prepared_bytes(_) -> {error, invalid_action}.
 -doc "Decode and validate one exact journal-owned private preparation.".
 -spec decode_prepared(binary()) ->
           {ok, prepared_descriptor()} | {error, invalid_action}.
-decode_prepared(Bytes)
-  when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES ->
+decode_prepared(Bytes) when is_binary(Bytes) ->
     %% These bytes were created locally before hand-off and are accepted by
     %% the journal only when their SHA-256 digest matches the certified public
     %% effect descriptor. They may legitimately contain atoms introduced by

@@ -1,0 +1,8 @@
+{
+  "child_exit": 1,
+  "command": [
+    "python3",
+    "_build/quod27-remote-collider-258-02/run.py"
+  ],
+  "finished": "2026-10-11T12:24:26.573832+00:00"
+}

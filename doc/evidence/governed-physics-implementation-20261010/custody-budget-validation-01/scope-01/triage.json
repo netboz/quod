@@ -1,0 +1,8 @@
+{
+  "result": "failed",
+  "tests": 171,
+  "failures": 8,
+  "cause": "Resource lifecycle instrumentation still traced install_resource/3 after production owner signature changed to /4. All eight failures concern installation counters/descriptions; no assertions will be weakened. New journal/root lifecycle/signed-three-lane budget cases passed. Client tests did not run because the sequential EUnit step failed.",
+  "changed_inputs": [],
+  "next_scope": "Update the trace arity and argument matcher; close and exercise interrupted selector withdrawal; run a separately labelled scope."
+}

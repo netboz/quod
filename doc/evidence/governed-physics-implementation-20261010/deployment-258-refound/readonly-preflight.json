@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-11T11:20:34.490727+00:00",
+  "jobs": {
+    "quod-finality-candidate-v6-20260926": {
+      "version": 59,
+      "modify_index": 842921,
+      "status": "running"
+    },
+    "quod": {
+      "version": 246,
+      "modify_index": 826727,
+      "status": "running"
+    }
+  },
+  "mutations": 0
+}

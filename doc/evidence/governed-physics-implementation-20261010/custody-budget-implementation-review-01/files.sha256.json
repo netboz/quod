@@ -1,0 +1,50 @@
+[
+  {
+    "file": "README.md",
+    "sha256": "cb7bb8b4917c64ce97cf9212c8249388357a590f5fbf594c06964eaecf665ebc"
+  },
+  {
+    "file": "fable-review.md",
+    "sha256": "a59b7c4c99625d315873d3b2c64ad9a54a0a9fa031a86f6ce95553e4cd8c5af7"
+  },
+  {
+    "file": "frozen-inputs-and-tests.tar.gz",
+    "sha256": "08fa00a5fbc0d39ade93937cfe7cd56367852ab69a5a3ce9a8c4700cbf2f407c"
+  },
+  {
+    "file": "implementation.patch",
+    "sha256": "92acc1caef86eea7fe776e162e9d97a96f4923434f4bf7220c1dda6bcc0c0978"
+  },
+  {
+    "file": "invocation.json",
+    "sha256": "1851d9dd39621e97e4f9348fdb7deb70113e8acbcdf0adebedcb6a49be869c3b"
+  },
+  {
+    "file": "receipt.json",
+    "sha256": "1afed103f8bcce6a5e93fb2c64e470da410dfd310e7703adce4e1375b6e803d3"
+  },
+  {
+    "file": "review-request.md",
+    "sha256": "f7bfdad45693a32f1c127a974d3da965958028732be99cde2fc0ec94ac8e29a7"
+  },
+  {
+    "file": "run-review.py",
+    "sha256": "01b1e85c91036059383398404cc47f98445087b84700836685dc11643967a6f1"
+  },
+  {
+    "file": "source-manifest.json",
+    "sha256": "ef5e67b39f9d19f541e3c4aa53b4cc387da29ec11484645a6e1e96276073c06b"
+  },
+  {
+    "file": "stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "file": "stdout.json",
+    "sha256": "6f7b40badae13b8625366d7f6b5be95d54d166101bcf8284fe9a3dfc796a187e"
+  },
+  {
+    "file": "triage.json",
+    "sha256": "e81d94a20795d645f3e1556f6d821ffd8713eaa25d85877b90bd3d3a857f5d91"
+  }
+]

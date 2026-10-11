@@ -1100,6 +1100,14 @@ start_resource({resource, _Min, Resource, Scope, Deadline, From, Monitor},
 %% conservative dependency for persistent consumers until the next committed
 %% change selects again. Occurrence-bound recovery and custody are never replayed.
 resource_finished({interrupted, Reply}, S = #s{resource_waiter = {From, _}}) ->
+    case {S#s.ns, From} of
+        {<<"quod:root">>, {internal, effect_custody}} ->
+            case quod_effect_journal:withdraw_limits() of
+                ok -> ok;
+                {error, Reason} -> logger:warning("quod: custody policy withdrawal failed: ~p", [Reason])
+            end;
+        _ -> ok
+    end,
     Basis = case From of
         {internal, Key} when Key =:= agent_hosts; Key =:= agent_observers;
                              Key =:= node_ontologies; Key =:= effect_custody; Key =:= physics_worlds;
@@ -2734,8 +2742,8 @@ run_resource(Ns, H, Est, Resource, Scope, Deadline, {Caller, _}) ->
             case Admission of
                 ok ->
                     case Deadline > quod_time:mono_ms() of
-                        true -> install_resource(Ns, H, Selected);
-                        false -> {error, deadline_exceeded}
+                        true -> install_resource(Ns, H, Resource, Selected);
+                        false -> {interrupted, {error, deadline_exceeded}}
                     end;
                 Error -> Error
             end
@@ -2770,12 +2778,11 @@ select_resource_description(Ns, H, Est, node_ontologies, _Scope) ->
         _ -> inactive
     end;
 select_resource_description(<<"quod:root">> = Ns, H, Est, effect_custody, all) ->
-    Goal = {findall, {'C'}, {effect_custody_capacity, {'C'}}, {'Capacities'}},
+    Goal = {findall, {limits, {'C'}, {'B'}},
+            {effect_custody_limits, {'C'}, {'B'}}, {'Limits'}},
     case select_resource(Ns, H, Est, Goal) of
-        #{'Capacities' := [Capacity]}
-          when is_integer(Capacity), Capacity >= 0; Capacity =:= unlimited ->
-            {effect_custody, Capacity};
-        _ -> {error, invalid_effect_custody_capacity}
+        #{'Limits' := [{limits, Count, Bytes}]} -> {effect_custody, Count, Bytes};
+        _ -> {error, invalid_effect_custody_limits}
     end;
 select_resource_description(_, _, _, effect_custody, _) -> inactive;
 select_resource_description(Ns, H, Est, agent_work, {Instance, Wake}) ->
@@ -2821,20 +2828,27 @@ select_resource_description(Ns, H, Est, agent_custody,
     end;
 select_resource_description(_, _, _, _, _) -> {error, invalid_resource_request}.
 
-install_resource(Ns, _, {physics_worlds, Rows, Unavailable}) ->
+install_resource(<<"quod:root">>, _, effect_custody, {error, _} = Error) ->
+    %% A failed committed selection withdraws admission, preserving all
+    %% already staged and bound obligations in the same journal owner.
+    case quod_effect_journal:withdraw_limits() of
+        ok -> Error;
+        {error, _} = Unavailable -> Unavailable
+    end;
+install_resource(Ns, _, _, {physics_worlds, Rows, Unavailable}) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows, Unavailable}, infinity);
-install_resource(Ns, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
-install_resource(Ns, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
-install_resource(Ns, H, {node_ontologies, Hosts, Contacts}) ->
+install_resource(Ns, _, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
+install_resource(Ns, _, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
+install_resource(Ns, H, _, {node_ontologies, Hosts, Contacts}) ->
     quod_node_actor:hosting_projection(Ns, H, all, Hosts, Contacts);
-install_resource(_, _, {effect_custody, Capacity}) -> quod_effect_journal:configure_capacity(Capacity);
-install_resource(Ns, H, {agent_work, Instance, Step}) -> resource_result(project_agent_work(Ns, H, Instance, Step));
-install_resource(Ns, _, {agent_recovery, Batch, Event, Metadata, Expiry}) ->
+install_resource(_, _, _, {effect_custody, Count, Bytes}) -> quod_effect_journal:configure_limits(Count, Bytes);
+install_resource(Ns, H, _, {agent_work, Instance, Step}) -> resource_result(project_agent_work(Ns, H, Instance, Step));
+install_resource(Ns, _, _, {agent_recovery, Batch, Event, Metadata, Expiry}) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
                     {deliver_recovery, Batch, Event, Metadata, Expiry}, infinity);
-install_resource(_, _, authorized) -> ok;
-install_resource(_, _, inactive) -> ok;
-install_resource(_, _, {error, _} = Error) -> Error.
+install_resource(_, _, _, authorized) -> ok;
+install_resource(_, _, _, inactive) -> ok;
+install_resource(_, _, _, {error, _} = Error) -> Error.
 
 optional_selection(Ns, H, Est = #est{db = #db{mod = M, ref = R}}, Goal) ->
     %% Canonical removal leaves an empty interpreted procedure; both forms

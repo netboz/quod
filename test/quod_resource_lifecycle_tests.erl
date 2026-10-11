@@ -257,7 +257,7 @@ foreign_scope_cannot_supply_node_or_root_resource_policy_test_() ->
     {timeout, 60, fun() -> with_owner(fun(#{namespace := Ns}, Owner) ->
         NodeSelector = {':-', {node_ontology_hosting_projection, {'_'}, {'_'}},
                               {throw, foreign_node_resource_policy}},
-        RootSelector = {':-', {effect_custody_capacity, {'_'}},
+        RootSelector = {':-', {effect_custody_limits, {'_'}, unlimited},
                               {throw, foreign_root_resource_policy}},
         commit(Ns, both({assertz, NodeSelector}, {assertz, RootSelector})),
         ?assertEqual(#{}, maps:get(resource_failures, settled(Owner))),
@@ -267,6 +267,50 @@ foreign_scope_cannot_supply_node_or_root_resource_policy_test_() ->
              Ns, quod_prolog:applied(Ns), Resource, all, quod_time:mono_ms() + 5000))
          || Resource <- [node_ontologies, effect_custody]],
         ?assertEqual(#{}, maps:get(resource_failures, settled(Owner)))
+    end) end}.
+
+foreign_resource_deadline_cannot_withdraw_root_limits_test_() ->
+    {timeout, 60, fun() -> with_owner(fun(#{namespace := Ns, directory := Dir},
+                                         #{runtime := Runtime}) ->
+        {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(Journal),
+        ok = quod_effect_journal:configure_limits(7, 500000),
+        Parent = self(), Token = make_ref(), Deadline = quod_time:mono_ms() + 1000,
+        Pause = fun(false, {in, {'$gen_call', {Worker, _},
+                                {resource_selected, effect_custody, _}}}, _) ->
+                         true = erlang:suspend_process(Worker),
+                         Parent ! {selection_paused, Token, Worker}, true;
+                   (State, _, _) -> State end,
+        ok = sys:install(Runtime, {Pause, false}),
+        {Caller, CallerMonitor} = spawn_monitor(fun() ->
+            Result = quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns),
+                         effect_custody, all, Deadline),
+            Parent ! {selection_result, Token, Result}
+        end),
+        try
+            Worker = receive {selection_paused, Token, Pid} -> Pid
+                     after 10000 -> error(selection_not_paused) end,
+            WorkerMonitor = monitor(process, Worker),
+            try
+                _ = quod_runtime:stats(Ns),
+                ok = sys:suspend(Runtime),
+                %% Exercise the deadline check after an accepted selection,
+                %% before the runtime can process its queued expiry signal.
+                Timer = erlang:start_timer(max(0, Deadline - quod_time:mono_ms()), self(), expiry),
+                receive {timeout, Timer, expiry} -> ok end,
+                true = resume_worker(Runtime, Worker),
+                receive {'DOWN', WorkerMonitor, process, Worker, normal} -> ok
+                after 10000 -> error(selection_worker_not_completed) end,
+                ?assertEqual({7, 500000}, quod_effect_journal:limits())
+            after
+                catch resume_worker(Runtime, Worker),
+                sys:resume(Runtime)
+            end,
+            receive {selection_result, Token, Result} -> ?assertEqual({error, deadline_exceeded}, Result)
+            after 10000 -> error(selection_not_completed) end,
+            receive {'DOWN', CallerMonitor, process, Caller, normal} -> ok
+            after 10000 -> error(selection_caller_not_completed) end
+        after sys:remove(Runtime, Pause), gen_server:stop(Journal) end
     end) end}.
 
 change_while_selected_result_waits_cannot_leave_obsolete_inventory_test_() ->
@@ -402,8 +446,8 @@ start_trace(#{namespace := Ns, runtime := Runtime}) ->
     Trace = #{session := Session, io := IO} = new_trace(),
     trace:function(Session, {quod_runtime, select_resource_description, 5},
                    [{[Ns, '_', '_', agent_hosts, '_'], [], []}], [local]),
-    trace:function(Session, {quod_runtime, install_resource, 3},
-                   [{[Ns, '_', {agent_hosts, '_', '_'}], [], []}], [local]),
+    trace:function(Session, {quod_runtime, install_resource, 4},
+                   [{[Ns, '_', agent_hosts, {agent_hosts, '_', '_'}], [], []}], [local]),
     [trace:function(Session, MFA, true, [local]) || MFA <- IO],
     trace:process(Session, Runtime, true, [call, set_on_spawn]),
     clear_measurement(Trace),
@@ -415,7 +459,7 @@ trace_counts(Tag, IO, Acc) ->
     receive
         {Tag, {trace, _, call, {quod_runtime, select_resource_description, _}}} ->
             trace_counts(Tag, IO, Acc#{selections := maps:get(selections, Acc) + 1});
-        {Tag, {trace, _, call, {quod_runtime, install_resource, [_, _, Description]}}} ->
+        {Tag, {trace, _, call, {quod_runtime, install_resource, [_, _, _, Description]}}} ->
             trace_counts(Tag, IO, Acc#{installs := maps:get(installs, Acc) + 1,
                                      descriptions := maps:get(descriptions, Acc) ++ [Description]});
         {Tag, {trace, _, call, {M, F, Args}}} ->

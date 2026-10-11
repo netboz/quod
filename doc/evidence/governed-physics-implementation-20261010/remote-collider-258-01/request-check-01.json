@@ -1,0 +1,42 @@
+{
+  "checked_at": "2026-10-11T11:41:55.662809+00:00",
+  "child_exit": 0,
+  "submitted": false,
+  "scope": "Real signed-goal construction, signature verification and frozen grammar parsing with isolated ephemeral keys; no ontology or network writes",
+  "files": {
+    "quod_remote_collider_evidence.erl": "981e03cbab449ed752178d611776ac03d256ce2d5d278b72abb4dd650e636a7d",
+    "check_requests.erl": "4abd448d7bfb882e7a6d742d923e1cec91bce70d186319f6bf31b3fcd311f608"
+  },
+  "signed_and_parsed": [
+    {
+      "name": "preparation",
+      "goal_bytes": 1196,
+      "wire_bytes": 1449
+    },
+    {
+      "name": "activation",
+      "goal_bytes": 10031,
+      "wire_bytes": 10284
+    },
+    {
+      "name": "admission",
+      "goal_bytes": 644,
+      "wire_bytes": 897
+    },
+    {
+      "name": "unrelated",
+      "goal_bytes": 377,
+      "wire_bytes": 630
+    },
+    {
+      "name": "edit",
+      "goal_bytes": 409,
+      "wire_bytes": 662
+    },
+    {
+      "name": "withdrawal",
+      "goal_bytes": 659,
+      "wire_bytes": 912
+    }
+  ]
+}

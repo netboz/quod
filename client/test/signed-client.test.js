@@ -68,6 +68,27 @@ test('traced HTTP transport errors retain uncertainty and do not retry', async (
   }
 })
 
+test('prepared byte budget reports exact policy pressure without retry or uncertainty', async () => {
+  const previousFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls += 1
+    return jsonResponse(413, { error: 'effect_custody_limit', resource: 'prepared_bytes',
+      actual: '18446744073709551615', limit: '9007199254740993' })
+  }
+  try {
+    await assert.rejects(postJson('/api/goals/execute', { request: 'original-request' }), error => {
+      assert.equal(error.message, 'Prepared action needs 18446744073709551615 bytes; root policy allows 9007199254740993 bytes.')
+      assert.equal(error.status, 413)
+      assert.notEqual(error.outcomeUnknown, true)
+      return true
+    })
+    assert.equal(calls, 1)
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test('signed goal bytes match the Erlang browser fixture', () => {
   const bytes = encodeGoalRequest({
     networkIdentity: u256(0x10),

@@ -1,0 +1,64 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/evidence/governed-physics-implementation-20261010/custody-budget-plan-01.md",
+      "sha256": "5354e679ce61f16c1e35c6e7563e6ff97aa3b946a4b25d3eee3704883acb8423"
+    },
+    {
+      "file": "src/quod_effect_journal.erl",
+      "sha256": "79742f52eb745fb2b22905c25c806962d3b92a89504fb31c47c2aa2120accacb"
+    },
+    {
+      "file": "src/quod_ontology.erl",
+      "sha256": "ff6e612d49207e5f313d06e1e751645db91aa256ab20372de1197800ee475bb1"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "dab686922d3775eb64596126aaf41a04bb5e16fc2e5011b7486ae2c55969c007"
+    },
+    {
+      "file": "src/quod_prolog.erl",
+      "sha256": "4a960e2bc722d6412064b1b82531e77c7170676652b5945abd094f3a26633588"
+    },
+    {
+      "file": "src/predicates/quod_ontology_predicates.erl",
+      "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51"
+    },
+    {
+      "file": "priv/ontologies/quod_root.pl",
+      "sha256": "9e025c546c82e46837285a28e6ba0cf4e183de9bc8e1758b5359a3ea23a633ad"
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "sha256": "ac1a6fc7e8536e776759b27a5c2d58742e732f522bf96c40e3a30dfb60571009"
+    },
+    {
+      "file": "test/quod_root_resource_lifecycle_tests.erl",
+      "sha256": "5f1e7ad97000055594420e1e4b04900fe1d9cd15740b683dbeeba44d050bbbf2"
+    },
+    {
+      "file": "test/quod_lifecycle_single_path_tests.erl",
+      "sha256": "ea218f91876498d8584871469134fa93934cf39dbef9cf6da7c61232a25c74a8"
+    },
+    {
+      "file": "test/quod_effect_journal_tests.erl",
+      "sha256": "af8662f2a4b1e6454892e4fa5e971ed6e5d6d69222551a3a8ed6228879ab698b"
+    },
+    {
+      "file": "src/quod_metrics.erl",
+      "sha256": "dfa1d65002bbe4fc86de87f1fbeaa7d62a101ddf364c07aaeb194d5cf417c453"
+    }
+  ]
+}

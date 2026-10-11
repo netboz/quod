@@ -1,0 +1,13 @@
+{
+  "name": "eunit",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit"
+  ],
+  "started": "2026-10-11T11:39:48.465592+00:00",
+  "exit": 127,
+  "seconds": 0.0,
+  "sources_unchanged": true
+}

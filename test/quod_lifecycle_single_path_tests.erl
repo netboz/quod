@@ -12,8 +12,9 @@ lifecycle_single_path_test_() ->
      fun setup/0,
      fun cleanup/1,
      fun(Fixture) ->
-         [{timeout, 30, ?_test(effect_capacity_is_committed_root_policy(Fixture))},
+         [{timeout, 30, ?_test(effect_limits_are_committed_root_policy(Fixture))},
           {timeout, 30, ?_test(create_is_one_normal_effect_transaction(Fixture))},
+          {timeout, 60, ?_test(full_physical_composition_uses_governed_preparation_budget(Fixture))},
           {timeout, 30, ?_test(repeated_create_is_a_noop(Fixture))},
           {timeout, 30, ?_test(failed_transaction_branch_discards_its_effect(Fixture))},
           {timeout, 30, ?_test(join_uses_the_same_goal_path(Fixture))},
@@ -66,37 +67,37 @@ lifecycle_single_path_test_() ->
            ?_test(system_names_is_created_hosted_and_registered(Fixture))}]
      end}.
 
-effect_capacity_is_committed_root_policy(#{root_config := Config, actor_keypair := {Pub, _}}) ->
+effect_limits_are_committed_root_policy(#{root_config := Config, actor_keypair := {Pub, _}}) ->
     ?assertNot(lists:member(quod_agent_predicates,
                            maps:get(external_predicate_modules, Config))),
     ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?ROOT_NS, {me, {node, Pub}})),
-    ?assertEqual(64, quod_effect_journal:capacity()),
+    ?assertEqual({64, unlimited}, quod_effect_journal:limits()),
     ?assertMatch(
        {ok, [#{'Capacity' := 64}], _},
        quod_prolog:prove_ro(
-         ?ROOT_NS, {effect_custody_capacity, {'Capacity'}})),
+         ?ROOT_NS, {effect_custody_limits, {'Capacity'}, unlimited})),
     try
         %% A direct assertion invalidates the resource selector. The owning
         %% journal installs the resulting committed policy without a reaction.
         commit_root(
-          {assertz, {effect_custody_capacity_override, 3}}),
-        ok = wait_effect_capacity(3, 300),
+          {assertz, {effect_custody_limits_override, 3, unlimited}}),
+        ok = wait_effect_limits({3, unlimited}, 300),
         ?assertMatch(
            {ok, [#{'Capacity' := 3}], _},
            quod_prolog:prove_ro(
-             ?ROOT_NS, {effect_custody_capacity, {'Capacity'}})),
+             ?ROOT_NS, {effect_custody_limits, {'Capacity'}, unlimited})),
 
         %% The convenience predicate replaces the override atomically and has
         %% no compiled maximum.
-        commit_root({set_effect_custody_capacity, unlimited}),
-        ok = wait_effect_capacity(unlimited, 300),
+        commit_root({set_effect_custody_limits, unlimited, unlimited}),
+        ok = wait_effect_limits({unlimited, unlimited}, 300),
         ?assertMatch(
            {fail, _},
            quod_prolog:execute(
-             ?ROOT_NS, {set_effect_custody_capacity, -1}))
+             ?ROOT_NS, {set_effect_custody_limits, -1, unlimited}))
     after
-        commit_root({set_effect_custody_capacity, 64}),
-        ok = wait_effect_capacity(64, 300)
+        commit_root({set_effect_custody_limits, 64, unlimited}),
+        ok = wait_effect_limits({64, unlimited}, 300)
     end.
 
 setup() -> setup(manual).
@@ -153,7 +154,7 @@ setup(Mode) ->
           [{source_file, NodeSource},
            {external_predicate_modules, [quod_ontology_predicates]}]),
     ok = wait_ready(?NODE_NS, 300),
-    ok = wait_effect_capacity(64, 300),
+    ok = wait_effect_limits({64, unlimited}, 300),
     Base = #{dir => Dir, saved => Saved, manager => Manager,
              ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
              router => Router, foreign_log => ForeignLog,
@@ -424,6 +425,51 @@ create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
                 RowNs =:= Ns],
     ?assertMatch([#{state := applied}], EffectRows).
 
+full_physical_composition_uses_governed_preparation_budget(_Fixture) ->
+    Ns = unique_ns(<<"physical-composition">>),
+    Options = physical_composition_options(),
+    Action = {create_ontology, Ns, Options},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    Size = byte_size(Bytes),
+    ?assert(Size > 262144),
+    ?assertEqual({ok, Prepared}, quod_ontology:decode_prepared(Bytes)),
+    Goal = {create_ontology, Ns, Options, {'Anchor'}},
+    try
+        commit_root({set_effect_custody_limits, 64, 1}),
+        wait_effect_limits({64, 1}, 300),
+        Before = quod_prolog:applied(?ROOT_NS),
+        ?assertMatch({error, {effect_custody_limit, prepared_bytes, _, 1}},
+                     quod_prolog:execute(?ROOT_NS, Goal)),
+        ?assertEqual(Before, quod_prolog:applied(?ROOT_NS)),
+        ?assertEqual(undefined, quod_reg:where({quod_prolog, Ns})),
+        ?assertMatch(#{reservations := 0}, quod_effect_journal:stats()),
+        commit_root({set_effect_custody_limits, 64, unlimited}),
+        wait_effect_limits({64, unlimited}, 300),
+        {ok, [#{'Anchor' := Anchor}], _} = quod_prolog:execute(?ROOT_NS, Goal),
+        wait_ready(Ns, 300),
+        ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {composition_marker, complete})),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {isa, physical_space, space})),
+        %% The committed create retains the complete policy, not just the
+        %% marker. Ordinary namespace recovery must use that same genesis.
+        ok = quod_namespace_manager:stop_content(Ns),
+        ?assertMatch({ok, [_], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+        wait_ready(Ns, 300),
+        ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {composition_marker, complete}))
+    after
+        commit_root({set_effect_custody_limits, 64, unlimited}),
+        wait_effect_limits({64, unlimited}, 300)
+    end.
+
+physical_composition_options() ->
+    [{source_file, list_to_binary(filename:join([code:priv_dir(quod), "ontologies", File]))}
+     || File <- ["agent_instance.pl", "space.pl", "quod_physics.pl"]] ++
+    [{source, <<"can_invoke(_, _, _, _).\ncomposition_marker(complete).\n">>},
+     {external_predicate_modules, [quod_agent_predicates]}].
+
 repeated_create_is_a_noop(_Fixture) ->
     Ns = unique_ns(<<"repeated">>),
     Goal = create_goal(Ns, []),
@@ -569,6 +615,29 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
     try
         #{session_id := SessionId, expires_ms := SessionExpires} =
             open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        commit_root({set_effect_custody_limits, 64, 1}),
+        wait_effect_limits({64, 1}, 300),
+        AgentNs = maps:get(namespace, Agent),
+        Before = {quod_prolog:applied(?ROOT_NS), quod_prolog:applied(AgentNs)},
+        lists:foreach(fun(Lane) ->
+            Target = unique_ns(<<"budget-refused">>),
+            Create = ["quod:root::create_ontology(\"", Target, "\", [], _)"],
+            RefusedGoal = iolist_to_binary(case Lane of
+                single -> [Create, "."];
+                atomic -> ["assertz(budget_side_effect(atomic)), ", Create, "."];
+                independent -> ["independent((assertz(budget_side_effect(independent)), ", Create, "))."]
+            end),
+            {RefusedBytes, RefusedSig} = signed_agent_goal(
+                NetworkId, PublicKey, KeyPair, Agent, execute, SessionExpires, RefusedGoal),
+            ?assertMatch({ok, _, {normalized, {error, {effect_custody_limit, prepared_bytes, _, 1}}}},
+                quod_client_goal_ingress:submit(execute, SessionId, RefusedBytes, RefusedSig, Peer)),
+            ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Target)),
+            ?assertEqual(Before, {quod_prolog:applied(?ROOT_NS), quod_prolog:applied(AgentNs)}),
+            ?assertMatch(#{reservations := 0}, quod_effect_journal:stats())
+        end, [single, atomic, independent]),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(AgentNs, {budget_side_effect, {'_'}})),
+        commit_root({set_effect_custody_limits, 64, unlimited}),
+        wait_effect_limits({64, unlimited}, 300),
         GoalText = iolist_to_binary(
                      ["quod:root::create_ontology(\"", NewNs,
                       "\", [], _)."]),
@@ -582,6 +651,8 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
                SessionId, RequestBytes, Signature, Peer),
         ok = wait_ready(NewNs, 300)
     after
+        commit_root({set_effect_custody_limits, 64, unlimited}),
+        wait_effect_limits({64, unlimited}, 300),
         stop_process(AuthPid)
     end.
 
@@ -1211,7 +1282,7 @@ prepared_genesis_native_format_golden_test() ->
 
 prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     Ns = unique_ns(<<"prepared-journal-native">>),
-    Action = {create_ontology, Ns, []},
+    Action = {create_ontology, Ns, physical_composition_options()},
     {ok, Structural} = quod_ontology:validate_action(Action),
     {ok, Prepared0} = quod_ontology:prepare_action(Structural),
     {prepared_lifecycle, create, Ns, _InitialAnchor, Config0, created} = Prepared0,
@@ -1227,6 +1298,7 @@ prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
     Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
     {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    ?assert(byte_size(Bytes) > 262144),
     {ok, Effect} = quod_ontology:prepared_effect(
                      Action, Prepared, Executor, {node, Executor}),
     EffectId = quod_effect:effect_id(Effect),
@@ -2055,7 +2127,7 @@ dynamic_hosting_survives_content_tree_restart(
     ?assertEqual(Anchor, maps:get(genesis_hash, Config)),
     ?assertNot(maps:is_key(prepared_genesis_entry, Config)),
     ?assertNot(maps:is_key(genesis_diff, Config)),
-    ok = wait_effect_capacity(64, 300).
+    ok = wait_effect_limits({64, unlimited}, 300).
 
 wrong_anchor_child_stops_then_exact_material_restarts(
   Fixture = #{actor_ns := ActorNs, actor_principal := Principal}) ->
@@ -2420,26 +2492,26 @@ wait_effect_target_state(Ns, Expected, N) ->
              end
     end.
 
-wait_effect_capacity(Expected, Attempts) ->
+wait_effect_limits(Expected, Attempts) ->
     Journal = quod_reg:where({quod_effect_journal, node}),
     Parent = self(), Token = make_ref(),
-    Observe = fun(State, {in, {'$gen_call', _, {configure_capacity, _}}}, _) ->
-                      Parent ! {effect_capacity_input, Token}, State;
+    Observe = fun(State, {in, {'$gen_call', _, {configure_limits, _, _}}}, _) ->
+                      Parent ! {effect_limits_input, Token}, State;
                  (State, _, _) -> State end,
     %% Subscribe before querying installed state. The following capacity call
     %% joins a delivered configuration to completion of its real owner handler.
     ok = sys:install(Journal, {Observe, none}),
-    try wait_effect_capacity_notice(Expected, Token, quod_time:mono_ms() + Attempts * 10)
+    try wait_effect_limits_notice(Expected, Token, quod_time:mono_ms() + Attempts * 10)
     after sys:remove(Journal, Observe) end.
 
-wait_effect_capacity_notice(Expected, Token, Deadline) ->
-    case quod_effect_journal:capacity() of
+wait_effect_limits_notice(Expected, Token, Deadline) ->
+    case quod_effect_journal:limits() of
         Expected -> ok;
         _ -> receive
-            {effect_capacity_input, Token} ->
-                wait_effect_capacity_notice(Expected, Token, Deadline)
+            {effect_limits_input, Token} ->
+                wait_effect_limits_notice(Expected, Token, Deadline)
         after max(0, Deadline - quod_time:mono_ms()) ->
-            error({effect_capacity_timeout, quod_runtime:stats(?ROOT_NS)})
+            error({effect_limits_timeout, quod_runtime:stats(?ROOT_NS)})
         end
     end.
 

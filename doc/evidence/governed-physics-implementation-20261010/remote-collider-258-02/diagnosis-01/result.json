@@ -1,0 +1,32 @@
+{
+  "state": "{ok,not_hosted}",
+  "effect_result": "{error,initial_content_too_large}",
+  "root_applied": 62,
+  "action_encoding": {
+    "ok_bytes": 2097
+  },
+  "prepared_encoding": {
+    "error": "{error,initial_content_too_large}"
+  },
+  "raw_prepared_bytes": 304774,
+  "config_field_sizes": {
+    "mode": 9,
+    "seed_peers": 2,
+    "data_dir": 14,
+    "role": 9,
+    "committee": 2,
+    "node_id": 38,
+    "genesis_hash": 38,
+    "max_proof_workers": 3,
+    "max_scope_workers": 3,
+    "proof_timeout_ms": 6,
+    "transaction_ttl_ms": 6,
+    "batch_window_ms": 3,
+    "scope_timeout_ms": 6,
+    "scope_step_timeout_ms": 6,
+    "detailed_consensus_metrics": 8,
+    "external_predicate_modules": 30,
+    "genesis_diff": 65222,
+    "prepared_genesis_entry": 238974
+  }
+}

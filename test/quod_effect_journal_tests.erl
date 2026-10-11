@@ -7,26 +7,26 @@
 -define(ROOT_NS, <<"quod:root">>).
 -define(MAGIC, 16#51454A33).
 
-capacity_is_projected_and_restart_durable_test() ->
+limits_are_projected_and_restart_durable_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Dir = unique_tmp_dir("quod_effect_capacity_"),
     try
         {ok, Pid} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Pid),
-        ?assertEqual(unconfigured, quod_effect_journal:capacity()),
+        ?assertEqual(unconfigured, quod_effect_journal:limits()),
         ?assertEqual({error, unavailable},
                      quod_effect_journal:reserve(self())),
-        ?assertEqual({error, invalid_capacity},
-                     quod_effect_journal:configure_capacity(-1)),
-        ok = quod_effect_journal:configure_capacity(1),
+        ?assertEqual({error, invalid_limits},
+                     quod_effect_journal:configure_limits(-1, unlimited)),
+        ok = quod_effect_journal:configure_limits(1, unlimited),
         {ok, Token1} = quod_effect_journal:reserve(self()),
         ?assertMatch(
-           #{capacity := 1, active := 0, reservations := 1,
+           #{limits := {1, unlimited}, active := 0, reservations := 1,
              terminal := 0},
            quod_effect_journal:stats()),
         ?assertEqual({error, busy}, quod_effect_journal:reserve(self())),
         ok = quod_effect_journal:release_reservation(Token1),
-        ok = quod_effect_journal:configure_capacity(unlimited),
+        ok = quod_effect_journal:configure_limits(unlimited, unlimited),
         {ok, Token2} = quod_effect_journal:reserve(self()),
         {ok, Token3} = quod_effect_journal:reserve(self()),
         ok = quod_effect_journal:release_reservation(Token2),
@@ -34,7 +34,7 @@ capacity_is_projected_and_restart_durable_test() ->
         stop(Pid),
         {ok, Pid2} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Pid2),
-        ?assertEqual(unlimited, quod_effect_journal:capacity()),
+        ?assertEqual({unlimited, unlimited}, quod_effect_journal:limits()),
         stop(Pid2)
     after
         _ = file:del_dir_r(Dir)
@@ -49,9 +49,9 @@ lowering_capacity_keeps_active_custody_test() ->
           EffectId = quod_effect:effect_id(Effect),
           ?assertMatch({ok, #{state := transaction_ready}},
                        quod_effect_journal:status(EffectId)),
-          ok = quod_effect_journal:configure_capacity(0),
+          ok = quod_effect_journal:configure_limits(0, unlimited),
           ?assertMatch(
-             #{capacity := 0, active := 1, reservations := 0},
+             #{limits := {0, unlimited}, active := 1, reservations := 0},
              quod_effect_journal:stats()),
           ?assertMatch({ok, #{state := transaction_ready}},
                        quod_effect_journal:status(EffectId)),
@@ -68,7 +68,73 @@ superseded_snapshot_version_is_identified_test() ->
     assert_unsupported_snapshot_version(
       5, {quod_effect_journal, 5, 64, []}),
     assert_unsupported_snapshot_version(
-      6, {quod_effect_journal, 6, 64, []}).
+      6, {quod_effect_journal, 6, 64, []}),
+    assert_unsupported_snapshot_version(
+      7, {quod_effect_journal, 7, 64, []}).
+
+prepared_byte_limit_applies_at_stage_and_preserves_accepted_custody_test() ->
+    with_operation_journal(fun(Dir, Journal, Fixture, Binding) ->
+        {Action, Desired, Effect, Prepared} = maps:get(prepared_effect, Fixture),
+        {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+        Size = byte_size(Bytes),
+        ok = quod_effect_journal:configure_limits(2, Size - 1),
+        {ok, Token} = quod_effect_journal:reserve(self()),
+        ?assertEqual({error, {effect_custody_limit, prepared_bytes, Size, Size - 1}},
+            quod_effect_journal:stage(Token, Action, Desired, Effect, Prepared)),
+        %% A mismatching digest remains invalid even under the smaller policy.
+        Changed = setelement(5, Prepared, (element(5, Prepared))#{unexpected => true}),
+        ?assertEqual({error, invalid_direct_effect},
+            quod_effect_journal:stage(Token, Action, Desired, Effect, Changed)),
+        ?assertMatch(#{reservations := 1, active := 0}, quod_effect_journal:stats()),
+        ok = quod_effect_journal:configure_limits(2, Size),
+        ok = quod_effect_journal:stage(Token, Action, Desired, Effect, Prepared),
+        {ok, Unstaged} = quod_effect_journal:reserve(self()),
+        ok = quod_effect_journal:configure_limits(0, Size - 1),
+        ?assertEqual({error, busy}, quod_effect_journal:reserve(self())),
+        ?assertEqual({error, {effect_custody_limit, prepared_bytes, Size, Size - 1}},
+            quod_effect_journal:stage(Unstaged, Action, Desired, Effect, Prepared)),
+        %% The accepted stage is grandfathered, including later attestation.
+        ok = quod_effect_journal:bind_reservation(Token, maps:get(plan_digest, Binding),
+            maps:get(manifest_digest, Binding), operation_coordinator(Binding), maps:get(target, Binding)),
+        {ok, EffectId} = quod_effect_journal:bind_operation(
+            Token, maps:get(target, Binding), operation_blob(Fixture)),
+        ok = quod_effect_journal:release_reservation(Unstaged),
+        stop(Journal),
+        {ok, Restarted} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(Restarted),
+        ?assertEqual({0, Size - 1}, quod_effect_journal:limits()),
+        ?assertMatch({ok, #{state := operation_pending}}, quod_effect_journal:status(EffectId)),
+        ok = quod_effect_journal:withdraw_limits(),
+        ?assertEqual({error, unavailable}, quod_effect_journal:reserve(self())),
+        stop(Restarted),
+        {ok, Unavailable} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(Unavailable),
+        ?assertEqual(unconfigured, quod_effect_journal:limits()),
+        ?assertMatch({ok, #{state := operation_pending}}, quod_effect_journal:status(EffectId)),
+        ?assertEqual(cancelled, cancel_operation(Binding, operation_blob(Fixture)))
+    end).
+
+concurrent_policy_change_fences_unstaged_preparation_test() ->
+    with_operation_journal(fun(_, _, Fixture, _) ->
+        {Action, Desired, Effect, Prepared} = maps:get(prepared_effect, Fixture),
+        Parent = self(),
+        {Worker, Monitor} = spawn_monitor(fun() ->
+            {ok, Token} = quod_effect_journal:reserve(self()),
+            Parent ! {reserved, self()},
+            receive stage -> ok end,
+            Result = quod_effect_journal:stage(Token, Action, Desired, Effect, Prepared),
+            ok = quod_effect_journal:release_reservation(Token),
+            Parent ! {staged, self(), Result}
+        end),
+        receive {reserved, Worker} -> ok after 1000 -> error(reservation_not_delivered) end,
+        ok = quod_effect_journal:withdraw_limits(),
+        Worker ! stage,
+        receive {staged, Worker, Result} -> ?assertEqual({error, unavailable}, Result)
+        after 1000 -> error(stage_not_delivered) end,
+        receive {'DOWN', Monitor, process, Worker, normal} -> ok
+        after 1000 -> error(owner_did_not_stop) end,
+        ?assertMatch(#{reservations := 0, active := 0}, quod_effect_journal:stats())
+    end).
 
 prepared_recovery_may_restore_genesis_atoms_test() ->
     %% A prepared genesis can contain an atom which existed in the authoring
@@ -355,8 +421,8 @@ stale_reconcile_cannot_demote_terminal_row_test() ->
                         end),
                   %% Persist that exact terminal row before releasing the
                   %% stale reconciliation result.
-                  ok = quod_effect_journal:configure_capacity(unlimited),
-                  ok = quod_effect_journal:configure_capacity(64),
+                  ok = quod_effect_journal:configure_limits(unlimited, unlimited),
+                  ok = quod_effect_journal:configure_limits(64, unlimited),
                   Prolog ! continue_outcome,
                   receive {frontier_queried, Runtime, 2} -> ok
                   after 1000 -> error(frontier_query_timeout)
@@ -439,7 +505,7 @@ bound_owner_death_retires_live_unactivated_row_test() ->
         {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Journal),
         try
-            ok = quod_effect_journal:configure_capacity(64),
+            ok = quod_effect_journal:configure_limits(64, unlimited),
             {ok, Token} = quod_effect_journal:reserve(self()),
             ok = quod_effect_journal:stage(
                    Token, Action, Desired, Effect, Prepared),
@@ -755,7 +821,7 @@ group_binding_survives_owner_death_and_restart_test() ->
         ok = quod_signing_journal:close(Source1),
         {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Journal),
-        ok = quod_effect_journal:configure_capacity(64),
+        ok = quod_effect_journal:configure_limits(64, unlimited),
         Coordinator = group_coordinator(GroupRef),
         {WrongAction, WrongDesired, Effect, WrongPrepared} = PreparedEffect,
         {ok, WrongReservation} = quod_effect_journal:reserve(self()),
@@ -780,6 +846,8 @@ group_binding_survives_owner_death_and_restart_test() ->
                       ok = quod_effect_journal:stage(
                              Reservation, Action, Desired,
                              Effect, Prepared),
+                      Parent ! {group_staged, self()},
+                      receive bind_group -> ok end,
                       ok = quod_effect_journal:bind_reservation(
                              Reservation, PlanDigest, ManifestDigest,
                              Coordinator, Target),
@@ -790,6 +858,9 @@ group_binding_survives_owner_death_and_restart_test() ->
                              Reservation)}
                   end),
         OwnerMRef = monitor(process, Owner),
+        receive {group_staged, Owner} -> ok after 1000 -> error(group_not_staged) end,
+        ok = quod_effect_journal:configure_limits(0, 0),
+        Owner ! bind_group,
         Reservation =
             receive {group_bind_result, Owner, Token, ok} -> Token
             after 1000 -> error(group_bind_timeout)
@@ -893,7 +964,7 @@ with_operation_journal(Options, Fun) ->
             {ok, Journal} =
                 quod_effect_journal:start_link(#{data_dir => Dir}),
             unlink(Journal),
-            ok = quod_effect_journal:configure_capacity(unlimited),
+            ok = quod_effect_journal:configure_limits(unlimited, unlimited),
             Fun(Dir, Journal, Fixture, Binding)
         after
             stop_registered_journal(),
@@ -1023,10 +1094,14 @@ fixture(State) ->
 
 group_fixture(Pub, Seed, RootAnchor) ->
     Ns = <<"effect:group-test">>,
-    Action = {create_ontology, Ns, []},
+    Options = [{source_file, list_to_binary(filename:join([code:priv_dir(quod), "ontologies", File]))}
+               || File <- ["agent_instance.pl", "space.pl", "quod_physics.pl"]],
+    Action = {create_ontology, Ns, Options},
     Desired = {ontology_hosted, Ns},
     {ok, Structural} = quod_ontology:validate_action(Action),
     {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    {ok, PreparedBytes} = quod_ontology:prepared_bytes(Prepared),
+    ?assert(byte_size(PreparedBytes) > 262144),
     {ok, Effect} = quod_ontology:prepared_effect(
                      Action, Prepared, Pub, {node, Pub}),
     Target = {?ROOT_NS, RootAnchor},
@@ -1135,7 +1210,7 @@ write_snapshot(Dir, Row) ->
     Path = filename:join(Dir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
     Payload = term_to_binary(
-                {quod_effect_journal, 7, 64, Rows}, [deterministic]),
+                {quod_effect_journal, 8, {64, unlimited}, Rows}, [deterministic]),
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big,
               (byte_size(Payload)):32/unsigned-big,

@@ -313,7 +313,10 @@ export async function postJson(url, body, method = 'POST', { traceparent } = {})
     throw unknownOutcome(cause)
   }
   if (!response.ok) {
-    const error = new Error(payload.error)
+    const message = payload.error === 'effect_custody_limit' && payload.resource === 'prepared_bytes'
+      ? `Prepared action needs ${payload.actual} bytes; root policy allows ${payload.limit} bytes.`
+      : payload.error
+    const error = new Error(message)
     error.status = response.status
     throw error
   }

@@ -1,0 +1,9 @@
+{
+  "image": "192.168.1.11:5000/quod:0.7.258",
+  "digest": "192.168.1.11:5000/quod@sha256:b5190f009b08ebeca5923258c2cd99fb754eb69bb81c28ff6c1b19b3c4fc892c",
+  "pinned_image": "192.168.1.11:5000/quod:0.7.258@sha256:b5190f009b08ebeca5923258c2cd99fb754eb69bb81c28ff6c1b19b3c4fc892c",
+  "commit": "96ab9bf45ae9f3ccebe31a5adc1613d216c3d09d",
+  "source_manifest_sha256": "bd2562cfdf27c24e9d6be053845e2a897bb58b56cd5aa1559a266d6c5e6569eb",
+  "explorer_matches": true,
+  "registry_digest_matches": true
+}

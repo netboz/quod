@@ -1,0 +1,10 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "/home/yan/src/quod/_build/quod27-release-258/deployment/boot_probe.py",
+    "192.168.1.11:5000/quod:0.7.258",
+    "vault-boot-01"
+  ],
+  "exit": 0,
+  "seconds": 3.077299737953581
+}

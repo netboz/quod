@@ -1,0 +1,7 @@
+{
+  "result": "regression reproduced",
+  "tests": 17,
+  "failures": 1,
+  "observed": "Foreign ontology post-selection expiry withdrew global journal limits: expected {7,500000}, got unconfigured. Actual worker and owner scheduling controlled through existing sys instrumentation; waited on the original absolute expiry, no proof exemption.",
+  "correction": "Use existing interrupted completion path after deadline, retain conservative internal dependency, and explicitly scope global withdrawal to root."
+}

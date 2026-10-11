@@ -1,0 +1,122 @@
+[
+  {
+    "file": "disposition.md",
+    "sha256": "2a6786a89834b80758168638fdd33baaece848a0c20bb2b0468739bf3d97263d",
+    "bytes": 988
+  },
+  {
+    "file": "fable-review.md",
+    "sha256": "8b67ae282a8bf44e1e7472a0d54f0ddb07114c8e5d56aa408a328e4b153ca09b",
+    "bytes": 4595
+  },
+  {
+    "file": "invocation.json",
+    "sha256": "c600f8f038f84ab4a7e19923a7bfdb2b19449c0c41595de16dd6c6e28a06e86f",
+    "bytes": 654
+  },
+  {
+    "file": "receipt.json",
+    "sha256": "14e5620b39081c8dfb61978a17e9229036ef153bb0e0a9d8009d95433d090688",
+    "bytes": 237
+  },
+  {
+    "file": "review-request.md",
+    "sha256": "70548877890f7cc457f01c9ba77db4582a07dbc1b350b12197c1c3f21047440b",
+    "bytes": 1384
+  },
+  {
+    "file": "run-review.py",
+    "sha256": "f16fdcef72b9d42b9b4c37e33e9e661b30ac8f6805a8011a076315e5ed4bc72f",
+    "bytes": 1743
+  },
+  {
+    "file": "source-manifest.json",
+    "sha256": "dbff080661f79109864cb54c2c3c10cb1742281ee1124a324d2f5f94c12f5b4e",
+    "bytes": 2185
+  },
+  {
+    "file": "stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "file": "stdout.json",
+    "sha256": "062b5b758ae019e041d251338b0bbc203334c68086f193d44e604563961a420d",
+    "bytes": 6416
+  },
+  {
+    "file": "tree/AGENTS.md",
+    "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+    "bytes": 8636
+  },
+  {
+    "file": "tree/doc/evidence/governed-physics-implementation-20261010/custody-budget-plan-01.md",
+    "sha256": "5354e679ce61f16c1e35c6e7563e6ff97aa3b946a4b25d3eee3704883acb8423",
+    "bytes": 5510
+  },
+  {
+    "file": "tree/doc/multiwrite-architecture.md",
+    "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821",
+    "bytes": 5404
+  },
+  {
+    "file": "tree/doc/world.md",
+    "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179",
+    "bytes": 41722
+  },
+  {
+    "file": "tree/include/quod_proof_limits.hrl",
+    "sha256": "ac1a6fc7e8536e776759b27a5c2d58742e732f522bf96c40e3a30dfb60571009",
+    "bytes": 5492
+  },
+  {
+    "file": "tree/priv/ontologies/quod_root.pl",
+    "sha256": "9e025c546c82e46837285a28e6ba0cf4e183de9bc8e1758b5359a3ea23a633ad",
+    "bytes": 8292
+  },
+  {
+    "file": "tree/src/predicates/quod_ontology_predicates.erl",
+    "sha256": "1b9e37ae4bb42ef7bca34304dd2189ac1fd1af549a8b7645f7a8d7f610e94e51",
+    "bytes": 14307
+  },
+  {
+    "file": "tree/src/quod_effect_journal.erl",
+    "sha256": "79742f52eb745fb2b22905c25c806962d3b92a89504fb31c47c2aa2120accacb",
+    "bytes": 73473
+  },
+  {
+    "file": "tree/src/quod_metrics.erl",
+    "sha256": "dfa1d65002bbe4fc86de87f1fbeaa7d62a101ddf364c07aaeb194d5cf417c453",
+    "bytes": 110209
+  },
+  {
+    "file": "tree/src/quod_ontology.erl",
+    "sha256": "ff6e612d49207e5f313d06e1e751645db91aa256ab20372de1197800ee475bb1",
+    "bytes": 36649
+  },
+  {
+    "file": "tree/src/quod_prolog.erl",
+    "sha256": "4a960e2bc722d6412064b1b82531e77c7170676652b5945abd094f3a26633588",
+    "bytes": 339781
+  },
+  {
+    "file": "tree/src/quod_runtime.erl",
+    "sha256": "dab686922d3775eb64596126aaf41a04bb5e16fc2e5011b7486ae2c55969c007",
+    "bytes": 159771
+  },
+  {
+    "file": "tree/test/quod_effect_journal_tests.erl",
+    "sha256": "af8662f2a4b1e6454892e4fa5e971ed6e5d6d69222551a3a8ed6228879ab698b",
+    "bytes": 57053
+  },
+  {
+    "file": "tree/test/quod_lifecycle_single_path_tests.erl",
+    "sha256": "ea218f91876498d8584871469134fa93934cf39dbef9cf6da7c61232a25c74a8",
+    "bytes": 126847
+  },
+  {
+    "file": "tree/test/quod_root_resource_lifecycle_tests.erl",
+    "sha256": "5f1e7ad97000055594420e1e4b04900fe1d9cd15740b683dbeeba44d050bbbf2",
+    "bytes": 12168
+  }
+]

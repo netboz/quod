@@ -742,7 +742,7 @@ refresh_catchup_ns(Ns) ->
 
 refresh_effect_custody() ->
     case quod_effect_journal:stats() of
-        #{capacity := Capacity, active := Active, group_active := GroupActive,
+        #{limits := Limits, active := Active, group_active := GroupActive,
           reservations := Reservations, terminal := Terminal} ->
             _ = prometheus_gauge:set(quod_effect_custody_active, Active),
             _ = prometheus_gauge:set(
@@ -751,7 +751,7 @@ refresh_effect_custody() ->
                   quod_effect_custody_reservations, Reservations),
             _ = prometheus_gauge:set(quod_effect_custody_terminal, Terminal),
             {Value, Configured, Unlimited} =
-                effect_capacity_metrics(Capacity),
+                effect_capacity_metrics(Limits),
             _ = prometheus_gauge:set(quod_effect_custody_capacity, Value),
             _ = prometheus_gauge:set(
                   quod_effect_custody_capacity_configured, Configured),
@@ -773,8 +773,8 @@ refresh_effect_custody() ->
     end.
 
 effect_capacity_metrics(unconfigured) -> {0, 0, 0};
-effect_capacity_metrics(unlimited) -> {0, 1, 1};
-effect_capacity_metrics(Capacity)
+effect_capacity_metrics({unlimited, _}) -> {0, 1, 1};
+effect_capacity_metrics({Capacity, _})
   when is_integer(Capacity), Capacity >= 0 ->
     {Capacity, 1, 0}.
 

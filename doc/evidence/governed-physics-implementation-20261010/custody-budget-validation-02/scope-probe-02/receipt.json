@@ -1,0 +1,10 @@
+{
+  "started": "2026-10-11T13:03:25.637966+00:00",
+  "finished": "2026-10-11T13:03:31.806811+00:00",
+  "command": [
+    "rebar3",
+    "eunit",
+    "--module=quod_resource_lifecycle_tests"
+  ],
+  "child_exit": 1
+}

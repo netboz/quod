@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-11T12:29:52.207059+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "cwd": "/home/yan/src/quod/_build/quod27-custody-budget-plan-review-01",
+  "scope": "governed custody budget plan review; frozen local inputs; no live action"
+}

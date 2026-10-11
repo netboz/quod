@@ -47,7 +47,7 @@ root_direct_context(agent_instance_ref(Origin, _, _), [Origin], _).
 
 root_public_goal(system_ontology(_, _)).
 root_public_goal(ontology_creation_policy(_, _)).
-root_public_goal(effect_custody_capacity(_)).
+root_public_goal(effect_custody_limits(_, _)).
 root_public_goal(peer_admitted(_, _, _, _)).
 root_public_goal(acl_sovereign(_)).
 root_public_goal(system_source_access(_, _)).
@@ -74,24 +74,24 @@ system_source_target(Namespace, Anchor) :-
     system_ontology(Namespace, Anchor).
 
 %% Root is the one ontology every node starts before it can execute durable
-%% effects, so it owns the node-wide custody capacity without a bootstrap
-%% fallback. With no override the effective capacity is 64. An operator may
-%% call the setter or atomically replace the single override fact; there is no
-%% compiled maximum, and `unlimited` is explicit.
-effect_custody_capacity(Capacity) :-
-    effect_custody_capacity_override(Capacity).
-effect_custody_capacity(64) :-
-    \+ effect_custody_capacity_override(_).
+%% effects, so it owns both the active custody count and prepared bytes per
+%% effect. An operator may call the setter or atomically replace the single
+%% override fact. Allocation has no compiled maximum; `unlimited` is explicit.
+effect_custody_limits(Count, PreparedBytes) :-
+    effect_custody_limits_override(Count, PreparedBytes).
+effect_custody_limits(64, unlimited) :-
+    \+ effect_custody_limits_override(_, _).
 
-valid_effect_custody_capacity(unlimited).
-valid_effect_custody_capacity(Capacity) :-
-    integer(Capacity),
-    Capacity >= 0.
+valid_effect_custody_limit(unlimited).
+valid_effect_custody_limit(Limit) :-
+    integer(Limit),
+    Limit >= 0.
 
-set_effect_custody_capacity(Capacity) :-
-    valid_effect_custody_capacity(Capacity),
-    abolish(effect_custody_capacity_override/1),
-    assertz(effect_custody_capacity_override(Capacity)).
+set_effect_custody_limits(Count, PreparedBytes) :-
+    valid_effect_custody_limit(Count),
+    valid_effect_custody_limit(PreparedBytes),
+    abolish(effect_custody_limits_override/2),
+    assertz(effect_custody_limits_override(Count, PreparedBytes)).
 
 %% Root governs the creation of new ontology identities. The node which authors
 %% the accepted root transaction remains the direct-effect executor and

@@ -61,6 +61,20 @@ controlling committed transition authorizes its release. Related domain
 changes and receiver consequences belong in one atomic transaction when
 they are one transition, as in the [internal FIPA Request](runtime-and-agents.md).
 
+Root's committed `effect_custody_limits(Count, PreparedBytes)` governs new
+private-effect admission. `set_effect_custody_limits/2` replaces both limits
+atomically under root's existing privileged ACL. Each limit is a nonnegative
+integer or `unlimited`; the bootstrap policy selects `64, unlimited`. The
+existing resource selector installs that policy into the one node-wide journal.
+Missing, ambiguous, invalid or interrupted root selection withdraws new
+admission while preserving staged and bound obligations. An interrupted
+selection retains a conservative root dependency for the next committed change.
+Count pressure remains `busy`; byte pressure reports
+`effect_custody_limit(prepared_bytes, Actual, Limit)` after digest validation.
+Neither policy tightening nor recovery re-admits already accepted obligations.
+Unchanged policy checks do not write the journal. Canonical transaction and
+genesis encoding bounds remain separate from this resource policy.
+
 ## Exact terminal outcome reads
 
 `committed_operation_outcome(Bytes, Signature, Status)` reads the current

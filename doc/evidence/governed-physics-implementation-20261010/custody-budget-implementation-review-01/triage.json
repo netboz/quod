@@ -1,0 +1,5 @@
+{
+  "result": "failed before model invocation",
+  "cause": "Claude API ENOTFOUND in sandbox; models array empty",
+  "next_scope": "Review 02, identical 45 frozen files and read-only Claude tools, with authorized network access. No review verdict or approval claimed."
+}

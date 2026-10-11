@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "step": "eunit",
+  "child_exit": 1,
+  "test_summary": "45 tests, 0 failures, 6 cancelled",
+  "cause": "Sandbox disallowed Ranch TLS listen: {listen_error,quod_agent_vault_listener,eperm}, then vault_provider_unavailable. No production or fixture correction is justified by this environmental refusal.",
+  "next_scope": "Clean sequential gates-02 outside the socket restriction, exact unchanged production inputs; prior scope remains stopped."
+}

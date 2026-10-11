@@ -1,0 +1,327 @@
+{
+  "passed": true,
+  "job": "quod-finality-candidate-v6-20260926",
+  "job_version": 61,
+  "job_modify_index": 845205,
+  "deployment": {
+    "id": "3bd2c3f9-642e-f770-5a20-61cdc138679e",
+    "status": "successful",
+    "description": "Deployment completed successfully"
+  },
+  "image": "192.168.1.11:5000/quod:0.7.258@sha256:b5190f009b08ebeca5923258c2cd99fb754eb69bb81c28ff6c1b19b3c4fc892c",
+  "task_images": [
+    "192.168.1.11:5000/quod:0.7.258@sha256:b5190f009b08ebeca5923258c2cd99fb754eb69bb81c28ff6c1b19b3c4fc892c"
+  ],
+  "volume_family": "quod-finality-candidate-v6-20260926-refound-20261011-v5",
+  "main_job": {
+    "version": 246,
+    "job_modify_index": 826727
+  },
+  "allocations": [
+    {
+      "allocation": "f3e961cb-1860-ff67-f99f-998872e1c7ba",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "node": "conrad",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "1C2B8FA399D9C33653570D9761A7490FF01D34AA95A358DBD86FBD88953AE57E",
+          "namespace": "node:b235e7a0de35cff62465ad7a550478c1a06dfca2dcb3dec9f7009686124a6f25",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 27
+          },
+          "hosting_revision": 5,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "94741eed-4d5c-d177-ffb7-57ca7f1c0408",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "node": "corin",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "BF122A7FE50EF839B49A2BC2382AA2AFA2FF422853F8C6766893D16901EA7007",
+          "namespace": "node:a4789762c56f96813493bd72de803107bf6dde2028426d7d9c8167ffa70e553f",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "20c45f4f-1184-094d-a8ee-723f6b79715d",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "node": "caton",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "ADE50CA2165ADF857DB0328182C1098544D6DFF579D461E1D082678D82ACDF43",
+          "namespace": "node:3a5408d7c2e9b4ab4b261d95bb4ccbe1d6d662e85e683f27d2f0fa9b8921091d",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "196b001c-b2f6-b59e-7589-ed0c5d0ce68f",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "node": "conrad",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "42262ED855562FF9FB4A3B37B6A29AC265146B095BECBFAEE9FF91549D686A7D",
+          "namespace": "node:c08e6d3a819248471134e226917c2876aa595d3278906596156e39d88bffadb3",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 6,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "4cc26274-3a3a-20f8-62ac-ba19590a3816",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "node": "corin",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "6ADBB76CCEA39B193C161786712DCF1C0B9DE05459FFD17C131C855FCE1C1226",
+          "namespace": "node:5e469f8b8da541713525f6f79f03ec3003cab91cc87f18b25b6371d4d1960aa5",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "bec88a25-db75-e627-035d-9e76bc514005",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "node": "caton",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "C684B0A8C73DBC13FC65FFEC4B9CE1122D2433D1A1948BBBDC4B034A37F066F7",
+          "namespace": "node:59239a5ccbd12d91a4a6c269688c45c2da39788e690b2e38b512bc424244963e",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 17,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "6f88f0ad-edf4-6b07-eeb0-b9a3566d5752",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "node": "conrad",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "9CE53765EBF3DE7898B829E740E3B87CDC890DA51432CDA0F2927273AC702C32",
+          "namespace": "node:dbd9b7c1088e5f5db16d48bd81fca02c21cc9d1823f059296e757d76664e07ac",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 5,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "90a77666-ff2d-e79e-91b1-3ea6592bbb2c",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "node": "corin",
+      "restarts": 0,
+      "exit": 0,
+      "probe": {
+        "version": "0.7.258",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "5D9573D5CDFFFAF380347A43142AFF1B9FAD8F71C39356823EC5D4D8CD97A68F",
+          "namespace": "node:380674dd8ceec9e315661b4802e8354596cd404343d0a516985b7f3323ceee0f",
+          "self_hosting": "committed"
+        },
+        "root_anchor": "AA1F4ABBE0C7597C1BE15A1656E447EB7685B798BFBE7B845CBE889C620CB4E5",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 62,
+        "root_applied": 62,
+        "catalogue_height": 62,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    }
+  ],
+  "seconds": 2.5577033139998093
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-i=false",
+    "-t=false",
+    "-address=http://192.168.1.10:4646",
+    "-task",
+    "quod",
+    "f3e961cb-1860-ff67-f99f-998872e1c7ba",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin Ns = <<\"acceptance:physics:258:gallery\">>,{ok,Host}=quod_node_actor:reference(),{ok,Key}=application:get_env(quod,node_pubkey),Editor=binary_to_term(base64:decode(<<\"g2gEdxJhZ2VudF9pbnN0YW5jZV9yZWZtAAAARW5vZGU6YTQ3ODk3NjJjNTZmOTY4MTM0OTNiZDcyZGU4MDMxMDdiZjZkZGUyMDI4NDI2ZDdkOWM4MTY3ZmZhNzBlNTUzZm0AAAAgvxIqf+UO+Dm0mivCOCqir6L/QihT+MZ2aJPRaQHqcAd3Am1l\">>),[safe]),Terms=[{can_invoke,{'_'},Host,{'_'},Ns},{can_invoke,{'_'},Editor,{'_'},Ns},{can_prepare_agent_key,Host,physics_authority,none,0,Host},{can_assign_agent_host,Host,physics_authority,none,0,Host,{'_'}}],Options=quod_remote_collider_evidence:found_options([\"agent_instance.pl\",\"space.pl\",\"quod_physics.pl\"],Terms),{ok,[_],_}=quod_prolog:prove_ro(<<\"quod:root\">>,{can_create_ontology,{node,Key},Ns,Options}),{ok,Structural}=quod_ontology:validate_action({create_ontology,Ns,Options}),{ok,Prepared}=quod_ontology:prepare_action(Structural,{node,Key}),Anchor=quod_ontology:prepared_anchor(Prepared),Action={create_ontology,Ns,Options,Anchor},Encode=fun({ok,B}) when is_binary(B)->#{ok_bytes=>byte_size(B)};(E)->#{error=>iolist_to_binary(io_lib:format(\"~0p\",[E]))} end,Config=element(5,Prepared),#{state=>iolist_to_binary(io_lib:format(\"~0p\",[quod_ontology:local_state(Ns)])),root_applied=>quod_prolog:applied(<<\"quod:root\">>),action_encoding=>Encode(quod_durable_term:encode_goal(Action)),prepared_encoding=>Encode(quod_ontology:prepared_bytes(Prepared)),raw_prepared_bytes=>erlang:external_size(Prepared),config_field_sizes=>maps:from_list([{K,erlang:external_size(V)}||{K,V}<-maps:to_list(Config)]),effect_result=>iolist_to_binary(io_lib:format(\"~0p\",[quod_ontology:prepared_effect(Action,Prepared,Key,{node,Key})]))} end))))."
+  ],
+  "scope": "Read-only authorized structural preparation diagnosis; no stage, journal, commit, or execution of prepared effect"
+}

@@ -24,7 +24,7 @@ permitted_recovery_helper_cannot_borrow_node_privileges_test_() ->
           try
               Intermediary = start_policy_ontology(Relay, Directory, Identity,
                 [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}},
-                 {':-', relay_privilege, {'::', Target, {set_effect_custody_capacity, unlimited}}}]),
+                 {':-', relay_privilege, {'::', Target, {set_effect_custody_limits, unlimited, unlimited}}}]),
               try
                   commit(Source, {assertz, {':-', recovery_operation, {recovery_helper, unit}}}),
                   replace_recovery_helper(Source, {record_ping, recovery_allowed}),
@@ -34,15 +34,15 @@ permitted_recovery_helper_cannot_borrow_node_privileges_test_() ->
                   %% The third target explicitly grants this exact principal
                   %% direct access, so a later refusal is caused by context.
                   ?assertMatch({ok, _, {normalized, {committed, _, _}}},
-                               signed_node({'::', Target, {set_effect_custody_capacity, 17}})),
+                               signed_node({'::', Target, {set_effect_custody_limits, 17, unlimited}})),
                   lists:foreach(fun(Implementation) ->
                       replace_recovery_helper(Source, Implementation),
                       ?assertMatch({ok, _, {normalized, {failed, _}}}, signed_node(Request)),
                       ?assertMatch({fail, _}, quod_prolog:prove_ro(NodeNs, borrowed_node_authority)),
                       ?assertMatch({ok, [#{'Capacity' := 17}], _},
-                                   quod_prolog:prove_ro(Target, {effect_custody_capacity, {'Capacity'}}))
+                                   quod_prolog:prove_ro(Target, {effect_custody_limits, {'Capacity'}, unlimited}))
                   end, [{'::', NodeNs, {assertz, borrowed_node_authority}},
-                        {'::', Target, {set_effect_custody_capacity, unlimited}},
+                        {'::', Target, {set_effect_custody_limits, unlimited, unlimited}},
                         {'::', Relay, relay_privilege}])
               after stop_policy_ontology(Intermediary) end
           after stop_policy_ontology(Privileged) end
@@ -107,7 +107,7 @@ root_administrator_and_public_creation_require_direct_context_test() ->
     with_policy("quod_root.pl", [{root_administrator_agent, Ref},
                                   {ontology_creator_agent, Ref}],
       fun(Est) ->
-          Goals = [{set_effect_custody_capacity, unlimited},
+          Goals = [{set_effect_custody_limits, unlimited, unlimited},
                    {create_ontology, <<"private:new">>, [], {'Anchor'}}],
           lists:foreach(fun(Goal) ->
               admission(allowed, Root, Node, Ref, [Node], Goal, Est),
@@ -119,7 +119,7 @@ root_administrator_and_public_creation_require_direct_context_test() ->
           %% merely because the policy-visible namespace path is unchanged.
           OtherNode = identity(element(1, Node), 13),
           admission(denied, Root, OtherNode, reference(OtherNode, physical_node),
-                    [OtherNode], {set_effect_custody_capacity, unlimited}, Est),
+                    [OtherNode], {set_effect_custody_limits, unlimited, unlimited}, Est),
           %% Public catalogue reads remain available through foreign code.
           admission(allowed, Root, Node, Ref, [Helper, Node],
                     {system_ontology, {'Name'}, {'Anchor'}}, Est)
@@ -140,7 +140,7 @@ root_creator_grant_cannot_bypass_context_through_public_entry_test() ->
           admission(allowed, Root, Node, Ref, [Node], Goal, Est),
           admission(denied, Root, Node, Ref, [Helper, Node], Goal, Est),
           admission(denied, Root, Node, Ref, [Node],
-                    {set_effect_custody_capacity, unlimited}, Est)
+                    {set_effect_custody_limits, unlimited, unlimited}, Est)
       end).
 
 root_keeps_delegated_creation_entry_for_other_callers_test() ->
@@ -154,7 +154,7 @@ root_keeps_delegated_creation_entry_for_other_callers_test() ->
         admission(allowed, Root, User, Ref, [Signup, User],
                   {create_ontology, <<"human:new/lobby">>, [], {'Anchor'}}, Est),
         admission(denied, Root, User, Ref, [User],
-                  {set_effect_custody_capacity, unlimited}, Est)
+                  {set_effect_custody_limits, unlimited, unlimited}, Est)
     end).
 
 physical_node_root_privileges_stay_in_the_root_context_test() ->
@@ -169,7 +169,7 @@ physical_node_root_privileges_stay_in_the_root_context_test() ->
               admission(allowed, Root, Root, Principal, [Root], Goal, Est),
               admission(denied, Root, Foreign, Principal, [Foreign], Goal, Est),
               admission(denied, Root, Root, Principal, [Foreign, Root], Goal, Est)
-          end, [{set_effect_custody_capacity, unlimited},
+          end, [{set_effect_custody_limits, unlimited, unlimited},
                 {create_ontology, <<"private:physical">>, [], {'Anchor'}}])
       end).
 

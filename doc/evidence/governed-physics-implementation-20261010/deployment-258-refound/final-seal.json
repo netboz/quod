@@ -1,0 +1,60 @@
+{
+  "time": "2026-10-11T12:30:51.241244+00:00",
+  "candidate": {
+    "version": 61,
+    "modify_index": 845205
+  },
+  "main": {
+    "version": 246,
+    "modify_index": 826727
+  },
+  "old_volume_family_absent": "quod-finality-candidate-v6-20260926-refound-20261011-v4",
+  "checks": [
+    {
+      "cleanup": [
+        {
+          "module": "quod_remote_collider_evidence",
+          "deleted": true,
+          "purged": true,
+          "was_loaded": "{file,\"4063804000c066910f4b2e7306e67ff8276107d403955e902037687dc05d4836\"}",
+          "old_purged": true,
+          "loaded_after": "false"
+        },
+        {
+          "module": "quod_fresh_systems",
+          "deleted": false,
+          "purged": true,
+          "was_loaded": "false",
+          "old_purged": true,
+          "loaded_after": "false"
+        }
+      ],
+      "root_applied": 62,
+      "world_state": "{ok,not_hosted}",
+      "source_state": "{ok,not_hosted}"
+    },
+    {
+      "cleanup": [
+        {
+          "module": "quod_remote_collider_evidence",
+          "deleted": true,
+          "purged": true,
+          "was_loaded": "{file,\"4063804000c066910f4b2e7306e67ff8276107d403955e902037687dc05d4836\"}",
+          "old_purged": true,
+          "loaded_after": "false"
+        },
+        {
+          "module": "quod_fresh_systems",
+          "deleted": false,
+          "purged": true,
+          "was_loaded": "false",
+          "old_purged": true,
+          "loaded_after": "false"
+        }
+      ],
+      "root_applied": 62,
+      "world_state": "{ok,not_hosted}",
+      "source_state": "{ok,not_hosted}"
+    }
+  ]
+}

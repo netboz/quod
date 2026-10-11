@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-11T20:32:45.747845+00:00",
+  "reason": "Invalid sustained-movement test: mouse capture lost2025.4ms into the run; focus then lost2514.4ms and returned2580.5ms. The ordinary client correctly paused movement. Expiry refresh occurred28643.7ms after start while capture was already absent.",
+  "unknown": "No attribution of capture loss to the user, browser or harness is established.",
+  "diagnostic_limit": "Only s and d key events were recorded by the narrow letter filter; this is not proof the other commanded keys were delivered unchanged.",
+  "passed_scope": "Native roof contact already recorded separately; this run renders2178frames over36282.9ms without the old repeated eight-floor-contact stall.",
+  "not_accepted": "Longer movement or held-input expiry acceptance",
+  "actions_returned": true,
+  "release_completed": true,
+  "source_sha256": "d151e614e37d68c14fc0260b37b640e065bfcb235fdc29312ff1a6c452f29f81",
+  "next": "Separately labelled movement run using supported arrow keys, recording all movement keys and stopping further cycles on capture/focus loss."
+}

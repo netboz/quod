@@ -1,0 +1,27 @@
+[
+  {
+    "id": "1705040.131",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.132",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.133",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.134",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.135",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  }
+]

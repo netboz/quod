@@ -1,0 +1,1 @@
+{"action": {"actions_returned": true, "completed_cycles": 2, "observation_stopped": {"ended": true, "reason": "capture_or_focus_lost"}, "elapsed_seconds": 3.86454620200675, "release_completed": true}, "observations": 229, "held_at_end": ["ArrowLeft"], "position": [4.511576175689697, 1.451829981803894, 1.518602967262268], "frames": 174, "control_responses": 102}

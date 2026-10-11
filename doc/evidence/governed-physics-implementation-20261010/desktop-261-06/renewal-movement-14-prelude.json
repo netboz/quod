@@ -1,0 +1,113 @@
+{
+  "events": [
+    {
+      "timestamp": 612281.200779,
+      "request_id": "1705040.874",
+      "data": {
+        "type": "simulation_frame",
+        "view": "z5d4FtByzCFZOaj3Y9jMPI8ggAKM0JEUJEBE0cLp1zE",
+        "frame": {
+          "tick": "5348",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "3",
+          "schema": 1,
+          "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.799164772033691,
+                0.7515125274658203,
+                1.9848848581314087
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "SQw1J5j3YuIFec4a15mIUWzZdvx0aK7rDMAPpfVqwa4",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "clipped(pose(vector(4.799164772033691,0.7515125274658203,1.9848848581314087),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(3.8699676224496216e-5,1.0,1.2093649274902418e-5))],8)",
+            "sequence": "1594"
+          },
+          "units": "metres_seconds"
+        }
+      }
+    },
+    {
+      "timestamp": 612291.537141,
+      "request_id": "1705040.874",
+      "data": {
+        "type": "simulation_frame",
+        "view": "z5d4FtByzCFZOaj3Y9jMPI8ggAKM0JEUJEBE0cLp1zE",
+        "frame": {
+          "tick": "5349",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "3",
+          "schema": 1,
+          "incarnation": "K9XkgDfLyTsYHIvGUFufRQ96nkYXZgkqpBvtwRxcdr8",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.799164772033691,
+                0.7515125274658203,
+                1.9848848581314087
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "SQw1J5j3YuIFec4a15mIUWzZdvx0aK7rDMAPpfVqwa4",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "clipped(pose(vector(4.799164772033691,0.7515125274658203,1.9848848581314087),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(3.8699676224496216e-5,1.0,1.2093649274902418e-5))],8)",
+            "sequence": "1595"
+          },
+          "units": "metres_seconds"
+        }
+      }
+    }
+  ],
+  "requests": [
+    {
+      "id": "1705040.912",
+      "timestamp": 612291.507969,
+      "wallTime": 1791750893.24603,
+      "method": "POST",
+      "url": "https://192.168.1.10:30519/api/goals/control"
+    }
+  ],
+  "responses": [
+    {
+      "id": "1705040.880",
+      "timestamp": 612281.19136,
+      "status": 200
+    },
+    {
+      "id": "1705040.912",
+      "timestamp": 612291.519214,
+      "status": 200
+    }
+  ]
+}

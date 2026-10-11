@@ -88,6 +88,9 @@ eight healthy allocations and the same personal world/history retained.
 [Signed desktop movement](desktop-261-02/README.md) records floor and console
 contact and passage through a tall opening without the old repeated floor stall.
 The [foreground strafe](desktop-261-05/README.md) also advances with accepted
-controls and active floor contact. Low-roof collision and longer visible movement
-checks remain open. Separate hardware XR and durable closed-door consequences
-are not claimed here.
+controls and active floor contact. The
+[resumed desktop check](desktop-261-06/README.md) now also records real roof
+contact stopping the body despite advancing accepted controls. Longer visible
+movement across permission renewal remains unverified after capture-loss and
+authentication failures. Separate hardware XR and durable closed-door
+consequences are not claimed here.

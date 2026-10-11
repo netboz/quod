@@ -1,0 +1,42 @@
+[
+  {
+    "id": "1705040.122",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.123",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.124",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.125",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.126",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.127",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1705040.128",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1705040.129",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  }
+]

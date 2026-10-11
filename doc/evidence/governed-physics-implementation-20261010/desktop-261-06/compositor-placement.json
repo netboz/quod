@@ -1,0 +1,19 @@
+{
+  "browser": {
+    "pid": 1704939,
+    "address": "0x55ea4a2354a0",
+    "class": "chromium-browser",
+    "at": [
+      48,
+      22
+    ],
+    "size": [
+      913,
+      1036
+    ],
+    "workspace": {
+      "id": 1,
+      "name": "1"
+    }
+  }
+}

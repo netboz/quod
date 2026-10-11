@@ -1,0 +1,29 @@
+{
+  "events": [
+    {
+      "timestamp": 612036.723101,
+      "request_id": "1705040.804",
+      "data": {
+        "reason": "expired",
+        "type": "refresh"
+      }
+    }
+  ],
+  "requests": [
+    {
+      "id": "1705040.806",
+      "timestamp": 612036.723569,
+      "wallTime": 1791750638.461645,
+      "method": "GET",
+      "url": "https://192.168.1.10:30519/api/ontologies/system"
+    },
+    {
+      "id": "1705040.807",
+      "timestamp": 612036.723934,
+      "wallTime": 1791750638.461961,
+      "method": "POST",
+      "url": "https://192.168.1.10:30519/api/goals/read"
+    }
+  ],
+  "responses": []
+}

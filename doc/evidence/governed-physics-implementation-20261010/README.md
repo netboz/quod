@@ -33,9 +33,14 @@ contact and successful travel through a tall opening, without the old repeated
 eight-floor-contact stall. A [visible strafe](desktop-261-05/README.md) records
 30 animation callbacks over 513 ms with accepted controls. Browser hangs and
 invalid off-screen frame-rate measurements are retained separately; this short
-result does not establish sustained smoothness. Low-roof contact and longer
-visible movement checks remain open. Desktop input is deferred while Yan plays
-another game; background evidence work continues.
+result does not establish sustained smoothness. The
+[resumed desktop campaign](desktop-261-06/README.md) now records real low-roof
+contact clipping the body despite advancing accepted controls. Longer movement
+attempts lost mouse capture before the permission renewal; one also encountered
+an expired sign-in and reconnected normally with the same identity and position.
+Those failures are retained. Sustained visible movement across permission
+renewal remains unverified; no automatic input continues while capture loss is
+being clarified.
 The [first release260 gate](release-260-gates-01/README.md) stopped at two EUnit
 failures. Their diagnostics and the separately labelled correction campaign
 are retained; passing isolated checks do not explain the unattributed write.

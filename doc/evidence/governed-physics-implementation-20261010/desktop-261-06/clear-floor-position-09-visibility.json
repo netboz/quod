@@ -1,0 +1,20 @@
+{
+  "cadence": {
+    "focused": true,
+    "hidden": false,
+    "reason": "complete",
+    "timestamps": [
+      291757.7,
+      291774.3,
+      291791,
+      291807.1,
+      291823.8,
+      291840.5,
+      291857.2,
+      291873.9,
+      291890.6
+    ]
+  },
+  "active_pid": 1704939,
+  "expected_pid": 1704939
+}

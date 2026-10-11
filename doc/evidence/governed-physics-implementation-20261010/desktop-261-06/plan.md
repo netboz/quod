@@ -1,0 +1,7 @@
+# Release 261 resumed signed desktop acceptance
+
+Yan has returned after the gaming pause. Reuse the exact existing private profile and signed normal view; no refound, geometry or policy changes. Current candidate v67/index846780 is pinned to0.7.261, eight healthy allocations with zero restarts; separate main and ingress unchanged. The preceding driver is no longer available, and no browser process owns the profile. Let normal Chrome startup recover its stale lock; never copy, export or erase the profile.
+
+Verify the recovered signed account, exact current body and camera transform before moving. Follow short ordinary input steps on the annulus toward the low roof, checking actual pose and contact after each step, then reverse away. Recheck visible compositor ownership immediately before any step. Longer forward/back/strafe checks must stay on a safe segment and capture actual key state, animation cadence, signed responses and expiry/projection timing. Do not infer current input from buffered old events, or infer visible rendering from DOM focus alone.
+
+Stop failed or uncertain input attempts under their original label. Keep all failures, source scripts, outcomes and captured public frames. No controlled-body fallback, teleport grant, altered deadline, raw pose injection or new domain action is authorized by this diagnostic. User-level movement control remains the ordinary signed production path.

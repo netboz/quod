@@ -1,0 +1,31 @@
+{
+  "frames": 103,
+  "position_first": [
+    4.357010841369629,
+    0.7518430948257446,
+    5.526162624359131
+  ],
+  "animation": {
+    "active": false,
+    "count": 109,
+    "elapsed": 1820.8999999761581,
+    "start": 73476
+  },
+  "position_last": [
+    4.356121063232422,
+    0.7518655061721802,
+    2.2274763584136963
+  ],
+  "last_feedback": {
+    "pending": false,
+    "result": "clipped(pose(vector(4.356121063232422,0.7518655061721802,2.2274763584136963),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(1.2759424862451851e-4,1.0,1.2759424862451851e-4))],8)",
+    "sequence": "963"
+  },
+  "contact_bodies": [
+    "1"
+  ],
+  "signed_control_requests": 10,
+  "accepted_control_responses": 10,
+  "refused_control_responses": 0,
+  "status": "Mouse to look \u00b7 ZQSD, WASD or arrows to move \u00b7 Shift for faster movement \u00b7 Esc to release\nquod \u2234\nkey 7n_lHNMzUqS_\nhuman:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE \u00b7 me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer \u2197\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nAdvanced"
+}

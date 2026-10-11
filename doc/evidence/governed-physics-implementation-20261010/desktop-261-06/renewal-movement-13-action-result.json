@@ -1,0 +1,10 @@
+{
+  "actions_returned": true,
+  "completed_cycles": 3,
+  "observation_stopped": {
+    "ended": true,
+    "reason": "capture_or_focus_lost"
+  },
+  "elapsed_seconds": 5.734387650038116,
+  "release_completed": true
+}

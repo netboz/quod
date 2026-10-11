@@ -1,0 +1,8 @@
+{
+  "accepted_controls": 2,
+  "body_travel": false,
+  "animation_frames": 14,
+  "elapsed_ms": 2019.8,
+  "following_browser_status": "invalid session id",
+  "next_step": "Reconnect the existing profile in place; preserve failed evidence"
+}

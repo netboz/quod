@@ -1,0 +1,101 @@
+[
+  {
+    "awaiting_job_version": 0
+  },
+  {
+    "CreateIndex": 846327,
+    "CreateTime": 1791737330874120503,
+    "EvalPriority": 50,
+    "ID": "b98b466d-28ec-81a1-d2a1-0cf08a1c19a6",
+    "IsMultiregion": false,
+    "JobCreateIndex": 846326,
+    "JobID": "quod27-client-30519",
+    "JobModifyIndex": 846326,
+    "JobSpecModifyIndex": 846326,
+    "JobVersion": 0,
+    "ModifyIndex": 846327,
+    "ModifyTime": 1791737332736459553,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "ingress": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 1,
+        "HealthyAllocs": 0,
+        "PlacedAllocs": 1,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 600000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-11T18:58:52.736459553+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 846327,
+    "CreateTime": 1791737330874120503,
+    "EvalPriority": 50,
+    "ID": "b98b466d-28ec-81a1-d2a1-0cf08a1c19a6",
+    "IsMultiregion": false,
+    "JobCreateIndex": 846326,
+    "JobID": "quod27-client-30519",
+    "JobModifyIndex": 846326,
+    "JobSpecModifyIndex": 846326,
+    "JobVersion": 0,
+    "ModifyIndex": 846331,
+    "ModifyTime": 1791737353688961261,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "ingress": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 1,
+        "HealthyAllocs": 1,
+        "PlacedAllocs": 1,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 600000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-11T18:59:13.410475866+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 846327,
+    "CreateTime": 1791737330874120503,
+    "EvalPriority": 50,
+    "ID": "b98b466d-28ec-81a1-d2a1-0cf08a1c19a6",
+    "IsMultiregion": false,
+    "JobCreateIndex": 846326,
+    "JobID": "quod27-client-30519",
+    "JobModifyIndex": 846326,
+    "JobSpecModifyIndex": 846326,
+    "JobVersion": 0,
+    "ModifyIndex": 846333,
+    "ModifyTime": 0,
+    "Namespace": "default",
+    "Status": "successful",
+    "StatusDescription": "Deployment completed successfully",
+    "TaskGroups": {
+      "ingress": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 1,
+        "HealthyAllocs": 1,
+        "PlacedAllocs": 1,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 600000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-11T18:59:13.410475866+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  }
+]

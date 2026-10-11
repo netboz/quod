@@ -1,0 +1,8 @@
+{
+  "pid": 1498237,
+  "exe": "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome",
+  "owned_profile_verified": true,
+  "reason": "Browser main and DevTools are unresponsive; no new signed write was submitted in this browser campaign.",
+  "at": "2026-10-11T17:41:37.180138+00:00",
+  "signal": "SIGTERM"
+}

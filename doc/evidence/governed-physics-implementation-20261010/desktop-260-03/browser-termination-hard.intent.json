@@ -1,0 +1,6 @@
+{
+  "pid": 1498237,
+  "signal": "SIGKILL",
+  "same_pidfd": true,
+  "graceful_exit_within_8s": false
+}

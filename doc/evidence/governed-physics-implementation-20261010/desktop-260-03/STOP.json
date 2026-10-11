@@ -1,0 +1,4 @@
+{
+  "reason": "Browser main and DevTools HTTP stopped responding. Escape action timed out at original deadline. No new signed writes in campaign03. Main thread wait state was anon_pipe_write; exact cause not established.",
+  "next": "Fresh campaign04 uses same original private profile and origin. Console checks precede pointer capture."
+}

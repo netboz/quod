@@ -1,7 +1,7 @@
 -module(quod_e2e_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
--import(quod_ct, [rp/2]).
+-import(quod_ct, [rp/2, stop_ns/1]).
 
 %%%===================================================================
 %%% single-node end-to-end: prove(write) -> commit -> apply -> read,
@@ -30,7 +30,8 @@ cleanup({Dir, Ns, _Cfg}) ->
 
 e2e_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
-     [fun t_write_read/1,
+     [fun t_non_parent_teardown/1,
+      fun t_write_read/1,
       fun t_concurrent_writes_batch/1,
       fun t_direct_membership_revalidated/1,
       fun t_restart_reload/1,
@@ -47,12 +48,6 @@ start_ns(Ns, Cfg) ->
     unlink(Pid),
     Pid.
 
-stop_ns(Pid) ->
-    Ref = monitor(process, Pid),
-    exit(Pid, shutdown),
-    receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
-
-
 wait_new_pid(Key, OldPid) -> wait_new_pid(Key, OldPid, 300).
 wait_new_pid(_K, _Old, 0) -> error(timeout);
 wait_new_pid(Key, OldPid, N) ->
@@ -64,6 +59,32 @@ wait_new_pid(Key, OldPid, N) ->
 %%%===================================================================
 %%% tests
 %%%===================================================================
+
+%% EUnit cleanup runs outside the process that started the supervisor.
+t_non_parent_teardown({_Dir, Ns, Cfg}) ->
+    fun() ->
+        Parent = self(), Tag = make_ref(),
+        {Owner, OwnerMonitor} = spawn_monitor(fun() ->
+            Pid = start_ns(Ns, Cfg), Parent ! {Tag, Pid},
+            receive {Tag, done} -> ok end
+        end),
+        Pid = receive
+            {Tag, Started} -> Started;
+            {'DOWN', OwnerMonitor, process, Owner, Why} -> error({start_failed, Why})
+        after 5000 -> error(start_timeout) end,
+        try
+            stop_ns(Pid),
+            ?assertNot(is_process_alive(Pid))
+        after
+            case is_process_alive(Pid) of
+                true -> catch gen_server:stop(Pid, shutdown, 5000);
+                false -> ok
+            end,
+            Owner ! {Tag, done},
+            receive {'DOWN', OwnerMonitor, process, Owner, normal} -> ok
+            after 5000 -> error(owner_not_stopped) end
+        end
+    end.
 
 t_write_read({Dir, Ns, Cfg}) ->
     fun() ->

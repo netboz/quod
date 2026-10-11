@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-11T18:12:28.876560+00:00",
+  "reason": "Fable implementation review identified unbounded supervisor child enumeration before teardown deadline; stop before trusting this frozen scope; superseding correction required",
+  "phase": "eunit",
+  "pid": 1549419,
+  "pgid": 1549419,
+  "signal": "SIGINT",
+  "prior_completed_checks_retained": true
+}

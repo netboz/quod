@@ -1,0 +1,1402 @@
+{
+  "Affinities": null,
+  "AllAtOnce": false,
+  "Constraints": null,
+  "ConsulNamespace": "",
+  "CreateIndex": 780429,
+  "Datacenters": [
+    "qengho"
+  ],
+  "DispatchIdempotencyToken": "",
+  "Dispatched": false,
+  "ID": "quod-finality-candidate-v6-20260926",
+  "JobModifyIndex": 845822,
+  "Meta": null,
+  "ModifyIndex": 845864,
+  "Multiregion": null,
+  "Name": "quod-finality-candidate-v6-20260926",
+  "Namespace": "default",
+  "NodePool": "default",
+  "NomadTokenID": "",
+  "ParameterizedJob": null,
+  "ParentID": "",
+  "Payload": null,
+  "Periodic": null,
+  "Priority": 50,
+  "Region": "global",
+  "Spreads": null,
+  "Stable": true,
+  "Status": "running",
+  "StatusDescription": "",
+  "Stop": false,
+  "SubmitTime": 1791727077717979593,
+  "TaskGroups": [
+    {
+      "Affinities": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "compute"
+        },
+        {
+          "LTarget": "${attr.os.signals}",
+          "Operand": "set_contains",
+          "RTarget": "SIGTERM"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.bridge}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.firewall}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.host-local}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.loopback}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.portmap}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        }
+      ],
+      "Consul": null,
+      "Count": 8,
+      "Disconnect": null,
+      "EphemeralDisk": {
+        "Migrate": false,
+        "SizeMB": 300,
+        "Sticky": false
+      },
+      "MaxClientDisconnect": null,
+      "Meta": null,
+      "Migrate": {
+        "HealthCheck": "checks",
+        "HealthyDeadline": 300000000000,
+        "MaxParallel": 1,
+        "MinHealthyTime": 10000000000
+      },
+      "Name": "quod-node",
+      "Networks": [
+        {
+          "DynamicPorts": [
+            {
+              "HostNetwork": "default",
+              "Label": "p2p",
+              "To": 14567
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "metrics",
+              "To": 14568
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "explorer",
+              "To": 14569
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "client",
+              "To": 14570
+            }
+          ],
+          "Mode": "bridge"
+        }
+      ],
+      "PreventRescheduleOnLost": false,
+      "ReschedulePolicy": {
+        "Attempts": 0,
+        "Delay": 30000000000,
+        "DelayFunction": "exponential",
+        "Interval": 0,
+        "MaxDelay": 3600000000000,
+        "Unlimited": true
+      },
+      "RestartPolicy": {
+        "Attempts": 3,
+        "Delay": 15000000000,
+        "Interval": 300000000000,
+        "Mode": "delay",
+        "RenderTemplates": false
+      },
+      "Scaling": null,
+      "Services": null,
+      "ShutdownDelay": null,
+      "Spreads": [
+        {
+          "Attribute": "${node.unique.name}",
+          "SpreadTarget": null,
+          "Weight": 50
+        }
+      ],
+      "StopAfterClientDisconnect": null,
+      "Tasks": [
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "entrypoint": [
+              "/bin/sh",
+              "-c"
+            ],
+            "force_pull": true,
+            "image": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+            "args": [
+              "if [ -z 'E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done"
+            ]
+          },
+          "Constraints": null,
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": null,
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "",
+          "KillTimeout": 5000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": {
+            "Hook": "prestart",
+            "Sidecar": false
+          },
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "wait-for-peer",
+          "Resources": {
+            "CPU": 100,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 32,
+            "MemoryMaxMB": 0,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": null,
+          "ShutdownDelay": 0,
+          "Templates": [
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/peers",
+              "EmbeddedTmpl": "{{- range service \"quod-finality-candidate-v6-20260926-quod-metrics|any\" }}\n{{ .Address }}:{{ .Port }}\n{{- end }}\n",
+              "Envvars": false,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            }
+          ],
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": null
+        },
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "args": [
+              "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n"
+            ],
+            "entrypoint": [
+              "/bin/sh",
+              "-c"
+            ],
+            "force_pull": true,
+            "image": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c"
+          },
+          "Constraints": null,
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": {
+            "QUOD_DATA_DIR": "/quod/data"
+          },
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "",
+          "KillTimeout": 5000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": {
+            "Hook": "prestart",
+            "Sidecar": false
+          },
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "prepare-agent-vault",
+          "Resources": {
+            "CPU": 100,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 32,
+            "MemoryMaxMB": 0,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": null,
+          "ShutdownDelay": 0,
+          "Templates": null,
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": [
+            {
+              "Destination": "/quod/data",
+              "PropagationMode": "private",
+              "ReadOnly": false,
+              "SELinuxLabel": "",
+              "Volume": "quod-data"
+            }
+          ]
+        },
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "ports": [
+              "p2p",
+              "metrics",
+              "explorer",
+              "client"
+            ],
+            "force_pull": true,
+            "image": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c"
+          },
+          "Constraints": [
+            {
+              "LTarget": "${attr.consul.version}",
+              "Operand": "semver",
+              "RTarget": ">= 1.8.0"
+            }
+          ],
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": null,
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "SIGTERM",
+          "KillTimeout": 30000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": null,
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "quod",
+          "Resources": {
+            "CPU": 500,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 512,
+            "MemoryMaxMB": 1024,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": [
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": null,
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-quod",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "p2p",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-quod-metrics\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/metrics",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                },
+                {
+                  "AddressMode": "",
+                  "Args": [
+                    "-ec",
+                    "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { if ($0 ~ /namespace=\\\"quod:root\\\"/) root=1; if ($2 != 0) bad=1 } END { exit !(root && !bad) }'"
+                  ],
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "/bin/sh",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 5000000000,
+                  "Method": "",
+                  "Name": "consensus-ready",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 5000000000,
+                  "Type": "script"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-quod-metrics",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "metrics",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-explorer\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/health",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-explorer",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "explorer",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "explorer",
+                "web"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-client\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/health",
+                  "PortLabel": "",
+                  "Protocol": "https",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": true,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-client",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "client",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "client",
+                "web",
+                "candidate-quod-node-${NOMAD_ALLOC_INDEX}"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            }
+          ],
+          "ShutdownDelay": 0,
+          "Templates": [
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/quod.conf",
+              "EmbeddedTmpl": "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/agent-keys\"\n  unlock_file = \"/quod/data/agent-vault.unlock\"\n}\n# The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet\n# opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This\n# is a private cluster; do not copy `ip = \"0.0.0.0\"` to an internet-exposed deployment.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST: further ontologies are added as extra entries, each with its own\n# mode/anchor (founded once by a single create deploy, then joined fleet-wide with the\n# logged anchor \u2014 same two-phase dance as quod:root; they share /quod/data, the ledger\n# keeps one subdirectory per namespace).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    # data_dir is the fast local host volume mounted at /quod/data \u2014 identity, vote\n    # journal, and ledger all live here now, so ledger_dir (the 0.7.36 Ceph workaround)\n    # is no longer needed.\n    data_dir  = \"/quod/data\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 60000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 60000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n\n    mode         = join\n    genesis_hash = \"E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096\"\n    seeds        = [\n{{- range service \"quod-finality-candidate-v6-20260926-quod\" }}\n      \"{{ .Address }}:{{ .Port }}\",\n{{- end }}\n    ]\n\n  }\n]\n",
+              "Envvars": false,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            },
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/env",
+              "EmbeddedTmpl": "QUOD_CONF={{ env \"NOMAD_TASK_DIR\" }}/quod.conf\nOTEL_SERVICE_NAME=quod\nOTEL_RESOURCE_ATTRIBUTES=service.namespace=quod-finality-candidate-v6-20260926,deployment.environment=nomad,service.instance.id={{ env \"NOMAD_ALLOC_ID\" }}\nOTEL_TRACES_EXPORTER=otlp\nOTEL_EXPORTER_OTLP_ENDPOINT=http://192.168.1.11:4318\nOTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf\nOTEL_TRACES_SAMPLER=parentbased_traceidratio\nOTEL_TRACES_SAMPLER_ARG=0.05\n",
+              "Envvars": true,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            }
+          ],
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": [
+            {
+              "Destination": "/quod/data",
+              "PropagationMode": "private",
+              "ReadOnly": false,
+              "SELinuxLabel": "",
+              "Volume": "quod-data"
+            }
+          ]
+        }
+      ],
+      "Update": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "Canary": 0,
+        "HealthCheck": "checks",
+        "HealthyDeadline": 900000000000,
+        "MaxParallel": 1,
+        "MinHealthyTime": 5000000000,
+        "ProgressDeadline": 1200000000000,
+        "Stagger": 5000000000
+      },
+      "Volumes": {
+        "quod-data": {
+          "AccessMode": "",
+          "AttachmentMode": "",
+          "MountOptions": null,
+          "Name": "quod-data",
+          "PerAlloc": true,
+          "ReadOnly": false,
+          "Source": "quod-finality-candidate-v6-20260926-refound-20261011-v6",
+          "Sticky": false,
+          "Type": "host"
+        }
+      }
+    },
+    {
+      "Affinities": null,
+      "Constraints": [
+        {
+          "LTarget": "${node.class}",
+          "Operand": "=",
+          "RTarget": "cloud"
+        },
+        {
+          "LTarget": "${attr.os.signals}",
+          "Operand": "set_contains",
+          "RTarget": "SIGTERM"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.bridge}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.firewall}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.host-local}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.loopback}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        },
+        {
+          "LTarget": "${attr.plugins.cni.version.portmap}",
+          "Operand": "semver",
+          "RTarget": ">= 0.4.0"
+        }
+      ],
+      "Consul": null,
+      "Count": 0,
+      "Disconnect": null,
+      "EphemeralDisk": {
+        "Migrate": false,
+        "SizeMB": 300,
+        "Sticky": false
+      },
+      "MaxClientDisconnect": null,
+      "Meta": null,
+      "Migrate": {
+        "HealthCheck": "checks",
+        "HealthyDeadline": 300000000000,
+        "MaxParallel": 1,
+        "MinHealthyTime": 10000000000
+      },
+      "Name": "quod-cloud",
+      "Networks": [
+        {
+          "DynamicPorts": [
+            {
+              "HostNetwork": "default",
+              "Label": "p2p",
+              "To": 14567
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "metrics",
+              "To": 14568
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "explorer",
+              "To": 14569
+            },
+            {
+              "HostNetwork": "default",
+              "Label": "client",
+              "To": 14570
+            }
+          ],
+          "Mode": "bridge"
+        }
+      ],
+      "PreventRescheduleOnLost": false,
+      "ReschedulePolicy": {
+        "Attempts": 0,
+        "Delay": 30000000000,
+        "DelayFunction": "exponential",
+        "Interval": 0,
+        "MaxDelay": 3600000000000,
+        "Unlimited": true
+      },
+      "RestartPolicy": {
+        "Attempts": 3,
+        "Delay": 15000000000,
+        "Interval": 300000000000,
+        "Mode": "delay",
+        "RenderTemplates": false
+      },
+      "Scaling": null,
+      "Services": null,
+      "ShutdownDelay": null,
+      "Spreads": null,
+      "StopAfterClientDisconnect": null,
+      "Tasks": [
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "args": [
+              "-c",
+              "while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && nc -z -w2 \"$H\" \"$P\" 2>/dev/null; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done"
+            ],
+            "command": "sh",
+            "image": "alpine:3.19"
+          },
+          "Constraints": null,
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": null,
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "",
+          "KillTimeout": 5000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": {
+            "Hook": "prestart",
+            "Sidecar": false
+          },
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "wait-for-peer",
+          "Resources": {
+            "CPU": 100,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 32,
+            "MemoryMaxMB": 0,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": null,
+          "ShutdownDelay": 0,
+          "Templates": [
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/peers",
+              "EmbeddedTmpl": "{{- range service \"quod-finality-candidate-v6-20260926-quod-metrics|any\" }}\n{{ .Address }}:{{ .Port }}\n{{- end }}\n",
+              "Envvars": false,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            }
+          ],
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": null
+        },
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "entrypoint": [
+              "/bin/sh",
+              "-c"
+            ],
+            "force_pull": true,
+            "image": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+            "args": [
+              "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n"
+            ]
+          },
+          "Constraints": null,
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": {
+            "QUOD_DATA_DIR": "/quod/data/${NOMAD_ALLOC_INDEX}"
+          },
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "",
+          "KillTimeout": 5000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": {
+            "Hook": "prestart",
+            "Sidecar": false
+          },
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "prepare-agent-vault",
+          "Resources": {
+            "CPU": 100,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 32,
+            "MemoryMaxMB": 0,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": null,
+          "ShutdownDelay": 0,
+          "Templates": null,
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": [
+            {
+              "Destination": "/quod/data",
+              "PropagationMode": "private",
+              "ReadOnly": false,
+              "SELinuxLabel": "",
+              "Volume": "quod-data"
+            }
+          ]
+        },
+        {
+          "Actions": null,
+          "Affinities": null,
+          "Artifacts": null,
+          "CSIPluginConfig": null,
+          "Config": {
+            "force_pull": true,
+            "image": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+            "ports": [
+              "p2p",
+              "metrics",
+              "explorer",
+              "client"
+            ]
+          },
+          "Constraints": [
+            {
+              "LTarget": "${attr.consul.version}",
+              "Operand": "semver",
+              "RTarget": ">= 1.8.0"
+            }
+          ],
+          "Consul": null,
+          "DispatchPayload": null,
+          "Driver": "docker",
+          "Env": null,
+          "Identities": null,
+          "Identity": {
+            "Audience": [
+              "nomadproject.io"
+            ],
+            "ChangeMode": "",
+            "ChangeSignal": "",
+            "Env": false,
+            "File": false,
+            "Filepath": "",
+            "Name": "default",
+            "ServiceName": "",
+            "TTL": 0
+          },
+          "KillSignal": "SIGTERM",
+          "KillTimeout": 30000000000,
+          "Kind": "",
+          "Leader": false,
+          "Lifecycle": null,
+          "LogConfig": {
+            "Disabled": false,
+            "MaxFileSizeMB": 10,
+            "MaxFiles": 10
+          },
+          "Meta": null,
+          "Name": "quod",
+          "Resources": {
+            "CPU": 500,
+            "Cores": 0,
+            "Devices": null,
+            "DiskMB": 0,
+            "IOPS": 0,
+            "MemoryMB": 512,
+            "MemoryMaxMB": 1024,
+            "NUMA": null,
+            "Networks": null,
+            "SecretsMB": 0
+          },
+          "RestartPolicy": {
+            "Attempts": 3,
+            "Delay": 15000000000,
+            "Interval": 300000000000,
+            "Mode": "delay",
+            "RenderTemplates": false
+          },
+          "ScalingPolicies": null,
+          "Schedule": null,
+          "Secrets": null,
+          "Services": [
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": null,
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-quod",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "p2p",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "content",
+                "quic",
+                "p2p",
+                "cloud"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-quod-metrics\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/metrics",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                },
+                {
+                  "AddressMode": "",
+                  "Args": [
+                    "-ec",
+                    "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { if ($0 ~ /namespace=\\\"quod:root\\\"/) root=1; if ($2 != 0) bad=1 } END { exit !(root && !bad) }'"
+                  ],
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "/bin/sh",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 5000000000,
+                  "Method": "",
+                  "Name": "consensus-ready",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 5000000000,
+                  "Type": "script"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-quod-metrics",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "metrics",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "metrics",
+                "prometheus",
+                "cloud"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-explorer\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/health",
+                  "PortLabel": "",
+                  "Protocol": "",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": false,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-explorer",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "explorer",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "explorer",
+                "web",
+                "cloud"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            },
+            {
+              "Address": "",
+              "AddressMode": "auto",
+              "CanaryMeta": null,
+              "CanaryTags": null,
+              "Checks": [
+                {
+                  "AddressMode": "",
+                  "Args": null,
+                  "Body": "",
+                  "CheckRestart": null,
+                  "Command": "",
+                  "Expose": false,
+                  "FailuresBeforeCritical": 0,
+                  "FailuresBeforeWarning": 0,
+                  "GRPCService": "",
+                  "GRPCUseTLS": false,
+                  "Header": null,
+                  "InitialStatus": "",
+                  "Interval": 15000000000,
+                  "Method": "",
+                  "Name": "service: \"quod-finality-candidate-v6-20260926-client\" check",
+                  "Notes": "",
+                  "OnUpdate": "require_healthy",
+                  "Path": "/health",
+                  "PortLabel": "",
+                  "Protocol": "https",
+                  "SuccessBeforePassing": 0,
+                  "TLSServerName": "",
+                  "TLSSkipVerify": true,
+                  "TaskName": "quod",
+                  "Timeout": 3000000000,
+                  "Type": "http"
+                }
+              ],
+              "Cluster": "default",
+              "Connect": null,
+              "EnableTagOverride": false,
+              "Identity": null,
+              "Kind": "",
+              "Meta": null,
+              "Name": "quod-finality-candidate-v6-20260926-client",
+              "Namespace": "default",
+              "OnUpdate": "require_healthy",
+              "PortLabel": "client",
+              "Provider": "consul",
+              "TaggedAddresses": null,
+              "Tags": [
+                "quod",
+                "client",
+                "web",
+                "cloud",
+                "candidate-quod-cloud-${NOMAD_ALLOC_INDEX}"
+              ],
+              "TaskName": "quod",
+              "Weights": null
+            }
+          ],
+          "ShutdownDelay": 0,
+          "Templates": [
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/quod.conf",
+              "EmbeddedTmpl": "node {\n  ip        = \"{{ env \"attr.unique.network.ip-address\" }}\"\n  port      = {{ env \"NOMAD_HOST_PORT_p2p\" }}\n  bind_port = 14567\n  consensus_owner_tracing = false\n}\nmetrics { port = 14568 }\nagent_vault {\n  enabled = true\n  directory = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-keys\"\n  unlock_file = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}/agent-vault.unlock\"\n}\n# Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public\n# interface is firewalled, so 0.0.0.0 here never faces the internet.\nexplorer {\n  enabled = true\n  ip      = \"0.0.0.0\"\n  port    = 14569\n}\n# HTTPS, with the node's own self-signed certificate: a browser withholds Web\n# Crypto outside a secure context, so over plaintext the client could not hold a\n# key at all. Visitors accept the certificate once per node.\nclient {\n  enabled  = true\n  ip       = \"0.0.0.0\"\n  port     = 14570\n  certfile = \"\"\n  keyfile  = \"\"\n}\n# `content` is a LIST \u2014 extra ontologies join here too (see the quod-node group's note).\ncontent = [\n  {\n    namespace = \"quod:root\"\n    data_dir  = \"/quod/data/{{ env \"NOMAD_ALLOC_INDEX\" }}\"\n    max_proof_workers = 64\n    max_scope_workers = 64\n    proof_timeout_ms = 60000\n    transaction_ttl_ms = 30000\n    batch_window_ms = 25\n    scope_timeout_ms = 60000\n    scope_step_timeout_ms = 30000\n    detailed_consensus_metrics = false\n    mode         = join\n    genesis_hash = \"E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096\"\n    seeds        = [\n{{- range service \"quod-finality-candidate-v6-20260926-quod\" }}\n      \"{{ .Address }}:{{ .Port }}\",\n{{- end }}\n    ]\n  }\n]\n",
+              "Envvars": false,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            },
+            {
+              "ChangeMode": "noop",
+              "ChangeScript": null,
+              "ChangeSignal": "",
+              "DestPath": "${NOMAD_TASK_DIR}/env",
+              "EmbeddedTmpl": "QUOD_CONF={{ env \"NOMAD_TASK_DIR\" }}/quod.conf\nOTEL_SERVICE_NAME=quod\nOTEL_RESOURCE_ATTRIBUTES=service.namespace=quod-finality-candidate-v6-20260926,deployment.environment=nomad,service.instance.id={{ env \"NOMAD_ALLOC_ID\" }}\nOTEL_TRACES_EXPORTER=otlp\nOTEL_EXPORTER_OTLP_ENDPOINT=http://192.168.1.11:4318\nOTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf\nOTEL_TRACES_SAMPLER=parentbased_traceidratio\nOTEL_TRACES_SAMPLER_ARG=0.05\n",
+              "Envvars": true,
+              "ErrMissingKey": false,
+              "Gid": null,
+              "LeftDelim": "{{",
+              "Once": false,
+              "Perms": "0644",
+              "RightDelim": "}}",
+              "SourcePath": "",
+              "Splay": 5000000000,
+              "Uid": null,
+              "VaultGrace": 0,
+              "Wait": null
+            }
+          ],
+          "User": "",
+          "Vault": null,
+          "VolumeMounts": [
+            {
+              "Destination": "/quod/data",
+              "PropagationMode": "private",
+              "ReadOnly": false,
+              "SELinuxLabel": "",
+              "Volume": "quod-data"
+            }
+          ]
+        }
+      ],
+      "Update": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "Canary": 0,
+        "HealthCheck": "checks",
+        "HealthyDeadline": 900000000000,
+        "MaxParallel": 1,
+        "MinHealthyTime": 5000000000,
+        "ProgressDeadline": 1200000000000,
+        "Stagger": 5000000000
+      },
+      "Volumes": {
+        "quod-data": {
+          "AccessMode": "",
+          "AttachmentMode": "",
+          "MountOptions": null,
+          "Name": "quod-data",
+          "PerAlloc": false,
+          "ReadOnly": false,
+          "Source": "quod-finality-candidate-v6-20260926-refound-20261011-v6-cloud",
+          "Sticky": false,
+          "Type": "host"
+        }
+      }
+    }
+  ],
+  "Type": "service",
+  "UI": null,
+  "Update": {
+    "AutoPromote": false,
+    "AutoRevert": false,
+    "Canary": 0,
+    "HealthCheck": "",
+    "HealthyDeadline": 0,
+    "MaxParallel": 1,
+    "MinHealthyTime": 0,
+    "ProgressDeadline": 0,
+    "Stagger": 5000000000
+  },
+  "VaultNamespace": "",
+  "Version": 63,
+  "VersionTag": null
+}

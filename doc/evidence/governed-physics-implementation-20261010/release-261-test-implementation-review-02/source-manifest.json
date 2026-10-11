@@ -1,0 +1,9 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "test/quod_ct.erl": "93551808aa5e44046296ec329723f67c514a3124eaaa8d8367f77191c028bc6d",
+  "test/quod_e2e_tests.erl": "5d8688e3cf398711ba3b2100968da01d92dd7691fe317fd9532d62f4ce928077",
+  "test/quod_create_root_tests.erl": "d3c909531d3209b31bf833438f67a175118422fa981285c658a59a5a399bf694",
+  "test/quod_physics_tests.erl": "c010102ff0bb67fe52b722287ee9d33b517f25bb776f54c980206686b63e56bc",
+  "test/quod_agent_hosting_tests.erl": "bb6fde5a105904464fdf76d1033e3d84c14d8bac7fdacf5b69ddf8d0eaf9c23c",
+  "src/quod_prolog.erl": "4a960e2bc722d6412064b1b82531e77c7170676652b5945abd094f3a26633588"
+}

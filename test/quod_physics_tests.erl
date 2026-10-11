@@ -1660,16 +1660,19 @@ opening_worker_cancellation_test_() ->
         try
             Open = fun() ->
                 Socket ! {client,simulation_open(F,Session,Human)},
-                receive {local_proof_waiting,_} -> ok after 5000 -> error(opening_proof_not_waiting) end
+                receive {local_proof_waiting,Proof} -> Proof after 5000 -> error(opening_proof_not_waiting) end
             end,
             Socket ! {client,simulation_open(F#{expires => 18446744073709551615},Session,Human)},
             ?assertMatch(#{<<"reason">> := <<"invalid_view_deadline">>},simulation_reply(Socket,<<"unavailable">>)),
             ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
-            Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
-            M = monitor(process,Worker),
+            Proof = Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
+            M = monitor(process,Worker), ProofMonitor = monitor(process,Proof),
             Socket ! {timeout,Timer,expired},
             ?assertMatch(#{<<"reason">> := <<"expired">>},simulation_reply(Socket,<<"unavailable">>)),
-            receive {'DOWN',M,process,Worker,killed} -> ok after 5000 -> error(opening_not_cancelled) end,
+            receive {'DOWN',M,process,Worker,Reason} -> ?assertEqual(killed,Reason)
+            after 5000 -> error({opening_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
+            receive {'DOWN',ProofMonitor,process,Proof,_} -> ok
+            after 5000 -> error({proof_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
             receive {simulation_opening_down,Socket,Worker} -> ok after 5000 -> error(socket_cleanup_missing) end,
             Socket ! {view_opened,Ref,retired_result},
             ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
@@ -1685,6 +1688,13 @@ opening_worker_cancellation_test_() ->
         after gproc:unreg(quod_reg:name({host_test,local_proof})), exit(Socket,kill) end
     end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},
         {':-',{world_view,room,playing,[]},test_physics_snapshot}] end) end}.
+
+opening_cancellation_state(Worker,Proof,Socket) ->
+    Info = fun(Pid) -> #{pid => Pid,alive => is_process_alive(Pid),
+        info => process_info(Pid,[status,current_function,current_stacktrace,message_queue_len,monitored_by])} end,
+    #{worker => Info(Worker),proof => Info(Proof),socket => Info(Socket),
+      mailbox => process_info(self(),messages),
+      socket_state => try simulation_state(Socket) catch Class:Reason -> {Class,Reason} end}.
 
 assert_view_selection(Selection,{ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
     {ok,Pairs} = quod_client_result:decode_binding(Blob),

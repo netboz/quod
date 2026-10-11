@@ -1,0 +1,23 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 42399.
+[1520174:1520174:1011/194704.866625:WARNING:sandbox/policy/linux/sandbox_linux.cc:405] InitializeSandbox() called with multiple threads in process gpu-process.
+
+DevTools listening on ws://127.0.0.1:34307/devtools/browser/9f924e4a-9cc2-47f6-96a6-cbd4463b53db
+[1520231:1:1011/194705.069739:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1520126:1520126:1011/194705.113703:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1520126:1520126:1011/194705.113820:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1520247:1:1011/194705.114699:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1520248:1:1011/194705.118333:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1520126:1520126:1011/194705.262849:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[1520320:1:1011/194705.475259:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1520126:1520126:1011/194706.542934:INFO:CONSOLE:1] "BJS - [19:47:06]: Babylon.js v9.18.1 - WebGL2", source: https://192.168.1.10:30519/assets/logger-CuBYPcDK.js (1)
+[1520574:1:1011/194710.139402:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1521410:1:1011/194743.919800:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1520126:1520126:1011/194744.885402:ERROR:ui/gfx/x/atom_cache.cc:236] Add application/vnd.portal.filetransfer to kAtomsToCache
+[1520126:1520126:1011/194744.885431:ERROR:ui/gfx/x/atom_cache.cc:236] Add application/vnd.portal.files to kAtomsToCache
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 72 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 64 to 16 to fit dynamic offset allocation limit.
+[1524848:1:1011/195000.691312:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1524859:1:1011/195000.736225:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.

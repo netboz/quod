@@ -1,0 +1,42 @@
+[
+  {
+    "path": "AGENTS.md",
+    "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+    "bytes": 8636
+  },
+  {
+    "path": "native/quod_physics/src/motion.rs",
+    "sha256": "4bc4bb4f71e2253a13a98b527ab473a3b51cea21e593d8d661b3a9423f893757",
+    "bytes": 22291
+  },
+  {
+    "path": "native/quod_physics/src/geometry.rs",
+    "sha256": "3ab51b0ec968a653ccf0748c89dfc80e05b5d765a790887546853e741fa792ae",
+    "bytes": 8496
+  },
+  {
+    "path": "native/quod_physics/Cargo.toml",
+    "sha256": "8b12f074b10cb6a76577e6af1477a26fb236483bc64cdccab6a940d9bd15e421",
+    "bytes": 360
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/test-source.rs",
+    "sha256": "d8c83d459861502586b265df074f44fd64bcbb769da6212620a83812ef4957e6",
+    "bytes": 2409
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/trace.log",
+    "sha256": "2fa974932756f48e50d6c66c131b57df5b163619e4b2adc8c4fca365e2cf9112",
+    "bytes": 3655
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/before-exit.json",
+    "sha256": "468a3ffd9628980f0a2582b7e74af9a5f1a9edb80efc890de9ce3792e66ed24e",
+    "bytes": 105
+  },
+  {
+    "path": "_build/quod27-desktop-260-02/low-roof-contact-01-STOP.json",
+    "sha256": "25fcd50ac51bf47b123c40becd00c26a4f1653137fe264b2f4143c9c2ac2c564",
+    "bytes": 525
+  }
+]

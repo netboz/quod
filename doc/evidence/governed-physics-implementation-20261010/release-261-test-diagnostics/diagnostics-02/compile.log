@@ -1,0 +1,4 @@
+_build/quod27-release-261/diagnostics-02/quod_e2e_tests.erl:2:2: Warning: export_all flag enabled - all functions will be exported
+%    2| -compile(export_all).
+%     |  ^
+

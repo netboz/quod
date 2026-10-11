@@ -1,0 +1,82 @@
+[
+  {
+    "id": "1448675.279",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/auth/challenge"
+  },
+  {
+    "id": "1448675.280",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/auth/complete"
+  },
+  {
+    "id": "1448675.283",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1448675.330",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1448675.332",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1448675.346",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.371",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.372",
+    "method": "GET",
+    "url": "https://192.168.1.10:30519/api/ontologies/system"
+  },
+  {
+    "id": "1448675.373",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/read"
+  },
+  {
+    "id": "1448675.375",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.376",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.377",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.378",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.379",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.380",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  },
+  {
+    "id": "1448675.381",
+    "method": "POST",
+    "url": "https://192.168.1.10:30519/api/goals/control"
+  }
+]

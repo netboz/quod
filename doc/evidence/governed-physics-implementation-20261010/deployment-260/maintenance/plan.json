@@ -1,0 +1,121 @@
+{
+  "Annotations": {
+    "DesiredTGUpdates": {
+      "quod-cloud": {
+        "Canary": 0,
+        "DestructiveUpdate": 0,
+        "Disconnect": 0,
+        "Ignore": 0,
+        "InPlaceUpdate": 0,
+        "Migrate": 0,
+        "Place": 0,
+        "Preemptions": 0,
+        "Reconnect": 0,
+        "RescheduleLater": 0,
+        "RescheduleNow": 0,
+        "Stop": 0
+      },
+      "quod-node": {
+        "Canary": 0,
+        "DestructiveUpdate": 0,
+        "Disconnect": 0,
+        "Ignore": 0,
+        "InPlaceUpdate": 0,
+        "Migrate": 0,
+        "Place": 0,
+        "Preemptions": 0,
+        "Reconnect": 0,
+        "RescheduleLater": 0,
+        "RescheduleNow": 0,
+        "Stop": 8
+      }
+    },
+    "PreemptedAllocs": null
+  },
+  "CreatedEvals": null,
+  "Diff": {
+    "Fields": null,
+    "ID": "quod-finality-candidate-v6-20260926",
+    "Objects": null,
+    "TaskGroups": [
+      {
+        "Fields": null,
+        "Name": "quod-cloud",
+        "Objects": null,
+        "Tasks": [
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "prepare-agent-vault",
+            "Objects": null,
+            "Type": "None"
+          },
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "quod",
+            "Objects": null,
+            "Type": "None"
+          },
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "wait-for-peer",
+            "Objects": null,
+            "Type": "None"
+          }
+        ],
+        "Type": "None",
+        "Updates": {}
+      },
+      {
+        "Fields": [
+          {
+            "Annotations": [
+              "forces destroy"
+            ],
+            "Name": "Count",
+            "New": "0",
+            "Old": "8",
+            "Type": "Edited"
+          }
+        ],
+        "Name": "quod-node",
+        "Objects": null,
+        "Tasks": [
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "prepare-agent-vault",
+            "Objects": null,
+            "Type": "None"
+          },
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "quod",
+            "Objects": null,
+            "Type": "None"
+          },
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "wait-for-peer",
+            "Objects": null,
+            "Type": "None"
+          }
+        ],
+        "Type": "Edited",
+        "Updates": {
+          "destroy": 8
+        }
+      }
+    ],
+    "Type": "Edited"
+  },
+  "FailedTGAllocs": null,
+  "Index": 845822,
+  "JobModifyIndex": 845822,
+  "NextPeriodicLaunch": null,
+  "Warnings": ""
+}

@@ -1,0 +1,7 @@
+{
+  "action": "scoped",
+  "args": [
+    "transaction(','(current_principal(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me)),','(physics_space(personal_lobby,enabled,physics_authority),','(physics_control_state(personal_lobby,agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled(pilot,eye)),','(findall(definition(R,B,M),physics_agent(personal_lobby,pilot,R,B,M),[definition(2,2,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[reposition]))]),','(retract(physics_agent(personal_lobby,pilot,2,2,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[reposition]))),assertz(physics_agent(personal_lobby,pilot,3,2,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[])))))))))"
+  ],
+  "at": "2026-10-11T17:04:00.775077+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "frame": {
+    "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+    "control_state": {
+      "pending": false,
+      "result": "clear(pose(vector(0.0,0.7599999904632568,2.799999952316284),quaternion(0.0,0.0,0.0,1.0)),2)",
+      "sequence": "60"
+    },
+    "epoch": "1",
+    "generation": "2",
+    "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+    "poses": [
+      {
+        "body": "2",
+        "position": [
+          0,
+          0.7599999904632568,
+          2.799999952316284
+        ],
+        "revision": "1",
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    ],
+    "registration": "jPFF4u1FX2d38wzlJNTXtpwMUUvsOv0qENELv_gcLJY",
+    "schema": 1,
+    "space": "world",
+    "structure": "1",
+    "tick": "943",
+    "units": "metres_seconds",
+    "view_clearance": 0.49799999594688416,
+    "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)"
+  },
+  "type": "simulation_frame",
+  "view": "3Bdtz30ZdxqthzKwXZHX7pAoad5zemQAwCGJe6GeBdE"
+}

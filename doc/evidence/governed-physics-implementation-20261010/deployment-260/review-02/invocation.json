@@ -1,0 +1,24 @@
+{
+  "started": "2026-10-11T16:35:12.234126+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "payload_sha256": "6d5b6699dcffbeefd4d47488de9e9f5f29550f8534d5677ef7c9298fd9c457da",
+  "scope": "Exact candidate260 job transitions and operator scripts; public configuration and references only; tools disabled"
+}

@@ -1,0 +1,9 @@
+{
+  "captured": "2026-10-11T16:37:19.644788+00:00",
+  "candidate_version": 63,
+  "candidate_modify_index": 845822,
+  "main_version": 246,
+  "main_modify_index": 826727,
+  "same_eight_allocations": true,
+  "zero_restarts": true
+}

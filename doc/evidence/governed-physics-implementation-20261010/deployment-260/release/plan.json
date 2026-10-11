@@ -1,0 +1,360 @@
+{
+  "Annotations": {
+    "DesiredTGUpdates": {
+      "quod-node": {
+        "Canary": 0,
+        "DestructiveUpdate": 0,
+        "Disconnect": 0,
+        "Ignore": 0,
+        "InPlaceUpdate": 0,
+        "Migrate": 0,
+        "Place": 8,
+        "Preemptions": 0,
+        "Reconnect": 0,
+        "RescheduleLater": 0,
+        "RescheduleNow": 0,
+        "Stop": 0
+      },
+      "quod-cloud": {
+        "Canary": 0,
+        "DestructiveUpdate": 0,
+        "Disconnect": 0,
+        "Ignore": 0,
+        "InPlaceUpdate": 0,
+        "Migrate": 0,
+        "Place": 0,
+        "Preemptions": 0,
+        "Reconnect": 0,
+        "RescheduleLater": 0,
+        "RescheduleNow": 0,
+        "Stop": 0
+      }
+    },
+    "PreemptedAllocs": null
+  },
+  "CreatedEvals": null,
+  "Diff": {
+    "Fields": null,
+    "ID": "quod-finality-candidate-v6-20260926",
+    "Objects": null,
+    "TaskGroups": [
+      {
+        "Fields": null,
+        "Name": "quod-cloud",
+        "Objects": null,
+        "Tasks": [
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "prepare-agent-vault",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "args[0]",
+                    "New": "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n",
+                    "Old": "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[0]",
+                    "New": "/bin/sh",
+                    "Old": "/bin/sh",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[1]",
+                    "New": "-c",
+                    "Old": "-c",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "force_pull",
+                    "New": "true",
+                    "Old": "true",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "image",
+                    "New": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+                    "Old": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+                    "Type": "Edited"
+                  }
+                ],
+                "Name": "Config",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          },
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "quod",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "force_pull",
+                    "New": "true",
+                    "Old": "true",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "image",
+                    "New": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+                    "Old": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+                    "Type": "Edited"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[0]",
+                    "New": "p2p",
+                    "Old": "p2p",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[1]",
+                    "New": "metrics",
+                    "Old": "metrics",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[2]",
+                    "New": "explorer",
+                    "Old": "explorer",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[3]",
+                    "New": "client",
+                    "Old": "client",
+                    "Type": "None"
+                  }
+                ],
+                "Name": "Config",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          },
+          {
+            "Annotations": null,
+            "Fields": null,
+            "Name": "wait-for-peer",
+            "Objects": null,
+            "Type": "None"
+          }
+        ],
+        "Type": "Edited",
+        "Updates": {}
+      },
+      {
+        "Fields": [
+          {
+            "Annotations": [
+              "forces create"
+            ],
+            "Name": "Count",
+            "New": "8",
+            "Old": "0",
+            "Type": "Edited"
+          }
+        ],
+        "Name": "quod-node",
+        "Objects": null,
+        "Tasks": [
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "prepare-agent-vault",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "args[0]",
+                    "New": "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n",
+                    "Old": "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[0]",
+                    "New": "/bin/sh",
+                    "Old": "/bin/sh",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[1]",
+                    "New": "-c",
+                    "Old": "-c",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "force_pull",
+                    "New": "true",
+                    "Old": "true",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "image",
+                    "New": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+                    "Old": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+                    "Type": "Edited"
+                  }
+                ],
+                "Name": "Config",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          },
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "quod",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "force_pull",
+                    "New": "true",
+                    "Old": "true",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "image",
+                    "New": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+                    "Old": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+                    "Type": "Edited"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[0]",
+                    "New": "p2p",
+                    "Old": "p2p",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[1]",
+                    "New": "metrics",
+                    "Old": "metrics",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[2]",
+                    "New": "explorer",
+                    "Old": "explorer",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ports[3]",
+                    "New": "client",
+                    "Old": "client",
+                    "Type": "None"
+                  }
+                ],
+                "Name": "Config",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          },
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "wait-for-peer",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "args[0]",
+                    "New": "if [ -z 'E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done",
+                    "Old": "if [ -z 'E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[0]",
+                    "New": "/bin/sh",
+                    "Old": "/bin/sh",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "entrypoint[1]",
+                    "New": "-c",
+                    "Old": "-c",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "force_pull",
+                    "New": "true",
+                    "Old": "true",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "image",
+                    "New": "192.168.1.11:5000/quod:0.7.260@sha256:e7a4dd4c221d8b358ff7d14a3b818901ae5ae5f331158a46754a72016a76adca",
+                    "Old": "192.168.1.11:5000/quod:0.7.259@sha256:3a48fe2b9f88350b0e874b3d2f8938f2ab86d08f3c35a464635f47a15e8f478c",
+                    "Type": "Edited"
+                  }
+                ],
+                "Name": "Config",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          }
+        ],
+        "Type": "Edited",
+        "Updates": {
+          "create": 8
+        }
+      }
+    ],
+    "Type": "Edited"
+  },
+  "FailedTGAllocs": null,
+  "Index": 846314,
+  "JobModifyIndex": 846314,
+  "NextPeriodicLaunch": null,
+  "Warnings": ""
+}

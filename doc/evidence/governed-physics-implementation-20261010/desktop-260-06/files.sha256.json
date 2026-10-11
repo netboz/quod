@@ -1,0 +1,16 @@
+{
+  "before-release261-01.json": "0876dddaf96737ec8904cdac34e568034c3a58f6fd054bc6b70d5fe4977bedf5",
+  "before-release261-01.png": "ac80302e672cb0b7b22d6e5470fbd07651d47c0d30388e8ebcbfb51b790517dc",
+  "browser.py": "bc2862c8a68501ba4ac74967ce75ebf7c89d035cd879e78a34db3a7b0676e199",
+  "campaign.json": "aef4c7719c65ca0c25801b2b870e4964f9fbd4def8d2f407b68d4f7c047f09de",
+  "capture.py": "35a6497ab2592f026e7dfc0007108e494c5364c391d1ec9dbfb0180e4583a8fa",
+  "hardware-render-01.json": "405ad723c1a979ebb1ccedfa80473306dc989ba089a0d73d6662ce40ed591637",
+  "hardware-render-steady-02.json": "264bf1b770b6fcce7f8a997528e03bfed767a41f768ab0f606d7dbca3d034f3d",
+  "initial-page.json": "ee968c5ea555b17d2de9aa775757f6d8c217e7d90f1bd0ead13b020be1801fff",
+  "install-helper-retain-terminal.js": "fec25c90914a4af4b441ad5723551004fd99fb0ec9c92f04209c7737aeea9ac8",
+  "movement-stutters-01.json": "eb04d3fb79a95ab755bec016d53cf1f7d446c74fd3eb123bfe510d3a82b237f8",
+  "movement-stutters-analysis.json": "17d34eea0a700ee3a6d5b386b140f65ddc976e182da3fb80b05d1aaacb00d9f8",
+  "run.py": "97657bc63cdaca730a555bc5ace5fabb322d2e7681b56feced99901b4019dbd6",
+  "session.json": "77a01169f4125fe58bb98b131626574ea57789a5c24e111fc0032964c7bb389d",
+  "signed.py": "8a62c76fd64f8b62f182e08cd4167953a2fe60c6a4a2eeeae254df599994d716"
+}

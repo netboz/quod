@@ -1,0 +1,913 @@
+Yan explicitly requested Claude Fable plan and implementation reviews for QUD.27. Review this implemented test-only correction. Tools/hooks disabled; only bounded repository source and synthetic fixture evidence. Advice is consultative. Native floor-slide correction already reviewed separately; this packet concerns release-test reliability, not new production behavior.
+
+Gate03 stopped at two EUnit failures: (1) a cancellation monitor did not match DOWN killed within five seconds, with no alternative reason retained; (2) the strict unchanged-source zero-I/O assertion captured actual signing-journal writes from a Simplex owner named e2e:6322. Deterministic non-parent teardown reproduction measured old e2e stop helper returning after5001ms with namespace still alive/registered. Regression failed with old helper, passed after existing OTP gen_server:stop replacement. Your plan review accepted that diagnosis and requested an audit, child death checks and cancellation diagnostics.
+
+Audit: create-root has the identical foreach/test-body startup and foreign cleanup pattern. Its original module passes8 tests while two namespaces survive; captured using documented gproc:select and explicitly stopped afterward. A preceding audit used the wrong raw ETS tuple shape, returned an invalid empty inventory and exited1; it is retained and explicitly invalidated. The earlier scratch fixed-e2e empty-inventory report has no retained query expression and is not relied on as registry evidence. The present focused run uses correct gproc:select, plus production-test-helper monitors every supervisor/child. All other searched shutdown helpers use parent-owned startup/cleanup and/or fail loudly, including agent_hosting stop_ontology. No demonstrated leak there is claimed or patched. Gate03 has no unexpected-message log: OTP28 supervisor handle_info EXIT routes to restart_child, whose unknown-PID branch returns unchanged state without logging. Thus your plan's predicted log line does not occur; retained process attribution and deterministic reproduction support the diagnosis directly.
+
+Implemented: replace two copies of stop_ns with a shared quod_ct:stop_ns helper using synchronous existing OTP stop, preserving5000ms and monitoring all direct owners under one absolute deadline. E2E adds a real namespace regression with a live different parent. Existing I/O assertion unchanged/unfiltered; no sleeps or masking. Cancellation test now records alternative DOWN reasons while still requiring killed, retains the actual proof PID and checks its death, and dumps worker/proof/socket process state plus mailbox/current socket state only on timeout. The original cancellation failure is UNEXPLAINED. Passing focused/module tests cannot establish its cause. Full fresh clean sequential gates must pass before deployment; no deadlines, authorization or production semantics changed for the tests.
+
+Please review exact implementation for correctness, teardown races, unnecessary abstractions or weakened obligations. Give blockers separately from optional observations. Does it satisfy the plan requirements while retaining the unexplained-cancellation record? Do not infer release-gate success from these focused results.
+
+=== AGENTS.md:1-111 ===
+# Working agreement
+
+## Shared engineering rules
+
+These are Yan's standing rules for this repository, not optional suggestions.
+Read this file before starting work. When delegating, require each agent to
+read it and pass on the relevant scope, invariants and verification requirements.
+Keep these rules in one place; task handoffs should reference them, not maintain
+divergent copies. Read the relevant specs and `doc/multiwrite-architecture.md`
+before changing architecture or semantics. Flag conflicts rather than guessing.
+
+### Architecture and Erlang processes
+
+- Prolog ontologies are the core of the system. Domain state, policy, actions,
+  authorization and protocol/conversation rules belong there. External Erlang
+  predicates are the governed interface to the real world and runtime services;
+  they must not become a second domain engine or private knowledge base.
+- Do not hardcode resource budgets or population ceilings in Erlang. Resource
+  allocation is Prolog policy, including future pricing of scarce resources.
+  When an existing numeric cap blocks ordinary work, fix its policy ownership
+  and related enforcement paths; do not silently raise the constant or split
+  domain transactions to evade it. Distinguish actual encoding constraints from
+  configurable budgets, and report the resource that was actually exceeded.
+- Build every new domain, including FIPA, on Quod's existing actions,
+  multi-ontology transactions, ontology recovery and reaction framework. This
+  is a foundational rule, not an optional optimization. Before proposing new
+  machinery, trace the use case through those paths and identify a concrete
+  missing capability. Commit related domain changes and receiver consequences
+  in one existing atomic transaction where they form one transition; do not
+  artificially separate them and then build messaging, acknowledgements or
+  recovery to reconnect them. Preserve event-pattern unification and distinguish
+  restoring ontology state from replaying reactions. Extend the existing owner
+  only for a demonstrated gap; do not duplicate guarantees already provided.
+- Refactor to the domain concept: one authoritative implementation and one
+  owner for each mutable truth. Reuse existing functions and lifecycle
+  machinery; extract shared algorithms into pure modules when appropriate.
+  A module does not need its own process.
+- Prefer asynchronous messages for cross-process work. Use the existing
+  gproc/`quod_reg` pub/sub facilities for shared local events; use direct
+  messages when the recipient is already owned or known. Do not add a broker,
+  second executor, shadow inventory or queue merely to connect existing owners.
+- Publish meaningful installed-state changes, scoped to the affected identity
+  and owner incarnation. Wake only work whose dependencies changed, not all
+  pending work. Preserve subscription/snapshot ordering, cancellation and
+  absolute caller deadlines; stale or duplicate notices must be harmless.
+- No polling, sleeps or recurring retry timers to discover readiness when the
+  owning process can notify it. Protocol-required expiry/failure detection is
+  distinct from readiness polling. Do not block a state owner on network I/O.
+- Share verified results, references and deltas, not another mutable copy of
+  the truth. Do not copy Prolog state between nodes during proofs or re-read
+  ledger prefixes on ordinary requests. Recovery and rebuilds need explicit
+  lifecycle reasons, not hidden request-time repair paths.
+- Keep reusable verified state alive for the lifetime of its real consumer,
+  not just one request. Proofs, renewals and readiness checks must reuse it
+  and process only changes; they must not repeatedly parse history, rebuild
+  projections or recreate disposable disk indexes. Unchanged checks must not
+  cause disk writes or syncs. Preserve required durability for actual changes;
+  do not hide an I/O lifecycle defect by weakening persistence or moving an
+  unbounded history into memory.
+
+### Simplification and maintenance
+
+- "No Akira code": no ad-hoc special cases, exception-driven workarounds,
+  hidden fallback behavior or clever patches that obscure the architecture.
+  Fix the underlying abstraction instead of layering around the symptom.
+- Replace the old path when introducing its replacement. Do not keep parallel
+  old/new implementations, permanent fast-path forks or compatibility shims.
+  New behavior belongs in the shared model, not an alternative execution path.
+  Clean format breaks still require the applicable review/deployment authority;
+  this rule alone never authorizes a data wipe.
+- Remove superseded code, unused exports, duplicate validation and stale
+  comments/docs in the same scope. Verify callers and runtime reachability;
+  neither Dialyzer/xref alone nor absence from one trace proves code is dead.
+  Preserve user-owned files and pinned document prefixes.
+- Aim for fewer production lines and fewer concepts after a refinement. Report
+  the actual delta and explain unavoidable growth; do not achieve a smaller
+  count by compressing formatting, hiding code elsewhere or deleting coverage.
+- Keep comments about current invariants and intent. Put run logs, historical
+  status diaries and review narration in handoffs, not implementation docs.
+
+### Diagnosis and verification
+
+- Understand the causal chain before optimizing. Use traces and deterministic
+  reproductions to distinguish computation, mailbox residence, I/O and protocol
+  waits. Add bounded, redacted, removable tracing when needed; observation must
+  not change authority, mask errors or require another execution engine.
+- Check repeated-operation cost as well as first-use correctness. For changes
+  to shared-state lifecycles, verify through the real owner that an unchanged
+  repeat does not replay history, rebuild state or write/sync files, and that
+  a real update is still applied. Measure the relevant work, not just latency.
+- Preserve consensus, authorization, custody, proof/backtracking/cut and
+  commit guarantees. Performance goals do not authorize weaker checks, extended
+  deadlines, uncertain-operation resubmission or changed client semantics.
+- Test the behavior and the failure it prevents, using real production seams.
+  Retire obsolete tests by identifying where their still-valid obligations are
+  covered; do not preserve obsolete machinery just to satisfy its old fixtures.
+  Synchronize tests with delivery/processing evidence, not sleeps or send traces.
+- At required release/review boundaries, use the standing clean sequential
+  gates, full logs and true child exits. Retain and triage failures before
+  trusting a run; no silent reruns or weakened assertions. Freeze each scope's
+  exact tree and evidence, keep label bumps separate, and report partial work
+  honestly. Do not turn routine edits into unnecessary review rounds.
+
+## Continuity
+
+Yan's standing instruction (2026-09-24): do not initiate Claude reviews or
+consultations unless Yan explicitly requests one. Review the work independently.
+When explicitly requested, use the Fable model; its advice remains consultative
+and must be checked against the code and architecture.
+
+Yan's standing instruction (2026-09-10): keep progressing through authorized
+
+=== test/quod_ct.erl:700-735 ===
+            true;
+        {quod_retry_stop, Reason} ->
+            erlang:error({unsafe_retry, Reason});
+        _ ->
+            timer:sleep(150),
+            eventually(F, Timeout - 150)
+    end.
+
+%% Best-effort stop of a list of `peer` nodes (never throws).
+stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
+
+%% Fixture cleanup may run outside the supervisor's parent process. Stop through
+%% OTP and observe every state owner's death before its data directory is removed.
+stop_ns(Pid) ->
+    Owners = [Pid | [Child || {_, Child, _, _} <- supervisor:which_children(Pid), is_pid(Child)]],
+    Monitors = [{Owner, monitor(process, Owner)} || Owner <- Owners],
+    Deadline = erlang:monotonic_time(millisecond) + 5000,
+    try
+        ok = gen_server:stop(Pid, shutdown, 5000),
+        lists:foreach(fun({Owner, Monitor}) ->
+            Remaining = max(0, Deadline - erlang:monotonic_time(millisecond)),
+            receive {'DOWN', Monitor, process, Owner, _} -> ok
+            after Remaining -> error({namespace_owner_not_stopped, Owner}) end
+        end, Monitors)
+    after [demonitor(Monitor, [flush]) || {_, Monitor} <- Monitors] end.
+
+%% A `quod_prolog:prove/2` result with at least one binding.
+%% A local deadline does not prove that a write failed. Tag it so even a nested
+%% `lists:any/2` callback escapes `eventually/2` instead of resubmitting it.
+match_ok({error, {outcome_unknown, OutcomeRef}}) ->
+    throw({quod_retry_stop, {outcome_unknown, OutcomeRef}});
+match_ok({badrpc, timeout}) ->
+    throw({quod_retry_stop, {transport_timeout, peer_call}});
+match_ok({ok, [_ | _], _}) -> true;
+match_ok(_)                -> false.
+
+
+=== test/quod_e2e_tests.erl:1-116 ===
+-module(quod_e2e_tests).
+-include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+-import(quod_ct, [rp/2, stop_ns/1]).
+
+%%%===================================================================
+%%% single-node end-to-end: prove(write) -> commit -> apply -> read,
+%%% restart-from-disk -> replay, prolog-only restart -> rebuild, and
+%%% the failure paths the review flagged (no ETS leak on failing proofs).
+%%%===================================================================
+
+setup() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U   = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_e2e_" ++ U),
+    Ns  = list_to_binary("e2e:" ++ U),
+    {Pub, Seed} = quod_identity:generate(),   %% consensus signs shares now — a real keypair is required
+    Key = quod_identity:key_term({Pub, Seed}),
+    Id  = #{pubkey => Pub, key => Key},
+    Cfg = #{node_id => Pub, identity => Id, data_dir => Dir, mode => create},
+    {Dir, Ns, Cfg}.
+
+cleanup({Dir, Ns, _Cfg}) ->
+    case quod_reg:where({quod_ns, Ns}) of
+        undefined -> ok;
+        Pid       -> stop_ns(Pid)
+    end,
+    _ = file:del_dir_r(Dir),
+    ok.
+
+e2e_test_() ->
+    {foreach, fun setup/0, fun cleanup/1,
+     [fun t_non_parent_teardown/1,
+      fun t_write_read/1,
+      fun t_concurrent_writes_batch/1,
+      fun t_direct_membership_revalidated/1,
+      fun t_restart_reload/1,
+      fun t_ordered_edit_restart_reload/1,
+      fun t_prolog_restart_rebuild/1,
+      fun t_failing_proofs_no_ets_leak/1]}.
+
+%%%===================================================================
+%%% helpers
+%%%===================================================================
+
+start_ns(Ns, Cfg) ->
+    {ok, Pid} = quod_ns:start_link(Ns, Cfg),
+    unlink(Pid),
+    Pid.
+
+wait_new_pid(Key, OldPid) -> wait_new_pid(Key, OldPid, 300).
+wait_new_pid(_K, _Old, 0) -> error(timeout);
+wait_new_pid(Key, OldPid, N) ->
+    case quod_reg:where(Key) of
+        P when is_pid(P), P =/= OldPid -> P;
+        _ -> timer:sleep(10), wait_new_pid(Key, OldPid, N - 1)
+    end.
+
+%%%===================================================================
+%%% tests
+%%%===================================================================
+
+%% EUnit cleanup runs outside the process that started the supervisor.
+t_non_parent_teardown({_Dir, Ns, Cfg}) ->
+    fun() ->
+        Parent = self(), Tag = make_ref(),
+        {Owner, OwnerMonitor} = spawn_monitor(fun() ->
+            Pid = start_ns(Ns, Cfg), Parent ! {Tag, Pid},
+            receive {Tag, done} -> ok end
+        end),
+        Pid = receive {Tag, Started} -> Started after 5000 -> error(start_timeout) end,
+        try
+            stop_ns(Pid),
+            ?assertNot(is_process_alive(Pid))
+        after
+            case is_process_alive(Pid) of
+                true -> gen_server:stop(Pid, shutdown, 5000);
+                false -> ok
+            end,
+            Owner ! {Tag, done},
+            receive {'DOWN', OwnerMonitor, process, Owner, normal} -> ok
+            after 5000 -> error(owner_not_stopped) end
+        end
+    end.
+
+t_write_read({Dir, Ns, Cfg}) ->
+    fun() ->
+        _Pid = start_ns(Ns, Cfg),
+        %% a write goes prove -> stage -> append -> commit -> apply -> reply
+        ?assertEqual(
+           {ok, [#{}], 2},
+           rp(Ns, {assertz, {parent, tom, bob}})),
+        ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
+        %% an unknown predicate fails (does not crash) — unknown=fail
+        ?assertMatch({fail, [_ | _]}, rp(Ns, {grandparent, tom, {'Y'}})),
+        %% index 1 is the durable genesis {add, self} config entry, so the first write
+        %% commits at index 2 (the committee now survives restart — see quod_simplex).
+        ?assertMatch(#{committed := 2, last_applied := 2, appends := 1},
+                     quod_simplex:stats(Ns)),
+        %% sealed-plan submission stamps the client submit time on the tx
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        try
+            {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+            #entry{data = {batch, [#transaction{
+                                              tx_id = TxId,
+                                              submitted_at = Sub}]}} =
+                quod_ledger:entry_view(Entry),
+            ?assert(Sub > 0),
+            %% The proof reply is sent only after the outcome row and MVCC
+            %% snapshot are published, so an immediate lookup is terminal.
+            ?assertMatch(
+               {ok, #{status := committed, height := 2}},
+               quod_outcome:lookup_live(
+                 Ns, quod_ledger_store:data_dir(Cfg), TxId))
+        after quod_ledger_store:close(Store) end
+    end.
+
+=== test/quod_create_root_tests.erl:1-97 ===
+-module(quod_create_root_tests).
+-include_lib("eunit/include/eunit.hrl").
+-import(quod_ct, [rp/2, stop_ns/1]).
+
+%%%===================================================================
+%%% create-a-network: the founder reads quod_root.pl once and commits it
+%%% into the ledger as the genesis; the content is queryable; a restart
+%%% REPLAYS it (does not re-create); a bad genesis .pl fails the start.
+%%%===================================================================
+
+setup() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U   = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_create_root_" ++ U),
+    Ns  = list_to_binary("createroot:" ++ U),
+    ok = establish_identity(),
+    Content = #{namespace    => Ns,
+                mode         => create,
+                genesis_file => <<"ontologies/quod_root.pl">>,
+                data_dir     => list_to_binary(Dir),
+                seeds        => []},
+    {Dir, Ns, Content}.
+
+cleanup({Dir, Ns, _}) ->
+    case quod_reg:where({quod_ns, Ns}) of
+        undefined -> ok;
+        Pid       -> stop_ns(Pid)
+    end,
+    ok = clear_identity(),
+    _ = file:del_dir_r(Dir),
+    ok.
+
+%% Establish/clear a node identity in the app env, exactly as quod_app:apply_identity does
+%% at boot — build_ns_config reads node_pubkey and consensus signs shares with identity_key.
+%% ONE home for the pattern, shared by the fixture and the two-ontologies test.
+establish_identity() ->
+    {Pub, Seed} = quod_identity:generate(),
+    application:set_env(quod, node_pubkey, Pub),
+    application:set_env(quod, identity_key, quod_identity:key_term({Pub, Seed})).
+
+clear_identity() ->
+    application:unset_env(quod, node_pubkey),
+    application:unset_env(quod, identity_key).
+
+create_root_test_() ->
+    {foreach, fun setup/0, fun cleanup/1,
+     [fun t_create_root/1,
+      fun t_create_root_restart/1,
+      fun t_genesis_failure/1,
+      fun t_genesis_sources_are_exclusive/1,
+      fun t_invalid_precompiled_genesis_is_preflighted/1]}.
+
+%% genesis_diff compiles the real quod_root.pl into write-set ops (compiled clause
+%% bodies, the on-disk form). Every op is an assert; the acl_sovereign head is present.
+genesis_diff_test() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    Ops  = quod_prolog:genesis_diff(File),
+    ?assert(length(Ops) >= 3),
+    ?assert(lists:all(fun({assert, {_H, _B}}) -> true; (_) -> false end, Ops)),
+    Heads = [H || {assert, {H, _B}} <- Ops],
+    ?assert(lists:member({acl_sovereign, {':', quod, root}}, Heads)).
+
+%%%===================================================================
+%%% helpers (mirror quod_e2e_tests)
+%%%===================================================================
+
+start_ns(Ns, Cfg) ->
+    {ok, Pid} = quod_ns:start_link(Ns, Cfg),
+    unlink(Pid),
+    Pid.
+
+%%%===================================================================
+%%% tests
+%%%===================================================================
+
+t_create_root({_Dir, Ns, Content}) ->
+    fun() ->
+        {Ns, NsCfg} = quod_app:build_ns_config(Content),
+        _Pid = start_ns(Ns, NsCfg),
+        %% the genesis content from quod_root.pl is committed + applied into the kb
+        ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),
+        %% Root is the configured bootstrap exception, not a recursive entry
+        %% in the system-ontology catalogue.
+        ?assertMatch(
+           {fail, _},
+           rp(Ns, {system_ontology, {'_'}, {'_'}})),
+        %% This fixture uses root's Prolog source under a unique test namespace,
+        %% so its ontology-specific manifest is correctly empty.  The actual
+        %% quod:root bootstrap configuration is checked separately below.
+        ?assertMatch(
+           {ok, [#{'Manifest' := []}], _},
+           rp(Ns, {external_predicate_modules, {'Manifest'}})),
+        %% the default-open can_invoke/4 rule unifies with anything
+        ?assertMatch({ok, [#{}], _},
+                     rp(Ns, {can_invoke, foo, {node, bar}, [], baz})),
+        %% the founder is on its own committee, as a peer_admitted fact in the genesis kb
+        ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, {'_'}})),
+
+=== test/quod_agent_hosting_tests.erl:1430-1540 ===
+    application:set_env(quod, identity_key, maps:get(key, Identity)),
+    application:set_env(quod, namespace_desired,
+      #{content => #{quod_ontology:root_ns() => #{genesis_hash => <<42:256>>}}, brahms => #{}}),
+    {ok, Router} = quod_ask_router:start_link(),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => <<42:256>>, node_key => Pub}),
+    Dir = filename:join("/tmp", "quod_hosted_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    ok = filelib:ensure_dir(filename:join(Dir, "file")),
+    Unlock = filename:join(Dir, "unlock"),
+    ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+    {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "keys"), unlock_file => Unlock}),
+    NodeNs = <<"host-test-node">>,
+    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+    NodeDiff = case NodePolicy of
+        current -> quod_prolog:genesis_diff(NodeExecution);
+        legacy -> []
+    end,
+    NodeFacts = [{agent_key, physical_node, Pub, active},
+                 {node_ontology, NodeNs}, {instance_of, node, physical_node}],
+    LegacyAdmission = case NodePolicy of
+        current -> [];
+        legacy -> [{can_invoke, {'_'}, {agent_instance_ref, NodeNs, {'_'}, physical_node},
+                    [NodeNs], NodeNs}]
+    end,
+    NodeOntology = start_ontology(NodeNs, Dir, Identity, NodeDiff, NodeFacts ++ LegacyAdmission),
+    Node = {agent_instance_ref, NodeNs, quod_simplex:genesis_hash(NodeNs), physical_node},
+    {ok, NodeBlob} = quod_wire_term:encode_canonical(Node),
+    application:set_env(quod, node_actor_principal, {agent, NodeBlob}),
+    Source = filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl"),
+    Diff = quod_prolog:genesis_diff(Source),
+    true = quod_reg:subscribe({agent_hosting, Ns}),
+    Additional = case ExtraFacts of
+        F when is_function(F, 1) -> F(Pub);
+        Facts -> Facts
+    end,
+    ActorOntology = start_ontology(Ns, Dir, Identity, Diff,
+      [{can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, Node, {'_'}},
+       {can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, setelement(2, Node, <<"remote-node">>), {'_'}},
+       {can_assign_agent_host, {node, Pub}, other, {'_'}, {'_'}, Node, {'_'}},
+       {can_invoke, {'_'}, Node, {'_'}, Ns},
+       {can_invoke, {record_ping, {'_'}}, {agent_instance_ref, Ns, {'_'}, actor}, {'_'}, Ns},
+       {can_request_agent_signature, Node, actor, {'_'}},
+       owned_reaction(actor, pause_batch, true, test_reaction_barrier),
+       owned_reaction(actor, fill_agents, true, test_fill_agents),
+       owned_reaction(actor, {do_short_work, {'Value'}, {'Expiry'}},
+                      {record_ping, {'Value'}}, {limit_reaction_expiry, {'Expiry'}}),
+       owned_reaction(actor, {do_work, {'Value'}}, {record_ping, {'Value'}}),
+       {':-', {record_ping, {'Value'}},
+         {',', {assertz, {ping, {'Value'}}}, {trigger_event, {request, {'Value'}}}}}] ++ Additional),
+    Ref = {agent_instance_ref, Ns, quod_simplex:genesis_hash(Ns), actor},
+    {ok, RefBlob} = quod_wire_term:encode_canonical(Ref),
+    {ok, Key} = quod_agent_vault:prepare(RefBlob, 0),
+    true = quod_reg:subscribe({agent, Ref}),
+    Result = try
+        {ok, Fun(#{namespace => Ns, reference => Ref, node => Node, key => Key,
+                   directory => Dir, identity => Identity})}
+    catch Class:Reason:Stack -> {failed, Class, Reason, Stack}
+    after
+        quod_reg:unsubscribe({agent, Ref}),
+        quod_reg:unsubscribe({agent_hosting, Ns}),
+        stop_ontology(ActorOntology), stop_ontology(NodeOntology),
+        gen_server:stop(Vault), gen_server:stop(Auth), gen_server:stop(Router),
+        ok = file:delete(BeamPath),
+        lists:foreach(fun({K, undefined}) -> application:unset_env(quod, K);
+                         ({K, {ok, V}}) -> application:set_env(quod, K, V)
+                      end, Saved)
+    end,
+    case Result of
+        {ok, Value} ->
+            ok = file:del_dir_r(Dir),
+            Value;
+        {failed, FailureClass, FailureReason, FailureStack} ->
+            io:format("Failed hosted-agent fixture retained at ~s~n", [Dir]),
+            erlang:raise(FailureClass, FailureReason, FailureStack)
+    end.
+
+owned_reaction(Instance, Event, Goal) -> owned_reaction(Instance, Event, Goal, true).
+
+owned_reaction(Instance, Event, Goal, Guard) ->
+    {':-', {react_on, Event, Goal},
+      {',', {me, {agent_instance_ref, {'_'}, {'_'}, Instance}}, Guard}}.
+
+start_ontology(Ns, Dir, Identity, Diff, Terms) ->
+    start_ontology(Ns, Dir, Identity, Diff, Terms, #{}).
+
+start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
+    true = quod_reg:subscribe({runtime, Ns}),
+    {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
+      #{node_id => maps:get(pubkey, Identity), identity => Identity,
+        data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
+        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates, ?MODULE],
+        genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}, BootConfig)),
+    unlink(Sup),
+    receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,
+    quod_reg:unsubscribe({runtime, Ns}),
+    %% This fixture directly owns namespace supervisors. Retain the same
+    %% anchored hosting declaration that the real namespace manager keeps
+    %% across a child restart; a dead child must not become a foreign target.
+    {ok, #{content := Content} = Projection} = application:get_env(quod, namespace_desired),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    application:set_env(quod, namespace_desired,
+        Projection#{content => Content#{Ns => #{genesis_hash => Anchor}}}),
+    Sup.
+
+stop_ontology(Sup) ->
+    Monitor = monitor(process, Sup),
+    exit(Sup, shutdown),
+    receive {'DOWN', Monitor, process, Sup, _} -> ok after 5000 -> error(namespace_stop_timeout) end.
+
+=== test/quod_physics_tests.erl:1655-1708 ===
+opening_worker_cancellation_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{node := Human,identity := Identity}) ->
+        Parent = self(), Socket = spawn(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        Session = simulation_session(Identity),
+        true = quod_reg:reg({host_test,local_proof}),
+        try
+            Open = fun() ->
+                Socket ! {client,simulation_open(F,Session,Human)},
+                receive {local_proof_waiting,Proof} -> Proof after 5000 -> error(opening_proof_not_waiting) end
+            end,
+            Socket ! {client,simulation_open(F#{expires => 18446744073709551615},Session,Human)},
+            ?assertMatch(#{<<"reason">> := <<"invalid_view_deadline">>},simulation_reply(Socket,<<"unavailable">>)),
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+            Proof = Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
+            M = monitor(process,Worker), ProofMonitor = monitor(process,Proof),
+            Socket ! {timeout,Timer,expired},
+            ?assertMatch(#{<<"reason">> := <<"expired">>},simulation_reply(Socket,<<"unavailable">>)),
+            receive {'DOWN',M,process,Worker,Reason} -> ?assertEqual(killed,Reason)
+            after 5000 -> error({opening_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
+            receive {'DOWN',ProofMonitor,process,Proof,_} -> ok
+            after 5000 -> error({proof_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
+            receive {simulation_opening_down,Socket,Worker} -> ok after 5000 -> error(socket_cleanup_missing) end,
+            Socket ! {view_opened,Ref,retired_result},
+            ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+            Open(), #{opening := {_,Fresh,_}} = simulation_state(Socket),
+            Socket ! {client,simulation_open(F,Session,Human)},
+            ?assertMatch(#{<<"reason">> := <<"dependency_recovering">>},simulation_reply(Socket,<<"unavailable">>)),
+            _ = simulation_reply(Socket,<<"refresh">>),
+            receive {simulation_opening_down,Socket,Fresh} -> ok after 5000 -> error(reopen_cleanup_missing) end,
+            Open(), #{opening := {_,Last,_}} = simulation_state(Socket),
+            LastMonitor = monitor(process,Last), exit(Socket,kill),
+            receive {'DOWN',LastMonitor,process,Last,killed} -> ok
+            after 5000 -> error(socket_did_not_reap_opening) end
+        after gproc:unreg(quod_reg:name({host_test,local_proof})), exit(Socket,kill) end
+    end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},
+        {':-',{world_view,room,playing,[]},test_physics_snapshot}] end) end}.
+
+opening_cancellation_state(Worker,Proof,Socket) ->
+    Info = fun(Pid) -> #{pid => Pid,alive => is_process_alive(Pid),
+        info => process_info(Pid,[status,current_function,current_stacktrace,message_queue_len,monitored_by])} end,
+    #{worker => Info(Worker),proof => Info(Proof),socket => Info(Socket),
+      mailbox => process_info(self(),messages),
+      socket_state => try simulation_state(Socket) catch Class:Reason -> {Class,Reason} end}.
+
+assert_view_selection(Selection,{ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
+    {ok,Pairs} = quod_client_result:decode_binding(Blob),
+    ?assert(lists:any(fun({_,{world_view,_,_,S}}) -> S =:= Selection; (_) -> false end,Pairs)).
+
+signed_mixed_view_uses_rendering_policy_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns}) ->
+        _ = enable(F),
+        Body = {mark,<<"body">>,<<"group">>,[],{body_pose,1,1},no_surface,unlabelled,
+                {depicts,<<"source-instance">>,<<91:256>>,object}},
+        Decoration = {mark,<<"decoration">>,<<"group">>,[],
+
+=== test/quod_physics_tests.erl:1970-2010 ===
+        world_namespace => Ns,world_anchor => Enc(Anchor),
+        signature => Enc(quod_identity:sign(Bytes, Identity))})).
+
+simulation_reply(Socket, Type) ->
+    receive
+        {simulation, Socket, #{<<"type">> := Type} = Message} -> Message;
+        {simulation, Socket, Message} -> error({unexpected_simulation_reply, Type, Message})
+    after 10000 -> error({missing_simulation_reply, Type}) end.
+
+simulation_socket(Parent, S) ->
+    receive
+        stop -> quod_client_simulation:terminate(normal, unused, S);
+        {inspect, Ref} -> Parent ! {simulation_state, Ref, S}, simulation_socket(Parent, S);
+        Message ->
+            Result = case Message of
+                {client, Bytes} -> quod_client_simulation:websocket_handle({text, Bytes}, S);
+                _ -> quod_client_simulation:websocket_info(Message, S)
+            end,
+            Next = case Result of
+                {ok, State} -> State;
+                {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
+                Other -> error({invalid_socket_result, Other})
+            end,
+            case {Message,S} of
+                {{'DOWN',M,process,P,_},#{opening := {_,P,M}}} -> Parent ! {simulation_opening_down,self(),P};
+                _ -> ok
+            end,
+            simulation_socket(Parent, Next)
+    end.
+
+simulation_state(Socket) ->
+    Ref = make_ref(), Socket ! {inspect, Ref},
+    receive {simulation_state, Ref, State} -> State
+    after 5000 -> error(socket_state_unavailable) end.
+
+with_world(Fun) -> with_world(Fun, fun(Rules) -> Rules end).
+with_world(Fun, Transform) ->
+    with_world(<<"host-test-agent">>, Fun, Transform).
+with_world(Ns, Fun, Transform) ->
+    Actor = {agent_instance_ref, Ns, {'_'}, actor},
+    Rules = quod_prolog:read_terms("priv/ontologies/quod_physics.pl") ++
+
+=== src/quod_ns.erl:1-66 ===
+-module(quod_ns).
+-moduledoc """
+Per-namespace sub-supervisor — the unit of **fate-sharing** for one ontology's
+content processes. Supervises, with **`rest_for_one`** (in order): `m:quod_simplex`
+(consensus + durable block log), `m:quod_prolog` (the KB projection),
+`m:quod_catchup` (trustless catch-up endpoint), `m:quod_feed` (the dissemination
+feed — gossips committed blocks to the crowd), and `m:quod_runtime` (the derived
+local runtime projection).
+
+The durable log rebuilds the kb, never the other way round: if `quod_simplex` crashes,
+`rest_for_one` restarts it *and then* every sibling after it (`quod_prolog` rebuilds
+from the reloaded log; the catch-up/feed endpoints re-subscribe their channels); if a
+later sibling crashes alone, only it and those after it restart. `quod_prolog`
+rebuilds from `quod_simplex`'s committed prefix via the rebuild handshake.
+""".
+-behaviour(supervisor).
+-export([start_link/2]).
+-export([init/1]).
+
+start_link(Ns, Config) ->
+    supervisor:start_link(quod_reg:via({quod_ns, Ns}), ?MODULE, {Ns, Config}).
+
+init({Ns, Config}) ->
+    Flags = #{strategy => rest_for_one, intensity => 10, period => 10},
+    Children =
+        [#{id => quod_simplex, start => {quod_simplex, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         #{id => quod_prolog, start => {quod_prolog, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% catch-up endpoint ({catchup, Ns} channel): serves the committed block+cert log to a joiner
+         %% from a READ-ONLY store view (it opens its own fd; never touches the writer's handle).
+         %% It depends on the durable log but holds no state the earlier children need.
+         #{id => quod_catchup, start => {quod_catchup, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% dissemination feed ({feed, Ns} channel): push-pull epidemic gossip of committed blocks to the
+         %% non-voting crowd, each block verified against its quorum cert per hop. It depends on the
+         %% earlier content children (reads full live commits and height-only
+         %% catch-up wakes via the shared {committed, Ns} property, ingests
+         %% through quod_simplex, samples quod_brahms) and holds no state they need.
+         #{id => quod_feed, start => {quod_feed, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% runtime projection orchestrator (P tier, agent-fipa-plan §7/§8): rebuilds derived
+         %% local state from the committed kb. LAST in the chain: it must come after
+         %% quod_prolog (the attach monitor is one-way — a kb restart must restart the runtime
+         %% so it re-attaches), and being last means its own crash restarts nothing else, so a
+         %% runtime fault never bounces the serving endpoints or amplifies restart intensity.
+         #{id => quod_runtime, start => {quod_runtime, start_link, [Ns, Config]},
+           restart => permanent, type => worker}],
+    {ok, {Flags, Children}}.
+
+=== src/quod_client_simulation.erl:68-88 ===
+open_worker(Session,Bytes,Signature,Remaining,S = #{namespace := Ns}) ->
+    %% Reject a deadline outside the VM timer representation before allocating
+    %% an opening worker. Ingress still owns signature/session admission.
+    TimerResult = try {ok,erlang:start_timer(Remaining,self(),expired)}
+                  catch error:badarg -> error end,
+    case TimerResult of
+        {ok,Timer} ->
+            true = quod_reg:subscribe({physics, Ns}),
+            Owner = self(), Ref = make_ref(), Peer = maps:get(peer,S),
+            {Pid,M} = spawn_monitor(fun() ->
+                receive {open,Ref} ->
+                    Result = quod_client_goal_ingress:submit(read,Session,Bytes,Signature,Peer),
+                    Owner ! {view_opened,Ref,Result}
+                end
+            end),
+            _ = quod_process:kill_when_owner_dies(Owner,Pid),
+            Pid ! {open,Ref},
+            {ok,S#{opening => {Ref,Pid,M},timer => Timer}};
+        error -> reply(#{type => unavailable,reason => invalid_view_deadline},maps:with([peer],S))
+    end.
+
+
+=== src/quod_client_simulation.erl:485-515 ===
+b64(B) -> base64:encode(B, #{mode => urlsafe, padding => false}).
+
+detach(S) ->
+    case S of #{pid := Pid, ref := Ref, monitor := M} ->
+        quod_physics:unwatch(Pid, Ref), demonitor(M, [flush]); _ -> ok end,
+    maps:without([pid,ref,monitor,view,tick,height,bodies,control],S).
+
+release(S) ->
+    _ = detach(S),
+    case S of #{opening := {_,Worker,_}} -> exit(Worker,kill); _ -> ok end,
+    _ = case S of #{timer := T} -> erlang:cancel_timer(T); _ -> ok end,
+    [quod_reg:unsubscribe({runtime,N}) || N <- maps:keys(maps:get(heights,S,#{}))],
+    [demonitor(M,[flush]) || M <- maps:keys(maps:get(dependency_monitors,S,#{}))],
+    [quod_reg:demonitor_name({quod_prolog,Ns},M) ||
+        {M,Ns} <- maps:to_list(maps:get(dependency_names,S,#{}))],
+    _ = [catch gen_server:receive_response(Request,0) ||
+        {Request,_} <- gen_server:reqids_to_list(maps:get(snapshots,S,gen_server:reqids_new()))],
+    [unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
+    case S of #{namespace := Ns} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
+    case maps:find(follow_requests,S) of
+        {ok, Requests} ->
+            case gen_server:reqids_size(Requests) of
+                0 -> maps:with([peer,opening],S);
+                _ -> maps:with([peer,opening,follow_requests],S)
+            end;
+        error -> maps:with([peer,opening],S)
+    end.
+terminate(_, _, S) -> _ = release(S), ok.
+
+=== EXACT TEST PATCH ===
+diff --git a/test/quod_create_root_tests.erl b/test/quod_create_root_tests.erl
+index cb29d29..15b6eaa 100644
+--- a/test/quod_create_root_tests.erl
++++ b/test/quod_create_root_tests.erl
+@@ -1,6 +1,6 @@
+ -module(quod_create_root_tests).
+ -include_lib("eunit/include/eunit.hrl").
+--import(quod_ct, [rp/2]).
++-import(quod_ct, [rp/2, stop_ns/1]).
+ 
+ %%%===================================================================
+ %%% create-a-network: the founder reads quod_root.pl once and commits it
+@@ -69,12 +69,6 @@ start_ns(Ns, Cfg) ->
+     unlink(Pid),
+     Pid.
+ 
+-stop_ns(Pid) ->
+-    Ref = monitor(process, Pid),
+-    exit(Pid, shutdown),
+-    receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
+-
+-
+ %%%===================================================================
+ %%% tests
+ %%%===================================================================
+diff --git a/test/quod_ct.erl b/test/quod_ct.erl
+index f9b5470..db70fc7 100644
+--- a/test/quod_ct.erl
++++ b/test/quod_ct.erl
+@@ -16,7 +16,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
+ -ifdef(TEST).
+ -include_lib("eunit/include/eunit.hrl").
+ -endif.
+--export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
++-export([eventually/2, stop_all/1, stop_ns/1, match_ok/1, ordinary_write_ok/1,
+          peer_prove/3, peer_protocol_position/2, await_applied/3, await_operation_complete/3,
+          datadir/2, generate_key_gt/1]).
+ -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
+@@ -708,6 +708,21 @@ eventually(F, Timeout) ->
+ %% Best-effort stop of a list of `peer` nodes (never throws).
+ stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
+ 
++%% Fixture cleanup may run outside the supervisor's parent process. Stop through
++%% OTP and observe every state owner's death before its data directory is removed.
++stop_ns(Pid) ->
++    Owners = [Pid | [Child || {_, Child, _, _} <- supervisor:which_children(Pid), is_pid(Child)]],
++    Monitors = [{Owner, monitor(process, Owner)} || Owner <- Owners],
++    Deadline = erlang:monotonic_time(millisecond) + 5000,
++    try
++        ok = gen_server:stop(Pid, shutdown, 5000),
++        lists:foreach(fun({Owner, Monitor}) ->
++            Remaining = max(0, Deadline - erlang:monotonic_time(millisecond)),
++            receive {'DOWN', Monitor, process, Owner, _} -> ok
++            after Remaining -> error({namespace_owner_not_stopped, Owner}) end
++        end, Monitors)
++    after [demonitor(Monitor, [flush]) || {_, Monitor} <- Monitors] end.
++
+ %% A `quod_prolog:prove/2` result with at least one binding.
+ %% A local deadline does not prove that a write failed. Tag it so even a nested
+ %% `lists:any/2` callback escapes `eventually/2` instead of resubmitting it.
+diff --git a/test/quod_e2e_tests.erl b/test/quod_e2e_tests.erl
+index 7e59a09..7adeb51 100644
+--- a/test/quod_e2e_tests.erl
++++ b/test/quod_e2e_tests.erl
+@@ -1,7 +1,7 @@
+ -module(quod_e2e_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ -include("quod_ledger.hrl").
+--import(quod_ct, [rp/2]).
++-import(quod_ct, [rp/2, stop_ns/1]).
+ 
+ %%%===================================================================
+ %%% single-node end-to-end: prove(write) -> commit -> apply -> read,
+@@ -30,7 +30,8 @@ cleanup({Dir, Ns, _Cfg}) ->
+ 
+ e2e_test_() ->
+     {foreach, fun setup/0, fun cleanup/1,
+-     [fun t_write_read/1,
++     [fun t_non_parent_teardown/1,
++      fun t_write_read/1,
+       fun t_concurrent_writes_batch/1,
+       fun t_direct_membership_revalidated/1,
+       fun t_restart_reload/1,
+@@ -47,12 +48,6 @@ start_ns(Ns, Cfg) ->
+     unlink(Pid),
+     Pid.
+ 
+-stop_ns(Pid) ->
+-    Ref = monitor(process, Pid),
+-    exit(Pid, shutdown),
+-    receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
+-
+-
+ wait_new_pid(Key, OldPid) -> wait_new_pid(Key, OldPid, 300).
+ wait_new_pid(_K, _Old, 0) -> error(timeout);
+ wait_new_pid(Key, OldPid, N) ->
+@@ -65,6 +60,29 @@ wait_new_pid(Key, OldPid, N) ->
+ %%% tests
+ %%%===================================================================
+ 
++%% EUnit cleanup runs outside the process that started the supervisor.
++t_non_parent_teardown({_Dir, Ns, Cfg}) ->
++    fun() ->
++        Parent = self(), Tag = make_ref(),
++        {Owner, OwnerMonitor} = spawn_monitor(fun() ->
++            Pid = start_ns(Ns, Cfg), Parent ! {Tag, Pid},
++            receive {Tag, done} -> ok end
++        end),
++        Pid = receive {Tag, Started} -> Started after 5000 -> error(start_timeout) end,
++        try
++            stop_ns(Pid),
++            ?assertNot(is_process_alive(Pid))
++        after
++            case is_process_alive(Pid) of
++                true -> gen_server:stop(Pid, shutdown, 5000);
++                false -> ok
++            end,
++            Owner ! {Tag, done},
++            receive {'DOWN', OwnerMonitor, process, Owner, normal} -> ok
++            after 5000 -> error(owner_not_stopped) end
++        end
++    end.
++
+ t_write_read({Dir, Ns, Cfg}) ->
+     fun() ->
+         _Pid = start_ns(Ns, Cfg),
+diff --git a/test/quod_physics_tests.erl b/test/quod_physics_tests.erl
+index a1f4106..65fe571 100644
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -1660,16 +1660,19 @@ opening_worker_cancellation_test_() ->
+         try
+             Open = fun() ->
+                 Socket ! {client,simulation_open(F,Session,Human)},
+-                receive {local_proof_waiting,_} -> ok after 5000 -> error(opening_proof_not_waiting) end
++                receive {local_proof_waiting,Proof} -> Proof after 5000 -> error(opening_proof_not_waiting) end
+             end,
+             Socket ! {client,simulation_open(F#{expires => 18446744073709551615},Session,Human)},
+             ?assertMatch(#{<<"reason">> := <<"invalid_view_deadline">>},simulation_reply(Socket,<<"unavailable">>)),
+             ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+-            Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
+-            M = monitor(process,Worker),
++            Proof = Open(), #{opening := {Ref,Worker,_},timer := Timer} = simulation_state(Socket),
++            M = monitor(process,Worker), ProofMonitor = monitor(process,Proof),
+             Socket ! {timeout,Timer,expired},
+             ?assertMatch(#{<<"reason">> := <<"expired">>},simulation_reply(Socket,<<"unavailable">>)),
+-            receive {'DOWN',M,process,Worker,killed} -> ok after 5000 -> error(opening_not_cancelled) end,
++            receive {'DOWN',M,process,Worker,Reason} -> ?assertEqual(killed,Reason)
++            after 5000 -> error({opening_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
++            receive {'DOWN',ProofMonitor,process,Proof,_} -> ok
++            after 5000 -> error({proof_not_cancelled,opening_cancellation_state(Worker,Proof,Socket)}) end,
+             receive {simulation_opening_down,Socket,Worker} -> ok after 5000 -> error(socket_cleanup_missing) end,
+             Socket ! {view_opened,Ref,retired_result},
+             ?assertEqual(#{peer => {127,0,0,1}},simulation_state(Socket)),
+@@ -1686,6 +1689,13 @@ opening_worker_cancellation_test_() ->
+     end,fun(Rules) -> Rules ++ [{can_view_physics,room,{'_'}},
+         {':-',{world_view,room,playing,[]},test_physics_snapshot}] end) end}.
+ 
++opening_cancellation_state(Worker,Proof,Socket) ->
++    Info = fun(Pid) -> #{pid => Pid,alive => is_process_alive(Pid),
++        info => process_info(Pid,[status,current_function,current_stacktrace,message_queue_len,monitored_by])} end,
++    #{worker => Info(Worker),proof => Info(Proof),socket => Info(Socket),
++      mailbox => process_info(self(),messages),
++      socket_state => try simulation_state(Socket) catch Class:Reason -> {Class,Reason} end}.
++
+ assert_view_selection(Selection,{ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
+     {ok,Pairs} = quod_client_result:decode_binding(Blob),
+     ?assert(lists:any(fun({_,{world_view,_,_,S}}) -> S =:= Selection; (_) -> false end,Pairs)).
+
+=== FOCUSED RESULT ===
+{
+  "exit": 0,
+  "seconds": 111.115,
+  "scope": "corrected create-root/e2e fixtures and physics module, then live namespaces via documented gproc select"
+}
+=== FOCUSED TEST END ===
+[2.938 s] ok
+  quod_physics_tests: native_rest_recovery_rejects_overlap_and_bad_rotation_test...ok
+  quod_physics_tests: -rest_recovery_overlap_fails_visibly_test_/0-fun-3-...[0.889 s] ok
+  quod_physics_tests: -chair_edit_races_prepared_checkpoint_test_/0-fun-9-...[1.609 s] ok
+  quod_physics_tests: -chair_unknown_checkpoint_custody_is_not_resubmitted_test_/0-fun-16-...[1.843 s] ok
+  quod_physics_tests: -expired_rest_observation_resamples_test_/0-fun-4-...[0.523 s] ok
+  quod_physics_tests: -authored_nonbox_edit_invalidates_rest_checkpoint_test_/0-fun-9- (ball)...[1.319 s] ok
+  quod_physics_tests: -authored_nonbox_edit_invalidates_rest_checkpoint_test_/0-fun-9- (compound)...[1.028 s] ok
+  [done in 108.649 s]
+=======================================================
+  All 170 tests passed.
+REMAINING_NAMESPACES []
+
+=== diagnostics-01/foreign-stop.json ===
+{
+  "exit": 0,
+  "seconds": 6.322031003073789,
+  "diagnostic": "foreign-stop"
+}
+=== diagnostics-02/before-fix.log ===
+======================== EUnit ========================
+quod_e2e_tests: -t_non_parent_teardown/1-fun-4-...*failed*
+in function quod_e2e_tests:'-t_non_parent_teardown/1-fun-4-'/2 (_build/quod27-release-261/diagnostics-02/quod_e2e_tests.erl, line 84)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{assert,[{module,quod_e2e_tests},
+         {line,84},
+         {expression,"is_process_alive ( Pid )"},
+         {expected,false},
+         {value,true}]}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+
+=== diagnostics-05/result.json ===
+{
+  "exit": 0,
+  "seconds": 11.079,
+  "expected": "original module passes while namespaces survive; then explicitly stopped"
+}

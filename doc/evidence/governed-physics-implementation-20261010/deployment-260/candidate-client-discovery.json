@@ -1,0 +1,186 @@
+[
+  {
+    "node": "caton",
+    "address": "192.168.1.12",
+    "port": 27790,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-5"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-24d00555d58057f5b9f97d250c64a2fa7bfec15a",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-867e4421-50dc-8560-ec6f-992509c775c8-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "caton",
+    "address": "192.168.1.12",
+    "port": 28427,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-2"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-d2b9c33f1f7dac233ebf7c5cf7131f6cf468cc97",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-c434e3d5-e0da-d9dd-6466-4da300611e8c-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "conrad",
+    "address": "192.168.1.10",
+    "port": 24657,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-3"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-73531260050ef56ebd43a97f6a4869fa2ef6526b",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-1e7556ee-e912-8697-11cf-8516bbfbe08d-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "conrad",
+    "address": "192.168.1.10",
+    "port": 22594,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-6"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-49f2ea1a69ba9995b9bbefa54d9ba7f2c2dd9e47",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-3ea9f00e-8219-b3f8-5958-fd8540a28873-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "conrad",
+    "address": "192.168.1.10",
+    "port": 30519,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-0"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-c15633f21592bfec509ec641f212c7b0bef19682",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-54af69b0-7ec7-34d7-725e-6dc3fbee0950-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "corin",
+    "address": "192.168.1.11",
+    "port": 25537,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-4"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-c165c2cea75cfab02d37133faa29b87c0784351e",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-728a3b28-a080-2174-b19b-7c983832a313-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "corin",
+    "address": "192.168.1.11",
+    "port": 29269,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-1"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-015ca78615d5aa07d3ba60562de5546b7efb3258",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-7c6dbc0b-17e5-dc53-bc5d-ab1c57933f40-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  },
+  {
+    "node": "corin",
+    "address": "192.168.1.11",
+    "port": 25322,
+    "tags": [
+      "quod",
+      "client",
+      "web",
+      "candidate-quod-node-7"
+    ],
+    "checks": [
+      {
+        "CheckID": "serfHealth",
+        "Status": "passing",
+        "ServiceID": ""
+      },
+      {
+        "CheckID": "_nomad-check-9de23976c3f6a559cd66dcb3fbfe4828867e14ea",
+        "Status": "passing",
+        "ServiceID": "_nomad-task-df44e889-7ae8-94ec-18d3-e5b7788dd68e-quod-quod-finality-candidate-v6-20260926-client-client"
+      }
+    ]
+  }
+]

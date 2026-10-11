@@ -1,0 +1,8 @@
+{
+  "approved": true,
+  "at": "2026-10-11T16:48:12.213431+00:00",
+  "basis": "Fable conditional go; correction and both preflights independently verified in review02/disposition.md",
+  "mutation_manifest_sha256": "61f1fd9a566d9a35bf2831e08e75cfac00ce3237b8de8bfeb3c6ac4af8e5b075",
+  "review_receipt_sha256": "7037759a9206ad7915cde05a88f436889ea577ff825dc484c0fc450f61914203",
+  "disposition_sha256": "0012dae6ac3394163359cb6daa8c0bee08133b13defa4f999bff25d9f71ff78f"
+}

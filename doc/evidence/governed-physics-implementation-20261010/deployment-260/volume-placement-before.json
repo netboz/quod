@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "27ee987d-df4a-d49a-1be9-8ce329359852",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[7]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  },
+  {
+    "ID": "342e5eac-32ee-d80a-919c-febbb6a07468",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[1]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  },
+  {
+    "ID": "631b65e4-aa0a-30c7-bfc2-c7997b30fa63",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[4]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  },
+  {
+    "ID": "90ab9775-31ce-879d-73af-d8bdbd276d98",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[5]",
+    "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "State": "ready"
+  },
+  {
+    "ID": "b2367fb0-ab6f-dbfd-7989-6467872b89d2",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[6]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "b44d3af5-cba7-7457-0a2a-3174d4e3bf67",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[3]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "bcbb7714-d39b-48e9-e141-9ed721a22cd1",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[0]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "dbeff8e6-bc61-6d8c-001f-0796e7ecf0e1",
+    "Name": "quod-finality-candidate-v6-20260926-refound-20261011-v6[2]",
+    "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "State": "ready"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "expected_release": "0.7.260",
+  "origin": "https://192.168.1.10:30519",
+  "existing_webdriver_session": "_build/quod27-desktop-259-03/session.json",
+  "world_window": "A7F6E2EB6874B3F706E82AC4282A742C",
+  "explorer_window": "FFCD418B2852C0322100C24BDE6891C8",
+  "baseline": "_build/quod27-personal-259-01/baseline.json",
+  "preserve_profile_in_place": true,
+  "do_not_archive_profile_or_authentication": true
+}

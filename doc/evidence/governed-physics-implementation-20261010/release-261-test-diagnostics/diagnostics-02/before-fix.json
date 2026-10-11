@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "seconds": 5.326404361054301,
+  "expected": "New real-owner regression fails against current stop_ns; cleanup uses OTP stop after assertion"
+}

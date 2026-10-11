@@ -1,0 +1,493 @@
+{
+  "source": "_build/quod27-desktop-260-02",
+  "files": [
+    {
+      "path": "after-console-camera.json",
+      "sha256": "39140f769fb74fae263d22e83380052efd72b3732da8a482b8c57e1e1eb34dc5",
+      "bytes": 431
+    },
+    {
+      "path": "browser.py",
+      "sha256": "ca1135f9106df8d85b05d2d2d6a9165b90d835bc6f02a5719d19b6ddedb4b56a",
+      "bytes": 1847
+    },
+    {
+      "path": "console-backward-01-before.png",
+      "sha256": "b57fa743d77853c5be432765ac0f7d51d9205b08dd820eaaedbddf0de52d0945",
+      "bytes": 112292
+    },
+    {
+      "path": "console-backward-01-control-responses.json",
+      "sha256": "8fbe6a1dc66f2f51feb7331e624da8c4680274cca0fcafb55639c7dbf523b8cc",
+      "bytes": 650
+    },
+    {
+      "path": "console-backward-01-dom.json",
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca",
+      "bytes": 1103
+    },
+    {
+      "path": "console-backward-01-frames.json",
+      "sha256": "cbacef958e10dc157873d677553bbf827af97846285c53ee5444410108436071",
+      "bytes": 240409
+    },
+    {
+      "path": "console-backward-01-requests.json",
+      "sha256": "818bf61379e580f7ea0d0113cbef289dbb996d2df1c8e5a8d5d657c4dd095c7d",
+      "bytes": 1256
+    },
+    {
+      "path": "console-backward-01-summary.json",
+      "sha256": "cb5ac156a746ea95ab9a5345b52c440c445353bb25fd21b0557d56faea726932",
+      "bytes": 1270
+    },
+    {
+      "path": "console-backward-01.intent.json",
+      "sha256": "b53b247ea952ff93c1b96b30ff12a26712f6e30867b895d745d04b7d469ba456",
+      "bytes": 70
+    },
+    {
+      "path": "console-backward-01.png",
+      "sha256": "6f64c765aa139a090317fa55853a28d5f4e4285ffa5af11bdbf3418e1d5728f2",
+      "bytes": 106485
+    },
+    {
+      "path": "console-opening-STOP.json",
+      "sha256": "efe11b6161b50b3fa98ed0a9a865fa1605b30d3f59b6ac944413d383354b5340",
+      "bytes": 223
+    },
+    {
+      "path": "desktop-step.py",
+      "sha256": "4d61d2d49874a0c80aa7dae3b73f8a9188897ddf78dc7428a1139c5a845a06ca",
+      "bytes": 4717
+    },
+    {
+      "path": "expired-input-paused.json",
+      "sha256": "3dec1f0f22e111fa357604f27dbb3ba27c46664460a560f34eee2620156e053b",
+      "bytes": 735
+    },
+    {
+      "path": "initial-page.json",
+      "sha256": "0f1cdf06a8d5482f2112fa4117706d84a6b56661c3ed17a42135cf1749aba5f5",
+      "bytes": 155
+    },
+    {
+      "path": "install-helper.js",
+      "sha256": "44576610150092b463d11484f575e89e5e1cab3acb1e4fc7d88c50a392fb37d3",
+      "bytes": 1850
+    },
+    {
+      "path": "low-roof-contact-01-STOP.json",
+      "sha256": "25fcd50ac51bf47b123c40becd00c26a4f1653137fe264b2f4143c9c2ac2c564",
+      "bytes": 525
+    },
+    {
+      "path": "low-roof-contact-01-before.png",
+      "sha256": "ba8f1e87616b70c7e8b594753c6d1b88ded7cc2cc26f6d0df64e1319f0b4f4a5",
+      "bytes": 214716
+    },
+    {
+      "path": "low-roof-contact-01-control-responses.json",
+      "sha256": "d8ef6d0f69c19d2e8d08f5872e2800c1dff0a9b611e25de3446ff3f1af14c72b",
+      "bytes": 722
+    },
+    {
+      "path": "low-roof-contact-01-dom.json",
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca",
+      "bytes": 1103
+    },
+    {
+      "path": "low-roof-contact-01-frames.json",
+      "sha256": "fe3291cc53de9a493555915a88d9480706301014bd9e24a08d9958fd466b9ecb",
+      "bytes": 30975
+    },
+    {
+      "path": "low-roof-contact-01-requests.json",
+      "sha256": "0c56f92b699ae58bbbd7446f651b8c87b056bc914712cc34a6395603217e9182",
+      "bytes": 1370
+    },
+    {
+      "path": "low-roof-contact-01-summary.json",
+      "sha256": "e0250b3c09474df08b4d1f32ee1b18879c4affa9f050b436b7a62fa37f4a7b35",
+      "bytes": 1189
+    },
+    {
+      "path": "low-roof-contact-01.intent.json",
+      "sha256": "53cbeddf1a6f48bb78e1f37b53aa8bc9b7625f441270a7ee5da811f96e588fdf",
+      "bytes": 70
+    },
+    {
+      "path": "low-roof-contact-01.png",
+      "sha256": "6869aae4081022ead119c5576b358b8995169bb4564f628ea5736bca82219013",
+      "bytes": 215546
+    },
+    {
+      "path": "observe.js",
+      "sha256": "78c18559b6e701b896b38d1ba39f6f9b29b2f31dcfc70aee292b291e3896ee7b",
+      "bytes": 1978
+    },
+    {
+      "path": "observe_view.py",
+      "sha256": "5bb097d6d4485f7e8635eb02251eba259e0c70714cc4d604dcccf47204acf19a",
+      "bytes": 1647
+    },
+    {
+      "path": "ordinary-reconnect-dom.json",
+      "sha256": "b3664de0bb08626fba2466d71ee89967ca1305de7ba1c3ca7514e75e522911dd",
+      "bytes": 1207
+    },
+    {
+      "path": "ordinary-reconnect.intent.json",
+      "sha256": "e49dbaa506e62c056bfc6730b7a6ba026dac5164a0b3fe81f157ef9fd13c7c66",
+      "bytes": 169
+    },
+    {
+      "path": "reported-fall-frames.json",
+      "sha256": "582bf81e5b68b2a79c87b3d1998937689a9734ea304a5a220ed18e022bc6d440",
+      "bytes": 1612446
+    },
+    {
+      "path": "reported-fall.png",
+      "sha256": "f6d5417f81ebeef12277a50c27cd78aa9f674fc17783a01557eccdab5c9c18ac",
+      "bytes": 42803
+    },
+    {
+      "path": "rescue-current-projection.json",
+      "sha256": "91ab5dd0680e1054c762568ac3f4663d50ebe29969231be3724d7be9fae91d05",
+      "bytes": 5757
+    },
+    {
+      "path": "rescue-final-frames.json",
+      "sha256": "c5eb8f8796c2762eadc9900efabd5355b410d8adeca43d500beae67656acef19",
+      "bytes": 16899
+    },
+    {
+      "path": "rescue-final.png",
+      "sha256": "92d82e3a99ec19fc9ad00dccfe2fb744a7752e035b317d203ae3ab04a2fe9c96",
+      "bytes": 203644
+    },
+    {
+      "path": "rescue-grant-execute.intent.json",
+      "sha256": "8e183430528d3cb16c487f4b2240588658bf84194551297b8b3106958f8ed8b7",
+      "bytes": 1482
+    },
+    {
+      "path": "rescue-grant-execute.json",
+      "sha256": "b381cdd81c0efe555bb78d2c29e5f146c7697b96cfa3989b346543bc02796e33",
+      "bytes": 461
+    },
+    {
+      "path": "rescue-grant-goal.intent.json",
+      "sha256": "15365f1b427f407c429dad8ce8c4a69ab3c2999a446a559246036bdf6102346d",
+      "bytes": 1156
+    },
+    {
+      "path": "rescue-grant-goal.json",
+      "sha256": "ec3babefe3bd30c7f3d1cf8cb85c5dad3f462059886a12bb810d3eafa8905297",
+      "bytes": 1391
+    },
+    {
+      "path": "rescue-grant-installed.json",
+      "sha256": "5c1125a37ad660c74acaa9ceeae5353af9188cf523f0230f3e9bb0214a09515e",
+      "bytes": 74
+    },
+    {
+      "path": "rescue-grant-observer.json",
+      "sha256": "244abc4328816b919bddd98f2de523bc4e3895818191cb7d27568158ecc893b3",
+      "bytes": 624
+    },
+    {
+      "path": "rescue-grant.prolog",
+      "sha256": "45ba23b6cc8afa05a0d12d2fdd6ff7bc25341a0e004e69e2455be2ea71b5ecf3",
+      "bytes": 1248
+    },
+    {
+      "path": "rescue-helper.json",
+      "sha256": "606dee27dec75719e1197c4e87f7ff334905aa80dad7c94c41b6a24e95fa1bd5",
+      "bytes": 1429
+    },
+    {
+      "path": "rescue-once.py",
+      "sha256": "5fb8248f182d315b3575b1e471ed6b1c161da72f71839d750b3ac84334a7f233",
+      "bytes": 2789
+    },
+    {
+      "path": "rescue-pending-before.intent.json",
+      "sha256": "c5dfcaf039de1f25e9c53eb66ba3d118926df8e612adb132cea86da88bfcf19a",
+      "bytes": 83
+    },
+    {
+      "path": "rescue-pending-before.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "path": "rescue-pending-final.intent.json",
+      "sha256": "d30c3c3f7187179ecdd51c7524fb53dc482c6cd3b5713f4c47e91915a99e8914",
+      "bytes": 83
+    },
+    {
+      "path": "rescue-pending-final.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2
+    },
+    {
+      "path": "rescue-read-goal-02.intent.json",
+      "sha256": "dc85744f9ee7a8e2bab2a0b69f8648795ed85958a6d64fbe7b546d836b6509be",
+      "bytes": 291
+    },
+    {
+      "path": "rescue-read-goal-02.json",
+      "sha256": "f6a5954fe44924d505a80df4b116d14c018e6dca0091521f5efb597160684cb5",
+      "bytes": 524
+    },
+    {
+      "path": "rescue-read-goal-STOP.json",
+      "sha256": "954c2c7798db58cec184532daa62b34cf196efe45ec6203dc2b2be229c88c903",
+      "bytes": 147
+    },
+    {
+      "path": "rescue-read-goal.intent.json",
+      "sha256": "36b60c131514c09f59e35b1e9c77d39637ecb69b43a6717b5e3236676fd6afbc",
+      "bytes": 278
+    },
+    {
+      "path": "rescue-refresh-log.json",
+      "sha256": "945f4a1313b01c4b10694ff401a22f885d43abbc5bec48415fce7239e8bbba8d",
+      "bytes": 43012
+    },
+    {
+      "path": "rescue-reposition-goal.intent.json",
+      "sha256": "04666135ba08810d6fd66a51d332581dc1f2df57be759201a2a3e35a828289bf",
+      "bytes": 1964
+    },
+    {
+      "path": "rescue-reposition-goal.json",
+      "sha256": "cb9c753bfd546c2dce0abb2c3018278fc6cc8855b54fe746ec10fb4350ab943d",
+      "bytes": 1305
+    },
+    {
+      "path": "rescue-reposition-mechanical.json",
+      "sha256": "0d3f1ab12741e554de220252fceeb6efe5e8e88af13f7ab60dbdc3096dd16510",
+      "bytes": 1441
+    },
+    {
+      "path": "rescue-reposition-submission.intent.json",
+      "sha256": "52d2226c24f18d0bf998025d6258f0ed6e058345aac9b5747eb7fad6608808d2",
+      "bytes": 1396
+    },
+    {
+      "path": "rescue-reposition-submission.json",
+      "sha256": "89dad6433057a6103ee817f1a1d757267b4c420f860478ed486586859d31709c",
+      "bytes": 231
+    },
+    {
+      "path": "rescue-revoke-execute.intent.json",
+      "sha256": "5f5038e3767e6853d0a17f8d72c6935232730565b9857089a48fc55837b0b397",
+      "bytes": 1492
+    },
+    {
+      "path": "rescue-revoke-execute.json",
+      "sha256": "a53497b0066fce4c635a8e7e73b7b1d84030c6af0bd95095fc1fcd3ffbaa0af6",
+      "bytes": 461
+    },
+    {
+      "path": "rescue-revoke-goal.intent.json",
+      "sha256": "b9eac57d05b82a9a82294cff5b01339473af1a2fefdbe0d4900e18f18ec7d3a8",
+      "bytes": 1166
+    },
+    {
+      "path": "rescue-revoke-goal.json",
+      "sha256": "eb871f93f64b7f3a47c48eb1cad2772f3157a23fd7a2a3a40e8d8db51f446110",
+      "bytes": 1401
+    },
+    {
+      "path": "rescue-revoke.prolog",
+      "sha256": "d0d3f56af5229ce90d2997a14f90945dc7d9bc2be187fbdea65e11eafea66081",
+      "bytes": 1258
+    },
+    {
+      "path": "rescue-state-after-grant.intent.json",
+      "sha256": "850f0b3877fac45e5ec9a86199274538a081eebcb3ed1de8ebdffcd241e88fea",
+      "bytes": 612
+    },
+    {
+      "path": "rescue-state-after-grant.json",
+      "sha256": "b10d0c03f6d53bcbc7761df7e7741d39b015f733ff769e8296eac4ca4b2ddcb4",
+      "bytes": 1079
+    },
+    {
+      "path": "rescue-state-before-02.intent.json",
+      "sha256": "a334639eed46481de5f4b96053d107c6ff64e2234c9d63c1cc3d00b70c25c39d",
+      "bytes": 612
+    },
+    {
+      "path": "rescue-state-before-02.json",
+      "sha256": "2c0291a4d3ddc8786ba960a4ffa34da8498a0628a6744b9bc55e2693fb907821",
+      "bytes": 1069
+    },
+    {
+      "path": "rescue-state-final.intent.json",
+      "sha256": "db15c6fcbe4e13998b95904e5720600b10858fccd60372d3e6da5040b5a86b4d",
+      "bytes": 612
+    },
+    {
+      "path": "rescue-state-final.json",
+      "sha256": "cf2b4ba6f8ce3ff2b167c3825be57ad39f3fef9eb5ac28597c756215147c045b",
+      "bytes": 1069
+    },
+    {
+      "path": "restore-control.prolog",
+      "sha256": "c44c4c7089864806a97802a06543c07cec096eac757ca49284d5c6b807a3cdd7",
+      "bytes": 1338
+    },
+    {
+      "path": "revoke-control.prolog",
+      "sha256": "92562fbc6798b101c368775143b9f8f99c26f8361136e4534a729f54a9396e02",
+      "bytes": 1583
+    },
+    {
+      "path": "run.py",
+      "sha256": "6cb7192c2f6682e2401a5d21e02e41018b4983de079a21c1078958aabe5b4806",
+      "bytes": 5951
+    },
+    {
+      "path": "scope.json",
+      "sha256": "4f6f67c8c1b0e3b540fe05d2ded2569a54dda2a0faf1864f167b83b1bf7de8c8",
+      "bytes": 386
+    },
+    {
+      "path": "session.json",
+      "sha256": "f8d5b8d3bc6f7aa2a84c6606101ed36f10bcf1a67fabe70d9846768a9817325f",
+      "bytes": 190
+    },
+    {
+      "path": "signed.py",
+      "sha256": "8a62c76fd64f8b62f182e08cd4167953a2fe60c6a4a2eeeae254df599994d716",
+      "bytes": 701
+    },
+    {
+      "path": "toward-low-roof-01-before.png",
+      "sha256": "8d74406dd9e72b258d3e15d39b8353b3698088ed3040756719a42ce60abd8104",
+      "bytes": 109677
+    },
+    {
+      "path": "toward-low-roof-01-control-responses.json",
+      "sha256": "8846a20f9ea5f4950b647afb802ea3a6495b59ca1086028000da57b269e82874",
+      "bytes": 938
+    },
+    {
+      "path": "toward-low-roof-01-dom.json",
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca",
+      "bytes": 1103
+    },
+    {
+      "path": "toward-low-roof-01-frames.json",
+      "sha256": "e1725a4f5a6906360cdf53efd006b96f294d3b05c6c437ce03b555434af223ec",
+      "bytes": 133372
+    },
+    {
+      "path": "toward-low-roof-01-requests.json",
+      "sha256": "24a858a6eafdce61cebb9dfe33cd57238bfdb7a08490ded454b5dbaf4d89fc40",
+      "bytes": 1940
+    },
+    {
+      "path": "toward-low-roof-01-summary.json",
+      "sha256": "7165abb8a6ddc74dbdaf23439e9049d84922fc0430d1295535249fab0848be85",
+      "bytes": 1173
+    },
+    {
+      "path": "toward-low-roof-01.intent.json",
+      "sha256": "ff32f2dfe114ae572b558ed7a6271407d79dc01fb1cd54aae8a6a5997f32970c",
+      "bytes": 70
+    },
+    {
+      "path": "toward-low-roof-01.png",
+      "sha256": "19ccaecf1b83e0f7e61c6bb79d5b8d2cc8eceb2dacc39cc8c8e7e5132e9cbc90",
+      "bytes": 114669
+    },
+    {
+      "path": "toward-low-roof-02-before.png",
+      "sha256": "f81f6122526fc7403fd4dd3f568b47a025b4ee0be054c3c14bdc3381875cefe3",
+      "bytes": 116581
+    },
+    {
+      "path": "toward-low-roof-02-control-responses.json",
+      "sha256": "5f605b1930cf0ce694ea73f586bc4c4a2b7c8af1a0b34f5cf10e9363f65556be",
+      "bytes": 74
+    },
+    {
+      "path": "toward-low-roof-02-dom.json",
+      "sha256": "2e80180aef5952275bde159d2f56319df761454a64b7fdbe50ceadedcb130d2b",
+      "bytes": 1136
+    },
+    {
+      "path": "toward-low-roof-02-frames.json",
+      "sha256": "3009ea603c31e214602e3aa8b774c84fa3bb47fb988213517221172de9cf5be6",
+      "bytes": 6675
+    },
+    {
+      "path": "toward-low-roof-02-requests.json",
+      "sha256": "c7dbc2f80e3c690abd3aef6cdf5607fb4c35efdec4c86fce678a21f0c6179002",
+      "bytes": 572
+    },
+    {
+      "path": "toward-low-roof-02-summary.json",
+      "sha256": "52cef4080d105612a765169d377a59f5afc20b0233e536b45c267d990adf1d24",
+      "bytes": 1202
+    },
+    {
+      "path": "toward-low-roof-02.intent.json",
+      "sha256": "78fa6fa23b82cfe5252b7a7249371552c09b4e1b222e02818e2dcfa09e2c5e98",
+      "bytes": 70
+    },
+    {
+      "path": "toward-low-roof-02.png",
+      "sha256": "f81f6122526fc7403fd4dd3f568b47a025b4ee0be054c3c14bdc3381875cefe3",
+      "bytes": 116581
+    },
+    {
+      "path": "toward-roof-centreline-01-before.png",
+      "sha256": "deb0b9c9c56286a949b66a8c90e4823bd93c7040d2aa80a28cb2ef142f48cc93",
+      "bytes": 219879
+    },
+    {
+      "path": "toward-roof-centreline-01-control-responses.json",
+      "sha256": "9a11f4f08b4a0ca69703fdc4c74fe763b0eaa7d63d4ac8acd519da21022b8ab8",
+      "bytes": 650
+    },
+    {
+      "path": "toward-roof-centreline-01-dom.json",
+      "sha256": "85989ae853b3a4fa6d78ea73c9b05f7deb02d79274c78ae42fc55ac0d3f395ca",
+      "bytes": 1103
+    },
+    {
+      "path": "toward-roof-centreline-01-frames.json",
+      "sha256": "803bd98580c07a3547e6c2156f93ec5a0afad5002f631b6abeac2d749c7c5c02",
+      "bytes": 151222
+    },
+    {
+      "path": "toward-roof-centreline-01-requests.json",
+      "sha256": "ce816b99f7a087e70ad65a3210e60e388908af6e3a034c1559ce84ef711da5d5",
+      "bytes": 1824
+    },
+    {
+      "path": "toward-roof-centreline-01-summary.json",
+      "sha256": "229f7995a0e7679dfcf1fecbdd4ed37e7f8b595a46369b373989cc388dc6eb5b",
+      "bytes": 1141
+    },
+    {
+      "path": "toward-roof-centreline-01.intent.json",
+      "sha256": "b9c09e4453e9b37ee8ec0f23c029be2d8e68f8e1b505c9e6ad598071bf8004c3",
+      "bytes": 70
+    },
+    {
+      "path": "toward-roof-centreline-01.png",
+      "sha256": "ba8f1e87616b70c7e8b594753c6d1b88ded7cc2cc26f6d0df64e1319f0b4f4a5",
+      "bytes": 214716
+    }
+  ],
+  "profile_copied": false,
+  "live_driver_log_excluded": true,
+  "status": "partial acceptance; failed trials retained"
+}

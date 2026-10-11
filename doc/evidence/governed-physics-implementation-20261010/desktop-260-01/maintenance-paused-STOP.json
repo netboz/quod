@@ -1,0 +1,5 @@
+{
+  "outcome": "pointer lock was not acquired; no key event was submitted",
+  "assertion": "pointer completion returned false",
+  "claim": "UI disconnect observed only; no movement assertion made"
+}

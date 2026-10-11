@@ -1,0 +1,5 @@
+{
+  "renderer": "Software WebGL through SwiftShader, real visible desktop Chrome, same private browser profile and server origin",
+  "reason": "Separate browser experiment after repeated main/GPU wait-state hangs. GPU causality is unproven. No runtime/server or physics change.",
+  "first_obligation": "Resolve original restore-control intent from campaign04 using the retained operation journal/history; no new submission."
+}

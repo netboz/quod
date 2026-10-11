@@ -1,0 +1,24 @@
+{
+  "started": "2026-10-11T18:06:37.369631+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "payload_sha256": "d3bab2f9b1aded395f0810966f679648f17308709d387882bdd8970ff01164d8",
+  "scope": "Test-only cleanup correction and cancellation diagnostics; bounded public source and synthetic fixture evidence"
+}

@@ -1,0 +1,1 @@
+Read tree/AGENTS.md first. Review ONLY packet tree files, primarily tree/_build/quod27-release-260/deployment/preserve-origin-plan.md. User requested regular Fable reviews. Concise deployment-gate verdict and concrete blockers; no edits/live action. Do not inspect parent/live checkout. Reuse existing template and owners.

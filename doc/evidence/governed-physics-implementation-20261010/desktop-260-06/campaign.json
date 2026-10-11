@@ -1,0 +1,11 @@
+{
+  "reason": "Restore default hardware acceleration after user reported stutters and software renderer measured 4.43 fps with median202.5ms/max414.9ms frame intervals.",
+  "profile": "same original private profile, preserved in place",
+  "server_changes": false,
+  "world_changes": false,
+  "removed_flags": [
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader"
+  ]
+}

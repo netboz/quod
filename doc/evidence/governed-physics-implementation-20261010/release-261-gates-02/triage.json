@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-11T17:32:41.574318+00:00",
+  "cause": "Clippy rejects three over-precise f32 literals in the new head-on regression.",
+  "correction": "Use the suggested f32 spellings; all three bit patterns are identical. No production or assertion change. Separate clean campaign03.",
+  "values": [
+    {
+      "original_f32": "37bb4289",
+      "shortened_f32": "37bb4289"
+    },
+    {
+      "original_f32": "3f7fffff",
+      "shortened_f32": "3f7fffff"
+    },
+    {
+      "original_f32": "b80c71e7",
+      "shortened_f32": "b80c71e7"
+    }
+  ]
+}

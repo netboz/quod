@@ -1,6 +1,6 @@
 -module(quod_create_root_tests).
 -include_lib("eunit/include/eunit.hrl").
--import(quod_ct, [rp/2]).
+-import(quod_ct, [rp/2, stop_ns/1]).
 
 %%%===================================================================
 %%% create-a-network: the founder reads quod_root.pl once and commits it
@@ -68,12 +68,6 @@ start_ns(Ns, Cfg) ->
     {ok, Pid} = quod_ns:start_link(Ns, Cfg),
     unlink(Pid),
     Pid.
-
-stop_ns(Pid) ->
-    Ref = monitor(process, Pid),
-    exit(Pid, shutdown),
-    receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
-
 
 %%%===================================================================
 %%% tests

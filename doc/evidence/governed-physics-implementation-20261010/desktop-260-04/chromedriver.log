@@ -1,0 +1,28 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 37991.
+
+DevTools listening on ws://127.0.0.1:35001/devtools/browser/7f349bc0-e37c-4829-a7c6-511b4b320fc7
+[1511122:1511122:1011/194207.996168:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+MESA-LOADER: failed to open dri: /usr/lib/gbm/dri_gbm.so: cannot open shared object file: Permission denied (search paths /usr/lib/gbm, suffix _gbm)
+[1511172:1:1011/194208.023800:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1511085:1511085:1011/194208.060909:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1511085:1511085:1011/194208.061311:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[1511186:1:1011/194208.063853:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1511187:1:1011/194208.067560:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1511085:1511085:1011/194208.186897:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[1511232:1:1011/194208.401978:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1511243:1:1011/194208.425618:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[1511085:1511085:1011/194209.323164:INFO:CONSOLE:1] "BJS - [19:42:09]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation", source: https://192.168.1.10:30519/assets/logger-CuBYPcDK.js (1)
+[1511473:1:1011/194213.087834:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+Warning: loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+Warning: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+Warning: vkCreateInstance: Found no drivers!
+Warning: vkCreateInstance failed with VK_ERROR_INCOMPATIBLE_DRIVER
+    at CheckVkSuccessImpl (../../third_party/dawn/src/dawn/native/vulkan/VulkanError.cpp:106)
+
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 72 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 64 to 16 to fit dynamic offset allocation limit.
+[1791740758.753][SEVERE]: Timed out receiving message from renderer: 30.000
+[1791740809.320][SEVERE]: Unable to receive message from renderer

@@ -1,0 +1,72 @@
+[
+  {
+    "path": "AGENTS.md",
+    "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+    "bytes": 8636
+  },
+  {
+    "path": "native/quod_physics/src/motion.rs",
+    "sha256": "c93746964cf8bdef1ca003dfd7f3452115335add671bd8477013d0386bd170e2",
+    "bytes": 27793
+  },
+  {
+    "path": "native/quod_physics/src/geometry.rs",
+    "sha256": "3ab51b0ec968a653ccf0748c89dfc80e05b5d765a790887546853e741fa792ae",
+    "bytes": 8496
+  },
+  {
+    "path": "native/quod_physics/Cargo.toml",
+    "sha256": "8b12f074b10cb6a76577e6af1477a26fb236483bc64cdccab6a940d9bd15e421",
+    "bytes": 360
+  },
+  {
+    "path": "_build/quod27-floor-slide-plan-review-01/fable-review.md",
+    "sha256": "7c3f7dee0fdc7803beca4e05005d7da0b26734abc21866c44d7a5d53d636da82",
+    "bytes": 3625
+  },
+  {
+    "path": "_build/quod27-floor-slide-plan-review-01/receipt.json",
+    "sha256": "257c2478963ee479a3ee2893e529e8c7fd324eab7dc284e134bce9fb8c075955",
+    "bytes": 316
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/before.log",
+    "sha256": "ba3523688dff806a6b80cae9435bdcd25f8a0d8dc1f6129596f3f25f87154f92",
+    "bytes": 1553
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/trace.log",
+    "sha256": "2fa974932756f48e50d6c66c131b57df5b163619e4b2adc8c4fca365e2cf9112",
+    "bytes": 3655
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/fable-candidate-02.log",
+    "sha256": "d510ecc33a577aeb451bfc7ceb34f6fbfe723a973c9d56bbc1bc0b3b5a08262c",
+    "bytes": 2483
+  },
+  {
+    "path": "_build/quod27-floor-slide-repro-01/surface-diagnostic-01.log",
+    "sha256": "c5d7749bf81d90333cd6725080216f6e990dd016a60bad38ab3e31e2ee38fe74",
+    "bytes": 963
+  },
+  {
+    "path": "_build/quod27-floor-slide-control-01/control.log",
+    "sha256": "27f9a82f41abe274bf0bbf32fcaf7f1634a29c894df7895d823199870479e9a5",
+    "bytes": 560
+  },
+  {
+    "path": "_build/quod27-floor-slide-verification-01/native.log",
+    "sha256": "fe74e4aa41c26d6d3255ca61058bbfc710e1881407e82d79acc184db21171037",
+    "bytes": 2147
+  },
+  {
+    "path": "_build/quod27-floor-slide-verification-01/native-exit.json",
+    "sha256": "de7f085a6bac9f2e46f8189730b4a2c6375afb416be358680c1d8413cc53f9e0",
+    "bytes": 226
+  },
+  {
+    "path": "/home/yan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/parry3d-0.31.1/src/query/shape_cast/shape_cast_support_map_support_map.rs",
+    "sha256": "8225dafcd03e43c52def722404a6b9ff063589e1968d7d551f7153598c1524e4",
+    "bytes": 3900
+  }
+]

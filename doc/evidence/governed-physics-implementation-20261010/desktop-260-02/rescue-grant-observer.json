@@ -1,0 +1,14 @@
+{
+  "events": [
+    {
+      "at": 1791738134732,
+      "data": {
+        "reason": "durable_gap",
+        "type": "refresh"
+      }
+    }
+  ],
+  "last": null,
+  "projection": null,
+  "text": "Click the world to explore \u00b7 ZQSD, WASD or arrows to move \u00b7 Shift for faster movement\nquod \u2234\nkey 7n_lHNMzUqS_\nhuman:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE \u00b7 me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer \u2197\n\nYOUR SPACE\n\nPersonal lobby\n\nMovement blocked by the physical world.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nAdvanced"
+}

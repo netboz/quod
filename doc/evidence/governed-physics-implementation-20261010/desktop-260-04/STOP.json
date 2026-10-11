@@ -1,0 +1,4 @@
+{
+  "reason": "Browser main again unresponsive; original restore-control action has no returned outcome. It must be resolved from original journal/history on reconnect, never blindly resubmitted.",
+  "signals": "Only owned main browser, same private profile retained."
+}

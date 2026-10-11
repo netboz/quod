@@ -1,0 +1,5 @@
+{
+  "sha256": "593910264d15c42dac9fe82cfa9c7502b95c5e465051bf972653f17af0503be8",
+  "bytes": 75266,
+  "scope": "Exact shared native slide-rounding correction and four production regressions, with full failed-bound triage; tools disabled"
+}

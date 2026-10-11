@@ -1,0 +1,11 @@
+{
+  "matching_errors": [
+    {
+      "level": "SEVERE",
+      "message": "javascript 2:133 Uncaught (in promise) TypeError: Cannot read properties of null (reading 'activeCamera')",
+      "source": "javascript",
+      "timestamp": 1791742804224
+    }
+  ],
+  "discarded_other_log_entries": 4
+}

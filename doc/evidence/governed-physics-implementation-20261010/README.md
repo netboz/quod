@@ -1,8 +1,8 @@
 # Governed physics: partial implementation evidence
 
 [QUD.27](nimbalyst://QUD.27) remains open. The latest deployed release is
-[0.7.259](deployment-259-refound/README.md), with eight healthy candidate nodes
-after the explicitly authorized refound. The separate main job was unchanged.
+[0.7.260](deployment-260/README.md), with eight healthy candidate nodes and the
+existing ledgers retained. The separate main job was unchanged.
 [Real remote collider propagation](remote-collider-259-06/README.md) passed
 admission, unrelated edit, geometry edit and withdrawal, including 80 unchanged
 checks with no measured rebuild or write/sync work.
@@ -14,7 +14,21 @@ Desktop movement exposed a [negative-zero input defect](movement-zero-dispositio
 Its correction passed Fable plan/implementation reviews and the
 [complete release 0.7.260 checks](release-260-gates-02/README.md): 3,879 EUnit
 tests, 146 Common Test cases, native and client checks, static analysis and
-release packaging. Deployment and desktop collision acceptance remain open.
+release packaging. Deployment passed. Signed desktop movement, floor contact
+and console collision were recorded; the subsequent roof approach exposed a
+shared native slide-rounding defect on the flat floor. Its exact position and
+authored collider reproduce the failure locally. Desktop acceptance remains open
+while that defect is repaired and the remaining checks are completed. The
+[floor slide correction](floor-slide-disposition.md) now passes 22 native tests
+in debug and release builds. The
+[hardware-rendered movement capture](desktop-260-06/README.md) corroborates
+repeated floor contacts despite advancing accepted controls. Normal console use
+and live control revocation/restoration passed in
+[campaigns 04](desktop-260-04/README.md) and [05](desktop-260-05/README.md).
+The final [release 261 checks](release-261-gates-05/README.md) passed all eleven
+gates, including 3,880 EUnit tests and 146 Common Test cases. Release 261 is not
+yet deployed; its test failures, correction reviews and interrupted campaigns
+are retained.
 The [first release260 gate](release-260-gates-01/README.md) stopped at two EUnit
 failures. Their diagnostics and the separately labelled correction campaign
 are retained; passing isolated checks do not explain the unattributed write.
@@ -190,7 +204,7 @@ world. The 0.7.257 release below freshly verified the reported job state before
 executing Yan's separately authorized refound.
 
 Still open: completion of real signed desktop collision acceptance after the
-reviewed client correction is deployed. Remote collider propagation/work
+native floor-slide defect is corrected and deployed. Remote collider propagation/work
 measurements and the signed personal-world baseline have been established.
 Separate Vive/WebXR and durable real-door
 acceptance are not claimed by local fixtures or release smoke checks.

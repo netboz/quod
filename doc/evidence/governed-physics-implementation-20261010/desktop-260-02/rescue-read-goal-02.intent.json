@@ -1,0 +1,7 @@
+{
+  "action": "scoped",
+  "args": [
+    "','(current_principal(P),','(physics_control_state(personal_lobby,P,E,S),','(findall(definition(R,B,M),physics_agent(personal_lobby,pilot,R,B,M),Agents),physics_structure(personal_lobby,Structure))))"
+  ],
+  "at": "2026-10-11T17:01:39.004466+00:00"
+}

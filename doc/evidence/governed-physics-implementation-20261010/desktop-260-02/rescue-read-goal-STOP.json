@@ -1,0 +1,1 @@
+{"stage": "local term construction", "reason": "readTerm requires canonical binding syntax; infix conjunction was supplied", "server_write": false}

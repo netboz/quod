@@ -1,0 +1,154 @@
+{
+  "Annotations": {
+    "DesiredTGUpdates": {
+      "ingress": {
+        "Canary": 0,
+        "DestructiveUpdate": 1,
+        "Disconnect": 0,
+        "Ignore": 0,
+        "InPlaceUpdate": 0,
+        "Migrate": 0,
+        "Place": 0,
+        "Preemptions": 0,
+        "Reconnect": 0,
+        "RescheduleLater": 0,
+        "RescheduleNow": 0,
+        "Stop": 0
+      }
+    },
+    "PreemptedAllocs": null
+  },
+  "CreatedEvals": null,
+  "Diff": {
+    "Fields": null,
+    "ID": "quod27-client-30519",
+    "Objects": null,
+    "TaskGroups": [
+      {
+        "Fields": null,
+        "Name": "ingress",
+        "Objects": null,
+        "Tasks": [
+          {
+            "Annotations": [
+              "forces create/destroy update"
+            ],
+            "Fields": null,
+            "Name": "traefik",
+            "Objects": [
+              {
+                "Fields": [
+                  {
+                    "Annotations": null,
+                    "Name": "ChangeMode",
+                    "New": "noop",
+                    "Old": "noop",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ChangeSignal",
+                    "New": "",
+                    "Old": "",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "DestPath",
+                    "New": "local/dynamic/client.yml",
+                    "Old": "local/dynamic/client.yml",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "EmbeddedTmpl",
+                    "New": "{{- $backends := service \"candidate-quod-node-0.quod-finality-candidate-v6-20260926-client\" -}}\n{{- if eq (len $backends) 1 }}\ntcp:\n  routers:\n    client:\n      entryPoints: [client]\n      rule: \"HostSNI(`*`)\"\n      service: client\n      tls:\n        passthrough: true\n  services:\n    client:\n      loadBalancer:\n        servers:\n{{- range $backends }}\n          - address: \"{{ .Address }}:{{ .Port }}\"\n{{- end }}\n{{- else }}\ntcp: {}\n{{- end }}\n",
+                    "Old": "{{- $backends := service \"quod27-maintenance-260.quod-finality-candidate-v6-20260926-client\" -}}\n{{- if eq (len $backends) 1 }}\ntcp:\n  routers:\n    client:\n      entryPoints: [client]\n      rule: \"HostSNI(`*`)\"\n      service: client\n      tls:\n        passthrough: true\n  services:\n    client:\n      loadBalancer:\n        servers:\n{{- range $backends }}\n          - address: \"{{ .Address }}:{{ .Port }}\"\n{{- end }}\n{{- else }}\ntcp: {}\n{{- end }}\n",
+                    "Type": "Edited"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "Envvars",
+                    "New": "false",
+                    "Old": "false",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "ErrMissingKey",
+                    "New": "false",
+                    "Old": "false",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "LeftDelim",
+                    "New": "{{",
+                    "Old": "{{",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "Once",
+                    "New": "false",
+                    "Old": "false",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "Perms",
+                    "New": "0644",
+                    "Old": "0644",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "RightDelim",
+                    "New": "}}",
+                    "Old": "}}",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "SourcePath",
+                    "New": "",
+                    "Old": "",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "Splay",
+                    "New": "5000000000",
+                    "Old": "5000000000",
+                    "Type": "None"
+                  },
+                  {
+                    "Annotations": null,
+                    "Name": "VaultGrace",
+                    "New": "0",
+                    "Old": "0",
+                    "Type": "None"
+                  }
+                ],
+                "Name": "Template",
+                "Objects": null,
+                "Type": "Edited"
+              }
+            ],
+            "Type": "Edited"
+          }
+        ],
+        "Type": "Edited",
+        "Updates": {
+          "create/destroy update": 1
+        }
+      }
+    ],
+    "Type": "Edited"
+  },
+  "FailedTGAllocs": null,
+  "Index": 846326,
+  "JobModifyIndex": 846326,
+  "NextPeriodicLaunch": null,
+  "Warnings": ""
+}

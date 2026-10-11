@@ -1,0 +1,64 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "50aac7669fa4d92c87fa4cddabe344f59ca370732c7175bf048828837766ca2f"
+    },
+    {
+      "file": "deploy/README.md",
+      "sha256": "b9a5d9dfcf46b5fd4921ad2dd270b88ca271f188b897fc044d99401d88379044"
+    },
+    {
+      "file": "deploy/quod-client.nomad",
+      "sha256": "e1f5a9bec6ab531faa488ceeb59e8133a7b39ca9e2447c78e8f041eb13142096"
+    },
+    {
+      "file": "deploy/quod.nomad",
+      "sha256": "6c78056b5ee15ca40e8005b3056ae4782d22ddbb980de3142a67972902c6aad2"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/preserve-origin-plan.md",
+      "sha256": "648ec0e51e817a5ee347d7ea47e3da8eed7830ad343071fa949ee8ac4ccc54f8"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/ingress-scope.json",
+      "sha256": "94afd465eb285651bc075a8f6b517bdb21f3dac604f718c9a290129ff78922ca"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/ingress-reserve.json",
+      "sha256": "b51b2f0d0bd188c7daf9f635fc9290c20dd98e4b24f044a684459d3b5a6fb325"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/ingress-active.json",
+      "sha256": "a2ff6b839cc3361a40d317fed0557234ec8352c2f9abb728d44cf1083ce8474d"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/candidate-client-discovery.json",
+      "sha256": "f868b69e2ccc0770de414d5cd913e00585df2a6151a74142417269f4c8754b67"
+    },
+    {
+      "file": "_build/quod27-release-260/deployment/client-rate-policy-before.term",
+      "sha256": "fd52b4395ba4c49dcb1707c0caaa1fbd76a2f0dc55cd3d86c3a837a535fca7da"
+    },
+    {
+      "file": "_build/quod27-personal-259-01/baseline.json",
+      "sha256": "7599400863fba4c6047c0ee7742bad0f218c0d19e787c556b1779dd421f7609d"
+    },
+    {
+      "file": "_build/quod27-personal-259-01/owner-active.json",
+      "sha256": "ea3821e166b47b90cba4f7cfb5a857f7f04fb29056949cc1043bb9d78df830bc"
+    },
+    {
+      "file": "_build/quod27-movement-zero-implementation-review-01/fable-review.md",
+      "sha256": "47100808f72cb38a157a1598054a141934e65aef54d4dcb96b261cc81ebe85c4"
+    }
+  ]
+}

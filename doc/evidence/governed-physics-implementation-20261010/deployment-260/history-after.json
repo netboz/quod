@@ -1,0 +1,19 @@
+{
+  "blocks": [
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "height": 350,
+      "unchanged": true,
+      "canonical_sha256": "e9f16f58d195237ac82eceb9dc064fb22619e74257f480f53a820fe2e2bd5623"
+    },
+    {
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "height": 176,
+      "unchanged": true,
+      "canonical_sha256": "7a1d6abe849ac397ab3bd65a576c701c1fff9f2ddd76074f103d2ecb78b0e24d"
+    }
+  ],
+  "certificate_sha256": "b06f4c167933cf35b135e9b8d8c26b47084bad77a08bd6f42e85f7a0803cf1c4",
+  "same_certificate": true,
+  "same_browser_origin": "https://192.168.1.10:30519"
+}

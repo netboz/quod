@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-11T16:48:52.553569+00:00",
+  "phase": "reserve",
+  "job": "quod27-client-30519",
+  "expected_index": 0,
+  "expected_version": 0,
+  "request_sha256": "fccf945b053f3bc30d185ec11b9bfada4184bff65a76dfa56246f06a9125865a"
+}

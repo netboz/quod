@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-11T17:30:32.508241+00:00",
+  "cause": "Copied Cargo target retained the scratch unmodified-control executable as a fresh own-package artifact. Gate log lists unmodified_separating_control, which is absent from the frozen source. Cargo did not recompile, so this failed run did not test the candidate.",
+  "frozen_source_sha256": "c93746964cf8bdef1ca003dfd7f3452115335add671bd8477013d0386bd170e2",
+  "wrong_executable_sha256": "7060d7fb5b5cd1235dd43f0d4413248a9ae1f8851bddd6ae62f66aa30e61b4fc",
+  "correction": "New separately labelled freeze will clean only the current Cargo package after warming dependency caches, before all sequential gates. Scratch crates must use isolated target directories. No source/assertion change and no silent rerun."
+}

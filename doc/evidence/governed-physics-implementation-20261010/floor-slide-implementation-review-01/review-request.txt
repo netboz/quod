@@ -1,0 +1,1340 @@
+Review this exact implementation for the explicitly requested Fable review. User authorizes repository-code review, commits and deploys. Tools disabled; use only the frozen packet. Give GO/BLOCKED with concrete correctness findings and validation gaps. Advice is consultative. QUD.27 remains open; there is NO claim of passing final desktop acceptance.
+
+Plan review blocked the dominant-axis ulp proposal, approved the narrow shared-solver scope, and recommended the simpler relative-f32 separation. The production change adopts that alternative verbatim: one added arithmetic line and two invariant comments in the existing travel slide loop. Every collider remains in each cast, final occupancy checks stay, zero penetration tolerance and all Prolog budgets/policy stay. No new API, fallback, domain rule, geometry or compatibility branch. Added tests use the real native install/apply/step path. No production helper/process introduced.
+
+Evidence: original solver reproduces actual signed desktop floor snag exactly. Trace reaches negative dot -1.492e-14, repeated unchanged, consuming all eight iterations. Separating-control test on the unmodified production solver returns Clear, validating the premise. The new production file passes all 22 native tests, including the original tests unchanged, exact recorded capsule/annulus pose, yawed capsule and translated/rotated surface, same-mesh floor plus wall and corner, head-on contact using the measured non-unit normal (four checks), and 2048 apply/step cycles around the annulus with direct contact-distance nonpenetration every step and no accumulated height drift.
+
+Test-design triage is explicit, not silent: your suggested <=6 total checks for wall/corner and <=one-skin instantaneous height range were tried and FAILED in labelled scratch runs. The isolated diagnostic records 7,6,5,6 total checks for floor/wall/corner cases; all reach the correct safe endpoint and remain below exhausting all eight slide iterations. The production regression asserts fewer than ten checks (eight slide casts plus the initial/final occupancy candidates), not an invented three-cast guarantee. The 2048-step diagnostic completed, min/max body y=.7511144876/.7540597916, final y=.7522174 and position error under1mm. The earlier deployed/unmodified desktop trace already reached .75670605898 during successful floor travel, so instantaneous GJK surface-height variation is a pre-existing separate finding, not introduced by this rounding fix. Production long-walk coverage asserts nonpenetration each step, completion and final height drift within one skin; it does not claim instantaneous exact-height precision. Raw failure and diagnostic logs are included. Do not treat the attempted bounds as passed.
+
+The earlier dominant-component experiments are scratch only and absent from production. Do not demand they be retained as compatibility paths. Review both the numerical fix and whether the stated triage is justified. Follow-up remains: clean sequential full repository gates, commit/code label separately, deploy through the sole candidate server writer preserving existing volumes/history, and resume actual normal-view acceptance. No runtime mutation has occurred to install this patch yet.
+
+
+--- Exact patch ---
+diff --git a/native/quod_physics/src/motion.rs b/native/quod_physics/src/motion.rs
+index a6455a2..7eaae68 100644
+--- a/native/quod_physics/src/motion.rs
++++ b/native/quod_physics/src/motion.rs
+@@ -226,6 +226,9 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
+         // Rotation stops at contact. Translation may continue along the surface.
+         turn = Vector::ZERO;
+         travel -= normal*travel.dot(normal).min(0.0);
++        // Cover f32 projection and pose-frame roundoff in Parry's approach test.
++        // Subsequent casts still check every collider, including this one.
++        travel += normal*(16.0*f32::EPSILON*travel.length());
+     }
+     // The query never returns an overlapping endpoint, including after a
+     // conservative cast or exhausted sliding iterations.
+@@ -413,4 +416,100 @@ mod tests {
+         assert_eq!(end(apply(&mut world,1,1,Query::Place(((4.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS)).0,4.0);
+         assert!(end(travel(&world,(-6.0,0.0,0.0))).0 > 2.5);
+     }
++    fn annular_surface(walls: bool) -> Geometry {
++        let mut points = Vec::new();
++        for radius in [2200.0,9000.0] {
++            for i in 0..24 {
++                let angle = std::f64::consts::TAU*i as f64/24.0;
++                let x = (radius*(angle.cos()*1000000.0).round()/1000000.0).trunc()/1000.0;
++                let z = (radius*(angle.sin()*1000000.0).round()/1000000.0).trunc()/1000.0;
++                points.push((x,0.0,z));
++            }
++        }
++        let mut faces = Vec::new();
++        for i in 0..24 { faces.extend([(i,24+(i+1)%24,24+i),(i,(i+1)%24,24+(i+1)%24)]); }
++        if walls {
++            points.extend([(3.2,0.0,-5.0),(3.2,4.0,-5.0),(3.2,4.0,5.0),(3.2,0.0,5.0),
++                (-5.0,0.0,3.2),(-5.0,4.0,3.2),(5.0,4.0,3.2),(5.0,0.0,3.2)]);
++            faces.extend([(48,49,50),(48,50,51),(52,53,54),(52,54,55)]);
++        }
++        Geometry::Surface(points,faces)
++    }
++
++    fn surface_world(start: V3, roll: f64, yaw: f64, offset: V3, walls: bool) -> (World,Pose) {
++        let mut world = World::new((16,16,128,1000.0,32,256,256),0.016667,-9.81).unwrap();
++        let frame = geometry::transform((offset,(0.0,0.0,roll)),1000.0).unwrap();
++        let position = frame.transform_point(Vector::new(start.0 as f32,start.1 as f32,start.2 as f32));
++        world.install(vec![
++            (1,1,Kind::Fixed,(offset,(0.0,0.0,roll)),annular_surface(walls),1.0),
++            (2,1,Kind::Controlled,(tuple(position),(0.0,yaw,roll)),Geometry::Solid(Primitive::Capsule(0.5,0.25)),1.0),
++        ]).unwrap();
++        world.step().unwrap();
++        (world,frame)
++    }
++
++    fn surface_distance(world: &World) -> f32 {
++        let collider = |id| &world.colliders[world.bodies[world.rows[&id].1].colliders()[0]];
++        let (agent,surface) = (collider(2),collider(1));
++        query::contact(agent.position(),agent.shape(),surface.position(),surface.shape(),1.0)
++            .unwrap().unwrap().dist
++    }
++
++    #[test]
++    fn capsule_slides_over_surface_in_rotated_frames() {
++        let start = (2.68794584274292,0.7519908547401428,0.36940792202949524);
++        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(0.0,0.83,(0.0,0.0,0.0)),
++                (-0.37,0.83,(13.4,-7.0,12.5))] {
++            let (mut world,frame) = surface_world(start,roll,yaw,offset,false);
++            let movement = tuple(frame.rotation*Vector::new(0.033334,-0.002725109,0.0));
++            let p = end(apply(&mut world,2,1,Query::Travel(movement,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
++            let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
++            assert!(local.x as f64 > start.0+0.03,"roll={roll} yaw={yaw}: {p:?}");
++            assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
++        }
++    }
++
++    #[test]
++    fn sliding_keeps_obstacles_in_the_same_surface() {
++        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
++            for desired in [Vector::new(1.0,-0.002725109,0.0),Vector::new(1.0,-0.002725109,1.0)] {
++                let (mut world,frame) = surface_world((2.7,0.752,2.7),roll,yaw,offset,true);
++                let answer = apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*desired),(0.0,0.0,0.0)),(0.002,0.0,8,128));
++                let Answer::Clipped((p,_),_,checks) = answer else {panic!("missed obstacle: {answer:?}")};
++                let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
++                assert!(local.x > 2.94 && local.x < 2.951,"wall: {local:?}");
++                assert!(local.z < 2.951,"corner: {local:?}");
++                assert!(checks < 10,"slide budget consumed by repeated contact: {checks}");
++                assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
++            }
++        }
++    }
++
++    #[test]
++    fn repeated_capsule_travel_keeps_surface_clearance() {
++        let (mut world,_) = surface_world((0.0,0.752,4.0),0.0,0.83,(0.0,0.0,0.0),false);
++        for i in 0..2048 {
++            let before = std::f64::consts::TAU*i as f64/2048.0;
++            let after = std::f64::consts::TAU*(i+1) as f64/2048.0;
++            let delta = (4.0*(after.sin()-before.sin()),-0.002725109,4.0*(after.cos()-before.cos()));
++            let p = end(apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
++            assert!(surface_distance(&world) >= 0.0,"surface overlap at {i}: {p:?}");
++            world.step().unwrap();
++        }
++        let pose = world.bodies[world.rows[&2].1].translation();
++        assert!((pose-Vector::new(0.0,0.752,4.0)).length() < 0.02,"walk failed: {pose:?}");
++        assert!((pose.y-0.752).abs() <= 0.002,"accumulated height drift: {pose:?}");
++    }
++
++
++    #[test]
++    fn head_on_surface_contact_converges() {
++        let (mut world,_) = surface_world((2.68794584274292,0.7519908547401428,0.36940792202949524),0.0,0.0,(0.0,0.0,0.0),false);
++        let n = Vector::new(2.232311999250669e-5,0.9999999403953552,-3.348468089825474e-5);
++        let answer = apply(&mut world,2,1,Query::Travel(tuple(-n),(0.0,0.0,0.0)),(0.002,0.0,8,128));
++        let Answer::Clipped(_,_,checks) = answer else {panic!("head-on: {answer:?}")};
++        assert!(checks <= 4,"head-on repeats: {checks}");
++        assert!(surface_distance(&world) >= 0.0);
++    }
++
+ }
+
+
+--- AGENTS.md ---
+# Working agreement
+
+## Shared engineering rules
+
+These are Yan's standing rules for this repository, not optional suggestions.
+Read this file before starting work. When delegating, require each agent to
+read it and pass on the relevant scope, invariants and verification requirements.
+Keep these rules in one place; task handoffs should reference them, not maintain
+divergent copies. Read the relevant specs and `doc/multiwrite-architecture.md`
+before changing architecture or semantics. Flag conflicts rather than guessing.
+
+### Architecture and Erlang processes
+
+- Prolog ontologies are the core of the system. Domain state, policy, actions,
+  authorization and protocol/conversation rules belong there. External Erlang
+  predicates are the governed interface to the real world and runtime services;
+  they must not become a second domain engine or private knowledge base.
+- Do not hardcode resource budgets or population ceilings in Erlang. Resource
+  allocation is Prolog policy, including future pricing of scarce resources.
+  When an existing numeric cap blocks ordinary work, fix its policy ownership
+  and related enforcement paths; do not silently raise the constant or split
+  domain transactions to evade it. Distinguish actual encoding constraints from
+  configurable budgets, and report the resource that was actually exceeded.
+- Build every new domain, including FIPA, on Quod's existing actions,
+  multi-ontology transactions, ontology recovery and reaction framework. This
+  is a foundational rule, not an optional optimization. Before proposing new
+  machinery, trace the use case through those paths and identify a concrete
+  missing capability. Commit related domain changes and receiver consequences
+  in one existing atomic transaction where they form one transition; do not
+  artificially separate them and then build messaging, acknowledgements or
+  recovery to reconnect them. Preserve event-pattern unification and distinguish
+  restoring ontology state from replaying reactions. Extend the existing owner
+  only for a demonstrated gap; do not duplicate guarantees already provided.
+- Refactor to the domain concept: one authoritative implementation and one
+  owner for each mutable truth. Reuse existing functions and lifecycle
+  machinery; extract shared algorithms into pure modules when appropriate.
+  A module does not need its own process.
+- Prefer asynchronous messages for cross-process work. Use the existing
+  gproc/`quod_reg` pub/sub facilities for shared local events; use direct
+  messages when the recipient is already owned or known. Do not add a broker,
+  second executor, shadow inventory or queue merely to connect existing owners.
+- Publish meaningful installed-state changes, scoped to the affected identity
+  and owner incarnation. Wake only work whose dependencies changed, not all
+  pending work. Preserve subscription/snapshot ordering, cancellation and
+  absolute caller deadlines; stale or duplicate notices must be harmless.
+- No polling, sleeps or recurring retry timers to discover readiness when the
+  owning process can notify it. Protocol-required expiry/failure detection is
+  distinct from readiness polling. Do not block a state owner on network I/O.
+- Share verified results, references and deltas, not another mutable copy of
+  the truth. Do not copy Prolog state between nodes during proofs or re-read
+  ledger prefixes on ordinary requests. Recovery and rebuilds need explicit
+  lifecycle reasons, not hidden request-time repair paths.
+- Keep reusable verified state alive for the lifetime of its real consumer,
+  not just one request. Proofs, renewals and readiness checks must reuse it
+  and process only changes; they must not repeatedly parse history, rebuild
+  projections or recreate disposable disk indexes. Unchanged checks must not
+  cause disk writes or syncs. Preserve required durability for actual changes;
+  do not hide an I/O lifecycle defect by weakening persistence or moving an
+  unbounded history into memory.
+
+### Simplification and maintenance
+
+- "No Akira code": no ad-hoc special cases, exception-driven workarounds,
+  hidden fallback behavior or clever patches that obscure the architecture.
+  Fix the underlying abstraction instead of layering around the symptom.
+- Replace the old path when introducing its replacement. Do not keep parallel
+  old/new implementations, permanent fast-path forks or compatibility shims.
+  New behavior belongs in the shared model, not an alternative execution path.
+  Clean format breaks still require the applicable review/deployment authority;
+  this rule alone never authorizes a data wipe.
+- Remove superseded code, unused exports, duplicate validation and stale
+  comments/docs in the same scope. Verify callers and runtime reachability;
+  neither Dialyzer/xref alone nor absence from one trace proves code is dead.
+  Preserve user-owned files and pinned document prefixes.
+- Aim for fewer production lines and fewer concepts after a refinement. Report
+  the actual delta and explain unavoidable growth; do not achieve a smaller
+  count by compressing formatting, hiding code elsewhere or deleting coverage.
+- Keep comments about current invariants and intent. Put run logs, historical
+  status diaries and review narration in handoffs, not implementation docs.
+
+### Diagnosis and verification
+
+- Understand the causal chain before optimizing. Use traces and deterministic
+  reproductions to distinguish computation, mailbox residence, I/O and protocol
+  waits. Add bounded, redacted, removable tracing when needed; observation must
+  not change authority, mask errors or require another execution engine.
+- Check repeated-operation cost as well as first-use correctness. For changes
+  to shared-state lifecycles, verify through the real owner that an unchanged
+  repeat does not replay history, rebuild state or write/sync files, and that
+  a real update is still applied. Measure the relevant work, not just latency.
+- Preserve consensus, authorization, custody, proof/backtracking/cut and
+  commit guarantees. Performance goals do not authorize weaker checks, extended
+  deadlines, uncertain-operation resubmission or changed client semantics.
+- Test the behavior and the failure it prevents, using real production seams.
+  Retire obsolete tests by identifying where their still-valid obligations are
+  covered; do not preserve obsolete machinery just to satisfy its old fixtures.
+  Synchronize tests with delivery/processing evidence, not sleeps or send traces.
+- At required release/review boundaries, use the standing clean sequential
+  gates, full logs and true child exits. Retain and triage failures before
+  trusting a run; no silent reruns or weakened assertions. Freeze each scope's
+  exact tree and evidence, keep label bumps separate, and report partial work
+  honestly. Do not turn routine edits into unnecessary review rounds.
+
+## Continuity
+
+Yan's standing instruction (2026-09-24): do not initiate Claude reviews or
+consultations unless Yan explicitly requests one. Review the work independently.
+When explicitly requested, use the Fable model; its advice remains consultative
+and must be checked against the code and architecture.
+
+Yan's standing instruction (2026-09-10): keep progressing through authorized
+work without stopping at routine intermediate steps, including while Yan is
+away. Use the authority already granted for the current workflow; do not ask
+again for an unchanged, already-authorized operation.
+
+Stop only for a genuine blocker, an unresolved safety/correctness question,
+a required architecture or review-before-commit gate, or a material expansion
+of scope requiring a user decision. Explain the concrete reason. This is not
+permission to bypass review, resubmit uncertain writes, alter deadlines to
+hide failures, or broaden destructive operations beyond the authorized scope.
+
+Preserve user-owned changes. Keep failed measurements and stop markers intact;
+an explicitly authorized new campaign must be separately labeled, not replace
+or silently resume a failed campaign. Report actual results, including failures.
+
+## Stop notifications
+
+Yan requested a desktop notification whenever work finishes or pauses
+(2026-09-10). Before ending a main-agent turn, invoke
+`/bin/sh /home/yan/.codex/notify-stop.sh` when available, and state any actual
+blocker in the final response. The local notifier deliberately omits conversation
+and source content. If notification delivery fails, report that failure rather
+than claiming delivery. A Codex `notify` hook is also configured for future turns;
+neither mechanism guarantees an alert after an abrupt process or host failure.
+
+
+--- native/quod_physics/src/motion.rs ---
+//! Collision queries over the installed world. This module never moves a body
+//! or chooses an agent's permissions, speed, gravity, or locomotion mode.
+use crate::{geometry::{self, Kind, Transform, V3}, World};
+use rapier3d::{math::Pose, parry::{bounding_volume::{Aabb, BoundingVolume},
+    query::{self, DefaultQueryDispatcher, NonlinearRigidMotion, ShapeCastOptions}, shape::Shape}, prelude::*};
+use rustler::NifTaggedEnum;
+
+#[derive(NifTaggedEnum)]
+pub enum Query {
+    Place(Transform),
+    Travel(V3, V3),
+    // Body-origin destination, maximum travel, support search, minimum upward
+    // normal. Policy chooses these values; the complete body follows a clear
+    // straight path, retains its orientation and lands on declared geometry.
+    Land(V3, f64, f64, f64),
+    // Sensory clearance around an authored body-local camera mount. This does
+    // not add a collider or move the agent when a human moves their head.
+    View(V3, f64),
+}
+
+// Skin, permitted numerical penetration, slide iterations, narrow-phase tests.
+// All allowances are supplied by ontology policy through the owner.
+pub type Limits = (f64, f64, usize, usize);
+pub type Position = (V3, (f64,f64,f64,f64));
+
+#[derive(Debug, PartialEq, NifTaggedEnum)]
+pub enum Answer {
+    Clear(Position, usize),
+    Clipped(Position, Vec<(u64,V3)>, usize),
+    Occupied(u64, usize),
+    Blocked(u64, usize),
+    NoSupport,
+    ViewClearance(f64, usize),
+    Unavailable,
+    Unsupported,
+    Invalid,
+    Exhausted,
+}
+
+fn position(p: Pose) -> Position {
+    ((p.translation.x as f64,p.translation.y as f64,p.translation.z as f64),
+     (p.rotation.x as f64,p.rotation.y as f64,p.rotation.z as f64,p.rotation.w as f64))
+}
+fn tuple(v: Vector) -> V3 { (v.x as f64,v.y as f64,v.z as f64) }
+
+struct Space<'a> {
+    query: QueryPipeline<'a>,
+    shape: &'a dyn Shape,
+    checks: usize,
+    remaining: usize,
+    tolerance: f32,
+}
+
+impl Space<'_> {
+    fn charge(&mut self) -> Result<(),Answer> {
+        self.remaining = self.remaining.checked_sub(1).ok_or(Answer::Exhausted)?;
+        self.checks += 1;
+        Ok(())
+    }
+
+    fn occupied(&mut self, pose: Pose) -> Result<Option<u64>,Answer> {
+        let query = self.query;
+        for (_,other) in query.intersect_aabb_conservative(self.shape.compute_aabb(&pose)) {
+            self.charge()?;
+            let contact = query::contact(&pose,self.shape,other.position(),other.shape(),0.0)
+                .map_err(|_| Answer::Unsupported)?;
+            if contact.is_some_and(|c| c.dist < -self.tolerance) {
+                return Ok(Some(other.user_data as u64));
+            }
+        }
+        Ok(None)
+    }
+
+    fn cast(&mut self, pose: Pose, travel: Vector, turn: Vector, skin: f32)
+        -> Result<Option<(f32,u64,Vector)>,Answer> {
+        let motion = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn);
+        let bounds = if turn == Vector::ZERO {
+            self.shape.compute_aabb(&pose).merged(&self.shape.compute_aabb(&motion.position_at_time(1.0)))
+        } else {
+            // A sphere around the body origin contains every rotated part,
+            // including parts whose centres are offset from that origin.
+            let local = self.shape.compute_local_aabb();
+            let radius = local.mins.abs().max(local.maxs.abs()).length();
+            Aabb::from_half_extents(pose.translation,Vector::splat(radius))
+                .merged(&Aabb::from_half_extents(pose.translation+travel,Vector::splat(radius)))
+        }.loosened(skin);
+        let pipeline = self.query;
+        let mut earliest: Option<(f32,u64,Vector)> = None;
+        for (_,other) in pipeline.intersect_aabb_conservative(bounds) {
+            self.charge()?;
+            let hit = if turn == Vector::ZERO {
+                query::cast_shapes(&pose,travel,self.shape,other.position(),Vector::ZERO,other.shape(),
+                    ShapeCastOptions { max_time_of_impact: 1.0, target_distance: skin,
+                        stop_at_penetration: false, compute_impact_geometry_on_penetration: true })
+            } else {
+                query::cast_shapes_nonlinear(&motion,self.shape,
+                    &NonlinearRigidMotion::constant_position(*other.position()),other.shape(),0.0,1.0,false)
+            }.map_err(|_| Answer::Unsupported)?;
+            if let Some(hit) = hit {
+                let normal = other.position().rotation * hit.normal2;
+                if !hit.time_of_impact.is_finite() || !normal.is_finite() { return Err(Answer::Unavailable); }
+                let id = other.user_data as u64;
+                if earliest.is_none_or(|(time,old,_)| hit.time_of_impact < time
+                    || (hit.time_of_impact == time && id < old)) {
+                    earliest = Some((hit.time_of_impact,id,normal));
+                }
+            }
+        }
+        Ok(earliest)
+    }
+}
+
+pub fn evaluate(world: &World, id: u64, revision: u64, input: Query, limits: Limits) -> Answer {
+    match solve(world,id,revision,input,limits) { Ok(answer) | Err(answer) => answer }
+}
+
+pub fn apply(world: &mut World, id: u64, revision: u64, input: Query, limits: Limits) -> Answer {
+    let answer = evaluate(world,id,revision,input,limits);
+    if let Answer::Clear((p,q),_) | Answer::Clipped((p,q),_,_) = &answer {
+        let handle = world.rows[&id].1;
+        let pose = Pose::from_parts(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32),
+            Rotation::from_xyzw(q.0 as f32,q.1 as f32,q.2 as f32,q.3 as f32));
+        if *world.bodies[handle].position() != pose {
+            let collider = world.bodies[handle].colliders()[0];
+            world.bodies[handle].set_position(pose,true);
+            world.bodies[handle].set_linvel(Vector::ZERO,true);
+            world.bodies[handle].set_angvel(Vector::ZERO,true);
+            // Make the new transform visible to the next controlled body in
+            // this same step. Rapier retains pair-change detection for its
+            // next integration; no second query index is constructed.
+            world.colliders[collider].set_position(pose);
+            let bounds = world.colliders[collider].compute_aabb();
+            world.broad.set_aabb(&IntegrationParameters {dt: world.dt,..Default::default()},collider,bounds);
+            world.changed = true;
+        }
+    }
+    answer
+}
+
+fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,iterations,checks): Limits)
+    -> Result<Answer,Answer> {
+    // Installation mutates collider sets before the physics step updates the
+    // retained BVH. Never treat that interval as empty collision coverage.
+    if !world.query_ready { return Err(Answer::Unavailable); }
+    if !skin.is_finite() || skin <= 0.0 || skin > world.limits.3
+        || !tolerance.is_finite() || tolerance < 0.0 || tolerance >= skin
+        || iterations == 0 || checks == 0 { return Err(Answer::Invalid); }
+    let Some((row,body)) = world.rows.get(&id) else { return Err(Answer::Unavailable); };
+    if row.1 != revision { return Err(Answer::Unavailable); }
+    if row.2 != Kind::Controlled { return Err(Answer::Unsupported); }
+    let body_handle = *body;
+    let body = &world.bodies[body_handle];
+    let shape = world.colliders[body.colliders()[0]].shape();
+    let mut space = Space { query: world.broad.as_query_pipeline(&DefaultQueryDispatcher,
+        &world.bodies,&world.colliders,QueryFilter::default().exclude_rigid_body(body_handle)),
+        shape, checks: 0, remaining: checks, tolerance: tolerance as f32 };
+    let mut pose = *body.position();
+    let (mut travel,mut turn) = match input {
+        Query::View(local,radius) => {
+            if !radius.is_finite() || radius <= 0.0 || radius > world.limits.3 { return Err(Answer::Invalid); }
+            let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
+            let point = pose.transform_point(local);
+            let pipeline = space.query;
+            let mut clearance = radius as f32;
+            for (_,other) in pipeline.intersect_aabb_conservative(Aabb::from_half_extents(point,Vector::splat(clearance))) {
+                space.charge()?;
+                let projected = other.shape().project_point(other.position(),point,true);
+                let distance = if projected.is_inside { 0.0 } else { (point-projected.point).length() };
+                if !distance.is_finite() { return Err(Answer::Unavailable); }
+                clearance = clearance.min(distance);
+            }
+            return Ok(Answer::ViewClearance((clearance-skin as f32).max(0.0) as f64,space.checks));
+        }
+        Query::Place(target) => {
+            let target = geometry::transform(target,world.limits.3).map_err(|_| Answer::Invalid)?;
+            return Ok(match space.occupied(target)? {
+                Some(other) => Answer::Occupied(other,space.checks),
+                None => Answer::Clear(position(target),space.checks),
+            });
+        }
+        Query::Land(target,reach,drop,up) => {
+            if !reach.is_finite() || reach <= 0.0 || reach > world.limits.3
+                || !drop.is_finite() || drop <= 0.0 || drop > world.limits.3
+                || !up.is_finite() || up <= 0.0 || up > 1.0 { return Err(Answer::Invalid); }
+            let target = geometry::vector(target,world.limits.3).map_err(|_| Answer::Invalid)?;
+            let delta = target-pose.translation;
+            if delta.length() as f64 > reach { return Err(Answer::Invalid); }
+            if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+            let mut landing = pose;
+            landing.translation = target;
+            if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
+            if delta != Vector::ZERO {
+                if let Some((_,other,_)) = space.cast(pose,delta,Vector::ZERO,skin as f32)? {
+                    return Ok(Answer::Blocked(other,space.checks));
+                }
+            }
+            let descent = Vector::new(0.0,-(drop as f32),0.0);
+            let Some((fraction,other,normal)) = space.cast(landing,descent,Vector::ZERO,skin as f32)?
+                else { return Ok(Answer::NoSupport); };
+            if normal.y < up as f32 { return Ok(Answer::NoSupport); }
+            landing.translation += descent*fraction;
+            if landing.translation.abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+            if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
+            return Ok(Answer::Clipped(position(landing),vec![(other,tuple(normal))],space.checks));
+        }
+        Query::Travel(delta,rotation) => (
+            geometry::vector(delta,world.limits.3).map_err(|_| Answer::Invalid)?,
+            geometry::vector(rotation,std::f64::consts::PI).map_err(|_| Answer::Invalid)?),
+    };
+    if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+    if (pose.translation+travel).abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+    let mut contacts = Vec::new();
+    for _ in 0..iterations {
+        if travel == Vector::ZERO && turn == Vector::ZERO { break; }
+        let Some((time,other,normal)) = space.cast(pose,travel,turn,skin as f32)? else {
+            pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(1.0);
+            break;
+        };
+        let radius = shape.compute_local_aabb().mins.abs().max(shape.compute_local_aabb().maxs.abs()).length();
+        let speed_bound = travel.length()+turn.length()*radius;
+        let fraction = if turn == Vector::ZERO { time }
+            else { (time-(skin as f32)/speed_bound).max(0.0) };
+        pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(fraction);
+        contacts.push((other,tuple(normal)));
+        travel *= 1.0-fraction;
+        // Rotation stops at contact. Translation may continue along the surface.
+        turn = Vector::ZERO;
+        travel -= normal*travel.dot(normal).min(0.0);
+        // Cover f32 projection and pose-frame roundoff in Parry's approach test.
+        // Subsequent casts still check every collider, including this one.
+        travel += normal*(16.0*f32::EPSILON*travel.length());
+    }
+    // The query never returns an overlapping endpoint, including after a
+    // conservative cast or exhausted sliding iterations.
+    if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+    Ok(if contacts.is_empty() { Answer::Clear(position(pose),space.checks) }
+        else { Answer::Clipped(position(pose),contacts,space.checks) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::{Geometry,Primitive};
+    const LIMITS: Limits = (0.002,0.00001,8,128);
+    fn box_at(id: u64, kind: Kind, p: V3, size: V3) -> crate::Body {
+        (id,1,kind,(p,(0.0,0.0,0.0)),Geometry::Solid(Primitive::Box(size.0,size.1,size.2)),1.0)
+    }
+    fn world(extra: Vec<crate::Body>) -> World {
+        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
+        let mut rows = vec![box_at(1,Kind::Controlled,(0.0,1.002,0.0),(0.5,1.0,0.5)),
+            box_at(2,Kind::Fixed,(0.0,-0.5,0.0),(20.0,0.5,20.0))];
+        rows.extend(extra);
+        world.install(rows).unwrap(); world.step().unwrap(); world
+    }
+    fn travel(world: &World, p: V3) -> Answer { evaluate(world,1,1,Query::Travel(p,(0.0,0.0,0.0)),LIMITS) }
+    fn end(answer: Answer) -> V3 {
+        match answer { Answer::Clear((p,_),_) | Answer::Clipped((p,_),_,_) => p,
+            other => panic!("unexpected query answer: {other:?}") }
+    }
+
+    #[test]
+    fn floor_wall_slide_and_corner_do_not_move_native_body() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,10.0)),
+                              box_at(4,Kind::Fixed,(0.0,2.0,3.0),(10.0,3.0,0.1))]);
+        let before = world.sample().unwrap();
+        let p = end(travel(&world,(10.0,0.0,2.0)));
+        assert!(p.0 > 1.39 && p.0 < 1.4,"{p:?}");
+        assert!((p.2-2.0).abs() < 0.001,"sliding: {p:?}");
+        let p = end(travel(&world,(10.0,0.0,10.0)));
+        assert!(p.0 < 1.4 && p.2 < 2.4,"corner: {p:?}");
+        let p = end(travel(&world,(0.0,-20.0,0.0)));
+        assert!(p.1 >= 1.0,"floor: {p:?}");
+        assert_eq!(before,world.sample().unwrap());
+    }
+
+    #[test]
+    fn placement_overlap_and_unavailable_are_explicit() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,1.0,0.0),(0.5,1.0,0.5))]);
+        assert!(matches!(evaluate(&world,1,1,Query::Place(((2.0,1.0,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Occupied(3,_)));
+        assert!(matches!(evaluate(&world,1,1,Query::Place(((5.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Clear(_,_)));
+        assert_eq!(evaluate(&world,1,0,Query::Travel((1.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS),Answer::Unavailable);
+        assert_eq!(evaluate(&world,99,1,Query::Place(((0.0,1.0,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Unavailable);
+        assert_eq!(evaluate(&world,1,1,Query::Travel((10.0,0.0,0.0),(0.0,0.0,0.0)),(0.002,0.00001,8,1)),Answer::Exhausted);
+    }
+
+    #[test]
+    fn installed_move_and_deletion_replace_collision_geometry() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(2.0,1.0,0.0),(0.5,1.0,0.5))]);
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 < 1.0);
+        let mut rows: Vec<_> = world.rows.values().map(|(row,_)| row.clone()).collect();
+        rows[2].1 = 2; rows[2].3.0 = (10.0,1.0,0.0);
+        world.install(rows.clone()).unwrap(); world.step().unwrap();
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 > 4.99);
+        rows.pop(); world.install(rows).unwrap(); world.step().unwrap();
+        assert!(end(travel(&world,(15.0,0.0,0.0))).0 > 14.99);
+    }
+
+    #[test]
+    fn compound_opening_and_rotation_use_all_parts() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(0.0,1.0,4.0),(0.3,0.8,0.3))]);
+        let mut rows: Vec<_> = world.rows.values().map(|(row,_)| row.clone()).collect();
+        rows[0].1 = 2;
+        rows[0].4 = Geometry::Parts(vec![
+            (((-1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
+            (((1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
+        ]);
+        world.install(rows).unwrap(); world.step().unwrap();
+        let p = end(evaluate(&world,1,2,Query::Travel((0.0,0.0,6.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(p.2 > 5.99,"opening was incorrectly filled: {p:?}");
+        let pose = ((0.0,1.002,3.0),(0.0,std::f64::consts::FRAC_PI_2,0.0));
+        assert!(matches!(evaluate(&world,1,2,Query::Place(pose),LIMITS),Answer::Occupied(3,_)));
+        // An offset part's arc collides even when the body origin stays still.
+        let row = world.rows.get_mut(&1).unwrap();
+        world.bodies[row.1].set_position(Pose::translation(0.0,1.002,3.0),true);
+        world.changed=true; world.step().unwrap();
+        assert!(matches!(evaluate(&world,1,2,Query::Travel((0.0,0.0,0.0),(0.0,std::f64::consts::FRAC_PI_2,0.0)),LIMITS),Answer::Clipped(_,_,_)));
+    }
+
+    #[test]
+    fn triangular_slope_blocks_downward_sweep() {
+        let terrain = (3,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(vec![(3.0,0.0,-3.0),(7.0,0.0,-3.0),(5.0,3.0,3.0)],vec![(0,2,1)]),1.0);
+        let mut world = world(vec![terrain]);
+        let body = world.rows[&1].1;
+        world.bodies[body].set_position(Pose::translation(5.0,5.0,0.0),true);
+        world.changed=true;world.step().unwrap();
+        let p = end(travel(&world,(0.0,-4.0,0.0)));
+        assert!(p.1 > 1.01,"slope missed: {p:?}");
+    }
+
+    #[test]
+    fn explicit_surface_opening_remains_passable_with_solid_rim() {
+        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
+        let floor = (2,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(
+                vec![(-5.0,0.0,-5.0),(5.0,0.0,-5.0),(5.0,0.0,5.0),(-5.0,0.0,5.0),
+                     (-1.0,0.0,-1.0),(1.0,0.0,-1.0),(1.0,0.0,1.0),(-1.0,0.0,1.0)],
+                vec![(0,4,1),(1,4,5),(1,5,2),(2,5,6),
+                     (2,6,3),(3,6,7),(3,7,0),(0,7,4)]),1.0);
+        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor]).unwrap();
+        world.step().unwrap();
+        assert!(matches!(travel(&world,(0.0,-6.0,0.0)),Answer::Clear(_,_)));
+        let moved = apply(&mut world,1,1,Query::Place(((3.0,3.0,0.0),(0.0,0.0,0.0))),LIMITS);
+        assert!(matches!(moved,Answer::Clear(_,_)));
+        world.step().unwrap();
+        let answer = travel(&world,(0.0,-6.0,0.0));
+        assert!(matches!(answer,Answer::Clipped(_,_,_)),"rim missed: {answer:?}");
+        let p = end(answer);
+        assert!(p.1 >= 1.0 && p.1 < 1.01,"rim contact: {p:?}");
+    }
+
+    #[test]
+    fn movement_stops_before_dynamic_objects_without_pushing_them() {
+        let mut world = world(vec![box_at(3,Kind::Dynamic,(2.0,1.002,0.0),(0.5,1.0,0.5))]);
+        let obstacle = *world.bodies[world.rows[&3].1].position();
+        let p = end(apply(&mut world,1,1,Query::Travel((10.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(p.0 > 0.99 && p.0 < 1.0,"{p:?}");
+        world.step().unwrap();
+        assert_eq!(*world.bodies[world.rows[&3].1].position(),obstacle);
+    }
+
+    #[test]
+    fn next_agent_queries_the_previous_agents_new_position() {
+        let mut world = world(vec![box_at(3,Kind::Controlled,(5.0,1.002,0.0),(0.5,1.0,0.5))]);
+        let first = end(apply(&mut world,1,1,Query::Travel((2.5,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        let second = end(apply(&mut world,3,1,Query::Travel((-2.5,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(second.0-first.0 >= 1.0,"{first:?} {second:?}");
+        world.step().unwrap();
+        assert_eq!(world.bodies[world.rows[&1].1].translation().x,first.0 as f32);
+        assert_eq!(world.bodies[world.rows[&3].1].translation().x,second.0 as f32);
+    }
+
+    #[test]
+    fn landing_checks_full_path_occupied_target_and_support() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,2.0))]);
+        let land = |p| Query::Land(p,10.0,2.0,0.7);
+        let initial = world.sample().unwrap();
+        assert!(matches!(apply(&mut world,1,1,land((2.0,2.0,0.0)),LIMITS),Answer::Occupied(3,_)));
+        assert!(matches!(apply(&mut world,1,1,land((4.0,2.0,0.0)),LIMITS),Answer::Blocked(3,_)));
+        assert_eq!(apply(&mut world,1,1,land((0.0,8.0,0.0)),LIMITS),Answer::NoSupport);
+        assert_eq!(initial,world.sample().unwrap());
+        let p = end(apply(&mut world,1,1,land((0.0,2.0,4.0)),LIMITS));
+        assert!(p.1 >= 1.0 && p.1 < 1.003 && p.2 == 4.0,"{p:?}");
+    }
+
+    #[test]
+    fn authored_camera_clearance_is_sensory_and_excludes_its_own_body() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,2.0))]);
+        let before = world.sample().unwrap();
+        let Answer::ViewClearance(distance,_) = evaluate(&world,1,1,Query::View((1.0,0.0,0.0),2.0),LIMITS)
+            else { panic!("no view clearance"); };
+        assert!(distance > 0.897 && distance < 0.901,"{distance}");
+        assert_eq!(evaluate(&world,1,1,Query::View((2.0,0.0,0.0),2.0),LIMITS),Answer::ViewClearance(0.0,2));
+        assert_eq!(before,world.sample().unwrap());
+        assert_eq!(evaluate(&world,1,1,Query::View((0.0,0.0,0.0),2.0),(0.002,0.0,8,1)),Answer::Exhausted);
+    }
+
+    #[test]
+    fn occupied_spawn_freezes_travel_until_explicit_clear_reposition() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(0.0,1.0,0.0),(0.2,0.2,0.2))]);
+        let before = world.sample().unwrap();
+        assert!(matches!(apply(&mut world,1,1,Query::Travel((5.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS),Answer::Occupied(3,_)));
+        assert_eq!(before,world.sample().unwrap());
+        let corrected = end(apply(&mut world,1,1,Query::Place(((3.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS));
+        assert_eq!(corrected.0,3.0);
+        assert!(end(travel(&world,(1.0,0.0,0.0))).0 > 3.99);
+    }
+
+    #[test]
+    fn declared_triangle_wall_blocks_travel_from_both_sides() {
+        let sheet = (3,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(vec![(2.0,0.0,-5.0),(2.0,4.0,-5.0),(2.0,4.0,5.0),(2.0,0.0,5.0)],
+                vec![(0,1,2),(0,2,3)]),1.0);
+        let mut world = world(vec![sheet]);
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 < 1.5);
+        assert_eq!(end(apply(&mut world,1,1,Query::Place(((4.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS)).0,4.0);
+        assert!(end(travel(&world,(-6.0,0.0,0.0))).0 > 2.5);
+    }
+    fn annular_surface(walls: bool) -> Geometry {
+        let mut points = Vec::new();
+        for radius in [2200.0,9000.0] {
+            for i in 0..24 {
+                let angle = std::f64::consts::TAU*i as f64/24.0;
+                let x = (radius*(angle.cos()*1000000.0).round()/1000000.0).trunc()/1000.0;
+                let z = (radius*(angle.sin()*1000000.0).round()/1000000.0).trunc()/1000.0;
+                points.push((x,0.0,z));
+            }
+        }
+        let mut faces = Vec::new();
+        for i in 0..24 { faces.extend([(i,24+(i+1)%24,24+i),(i,(i+1)%24,24+(i+1)%24)]); }
+        if walls {
+            points.extend([(3.2,0.0,-5.0),(3.2,4.0,-5.0),(3.2,4.0,5.0),(3.2,0.0,5.0),
+                (-5.0,0.0,3.2),(-5.0,4.0,3.2),(5.0,4.0,3.2),(5.0,0.0,3.2)]);
+            faces.extend([(48,49,50),(48,50,51),(52,53,54),(52,54,55)]);
+        }
+        Geometry::Surface(points,faces)
+    }
+
+    fn surface_world(start: V3, roll: f64, yaw: f64, offset: V3, walls: bool) -> (World,Pose) {
+        let mut world = World::new((16,16,128,1000.0,32,256,256),0.016667,-9.81).unwrap();
+        let frame = geometry::transform((offset,(0.0,0.0,roll)),1000.0).unwrap();
+        let position = frame.transform_point(Vector::new(start.0 as f32,start.1 as f32,start.2 as f32));
+        world.install(vec![
+            (1,1,Kind::Fixed,(offset,(0.0,0.0,roll)),annular_surface(walls),1.0),
+            (2,1,Kind::Controlled,(tuple(position),(0.0,yaw,roll)),Geometry::Solid(Primitive::Capsule(0.5,0.25)),1.0),
+        ]).unwrap();
+        world.step().unwrap();
+        (world,frame)
+    }
+
+    fn surface_distance(world: &World) -> f32 {
+        let collider = |id| &world.colliders[world.bodies[world.rows[&id].1].colliders()[0]];
+        let (agent,surface) = (collider(2),collider(1));
+        query::contact(agent.position(),agent.shape(),surface.position(),surface.shape(),1.0)
+            .unwrap().unwrap().dist
+    }
+
+    #[test]
+    fn capsule_slides_over_surface_in_rotated_frames() {
+        let start = (2.68794584274292,0.7519908547401428,0.36940792202949524);
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(0.0,0.83,(0.0,0.0,0.0)),
+                (-0.37,0.83,(13.4,-7.0,12.5))] {
+            let (mut world,frame) = surface_world(start,roll,yaw,offset,false);
+            let movement = tuple(frame.rotation*Vector::new(0.033334,-0.002725109,0.0));
+            let p = end(apply(&mut world,2,1,Query::Travel(movement,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+            let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
+            assert!(local.x as f64 > start.0+0.03,"roll={roll} yaw={yaw}: {p:?}");
+            assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+        }
+    }
+
+    #[test]
+    fn sliding_keeps_obstacles_in_the_same_surface() {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+            for desired in [Vector::new(1.0,-0.002725109,0.0),Vector::new(1.0,-0.002725109,1.0)] {
+                let (mut world,frame) = surface_world((2.7,0.752,2.7),roll,yaw,offset,true);
+                let answer = apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*desired),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+                let Answer::Clipped((p,_),_,checks) = answer else {panic!("missed obstacle: {answer:?}")};
+                let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
+                assert!(local.x > 2.94 && local.x < 2.951,"wall: {local:?}");
+                assert!(local.z < 2.951,"corner: {local:?}");
+                assert!(checks < 10,"slide budget consumed by repeated contact: {checks}");
+                assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_capsule_travel_keeps_surface_clearance() {
+        let (mut world,_) = surface_world((0.0,0.752,4.0),0.0,0.83,(0.0,0.0,0.0),false);
+        for i in 0..2048 {
+            let before = std::f64::consts::TAU*i as f64/2048.0;
+            let after = std::f64::consts::TAU*(i+1) as f64/2048.0;
+            let delta = (4.0*(after.sin()-before.sin()),-0.002725109,4.0*(after.cos()-before.cos()));
+            let p = end(apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+            assert!(surface_distance(&world) >= 0.0,"surface overlap at {i}: {p:?}");
+            world.step().unwrap();
+        }
+        let pose = world.bodies[world.rows[&2].1].translation();
+        assert!((pose-Vector::new(0.0,0.752,4.0)).length() < 0.02,"walk failed: {pose:?}");
+        assert!((pose.y-0.752).abs() <= 0.002,"accumulated height drift: {pose:?}");
+    }
+
+
+    #[test]
+    fn head_on_surface_contact_converges() {
+        let (mut world,_) = surface_world((2.68794584274292,0.7519908547401428,0.36940792202949524),0.0,0.0,(0.0,0.0,0.0),false);
+        let n = Vector::new(2.232311999250669e-5,0.9999999403953552,-3.348468089825474e-5);
+        let answer = apply(&mut world,2,1,Query::Travel(tuple(-n),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+        let Answer::Clipped(_,_,checks) = answer else {panic!("head-on: {answer:?}")};
+        assert!(checks <= 4,"head-on repeats: {checks}");
+        assert!(surface_distance(&world) >= 0.0);
+    }
+
+}
+
+
+--- native/quod_physics/src/geometry.rs ---
+//! Authored physical geometry. No visual meshes, inferred hulls, or avatar defaults.
+use rapier3d::{math::Pose, prelude::*};
+use rustler::{Atom, NifTaggedEnum, NifUnitEnum};
+use crate::atoms;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Error { InvalidBody, CoordinateAllowance, GeometryAllowance }
+impl From<Error> for Atom {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::InvalidBody => atoms::invalid_body(),
+            Error::CoordinateAllowance => atoms::coordinate_allowance(),
+            Error::GeometryAllowance => atoms::geometry_allowance(),
+        }
+    }
+}
+
+pub type V3 = (f64, f64, f64);
+pub type Transform = (V3, V3);
+
+#[derive(Clone, Copy, Debug, PartialEq, NifUnitEnum)]
+pub enum Kind { Fixed, Dynamic, Controlled }
+
+#[derive(Clone, Debug, PartialEq, NifTaggedEnum)]
+pub enum Primitive {
+    Box(f64, f64, f64),
+    Ball(f64),
+    Capsule(f64, f64), // Half segment length along local Y, then radius.
+    Convex(Vec<V3>),    // Explicitly authored convex hull semantics.
+}
+
+#[derive(Clone, Debug, PartialEq, NifTaggedEnum)]
+pub enum Geometry {
+    Solid(Primitive),
+    Parts(Vec<(Transform, Primitive)>),
+    Surface(Vec<V3>, Vec<(u32, u32, u32)>),
+}
+
+pub fn vector(v: V3, limit: f64) -> Result<Vector, Error> {
+    let a = [v.0, v.1, v.2];
+    if a.iter().any(|x| !x.is_finite() || x.abs() > limit || !(*x as f32).is_finite()) {
+        return Err(Error::CoordinateAllowance);
+    }
+    Ok(Vector::new(v.0 as f32, v.1 as f32, v.2 as f32))
+}
+
+pub fn transform((p, r): Transform, limit: f64) -> Result<Pose, Error> {
+    let p = vector(p, limit)?;
+    let r = vector(r, f32::MAX as f64)?;
+    // Same convention as authored rendering transforms: local X, then Y, then Z.
+    let q = Rotation::from_rotation_z(r.z) * Rotation::from_rotation_y(r.y)
+        * Rotation::from_rotation_x(r.x);
+    Ok(Pose::from_parts(p, q))
+}
+
+pub struct Budget {
+    pub parts: usize,
+    pub vertices: usize,
+    pub triangles: usize,
+    pub coordinate: f64,
+}
+
+fn take(left: &mut usize, count: usize) -> Result<(), Error> {
+    *left = left.checked_sub(count).ok_or(Error::GeometryAllowance)?;
+    Ok(())
+}
+
+impl Primitive {
+    fn build(&self, budget: &mut Budget) -> Result<SharedShape, Error> {
+        take(&mut budget.parts, 1)?;
+        let positive = |x: f64| {
+            if !x.is_finite() || x > budget.coordinate || (x as f32) <= 0.0 {
+                Err(Error::InvalidBody)
+            } else { Ok(x as f32) }
+        };
+        match self {
+            Self::Box(x,y,z) => Ok(SharedShape::cuboid(positive(*x)?,positive(*y)?,positive(*z)?)),
+            Self::Ball(r) => Ok(SharedShape::ball(positive(*r)?)),
+            Self::Capsule(h,r) => Ok(SharedShape::capsule_y(positive(*h)?,positive(*r)?)),
+            Self::Convex(points) => {
+                take(&mut budget.vertices, points.len())?;
+                let points = points.iter().map(|p| vector(*p,budget.coordinate)).collect::<Result<Vec<_>,_>>()?;
+                let hull = SharedShape::convex_hull(&points).ok_or(Error::InvalidBody)?;
+                let volume = hull.mass_properties(1.0).mass();
+                if !volume.is_finite() || volume <= 0.0 { return Err(Error::InvalidBody); }
+                Ok(hull)
+            }
+        }
+    }
+}
+
+impl Geometry {
+    pub fn charge(&self, budget: &mut Budget) -> Result<(), Error> {
+        let mut primitive = |p: &Primitive| {
+            take(&mut budget.parts,1)?;
+            if let Primitive::Convex(points) = p { take(&mut budget.vertices,points.len())?; }
+            Ok(())
+        };
+        match self {
+            Self::Solid(p) => primitive(p),
+            Self::Parts(parts) => { for (_,p) in parts { primitive(p)?; } Ok(()) },
+            Self::Surface(points,faces) => {
+                take(&mut budget.parts,1)?;
+                take(&mut budget.vertices,points.len())?;
+                take(&mut budget.triangles,faces.len())
+            }
+        }
+    }
+
+    pub fn build(&self, kind: Kind, budget: &mut Budget) -> Result<SharedShape, Error> {
+        match self {
+            Self::Solid(p) => p.build(budget),
+            Self::Parts(parts) => {
+                if parts.is_empty() { return Err(Error::InvalidBody); }
+                let mut shapes = Vec::new();
+                for (pose, primitive) in parts {
+                    let pose = transform(*pose,budget.coordinate)?;
+                    let shape = primitive.build(budget)?;
+                    let bounds = shape.compute_aabb(&pose);
+                    if bounds.mins.abs().max_element() as f64 > budget.coordinate
+                        || bounds.maxs.abs().max_element() as f64 > budget.coordinate {
+                        return Err(Error::CoordinateAllowance);
+                    }
+                    shapes.push((pose,shape));
+                }
+                Ok(SharedShape::compound(shapes))
+            }
+            Self::Surface(points, faces) => {
+                if kind != Kind::Fixed || faces.is_empty() { return Err(Error::InvalidBody); }
+                take(&mut budget.parts,1)?;
+                take(&mut budget.vertices,points.len())?;
+                take(&mut budget.triangles,faces.len())?;
+                let points = points.iter().map(|p| vector(*p,budget.coordinate)).collect::<Result<Vec<_>,_>>()?;
+                let mut indices = Vec::new();
+                for &(a,b,c) in faces {
+                    let [Some(pa),Some(pb),Some(pc)] = [points.get(a as usize),points.get(b as usize),points.get(c as usize)] else {
+                        return Err(Error::InvalidBody);
+                    };
+                    let area = (*pb-*pa).cross(*pc-*pa).length_squared();
+                    if !area.is_finite() || area <= 0.0 {
+                        return Err(Error::InvalidBody);
+                    }
+                    indices.push([a,b,c]);
+                }
+                SharedShape::trimesh(points,indices).map_err(|_| Error::InvalidBody)
+            }
+        }
+    }
+
+    pub fn box_half_x(&self) -> Option<f32> {
+        match self { Self::Solid(Primitive::Box(x,_,_)) => Some(*x as f32), _ => None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn budget() -> Budget { Budget { parts: 8, vertices: 32, triangles: 16, coordinate: 100.0 } }
+
+    #[test]
+    fn compound_preserves_an_authored_opening_and_rotation() {
+        let shape = Geometry::Parts(vec![
+            (((-2.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.5,1.0,0.5)),
+            (((2.0,0.0,0.0),(0.0,0.0,std::f64::consts::FRAC_PI_2)),Primitive::Box(1.0,0.25,0.5)),
+        ]);
+        let mut b = budget();
+        let built = shape.build(Kind::Controlled,&mut b).unwrap();
+        assert_eq!(b.parts,6);
+        assert!(!built.contains_point(&Pose::IDENTITY,Vector::ZERO));
+        assert!(built.contains_point(&Pose::IDENTITY,Vector::new(2.0,0.8,0.0)));
+        assert!(!built.contains_point(&Pose::IDENTITY,Vector::new(2.8,0.0,0.0)));
+        let mut repeated = budget();
+        shape.charge(&mut repeated).unwrap();
+        assert_eq!((b.parts,b.vertices,b.triangles),(repeated.parts,repeated.vertices,repeated.triangles));
+    }
+
+    #[test]
+    fn non_cubic_surface_and_explicit_hull_are_distinct() {
+        let vertices = vec![(-2.0,0.0,-2.0),(2.0,0.0,-2.0),(0.0,1.0,2.0)];
+        let surface = Geometry::Surface(vertices.clone(),vec![(0,2,1)]);
+        assert!(surface.build(Kind::Fixed,&mut budget()).is_ok());
+        assert_eq!(surface.build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Solid(Primitive::Convex(vertices)).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        let hull = Geometry::Solid(Primitive::Convex(vec![(0.0,0.0,0.0),(1.0,0.0,0.0),(0.0,1.0,0.0),(0.0,0.0,1.0)]));
+        assert!(hull.build(Kind::Controlled,&mut budget()).is_ok());
+    }
+
+    #[test]
+    fn malformed_geometry_and_resource_exhaustion_fail() {
+        let mut b = budget(); b.parts = 0;
+        assert_eq!(Geometry::Solid(Primitive::Ball(0.5)).build(Kind::Controlled,&mut b).err(),Some(Error::GeometryAllowance));
+        let invalid = Geometry::Surface(vec![(0.0,0.0,0.0)],vec![(0,1,2)]);
+        assert_eq!(invalid.build(Kind::Fixed,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Parts(vec![]).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Solid(Primitive::Ball(f64::NAN)).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+    }
+}
+
+
+--- native/quod_physics/Cargo.toml ---
+[package]
+name = "quod_physics"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rapier3d = { version = "=0.36.0", default-features = false, features = ["dim3", "f32", "std", "solver-bounds-checks"] }
+rustler = "=0.36.2"
+
+[profile.release]
+panic = "unwind"
+overflow-checks = true
+
+
+
+--- _build/quod27-floor-slide-plan-review-01/fable-review.md ---
+Verdict: GO for the scope and constraints, BLOCKED on the mechanism as written. The dominant-component ulp nudge is not safe outside identity frames. A simpler equivalent exists.
+
+**What the trace actually shows**
+
+- The first projection leaves a residual of about -5e-10, which is the non-unit normal plus rounding. The second lands at -1.5e-14, which is below one ulp of the y component, so the subtraction can no longer change the vector. That is a true fixed point, and dividing by the squared normal length does nothing about it.
+- The cast treats a time-zero contact as blocking only when the travel strictly approaches it, so the fix must leave the travel representably separating in the frame parry evaluates, not in ours.
+
+**Why the proposed nudge fails**
+
+- One ulp of the dominant component is ~6e-14 here. Parry recomputes its dot in the body's local frame after rotating travel and normal by f32 quaternions. For a yawed agent or a posed mesh, that rounding is ~1e-9 for this travel, five orders above the nudge. The repro passes only because both poses are identity. Production agents yaw, so the stall would survive the fix.
+- Picking a "stable dominant component" is a new concept with no error analysis behind it, and the scale of one ulp varies with which component dominates.
+
+**Simpler robust equivalent**
+
+After the existing projection, add a separation along the normal scaled to the format's rounding:
+
+```rust
+travel -= normal*travel.dot(normal).min(0.0);
+travel += normal*(16.0*f32::EPSILON*travel.length());
+```
+
+- The factor comes from the error budget, not tuning: two quaternion rotations of ~4 ulp each plus the dot product of ~3 ulp, so 16 dominates in every frame. It is relative to the travel, so it is not a fixed distance epsilon and does not change the tolerance or skin.
+- It moves the body outward by ~1e-8 per contact, physically nothing, and the final occupancy check stays.
+- The squared-length division becomes redundant and should be dropped. Net change is one line and zero new concepts.
+- It also fixes head-on contacts, where the current code burns all iterations and every per-collider check on a rounding-level residual. In a dense scene that can return Exhausted.
+
+**Required tests, in order**
+
+1. Control before coding: at the exact repro pose, cast the unmodified binary with the projected travel plus a strictly separating y component. Expect no time-zero contact. If this fails, the premise is wrong and the fix is misdirected.
+2. The repro as given, through `apply`, asserting progress and no penetration by querying the final contact distance directly, not only the occupied check.
+3. The same mesh with the body yawed and with the mesh under a non-identity pose, plus sloped planes. This is the case the ulp nudge cannot pass and the repro does not cover.
+4. Head-on wall and two-normal corner: assert convergence in two or three cast rounds via the returned check count, and a non-penetrating endpoint.
+5. Long walk: at least two thousand apply and step cycles circling the annulus under gravity. Assert the height stays within one skin of the start and the answer is never Occupied or Exhausted. The GJK normal noise of ~1e-5 radians can sink the body a few hundred nanometres per step. If it drifts, report it as a separate finding rather than widening this scope.
+6. Existing thin wall, hole, rim, and budget tests unchanged.
+
+Drop the trace prints from the committed test. Pin the invariant in a comment above the projection so the parry dependency is explicit.
+
+The stop notification script could not be invoked because no tool access is enabled in this session.
+
+
+--- _build/quod27-floor-slide-plan-review-01/receipt.json ---
+{
+  "started": "2026-10-11T17:12:23.983822+00:00",
+  "finished": "2026-10-11T17:17:18.728763+00:00",
+  "child_exit": 0,
+  "is_error": false,
+  "models": [
+    "claude-fable-5-1"
+  ],
+  "payload_unchanged": true,
+  "payload_sha256": "8c804c804b87569ec656e536c660584aa6916326ddc87e0fb135afc331774cda",
+  "tools": []
+}
+
+
+--- _build/quod27-floor-slide-repro-01/before.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.64s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+answer: Clipped(((2.68794584274292, 0.7519908547401428, 0.36940792202949524), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 10)
+
+thread 'motion::tests::surface_skin_contact_keeps_tangent_motion' (223) panicked at src/motion.rs:427:9:
+tangent travel caught on flat surface: (2.68794584274292, 0.7519908547401428, 0.36940792202949524)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::surface_skin_contact_keeps_tangent_motion ... FAILED
+
+failures:
+
+failures:
+    motion::tests::surface_skin_contact_keeps_tangent_motion
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+
+
+--- _build/quod27-floor-slide-repro-01/trace.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.98s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334, -0.002725109, 0.0) dot=-0.0027243646 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.445924e-7, -9.122448e-8), dot -0.00000000046914367
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.445924e-7, -9.122448e-8) dot=-0.00000000046914367 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+cast: time=0 normal=Vec3(2.232312e-5, 0.99999994, -3.348468e-5) travel=Vec3(0.033334058, -7.4412327e-7, -9.122449e-8) dot=-0.000000000000014921658 norm2=0.9999999 status=Converged
+projected Vec3(0.033334058, -7.4412327e-7, -9.122449e-8), dot -0.000000000000014921658
+answer: Clipped(((2.68794584274292, 0.7519908547401428, 0.36940792202949524), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 10)
+
+thread 'motion::tests::surface_skin_contact_keeps_tangent_motion' (225) panicked at src/motion.rs:429:9:
+tangent travel caught on flat surface: (2.68794584274292, 0.7519908547401428, 0.36940792202949524)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::surface_skin_contact_keeps_tangent_motion ... FAILED
+
+failures:
+
+failures:
+    motion::tests::surface_skin_contact_keeps_tangent_motion
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--lib`
+
+
+--- _build/quod27-floor-slide-repro-01/fable-candidate-02.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.65s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 16 tests
+test motion::tests::authored_camera_clearance_is_sensory_and_excludes_its_own_body ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+test motion::tests::declared_triangle_wall_blocks_travel_from_both_sides ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::occupied_spawn_freezes_travel_until_explicit_clear_reposition ... ok
+test motion::tests::explicit_surface_opening_remains_passable_with_solid_rim ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test motion::tests::capsule_slides_over_surface_in_rotated_frames ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+answer: Clipped(((2.7212798595428467, 0.7519901990890503, 0.3694078326225281), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 4)
+wall roll=0: Vec3(2.9480379, 0.76198083test motion::tests::surface_skin_contact_keeps_tangent_motion ... , ok2
+.6997163) checks=7
+
+thread 'motion::tests::sliding_keeps_obstacles_in_the_same_surface' (239) panicked at src/motion.rs:498:17:
+repeated contact: 7
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::sliding_keeps_obstacles_in_the_same_surface ... FAILED
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+
+thread 'motion::tests::repeated_capsule_travel_keeps_surface_clearance' (238) panicked at src/motion.rs:512:13:
+height drift at 168: (1.9812827110290527, 0.7540597915649414, 3.4745101928710938)
+test motion::tests::repeated_capsule_travel_keeps_surface_clearance ... FAILED
+
+failures:
+
+failures:
+    motion::tests::repeated_capsule_travel_keeps_surface_clearance
+    motion::tests::sliding_keeps_obstacles_in_the_same_surface
+
+test result: FAILED. 14 passed; 2 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.24s
+
+error: test failed, to rerun pass `--lib`
+
+
+--- _build/quod27-floor-slide-repro-01/surface-diagnostic-01.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.91s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 2 tests
+wall roll=0: Vec3(2.9480379, 0.76198083, 2.6997163) checks=7
+diagnostic cast checks: 7
+wall roll=0: Vec3(2.9480171, 0.75970995, 2.94797) checks=6
+diagnostic cast checks: 6
+wall roll=-0.37: Vec3(2.947998, 0.7607441, 2.6998215) checks=5
+diagnostic cast checks: 5
+wall roll=-0.37: Vec3(2.94793, 0.7514144, 2.9480164) checks=6
+diagnostic cast checks: 6
+test motion::tests::diagnostic_obstacles_in_the_same_surface ... ok
+full walk pose=Vec3(0.0005125522, 0.7522174, 4.0003357) y=(0.7511144876480103,0.7540597915649414)
+test motion::tests::diagnostic_repeated_capsule_travel ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.66s
+
+
+
+--- _build/quod27-floor-slide-control-01/control.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-control-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.63s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+separating control: Clear(((2.7212798595428467, 0.7519909739494324, 0.36940792202949524), (0.0, 0.0, 0.0, 1.0)), 3)
+test motion::tests::unmodified_separating_control ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+
+
+
+--- _build/quod27-floor-slide-verification-01/native.log ---
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.22s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 22 tests
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::authored_camera_clearance_is_sensory_and_excludes_its_own_body ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... ok
+test motion::tests::declared_triangle_wall_blocks_travel_from_both_sides ... ok
+test motion::tests::explicit_surface_opening_remains_passable_with_solid_rim ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::capsule_slides_over_surface_in_rotated_frames ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::head_on_surface_contact_converges ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+test motion::tests::occupied_spawn_freezes_travel_until_explicit_clear_reposition ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+test motion::tests::sliding_keeps_obstacles_in_the_same_surface ... ok
+test tests::bounded_push_rest_and_recovery ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+test tests::falling_and_retained_installation ... ok
+test motion::tests::repeated_capsule_travel_keeps_surface_clearance ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+   Doc-tests quod_physics
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+
+--- _build/quod27-floor-slide-verification-01/native-exit.json ---
+{
+  "exit": 0,
+  "started": "2026-10-11T17:24:59.767858+00:00",
+  "ended": "2026-10-11T17:25:02.677068+00:00",
+  "source_sha256": "c93746964cf8bdef1ca003dfd7f3452115335add671bd8477013d0386bd170e2",
+  "source_unchanged": true
+}
+
+--- /home/yan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/parry3d-0.31.1/src/query/shape_cast/shape_cast_support_map_support_map.rs ---
+use crate::math::{Pose, Real, Vector};
+use crate::query::details;
+use crate::query::details::ShapeCastOptions;
+use crate::query::gjk::{self, VoronoiSimplex};
+use crate::query::{ShapeCastHit, ShapeCastStatus};
+use crate::shape::{RoundShapeRef, SupportMap};
+use num::Zero;
+
+/// Time of impacts between two support-mapped shapes under translational movement.
+pub fn cast_shapes_support_map_support_map<G1, G2>(
+    pos12: &Pose,
+    vel12: Vector,
+    g1: &G1,
+    g2: &G2,
+    options: ShapeCastOptions,
+) -> Option<ShapeCastHit>
+where
+    G1: ?Sized + SupportMap,
+    G2: ?Sized + SupportMap,
+{
+    let gjk_result = if options.target_distance > 0.0 {
+        let round_g1 = RoundShapeRef {
+            inner_shape: g1,
+            border_radius: options.target_distance,
+        };
+        gjk::directional_distance(pos12, &round_g1, g2, vel12, &mut VoronoiSimplex::new())
+    } else {
+        gjk::directional_distance(pos12, g1, g2, vel12, &mut VoronoiSimplex::new())
+    };
+
+    gjk_result.and_then(|(time_of_impact, normal1, witness1, witness2)| {
+        if time_of_impact > options.max_time_of_impact {
+            None
+        } else if (options.compute_impact_geometry_on_penetration || !options.stop_at_penetration)
+            && time_of_impact < 1.0e-4
+        {
+            // The GJK-derived normal becomes unreliable for very small TOIs — typically
+            // when the cast starts at (or very close to) the `target_distance` boundary
+            // with a direction nearly tangent to the contact. Fall back on the contact
+            // query, which gives a robust closest-point normal and lets us detect the
+            // case where the cast direction is actually moving away from the contact.
+            let contact = details::contact_support_map_support_map(pos12, g1, g2, Real::MAX)?;
+            let normal_vel = contact.normal1.dot(vel12);
+
+            if !options.stop_at_penetration && normal_vel >= 0.0 {
+                None
+            } else {
+                Some(ShapeCastHit {
+                    time_of_impact,
+                    normal1: contact.normal1,
+                    normal2: contact.normal2,
+                    witness1: contact.point1,
+                    witness2: contact.point2,
+                    // A cast starting exactly touching, neither penetrating nor within
+                    // the target distance, converged like ball-ball does.
+                    status: if contact.dist < options.target_distance {
+                        ShapeCastStatus::PenetratingOrWithinTargetDist
+                    } else {
+                        ShapeCastStatus::Converged
+                    },
+                    subshape1: 0,
+                    subshape2: 0,
+                })
+            }
+        } else {
+            Some(ShapeCastHit {
+                time_of_impact,
+                normal1,
+                normal2: pos12.rotation.inverse() * -normal1,
+                witness1: witness1 - normal1 * options.target_distance,
+                witness2: pos12.inverse_transform_point(witness2),
+                status: if time_of_impact.is_zero() {
+                    // A zero TOI means either a real penetration (or a start within the
+                    // target distance) or a mere touching contact; only the former is
+                    // `PenetratingOrWithinTargetDist`, as for ball-ball.
+                    match details::contact_support_map_support_map(pos12, g1, g2, Real::MAX) {
+                        Some(contact) if contact.dist >= options.target_distance => {
+                            ShapeCastStatus::Converged
+                        }
+                        _ => ShapeCastStatus::PenetratingOrWithinTargetDist,
+                    }
+                } else {
+                    ShapeCastStatus::Converged
+                },
+                subshape1: 0,
+                subshape2: 0,
+            })
+        }
+    })
+}

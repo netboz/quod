@@ -1,0 +1,23 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 14 tests
+test motion::tests::authored_camera_clearance_is_sensory_and_excludes_its_own_body ... ok
+test motion::tests::explicit_surface_opening_remains_passable_with_solid_rim ... ok
+test motion::tests::declared_triangle_wall_blocks_travel_from_both_sides ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test motion::tests::occupied_spawn_freezes_travel_until_explicit_clear_reposition ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+answer: Clipped(((2.7212798595428467, 0.7519901394844055, 0.3694078326225281), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 4)
+test motion::tests::surface_skin_contact_keeps_tangent_motion ... ok
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+test motion::tests::slide_is_outward_rounded ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.15s
+

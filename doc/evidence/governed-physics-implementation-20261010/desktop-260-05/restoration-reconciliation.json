@@ -1,0 +1,14 @@
+{
+  "original_harness_intent": "../quod27-desktop-260-04/restore-control.intent.json",
+  "original_signed_request_id": "not returned; no matching unresolved journal row exists",
+  "journal_before_resolution": [],
+  "resolution_results": [],
+  "signed_current_grants": [],
+  "signed_world_height": 181,
+  "interpretation": "The existing signed client persists each execute request before transmission and retains every uncertain operation. The same key/network journal is empty; a request either did not reach that submission boundary or settled definitively. Current signed world state is still exactly the revoked grant. No pending signed operation is resubmitted. The original request is not claimed to have committed or been rejected. A fresh guarded restoration may now apply to the observed revoked state.",
+  "protocol_sources": [
+    "client/src/signed-client.js:154",
+    "client/src/operation-journal.js:63"
+  ],
+  "same_key_and_network": true
+}

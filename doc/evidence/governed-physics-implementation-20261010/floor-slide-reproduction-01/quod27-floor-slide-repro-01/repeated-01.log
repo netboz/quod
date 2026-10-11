@@ -1,0 +1,10 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+answer: Clipped(((2.7212798595428467, 0.7519901394844055, 0.3694078326225281), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 4)
+test motion::tests::surface_skin_contact_keeps_tangent_motion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.06s
+

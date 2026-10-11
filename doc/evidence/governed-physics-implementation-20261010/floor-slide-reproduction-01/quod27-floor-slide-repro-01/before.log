@@ -1,0 +1,20 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-slide-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.64s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+answer: Clipped(((2.68794584274292, 0.7519908547401428, 0.36940792202949524), (0.0, 0.0, 0.0, 1.0)), [(1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5)), (1, (2.232311999250669e-5, 0.9999999403953552, -3.348468089825474e-5))], 10)
+
+thread 'motion::tests::surface_skin_contact_keeps_tangent_motion' (223) panicked at src/motion.rs:427:9:
+tangent travel caught on flat surface: (2.68794584274292, 0.7519908547401428, 0.36940792202949524)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::surface_skin_contact_keeps_tangent_motion ... FAILED
+
+failures:
+
+failures:
+    motion::tests::surface_skin_contact_keeps_tangent_motion
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

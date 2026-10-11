@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {
+      "Result": "queued(60)"
+    }
+  ],
+  "height": 352,
+  "operation_id": "bPFm7ZuEukyZUWCfw1RV2ThRvu372-a7bqq_v6KO68I",
+  "request_digest": "Siuytt8EULDIElkdFleK9Zx1dSqXFmR6NpS9NPCUsqY",
+  "result": "ok"
+}

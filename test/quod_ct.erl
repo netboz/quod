@@ -16,7 +16,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
--export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
+-export([eventually/2, stop_all/1, stop_ns/1, match_ok/1, ordinary_write_ok/1,
          peer_prove/3, peer_protocol_position/2, await_applied/3, await_operation_complete/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
@@ -707,6 +707,10 @@ eventually(F, Timeout) ->
 
 %% Best-effort stop of a list of `peer` nodes (never throws).
 stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
+
+%% Cleanup can run outside the supervisor's parent. OTP waits for every child
+%% before returning; timeout must fail cleanup before its data is removed.
+stop_ns(Pid) -> gen_server:stop(Pid, shutdown, 5000).
 
 %% A `quod_prolog:prove/2` result with at least one binding.
 %% A local deadline does not prove that a write failed. Tag it so even a nested

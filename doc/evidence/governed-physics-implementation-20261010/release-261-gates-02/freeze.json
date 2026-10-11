@@ -1,0 +1,18 @@
+{
+  "base_commit": "c483c48bc89949695d7725f6e2c9f0b741e1b723",
+  "version": "0.7.261",
+  "purpose": "candidate release 261; implementation frozen with proposed separate version label",
+  "label_files": [
+    "rebar.config",
+    "src/quod.app.src"
+  ],
+  "frozen_at": "2026-10-11T17:30:34.254480+00:00",
+  "owned_changes": [
+    "native/quod_physics/src/motion.rs"
+  ],
+  "excluded_user_changes": [
+    "doc/README.md",
+    "untracked sibling native-client/planning files"
+  ],
+  "tree": "/home/yan/src/quod/_build/quod27-release-261/gates-02/tree"
+}

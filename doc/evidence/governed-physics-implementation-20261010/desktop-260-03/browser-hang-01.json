@@ -1,0 +1,52 @@
+{
+  "1498216": {
+    "wchan": "wait_woken",
+    "syscall": "PermissionError",
+    "status": "Name:\tpython3\nState:\tS (sleeping)\nPPid:\t870754\nThreads:\t2",
+    "stdio": {
+      "0": "/dev/pts/9",
+      "1": "/dev/pts/9",
+      "2": "/dev/pts/9"
+    }
+  },
+  "1498218": {
+    "wchan": "futex_do_wait",
+    "syscall": "PermissionError",
+    "status": "Name:\tchromedriver\nState:\tS (sleeping)\nPPid:\t1498216\nThreads:\t9",
+    "stdio": {
+      "0": "/dev/pts/9",
+      "1": "pipe:[63767398]",
+      "2": "pipe:[63767398]"
+    }
+  },
+  "1498237": {
+    "wchan": "anon_pipe_write",
+    "syscall": "PermissionError",
+    "status": "Name:\tchrome\nState:\tS (sleeping)\nPPid:\t1498218\nThreads:\t41",
+    "stdio": {
+      "0": "/dev/null",
+      "1": "pipe:[63767398]",
+      "2": "pipe:[63767398]"
+    },
+    "pipe_fds": {
+      "1": "pipe:[63767398]",
+      "2": "pipe:[63767398]",
+      "9": "pipe:[63768787]",
+      "10": "pipe:[63768787]",
+      "14": "pipe:[63768832]",
+      "15": "pipe:[63768832]",
+      "35": "pipe:[63769805]",
+      "39": "pipe:[63769805]"
+    }
+  },
+  "1498275": {
+    "wchan": "drm_syncobj_array_wait_timeout.constprop.0",
+    "syscall": "PermissionError",
+    "status": "Name:\tchrome\nState:\tS (sleeping)\nPPid:\t1498245\nThreads:\t16",
+    "stdio": {
+      "0": "/dev/null",
+      "1": "pipe:[63767398]",
+      "2": "pipe:[63767398]"
+    }
+  }
+}

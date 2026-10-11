@@ -1,0 +1,424 @@
+{
+  "events": [
+    {
+      "timestamp": 604206.974423,
+      "request_id": "1525417.424",
+      "data": {
+        "control": "control(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled_agent(pilot,3,2,1,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+        "type": "projection",
+        "view": "j0oLmwCmGtOCvtrm5uHuX7WyBF5zOxT79dVV9KyVpaU",
+        "frame": {
+          "tick": "3981",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "rIrPk4DmaOA9gj1fplD2hwJdiXKGp0rk9wbkWckEC04",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "disconnected",
+            "sequence": "1158"
+          },
+          "units": "metres_seconds"
+        },
+        "selection": "active",
+        "expires_ms": "1791742838430",
+        "height": "358",
+        "marks": "[mark(<<\"sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],transform(0,0,0,0,75,0),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_sky)),mark(<<\"floor\">>,<<\"mesh\">>,mesh_asset(asset(<<\"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-450,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(1660388,1658880,46080,46080,1,2,1)),transform(0,0,0,0,0,0),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"console\">>,<<\"group\">>,[],transform(0,0,3850,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing)]"
+      }
+    },
+    {
+      "timestamp": 604209.852429,
+      "request_id": "1525417.424",
+      "data": {
+        "type": "simulation_frame",
+        "view": "j0oLmwCmGtOCvtrm5uHuX7WyBF5zOxT79dVV9KyVpaU",
+        "frame": {
+          "tick": "3982",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "rIrPk4DmaOA9gj1fplD2hwJdiXKGp0rk9wbkWckEC04",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "clipped(pose(vector(4.528850078582764,0.7515183687210083,-0.4881959557533264),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(7.848978566471487e-5,1.0,4.9056116040446796e-6))],8)",
+            "sequence": "1159"
+          },
+          "units": "metres_seconds"
+        }
+      }
+    },
+    {
+      "timestamp": 604236.69515,
+      "request_id": "1525417.424",
+      "data": {
+        "reason": "expired",
+        "type": "refresh"
+      }
+    },
+    {
+      "timestamp": 604236.988997,
+      "request_id": "1525417.464",
+      "data": {
+        "control": "control(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled_agent(pilot,3,2,1,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+        "type": "projection",
+        "view": "hCTchn3lXPF1xmxSudlJzn8Pt_HiMBSEKcF7xCX0EUA",
+        "frame": {
+          "tick": "3982",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "aAIwQri30XHLOfXz8LPr5wDKxZqwKVrarqkzZhAaJxM",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "disconnected",
+            "sequence": "1159"
+          },
+          "units": "metres_seconds"
+        },
+        "selection": "active",
+        "expires_ms": "1791742868447",
+        "height": "358",
+        "marks": "[mark(<<\"sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],transform(0,0,0,0,75,0),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_sky)),mark(<<\"floor\">>,<<\"mesh\">>,mesh_asset(asset(<<\"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-450,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(1660388,1658880,46080,46080,1,2,1)),transform(0,0,0,0,0,0),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"console\">>,<<\"group\">>,[],transform(0,0,3850,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing)]"
+      }
+    },
+    {
+      "timestamp": 604237.090197,
+      "request_id": "1525417.464",
+      "data": {
+        "type": "simulation_frame",
+        "view": "hCTchn3lXPF1xmxSudlJzn8Pt_HiMBSEKcF7xCX0EUA",
+        "frame": {
+          "tick": "3983",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "aAIwQri30XHLOfXz8LPr5wDKxZqwKVrarqkzZhAaJxM",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "clipped(pose(vector(4.528850078582764,0.7515183687210083,-0.4881959557533264),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(7.848978566471487e-5,1.0,4.9056116040446796e-6))],8)",
+            "sequence": "1160"
+          },
+          "units": "metres_seconds"
+        }
+      }
+    },
+    {
+      "timestamp": 604266.712375,
+      "request_id": "1525417.464",
+      "data": {
+        "reason": "expired",
+        "type": "refresh"
+      }
+    },
+    {
+      "timestamp": 604267.032274,
+      "request_id": "1525417.468",
+      "data": {
+        "control": "control(agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE\">>,<<\"u\\x8F\\\\x8A\\\\xA1\\=T\\xCF\\bk\\xA4\\\\x93\\\\xA6\\\\xBF\\\\xBE\\\\xC2\\EH\\xAC\\\\x96\\\\xB4\\\\x9D\\\\xD0\\\\xFE\\\\xDA\\;\\xC0\\\\x84\\>\\x8\\8\\xCB\\\\xF2\\\">>,me),1,controlled_agent(pilot,3,2,1,motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+        "type": "projection",
+        "view": "fcsAjPAM8oa7YEibfpA8JSi0jZ-f7ftfCBPMa0zS7X8",
+        "frame": {
+          "tick": "3983",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "ocD4nWbYrcGbL8xcrxc7Z2YMR7Yov0VYGe9ZsZQa_yQ",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "disconnected",
+            "sequence": "1160"
+          },
+          "units": "metres_seconds"
+        },
+        "selection": "active",
+        "expires_ms": "1791742898482",
+        "height": "358",
+        "marks": "[mark(<<\"sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],transform(0,0,0,0,75,0),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_sky)),mark(<<\"floor\">>,<<\"mesh\">>,mesh_asset(asset(<<\"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-450,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(1660388,1658880,46080,46080,1,2,1)),transform(0,0,0,0,0,0),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"console\">>,<<\"group\">>,[],transform(0,0,3850,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing)]"
+      }
+    },
+    {
+      "timestamp": 604267.272956,
+      "request_id": "1525417.468",
+      "data": {
+        "type": "simulation_frame",
+        "view": "fcsAjPAM8oa7YEibfpA8JSi0jZ-f7ftfCBPMa0zS7X8",
+        "frame": {
+          "tick": "3984",
+          "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+          "space": "world",
+          "epoch": "1",
+          "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+          "generation": "2",
+          "schema": 1,
+          "incarnation": "eP0xcNefQfSmc6YA17xJVawB8cnJxhlO1aRft09YNx0",
+          "structure": "1",
+          "poses": [
+            {
+              "position": [
+                4.528850078582764,
+                0.7515183687210083,
+                -0.4881959557533264
+              ],
+              "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "body": "2",
+              "revision": "1"
+            }
+          ],
+          "registration": "ocD4nWbYrcGbL8xcrxc7Z2YMR7Yov0VYGe9ZsZQa_yQ",
+          "view_clearance": 0.49799999594688416,
+          "control_state": {
+            "pending": false,
+            "result": "clipped(pose(vector(4.528850078582764,0.7515183687210083,-0.4881959557533264),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(7.848978566471487e-5,1.0,4.9056116040446796e-6))],8)",
+            "sequence": "1161"
+          },
+          "units": "metres_seconds"
+        }
+      }
+    }
+  ],
+  "camera": {
+    "inputs": [
+      "mouse"
+    ],
+    "marks": [
+      {
+        "id": "mark:sky",
+        "name": "mark:sky",
+        "parent": null
+      },
+      {
+        "id": "mark-label:console/model",
+        "name": "mark-label:console/model",
+        "parent": "mark:console/model"
+      },
+      {
+        "id": "Clone of __root__.__root__",
+        "name": "asset:floor:__root__",
+        "parent": "asset-frame:floor"
+      },
+      {
+        "id": "Clone of lobby-ground_primitive0.lobby-ground_primitive0",
+        "name": "asset:floor:lobby-ground_primitive0",
+        "parent": "Clone of lobby-ground"
+      },
+      {
+        "id": "Clone of lobby-ground_primitive1.lobby-ground_primitive1",
+        "name": "asset:floor:lobby-ground_primitive1",
+        "parent": "Clone of lobby-ground"
+      },
+      {
+        "id": "Clone of __root__.__root__",
+        "name": "asset:roof/model:__root__",
+        "parent": "asset-frame:roof/model"
+      },
+      {
+        "id": "Clone of six-foot-roof_primitive0.six-foot-roof_primitive0",
+        "name": "asset:roof/model:six-foot-roof_primitive0",
+        "parent": "Clone of six-foot-roof"
+      },
+      {
+        "id": "Clone of six-foot-roof_primitive1.six-foot-roof_primitive1",
+        "name": "asset:roof/model:six-foot-roof_primitive1",
+        "parent": "Clone of six-foot-roof"
+      },
+      {
+        "id": "Clone of six-foot-roof_primitive2.six-foot-roof_primitive2",
+        "name": "asset:roof/model:six-foot-roof_primitive2",
+        "parent": "Clone of six-foot-roof"
+      },
+      {
+        "id": "Clone of __root__.__root__",
+        "name": "asset:console/model:__root__",
+        "parent": "asset-frame:console/model"
+      },
+      {
+        "id": "Clone of temp_mesh.ply.temp_mesh.ply",
+        "name": "asset:console/model:temp_mesh.ply",
+        "parent": "Clone of __root__.__root__"
+      }
+    ],
+    "parent": [
+      4.528850078582764,
+      1.4515183687210083,
+      -0.4881959557533264
+    ],
+    "parentRotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ]
+  },
+  "dom": {
+    "buttons": [
+      {
+        "disabled": false,
+        "text": "Add agent",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "text": "Save encrypted key",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "text": "Export encrypted key",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "text": "Sign out",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "text": "Open console",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "text": "Enter VR",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "text": "",
+        "title": ""
+      }
+    ],
+    "fields": [],
+    "text": "Click the world to explore \u00b7 ZQSD, WASD or arrows to move \u00b7 Shift for faster movement\nquod \u2234\nkey 7n_lHNMzUqS_\nhuman:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE \u00b7 me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer \u2197\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nAdvanced",
+    "url": "https://192.168.1.10:30519/"
+  }
+}

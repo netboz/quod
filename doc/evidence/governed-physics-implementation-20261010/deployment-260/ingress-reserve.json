@@ -1,0 +1,233 @@
+{
+    "Job": {
+        "Region": null,
+        "Namespace": "default",
+        "ID": "quod27-client-30519",
+        "Name": "quod27-client-30519",
+        "Type": "service",
+        "Priority": null,
+        "AllAtOnce": null,
+        "Datacenters": [
+            "qengho"
+        ],
+        "NodePool": null,
+        "Constraints": null,
+        "Affinities": null,
+        "TaskGroups": [
+            {
+                "Name": "ingress",
+                "Count": 1,
+                "Constraints": [
+                    {
+                        "LTarget": "${node.unique.id}",
+                        "RTarget": "3e390ebd-5557-a67c-b64e-07b728144297",
+                        "Operand": "="
+                    }
+                ],
+                "Affinities": null,
+                "Tasks": [
+                    {
+                        "Name": "traefik",
+                        "Driver": "docker",
+                        "User": "",
+                        "Lifecycle": null,
+                        "Config": {
+                            "args": [
+                                "--entrypoints.client.address=192.168.1.10:30519",
+                                "--providers.file.directory=/etc/traefik/dynamic",
+                                "--providers.file.watch=true",
+                                "--log.level=INFO",
+                                "--global.sendanonymoususage=false",
+                                "--global.checknewversion=false"
+                            ],
+                            "image": "traefik@sha256:06ddf61ee653caf4f4211a604e657f084f4727f762c16f826c97aafbefcb279e",
+                            "network_mode": "host",
+                            "ports": [
+                                "client"
+                            ],
+                            "volumes": [
+                                "local/dynamic:/etc/traefik/dynamic:ro"
+                            ]
+                        },
+                        "Constraints": null,
+                        "Affinities": null,
+                        "Env": null,
+                        "Services": [
+                            {
+                                "Name": "quod27-client-30519",
+                                "Tags": [
+                                    "quod",
+                                    "ingress"
+                                ],
+                                "CanaryTags": null,
+                                "EnableTagOverride": false,
+                                "PortLabel": "client",
+                                "AddressMode": "",
+                                "Address": "",
+                                "Checks": [
+                                    {
+                                        "Name": "reserved listener",
+                                        "Type": "tcp",
+                                        "Command": "",
+                                        "Args": null,
+                                        "Path": "",
+                                        "Protocol": "",
+                                        "PortLabel": "",
+                                        "Expose": false,
+                                        "AddressMode": "",
+                                        "Advertise": "",
+                                        "Interval": 10000000000,
+                                        "Timeout": 2000000000,
+                                        "InitialStatus": "",
+                                        "Notes": "",
+                                        "TLSServerName": "",
+                                        "TLSSkipVerify": false,
+                                        "Header": null,
+                                        "Method": "",
+                                        "CheckRestart": null,
+                                        "GRPCService": "",
+                                        "GRPCUseTLS": false,
+                                        "TaskName": "",
+                                        "SuccessBeforePassing": 0,
+                                        "FailuresBeforeCritical": 0,
+                                        "FailuresBeforeWarning": 0,
+                                        "Body": "",
+                                        "OnUpdate": ""
+                                    }
+                                ],
+                                "CheckRestart": null,
+                                "Connect": null,
+                                "Meta": null,
+                                "CanaryMeta": null,
+                                "TaggedAddresses": null,
+                                "TaskName": "",
+                                "OnUpdate": "",
+                                "Identity": null,
+                                "Weights": null,
+                                "Provider": "consul",
+                                "Cluster": "",
+                                "Kind": ""
+                            }
+                        ],
+                        "Resources": {
+                            "CPU": 200,
+                            "Cores": null,
+                            "MemoryMB": 128,
+                            "MemoryMaxMB": null,
+                            "DiskMB": null,
+                            "Networks": null,
+                            "Devices": null,
+                            "NUMA": null,
+                            "SecretsMB": null,
+                            "IOPS": null
+                        },
+                        "RestartPolicy": null,
+                        "Meta": null,
+                        "KillTimeout": null,
+                        "LogConfig": null,
+                        "Artifacts": null,
+                        "Vault": null,
+                        "Consul": null,
+                        "Templates": [
+                            {
+                                "SourcePath": null,
+                                "DestPath": "local/dynamic/client.yml",
+                                "EmbeddedTmpl": "{{- $backends := service \"quod27-maintenance-260.quod-finality-candidate-v6-20260926-client\" -}}\n{{- if eq (len $backends) 1 }}\ntcp:\n  routers:\n    client:\n      entryPoints: [client]\n      rule: \"HostSNI(`*`)\"\n      service: client\n      tls:\n        passthrough: true\n  services:\n    client:\n      loadBalancer:\n        servers:\n{{- range $backends }}\n          - address: \"{{ .Address }}:{{ .Port }}\"\n{{- end }}\n{{- else }}\ntcp: {}\n{{- end }}\n",
+                                "ChangeMode": "noop",
+                                "ChangeScript": null,
+                                "ChangeSignal": null,
+                                "Once": null,
+                                "Splay": 5000000000,
+                                "Perms": "0644",
+                                "Uid": null,
+                                "Gid": null,
+                                "LeftDelim": null,
+                                "RightDelim": null,
+                                "Envvars": null,
+                                "VaultGrace": null,
+                                "Wait": null,
+                                "ErrMissingKey": false
+                            }
+                        ],
+                        "DispatchPayload": null,
+                        "VolumeMounts": null,
+                        "Leader": false,
+                        "ShutdownDelay": 0,
+                        "KillSignal": "",
+                        "Kind": "",
+                        "ScalingPolicies": null,
+                        "Secrets": null,
+                        "Identity": null,
+                        "Identities": null,
+                        "Actions": null,
+                        "Schedule": null
+                    }
+                ],
+                "Spreads": null,
+                "Volumes": null,
+                "RestartPolicy": null,
+                "Disconnect": null,
+                "ReschedulePolicy": null,
+                "EphemeralDisk": null,
+                "Update": null,
+                "Migrate": null,
+                "Networks": [
+                    {
+                        "Mode": "host",
+                        "Device": "",
+                        "CIDR": "",
+                        "IP": "",
+                        "DNS": null,
+                        "ReservedPorts": [
+                            {
+                                "Label": "client",
+                                "Value": 30519,
+                                "To": 0,
+                                "HostNetwork": "",
+                                "IgnoreCollision": false
+                            }
+                        ],
+                        "DynamicPorts": null,
+                        "Hostname": "",
+                        "MBits": null,
+                        "CNI": null
+                    }
+                ],
+                "Meta": null,
+                "Services": null,
+                "ShutdownDelay": null,
+                "StopAfterClientDisconnect": null,
+                "MaxClientDisconnect": null,
+                "Scaling": null,
+                "Consul": null,
+                "PreventRescheduleOnLost": null
+            }
+        ],
+        "Update": null,
+        "Multiregion": null,
+        "Spreads": null,
+        "Periodic": null,
+        "ParameterizedJob": null,
+        "Reschedule": null,
+        "Migrate": null,
+        "Meta": null,
+        "UI": null,
+        "Stop": null,
+        "ParentID": null,
+        "Dispatched": false,
+        "DispatchIdempotencyToken": null,
+        "Payload": null,
+        "ConsulNamespace": null,
+        "VaultNamespace": null,
+        "NomadTokenID": null,
+        "Status": null,
+        "StatusDescription": null,
+        "Stable": null,
+        "Version": null,
+        "SubmitTime": null,
+        "CreateIndex": null,
+        "ModifyIndex": null,
+        "JobModifyIndex": null,
+        "VersionTag": null
+    }
+}

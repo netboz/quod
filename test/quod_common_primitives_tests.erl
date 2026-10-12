@@ -46,6 +46,44 @@ binary_codes_test() ->
          {{binary_codes,{'B'},[$U|{'T'}]},instantiation_error},
          {{binary_codes,{'B'},{'C'}},instantiation_error}]).
 
+source_chunk_empty_source_test() ->
+    {ok, Engine} = erlog:new(quod_erlog_db_mvcc, null),
+    #est{db = Db} = St0 = element(3, Engine),
+    EmptyDb = lists:foldl(fun erlog_int:abolish_clauses/2, Db,
+                          [{delete, 3}, {last, 2}, {perm, 2}, {phrase, 2}]),
+    #db{ref = EmptyRef} = EmptyDb,
+    St1 = quod_common_primitives:load(
+            St0#est{db = EmptyDb#db{
+                      ref = quod_erlog_db_mvcc:publish_base(EmptyRef)}}),
+    St = quod_erlog_db_local_prove:wrap_state(St1),
+    try
+        ?assertEqual({source_chunk, done, <<>>}, value({'Chunk'},
+            {'$quod_source_chunk', 4096, {'Chunk'}}, St))
+    after
+        quod_erlog_db_mvcc:delete(EmptyRef)
+    end.
+
+source_chunk_full_source_test() ->
+    with_authored([{source_chunk_marker, preserved}], fun(St) ->
+        {source_chunk, done, Text} = value({'Chunk'},
+            {'$quod_source_chunk', 1048576, {'Chunk'}}, St),
+        ?assertNotEqual(nomatch, binary:match(
+            Text, <<"source_chunk_marker(preserved) :- true.\n">>)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+            {'$quod_source_chunk', 4096,
+             {source_chunk, done, <<"different">>}}, St))
+    end).
+
+source_chunk_argument_errors_test() ->
+    St = bare(),
+    lists:foreach(fun({Bytes, Error}) ->
+        ?assertMatch({erlog_error, Error, _}, catch erlog_int:prove_goal(
+            {'$quod_source_chunk', Bytes, {'Chunk'}}, St))
+    end, [{{'Bytes'}, instantiation_error},
+          {bytes, {type_error, integer, bytes}},
+          {0, {domain_error, source_chunk_bytes, 0}},
+          {-1, {domain_error, source_chunk_bytes, -1}}]).
+
 authored_clauses_hide_followers_and_preserve_scope_test() ->
     with_authored([{choice, first}, {choice, second}], fun(St) ->
         ?assertEqual([{':-', {choice, first}, true},

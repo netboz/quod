@@ -29,6 +29,8 @@ that used them stays sealable.
   the same staged snapshot, in canonical predicate order. Backtracking yields
   bounded binary chunks, including the final empty chunk for an empty state.
   The caller's ontology supplies the transport allowance; no content is pruned.
+  An unbound, non-integer or nonpositive allowance raises an argument error;
+  an unequal bound chunk remains ordinary failure.
 - `'$quod_retract_exact'(+Clause)` — remove the first authored clause whose
   source is identical up to variable renaming. A fact is shorthand for
   `Head :- true`. It uses ordinary overlay mutations and savepoints, never
@@ -88,7 +90,9 @@ source_chunk_2({'$quod_source_chunk', Bytes0, Chunk}, Next,
                 [format_clause(C, St) || C <- element(2, authored_clauses(F, St))]
                 || F <- Functors]),
             erlog_int:prove_body([{member, Chunk, source_chunks(Text, Bytes)} | Next], St);
-        _ -> erlog_int:fail(St)
+        {_} -> erlog_int:instantiation_error(St);
+        Bytes when not is_integer(Bytes) -> erlog_int:type_error(integer, Bytes, St);
+        Bytes -> erlog_int:domain_error(source_chunk_bytes, Bytes, St)
     end.
 
 source_chunks(Text, Bytes) when byte_size(Text) =< Bytes -> [{source_chunk, done, Text}];

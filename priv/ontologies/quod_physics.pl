@@ -205,7 +205,7 @@ physics_delete_definition(Entity, Expected) :-
         assertz(physics_definition(Entity,Next,none)))).
 
 physics_unconstrained_body(W,B) :-
-    (\+ physics_joint(W,hinge(B,_,_,_,_,_)), \+ physics_joint(W,hinge(_,_,B,_,_,_)) -> true
+    (\+ physics_joint(W,hinge(body(B,_),_,_,_,_,_,_)), \+ physics_joint(W,hinge(_,_,body(B,_),_,_,_,_)) -> true
     ; fail_with_reason(body_constraint_group(B))).
 physics_removable_body(W,B) :-
     physics_unconstrained_body(W,B),
@@ -382,8 +382,8 @@ physics_push_configuration(W, Principal, Body, Revision, MaxImpulse, MaxSpeed) :
 
 physics_free_body(W, Body, Revision) :-
     physics_body_definition(W, Body, Revision, dynamic, _, _),
-    \+ physics_joint(W, hinge(Body, _, _, _, _, _)),
-    \+ physics_joint(W, hinge(_, _, Body, _, _, _)).
+    \+ physics_joint(W, hinge(body(Body,_), _, _, _, _, _, _)),
+    \+ physics_joint(W, hinge(_, _, body(Body,_), _, _, _, _)).
 
 physics_input_limits(W, Principal, Configuration, Frame,
         push(body(Body, Revision), vector(X,Y,Z)), Lease,
@@ -480,11 +480,8 @@ physics_projection(Node, Rows) :-
        physics_custody(W, Custody),
        findall(C, physics_recovery_checkpoint(W, C), Checkpoints),
        findall(J, physics_joint(W, J), Joints),
-       findall(door(D, Sequence, State, Request),
-               (physics_door(W,D,Sequence,State), physics_door_custody(W,D,Request)), Doors),
-       findall(rest(D, Sequence, State, Request),
-               (physics_rest(W,D,Sequence,State), physics_rest_custody(W,D,Request)), Rests),
-       append(Doors, Rests, Activities),
+       findall(activity(Reference,Request,Command,Saved),
+               physics_activity(W,Reference,Request,Command,Saved), Activities),
        findall(binding(Principal, BindingEpoch, Selection),
                physics_control(W, Principal, BindingEpoch, Selection), Bindings),
        findall(control(Principal, ControlEpoch, Configuration),
@@ -551,38 +548,7 @@ physics_activation_status(W, Request, activated) :-
     Generation is Previous + 1, physics_run(W, Generation, Token).
 physics_activation_status(W, Request, cancelled) :- physics_cancelled_request(W, Request).
 
-%% A reusable door recipe is deliberately pinned and materialized. Live
-%% instances instead use the source-owned definition/assignment contract below.
-physics_door_definition(local(Name, Version), Definition) :-
-    physics_door_class(Name, Version, Definition).
-physics_door_definition(class_ref(Ns, Anchor, Name, Version), Definition) :-
-    Ns::(current_ontology_identity(Ns, Anchor), physics_door_class(Name, Version, Definition)).
-
 can_edit_physics(_, _) :- fail.
-can_close_physics_door(_, _, _) :- fail.
-can_cancel_physics_door(_, _, _) :- fail.
-
-physics_add_door(W, Door, Frame, Source, Position, Structure) :-
-    term_variables([W, Door, Frame, Source, Position, Structure], []),
-    transaction((current_principal(P), can_edit_physics(W, P),
-        physics_structure(W, Structure), Door \= Frame,
-        physics_reserve_body_ids(W, [Door,Frame]),
-        \+ physics_body_definition(W, Door, _, _, _, _),
-        \+ physics_body_definition(W, Frame, _, _, _, _),
-        physics_door_definition(Source, door(FrameBox, LeafBox, Density, Angle, Motor)),
-        physics_valid_hinge_definition(Position, FrameBox, LeafBox),
-        physics_required_allowances(W, limits(_, _, _, Coordinate, _), _, _, _),
-        physics_checked_body(Door, dynamic, Position, LeafBox, Density, Coordinate),
-        physics_checked_body(Frame, fixed, Position, FrameBox, Density, Coordinate),
-        physics_valid_motor(Angle, Motor),
-        physics_body_capacity(W,2),
-        Next is Structure + 1,
-        retract(physics_structure(W, Structure)), assertz(physics_structure(W, Next)),
-        assertz(physics_body_definition(W, Frame, Next, fixed, Position, owned(FrameBox, Density))),
-        assertz(physics_body_definition(W, Door, Next, dynamic, Position, owned(LeafBox, Density))),
-        assertz(physics_joint(W, hinge(Door, Next, Frame, vector(0,0,0), Angle, Motor))),
-        assertz(physics_door_source(W, Door, Source)),
-        assertz(physics_door(W, Door, 0, idle)))).
 
 %% Shared authored-body schema. Native installation still checks numeric
 %% representation, hull volume, triangle area and supported joint mechanics.
@@ -642,107 +608,59 @@ physics_body_vector(vector(X,Y,Z), Limit) :-
 physics_body_coordinate(X, Limit) :-
     physics_milli_integer(X),
     (physics_coordinate(X, Limit) -> true ; fail_with_reason(coordinate_allowance(Limit))).
-physics_valid_hinge_definition(Position, Frame, Leaf) :-
-    (Position = vector(_,_,_), Frame = box(_,_,_), Leaf = box(_,_,_) -> true
-    ; fail_with_reason(unsupported_hinge_definition)).
-physics_valid_motor(Angle, motor(Stiffness, Damping, Torque, Tolerance)) :-
-    integer(Angle), Angle > 0, Angle < 3142,
+physics_valid_hinge(vector(X,Y,Z), anchors(Fixed,Moving), limits(Lower,Upper), Baseline, Coordinate) :-
+    physics_milli_integer(X), physics_milli_integer(Y), physics_milli_integer(Z),
+    (X =\= 0 ; Y =\= 0 ; Z =\= 0),
+    physics_body_vector(Fixed,Coordinate), physics_body_vector(Moving,Coordinate),
+    integer(Lower), integer(Upper), Lower >= -3141, Upper =< 3141,
+    Lower =< Upper, Upper-Lower =< 3141,
+    integer(Baseline), Baseline >= Lower, Baseline =< Upper.
+physics_valid_joint_command(hold, _).
+physics_valid_joint_command(position(Target,motor(Stiffness,Damping,Torque),stop(Tolerance,target_or_contact)),
+                            limits(Lower,Upper)) :-
+    integer(Target), Target >= Lower, Target =< Upper,
     physics_positive_scalar(Stiffness), physics_positive_scalar(Damping),
-    physics_positive_scalar(Torque), integer(Tolerance), Tolerance > 0, Tolerance < Angle.
+    physics_positive_scalar(Torque), physics_positive_scalar(Tolerance).
 
-%% The sequence belongs to the activity, not to body or authored revisions.
-%% A caller cannot reuse an old request by recycling its human-chosen id.
-physics_close_door(W, D, Sequence, Id) :-
-    term_variables([W,D,Sequence,Id], []), agent_identifier(Id),
-    transaction((current_principal(P), can_close_physics_door(W,D,P),
-        physics_door(W,D,Sequence,Before), Before \= closing(_),
-        physics_enabled(W,_), physics_joint(W,hinge(D,_,_,_,_,_)),
-        retract(physics_door(W,D,Sequence,Before)), Next is Sequence + 1,
-        assertz(physics_door(W,D,Next,closing(close(Next,Id)))),
-        physics_remove_door_request(W,D))).
-
-physics_cancel_door(W,D,Request) :-
-    term_variables([W,D,Request], []),
-    transaction((current_principal(P), can_cancel_physics_door(W,D,P),
-        retract(physics_door(W,D,Sequence,closing(Request))),
-        assertz(physics_door(W,D,Sequence,cancelled(Request))))).
-
-physics_door_custody(W,D,Custody) :-
-    findall(R, physics_door_request(W,D,R), Rows),
-    (Rows = [] -> Custody = none ; Rows = [Custody]).
-
-%% Authenticated owner metadata exists only during read-only reaction matching.
-%% The selected signed action contains the entire frozen sample.
-react_on(observed(Sample), physics_finish_door(Sample, Result)) :-
-    physics_observation(Sample),
-    Sample = door_sample(W,D,_,_,_,_,_,_,_,_,_,_,_,_),
-    physics_door_measurement(Sample, Result), physics_door_custody(W,D,Prior),
-    prepare_signed_request(Bytes, Signature,
-        physics_store_door_request(Sample, Result, Prior, Bytes, Signature)).
-
-physics_store_door_request(Sample, Result, Prior, Bytes, Signature) :-
-    term_variables([Sample,Result,Prior,Bytes,Signature], []),
-    transaction((physics_door_measurement(Sample,Result),
-        Sample = door_sample(W,D,_,_,_,_,_,_,_,_,_,_,_,_), physics_actor(W),
-        physics_door_custody(W,D,Prior), physics_door_replaceable(Prior,Sample),
-        signed_physics_request(physics_finish_door(Sample,Result), Bytes, Signature),
-        physics_remove_door_request(W,D),
-        assertz(physics_door_request(W,D,request(Sample,Result,Bytes,Signature))))).
-
-physics_door_replaceable(none,_).
-physics_door_replaceable(request(Previous,_,Bytes,Signature),Sample) :-
-    Previous = door_sample(_,_,_,_,_,OldGeneration,_,_,_,_,OldTick,_,_,_),
-    Sample = door_sample(_,_,_,_,_,Generation,_,_,_,_,Tick,_,_,_),
-    (Generation > OldGeneration ; Generation = OldGeneration, Tick > OldTick),
-    physics_request_rejected(Bytes,Signature).
-
-physics_finish_door(Sample,Result) :-
-    term_variables([Sample,Result], []),
-    transaction((physics_door_measurement(Sample,Result),
-        Sample = door_sample(W,D,R,_,_,Generation,_,_,Revision,_,Tick,Angle,_,_),
-        physics_actor(W), physics_door_request(W,D,request(Sample,Result,Bytes,Signature)),
-        current_signed_request(Bytes,Signature),
-        retract(physics_door(W,D,Sequence,closing(R))),
-        assertz(physics_door(W,D,Sequence,finished(R,Result))),
-        physics_remove_door_checkpoint(W,D),
-        assertz(physics_checkpoint(W,hinge(D,Revision,Generation,Tick,Angle))),
-        trigger_event(physics_door_finished(W,D,R,Result)))).
-
-physics_door_measurement(
-    door_sample(W,D,R,Authority,Epoch,Generation,Token,Structure,Revision,FrameRevision,
-                Tick,Angle,Contact,validity(At,Expiry)), Result) :-
-    physics_enabled(W,I), current_ontology_identity(Ns,Anchor),
-    Authority = agent_instance_ref(Ns,Anchor,I), agent_hosted(I,_,Epoch,_),
-    physics_run(W,Generation,Token), physics_structure(W,Structure),
-    physics_door(W,D,_,closing(R)), physics_body_definition(W,D,Revision,dynamic,_,_),
-    physics_joint(W,hinge(D,Revision,Frame,_,Baseline,motor(_,_,_,Tolerance))),
-    physics_body_definition(W,Frame,FrameRevision,fixed,_,_),
-    integer(Tick), Tick > 0, Tick < 18446744073709551616, integer(Angle), Angle >= -Baseline, Angle =< Baseline,
+%% Both physical measurement schemas carry this same immutable, signed envelope.
+%% Domain consumers match exact participating revisions, command and payload.
+physics_valid_sample(physics_sample(
+        physics_frame(world_ref(Ns,Anchor,W),agent_instance_ref(Ns,Anchor,I),Epoch,G,Token,Structure),
+        activity(_,_,_),revisions(_),Tick,validity(At,Expiry),_), W) :-
+    physics_enabled(W,I), current_ontology_identity(Ns,Anchor), agent_hosted(I,_,Epoch,_),
+    physics_run(W,G,Token), integer(G), G > 0, agent_identifier(Token),
+    physics_structure(W,Structure),
+    integer(Tick), Tick > 0, Tick < 18446744073709551616,
     physics_required_allowances(W,_,_,_,Budget),
-    integer(At), integer(Expiry), Expiry > At, Expiry - At =< Budget,
-    current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry,
-    physics_door_result(W,D,Frame,Angle,Tolerance,Contact,Result).
-physics_door_result(W,D,Frame,_,_,contact(Other,Revision),blocked(Other)) :-
-    Other \= D, Other \= Frame, physics_body_definition(W,Other,Revision,_,_,_).
-physics_door_result(_,_,_,Angle,Tolerance,clear,closed) :-
-    Angle >= -Tolerance, Angle =< Tolerance.
+    integer(At), At >= 0, integer(Expiry), Expiry > At, Expiry-At =< Budget,
+    current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry.
 
-physics_remove_door_request(W,D) :-
-    physics_door_custody(W,D,C), (C = none -> true ; retract(physics_door_request(W,D,C))).
-physics_remove_door_checkpoint(W,D) :-
-    findall(C, (physics_checkpoint(W,C), C = hinge(D,_,_,_,_)), Rows),
+%% New activity admission cannot discard unresolved original custody. An
+%% authored cancellation plus changed physical revisions is the explicit exit.
+physics_observation_replaceable(none,_,_).
+physics_observation_replaceable(request(Sample,_,Bytes,Signature),State,References) :-
+    Sample = physics_sample(_,activity(_,R,_),revisions(Before),_,_,_),
+    ((State = finished(R) ; State = cancelled(R), Before \= References) -> true
+    ; physics_request_rejected(Bytes,Signature)).
+
+physics_newer_sample(none,_).
+physics_newer_sample(request(Previous,_,_,_),Sample) :-
+    Previous = physics_sample(physics_frame(World,_,_,OldG,_,_),_,_,OldTick,_,_),
+    Sample = physics_sample(physics_frame(World,_,_,G,_,_),_,_,Tick,_,_),
+    (G > OldG ; G = OldG, Tick > OldTick).
+
+physics_remove_hinge_checkpoint(W,D) :-
+    findall(C, (physics_checkpoint(W,C), C = hinge(D,_,_,_,_,_,_)), Rows),
     (Rows = [] -> true ; Rows = [Old], retract(physics_checkpoint(W,Old))).
 
-
-%% A free obstacle edit advances the conservative whole-world fence. Door
-%% activity remains pending; a pre-edit observation cannot finish it.
+%% A free obstacle edit advances the conservative whole-world fence. Pending
+%% physical requests remain fenced; a pre-edit observation cannot finish them.
 physics_move_body(W,D,Revision,Structure,Position) :-
     term_variables([W,D,Revision,Structure,Position], []),
     transaction((current_principal(P), can_edit_physics(W,P),
         physics_structure(W,Structure), physics_body_definition(W,D,Revision,Kind,Old,Definition),
         physics_resolve_definition(W,Definition,Shape,Density),
-        \+ physics_joint(W,hinge(D,_,_,_,_,_)),
-        \+ physics_joint(W,hinge(_,_,D,_,_,_)),
+        physics_unconstrained_body(W,D),
         physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
         Position = vector(_,_,_), physics_relocated_pose(Old,Position,Pose),
         physics_checked_body(D,Kind,Pose,Shape,Density,Coordinate),
@@ -756,31 +674,6 @@ physics_move_body(W,D,Revision,Structure,Position) :-
 physics_relocated_pose(vector(_,_,_),Position,Position).
 physics_relocated_pose(pose(_,Rotation),Position,pose(Position,Rotation)).
 
-%% A structural edit resets the whole supported joint group. It also cancels
-%% its active objective; restoration cannot reinstate a pre-edit closed state.
-physics_move_door(W,D,Sequence,Structure,Position) :-
-    term_variables([W,D,Sequence,Structure,Position], []),
-    transaction((current_principal(P), can_edit_physics(W,P), physics_structure(W,Structure),
-        physics_door(W,D,Sequence,State),
-        physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor)),
-        physics_body_definition(W,D,Revision,dynamic,LeafPosition,owned(LeafBox,Density)),
-        physics_body_definition(W,F,Revision,fixed,FramePosition,owned(FrameBox,Density)),
-        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
-        physics_valid_hinge_definition(Position,FrameBox,LeafBox),
-        physics_checked_body(D,dynamic,Position,LeafBox,Density,Coordinate),
-        physics_checked_body(F,fixed,Position,FrameBox,Density,Coordinate), Next is Structure + 1,
-        retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
-        retract(physics_body_definition(W,D,Revision,dynamic,LeafPosition,owned(LeafBox,Density))),
-        retract(physics_body_definition(W,F,Revision,fixed,FramePosition,owned(FrameBox,Density))),
-        assertz(physics_body_definition(W,D,Next,dynamic,Position,owned(LeafBox,Density))),
-        assertz(physics_body_definition(W,F,Next,fixed,Position,owned(FrameBox,Density))),
-        retract(physics_joint(W,hinge(D,Revision,F,Pivot,Angle,Motor))),
-        assertz(physics_joint(W,hinge(D,Next,F,Pivot,Angle,Motor))),
-        physics_remove_door_checkpoint(W,D),
-        retract(physics_door(W,D,Sequence,State)),
-        (State = closing(R) -> After = cancelled(R) ; After = idle),
-        assertz(physics_door(W,D,Sequence,After)))).
-
 % Replacement custody requires exact terminal evidence captured in the proof's
 % ordinary read set. Unknown or unpublished outcomes cannot prove rejection.
 physics_request_rejected(Bytes, Signature) :-
@@ -789,8 +682,8 @@ physics_request_rejected(Bytes, Signature) :-
 
 
 %% Rest checkpoint requests are explicit policy actions, independent of hot
-%% impulses. Their fulfilment uses the same owned observation/custody lane as
-%% door consequences. The author baseline is never overwritten by a sample.
+%% impulses. Their fulfilment uses the common owned observation/custody lane.
+%% The author baseline is never overwritten by a sample.
 physics_rest(_, _, _, _) :- fail.
 can_checkpoint_physics_body(_, _, _) :- fail.
 physics_rest_policy(_, _, _) :- fail.
@@ -821,24 +714,33 @@ physics_rest_custody(W,D,C) :-
     ; fail_with_reason(ambiguous_checkpoint_custody(D))).
 %% An authored cancellation retires this activity, not its backend operation.
 %% The changed revision makes its exact old finish permanently ineligible.
-physics_rest_replaceable(none,_,_).
-physics_rest_replaceable(request(Sample,_,Bytes,Signature),W,D) :-
-    ((physics_rest(W,D,_,finished(Sample)) ;
-      Sample = rest_sample(W,D,R,_,_,_,_,_,OldRevision,_,_,_),
-      physics_rest(W,D,_,cancelled(R)), physics_free_body(W,D,Revision),
-      Revision \= OldRevision) -> true ; physics_request_rejected(Bytes,Signature)).
+physics_rest_replaceable(Custody,W,D) :-
+    physics_rest_state(W,D,_,Before), physics_free_body(W,D,Revision),
+    (Before = finished(Sample) ->
+        Sample = physics_sample(_,activity(_,R,_),_,_,_,_), State = finished(R)
+    ; State = Before),
+    physics_observation_replaceable(Custody,State,[body(D,Revision)]).
+
+%% Extensions contribute physical requests to this relation. Runtime owners
+%% never receive the domain's waiting/finished/cancelled state vocabulary.
+physics_activity(_,_,_,_,_) :- fail.
+physics_activity(W,rest(D,Revision),Request,rest,Custody) :-
+    physics_rest(W,D,_,State), physics_free_body(W,D,Revision),
+    (State = waiting(R) -> Request = R ; Request = none),
+    physics_rest_custody(W,D,Custody).
 
 react_on(observed(Sample), physics_finish_rest(Sample)) :-
     physics_observation(Sample), physics_rest_measurement(Sample),
-    Sample = rest_sample(W,D,_,_,_,_,_,_,_,_,_,_), physics_rest_custody(W,D,Prior),
-    prepare_signed_request(Bytes,Signature,physics_store_rest_request(Sample,Prior,Bytes,Signature)).
+    prepare_signed_request(Bytes,Signature,physics_store_rest_request(Sample,Bytes,Signature)).
 
-physics_store_rest_request(Sample,Prior,Bytes,Signature) :-
-    term_variables([Sample,Prior,Bytes,Signature], []),
+physics_store_rest_request(Sample,Bytes,Signature) :-
+    term_variables([Sample,Bytes,Signature], []),
     transaction((physics_rest_measurement(Sample),
-        Sample = rest_sample(W,D,_,_,_,_,_,_,_,_,_,_), physics_actor(W),
+        Sample = physics_sample(physics_frame(world_ref(_,_,W),_,_,_,_,_),
+            activity(rest(D,Revision),R,rest),_,_,_,_), physics_actor(W),
         physics_rest_custody(W,D,Prior),
-        (Prior = none -> true ; Prior = request(_,_,B,S), physics_request_rejected(B,S)),
+        physics_observation_replaceable(Prior,waiting(R),[body(D,Revision)]),
+        physics_newer_sample(Prior,Sample),
         signed_physics_request(physics_finish_rest(Sample),Bytes,Signature),
         physics_remove_rest_request(W,D),
         assertz(physics_rest_request(W,D,request(Sample,rest,Bytes,Signature))))).
@@ -846,7 +748,8 @@ physics_store_rest_request(Sample,Prior,Bytes,Signature) :-
 physics_finish_rest(Sample) :-
     term_variables(Sample, []),
     transaction((physics_rest_measurement(Sample),
-        Sample = rest_sample(W,D,R,Authority,Epoch,G,Token,Structure,Revision,Tick,Pose,_),
+        Sample = physics_sample(physics_frame(world_ref(_,_,W),Authority,Epoch,G,Token,Structure),
+            activity(rest(D,Revision),R,rest),_,Tick,_,rest_pose_mm_quaternion_million(Pose)),
         physics_actor(W), physics_rest_request(W,D,request(Sample,rest,Bytes,Signature)),
         current_signed_request(Bytes,Signature),
         retract(physics_rest(W,D,Sequence,waiting(R))),
@@ -856,22 +759,19 @@ physics_finish_rest(Sample) :-
             source(Authority,Epoch,G,Token,Structure,Tick),world_mm_quaternion_million,Pose,zero_velocity))),
         trigger_event(physics_body_checkpointed(W,D,R)))).
 
-physics_rest_measurement(rest_sample(W,D,R,Authority,Epoch,G,Token,Structure,Revision,Tick,Pose,
-                                     validity(At,Expiry))) :-
-    physics_enabled(W,I), current_ontology_identity(Ns,Anchor),
-    Authority = agent_instance_ref(Ns,Anchor,I), agent_hosted(I,_,Epoch,_),
-    physics_run(W,G,Token), physics_structure(W,Structure),
+physics_rest_measurement(Sample) :-
+    Sample = physics_sample(physics_frame(world_ref(_,_,W),_,_,G,_,_),
+        activity(rest(D,Revision),R,rest),revisions([body(D,Revision)]),Tick,_,
+        rest_pose_mm_quaternion_million(Pose)),
+    physics_valid_sample(Sample,W),
     physics_free_body(W,D,Revision), physics_rest(W,D,_,waiting(R)),
     physics_rest_policy(W,D,recovery(Tolerance,Checks)),
     integer(Tolerance), Tolerance >= 0, integer(Checks), Checks > 0,
-    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,Budget),
+    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
     Pose = pose(Position,quaternion(X,Y,Z,Q)), physics_query_vector(Position,Coordinate),
     physics_coordinate(X,1000000), physics_coordinate(Y,1000000),
     physics_coordinate(Z,1000000), physics_coordinate(Q,1000000),
     Norm is X*X+Y*Y+Z*Z+Q*Q, Norm >= 999996000000, Norm =< 1000004000000,
-    integer(Tick), Tick > 0, Tick < 18446744073709551616,
-    integer(At), integer(Expiry), Expiry > At, Expiry-At =< Budget,
-    current_request_expiry(RequestExpiry), RequestExpiry > At, RequestExpiry =< Expiry,
     \+ (physics_checkpoint(W,rest_v1(D,_,source(_,_,OldG,_,_,OldTick),_,_,_)),
         (OldG > G ; OldG = G, OldTick >= Tick)).
 

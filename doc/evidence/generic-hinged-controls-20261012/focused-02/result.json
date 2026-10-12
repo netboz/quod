@@ -1,0 +1,13 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:obstructed_door_signed_transition_test_+unobstructed_door_signed_transition_test_+live_source_moving_door_contact_test_+signed_chair_push_checkpoint_and_recovery_test_"
+  ],
+  "started": "2026-10-12T09:31:48.671834+00:00",
+  "finished": "2026-10-12T09:31:55.827614+00:00",
+  "child_exit": 0,
+  "sources_unchanged": true
+}

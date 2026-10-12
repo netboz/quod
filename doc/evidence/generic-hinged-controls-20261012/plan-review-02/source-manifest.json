@@ -1,0 +1,77 @@
+{
+  "baseline": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/plan.txt",
+      "sha256": "dff8700d28592a4f2a15f447b8a7206c258ab809f92b40a642ff3af5ff809090"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "c0625c32510294d88a1f28d88ffcf422e9fddf615eb3cf8b9d96a9433d850179"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "92eca4aa8b71afce0ac2fac362f1fb5f99ba79c15e6405f7a71ada74d4181aff"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "sha256": "f6a57e4f4e4b0bf18a815bff9f33e0e56741d5dce4630a5e9d5bbd36fc3a5b1f"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "50aac7669fa4d92c87fa4cddabe344f59ca370732c7175bf048828837766ca2f"
+    },
+    {
+      "file": "doc/outdated/multiwrite-architecture.md",
+      "sha256": "88686928ec5762528cb5fde8aac7a9a05819e8390af5e58a0391522253a0576b"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "c7bcb5f361910783f007348c5894e70e1ee49f3b2e8d9067de7cb0f8f87ff249"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "sha256": "d9e068401257939c9be22d32af3a79044e2c188121d6d0fef1df3b33caffac2f"
+    },
+    {
+      "file": "src/quod_agent.erl",
+      "sha256": "a88aabb4b4acefb934856cf44ea0659a8d4079386fd6af62f15e85b545e3d32d"
+    },
+    {
+      "file": "src/quod_physics_native.erl",
+      "sha256": "4dbee79eba9585d6c973875e9ba29c950acac4941ba19ba5e0d914e744616c63"
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "sha256": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "b1d56f0cb1bfcbfe30f83c6668cd60e7f0c7c5269b384f4af31b5cec8740cf1b"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "sha256": "ced858552277a9519de3dcaf306b557fe5728d9116a6a4c704d3ddd34ffd9e8a"
+    },
+    {
+      "file": "native/quod_physics/src/lib.rs",
+      "sha256": "a6d9a1ed2d4ba74c75609af4d23c90b19f582fecbd193d84ba7486765115350a"
+    },
+    {
+      "file": "native/quod_physics/src/geometry.rs",
+      "sha256": "3d4ae9b07321eff7b1c27af3906804b51e48a590061befb37b24a815647c2e88"
+    },
+    {
+      "file": "native/quod_physics/Cargo.toml",
+      "sha256": "d841aac31a559e7da91cf6f57bdc8fbb313d75e4db20e958aa23c2bf27a6da74"
+    }
+  ]
+}

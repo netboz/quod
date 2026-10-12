@@ -1,0 +1,138 @@
+Verification obligations for generic hinged controls
+Baseline f99a7f20d515966bc34629db88ff39885eccd547
+
+Baseline campaign 01: native 34/34; quod_physics_tests 158/158. Both actual
+child exits are zero; all 18 frozen plan inputs unchanged. These results
+establish the starting point, not validation of the proposed replacement.
+
+Retain and adapt production-seam obligations in quod_physics_tests:
+- obstructed_door_signed_transition_test_: committed obstruction, exact original
+  operation resolution, non-repeatable finish, native pose, unchanged checks,
+  owner replacement and retained durable result.
+- unobstructed_door_signed_transition_test_: authorized close with clear path.
+- idle_compound_agent_blocks_moving_door_test_: real non-box controlled collider
+  blocks a moving hinge, retains its own pose and can leave after braking.
+- competing_obstacle_edit_resolves_before_replacement_test_: edit races a
+  prepared finish, OCC rejects the old sample and only certain rejection
+  authorizes a replacement observation.
+- pending_door_restart_preserves_original_outcome_test_: restart while the
+  original is pending, for both eventual commit and eventual rejection.
+- pending_custody_and_delayed_sample_cannot_finish_new_close_test_: forged
+  authority/run/revision/contact/validity, store-before-edit, unknown original,
+  explicit cancellation, same caller ID with a new sequence, fake public event.
+- saturated_actor_retains_required_observation_test_ and
+  full_event_queue_keeps_wake_after_hinge_sleeps_test_: real queue admission,
+  refusal and capacity edges, including a mechanically sleeping hinge.
+- expired_queued_observation_is_freshly_sampled_test_: runtime and actor expiry
+  require a later completed step and original expiry is never extended.
+- generic_observation_clause_cannot_consume_door_request_test_: ordinary
+  observed(_) matching cannot consume private custodied physics work.
+- sleeping_does_not_erase_explicit_reconciliation_test_: preserve the explicit
+  reconciliation latch after unavailable then sleeping status.
+- expired_replacement_observation_resamples_test_,
+  observation_edit_delivery_order_test_, observation_budget_delivery_order_test_
+  and actor_queue_expiry_resamples_test: both selection/reply orders, with and
+  without saved custody, and distinct stale/unsent/unmatched/error outcomes.
+- shared_class_is_authorized_then_materialized_locally_test_: pinned reusable
+  recipe requires source ACL once; no hidden live recipe dependency afterward.
+- signed_client_view_lifecycle_test_: current normal client poses, refresh,
+  owner replacement and view ACLs through the same supported hinged object.
+- terminal_outcome_bridge_captures_failed_alternatives_test_: exact terminal
+  evidence survives alternatives/negation/cut; unavailable evidence cannot seal.
+
+Rest/checkpoint obligations using the same new envelope:
+- signed_chair_push_checkpoint_and_recovery_test_: exact signed input, rest
+  sample, checkpoint, new sample on a new request, unchanged-owner work,
+  current checkpoint restoration and authored edit invalidation.
+- chair_edit_races_prepared_checkpoint_test_: OCC failure has no checkpoint;
+  cancelled work does not replay after restart.
+- chair_unknown_checkpoint_custody_is_not_resubmitted_test_: original unknown
+  bytes survive both explicit reconciliation and owner death; an authored
+  revision change fences the old finish without fabricating its outcome.
+- expired_rest_observation_resamples_test_: a new completed step, even asleep.
+- native_rest_recovery_rejects_overlap_and_bad_rotation_test,
+  rest_recovery_overlap_fails_visibly_test_ and
+  authored_nonbox_edit_invalidates_rest_checkpoint_test_: preserve restore
+  validation and explicit authored recovery exits.
+
+Shared unchanged-work and lifecycle obligations:
+- sleeping_world_and_unchanged_cost_test_ and assert_no_physics_io instrument
+  native allocation/install, ledger folds/open/append and file/DETS write/sync.
+- live_source_unchanged_work_and_recovery_test_ instruments retained projection
+  creation/apply, native installs, ledger folds/open and write/sync. Real source
+  updates, atomic admission/edit/withdrawal, host/run changes and replay tests
+  remain in the same production suite.
+- replay_retires_world_without_replaying_reactions_test_: resource recovery
+  follows current facts, not historical occurrences.
+
+Obsolete profile assertions to replace, not retain through old code:
+- numeric_geometry_and_hinge_refusals_test_: keep numeric overflow and policy
+  range refusal/rollback; replace non-box/rotated-hinge refusal assertions with
+  acceptance of supported authored geometry and refusal of unsupported pivot,
+  range and command declarations.
+- native_hinge_refuses_authored_rotation_test: replace the blanket rotation
+  refusal with correct rotated-frame installation plus invalid/stale reference
+  tests. The invariant is valid mechanical declarations, not vertical boxes.
+- native independent_hinges_brake_restore_and_retain: retain obstruction,
+  independence, restart/restore and no-reset checks under authored pivots and
+  targets; add a different axis, nonzero target and reverse direction.
+
+New evidence required (not claimed by baseline):
+- Door and horizontal lid in distinct anchored ontologies, using identical
+  capability rules and runtime/native code. Different target/direction and
+  a domain consequence authored in Prolog. Compare unaffected world counters.
+- Alter every common envelope fence, including namespace/anchor, host/run,
+  body/joint/request revisions, tick/validity and envelope/payload substitution.
+  Check the actual private matcher, signed store and signed finish boundaries.
+- Control-definition edit between delivery/matching/store/finish must not let
+  an old sample fulfil a different selected target under the same identity.
+- Reusable capability permissions, denied close/cancel, explicit cancellation,
+  removal/refusal and stale control native calls.
+- Same atomic completion with a second ontology's receiver change. Failed
+  prerequisites/transaction rollback/OCC publish no partial local checkpoint,
+  domain result, event or receiver consequence.
+- Exact affected installation/control work counts after a real edit, followed
+  by zero repeated history/projection/native installation/write/sync work.
+- Fable implementation review and full clean sequential gates on the final
+  frozen tree, with failures retained. Report production additions/deletions.
+
+Current focused verification
+physics-12: 188/188, source hashes unchanged. This includes the original 158
+obligations and six new cross-world/receiver/support cases plus 24 command
+selection/result order cases. command-policy-13 adds three cases: real signed
+command change before store/before finish, and both authored examples blocked
+by geometry with close/cancel ACL revocation and explicit cancellation.
+Both fixture files run through the same constructor, selector, native primitive
+and Prolog capability. Horizontal lid uses local X, a rotated group anchor,
+compound geometry, baseline -1200 and target +400mrad. Vertical door uses local
+Y, baseline +1500 and target0. Each authors its own completion goal in Prolog.
+Exact real control-change trace observes one control_hinge call for the changed
+owner, no native install calls, unchanged other-world applied height/identity.
+Five unchanged reconciliations of both worlds observe zero native allocation,
+installation/control, ledger folds/opens/appends, projection build/apply and
+storage write/sync calls. Simulation stepping and real durable commits remain
+separate from these unchanged-work assertions.
+Fable's first implementation review found that moving a finished group changed
+finished to idle while retaining committed custody, preventing another close.
+finished-move-red-14 reproduces the failure. finished-move-green-15 passes the
+new regression for both examples plus shared-support move and rest recovery.
+The fix cancels only an active close; completed results stay historical while
+the move removes their checkpoint and advances the physical revisions.
+Fable's implementation-review-02 approves the corrected implementation,
+conditional on the restarted clean gates. Both reviews used claude-fable-5-1;
+their receipts retain exact frozen sources and true child exits.
+
+gates-01 was explicitly interrupted at that review boundary; its EUnit child
+exit is -9, with a preserved STOP and full partial log. Its completed native,
+client and UI checks passed. No later gate in that campaign is claimed run.
+The separately frozen gates-02 campaign completed EUnit with 3918 cases and
+one failure: the reaction-inertness fixture expected both reactions while
+loading only the core library. The replacement keeps its count-two and unmatched
+assertions and composes both libraries. The inactive incremental source-authoring
+fixture also includes the extracted library, retaining that obligation.
+lobby-fixture-16 passes all 15 tests with unchanged source. No production change
+was needed. gates-03 passed all eleven sequential gates with unchanged inputs:
+native debug/release 35 each, Clippy, client 134, UI build/lint, EUnit 3918,
+Common Test 146, xref, Dialyzer and production release build. Release artifact
+contents were checked against the reviewed source. Prior failed or interrupted
+evidence remains intact. No live deployment is claimed.

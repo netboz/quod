@@ -147,9 +147,6 @@ impl Geometry {
         }
     }
 
-    pub fn box_half_x(&self) -> Option<f64> {
-        match self { Self::Solid(Primitive::Box(x,_,_)) => Some(*x), _ => None }
-    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,34 @@
+[
+  {
+    "file": "src/quod_physics.erl",
+    "sha256": "4a3aedbeee5ea0200ebadffddd9294048111a44a6eb05ec3f0fd977b0b16f9cc"
+  },
+  {
+    "file": "src/quod_runtime.erl",
+    "sha256": "13dc6b7c6a63e9bbf08dec9745258b0fb9fb20c921345360225da300ff2131a0"
+  },
+  {
+    "file": "src/quod_physics_native.erl",
+    "sha256": "9e39ca1c35b967fb9927aa9b8b0695e76cb48accc310ec0683a365198247c5ba"
+  },
+  {
+    "file": "priv/ontologies/quod_physics.pl",
+    "sha256": "51b7a9a57d71a11563aec8747768dde69a3328d46f6d4f43193c4aa9d45a1ff8"
+  },
+  {
+    "file": "priv/ontologies/quod_hinged.pl",
+    "sha256": "096464524551f91eae8705f88dcda428427a2be5110c6e7350fea6e536205d2e"
+  },
+  {
+    "file": "test/quod_physics_tests.erl",
+    "sha256": "21a1a19340d7c8733508508ea7de17a2a8fe1162758720b7811fa81ecb434420"
+  },
+  {
+    "file": "native/quod_physics/src/lib.rs",
+    "sha256": "f8322dbd94f0ce3176f567c125097894061decb2435692cd6bd0f4ea03160a94"
+  },
+  {
+    "file": "native/quod_physics/src/geometry.rs",
+    "sha256": "16f7628cd9a14aaa03c68201eef2433cd2ee423911d4cbaa988ad7a3c339fcaa"
+  }
+]

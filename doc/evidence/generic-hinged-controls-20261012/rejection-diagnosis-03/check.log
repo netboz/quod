@@ -1,0 +1,161 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 955 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1435 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1435 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-competing_obstacle_edit_resolves_before_replacement_test_/0-fun-9-/0
+[0;31m     Failure/Error: {error,
+                     {door_not_finished,
+                      #{{world_ref,<<"host-test-agent">>,
+                         <<65,200,22,50,178,125,8,83,8,131,160,103,110,56,67,
+                           185,150,63,174,8,187,29,163,82,66,55,242,178,43,222,
+                           24,241>>,
+                         room} =>
+                         {#{tick => 83,navigation_ready => true,inputs => #{},
+                            installs => 2,steps => 83,
+                            incarnation =>
+                             <<75,83,248,94,18,72,134,149,171,79,67,196,176,89,
+                               127,191,62,172,217,205,217,251,29,241,111,99,5,
+                               1,145,77,218,43>>,
+                            queries => 0,phase => active,
+                            observations => #{{hinge,10} => unresolved}},
+                          #{generation => 1,structure => 3}}},
+                      #{agent_capacity_status => ready,p_height => 11,
+                        agent_work_blocked => 0,source_views_unreachable => 0,
+                        reaction_matches => 2,subscriptions_active => 0,
+                        collapses => 0,events_seen => 9,
+                        reaction_failures => 0,reconciles => 1,
+                        source_attach_queued => 0,runner_active => false,
+                        source_interests_active => 0,
+                        observed_agent_instances => 0,
+                        agent_observation_refusals_total => 0,
+                        reactions_executed => 2,agent_observation_bytes => 0,
+                        source_views_ready => 0,source_targets_active => 0,
+                        rejected_subscriptions => 0,mode => live,
+                        source_attempts => 0,hosted_agent_instances => 1,
+                        agent_capacity_refusals_total => 0,e_frontier => 11,
+                        source_views_building => 0,resource_dependencies => 6,
+                        reaction_candidates => 12,source_views_active => 0,
+                        agent_observation_capacity => ready,
+                        agent_pending_bytes => 0,resource_failures => #{},
+                        agent_work_idle => 1,dropped_events => 0,
+                        reactions_active => 6,physics_worlds => 1,
+                        height => 11,hosted_agents => 1,
+                        reconcile_failures => 0,queue_len => 0},
+                      {normalized,
+                       {committed,
+                        [<<131,104,1,97,5>>],
+                        {transaction,<<"host-test-agent">>,
+                         <<65,200,22,50,178,125,8,83,8,131,160,103,110,56,67,
+                           185,150,63,174,8,187,29,163,82,66,55,242,178,43,222,
+                           24,241>>,
+                         <<5,40,231,118,235,206,123,158,47,198,215,203,12,
+                           187,31,247,89,139,7,53,74,169,75,143,20,65,161,
+                           175,184,134,219,8>>}}}},
+                     [{quod_physics_tests,await_door_result,3,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,3324}]},
+                      {quod_physics_tests,
+                       '-competing_obstacle_edit_resolves_before_replacement_test_/0-fun-8-',
+                       1,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,3300}]},
+                      {quod_physics_tests,'-with_door/3-fun-3-',2,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,3187}]},
+                      {quod_physics_tests,'-with_world/3-fun-0-',3,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,2308}]},
+                      {quod_agent_hosting_tests,with_host,4,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_agent_hosting_tests.erl"},
+                        {line,1483}]},
+                      {quod_physics_tests,with_world,3,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,2311}]},
+                      {quod_physics_tests,
+                       '-competing_obstacle_edit_resolves_before_replacement_test_/0-fun-9-',
+                       0,
+                       [{file,
+                         "/home/yan/src/quod/test/quod_physics_tests.erl"},
+                        {line,3285}]},
+                      {eunit_test,run_testfun,1,
+                       [{file,"eunit_test.erl"},{line,83}]}]}
+[0m[0;36m     Output: DIAGNOSTIC physics result {normalized,{error,conflict_retry}}
+DIAGNOSTIC physics result {operation_outcome,
+                           #{status => claimed,
+                             ref =>
+                              {operation,<<"host-test-agent">>,
+                               <<65,200,22,50,178,125,8,83,8,131,160,103,110,
+                                 56,67,185,150,63,174,8,187,29,163,82,66,55,
+                                 242,178,43,222,24,241>>,
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,
+                                 0,18,97,103,101,110,116,95,105,110,115,116,97,
+                                 110,99,101,95,114,101,102,104,2,97,1,109,0,0,
+                                 0,15,104,111,115,116,45,116,101,115,116,45,97,
+                                 103,101,110,116,104,2,97,1,109,0,0,0,32,65,
+                                 200,22,50,178,125,8,83,8,131,160,103,110,56,
+                                 67,185,150,63,174,8,187,29,163,82,66,55,242,
+                                 178,43,222,24,241,104,2,97,0,109,0,0,0,5,97,
+                                 99,116,111,114,106>>,
+                               <<62,134,106,67,17,20,129,178,107,9,13,97,114,
+                                 38,92,244,160,95,65,158,178,54,146,90,211,91,
+                                 166,42,160,24,172,176>>},
+                             operation_state => terminal,receipt_height => 11,
+                             request_digest =>
+                              <<110,64,113,166,117,126,101,58,56,103,150,53,
+                                131,16,148,122,74,139,174,108,17,43,181,243,
+                                169,4,193,59,94,151,72,248>>,
+                             outcome_ref =>
+                              {transaction,<<"host-test-agent">>,
+                               <<65,200,22,50,178,125,8,83,8,131,160,103,110,
+                                 56,67,185,150,63,174,8,187,29,163,82,66,55,
+                                 242,178,43,222,24,241>>,
+                               <<194,199,75,220,34,139,137,5,200,161,97,74,35,
+                                 169,111,143,115,199,22,1,158,163,223,191,14,
+                                 222,106,166,79,251,114,241>>},
+                             height => 11,included => []},
+                           #{reason => conflict_retry,status => rejected,
+                             ref =>
+                              {transaction,<<"host-test-agent">>,
+                               <<65,200,22,50,178,125,8,83,8,131,160,103,110,
+                                 56,67,185,150,63,174,8,187,29,163,82,66,55,
+                                 242,178,43,222,24,241>>,
+                               <<194,199,75,220,34,139,137,5,200,161,97,74,35,
+                                 169,111,143,115,199,22,1,158,163,223,191,14,
+                                 222,106,166,79,251,114,241>>},
+                             height => 11}}
+DIAGNOSTIC physics result {error,agent_request_failed}
+Failed hosted-agent fixture retained at /tmp/quod_hosted_1714FB5BA2A84D5C
+[0m
+
+Finished in 16.272 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

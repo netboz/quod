@@ -2,8 +2,8 @@
 
 The authority and lifecycle contract is [world.md](world.md). This first adapter
 supports authored solid and surface geometry, baseline poses, uniform gravity,
-and coherent pose/contact snapshots. Vertical revolute cuboid doors add an
-ordinary close action, mechanical obstruction braking and signed blocked/closed
+and coherent pose/contact snapshots. Authored revolute joints support reusable
+Prolog close/cancel actions, mechanical contact braking and signed blocked/closed
 consequences with an atomic stopped-angle checkpoint. One local client view
 can consume current poses. Governed body-state and collision queries read the
 installed owner. Signed transient controls move ontology-defined rigid agents and push eligible
@@ -48,7 +48,7 @@ The Prolog selection supplies:
 - `physics_body_definition(World, Id, Revision, fixed|dynamic|controlled, Pose,
   owned(Shape, DensityKgPerM3)|live(EntityRef, AssignmentRevision,
   DefinitionRevision, Digest))`;
-- `physics_next_body(World, NextUnusedId)` for admission and door allocation.
+- `physics_next_body(World, NextUnusedId)` for admission and hinged-object allocation.
 
 World policy explicitly supplies geometry allowances; package changes do not
 rewrite committed ontology rules or founding manifests.
@@ -122,7 +122,7 @@ its actual visible-world, acting-agent, physics and Prolog authorization reads.
 Hot inputs and authenticated contact matching use installed body/run fences
 without reading source geometry again.
 
-Explicit reusable door recipes produce owned geometry. They are deliberately
+Explicit reusable hinged-object recipes produce owned geometry. They are deliberately
 materialized recipes, not the default semantics of admitted live instances.
 In this adapter, a live definition belongs to a different ontology with an
 explicit subscription; geometry authored in the world's own scope uses owned
@@ -151,8 +151,8 @@ Surface geometry cannot be used as a moving solid body.
 
 Governed body edits share the Prolog `physics_valid_body/6` schema for body
 identity, kind, authored pose, geometry, density and coordinate allowance.
-It accepts every shape above; the supported hinge requires box solids and a
-`vector/3` baseline, with no authored frame or leaf rotation. Integer rotations,
+It accepts every shape above. Hinged moving parts accept the same supported
+solids and compounds; fixed supports also accept surfaces. Integer rotations,
 density, motor scalars and dimensions must fit the adapter's finite binary64 representation before unit conversion;
 this encoding envelope is independent of coordinate and geometry policy.
 Native installation additionally checks numeric representation, convex volume,
@@ -410,7 +410,7 @@ recovery(PenetrationToleranceMm, NarrowPhaseChecks))`. The action records
 `physics_rest(World, Id, NextSequence, waiting(rest(NextSequence, RequestId)))`.
 It never accepts a caller-supplied measured pose. Once the native body sleeps,
 the current authority emits a fenced, completed-tick rest observation. Give that
-actor explicit invocation grants for `physics_store_rest_request/4` and
+actor explicit invocation grants for `physics_store_rest_request/3` and
 `physics_finish_rest/1`. Their existing custody lane saves exact signed bytes,
 then commits the finished request and checkpoint together:
 
@@ -462,83 +462,142 @@ checks, exhausted allowance or excessive overlap visibly fail installation;
 there is no silent baseline fallback. An authorized body edit invalidates the
 checkpoint and supplies a new baseline as the explicit recovery exit.
 
-## Door actions and effective definitions
+## Hinged actions and effective definitions
 
-`physics_add_door(World, DoorId, FrameId, Source, Position, ExpectedStructure)`
+Compose [quod_hinged.pl](../priv/ontologies/quod_hinged.pl) with the core physics
+rules in the same ontology. This optional Prolog capability owns close/cancel
+states and their meaning; the runtime handles physical commands and samples.
+A door, lid or hatch uses the same actions and owner.
+
+`physics_add_hinged(World, MovingId, FixedId, Source, Pose, ExpectedStructure)`
 requires `can_edit_physics(World, Principal)`. `Source` is either
 `local(Name, Version)` or `class_ref(Namespace, GenesisAnchor, Name, Version)`.
-The latter resolves `physics_door_class/3` through the ordinary authorized
-cross-ontology proof. The action materializes the resulting versioned leaf,
-frame and joint in one world transaction. The retained, local-only selector
-never resolves a shared class. Later class edits do not silently change an
-installed instance.
+The latter resolves `physics_hinged_class/3` through the ordinary authorized
+cross-ontology proof. The action materializes both bodies and their joint in
+one transaction. These explicitly pinned recipes do not change after a later
+class edit; live referenced colliders retain their separate subscription rules.
 
-A class contains `door(FrameBox, LeafBox, Density, BaselineAngleMrad,
-motor(Stiffness, Damping, MaximumTorque, ClosedToleranceMrad))`. The supported
-joint rotates a dynamic cuboid around a fixed frame's vertical axis. Its
-collider is the leaf cuboid; frame/leaf collision is disabled. Each leaf has
-one hinge, bounded by the existing body allowance, without a separate fixed
-joint-count ceiling.
+```prolog
+physics_hinged_class(Name, Version,
+    hinged(FixedShape, MovingShape, Density, Axis,
+           anchors(FixedAnchor, MovingAnchor), limits(Lower, Upper), Baseline,
+           position(Target, motor(Stiffness, Damping, MaximumTorque),
+                    stop(Tolerance, target_or_contact)))).
+physics_joint(World,
+    hinge(body(MovingId, MovingRevision), JointRevision,
+          body(FixedId, FixedRevision), Axis,
+          anchors(FixedAnchor, MovingAnchor), limits(Lower, Upper), Baseline)).
+```
 
-`physics_close_door(World, Door, ExpectedSequence, RequestId)` requires
-`can_close_physics_door/3` and a 32-byte request id. It advances an activity
-sequence and commits `closing(close(Sequence, RequestId))`. The retained owner
-starts the selected motor. Native mechanics brake that hinge on non-frame
-contact or arrival within its closed-angle tolerance; other bodies continue.
-Only Prolog interprets the sample as `blocked(OtherBody)` or `closed`.
+Angles are signed milliradians; anchor vectors are millimetres. `Axis` is a
+nonzero local direction shared by both bodies. Positive motion follows the
+right-hand rule. The adapter uses Rapier's complete angular frame for that axis,
+including its deterministic negative-X case. With frame rotation `F`, fixed-body
+rotation `Rf`, angle `a`, and authored anchors `af`/`am`, restoration sets
+`Rm = Rf * F * Rx(a) * inverse(F)` and `pm = pf + Rf*af - Rm*am`.
+The constructor's `Pose` is the group's placement anchor, not the moving body's
+effective baseline pose. The joint supplies that pose. Installation validates
+the computed pose before changing the native resource.
 
-`physics_move_body/5` edits an unconnected obstacle with expected body and
-structure revisions. Its new position retains authored geometry and orientation,
-including non-box and compound bodies. `physics_move_door/5` edits the whole supported joint
-group, advances its revisions, invalidates its checkpoint and cancels an
-active close. Both require `can_edit_physics/2`. `physics_cancel_door/3`,
-authorized by `can_cancel_physics_door/3`, explicitly ends a pending close
-while retaining its original request for exact outcome resolution.
+Limits stay within [-3141,3141], span at most 3141, and contain baseline and
+target. This avoids the revolute angle's wrap ambiguity. Baseline and target
+may be positive, zero or negative, in either direction. Each moving body has
+one hinge; several moving bodies may share a fixed support. The pair's own
+contact is disabled, so any intended rim/support belongs to that fixed body.
+Other contacts stop the motor and take precedence over target arrival. The
+bounded observation selects the lowest contacting body ID and revision.
+A motor stalled without contact or target arrival remains pending until an
+authorized cancellation or relevant physical change. Measured angles and
+checkpoints outside the authored angular interval are refused. Numerical
+constraint overshoot at a travel limit can therefore leave completion held;
+authored target tolerances should lie inside that interval for this profile.
+
+`physics_close_hinged(World, MovingId, ExpectedSequence, RequestId)` requires
+`can_close_physics_hinged/3` and a 32-byte request id. It advances the sequence
+and records `closing(close(Sequence, RequestId))`. The selected explicit target,
+motor and stopping policy come from `physics_hinged_control/3`. A closing
+activity requires a valid `position/3` command; replacing its definition with
+`hold` makes the projection unavailable. Cancellation is the governed way to
+stop that activity. Native mechanics brake on the selected physical condition. Prolog interprets the measurement as
+`blocked(OtherBody)` or `closed`; no native code tests object names or states.
+
+`physics_move_body/5` edits an unconnected body with expected body and structure
+revisions, retaining its authored geometry and orientation.
+`physics_move_hinged/5` moves a fixed support and **all** its attached moving
+parts in one transaction. It advances their body and joint revisions, removes
+their checkpoints and cancels active closes. It preserves already finished
+activity results and custody, so a later close can replace that committed
+request. A finished activity records its earlier result; removing its checkpoint
+means that result is not a current placement certificate. Unsupported members
+roll back the entire edit. Both require `can_edit_physics/2`. `physics_cancel_hinged/3`,
+authorized by `can_cancel_physics_hinged/3`, ends a pending close while retaining
+original signed custody for exact outcome resolution.
 
 ## Observation and consequence
 
-The runtime authenticates the current simulator PID and incarnation before
-matching `react_on(observed(Sample), Goal)` through the existing Prolog event
-matcher. Private `physics_observation/1` metadata is available only there; an
-ordinary event with the same term conveys no simulator authority. A private
-physics request selects a custodied consequence; a generic observed callback
-without signed-request preparation cannot consume it. The selected
-actor signs a goal containing the entire frozen sample: world/activity,
-authority assignment, generation/token, structure and participating body
-revisions, completed-step tick, quantized angle, one bounded contact partner
-(or clear), and its original validity interval.
+Hinged and free-body rest measurements share one immutable envelope:
 
-The actor's existing custody lane first stores those exact signed bytes and
-signature with `physics_store_door_request/5`, then submits
-`physics_finish_door/2`. Grant both entry actions explicitly to the physics
-actor. Prolog checks authority, sample bounds, revisions, current activity and
-exact signed-request binding. One existing transaction replaces closing with
-the finished result, records the compatible stopped-angle checkpoint, and
-emits `physics_door_finished/4`. No durable proof reads live native physics,
-and sealing has no physics exemption.
+```prolog
+physics_sample(
+    physics_frame(WorldRef, AuthorityRef, HostEpoch, Generation, RunToken, Structure),
+    activity(ResourceReference, Request, SelectedCommand),
+    revisions(ParticipatingReferences), Tick, validity(At, Expiry), Payload).
+```
 
-The checkpoint is an insertion-only restoration input, separate from the
-joint's structural identity. Selecting its own new checkpoint does not reset
-a retained body. A fresh simulator restores the compatible checkpoint or
-baseline, after committing its new run, without replaying the earlier reaction.
-A finished or cancelled activity does not restart its motor.
+Hinge references include the joint and both independently versioned bodies;
+rest references include the free body. Payloads are
+`joint_position_mrad(Angle, clear)` or
+`joint_position_mrad(Angle, contact(BodyId, BodyRevision))`, and
+`rest_pose_mm_quaternion_million(Pose)`, respectively. The complete envelope,
+selected command and payload are covered by the signature. A changed target
+cannot reuse an observation even if the activity identity stays the same.
 
-Required samples use the runtime's existing bounded owned-event cursor and
-actor queue. Refusal retains the unsent sample; actual queue-capacity release
-wakes it. Expired unsent evidence requires another completed native step and
-a new validity interval, never an extension of old signed bytes. A rejected
-request can be replaced only after the ordinary server proof checks the exact
-original operation's immutable, consensus-applied terminal outcome at or
-before the proof's pinned height. The simulator cannot certify rejection.
-Outcome notifications are scoped to that request and retained across a
-concurrent resolution read.
+The runtime authenticates the current simulator PID/incarnation and common
+world/run/structure/time fields before matching `react_on(observed(Sample), Goal)`.
+It does not inspect domain payloads. Private `physics_observation/1` metadata is
+available only in that matcher; a public event with the same term conveys no
+measurement authority. The Prolog consumer checks its exact references,
+command, current request and measurement. A generic observed callback without
+signed-request preparation cannot consume this custodied work.
 
-Pending, unknown and failed resolution leave the hinge held with a visible
-observation status. Recovery resolves the original saved request without
-resubmitting it. A saved-but-never-submitted request may remain pending;
-authorized cancellation is its explicit exit. A certainly unsent policy
-refusal is visible and waits for a relevant selection change. There is no
-readiness polling or retry timer, and absence never means an unobstructed door.
+The existing actor lane stores exact signed bytes and signature with
+`physics_store_hinged_request/4`, then submits `physics_finish_hinged/2`.
+Grant both entry actions explicitly to the authority. The finish checks exact
+signed-request binding, replaces closing with the result, writes
+`physics_checkpoint(World, hinge(MovingId, JointRevision, MovingBodyRef,
+FixedBodyRef, Generation, Tick, Angle))` and emits `physics_hinged_finished/4`
+in one existing transaction. Application clauses of
+`physics_hinged_consequence(World, MovingId, Request, Result, Goal)` contribute
+ordinary goals to that same transaction, including authorized receiver writes.
+Failure rolls back result, checkpoint, event and receiver changes together.
+No durable proof reads native physics and sealing has no physics exemption.
+
+The checkpoint is an insertion-only restoration input separate from joint
+structure. Selecting its own checkpoint does not reset a retained body. A new
+owner restores the compatible checkpoint or authored baseline after committing
+its new run; it does not replay an earlier reaction or restart a finished motor.
+
+Required samples use the existing bounded owned-event cursor and actor queue.
+Refusal retains the unsent sample and capacity release wakes it. Expired unsent
+evidence needs a later completed native step and a new interval; old bytes keep
+their original expiry. Replacing saved custody requires a matching finished
+request, certified rejection/abort of the original operation, or explicit
+cancellation **and changed participating physical revisions**. Cancellation
+alone cannot discard an unknown operation. This rule is shared with rest
+checkpoints. Original history and bytes remain available for exact resolution.
+
+Pending, unknown and failed resolution leave the resource held with a visible
+status. Recovery resolves original custody without resubmitting it. Terminal
+outcomes are read through ordinary pinned proof dependencies and OCC; simulator
+notifications cannot certify rejection. Unsent policy refusal waits for a
+relevant selection change. There is no readiness polling or retry timer.
+
+This is a coordinated format replacement. Validators, selectors and native
+adapters must use the same release. Updating a package does not update retained
+ontology rules or founding manifests; old formats are not converted or silently
+accepted. Apply ontology changes through the established governance/deployment
+owner, preserving original operation history, or perform a separately authorized
+refound when required. Never hot-replace a loaded native resource.
 
 ## Owner and recovery
 

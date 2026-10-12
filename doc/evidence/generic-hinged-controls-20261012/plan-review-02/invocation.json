@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-12T08:55:39.747965+00:00",
+  "args": [
+    "/home/yan/.local/bin/claude",
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "cwd": "/home/yan/src/quod/doc/evidence/generic-hinged-controls-20261012/plan-review-02",
+  "scope": "generic hinged control and common observation PLAN only"
+}

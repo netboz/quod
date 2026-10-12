@@ -1,0 +1,37 @@
+{
+  "created": "2026-10-12T10:21:58.417889+00:00",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "a4cef517639260f6d696daa07b00369d903b53778d43bd9c955ed7a7b2960f88"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "875c61f1ab4b692efeed31b44b3899084293c9d2c752818cb7729da114da8c0e"
+    },
+    {
+      "file": "priv/ontologies/quod_hinged.pl",
+      "sha256": "918635afdd2e6bc95560cdc263678135126b1871b78183c43524c406494ce057"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/implementation-review-02/fable-review.md",
+      "sha256": "15d462dfd41694229e9fe13cee7cbe06186df4c3ee79bbce4dc539c0e30811cc"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/gates-02/diagnosis.txt",
+      "sha256": "bfdb4dfbda91448274ed2a007aad52a9fd40acf52976771ac54f541c051dfdec"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/gates-02/STOP.json",
+      "sha256": "b601adbea96c7498031c01ef43d9e4d28fe0bf357a2295d9a35f58fb33ad4f17"
+    }
+  ]
+}

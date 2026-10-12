@@ -1,0 +1,43 @@
+{
+  "sealed_at": "2026-10-12T10:45:56.793185+00:00",
+  "base_commit": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "campaign": "gates-03",
+  "all_11_gates_passed": true,
+  "frozen_input_count": 1040,
+  "all_frozen_inputs_unchanged": true,
+  "current_owned_scope_matches_frozen_tree": true,
+  "user_document_unchanged": true,
+  "summaries": {
+    "native-tests": [
+      "test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.32s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ],
+    "native-release-tests": [
+      "test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ],
+    "client-tests": [
+      "\u2139 tests 134",
+      "\u2139 pass 134",
+      "\u2139 fail 0",
+      "\u2139 cancelled 0",
+      "\u2139 skipped 0"
+    ],
+    "eunit": [
+      "3918 tests, 0 failures"
+    ],
+    "ct": [
+      "All 146 tests passed."
+    ]
+  },
+  "release_packaged_files": {
+    "priv/ontologies/quod_physics.pl": "875c61f1ab4b692efeed31b44b3899084293c9d2c752818cb7729da114da8c0e",
+    "priv/ontologies/quod_hinged.pl": "918635afdd2e6bc95560cdc263678135126b1871b78183c43524c406494ce057",
+    "priv/native/quod_physics.so": "b9a908f5e0783ae7756e70a2cae94875743e6150c177ce85113b79fa788a0a29",
+    "ebin/quod_runtime.beam": "8ed40b3bb5c3cd8c7a6fa2b62f074f62f5e16268a7b113d9f75dfab96c3c4f2a",
+    "ebin/quod_physics.beam": "f4b5723e9ca4a96acc4113b98981d9f652345617fd1600edd578f1df0deccfbc",
+    "ebin/quod_physics_native.beam": "182892920bc1e2906a6a4e82d3ab631f1e6083f58e583c41ef0f44443db2a6be"
+  },
+  "deployed": false,
+  "ledger_or_server_mutations": false
+}

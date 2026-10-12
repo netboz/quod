@@ -1,0 +1,35 @@
+Fable implementation-review-01: NO-GO, one High finding and four Low notes.
+
+H1 accepted and reproduced: finished-move-red-14 fails the second close with
+hinged_custody_held. A group edit erased finished(R,Result) while keeping its
+committed custody. Fixed in the shared Prolog capability: closing becomes
+cancelled; other activity states are preserved. Checkpoints are still removed
+and every participating revision advances. Finished denotes the earlier action,
+not certification of the new group placement. finished-move-green-15 passes
+this regression on both the door and lid, shared-support move, and rest recovery.
+
+Duplicate rest validation removed; the already validated frame supplies W.
+Control edits to hold while closing are now explicitly documented as invalid;
+ordinary cancel is the supported stop action. No compatibility path added.
+
+start_native cache note checked against advance_current: an active owner calls
+install, never start_native. Owner replacement creates a fresh process whose
+installed_geometry is none. No current second-allocation path exists; retain
+this invariant rather than add a defensive cache-reset branch.
+
+Boundary-target note: the current profile conservatively rejects a stopped
+measurement or checkpoint outside authored angular limits, including solver
+overshoot rounded beyond an endpoint. This remains held/unfulfilled evidence,
+not an invented durable result. The profile now states this limitation; an
+exact endpoint/recovery precision redesign is not silently substituted for a
+measurement. The tested door and lid target windows are inside their limits.
+
+Fable confirmed both reviewed refinements: current custody reads inside the
+store transaction preserve OCC/authority, and excluding restore values from
+installed geometry preserves insertion-only recovery. Other contracts checked
+against pinned Rapier/glam and actual owner paths. All review inputs unchanged.
+
+Clean gates-01 was interrupted at review boundary after H1, during EUnit, with
+true child exit -9 and a separate review-stop record. Earlier six gates passed;
+that partial campaign is not final release evidence. Corrected tree gets a new
+clean campaign. No server deployment, ledger refound or personal-history change.

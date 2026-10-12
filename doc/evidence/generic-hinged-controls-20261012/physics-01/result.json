@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_physics_tests"
+  ],
+  "started": "2026-10-12T09:22:02.676992+00:00",
+  "finished": "2026-10-12T09:28:27.112255+00:00",
+  "child_exit": 1
+}

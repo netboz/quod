@@ -1,0 +1,63 @@
+{
+  "method": "line counts excluding Rust cfg(test) sections; no formatting compression",
+  "base_commit": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "files": [
+    {
+      "path": "src/quod_runtime.erl",
+      "before": 3244,
+      "after": 3244,
+      "delta": 0
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "before": 957,
+      "after": 973,
+      "delta": 16
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "before": 27,
+      "after": 27,
+      "delta": 0
+    },
+    {
+      "path": "src/predicates/quod_physics_predicates.erl",
+      "before": 227,
+      "after": 227,
+      "delta": 0
+    },
+    {
+      "path": "src/predicates/quod_runtime_predicates.erl",
+      "before": 336,
+      "after": 336,
+      "delta": 0
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "before": 895,
+      "after": 795,
+      "delta": -100
+    },
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "before": 652,
+      "after": 636,
+      "delta": -16
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "before": 154,
+      "after": 151,
+      "delta": -3
+    },
+    {
+      "path": "priv/ontologies/quod_hinged.pl",
+      "before": 0,
+      "after": 161,
+      "delta": 161
+    }
+  ],
+  "before": 6492,
+  "after": 6550,
+  "delta": 58
+}

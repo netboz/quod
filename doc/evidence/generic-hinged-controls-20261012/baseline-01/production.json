@@ -1,0 +1,46 @@
+{
+  "baseline": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "files": [
+    {
+      "path": "src/quod_runtime.erl",
+      "lines": 3244,
+      "sha256": "c7bcb5f361910783f007348c5894e70e1ee49f3b2e8d9067de7cb0f8f87ff249"
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "lines": 957,
+      "sha256": "d9e068401257939c9be22d32af3a79044e2c188121d6d0fef1df3b33caffac2f"
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "lines": 27,
+      "sha256": "4dbee79eba9585d6c973875e9ba29c950acac4941ba19ba5e0d914e744616c63"
+    },
+    {
+      "path": "src/predicates/quod_physics_predicates.erl",
+      "lines": 227,
+      "sha256": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a"
+    },
+    {
+      "path": "src/predicates/quod_runtime_predicates.erl",
+      "lines": 336,
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "lines": 895,
+      "sha256": "b1d56f0cb1bfcbfe30f83c6668cd60e7f0c7c5269b384f4af31b5cec8740cf1b"
+    },
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "lines": 763,
+      "sha256": "a6d9a1ed2d4ba74c75609af4d23c90b19f582fecbd193d84ba7486765115350a"
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "lines": 197,
+      "sha256": "3d4ae9b07321eff7b1c27af3906804b51e48a590061befb37b24a815647c2e88"
+    }
+  ],
+  "lines": 6646
+}

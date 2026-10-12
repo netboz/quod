@@ -3204,20 +3204,20 @@ physics_capacity(#{authority := {agent_instance_ref, _, _, I}, epoch := Epoch, k
 
 physics_observation_current(#{owner := Pid, world := World, token := Token,
     event := Sample, expiry := Expiry, deadline := Deadline}, S) ->
-    case {physics_sample_fence(Sample),maps:get(World,S#s.physics,none)} of
-        {{W,Authority,Epoch,Generation,Token,Structure,Expiry},
+    case {Sample,maps:get(World,S#s.physics,none)} of
+        {{physics_sample,{physics_frame,World,Authority,Epoch,Generation,Token,Structure},
+          {activity,_,_,_},{revisions,_},Tick,{validity,At,Expiry},_},
          #{pid := Pid, token := Token, stopping := false,
-          spec := #{world := {world_ref,_,_,W}, authority := Authority, epoch := Epoch,
-                    generation := Generation, structure := Structure}}} ->
-            S#s.mode =:= live andalso Expiry > quod_time:now_ms() andalso
+          spec := #{world := World, authority := Authority, epoch := Epoch,
+                    generation := Generation, run_token := Token, structure := Structure, budget := Budget}}}
+          when is_integer(Tick), Tick > 0, Tick < (1 bsl 64),
+               is_integer(At), At >= 0, is_integer(Expiry), Expiry > At, Expiry-At =< Budget ->
+            Now = quod_time:now_ms(),
+            S#s.mode =:= live andalso At =< Now andalso Expiry > Now andalso
                 Deadline > quod_time:mono_ms();
         _ -> false
     end;
 physics_observation_current(_,_) -> false.
-
-physics_sample_fence({door_sample,W,_,_,A,E,G,T,S,_,_,_,_,_,{validity,_,Expiry}}) -> {W,A,E,G,T,S,Expiry};
-physics_sample_fence({rest_sample,W,_,_,A,E,G,T,S,_,_,_,{validity,_,Expiry}}) -> {W,A,E,G,T,S,Expiry};
-physics_sample_fence(_) -> invalid.
 
 physics_observation_error(#{expiry := Expiry,deadline := Deadline}) ->
     case Expiry =< quod_time:now_ms() orelse Deadline =< quod_time:mono_ms() of

@@ -1,0 +1,72 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 959 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_physics_tests:-authored_hinged_examples_in_independent_worlds_test_/0-fun-19-/0
+[0;31m     Failure/Error: ?assertMatch([ # { pid := P1 , call := { quod_physics_native , control_hinge , 4 } } ], Calls)
+       expected: = [ # { pid := P1 , call := { quod_physics_native , control_hinge , 4 } } ]
+            got: [#{call => {quod_physics_native,control_hinge,4},
+                    caller => {quod_physics,native,1},
+                    pid => <0.766.0>,
+                    registered_keys =>
+                        [{n,l,
+                            {physics_world,
+                                {world_ref,<<"hinged-gallery">>,
+                                    <<32,96,36,7,41,224,42,113,24,54,218,74,
+                                      108,58,130,231,37,117,231,14,193,197,167,
+                                      234,248,17,186,36,15,16,46,41>>,
+                                    room}}}]},
+                  #{call => {quod_physics_native,install,2},
+                    caller => {quod_physics,'-install/2-fun-1-',5},
+                    pid => <0.766.0>,
+                    registered_keys =>
+                        [{n,l,
+                            {physics_world,
+                                {world_ref,<<"hinged-gallery">>,
+                                    <<32,96,36,7,41,224,42,113,24,54,218,74,
+                                      108,58,130,231,37,117,231,14,193,197,167,
+                                      234,248,17,186,36,15,16,46,41>>,
+                                    room}}}]},
+                  #{call => {quod_physics_native,install_hinges,2},
+                    caller => {quod_physics,'-install/2-fun-1-',5},
+                    pid => <0.766.0>,
+                    registered_keys =>
+                        [{n,l,
+                            {physics_world,
+                                {world_ref,<<"hinged-gallery">>,
+                                    <<32,96,36,7,41,224,42,113,24,54,218,74,
+                                      108,58,130,231,37,117,231,14,193,197,167,
+                                      234,248,17,186,36,15,16,46,41>>,
+                                    room}}}]}][0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_67A5152B0C7FD5CC
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_67A5152B0C7FD5CC
+[0m
+
+Finished in 10.746 seconds
+[0;31m6 tests, 1 failures
+[0m===> Error running tests

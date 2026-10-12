@@ -1,0 +1,122 @@
+{
+  "created": "2026-10-12T09:49:51.664031+00:00",
+  "baseline": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "sha256": "1cc0903b402f4ee91516309cb0c8d93774beab3aae4a3a17d172dd3bbb96dc8a"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "sha256": "79335e058f4e55c460f21d7cdba200f582f5b75ec2feca61c6b9ef19673ecac0"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "sha256": "f6a57e4f4e4b0bf18a815bff9f33e0e56741d5dce4630a5e9d5bbd36fc3a5b1f"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "sha256": "50aac7669fa4d92c87fa4cddabe344f59ca370732c7175bf048828837766ca2f"
+    },
+    {
+      "file": "doc/outdated/multiwrite-architecture.md",
+      "sha256": "88686928ec5762528cb5fde8aac7a9a05819e8390af5e58a0391522253a0576b"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "sha256": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2"
+    },
+    {
+      "file": "src/quod_physics_native.erl",
+      "sha256": "9e39ca1c35b967fb9927aa9b8b0695e76cb48accc310ec0683a365198247c5ba"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "sha256": "13dc6b7c6a63e9bbf08dec9745258b0fb9fb20c921345360225da300ff2131a0"
+    },
+    {
+      "file": "src/quod_agent.erl",
+      "sha256": "a88aabb4b4acefb934856cf44ea0659a8d4079386fd6af62f15e85b545e3d32d"
+    },
+    {
+      "file": "src/predicates/quod_physics_predicates.erl",
+      "sha256": "ca183a28f4c05b78dff498ec5e704491007b8b33873dac1fa5c49e13d0e23b0a"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "9e258ace45ec1e39d2416df328f1af6b82163bc32238af8309290aa2fba44759"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "sha256": "cb6bf6fcb52faf203e68ef8c61dbc983081acb9b1499cd89428caa4f8b1febe9"
+    },
+    {
+      "file": "priv/ontologies/quod_hinged.pl",
+      "sha256": "101bcd7471b78484604f841d8328ff6d98a4c9d5cb46d3da138ad775e1602700"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613"
+    },
+    {
+      "file": "native/quod_physics/Cargo.toml",
+      "sha256": "d841aac31a559e7da91cf6f57bdc8fbb313d75e4db20e958aa23c2bf27a6da74"
+    },
+    {
+      "file": "native/quod_physics/Cargo.lock",
+      "sha256": "105404af2dfe79b989119542ddd843a6d47fd97db2401368a499794602fe12bb"
+    },
+    {
+      "file": "native/quod_physics/src/lib.rs",
+      "sha256": "f8322dbd94f0ce3176f567c125097894061decb2435692cd6bd0f4ea03160a94"
+    },
+    {
+      "file": "native/quod_physics/src/geometry.rs",
+      "sha256": "16f7628cd9a14aaa03c68201eef2433cd2ee423911d4cbaa988ad7a3c339fcaa"
+    },
+    {
+      "file": "native/quod_physics/src/motion.rs",
+      "sha256": "ba784c6a11da83e77e6cd326cc442bd52b9929e608ea8e3586329b86da9b86b0"
+    },
+    {
+      "file": "test/quod_physics_tests.erl",
+      "sha256": "b4353330824be521b01897256d7a74ca89802514055e18bac912e66e2f19d4eb"
+    },
+    {
+      "file": "test/quod_agent_hosting_tests.erl",
+      "sha256": "bb6fde5a105904464fdf76d1033e3d84c14d8bac7fdacf5b69ddf8d0eaf9c23c"
+    },
+    {
+      "file": "test/fixtures/hinged-door.pl",
+      "sha256": "1c0a293238927bafba1035588a7fc6a45b47bb39cb55786dc139d040e63d2b2c"
+    },
+    {
+      "file": "test/fixtures/hinged-lid.pl",
+      "sha256": "7934c42934419ed8d74cd9ce7193e1737f95dc32c6ef94fde6b400cf6ec441d1"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/plan.txt",
+      "sha256": "73423aa76361eea6317b2d989317300eadb0cb658b211d1ca37feecea84046f4"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/verification-map.txt",
+      "sha256": "6f39fa9da5296d3255778181c4b75c494b6c99c45f9b4cfdfe5e714775bf3e81"
+    },
+    {
+      "file": "doc/evidence/generic-hinged-controls-20261012/plan-review-02/fable-review.md",
+      "sha256": "7d855251a3bcfb65394229c5dd0dc08016fb063775164bf76b7b91fd54956c5b"
+    },
+    {
+      "file": "dependencies/rapier-generic-joint.rs",
+      "sha256": "f575e7ae7de97257804519f0e46c933ede1cf3f605085ff23fd84514886295be"
+    },
+    {
+      "file": "dependencies/glam-dquat.rs",
+      "sha256": "a14fd7714d285b3d7430c73d8ede9b1e379ff51ef5acbe8eda18c83f65b31476"
+    }
+  ]
+}

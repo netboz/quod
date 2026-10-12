@@ -1,0 +1,13 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:finished_hinged_group_move_can_close_again_test_"
+  ],
+  "started": "2026-10-12T10:04:38.857438+00:00",
+  "finished": "2026-10-12T10:04:47.114994+00:00",
+  "child_exit": 1,
+  "sources_unchanged": true
+}

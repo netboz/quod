@@ -1,0 +1,49 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod-generic-hinged/gates-01/tree/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.32s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-7abeffcfc0fb725b)
+
+running 35 tests
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... ok
+test motion::tests::authored_camera_clearance_is_sensory_and_excludes_its_own_body ... ok
+test motion::tests::declared_triangle_wall_blocks_travel_from_both_sides ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::head_on_surface_contact_converges ... ok
+test motion::tests::captured_clear_floor_travel_makes_progress ... ok
+test motion::tests::capsule_slides_over_surface_in_rotated_frames ... ok
+test motion::tests::grazing_near_a_single_triangle_edge ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::explicit_surface_opening_remains_passable_with_solid_rim ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+test motion::tests::occupied_spawn_freezes_travel_until_explicit_clear_reposition ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::compound_parts_keep_each_nearby_face ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::shape_cast_preserves_authored_hole ... ok
+test motion::tests::shape_cast_obeys_the_existing_allowance ... ok
+test motion::tests::resting_landing_path_still_checks_the_complete_body ... ok
+test motion::tests::target_distance_cast_finds_captured_triangle ... ok
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+test motion::tests::separating_floor_keeps_close_walls_in_the_same_mesh ... ok
+test motion::tests::sliding_keeps_obstacles_in_the_same_surface ... ok
+test motion::tests::rotation_then_translation_keeps_surface_clearance ... ok
+test tests::authored_axes_restore_and_drive_nonzero_targets ... ok
+test tests::bounded_push_rest_and_recovery ... ok
+test tests::falling_and_retained_installation ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+test motion::tests::triangle_face_edge_vertex_normal_accuracy ... ok
+test motion::tests::repeated_capsule_travel_keeps_surface_clearance ... ok
+test motion::tests::long_reciprocal_surface_walk_makes_progress ... ok
+test motion::tests::skin_boundary_travel_and_landing_paths_remain_clear ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.20s
+
+   Doc-tests quod_physics
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

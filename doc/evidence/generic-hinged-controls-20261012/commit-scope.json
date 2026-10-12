@@ -1,0 +1,27 @@
+{
+  "base_commit": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "owned_source_fixture_docs": [
+    "doc/physics-native.md",
+    "doc/world.md",
+    "native/quod_physics/src/geometry.rs",
+    "native/quod_physics/src/lib.rs",
+    "priv/ontologies/quod_hinged.pl",
+    "priv/ontologies/quod_physics.pl",
+    "src/quod_physics.erl",
+    "src/quod_physics_native.erl",
+    "src/quod_runtime.erl",
+    "test/fixtures/hinged-door.pl",
+    "test/fixtures/hinged-lid.pl",
+    "test/quod_lobby_tests.erl",
+    "test/quod_physics_tests.erl"
+  ],
+  "included_evidence_prefix": "doc/evidence/generic-hinged-controls-20261012/",
+  "session_edit_crosscheck": "all currently uncommitted session-edited paths are included",
+  "preexisting_excluded": {
+    "tracked": [
+      "doc/README.md"
+    ],
+    "untracked_count": 2132
+  },
+  "index_empty_before_proposal": true
+}

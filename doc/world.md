@@ -594,15 +594,18 @@ the runtime. Its own activation uses durable original signed-request custody
 and outcome resolution before installation. Same-host restart commits a fresh
 generation; no successor adopts a dead incarnation's generation. The
 [adapter profile](physics-native.md) describes failure, backpressure and recovery
-boundaries, including vertical hinge/stopped-angle checkpoints, free-body rest
+boundaries, including authored revolute-joint/stopped-angle checkpoints, free-body rest
 checkpoints and rejection of unsupported joint/checkpoint declarations.
 
-The door bridge now selects close intents, restores supported stopped-angle
-checkpoints and hands authenticated immutable samples to the exact authority
+The reusable hinged capability selects physical commands, restores supported
+stopped-angle checkpoints and hands authenticated immutable samples to the exact authority
 actor through the existing event matcher. The actor commits original signed
 request custody before submission. A blocked/closed consequence and checkpoint
-commit atomically; pending outcomes are resolved exactly, and replacement
-requires a server-verified terminal rejection. The hosted actor's queue alone
+and any composed receiver changes commit atomically. Hinged and rest samples
+share one signed envelope with exact command and participating revision fences.
+Pending outcomes are resolved exactly. Custody replacement requires a matching
+finished request, certified terminal rejection, or an explicit cancellation plus
+changed participating physical revisions. The hosted actor's queue alone
 is not durable custody. Impact-operation custody and occurrence acceptance
 remain outside this implemented profile.
 

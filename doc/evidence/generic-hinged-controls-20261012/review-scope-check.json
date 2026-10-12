@@ -1,0 +1,129 @@
+{
+  "checked_at": "2026-10-12T10:24:40.420741+00:00",
+  "base_commit": "f99a7f20d515966bc34629db88ff39885eccd547",
+  "owned_scope": [
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "sha256": "f8322dbd94f0ce3176f567c125097894061decb2435692cd6bd0f4ea03160a94",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "sha256": "16f7628cd9a14aaa03c68201eef2433cd2ee423911d4cbaa988ad7a3c339fcaa",
+      "matching_frozen_review_packets": [
+        "implementation-review-01"
+      ]
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "sha256": "875c61f1ab4b692efeed31b44b3899084293c9d2c752818cb7729da114da8c0e",
+      "matching_frozen_review_packets": [
+        "implementation-review-02",
+        "implementation-review-03"
+      ]
+    },
+    {
+      "path": "priv/ontologies/quod_hinged.pl",
+      "sha256": "918635afdd2e6bc95560cdc263678135126b1871b78183c43524c406494ce057",
+      "matching_frozen_review_packets": [
+        "implementation-review-02",
+        "implementation-review-03"
+      ]
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "sha256": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "sha256": "9e39ca1c35b967fb9927aa9b8b0695e76cb48accc310ec0683a365198247c5ba",
+      "matching_frozen_review_packets": [
+        "implementation-review-01"
+      ]
+    },
+    {
+      "path": "src/quod_runtime.erl",
+      "sha256": "13dc6b7c6a63e9bbf08dec9745258b0fb9fb20c921345360225da300ff2131a0",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "test/quod_physics_tests.erl",
+      "sha256": "5d2012daa7460e57b7bce18702b56fcbdbac78846e4ea71f033fb557efabee67",
+      "matching_frozen_review_packets": [
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "test/fixtures/hinged-door.pl",
+      "sha256": "1c0a293238927bafba1035588a7fc6a45b47bb39cb55786dc139d040e63d2b2c",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "test/fixtures/hinged-lid.pl",
+      "sha256": "7934c42934419ed8d74cd9ce7193e1737f95dc32c6ef94fde6b400cf6ec441d1",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "test/quod_lobby_tests.erl",
+      "sha256": "a4cef517639260f6d696daa07b00369d903b53778d43bd9c955ed7a7b2960f88",
+      "matching_frozen_review_packets": [
+        "implementation-review-03"
+      ]
+    },
+    {
+      "path": "doc/physics-native.md",
+      "sha256": "44892035a1b1ccf2c64461212dec3c5842ec2c9c0587feb4b9963507f6a2ecbe",
+      "matching_frozen_review_packets": [
+        "implementation-review-02"
+      ]
+    },
+    {
+      "path": "doc/world.md",
+      "sha256": "1cc0903b402f4ee91516309cb0c8d93774beab3aae4a3a17d172dd3bbb96dc8a",
+      "matching_frozen_review_packets": [
+        "implementation-review-01",
+        "implementation-review-02"
+      ]
+    }
+  ],
+  "fable_followup": "GO conditional on final clean gates",
+  "review_model": "claude-fable-5-1",
+  "superseded_production_api_matches": 0,
+  "user_document_sha256": "7756a489d740fea8bb4bc953284f00cfa062eed29e85e34a3acf443b22d6d18f",
+  "gate_campaign": "gates-03",
+  "removed_api_query": {
+    "tool": "rg",
+    "pattern": "door_sample|sample_doors|offer_door|drive_hinge|box_half_x|physics_door_|physics_(add|close|cancel|move)_door",
+    "paths": [
+      "src",
+      "native/quod_physics/src",
+      "priv/ontologies"
+    ],
+    "exit": 1,
+    "matches": []
+  },
+  "reachability_evidence": [
+    "physics-12: original migrated owner regressions plus independent authored worlds",
+    "command-policy-13: real signed control edits and both-object obstruction/ACLs",
+    "finished-move-green-15: completed activity reuse in both authored examples",
+    "gates-03: full native and production-owner tests, xref and release packaging",
+    "lobby-fixture-16: optional library remains inert under incremental source authoring and ordinary domain notices"
+  ],
+  "final_clean_gate_result": "all eleven passed; review condition satisfied"
+}

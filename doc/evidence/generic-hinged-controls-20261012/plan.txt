@@ -1,0 +1,235 @@
+Generic hinged controls and authenticated observations
+Tracker: bug_1791718464912_3j9mtg
+Baseline: f99a7f20d515966bc34629db88ff39885eccd547
+Status: implementation plan after Fable plan-review-02 and the amendments below.
+No implementation evidence is claimed by this plan.
+
+Purpose
+Use the same production mechanics for a vertical door and a horizontal lid
+with a nonzero closing target. Close/cancel and closing/closed/blocked remain
+a reusable Prolog capability. Adding the second object changes ontology data
+and rules only. No compatibility branches, new process or physics ontology.
+
+Existing owners and demonstrated gaps
+1. physics_projection/2 selects committed bodies, hinges and activities for
+   quod_runtime's retained resource worker. Live source dependencies already
+   flow through its verified subscription/projection owner. Preserve this path.
+2. quod_physics owns the native resource, activation and observation cursor.
+   install_controls and sample_doors currently decode closing/door rows;
+   activity/1 even decodes rest rows through the door decoder. Replace this
+   selection boundary with physical requests, not domain activity states.
+3. install_hinges infers a cuboid's attachment offset and vertical axis;
+   drive_hinge accepts a Boolean and targets zero. Replace these assumptions
+   with authored attachment geometry and a bounded position command.
+4. Runtime admission (physics_observation_current) extracts authority/expiry
+   by destructuring door_sample and rest_sample. Replace those layouts with
+   one common envelope; retain full immutable sample in private metadata.
+5. Existing owned-event matching, prepare_signed_request, hosted actor custody,
+   signed_physics_request/current_signed_request and exact operation resolution
+   already bind and recover the consequence. Reuse them without a new queue,
+   broker, executor, acknowledgement protocol or domain store.
+
+Mechanical contract
+The supported joint remains a revolute connection from a fixed body to one
+dynamic body. One joint per dynamic body; the moving body's ID identifies the
+joint, bounded by the existing body allowance. No full joint catalogue.
+
+physics_joint(World, hinge(body(Moving, BodyRevision), JointRevision,
+    body(Fixed, FixedRevision), Axis, anchors(FixedAnchor, MovingAnchor),
+    limits(Lower, Upper), BaselineAngle)).
+
+Anchors are local millimetre vectors. One explicitly authored nonzero integer
+direction vector is the axis in both bodies' local frames; different local
+axes are outside this profile. Normalize it at the mechanical boundary. Supported
+angles are milliradians strictly inside Rapier's single-turn [-pi,pi] range;
+lower <= baseline/restore/target <= upper, with span at most pi. Pivots define
+both joint frames with the same deterministic axis-frame construction. Restore computes
+the moving body's pose from the fixed body's authored pose, both joint frames
+and the angle; geometry dimensions never supply an attachment point. Explicit
+body shapes reuse existing solid/compound validation and geometry budgets.
+Fixed-body rotation is supported. The moving pose is written only by physics.
+
+Controls are hold or position(Target, motor(Stiffness,Damping,MaximumTorque),
+    stop(Tolerance, target_or_contact)). The initial supported stop policy is
+explicit target-or-contact followed by holding the measured angle. It is a
+bounded mechanical brake; Prolog alone decides that contact means blocked.
+No Boolean close interface or hardcoded zero target remains. Native calls
+include the expected joint revision and reject stale references. Prolog owns
+control selection, all allowances, ACLs and domain meaning; native validates
+representation and supported mechanics. Unsupported policies fail visibly.
+
+Selection and reusable domain capability
+physics_projection collects physical activity(Key, Request, Command, Custody)
+rows through a composable physics_activity/5 predicate. Keys identify hinge
+or rest resources and their current revisions; Request is the exact current
+activity identity or none. Erlang neither receives nor interprets closing,
+closed, blocked or object types. One decoder validates the common row/custody.
+The hinge sampler produces a quantitative joint angle plus bounded contact;
+the rest sampler produces a sleeping body's quantized pose, both using the
+same envelope and existing retained observation/outcome cursor.
+
+A composable quod_hinged.pl library owns reusable pinned recipes, constructor,
+close/cancel/move actions, ACL hooks, sequence/state, custody, outcome mapping
+and completion events. Compose it into the same ontology as quod_physics.pl;
+it is not another ontology or runtime. Replace physics_*_door names and callers
+with physics_*_hinged capability names; do not retain aliases. A recipe authors
+both shapes, density, pivots, bounds, baseline and closing control. The existing
+body allocator reserves both bodies atomically; the moving body names its hinge.
+Move edits the whole supported group and cancels its active request atomically.
+Ordinary unconstrained edits continue through the existing body action.
+
+Common observation contract
+physics_sample(
+    physics_frame(WorldRef, AuthorityRef, HostEpoch, Generation, Token, Structure),
+    activity(Key, Request, Command), revisions(ExactReferences), Tick,
+    validity(CapturedAt, Expires), Payload).
+
+WorldRef and AuthorityRef include exact namespace/genesis anchors. Hinge
+references include joint revision plus both body revisions; rest includes its
+body revision. Payload declares units/schema: joint_position_mrad(Angle,Contact)
+or rest_pose_mm_quaternion_million(Pose). Contact carries the other body's ID
+and revision. Activity identity includes its monotonic sequence and original
+request ID. Command is the exact selected physical command, so changing a
+target, tolerance or motor cannot reuse an older sample under the same request.
+Complete envelope AND payload stay together in private metadata,
+reaction unification, signed goal, custody and current_signed_request checks.
+Runtime admission compares the entire anchored world/authority/run/structure,
+current owner PID/token, exact expiry and original monotonic deadline. It does
+not inspect payload schemas. Generic Prolog validation checks committed fence,
+validity/budget and tick bounds; the consuming capability checks exact expected
+references, request/state, supported physical payload and domain prerequisites.
+An ordinary observed event cannot obtain private physics_observation metadata.
+No durable proof queries native state, and there is no sealing exemption.
+
+Lifecycle, conflicts and rollback
+Keep original custody and outcome subscriptions across loss/restart. Unknown
+does not mean rejected; resolution uses the original signed bytes/identity,
+never a new submission or extended expiry. Expired certainly-unsent evidence
+requires a new completed native step. Cancellation fences the exact old activity
+without inventing a backend outcome. New activity identities cannot consume old
+evidence. Selection changes before/after matching, custody or replies recheck
+the exact body/joint/run/structure fences through existing notices/OCC.
+Completion, compatible checkpoint and event commit in one transaction; any
+related cross-ontology consequence participates in that same atomic write.
+Recovery restores current checkpoint/definitions without replaying reactions.
+Checkpoints remain insertion inputs, not reasons to reset retained bodies.
+Preserve conservative world structure fencing and per-predicate OCC.
+Withdrawal rejects connected bodies until an authorized group transition
+removes their constraint; no inter-simulation handoff is introduced.
+
+Required amendments from independent/Fable plan review
+1. Frame construction: use the pinned Rapier GenericJoint::complete_ang_frame
+   for the normalized shared axis, and set both complete local frames. Its
+   pinned glam implementation is total for unit vectors, including -X: the
+   antiparallel branch uses a deterministic perpendicular to +X. Do not copy
+   that existing algorithm into another implementation. Tests cover both signs
+   of all three principal axes plus an oblique axis and positive right-handed
+   travel. If F is that rotation, restoration is Rm = Rf*F*Rx(angle)*inverse(F),
+   pm = pf + Rf*fixed_anchor - Rm*moving_anchor. Angle zero aligns the moving
+   and fixed body frames through the anchors. Different local axes are not
+   represented. Check the resulting finite pose and coordinate allowance at
+   installation, before mutation/publication. The connected moving body's
+   authored Pose row is explicitly the group's placement anchor; its effective
+   baseline is derived from the joint, not a competing free-body pose writer.
+2. The support/rim that should meet the moving body at the target belongs to
+   the joint's fixed body, whose pair contacts are disabled. All other active
+   contacts are eligible obstruction measurements. Select the lowest body ID
+   (with its exact revision), as an explicit bounded observation rule. Contact
+   takes precedence over target proximity; clear plus within target tolerance
+   means closed; otherwise there is no result. Motor stall without contact
+   does not invent a result: explicit cancellation is the exit.
+3. Use one custody-replacement rule for rest and hinged admission: none,
+   matching finished activity, exact certified rejection/abort, or matching
+   cancelled activity whose participating physical revisions changed. A cancel
+   alone cannot drop an unresolved custody row and immediately re-close. Keep
+   the original bytes available for exact resolution; cancel plus authored
+   group move supplies the explicit revision-fenced exit. Add that regression
+   and adapt the former cancel-then-immediate-reclose test accordingly.
+4. A fixed support may carry multiple hinges. Group move means that fixed body
+   and EVERY attached moving body/joint, checkpoint and hinged activity, updated
+   in the same transaction. Current world-edit permission covers the group;
+   all member state/revision reads participate in OCC. Cancel pending activities
+   together. A member not owned by this reusable hinged capability makes this
+   action refuse before any partial write; it cannot invalidate a still-live
+   sibling joint. Constructor bodies remain separately allocated. Add a shared
+   support regression; do not create an artificial fixed-body population cap.
+5. Remove every specialized constraint: positive-only baseline, tolerance less
+   than baseline, common fixed/moving/joint revision, cuboid-only geometry,
+   zero rotations, zero target, symmetric baseline limits and symmetric sample
+   bounds. Equal current/target angle is valid and brakes at its first step.
+6. Retain one activity row per hinge and one hinge per corresponding activity,
+   exact checkpoint/joint revisions and visible failure for invalid restore
+   inputs. Keys in the retained observation map are stable resource identities;
+   revisions and commands are fields, not replacement map keys. Position is
+   selected only for active requests with no unresolved custody; other states
+   select hold. Resampling after certified rejection uses the current command
+   and a new completed step. Compare each observation's own selected command
+   when deciding whether a relevant change should wake held work.
+7. Update all constrained-body callers, including live refresh/removal, rest
+   restoration and push admission. Keep the positional world row stable,
+   especially body element 13 consumed by the source-resolution owner.
+8. Related domain effects use an explicit Prolog completion hook called INSIDE
+   the existing finish transaction, before its completion event. This lets an
+   application include a receiver's write atomically and map closed to its own
+   domain fact. It adds no executor or persistent workflow. Test rollback and
+   a real second ontology, not post-commit reaction repair.
+9. Composition uses existing read_terms + terms_to_diff/ordinary source owner.
+   The resource predicate physics_activity/5 is one Prolog relation contributed
+   by the physics and optional hinged libraries; no new loader is introduced.
+   The existing verified projection owner retains its actual predicate reads.
+   Per-selection signature validation remains as is unless measured evidence
+   requires changing it; do not add a speculative signature cache.
+
+The Fable report did not include dependency sources. The parent inspected the
+pinned Rapier 0.36.0 and glam 0.33.12 frame code directly, which supports reuse
+instead of a copied perpendicular-frame algorithm. Fable's other conditional
+findings are accepted above; its extra native stop-reason interface is deferred
+because the existing coherent frame already contains the bounded contacts.
+
+Validation and removal
+Carry forward every door/rest regression using replacement production paths:
+obstruction/clear, unauthorized control, cancellation, queued expiry, both
+selection/reply orders, actor/simulator restart, pending original outcomes,
+stale generations/revisions, full runtime/actor queues and rest checkpoints.
+Add horizontal lid with nonzero target/opposite direction and shared close
+rules; exercise separate anchored worlds and verify scope isolation. Native
+tests cover authored axes/anchors/rotated frame/shape reuse, target/hold, stale
+revision, bounds and unsupported declarations. Real-owner tests reject forged
+normal events, envelope/payload substitution, wrong host/world and replacement
+activities, and cover edits before delivery/matching/custody/finish.
+Test transaction failure/backtracking/OCC leaves no consequence/checkpoint/event;
+retain cross-ontology atomic receiver coverage. Trace unchanged reconciliation:
+zero history reads, projection rebuilds, geometry installation and writes/syncs;
+distinguish simulation steps and real committed changes. No client pose writer
+changes. Remove old dispatch, aliases, exports and geometry-only box helper if
+unreachable; update current specs, preserve historical evidence. Report actual
+production line delta with rationale. Full clean sequential release gates and
+Fable implementation review precede delivery; retain all failed runs.
+
+Clean deployment contract
+This is a coordinated format replacement, not mixed-version operation. All
+participating validators, selectors and native adapters need the same release.
+No package edit changes a retained founding manifest or existing ontology rules.
+Do not hot-upgrade a loaded NIF or rewrite saved signed operations/checkpoints.
+The user has authorized deploy/refound if needed. Before deployment inspect
+actual current scopes and pending operations with the single release writer.
+For an existing scope with old hinge/rest rules or custody, retain the original
+history/evidence and resolve or explicitly cancel pending activities through
+the old authorized actions before retiring that scope. Replace the ontology
+library only through governed source editing where supported; a necessary
+format refound is a separately recorded, authorized clean deployment, never a
+hidden conversion or fallback. No old-format recovery promise is made under
+new binaries. Existing unrelated world identity/history should be preserved
+where no refound is necessary. QUD.36 live client acceptance and QUD.26 headset
+acceptance remain separate; local fixtures cannot close either.
+
+Implementation refinement from rejection regression
+The reaction supplies the complete new sample and signed finish bytes to the
+store action. It does not embed an earlier full signed custody record. The
+store reads current custody from its existing ontology owner in the same
+transaction, requires certified rejection/abort before replacement, and checks
+strictly newer generation/tick. Ordinary per-predicate OCC fences that read.
+This removes redundant nested signed data, not an authorization or concurrency
+check. Store arities are hinged/4 and rest/3; superseded arities are removed.
+Exact measured formatter failure and retained diagnostic runs are recorded
+under rejection-diagnosis-*; no limit increase or split transaction is used.

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:competing_obstacle_edit_resolves_before_replacement_test_+pending_door_restart_preserves_original_outcome_test_+pending_custody_and_delayed_sample_cannot_finish_new_close_test_+chair_unknown_checkpoint_custody_is_not_resubmitted_test_"
+  ],
+  "started": "2026-10-12T09:40:01.218078+00:00",
+  "finished": "2026-10-12T09:40:15.012707+00:00",
+  "child_exit": 0,
+  "sources_unchanged": true
+}

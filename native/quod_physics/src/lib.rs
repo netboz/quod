@@ -24,16 +24,35 @@ type Sample = (bool, Vec<Pose>, Vec<(u64, u64)>);
 // Millimetres and quaternion millionths; a sleeping body has zero velocity.
 type RestSample = ((i64, i64, i64), (i64, i64, i64, i64));
 
-// Vertical revolute cuboid profile. Each leaf has one joint; the existing
-// body allowance bounds the joint set too. Restore angles are insertion inputs,
-// never part of a structural definition's identity.
-type Hinge = (u64, u64, u64, (f64, f64, f64), f64, (f64, f64, f64, f64));
+// One revolute joint per moving body. Body and joint revisions are independent.
+// Restore angles are insertion inputs, never structural identity.
+#[derive(Clone, Copy, Debug, PartialEq, rustler::NifTuple)]
+struct Hinge {
+    moving: (u64, u64),
+    revision: u64,
+    fixed: (u64, u64),
+    axis: geometry::V3,
+    anchors: (geometry::V3, geometry::V3),
+    limits: (f64, f64),
+    baseline: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, rustler::NifUnitEnum)]
+enum StopPolicy { TargetOrContact }
+
+#[derive(Clone, Copy, Debug, PartialEq, rustler::NifTaggedEnum)]
+enum JointCommand {
+    Hold,
+    // Target, motor stiffness/damping/torque, tolerance and mechanical stop rule.
+    Position(f64, (f64, f64, f64), (f64, StopPolicy)),
+}
+
 struct InstalledHinge {
     row: Hinge,
     handle: ImpulseJointHandle,
-    leaf: RigidBodyHandle,
-    frame: RigidBodyHandle,
-    driving: bool,
+    moving: RigidBodyHandle,
+    fixed: RigidBodyHandle,
+    command: JointCommand,
 }
 
 struct World {
@@ -146,7 +165,7 @@ impl World {
         for (id, rev, (p, q), tolerance, checks) in &rows {
             let Some((row, handle)) = self.rows.get(id) else { return Err(atoms::invalid_checkpoint()); };
             if row.1 != *rev || row.2 != Kind::Dynamic || !seen.insert(*id)
-                || self.hinges.values().any(|h| h.row.0 == *id || h.row.2 == *id)
+                || self.hinges.values().any(|h| h.row.moving.0 == *id || h.row.fixed.0 == *id)
                 || !tolerance.is_finite() || *tolerance < 0.0 || *checks == 0 {
                 return Err(atoms::invalid_checkpoint());
             }
@@ -196,7 +215,7 @@ impl World {
     fn push_body(&mut self, id:u64, rev:u64, impulse:geometry::V3, max_speed:f64) -> bool {
         let Some((row, handle)) = self.rows.get(&id) else { return false; };
         if row.1 != rev || row.2 != Kind::Dynamic
-            || self.hinges.values().any(|h| h.row.0 == id || h.row.2 == id)
+            || self.hinges.values().any(|h| h.row.moving.0 == id || h.row.fixed.0 == id)
             || !max_speed.is_finite() || max_speed <= 0.0 { return false; }
         let Ok(impulse) = geometry::vector(impulse,f64::MAX) else { return false; };
         let b = &mut self.bodies[*handle];
@@ -211,100 +230,72 @@ impl World {
 
     fn install_hinges(&mut self, inputs: Vec<(Hinge, f64)>) -> Result<usize, Atom> {
         let mut seen = BTreeSet::new();
-        for (
-            row @ (id, rev, frame, (x, y, z), baseline, (stiffness, damping, force, tolerance)),
-            restore,
-        ) in &inputs
-        {
-            let Some((leaf_row, _)) = self.rows.get(id) else {
+        let mut prepared = Vec::new();
+        for (row, restore) in inputs {
+            let id = row.moving.0;
+            let Some((moving_row, moving)) = self.rows.get(&id) else {
                 return Err(atoms::invalid_hinge());
             };
-            let Some((frame_row, _)) = self.rows.get(frame) else {
+            let Some((fixed_row, fixed)) = self.rows.get(&row.fixed.0) else {
                 return Err(atoms::invalid_hinge());
             };
-            if !seen.insert(*id)
-                || id == frame
-                || leaf_row.2 != Kind::Dynamic
-                || frame_row.2 != Kind::Fixed
-                || leaf_row.4.box_half_x().is_none()
-                || frame_row.4.box_half_x().is_none()
-                || leaf_row.3.1 != (0.0, 0.0, 0.0)
-                || frame_row.3.1 != (0.0, 0.0, 0.0)
-                || *rev != leaf_row.1
-                || *rev != frame_row.1
-                || [baseline, restore, stiffness, damping, force, tolerance]
-                    .iter()
-                    .any(|v| !v.is_finite())
-                || baseline.abs() >= std::f64::consts::PI
-                || restore.abs() >= std::f64::consts::PI
-                || *stiffness <= 0.0
-                || *damping <= 0.0
-                || *force <= 0.0
-                || *tolerance <= 0.0
-                || *tolerance >= baseline.abs()
-            {
-                return Err(atoms::invalid_hinge());
+            let (lower, upper) = row.limits;
+            if !seen.insert(id) || id == row.fixed.0 || row.revision == 0
+                || moving_row.2 != Kind::Dynamic || fixed_row.2 != Kind::Fixed
+                || moving_row.1 != row.moving.1 || fixed_row.1 != row.fixed.1
+                || [lower, upper, row.baseline, restore].iter().any(|v| !v.is_finite())
+                || lower <= -std::f64::consts::PI || upper >= std::f64::consts::PI
+                || lower > upper || upper - lower > std::f64::consts::PI
+                || !(lower..=upper).contains(&row.baseline)
+                || !(lower..=upper).contains(&restore)
+            { return Err(atoms::invalid_hinge()); }
+            let axis = geometry::vector(row.axis, f64::MAX).map_err(|_| atoms::invalid_hinge())?;
+            let scale = axis.abs().max_element();
+            if scale == 0.0 { return Err(atoms::invalid_hinge()); }
+            // Scale before normalization so any finite nonzero direction is safe.
+            let axis = (axis / scale).normalize();
+            let a1 = geometry::vector(row.anchors.0, self.limits.3)?;
+            let a2 = geometry::vector(row.anchors.1, self.limits.3)?;
+            if let Some(old) = self.hinges.get(&id) {
+                if (old.row != row && old.row.revision >= row.revision)
+                    || (old.row == row && self.impulse.get(old.handle).is_none())
+                { return Err(atoms::stale_revision()); }
+                if old.row == row { continue; }
             }
-            if [x, y, z]
-                .iter()
-                .any(|v| !v.is_finite() || v.abs() > self.limits.3)
-            {
-                return Err(atoms::coordinate_allowance());
-            }
-            if let Some(old) = self.hinges.get(id) {
-                if (old.row != *row && old.row.1 >= *rev)
-                    || (old.row == *row && self.impulse.get(old.handle).is_none())
-                {
-                    return Err(atoms::stale_revision());
-                }
-            }
+            // Both local frames use the same total, pinned Rapier construction.
+            // Angle zero aligns the body frames through their authored anchors.
+            let frame = GenericJoint::complete_ang_frame(axis);
+            let joint = GenericJointBuilder::new(JointAxesMask::LOCKED_REVOLUTE_AXES)
+                .local_frame1(rapier3d::math::Pose::from_parts(a1, frame))
+                .local_frame2(rapier3d::math::Pose::from_parts(a2, frame))
+                .contacts_enabled(false)
+                .limits(JointAxis::AngX, [restore, restore])
+                .build();
+            let fixed_pose = self.bodies[*fixed].position();
+            let rotation = fixed_pose.rotation * frame * Rotation::from_rotation_x(restore) * frame.inverse();
+            let position = fixed_pose.translation + fixed_pose.rotation * a1 - rotation * a2;
+            geometry::vector((position.x, position.y, position.z), self.limits.3)?;
+            if !rotation.is_finite() { return Err(atoms::invalid_hinge()); }
+            prepared.push((row, *moving, *fixed, position, rotation, joint));
         }
-        let removed: Vec<_> = self
-            .hinges
-            .keys()
-            .filter(|id| !seen.contains(id))
-            .copied()
-            .collect();
-        let mut changes = removed.len();
+        let removed: Vec<_> = self.hinges.keys().filter(|id| !seen.contains(id)).copied().collect();
+        let changes = removed.len() + prepared.len();
         for id in removed {
             let old = self.hinges.remove(&id).unwrap();
             self.impulse.remove(old.handle, true);
         }
-        for (row @ (id, _, frame_id, (x, y, z), _, _), restore) in inputs {
-            if self.hinges.get(&id).is_some_and(|old| old.row == row) {
-                continue;
-            }
-            if let Some(old) = self.hinges.remove(&id) {
+        for (row, moving, fixed, position, rotation, joint) in prepared {
+            if let Some(old) = self.hinges.remove(&row.moving.0) {
                 self.impulse.remove(old.handle, true);
             }
-            let (leaf_row, leaf) = &self.rows[&id];
-            let leaf = *leaf;
-            let frame = self.rows[&frame_id].1;
-            let pivot = Vector::new(x, y, z);
-            let offset = Vector::new(leaf_row.4.box_half_x().ok_or_else(atoms::invalid_hinge)?, 0.0, 0.0);
-            let rotation = rapier3d::math::rotation_from_angle(Vector::Y * restore);
-            let position = self.bodies[frame].translation() + pivot + rotation * offset;
-            self.bodies[leaf].set_translation(position, true);
-            self.bodies[leaf].set_rotation(rotation, true);
-            self.bodies[leaf].set_linvel(Vector::ZERO, true);
-            self.bodies[leaf].set_angvel(Vector::ZERO, true);
-            let joint = RevoluteJointBuilder::new(Vector::Y)
-                .local_anchor1(pivot)
-                .local_anchor2(-offset)
-                .contacts_enabled(false)
-                .limits([restore, restore]);
-            let handle = self.impulse.insert(frame, leaf, joint, true);
-            self.hinges.insert(
-                id,
-                InstalledHinge {
-                    row,
-                    handle,
-                    leaf,
-                    frame,
-                    driving: false,
-                },
-            );
-            changes += 1;
+            self.bodies[moving].set_translation(position, true);
+            self.bodies[moving].set_rotation(rotation, true);
+            self.bodies[moving].set_linvel(Vector::ZERO, true);
+            self.bodies[moving].set_angvel(Vector::ZERO, true);
+            let handle = self.impulse.insert(fixed, moving, joint, true);
+            self.hinges.insert(row.moving.0, InstalledHinge {
+                row, handle, moving, fixed, command: JointCommand::Hold,
+            });
         }
         self.changed |= changes > 0;
         self.query_ready &= changes == 0;
@@ -318,8 +309,8 @@ impl World {
             .ok_or_else(atoms::invalid_hinge)?;
         let revolute = RevoluteJoint { data: joint.data };
         let angle = revolute.angle(
-            self.bodies[h.frame].rotation(),
-            self.bodies[h.leaf].rotation(),
+            self.bodies[h.fixed].rotation(),
+            self.bodies[h.moving].rotation(),
         );
         if angle.is_finite() {
             Ok(angle)
@@ -328,63 +319,55 @@ impl World {
         }
     }
 
-    fn drive_hinge(&mut self, id: u64, drive: bool) -> Result<(), Atom> {
+    fn control_hinge(&mut self, id: u64, revision: u64, command: JointCommand) -> Result<(), Atom> {
         let h = self.hinges.get(&id).ok_or_else(atoms::invalid_hinge)?;
+        if h.row.revision != revision { return Err(atoms::stale_revision()); }
+        if let JointCommand::Position(target, (stiffness, damping, force), (tolerance, _)) = command {
+            if !target.is_finite() || !(h.row.limits.0..=h.row.limits.1).contains(&target)
+                || [stiffness, damping, force, tolerance].iter().any(|v| !v.is_finite() || *v <= 0.0)
+            { return Err(atoms::invalid_hinge()); }
+        }
         let angle = self.hinge_angle(h)?;
         let h = self.hinges.get_mut(&id).unwrap();
-        let joint = self
-            .impulse
-            .get_mut(h.handle, true)
-            .ok_or_else(atoms::invalid_hinge)?;
-        if drive {
-            let limit = h.row.4.abs();
-            joint.data.set_limits(JointAxis::AngX, [-limit, limit]);
-            joint.data.set_motor_position(
-                JointAxis::AngX,
-                0.0,
-                h.row.5 .0,
-                h.row.5 .1,
-            );
-            joint
-                .data
-                .set_motor_max_force(JointAxis::AngX, h.row.5 .2);
-        } else {
-            joint.data.set_limits(JointAxis::AngX, [angle, angle]);
-            joint.data.set_motor_max_force(JointAxis::AngX, 0.0);
-            self.bodies[h.leaf].set_linvel(Vector::ZERO, true);
-            self.bodies[h.leaf].set_angvel(Vector::ZERO, true);
+        let joint = self.impulse.get_mut(h.handle, true).ok_or_else(atoms::invalid_hinge)?;
+        match command {
+            JointCommand::Position(target, (stiffness, damping, force), _) => {
+                joint.data.set_limits(JointAxis::AngX, [h.row.limits.0, h.row.limits.1]);
+                joint.data.set_motor_position(JointAxis::AngX, target, stiffness, damping);
+                joint.data.set_motor_max_force(JointAxis::AngX, force);
+            }
+            JointCommand::Hold => {
+                joint.data.set_limits(JointAxis::AngX, [angle, angle]);
+                joint.data.set_motor_max_force(JointAxis::AngX, 0.0);
+                self.bodies[h.moving].set_linvel(Vector::ZERO, true);
+                self.bodies[h.moving].set_angvel(Vector::ZERO, true);
+            }
         }
-        h.driving = drive;
+        h.command = command;
         self.changed = true;
         Ok(())
     }
 
-    // The brake is mechanical. Only Prolog interprets the measured condition
-    // as a durable blocked/closed result for an authorized activity.
+    // These are mechanical stop conditions; the ontology interprets the result.
     fn brake_hinges(&mut self) -> Result<(), Atom> {
         let mut stopped = BTreeSet::new();
         for (id, h) in &self.hinges {
-            if h.driving && self.hinge_angle(h)?.abs() <= h.row.5 .3 {
-                stopped.insert(*id);
+            if let JointCommand::Position(target, _, (tolerance, _)) = h.command {
+                if (self.hinge_angle(h)? - target).abs() <= tolerance { stopped.insert(*id); }
             }
         }
-        for pair in self
-            .narrow
-            .contact_pairs()
-            .filter(|p| p.has_any_active_contact())
-        {
+        for pair in self.narrow.contact_pairs().filter(|p| p.has_any_active_contact()) {
             let a = self.colliders[pair.collider1].user_data as u64;
             let b = self.colliders[pair.collider2].user_data as u64;
-            for (leaf, other) in [(a, b), (b, a)] {
-                if let Some(h) = self.hinges.get(&leaf) {
-                    if h.driving && other != h.row.2 {
-                        stopped.insert(leaf);
-                    }
+            for (moving, other) in [(a, b), (b, a)] {
+                if let Some(h) = self.hinges.get(&moving) {
+                    if matches!(h.command, JointCommand::Position(_, _, (_, StopPolicy::TargetOrContact)))
+                        && other != h.row.fixed.0 { stopped.insert(moving); }
                 }
             }
         }
         for id in stopped {
-            self.drive_hinge(id, false)?;
+            self.control_hinge(id, self.hinges[&id].row.revision, JointCommand::Hold)?;
         }
         Ok(())
     }
@@ -396,7 +379,7 @@ impl World {
                 Ok((
                     *id,
                     (self.hinge_angle(h)? * 1000.0).round() as i64,
-                    h.driving,
+                    matches!(h.command, JointCommand::Position(_, _, _)),
                 ))
             })
             .collect()
@@ -596,13 +579,14 @@ fn install_hinges(
     })
 }
 #[rustler::nif(schedule = "DirtyCpu")]
-fn drive_hinge(
+fn control_hinge(
     env: Env,
     resource: ResourceArc<WorldResource>,
     id: u64,
-    drive: bool,
+    revision: u64,
+    command: JointCommand,
 ) -> Result<(), Atom> {
-    access(env, resource, |world| world.drive_hinge(id, drive))
+    access(env, resource, |world| world.control_hinge(id, revision, command))
 }
 #[rustler::nif(schedule = "DirtyCpu")]
 fn hinge_samples(
@@ -657,6 +641,49 @@ mod tests {
         (id,rev,if dynamic {Kind::Dynamic} else {Kind::Fixed},
          (p,(0.0,0.0,0.0)),Geometry::Solid(geometry::Primitive::Box(h.0,h.1,h.2)),density)
     }
+    fn position_command(target: f64) -> JointCommand {
+        JointCommand::Position(target, (100.0,10.0,1000.0), (0.02,StopPolicy::TargetOrContact))
+    }
+
+    #[test]
+    fn authored_axes_restore_and_drive_nonzero_targets() {
+        for axis in [(1.0,0.0,0.0),(-1.0,0.0,0.0),(0.0,1.0,0.0),(0.0,-1.0,0.0),
+                     (0.0,0.0,1.0),(0.0,0.0,-1.0),(1.0,2.0,3.0)] {
+            let mut w = World::new((2,2,1,100.0,4,0,0),1.0/60.0,0.0).unwrap();
+            let mut fixed = box_body(1,2,false,(3.0,4.0,5.0),(0.1,0.1,0.1),1.0);
+            fixed.3.1 = (0.23,-0.41,0.19);
+            let mut moving = box_body(2,3,true,(3.0,4.0,5.0),(0.5,0.5,0.5),1.0);
+            moving.4 = Geometry::Parts(vec![(((0.0,0.0,0.0),(0.0,0.0,0.0)),
+                geometry::Primitive::Ball(0.3)), (((0.4,0.0,0.0),(0.0,0.0,0.0)),
+                geometry::Primitive::Box(0.1,0.1,0.1))]);
+            w.install(vec![fixed.clone(),moving]).unwrap();
+            let h = Hinge { moving: (2,3), revision: 7, fixed: (1,2), axis,
+                anchors: ((0.2,0.3,0.4),(-0.7,0.2,0.1)), limits: (-1.2,1.2), baseline: -0.5 };
+            w.install_hinges(vec![(h,-0.5)]).unwrap();
+            assert_eq!(w.hinge_samples().unwrap(),vec![(2,-500,false)]);
+            let fp = geometry::transform(fixed.3,100.0).unwrap();
+            let normalized = Vector::new(axis.0,axis.1,axis.2).normalize();
+            let expected = fp.rotation * rapier3d::math::rotation_from_angle(normalized * -0.5);
+            let body = &w.bodies[w.rows[&2].1];
+            assert!(body.rotation().dot(expected).abs() > 1.0-1e-12, "{axis:?}");
+            let joint_point = body.translation() + body.rotation() * Vector::new(-0.7,0.2,0.1);
+            assert!((joint_point-(fp.translation+fp.rotation*Vector::new(0.2,0.3,0.4))).length() < 1e-12);
+            w.control_hinge(2,7,position_command(0.4)).unwrap();
+            w.step().unwrap();
+            assert!(w.hinge_samples().unwrap()[0].1 > -500, "positive travel around {axis:?}");
+            for _ in 0..600 {
+                if !w.hinge_samples().unwrap()[0].2 { break; }
+                w.step().unwrap();
+            }
+            let result = w.hinge_samples().unwrap()[0];
+            assert!(!result.2 && (result.1-400).abs() <= 20, "{axis:?}: {result:?}");
+            // Starting inside tolerance is valid, including a nonzero target.
+            w.control_hinge(2,7,position_command(result.1 as f64/1000.0)).unwrap();
+            w.step().unwrap();
+            assert!(!w.hinge_samples().unwrap()[0].2);
+        }
+    }
+
     #[test]
     fn independent_hinges_brake_restore_and_retain() {
         let mut w = World::new((5, 5, 10, 100.0, 64, 1024, 1024), 1.0 / 60.0, 0.0).unwrap();
@@ -665,13 +692,14 @@ mod tests {
         let obstacle = box_body(3, 1, false, (1.5, 1.0, -0.5), (0.2, 1.0, 0.2), 1.0);
         let frame2 = box_body(4, 1, false, (5.0, 0.0, 0.0), (0.05, 1.0, 0.05), 1.0);
         let door2 = box_body(5, 1, true, (6.0, 1.0, 0.0), (1.0, 1.0, 0.1), 1.0);
-        let hinge = (2, 1, 1, (0.0, 1.0, 0.0), 1.5, (100.0, 10.0, 1000.0, 0.02));
-        let hinge2 = (5, 1, 4, (0.0, 1.0, 0.0), 1.5, (100.0, 10.0, 1000.0, 0.02));
+        let hinge = Hinge { moving: (2,1), revision: 1, fixed: (1,1), axis: (0.0,1.0,0.0),
+            anchors: ((0.0,1.0,0.0),(-1.0,0.0,0.0)), limits: (-1.5,1.5), baseline: 1.5 };
+        let hinge2 = Hinge { moving: (5,1), fixed: (4,1), ..hinge };
         w.install(vec![frame.clone(), door.clone(), obstacle.clone(), frame2.clone(), door2.clone()])
             .unwrap();
         assert_eq!(w.install_hinges(vec![(hinge, 1.5), (hinge2, 1.5)]), Ok(2));
-        w.drive_hinge(2, true).unwrap();
-        w.drive_hinge(5, true).unwrap();
+        w.control_hinge(2, 1, position_command(0.0)).unwrap();
+        w.control_hinge(5, 1, position_command(0.0)).unwrap();
         let mut contact_seen = false;
         for _ in 0..600 {
             let sample = w.step().unwrap();
@@ -695,7 +723,7 @@ mod tests {
         moved.1 = 2;
         moved.3.0 = (20.0, 1.0, -0.5);
         w.install(vec![frame.clone(), door.clone(), moved.clone(), frame2.clone(), door2.clone()]).unwrap();
-        w.drive_hinge(2, true).unwrap();
+        w.control_hinge(2, 1, position_command(0.0)).unwrap();
         for _ in 0..600 {
             w.step().unwrap();
             if !w.hinge_samples().unwrap()[0].2 {

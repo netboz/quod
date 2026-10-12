@@ -300,7 +300,9 @@ start_native(S = #s{spec = #{limits := Limits, dt := Dt, gravity := Gravity}}) -
 
 install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
     Hinges = maps:get(hinges,Spec,[]),
-    Geometry = maps:with([bodies,hinges,restores],Spec),
+    %% Checkpoints restore newly installed identities; changing one cannot
+    %% rebuild or reposition a retained body/joint with the same revision.
+    Geometry = {Bodies,[Row || {Row,_Restore} <- Hinges]},
     Result = case S#s.installed_geometry =:= Geometry of
         true -> {ok,0};
         false -> native(fun() ->
@@ -318,7 +320,7 @@ install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
     end,
     case Result of
         {ok, Changes} ->
-            {ControlChanges,DoorsInstalled} = install_controls(S#s{spec = Spec,installed_geometry = Geometry,
+            {ControlChanges,PhysicalControls} = install_controls(S#s{spec = Spec,installed_geometry = Geometry,
                 revisions = maps:from_list([{Id,Rev} || {Id,Rev,_,_,_,_} <- Bodies])}),
             AgentControls = maps:get(agent_controls, Spec, []),
             ControlChanged = S#s.agent_controls =/= AgentControls,
@@ -340,7 +342,7 @@ install(Spec = #{bodies := Bodies}, S = #s{native = Resource}) ->
             end,S#s.inputs),
             Guard = maps:get(navigation_guard,Spec),
             GuardChanged = Guard =/= S#s.installed_guard,
-            Controlled = reconcile_controller(DoorsInstalled#s{agent_controls = AgentControls,inputs = Inputs,installed_guard = Guard}),
+            Controlled = reconcile_controller(PhysicalControls#s{agent_controls = AgentControls,inputs = Inputs,installed_guard = Guard}),
             case {Controlled#s.phase,Changes+ControlChanges,S#s.frame} of
                 {{failed,_},_,_} -> Controlled;
                 {_,0,none} -> notify(installed,schedule({false,[],[]},publish({false,[],[]},Controlled)));
@@ -375,30 +377,24 @@ reconcile_controller(S) -> S.
 
 install_controls(S = #s{spec = Spec, controls = Old, native = Resource, observations = Observations}) ->
     Activities = maps:get(activities,Spec,#{}),
-    Doors = maps:filter(fun(K,_) -> is_integer(K) end,Activities),
-    Desired = maps:map(fun(D,#{state := State}) ->
-        Revision = maps:get(D,S#s.revisions),
-        case State of {closing,R} -> {Revision,R}; _ -> stopped end
-    end,Doors),
-    Kept = maps:filter(fun(D,#{request := R}) ->
-        case maps:get(D,Activities,none) of #{request := R} -> true; _ -> false end
+    Desired = maps:filtermap(fun
+        ({hinge,_},#{reference := {hinge,_,Revision},request := R,native_command := Command,custody := Custody}) ->
+            Effective = case Custody of none -> Command; _ -> hold end,
+            {true,{Revision,R,Effective}};
+        (_,_) -> false
+    end,Activities),
+    Kept = maps:filter(fun(Key,#{request := R}) ->
+        case maps:get(Key,Activities,none) of #{request := R} -> true; _ -> false end
     end,Observations),
-    maps:fold(fun(D,Control,{Count,Acc}) ->
-        case maps:get(D,Old,stopped) =:= Control of
-            true -> {Count,Acc};
-            false ->
-                Drive = case {Control,maps:get(D,Doors)} of
-                    {{_,_},#{custody := none}} -> true;
-                    _ -> false
-                end,
-                case Drive orelse maps:get(D,Acc#s.driving,false) of
-                    true ->
-                        case native(fun() -> quod_physics_native:drive_hinge(Resource,D,Drive) end) of
-                            {ok,{}} -> {Count+1,Acc};
-                            {error,Reason} -> {Count,fail(Reason,Acc)}
-                        end;
-                    false -> {Count,Acc}
-                end
+    maps:fold(fun(Key = {hinge,D},Control = {Revision,_,Command},{Count,Acc}) ->
+        Changed = maps:get(Key,Old,none) =/= Control,
+        case Changed andalso (Command =/= hold orelse maps:get(D,Acc#s.driving,false)) of
+            true ->
+                case native(fun() -> quod_physics_native:control_hinge(Resource,D,Revision,Command) end) of
+                    {ok,{}} -> {Count+1,Acc};
+                    {error,Reason} -> {Count,fail(Reason,Acc)}
+                end;
+            false -> {Count,Acc}
         end
     end,{0,S#s{controls = Desired,observations = Kept}},Desired).
 
@@ -419,7 +415,7 @@ step_current_native(S = #s{native = Resource},Refresh) ->
                     schedule({false,[],[]},deliver_frame(S#s{tick = Tick,
                         frame = (S#s.frame)#{tick => Tick,inputs => Feedback}}))
             end;
-        {ok, Sample} -> sample_rests(sample_doors(schedule(Sample, publish(Sample, S#s{tick = S#s.tick + 1, steps = S#s.steps + 1, moving = element(1,Sample)}))));
+        {ok, Sample} -> sample_rests(sample_hinges(schedule(Sample, publish(Sample, S#s{tick = S#s.tick + 1, steps = S#s.steps + 1, moving = element(1,Sample)}))));
         {error, Reason} -> fail(Reason, S)
     end.
 
@@ -654,7 +650,7 @@ projection({Ns, Anchor}, Rows) ->
 
 spec(Ns, Anchor, {world, W, I, E, Key, G, Token, Custody, S,
                   {limits, B, P, C, Coord, {geometry, Parts, Vertices, Triangles}}, Step, Gravity, Bodies, Budget, Recovery}) ->
-    {Checkpoints,Joints,DoorRows,Bindings,Controls} = case Recovery of
+    {Checkpoints,Joints,ActivityRows,Bindings,Controls} = case Recovery of
         {baseline,CP,JS,DS,{control_selection,BS,CS}} -> {CP,JS,DS,BS,CS}; _ -> throw(unsupported_physics_profile)
     end,
     true = is_integer(E) andalso E > 0 andalso is_integer(G) andalso G >= 0,
@@ -666,13 +662,14 @@ spec(Ns, Anchor, {world, W, I, E, Key, G, Token, Custody, S,
     true = is_integer(Gravity),
     true = is_integer(Budget) andalso Budget > 0,
     Native = [body(Row, S) || Row <- Bodies],
-    Hinges = [hinge(Row,Checkpoints,Native,G) || Row <- Joints],
-    ActivityMap = maps:from_list([activity(Row) || Row <- DoorRows]),
-    true = length(DoorRows) =:= map_size(ActivityMap),
-    true = lists:sort([Id || Id <- maps:keys(ActivityMap), is_integer(Id)]) =:= lists:sort([Id || {{Id,_,_,_,_,_},_} <- Hinges]),
+    Hinges = [hinge(Row,Checkpoints,Native,G,S) || Row <- Joints],
+    ActivityMap = maps:from_list([activity(Row,Native,Hinges) || Row <- ActivityRows]),
+    true = length(ActivityRows) =:= map_size(ActivityMap),
+    true = lists:sort([Id || {hinge,Id} <- maps:keys(ActivityMap)]) =:=
+        lists:sort([Id || {{{Id,_},_,_,_,_,_,_},_} <- Hinges]),
     Restores = [rest_checkpoint(CP,Policy,Native,Hinges,G) || {rest,CP,Policy} <- Checkpoints],
     true = length(Restores) =:= map_size(maps:from_list([{Id,true} || {Id,_,_,_,_} <- Restores])),
-    true = lists:all(fun({hinge,D,_,_,_,_}) -> maps:is_key(D,ActivityMap);
+    true = lists:all(fun({hinge,D,_,_,_,_,_,_}) -> maps:is_key({hinge,D},ActivityMap);
                         ({rest,_,_}) -> true; (_) -> false end,Checkpoints),
     #{world => {world_ref, Ns, Anchor, W}, authority => {agent_instance_ref, Ns, Anchor, I},
       epoch => E, key => Key, generation => G, run_token => Token, custody => Custody,
@@ -730,36 +727,58 @@ valid_custody({request, Token, Previous, Bytes, Signature}, G) ->
     is_binary(Signature) andalso byte_size(Signature) =:= 64;
 valid_custody(_, _) -> false.
 
-hinge({hinge,D,Revision,Frame,{vector,X,Y,Z},Baseline,{motor,Stiff,Damp,Force,Tolerance}},CPs,Bodies,G) ->
-    {D,Revision,dynamic,_,_,_} = lists:keyfind(D,1,Bodies),
-    {Frame,Revision,fixed,_,_,_} = lists:keyfind(Frame,1,Bodies),
-    true = lists:all(fun is_integer/1,[X,Y,Z,Baseline,Stiff,Damp,Force,Tolerance]),
-    Restore = case [CP || CP = {hinge,Id,_,_,_,_} <- CPs, Id =:= D] of
+hinge({hinge,{body,D,BodyRevision},Revision,{body,Frame,FrameRevision},Axis,
+             {anchors,FixedAnchor,MovingAnchor},{limits,Lower,Upper},Baseline},CPs,Bodies,G,Structure) ->
+    {D,BodyRevision,dynamic,_,_,_} = lists:keyfind(D,1,Bodies),
+    {Frame,FrameRevision,fixed,_,_,_} = lists:keyfind(Frame,1,Bodies),
+    true = D =/= Frame andalso is_integer(Revision) andalso Revision > 0 andalso
+        Revision =< Structure andalso Revision < (1 bsl 64),
+    true = lists:all(fun is_integer/1,[Baseline,Lower,Upper]),
+    true = Lower >= -3141 andalso Upper =< 3141 andalso Lower =< Upper andalso
+        Upper-Lower =< 3141 andalso Baseline >= Lower andalso Baseline =< Upper,
+    Restore = case [CP || CP = {hinge,Id,_,_,_,_,_,_} <- CPs, Id =:= D] of
         [] -> Baseline;
-        [{hinge,D,Revision,Generation,Tick,Angle}]
+        [{hinge,D,Revision,{body,D,BodyRevision},{body,Frame,FrameRevision},Generation,Tick,Angle}]
           when is_integer(Generation),Generation > 0,Generation =< G,
-               is_integer(Tick),Tick > 0,is_integer(Angle) -> Angle
+               is_integer(Tick),Tick > 0,Tick < (1 bsl 64),
+               is_integer(Angle),Angle >= Lower,Angle =< Upper -> Angle
     end,
-    {{D,Revision,Frame,{X/1000,Y/1000,Z/1000},Baseline/1000,
-      {float(Stiff),float(Damp),float(Force),Tolerance/1000}},Restore/1000};
-hinge(_,_,_,_) -> throw(unsupported_physics_profile).
+    Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+    {{{D,BodyRevision},Revision,{Frame,FrameRevision},Direction,
+      {physical_vector(FixedAnchor),physical_vector(MovingAnchor)},
+      {Lower/1000,Upper/1000},Baseline/1000},Restore/1000};
+hinge(_,_,_,_,_) -> throw(unsupported_physics_profile).
 
-activity({rest,D,Sequence,State,Custody}) ->
-    {D,Activity} = activity({door,D,Sequence,State,Custody}),
-    {{rest,D},Activity};
-activity({door,D,Sequence,State,Custody}) when is_integer(D),is_integer(Sequence),Sequence >= 0 ->
-    true = quod_wire_term:is_ground({State,Custody}),
-    Key = case Custody of
+activity({activity,Reference,Request,Command,Custody},Bodies,Hinges) ->
+    true = quod_wire_term:is_ground({Reference,Request,Command,Custody}),
+    {Key,References,NativeCommand} = case Reference of
+        {hinge,D,Revision} ->
+            [{{{D,DR},Revision,{F,FR},_,_,Limits,_},_}] =
+                [H || H = {{{Id,_},_,_,_,_,_,_},_} <- Hinges,Id =:= D],
+            true = (Request =:= none) =:= (Command =:= hold),
+            {{hinge,D},[{joint,D,Revision},{body,D,DR},{body,F,FR}],joint_command(Command,Limits)};
+        {rest,D,Revision} when Command =:= rest ->
+            {D,Revision,dynamic,_,_,_} = lists:keyfind(D,1,Bodies),
+            true = not constrained(D,Hinges),
+            {{rest,D},[{body,D,Revision}],none}
+    end,
+    Outcome = case Custody of
         none -> none;
         {request,_,_,Bytes,Signature} ->
             {ok,#{operation_ref := {operation,_,_,Agent,Id}}} = quod_client_goal:verify(Bytes,Signature),
             {request,{Agent,Id}}
     end,
-    {D,#{sequence => Sequence,state => State,request => activity_request(State),custody => Custody,outcome_key => Key}}.
+    {Key,#{reference => Reference,request => Request,command => Command,native_command => NativeCommand,
+           references => References,custody => Custody,outcome_key => Outcome}}.
 
-activity_request({closing,R}) -> R;
-activity_request({waiting,R}) -> R;
-activity_request(_) -> none.
+joint_command(hold,_) -> hold;
+joint_command({position,Target,{motor,Stiff,Damp,Force},{stop,Tolerance,target_or_contact}},{Lower,Upper}) ->
+    true = is_integer(Target) andalso Target/1000 >= Lower andalso Target/1000 =< Upper,
+    true = lists:all(fun(V) -> is_integer(V) andalso V > 0 end,[Stiff,Damp,Force,Tolerance]),
+    {position,Target/1000,{float(Stiff),float(Damp),float(Force)},{Tolerance/1000,target_or_contact}}.
+
+constrained(D,Hinges) ->
+    lists:any(fun({{{Id,_},_,{Frame,_},_,_,_,_},_}) -> Id =:= D orelse Frame =:= D end,Hinges).
 
 rest_checkpoint({rest_v1,D,Revision,{source,{agent_instance_ref,Ns,Anchor,_},Epoch,G,Token,Structure,Tick},
                  world_mm_quaternion_million,{pose,Position,{quaternion,X,Y,Z,Q}},zero_velocity},
@@ -771,7 +790,7 @@ rest_checkpoint({rest_v1,D,Revision,{source,{agent_instance_ref,Ns,Anchor,_},Epo
     true = is_integer(Structure) andalso Structure >= Revision andalso is_integer(Tick) andalso Tick > 0,
     true = is_integer(Tolerance) andalso Tolerance >= 0 andalso is_integer(Checks) andalso Checks > 0,
     true = lists:all(fun(V) -> is_integer(V) andalso abs(V) =< 1000000 end,[X,Y,Z,Q]),
-    true = not lists:any(fun({{Id,_,Frame,_,_,_},_}) -> Id =:= D orelse Frame =:= D end,Hinges),
+    true = not constrained(D,Hinges),
     {D,Revision,{physical_vector(Position),{X/1000000,Y/1000000,Z/1000000,Q/1000000}},Tolerance/1000,Checks}.
 
 
@@ -783,61 +802,47 @@ update_observation(Ref,Fun,S) ->
     S#s{observations = maps:map(fun(_,O = #{ref := R}) when R =:= Ref -> Fun(O);
                                  (_,O) -> O end,S#s.observations)}.
 
-sample_doors(S = #s{phase = active,native = Resource,spec = Spec}) ->
+sample_hinges(S = #s{phase = active,native = Resource,spec = Spec}) ->
     case native(fun() -> quod_physics_native:hinge_samples(Resource) end) of
         {ok,Rows} ->
             Next = S#s{driving = maps:from_list([{D,Drive} || {D,_,Drive} <- Rows])},
             lists:foldl(fun({D,Angle,false},Acc) ->
-                case {maps:get(D,maps:get(activities,Spec,#{})),maps:is_key(D,Acc#s.observations)} of
-                    {#{state := {closing,R},custody := none},false} -> offer_door(D,R,Angle,Acc);
-                    {#{state := {closing,R}},true} ->
-                        case maps:get(D,Acc#s.observations) of
-                            #{state := resampling} -> offer_door(D,R,Angle,Acc);
-                            _ -> Acc
-                        end;
+                Key = {hinge,D},
+                case {maps:get(Key,maps:get(activities,Spec,#{})),maps:get(Key,Acc#s.observations,none)} of
+                    {#{request := R,custody := none},none} when R =/= none -> offer_joint(Key,Angle,Acc);
+                    {#{request := R},#{state := resampling}} when R =/= none -> offer_joint(Key,Angle,Acc);
                     _ -> Acc
                 end;
                 (_,Acc) -> Acc
             end,Next,Rows);
         {error,Reason} -> fail(Reason,S)
     end;
-sample_doors(S) -> S.
+sample_hinges(S) -> S.
 
-offer_door(D,R,Angle,S = #s{spec = Spec,frame = #{contacts := Contacts}}) ->
-    [{_,Revision,Frame,_,_,{_,_,_,Tolerance}}] =
-        [Row || {Row = {Id,_,_,_,_,_},_} <- maps:get(hinges,Spec),Id =:= D],
-    Partners = lists:sort([{B,BR} || {A,_,B,BR} <- Contacts,A =:= D,B =/= Frame] ++
-                          [{A,AR} || {A,AR,B,_} <- Contacts,B =:= D,A =/= Frame]),
+offer_joint(Key = {hinge,D},Angle,S = #s{spec = Spec,frame = #{contacts := Contacts}}) ->
+    #{references := [_,_,{body,Fixed,_}],
+      command := {position,Target,_,{stop,Tolerance,target_or_contact}}} = maps:get(Key,maps:get(activities,Spec)),
+    Partners = lists:sort([{B,BR} || {A,_,B,BR} <- Contacts,A =:= D,B =/= Fixed] ++
+                          [{A,AR} || {A,AR,B,_} <- Contacts,B =:= D,A =/= Fixed]),
     Contact = case Partners of [{Other,Rev}|_] -> {contact,Other,Rev}; [] -> clear end,
-    case Contact =/= clear orelse abs(Angle) =< round(Tolerance*1000) of
-        false -> notify({unavailable,{door_held,D}},S);
-        true ->
-            Budget = maps:get(budget,Spec), At = quod_time:now_ms(), Expiry = At+Budget,
-            Window = {Expiry,quod_time:mono_ms()+Budget},
-            {world_ref,_,_,W} = maps:get(world,Spec),
-            Sample = {door_sample,W,D,R,maps:get(authority,Spec),maps:get(epoch,Spec),
-                maps:get(generation,Spec),S#s.token,maps:get(structure,Spec),Revision,
-                maps:get(Frame,S#s.revisions),S#s.tick,Angle,Contact,{validity,At,Expiry}},
-            offer_sample(D,R,Sample,Window,S)
+    case Contact =/= clear orelse abs(Angle-Target) =< Tolerance of
+        false -> notify({unavailable,{joint_held,D}},S);
+        true -> offer_sample(Key,{joint_position_mrad,Angle,Contact},S)
     end.
 
 sample_rests(S = #s{phase = active,spec = Spec}) ->
-    maps:fold(fun({rest,D} = Key,#{request := R},Acc) when R =/= none ->
+    maps:fold(fun({rest,D} = Key,#{request := R,reference := {rest,D,Revision}},Acc) when R =/= none ->
         Ready = case maps:get(Key,Acc#s.observations,none) of
             #{state := resampling} -> true;
             _ -> false
         end,
         case Ready andalso navigation_current(Acc) of
             true ->
-                Revision = maps:get(D,Acc#s.revisions),
                 case native(fun() -> quod_physics_native:rest_sample(Acc#s.native,D,Revision) end) of
                     {ok,{{X,Y,Z},{Qx,Qy,Qz,Qw}}} ->
-                        At = quod_time:now_ms(), Budget = maps:get(budget,Spec), Expiry = At+Budget,
-                        {world_ref,_,_,W} = maps:get(world,Spec),
-                        Sample = {rest_sample,W,D,R,maps:get(authority,Spec),maps:get(epoch,Spec),
-                            maps:get(generation,Spec),Acc#s.token,maps:get(structure,Spec),Revision,Acc#s.tick,
-                            {pose,{vector,X,Y,Z},{quaternion,Qx,Qy,Qz,Qw}},{validity,At,Expiry}},
-                        offer_sample(Key,R,Sample,{Expiry,quod_time:mono_ms()+Budget},Acc);
+                        Payload = {rest_pose_mm_quaternion_million,
+                            {pose,{vector,X,Y,Z},{quaternion,Qx,Qy,Qz,Qw}}},
+                        offer_sample(Key,Payload,Acc);
                     {ok,nil} -> Acc;
                     {error,Reason} -> fail(Reason,Acc)
                 end;
@@ -847,14 +852,24 @@ sample_rests(S = #s{phase = active,spec = Spec}) ->
     end,S,maps:get(activities,Spec,#{}));
 sample_rests(S) -> S.
 
-offer_sample(Key,R,Sample,Window,S = #s{owner = Owner,spec = Spec}) ->
+offer_sample(Key,Payload,S = #s{owner = Owner,spec = Spec}) ->
+    #{reference := Resource,request := R,command := Command,references := References,custody := Prior} =
+        maps:get(Key,maps:get(activities,Spec)),
+    {World,Authority,Epoch,Generation} = fence(Spec),
+    Frame = {physics_frame,World,Authority,Epoch,Generation,S#s.token,maps:get(structure,Spec)},
+    At = quod_time:now_ms(), Budget = maps:get(budget,Spec), Expiry = At+Budget,
+    Window = {Expiry,quod_time:mono_ms()+Budget},
+    Sample = {physics_sample,Frame,{activity,Resource,R,Command},{revisions,References},
+              S#s.tick,{validity,At,Expiry},Payload},
     Ref = make_ref(),
-    Owner ! {physics_observation,self(),maps:get(world,Spec),S#s.token,Ref,Sample,Window},
+    Owner ! {physics_observation,self(),World,S#s.token,Ref,Sample,Window},
     O = #{request => R,state => offered,ref => Ref,sample => Sample,window => Window,
-          basis => observation_basis(Spec),prior => maps:get(custody,maps:get(Key,maps:get(activities,Spec)))},
+          basis => observation_basis(Key,Spec),prior => Prior},
     S#s{observations = (S#s.observations)#{Key => O}}.
 
-observation_basis(Spec) -> maps:with([authority,epoch,generation,run_token,structure,budget],Spec).
+observation_basis(Key,Spec) ->
+    {maps:with([authority,epoch,generation,run_token,structure,budget],Spec),
+     maps:with([reference,command,references],maps:get(Key,maps:get(activities,Spec)))}.
 
 observation_result(Ref,Result,S) ->
     case [{D,O} || {D,O = #{ref := R}} <- maps:to_list(S#s.observations),R =:= Ref] of
@@ -921,7 +936,7 @@ resume_observation(D,R,Custody,S = #s{observations = Observations,spec = Spec}) 
         #{state := rejected} -> fresh_sample(D,S);
         #{state := unresolved,prior := Prior} when Custody =/= none, Custody =/= Prior -> resolve_observation(D,R,Custody,S);
         #{state := State,basis := Before} when State =:= stale; State =:= held; State =:= unsent ->
-            case observation_basis(Spec) =/= Before of
+            case observation_basis(D,Spec) =/= Before of
                 true when Custody =:= none -> fresh_sample(D,S);
                 true -> resolve_observation(D,R,Custody,S);
                 _ -> S
@@ -934,7 +949,7 @@ resolve_observation(D,R,{request,_Sample,_Result,Bytes,Signature} = Custody,S = 
     Window = {quod_time:now_ms()+Budget,quod_time:mono_ms()+Budget},
     S#s.owner ! {physics_work,self(),maps:get(world,Spec),Ref,resolve,{Bytes,Signature},Window},
     O = #{request => R,state => resolving,ref => Ref,prior => Custody,
-          basis => observation_basis(Spec),
+          basis => observation_basis(D,Spec),
           kind => resolve,window => Window,
           outcome_height => maps:get(outcome_height,maps:get(D,S#s.observations,#{}),0)},
     S#s{observations = (S#s.observations)#{D => O}}.
@@ -942,13 +957,14 @@ resolve_observation(D,R,{request,_Sample,_Result,Bytes,Signature} = Custody,S = 
 fresh_sample({rest,_} = Key,S) ->
     #{request := R} = maps:get(Key,maps:get(activities,S#s.spec)),
     step_native(S#s{observations = (S#s.observations)#{Key => #{request => R,state => resampling}}},true);
-fresh_sample(D,S = #s{native = Resource}) ->
-    case native(fun() -> quod_physics_native:drive_hinge(Resource,D,true) end) of
+fresh_sample(Key = {hinge,D},S = #s{native = Resource,spec = Spec}) ->
+    #{request := R,reference := {hinge,D,Revision},native_command := Command} =
+        maps:get(Key,maps:get(activities,Spec)),
+    case native(fun() -> quod_physics_native:control_hinge(Resource,D,Revision,Command) end) of
         {ok,{}} ->
             %% A capacity/edit edge obtains a new completed-step observation;
             %% an old expiry is never extended on its retained bytes.
-            #{request := R} = maps:get(D,S#s.observations),
-            do_step(S#s{observations = (S#s.observations)#{D => #{request => R,state => resampling}}});
+            do_step(S#s{observations = (S#s.observations)#{Key => #{request => R,state => resampling}}});
         {error,Reason} -> fail(Reason,S)
     end.
 

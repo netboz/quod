@@ -1,0 +1,12 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml"
+  ],
+  "started": "2026-10-12T09:11:44.578036+00:00",
+  "finished": "2026-10-12T09:11:57.871059+00:00",
+  "child_exit": 0
+}

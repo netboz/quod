@@ -1,0 +1,97 @@
+Generic hinged controls and shared physics observations — 2026-10-12
+Tracker bug_1791718464912_3j9mtg (issue key not assigned)
+Base commit f99a7f20d515966bc34629db88ff39885eccd547
+
+Delivered behavior
+An optional Prolog library composes into the existing world ontology and owns
+the generic hinged close/cancel capability. The same production constructor,
+action, selector, native joint, authenticated observation and finish path serves
+both a vertical door and a horizontal compound lid. The examples differ only in
+ontology data/rules: axis, placement, shape, baseline, target, motor and their
+completion consequence. Rest checkpoints use the same observation envelope.
+
+Native mechanics receive explicit references/revisions, local axis/anchors,
+limits and physical commands. Runtime admission checks the common anchored
+frame and lifetime. Neither layer interprets closing/closed/blocked or an
+object-specific payload. The superseded door API, Boolean motor interface,
+geometry-inferred pivot and payload-specific runtime clauses were removed.
+There are no aliases or old/new compatibility branches.
+
+Governance and lifecycle
+Existing action, multiwrite, owned-event, actor custody, exact original outcome,
+resource subscription and verified-projection owners remain authoritative.
+Completion result/checkpoint/event and authored receiver consequences commit
+in one existing transaction. Uncertainty cannot authorize resubmission.
+Shared-support moves revise all members and cancel active work atomically.
+Completed results remain historical, and movement removes their checkpoints.
+Recovery installs current verified state without replaying completed reactions.
+The unchanged client path remains the sole writer of physics body poses.
+
+Verification map
+verification-map.txt maps retained regressions to their obligations. The new
+fixtures live in test/fixtures/hinged-door.pl and hinged-lid.pl. Independent
+world tests and a real second-ontology receiver cover scope isolation, signed
+completion, denial, rollback and OCC. Other tests cover forged/stale envelopes,
+edits at delivery/store/finish boundaries, queue capacity, cancellation, owner
+and actor recovery, original unknown outcomes and rest recovery.
+
+Repeated-work measurement
+An actual committed control edit causes exactly one control_hinge call in its
+affected owner, zero geometry-install calls, and no change in the other world's
+owner/height. Five unchanged reconciliations of both worlds trace zero native
+allocation/install/control, history folds/opens/appends, retained-projection
+creation/apply and storage writes/syncs. Legitimate simulation steps and real
+durable changes are outside those zero-work assertions. World structure fencing
+and per-predicate OCC remain conservative; no row-level precision is claimed.
+
+Review
+Fable reviewed both plan and implementation using claude-fable-5-1. The initial
+implementation review found one High defect, retained with a failing regression:
+completed close -> group move -> close again left custody held. The corrected
+branch preserves completed state and cancels only active closing. Both examples
+pass the regression. Follow-up review reports no code/design blocker and GO
+conditional on the final clean checks. See implementation-review-02 and the
+separate review disposition for the lower-severity notes.
+The full-suite fixture migration also received Fable GO in
+implementation-review-03: both original reaction assertions and incremental
+inactive-authoring coverage are retained across the two composed libraries.
+
+Limits and deployment
+This profile supports fixed-to-dynamic revolute joints with one shared local
+axis, explicit anchors and angular spans up to 3141mrad. An out-of-range sample
+or checkpoint is refused, including numerical overshoot at a travel limit;
+target tolerances should be authored inside that interval. It does not invent
+a result or clamp authenticated evidence. Cancellation remains explicit.
+Changing an active close's control definition to hold is invalid; the governed
+cancel action stops it. General joint catalogues and terrain streaming are
+outside this repair.
+
+This is a coordinated format replacement. The deployment contract in plan.txt
+requires compatible validators/consumers and governed source installation or
+an explicitly recorded clean refound; package files cannot rewrite retained
+founding rules or signed custody. No network, server, ledger or browser mutation
+occurred during this repair. QUD.36 live normal-view acceptance and QUD.26 XR
+acceptance remain separate. QUD.27 was completed before this scope.
+
+Size and ownership
+production-delta.json records 6492 -> 6550 production lines, net +58, excluding
+Rust test sections. The core Prolog file loses 100 lines, the optional reusable
+library adds 161, Erlang adds 16, and native production removes 19. The growth
+provides explicit mechanics, exact references, shared validation/custody and
+atomic group/consequence composition; no additional process or domain engine.
+No formatting compression or coverage deletion is used to reduce that count.
+The user's doc/README.md and all preexisting untracked sibling/historical files
+are excluded from this scope and its clean build. No version bump is included.
+
+Clean sequential validation
+gates-03 passed all eleven checks: native tests (35 debug and 35 release),
+Clippy with warnings denied, client tests (134), UI build/lint, EUnit (3918),
+Common Test (146), xref, Dialyzer and production release build. Actual child
+exits are zero; all 1040 frozen inputs are unchanged. Release packaging includes
+the exact reviewed core/hinged Prolog libraries and native adapter. This is a
+build validation with no label bump or deployment. final-validation.json records
+the receipts and artifact hashes. gates-03 retains full gate logs, source patch,
+manifests and the full Common Test log archive. warning-disposition.txt records
+compiler/lint warnings without changing any warning policy or test assertion.
+All earlier failed/diagnostic campaigns and the explicitly interrupted gates-01
+remain intact. They are not presented as passing final validation.

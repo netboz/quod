@@ -1,0 +1,305 @@
+{
+  "passed": true,
+  "release": "0.7.263",
+  "same_fence_all_short_steps": true,
+  "world_and_run": {
+    "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+    "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+    "epoch": "1",
+    "generation": "5",
+    "schema": 1,
+    "incarnation": "b1K42DOtR1tWjiQ2XM9DJWM1m4qn6jxoHkzHAapERf0",
+    "structure": "1"
+  },
+  "body": "2",
+  "body_revision": "1",
+  "console": {
+    "contact_frames": 36,
+    "sample": {
+      "tick": "53",
+      "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+      "space": "world",
+      "epoch": "1",
+      "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+      "generation": "5",
+      "schema": 1,
+      "incarnation": "b1K42DOtR1tWjiQ2XM9DJWM1m4qn6jxoHkzHAapERf0",
+      "structure": "1",
+      "poses": [
+        {
+          "position": [
+            0.13650272996737112,
+            0.8416767244867835,
+            3.293699273798455
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "body": "2",
+          "revision": "1"
+        }
+      ],
+      "registration": "YuVukDzXrv21cvhU3gngohc7TKvVLgkBkSz_CBPLt8U",
+      "view_clearance": 0.34430072620154495,
+      "control_state": {
+        "pending": false,
+        "result": "clipped(pose(vector(0.13650272996737112,0.8416767244867835,3.293699273798455),quaternion(0.0,0.0,0.0,1.0)),[contact(4,normal(0.0,0.6015001245003576,-0.7988727058962862)),contact(4,normal(-1.7263967955252838e-11,0.6015101113427588,-0.7988651863439925))],10)",
+        "sequence": "5"
+      },
+      "units": "metres_seconds"
+    },
+    "ordinary_read_succeeded": true
+  },
+  "roof": {
+    "contact_frames": 2,
+    "blocked_pose": [
+      8.060190905608241,
+      0.7519999998738579,
+      0.38171211177909187
+    ],
+    "sample": {
+      "tick": "4809",
+      "world": "world_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,personal_lobby)",
+      "space": "world",
+      "epoch": "1",
+      "authority": "agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>,physics_authority)",
+      "generation": "5",
+      "schema": 1,
+      "incarnation": "b1K42DOtR1tWjiQ2XM9DJWM1m4qn6jxoHkzHAapERf0",
+      "structure": "1",
+      "poses": [
+        {
+          "position": [
+            8.060190905608241,
+            0.7519999998738579,
+            0.38171211177909187
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "body": "2",
+          "revision": "1"
+        }
+      ],
+      "registration": "XDcvxBTtuYognvwd6ucZJx7T6kDwDngyLdXh3FB1wy4",
+      "view_clearance": 0.12579489130710914,
+      "control_state": {
+        "pending": false,
+        "result": "clipped(pose(vector(8.060190905608241,0.7519999998738579,0.38171211177909187),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-6.862566482480353e-12,1.0,-9.159340502400472e-13)),contact(3,normal(-0.6649473499020065,-0.6210255433572853,0.41493649677521377)),contact(1,normal(-6.862566482480353e-12,1.0,-9.159340502400472e-13)),contact(3,normal(-0.6649473499020065,-0.6210255433572853,0.41493649677521377)),contact(1,normal(-6.862566482480353e-12,1.0,-9.159340502400472e-13)),contact(3,normal(-0.6649473499020065,-0.6210255433572853,0.41493649677521377)),contact(1,normal(-6.862566482480353e-12,1.0,-9.159340502400472e-13)),contact(3,normal(-0.6649473499020065,-0.6210255433572853,0.41493649677521377))],20)",
+        "sequence": "492"
+      },
+      "units": "metres_seconds"
+    }
+  },
+  "opening": {
+    "frame_count": 89,
+    "start": [
+      0.6933771512560585,
+      0.7520000047122423,
+      5.248475937793325
+    ],
+    "end": [
+      0.6933771512564793,
+      0.7519999963429361,
+      8.081865937792331
+    ],
+    "only_floor_contacts": true
+  },
+  "movement": {
+    "recording_reason": "complete",
+    "movement_child_exit": 0,
+    "planned_cycles": 42,
+    "completed_cycles": 42,
+    "elapsed_seconds": 80.50902779703029,
+    "animation_frames": 4831,
+    "animation_ms": {
+      "median": 16.70000000001164,
+      "max": 31.5,
+      "over_33": 0,
+      "over_50": 0
+    },
+    "network_events": {
+      "simulation_frame": 4424,
+      "projection": 6
+    },
+    "control_results": {
+      "ok": 455,
+      "fail": 1
+    },
+    "control_response_capture_errors": 0,
+    "clock_offset_spread_ms": 0.31298828125,
+    "physical_fence_count": 1,
+    "body_identity_revision_sets": [
+      [
+        [
+          "2",
+          "1"
+        ]
+      ]
+    ],
+    "renewals": [
+      {
+        "at_ms": 4387.337158203125,
+        "selection": "active",
+        "held": [
+          "ArrowUp"
+        ],
+        "expires_ms": "1791769839847",
+        "longest_stationary_within_500ms": 16.60009765625,
+        "control_sequence": "43",
+        "registration": "E9_X3KJFQwjSouHKywM-m26jt__zn-LuWnqNS8yiqtc"
+      },
+      {
+        "at_ms": 19557.838134765625,
+        "selection": "active",
+        "held": [
+          "ArrowUp"
+        ],
+        "expires_ms": "1791769855024",
+        "longest_stationary_within_500ms": 34.300048828125,
+        "control_sequence": "130",
+        "registration": "nF2ETW8lwugbok4PYx31IQeYXq0NnoId3PcN0sL8ono"
+      },
+      {
+        "at_ms": 34720.337158203125,
+        "selection": "active",
+        "held": [
+          "ArrowUp"
+        ],
+        "expires_ms": "1791769870197",
+        "longest_stationary_within_500ms": 16.7998046875,
+        "control_sequence": "217",
+        "registration": "m8lx1wJrpw9BJjj2PdoLcSu_9pE1-8qb1RtxGipx69E"
+      },
+      {
+        "at_ms": 49899.589111328125,
+        "selection": "active",
+        "held": [
+          "ArrowUp"
+        ],
+        "expires_ms": "1791769885365",
+        "longest_stationary_within_500ms": 17.0,
+        "control_sequence": "300",
+        "registration": "1DPqHjUjqTsnO4G1OkNHVMeH11wCqnw1aFZlmifivXI"
+      },
+      {
+        "at_ms": 65052.39306640625,
+        "selection": "active",
+        "held": [
+          "ArrowRight"
+        ],
+        "expires_ms": "1791769900539",
+        "longest_stationary_within_500ms": 49.89990234375,
+        "control_sequence": "385",
+        "registration": "LQ29MveNxWneg9uCghLKYEL4amn6q2d7N3JP0uvMgH8"
+      },
+      {
+        "at_ms": 80218.23706054688,
+        "selection": "active",
+        "held": [
+          "ArrowRight"
+        ],
+        "expires_ms": "1791769915702",
+        "longest_stationary_within_500ms": 16.89990234375,
+        "control_sequence": "472",
+        "registration": "VM6a0GaeO5DLdhHOGZEK47gkeheJa2xEJY3er5-XZVY"
+      }
+    ],
+    "control_failures": [
+      {
+        "at_ms": 4399.612060546875,
+        "result": "fail",
+        "reasons": [
+          "stale_registration"
+        ],
+        "nearest_projection_distance_ms": 12.27490234375,
+        "next_ok_after_ms": 21.796142578125
+      }
+    ],
+    "stationary_definition": "Consecutive animation-frame pairs with the same nonempty held-key set and horizontal position change <= 0.00001 metre; durations are observed sample bounds, not claims of exact onset/offset.",
+    "longest_stationary_ms": 50.5,
+    "stationary_intervals_over_100ms": [],
+    "native_occupied_results": [],
+    "rotation_variants": 1,
+    "hidden_or_unfocused_frames": 0,
+    "held_at_end": [],
+    "keys_released": true,
+    "acceptance": "passed",
+    "checks": {
+      "complete_recording": true,
+      "keys_released": true,
+      "visible": true,
+      "no_clear_floor_stall_100ms": true,
+      "no_occupied_refusal": true,
+      "view_available": true,
+      "same_physical_fence": true,
+      "same_body_revision": true,
+      "renewal_while_moving": true,
+      "all_control_results_captured": true
+    }
+  },
+  "reconnect": {
+    "normal_reload": true,
+    "same_camera_mount_position": true,
+    "before": [
+      8.060190905608222,
+      1.4519999998738577,
+      0.38171211177908937
+    ],
+    "after": [
+      8.060190905608222,
+      1.4519999998738577,
+      0.38171211177908937
+    ],
+    "same_run_generation_and_incarnation": true,
+    "same_body_revision": true,
+    "ready": true,
+    "at": "2026-10-12T01:56:32.290228+00:00",
+    "prior_input_guard_failures": [
+      "opening-route-inward-09",
+      "opening-route-forward-10"
+    ],
+    "no_input_sent_by_failed_steps": true
+  },
+  "authored_identity_and_scene": {
+    "same_authored_scene": true,
+    "marks_sha256": "b4d53a0d4a2df909eae38f8fa0580b2f6e372dd1b44ec0c918c98891ecf72650",
+    "same_control_binding_and_authored_viewpoint": true,
+    "same_world_authority_schema_structure_units": true,
+    "old_generation": "4",
+    "new_generation": "5",
+    "expected_new_incarnation": "b1K42DOtR1tWjiQ2XM9DJWM1m4qn6jxoHkzHAapERf0",
+    "marks_in_rendered_scene": 6,
+    "old_evidence": "desktop-262-02/setup-signed-projections.json"
+  },
+  "final_parked_body_position": [
+    0.6933771512563647,
+    0.7519999915217519,
+    6.048491937791469
+  ],
+  "camera_eye_offset_y": 0.7,
+  "browser_closed": {
+    "harness_session": 47728,
+    "harness_exit": 0,
+    "exit_observed_via": "exec write_stdin tool",
+    "browser_pid": 2184888,
+    "browser_process_gone": true,
+    "profile_preserved": true,
+    "at": "2026-10-12T02:03:33.630110+00:00"
+  },
+  "retained_harness_corrections": [
+    "interaction-harness-notes.json",
+    "final-mark-verification.json"
+  ],
+  "limits": [
+    "Bounded desktop sample, not a guarantee of zero pauses under every load.",
+    "Sign-in expiry remains a hard stop; ordinary reload reauthenticates.",
+    "Vive/WebXR and durable real-world door consequences are separate acceptance."
+  ]
+}

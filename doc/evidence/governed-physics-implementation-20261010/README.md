@@ -1,8 +1,41 @@
-# Governed physics: partial implementation evidence
+# Governed physics: implementation and acceptance evidence
 
-[QUD.27](nimbalyst://QUD.27) remains open. The latest deployed release is
-[0.7.262](release-262-deployment/README.md), with eight healthy candidate nodes and the
-existing ledgers retained. The separate main job was unchanged.
+All acceptance for [QUD.27](nimbalyst://QUD.27) is verified as of October 12.
+The [completion map](completion-20261012.md) links each requirement to its
+production-owner, remote or actual signed desktop evidence.
+
+The latest deployed release is [0.7.263](release-263-deployment/README.md):
+eight healthy candidate nodes, zero restarts, retained personal identity/history,
+and unchanged main job and browser ingress. The [final desktop campaign](desktop-263-01/README.md)
+passed floor, console, low-roof and tall-opening checks, same-body reconnect,
+authored scene preservation, and 80.509 seconds of sustained movement through
+six renewals. No occupied-floor refusal or stationary held-key interval of
+100 ms or more occurred; the longest sampled interval was 50.5 ms.
+
+The [generic live-collider implementation](live-collider-implementation-01.md)
+uses the existing atomic transitions, subscriptions, verified projections and
+native owner. The [real remote campaign](remote-collider-259-06/README.md)
+passed admission, unrelated edit, geometry edit and withdrawal, plus 80 unchanged
+checks with no measured replay, rebuild or write/sync work. The capability
+applies to ordinary physical spaces; the personal lobby is its real acceptance
+target, not a special implementation.
+
+All [eleven final release gates](release-263-gates-05/README.md) passed, including
+3,884 EUnit tests and 146 Common Test cases. Requested Claude reviews, the
+authorized Opus fallback, independent dispositions and rejected candidates are
+retained. The browser is closed with its profile preserved; no release, refound
+or server mutation remains queued. Physical Vive/WebXR and durable real-door
+acceptance remain separate obligations.
+
+## Historical stage records
+
+The following sections preserve the state and limitations of earlier stages.
+Their unfinished-acceptance statements describe those stages; the completion
+map above records the final result. Original failed logs and stop markers remain.
+
+At the preceding boundary, [0.7.262](release-262-deployment/README.md) was deployed
+with eight healthy candidate nodes and the existing ledgers retained.
+The separate main job was unchanged.
 [Real remote collider propagation](remote-collider-259-06/README.md) passed
 admission, unrelated edit, geometry edit and withdrawal, including 80 unchanged
 checks with no measured rebuild or write/sync work.

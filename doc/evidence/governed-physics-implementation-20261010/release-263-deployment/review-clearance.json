@@ -1,0 +1,9 @@
+{
+  "approved": true,
+  "at": "2026-10-12T01:42:08.332253+00:00",
+  "reviewer": "Codex independent exact-diff review under Yan explicit deployment authorization",
+  "mutation_manifest_sha256": "5324739f193996d506cb1a1e45ea6a3fdc14be02b4daa110a4eeb685a2714b33",
+  "scope": "Existing candidate only; maintenance count8 to0, then count8 with five pinned image replacements. Same ledger volume family and placements; main and ingress unchanged.",
+  "rollback": "Exact prior candidate body retained; no automatic revert, no format/state rewrite.",
+  "uncertain_submission": "Resolve original job/version/index; never submit the mutation again."
+}

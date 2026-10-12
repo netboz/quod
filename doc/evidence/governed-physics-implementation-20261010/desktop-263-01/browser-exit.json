@@ -1,0 +1,9 @@
+{
+  "harness_session": 47728,
+  "harness_exit": 0,
+  "exit_observed_via": "exec write_stdin tool",
+  "browser_pid": 2184888,
+  "browser_process_gone": true,
+  "profile_preserved": true,
+  "at": "2026-10-12T02:03:33.630110+00:00"
+}

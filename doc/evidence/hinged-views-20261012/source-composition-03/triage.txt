@@ -1,0 +1,1 @@
+The initial fixture setup attempted to assert the entire old library in one proof and exceeded the transcript encoding bound before the candidate signed edit ran. Found the disposable old-library fixture through the existing ontology test lifecycle instead. No live source mutation or cap change occurred.

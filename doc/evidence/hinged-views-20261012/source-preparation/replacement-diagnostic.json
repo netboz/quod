@@ -1,0 +1,1 @@
+{"nodes":13000,"predicates":58,"text_bytes":80804,"canonical_bytes":164372,"parser_result":"{error,{too_large,goal}}","formatter_result":"{error,invalid_term}","max_depth":52,"text_sha256":"07AFE8010A97C97E066503490D73E896E3D0BBA14FFE69453FD41BAD5E73D914"}

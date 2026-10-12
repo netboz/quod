@@ -1,0 +1,12 @@
+{
+  "command": [
+    "escript",
+    "_build/quod36/inactive-installation-01/run.escript",
+    "/home/yan/src/quod",
+    "/home/yan/src/quod/_build/quod36/inactive-installation-01"
+  ],
+  "started": "2026-10-12T12:43:50.535400+00:00",
+  "finished": "2026-10-12T12:44:01.061517+00:00",
+  "child_exit": 0,
+  "sources_unchanged": true
+}

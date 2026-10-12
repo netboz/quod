@@ -1,0 +1,1 @@
+The newly added signed obstacle-authoring request failed before submission: its Erlang test term carried named variables instead of canonical numbered variables. Normalize that test request with the existing erlog term_instance helper before signing. No domain action, signature check or client/parser assertion changed.

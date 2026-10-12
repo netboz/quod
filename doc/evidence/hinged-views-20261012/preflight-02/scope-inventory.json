@@ -1,0 +1,67 @@
+{
+  "captured": "2026-10-12T11:36:19.922231+00:00",
+  "rows": [
+    {
+      "allocation": "3615f0c6-c757-b480-584e-719d51b6d0b1",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "physical": [
+        {
+          "spaces": "[{space,room,enabled,physics_authority}]",
+          "anchor": "41EF1E056943B629AC1DCA71B13BA0028ABDE7FB7B0F91756604334A2F07B69B",
+          "namespace": "acceptance:physics:259:04:gallery",
+          "height": 20,
+          "doors": "[]",
+          "rests": "[]",
+          "checkpoints": "[]",
+          "joints": "[]"
+        },
+        {
+          "spaces": "[{space,personal_lobby,enabled,physics_authority}]",
+          "anchor": "7082C150269E5B82754C06CB7928F6E55FFBCEDABD25E642C2CCF874A3A6F77F",
+          "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+          "height": 188,
+          "doors": "[]",
+          "rests": "[]",
+          "checkpoints": "[]",
+          "joints": "[]"
+        }
+      ]
+    },
+    {
+      "allocation": "efa6b3e4-81fc-3d5d-b34a-70828e2cae13",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "physical": []
+    },
+    {
+      "allocation": "af032e3f-f86b-b319-ee6a-00f49733d4ac",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "physical": []
+    },
+    {
+      "allocation": "1a0e9283-1f8b-184a-41a7-5281a2c5dad1",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "physical": []
+    },
+    {
+      "allocation": "b178f9f4-9b5e-64b8-85b6-ced2087607aa",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "physical": []
+    },
+    {
+      "allocation": "0d475bdd-d52a-bfed-262e-5c1802b60cd4",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "physical": []
+    },
+    {
+      "allocation": "1c78e7cf-6f7e-9e14-129b-85902a355186",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "physical": []
+    },
+    {
+      "allocation": "80e92242-8d0c-6680-a160-0da1347ecbe2",
+      "node": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "physical": []
+    }
+  ],
+  "read_only": true
+}

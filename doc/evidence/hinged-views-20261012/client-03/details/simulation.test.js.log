@@ -1,0 +1,30 @@
+BJS - [14:11:00]: Babylon.js v9.18.1 - Null engine
+BJS - [14:11:00]: Babylon.js v9.18.1 - Null engine
+BJS - [14:11:00]: Babylon.js v9.18.1 - Null engine
+✔ ordinary selections are explicit and cannot accept native frames or expired authorization (4.629351ms)
+✔ navigation fences preserve uint64 heights and exact sorted source identities (1.169775ms)
+✔ mixed scenes retain parents, decoration and exact subjects under one body pose writer (30.464258ms)
+✔ dropped ticks are latest-wins; late, duplicate, foreign and old-incarnation frames cannot move the view (0.719972ms)
+✔ independent bodies retain their world poses through moving and replaced parents (6.240875ms)
+✔ appearance refresh retains the live transform; deletion/recreation reusing a mark cannot inherit the old pose (4.973733ms)
+✔ restart, authority change and reconnect begin with a fresh current projection (1.153878ms)
+✔ uint64 identities remain exact; a body projection has one complete pose source (0.843836ms)
+✔ socket refresh and reconnect sign fresh reads and reject delayed messages from a previous view (22.888928ms)
+✔ early renewal keeps frames and controls live and never rolls sequence backwards (10.317316ms)
+✔ renewal preserves an in-flight discrete command's uncertain outcome (2.267284ms)
+✔ renewal preserves an in-flight discrete command's refused outcome (2.006344ms)
+✔ a candidate cannot restore a view after expired (1.73931ms)
+✔ a candidate cannot restore a view after denied (1.234601ms)
+✔ a late digest cannot send or revive an expired candidate (1.481579ms)
+✔ nonphysical renewal stops at sign-in expiry without repeated shorter renewals (1.47067ms)
+✔ navigation returns an exact space and every signed dependency without changing the acting agent (0.998398ms)
+✔ snap admission waits for its discrete outcome and stops after uncertain loss (4.48028ms)
+✔ push admission waits for its discrete outcome and stops after uncertain loss (2.613096ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109.656644

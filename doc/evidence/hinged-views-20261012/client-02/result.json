@@ -1,0 +1,19 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "NODE_TEST_CONTEXT",
+    "-u",
+    "NODE_CHANNEL_FD",
+    "-u",
+    "NODE_CHANNEL_SERIALIZATION_MODE",
+    "npm",
+    "--prefix",
+    "client",
+    "test"
+  ],
+  "started": "2026-10-12T12:09:24.770627+00:00",
+  "finished": "2026-10-12T12:09:26.716080+00:00",
+  "child_exit": 0,
+  "sources_unchanged": true
+}

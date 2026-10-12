@@ -8,3 +8,8 @@ physics_hinged_class(vertical_door, 1,
     X is -1000, Lower is -1500.
 physics_hinged_consequence(room,10,Request,closed,
                           assertz(hinged_result(passage_closed,Request))).
+
+hinged_example_appearance(room, 10, <<"hinged-example">>, vertical_door,
+    [part(<<"hinged-example/panel">>, <<"box">>,
+          [f(<<"width">>,2000),f(<<"height">>,2000),f(<<"depth">>,200)],
+          transform(0,0,0,0,0,0), surface(<<"#4678AB">>,0,900,0,[]))]).

@@ -1,0 +1,42 @@
+{
+  "captured": "2026-10-12T12:06:44.689835+00:00",
+  "implementation_commit": "05f8b42bfd554115f77b32b660707dcdcbbd1a68",
+  "live_release": "0.7.263",
+  "live_mutation_performed": false,
+  "local_owners_tests": 208,
+  "new_signed_view_test": "door and lid: denied close, native blocked result, checkpoint, blocked and closed restoration, cleared obstacle, closed target, isolated other world, one completion consequence",
+  "source_replacement_predicates": 55,
+  "live_source_conflicts": 0,
+  "blocker": null,
+  "production_delta": {
+    "added": 30,
+    "deleted": 0
+  },
+  "test_delta": {
+    "added": 135,
+    "deleted": 2
+  },
+  "client_tests": 134,
+  "client_files": 15,
+  "browser_child_exit": 0,
+  "expanded_source_probe_predicates": 58,
+  "final_source_replacement_predicates": 55,
+  "bulk_edit_issue_id": "bug_1791807061434_iovrco",
+  "bulk_edit_issue_blocks_this_ticket": false,
+  "inactive_installation_definitions_verified": 55,
+  "installation_route": "existing signed predicate editor while physics is disabled; physical domain transitions remain atomic",
+  "clean_release_gates": {
+    "sealed_at": "2026-10-12T13:23:28.165002+00:00",
+    "passed": true,
+    "frozen_inputs": 1039,
+    "draft_version": "0.7.264",
+    "implementation_base": "05f8b42bfd554115f77b32b660707dcdcbbd1a68",
+    "implementation_label_separate": true,
+    "eunit": 3919,
+    "ct": 146,
+    "native_debug": 35,
+    "native_release": 35,
+    "client": 134,
+    "deployed": false
+  }
+}

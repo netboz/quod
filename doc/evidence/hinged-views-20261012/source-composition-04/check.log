@@ -1,0 +1,53 @@
+=ERROR REPORT==== 12-Oct-2026::13:49:25.256638 ===
+** State machine {n,l,{quod_simplex,<<"lobby-test-source-replacement">>}} terminating
+** When server state  = {undefined,undefined}
+** Reason for termination = error:{badmatch,
+                                   {error,
+                                    {predicate_module_unavailable,
+                                     quod_agent_hosting_tests}}}
+** Callback modules = [quod_simplex]
+** Callback mode = state_functions
+** Stacktrace =
+**  [{quod_simplex,genesis_entry,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3696}]},
+     {quod_simplex,initialize_empty_storage,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3624}]},
+     {quod_simplex,restore_storage,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3474}]},
+     {quod_simplex,init_store,3,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3211}]},
+     {gen_statem,init_it,6,[{file,"gen_statem.erl"},{line,3323}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]
+
+=CRASH REPORT==== 12-Oct-2026::13:49:25.256884 ===
+  crasher:
+    initial call: quod_simplex:init/1
+    pid: <0.449.0>
+    registered_name: []
+    exception error: no match of right hand side value {error,
+                                                        {predicate_module_unavailable,
+                                                         quod_agent_hosting_tests}}
+      in function  quod_simplex:genesis_entry/2 (/home/yan/src/quod/src/quod_simplex.erl:3696)
+      in call from quod_simplex:initialize_empty_storage/2 (/home/yan/src/quod/src/quod_simplex.erl:3624)
+      in call from quod_simplex:restore_storage/2 (/home/yan/src/quod/src/quod_simplex.erl:3474)
+      in call from quod_simplex:init_store/3 (/home/yan/src/quod/src/quod_simplex.erl:3211)
+      in call from gen_statem:init_it/6 (gen_statem.erl:3323)
+    ancestors: [<0.448.0>,<0.10.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: [{'$logger_metadata$',#{}},{'$__current_otel_ctx',undefined}]
+    trap_exit: false
+    status: running
+    heap_size: 6772
+    stack_size: 29
+    reductions: 104495
+  neighbours:
+
+Runtime terminating during boot ({shutdown,{failed_to_start_child,quod_simplex,{badmatch,{error,{predicate_module_unavailable,quod_agent_hosting_tests}}}}})
+
+Crash dump is being written to: erl_crash.dump...done

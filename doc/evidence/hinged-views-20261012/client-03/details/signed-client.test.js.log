@@ -1,0 +1,31 @@
+✔ system discovery rejects unavailable or wrong-network catalogues (2.360006ms)
+✔ optional traceparent changes only HTTP metadata, not signed request bytes (0.947141ms)
+✔ traced HTTP transport errors retain uncertainty and do not retry (0.445856ms)
+✔ prepared byte budget reports exact policy pressure without retry or uncertainty (0.292925ms)
+✔ signed goal bytes match the Erlang browser fixture (0.477682ms)
+✔ request encoding and journaling share the full protocol bounds (2.822594ms)
+✔ a lost signed-goal response is marked outcome-unknown (7.695463ms)
+✔ exact persisted requests are resolved, never resubmitted (1.570529ms)
+✔ a returned group reference survives reload and resolves only that submitted attempt (1.431722ms)
+✔ a pending reference for another ontology never replaces the recoverable signed request (0.87283ms)
+✔ a definite execute reply removes the durable browser row (0.681886ms)
+✔ cursor Accept persists the original request before an uncertain reply (0.866489ms)
+✔ cursor Accept retains its exact request after lost response body (0.750654ms)
+✔ cursor Accept retains its exact request after broken JSON (25.449837ms)
+✔ cursor Accept retains its exact request after missing write result (2.678345ms)
+✔ cursor Accept retains its exact request after null response (1.336776ms)
+✔ cursor Accept retains its exact request after unrecognized write result (0.999605ms)
+✔ cursor Accept retains its exact request after empty gateway failure (0.697203ms)
+✔ pending cursor Accept identifies its journal row and resolution never submits another request (1.085418ms)
+✔ retryable cursor refusal clears the journal but keeps the same cursor request (0.481729ms)
+✔ transient control is signed once and never journaled or replayed after response loss (0.288172ms)
+✔ missing durable storage permits reads but sends no possible write (0.645181ms)
+✔ the browser journal has no fixed unresolved-operation population limit (2.815701ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 69.443957

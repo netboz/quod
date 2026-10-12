@@ -1,0 +1,11 @@
+{
+  "name": "dialyzer",
+  "command": [
+    "rebar3",
+    "dialyzer"
+  ],
+  "started": "2026-10-12T13:20:19.056034+00:00",
+  "exit": 0,
+  "seconds": 75.72,
+  "sources_unchanged": true
+}

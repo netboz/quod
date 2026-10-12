@@ -1,0 +1,14 @@
+{
+  "priv/ontologies/quod_physics.pl": "875c61f1ab4b692efeed31b44b3899084293c9d2c752818cb7729da114da8c0e",
+  "priv/ontologies/quod_hinged.pl": "918635afdd2e6bc95560cdc263678135126b1871b78183c43524c406494ce057",
+  "src/quod_physics.erl": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2",
+  "src/quod_physics_native.erl": "9e39ca1c35b967fb9927aa9b8b0695e76cb48accc310ec0683a365198247c5ba",
+  "src/quod_runtime.erl": "13dc6b7c6a63e9bbf08dec9745258b0fb9fb20c921345360225da300ff2131a0",
+  "native/quod_physics/src/lib.rs": "f8322dbd94f0ce3176f567c125097894061decb2435692cd6bd0f4ea03160a94",
+  "native/quod_physics/src/geometry.rs": "16f7628cd9a14aaa03c68201eef2433cd2ee423911d4cbaa988ad7a3c339fcaa",
+  "test/quod_physics_tests.erl": "d7b552bda424c0c470b878e11896dd1fe3375c9849f1f759cbfa61d9e586f190",
+  "test/quod_lobby_tests.erl": "a4cef517639260f6d696daa07b00369d903b53778d43bd9c955ed7a7b2960f88",
+  "test/fixtures/hinged-door.pl": "7e9963a71a187a25bfce0506fe0a0bb6eaa8ab1447278ccbc164897ed4507c6a",
+  "test/fixtures/hinged-lid.pl": "72984185d8d9bdeacabe02f25b4c52c2b77cf4b026c17d4bd1c1ff91db4e03e3",
+  "priv/ontologies/hinged_example_view.pl": "1b504de1d5f76068684b5968724944f287ef41e2cfd136d6af7c37da1e0bc935"
+}

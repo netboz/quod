@@ -4077,6 +4077,123 @@ await_checkpoint_rejection(Ns,Bytes,Signature,Deadline) ->
 
 %% Both examples compose the same production libraries. Only these authored
 %% data/rule files choose object geometry, axis, target and domain consequence.
+generic_hinged_signed_view_recovery_test_() ->
+    {timeout,180,fun() -> with_hinged_examples(fun(First,Second) ->
+        [verify_hinged_signed_view(F) || F <- [First,Second]]
+    end) end}.
+
+verify_hinged_signed_view(F = #{namespace := Ns,identity := Identity,target := Target}) ->
+    Obstacle = maps:get(obstacle,F),
+    {Admission,_,_} = erlog_int:term_instance({transaction,list_conjunction([
+            {current_principal,{'P'}},{can_edit_physics,room,{'P'}},
+            {physics_body_capacity,room,1},{physics_allocate_body,room,12},
+            {physics_advance_structure,room,3},
+            {assertz,{physics_body_definition,room,12,3,fixed,Obstacle,{owned,{box,200,1000,200},1}}}])},0),
+    ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,Admission)),
+    {Pid,World} = enable(F),
+    Pub = maps:get(pubkey,Identity),
+    commit(Ns,{assertz,{agent_key,viewer,Pub,active}}),
+    Principal = {agent_instance_ref,Ns,quod_simplex:genesis_hash(Ns),viewer},
+    ViewGoal = {',',{current_ontology_identity,Ns,{'_'}},
+                     {client_world_view,room,playing,{'_'},{'_'}}},
+    Rules = quod_prolog:read_terms("priv/ontologies/hinged_example_view.pl") ++
+        [{can_invoke,ViewGoal,Principal,{'_'},Ns},{can_view_physics,room,Principal},
+         {':-',{world_view,room,playing,{'Marks'}},{hinged_example_view,room,{'Marks'}}}],
+    commit(Ns,list_conjunction([{assertz,R} || R <- Rules])), reconcile(Ns),
+    {ok,[#{'Marks' := AuthoredMarks}],_} = quod_prolog:prove_ro(Ns,{world_view,room,playing,{'Marks'}}),
+    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(<<"physics-test-rendering">>,{well_formed_scene,AuthoredMarks})),
+    Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+    try
+        Session = simulation_session(Identity),
+        Open = fun() -> Socket ! {client,simulation_open(F,Session)} end,
+        Open(), Initial = simulation_reply(Socket,<<"projection">>),
+        ?assertEqual(<<"active">>,maps:get(<<"selection">>,Initial)),
+        InitialPose = hinged_view_pose(Initial),
+        assert_hinged_view_label(Initial,<<"Ready to close">>),
+        %% The viewer's key is real, but viewing grants no mutation authority.
+        Id = <<181:256>>, Goal = {physics_close_hinged,room,10,0,Id},
+        ?assertMatch({ok,_,{normalized,{failed,_}}},hinged_view_action(F,Goal)),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,0,idle})),
+        commit(Ns,{assertz,{can_invoke,Goal,Principal,{'_'},Ns}}),
+        true = quod_reg:subscribe({runtime,Ns}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},hinged_view_action(F,Goal)),
+        _ = await_hinged_ops(Ns,{close,1,Id},{blocked,12}),
+        _ = simulation_reply(Socket,<<"refresh">>), Open(),
+        Blocked = simulation_reply(Socket,<<"projection">>),
+        assert_hinged_view_label(Blocked,<<"Blocked">>),
+        BlockedPose = hinged_view_pose(Blocked), ?assertNotEqual(InitialPose,BlockedPose),
+        {ok,[#{'Angle' := BlockedAngle}],_} = quod_prolog:prove_ro(Ns,
+            {physics_checkpoint,room,{hinge,10,2,{body,10,2},{body,11,2},1,{'_'},{'Angle'}}}),
+        ?assert(abs(BlockedAngle-Target) > 20),
+        M1 = monitor(process,Pid), exit(Pid,kill),
+        receive {'DOWN',M1,process,Pid,killed} -> ok after 5000 -> error(owner_alive) end,
+        _ = simulation_reply(Socket,<<"refresh">>),
+        {BlockedOwner,World} = installed(Ns), ?assertNotEqual(Pid,BlockedOwner), Open(),
+        RestoredBlocked = simulation_reply(Socket,<<"projection">>),
+        assert_hinged_view_label(RestoredBlocked,<<"Blocked">>),
+        assert_hinged_view_restored_pose(BlockedPose,hinged_view_pose(RestoredBlocked)),
+        {vector,OX,OY,OZ} = Obstacle,
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,
+            {physics_move_body,room,12,3,3,{vector,OX+5000,OY,OZ}})),
+        _ = simulation_reply(Socket,<<"refresh">>), Open(),
+        _ = simulation_reply(Socket,<<"projection">>),
+        NextId = <<182:256>>, NextGoal = {physics_close_hinged,room,10,1,NextId},
+        commit(Ns,{assertz,{can_invoke,NextGoal,Principal,{'_'},Ns}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},hinged_view_action(F,NextGoal)),
+        _ = await_hinged_ops(Ns,{close,2,NextId},closed),
+        _ = simulation_reply(Socket,<<"refresh">>), Open(),
+        Closed = simulation_reply(Socket,<<"projection">>),
+        assert_hinged_view_label(Closed,<<"Closed">>),
+        ClosedPose = hinged_view_pose(Closed), ?assertNotEqual(InitialPose,ClosedPose),
+        {ok,[#{'Angle' := Angle}],_} = quod_prolog:prove_ro(Ns,
+            {physics_checkpoint,room,{hinge,10,2,{body,10,2},{body,11,2},2,{'_'},{'Angle'}}}),
+        ?assert(abs(Angle-Target) =< 20),
+        BeforeOther = quod_prolog:applied(maps:get(other_namespace,F)),
+        M = monitor(process,BlockedOwner), exit(BlockedOwner,kill),
+        receive {'DOWN',M,process,BlockedOwner,killed} -> ok after 5000 -> error(owner_alive) end,
+        _ = simulation_reply(Socket,<<"refresh">>),
+        {Next,World} = installed(Ns), ?assertNotEqual(BlockedOwner,Next), Open(),
+        Restored = simulation_reply(Socket,<<"projection">>),
+        assert_hinged_view_label(Restored,<<"Closed">>),
+        assert_hinged_view_restored_pose(ClosedPose,hinged_view_pose(Restored)),
+        ?assertEqual(BeforeOther,quod_prolog:applied(maps:get(other_namespace,F))),
+        {ok,[#{'Results' := Results}],_} = quod_prolog:prove_ro(Ns,
+            {findall,{'R'},{hinged_result,maps:get(meaning,F),{'R'}},{'Results'}}),
+        ?assertEqual([{close,2,NextId}],Results)
+    after
+        Socket ! stop, catch quod_reg:unsubscribe({runtime,Ns})
+    end.
+
+hinged_view_action(#{namespace := Ns,identity := Identity},Goal) ->
+    Anchor = quod_simplex:genesis_hash(Ns),
+    {Scoped,_,_} = erlog_int:term_instance({'::',Ns,Goal},0),
+    {ok,Text} = quod_client_goal_parser:format(Scoped),
+    Request = #{network_identity => <<42:256>>,agent_namespace => Ns,
+        agent_genesis_anchor => Anchor,agent_instance_text => <<"viewer.">>,
+        signing_public_key => maps:get(pubkey,Identity),operation_id => crypto:strong_rand_bytes(32),
+        not_after_ms => quod_time:now_ms()+10000,mode => execute,parser_version => 3,goal_text => Text},
+    {ok,Bytes} = quod_client_goal:encode(Request),
+    quod_client_goal_ingress:submit(Bytes,quod_identity:sign(Bytes,Identity)).
+
+hinged_view_pose(Projection) ->
+    [Pose] = maps:get(<<"poses">>,maps:get(<<"frame">>,Projection)),
+    ?assertEqual(<<"10">>,maps:get(<<"body">>,Pose)), Pose.
+
+assert_hinged_view_label(Projection,Text) ->
+    {ok,#{goal := Parsed}} = quod_client_goal_parser:parse(<<(maps:get(<<"marks">>,Projection))/binary,".">>,3),
+    {ok,[{mark,<<"hinged-example">>,<<"group">>,[],{body_pose,10,2},no_surface,
+          {label,Text,<<"above">>},{depicts,_,_,_}}|Parts]} = quod_wire_term:materialize_symbols(Parsed),
+    ?assert(lists:all(fun({mark,_,_,_,{relative,<<"hinged-example">>,_},_,_,depicts_nothing}) -> true;
+                        (_) -> false end,Parts)).
+
+assert_hinged_view_restored_pose(Before,After) ->
+    %% The durable angle rounds to mrad; recovery may differ by its half-mrad.
+    [begin ?assert(abs(A-B) =< 0.002) end ||
+        {A,B} <- lists:zip(maps:get(<<"position">>,Before),maps:get(<<"position">>,After))],
+    Q = maps:get(<<"rotation">>,Before), R = maps:get(<<"rotation">>,After),
+    Dot = lists:sum([A*B || {A,B} <- lists:zip(Q,R)]),
+    ?assert(abs(Dot) >= 0.999999).
+
 authored_hinged_examples_in_independent_worlds_test_() ->
     {timeout,120,fun() -> with_hinged_examples(fun(First,Second) ->
         {P1,W1} = enable(First), {P2,W2} = enable(Second),
@@ -4127,14 +4244,17 @@ with_hinged_examples(Fun) ->
     A = <<"hinged-gallery">>, B = <<"hinged-workshop">>,
     Door = "test/fixtures/hinged-door.pl", Lid = "test/fixtures/hinged-lid.pl",
     with_world(A,fun(F = #{node := Node,directory := Dir,identity := Identity}) ->
-        Rules = hinged_example_rules(B,world_rules(B),Lid),
+        Rules = hinged_example_rules(B,world_rules(B),Lid) ++
+            [{rendering_vocabulary,<<"physics-test-rendering">>,
+              quod_simplex:genesis_hash(<<"physics-test-rendering">>)}],
         Sup = quod_agent_hosting_tests:start_ontology(B,Dir,Identity,
             quod_prolog:genesis_diff("priv/ontologies/agent_instance.pl"),
             [{can_assign_agent_host,{node,maps:get(pubkey,Identity)},actor,{'_'},{'_'},Node,{'_'}},
              {can_invoke,{'_'},Node,{'_'},B},{can_request_agent_signature,Node,actor,{'_'}}|Rules]),
         Ref = {agent_instance_ref,B,quod_simplex:genesis_hash(B),actor},
         {ok,Blob} = quod_wire_term:encode_canonical(Ref), {ok,Key} = quod_agent_vault:prepare(Blob,0),
-        try Fun(add_hinged_example(F),add_hinged_example(F#{namespace => B,reference => Ref,key => Key}))
+        try Fun((add_hinged_example(F))#{other_namespace => B},
+                (add_hinged_example(F#{namespace => B,reference => Ref,key => Key}))#{other_namespace => A})
         after
             [catch quod_reg:unsubscribe(Topic) || Topic <- [{physics,B},{runtime,A},{runtime,B}]],
             quod_agent_hosting_tests:stop_ontology(Sup)

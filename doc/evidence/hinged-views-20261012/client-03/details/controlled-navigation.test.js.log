@@ -1,0 +1,19 @@
+BJS - [14:10:57]: Babylon.js v9.18.1 - Null engine
+BJS - [14:10:57]: Babylon.js v9.18.1 - Null engine
+BJS - [14:10:57]: Babylon.js v9.18.1 - Null engine
+BJS - [14:10:57]: Babylon.js v9.18.1 - Null engine
+BJS - [14:10:57]: Babylon.js v9.18.1 - Null engine
+✔ backward desktop travel sends integer zero axes accepted by physics (17.649341ms)
+✔ renewing the same binding preserves held travel and authored camera placement (3.598417ms)
+✔ authored off-centre cockpit follows accepted body pose; commands cannot translate the camera (1.657426ms)
+✔ tracked head offsets are calibrated view motion; clearance masks them without moving the body (2.292237ms)
+✔ unknown capabilities and implicit movement profiles fail closed (0.444514ms)
+✔ XR entry preserves tracked pitch and roll; free agents cannot request landing teleport (1.80282ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40.059232

@@ -12,3 +12,11 @@ physics_hinged_class(container_lid, 1,
     HandleZ is -700, AnchorZ is -1000, Lower is -1300, Baseline is -1200.
 physics_hinged_consequence(room,10,Request,closed,
                           assertz(hinged_result(container_closed,Request))).
+
+hinged_example_appearance(room, 10, <<"hinged-example">>, container_lid,
+    [part(<<"hinged-example/panel">>, <<"box">>,
+          [f(<<"width">>,2000),f(<<"height">>,200),f(<<"depth">>,2000)],
+          transform(0,0,0,0,0,0), surface(<<"#C48A45">>,0,900,0,[])),
+     part(<<"hinged-example/handle">>, <<"sphere">>, [f(<<"diameter">>,300)],
+          transform(0,150,HandleZ,0,0,0), surface(<<"#D7CB9F">>,600,450,0,[]))]) :-
+    HandleZ is -700.

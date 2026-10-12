@@ -1,0 +1,12 @@
+{
+  "command": [
+    "escript",
+    "_build/quod36/compact-source-01/run.escript",
+    "/home/yan/src/quod",
+    "/home/yan/src/quod/_build/quod36/compact-source-01"
+  ],
+  "started": "2026-10-12T11:42:39.345742+00:00",
+  "finished": "2026-10-12T11:42:44.003885+00:00",
+  "child_exit": 0,
+  "sources_unchanged": true
+}

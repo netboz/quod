@@ -1,0 +1,8 @@
+{
+  "escript": "/home/yan/.asdf/shims/escript",
+  "erl": "/home/yan/.asdf/shims/erl",
+  "rebar3": "/usr/bin/rebar3",
+  "cargo": "/usr/bin/cargo",
+  "npm": "/usr/bin/npm",
+  "node": "/usr/bin/node"
+}

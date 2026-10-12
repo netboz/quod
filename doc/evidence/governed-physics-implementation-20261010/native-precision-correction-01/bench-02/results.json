@@ -1,0 +1,23 @@
+[
+  {
+    "label": "binary64",
+    "command": [
+      "erl",
+      "+S",
+      "2:2",
+      "+SDcpu",
+      "2",
+      "+SDio",
+      "2",
+      "-noshell",
+      "-pa",
+      "/home/yan/src/quod/_build/quod27-native-precision-bench-02/binary64/lib/quod/ebin",
+      "-eval",
+      "true=quod_physics_native:available(), quod_physics_bench:run(), halt()."
+    ],
+    "started": "2026-10-12T01:00:04.111242+00:00",
+    "exit": 1,
+    "seconds": 0.39263429993297905,
+    "nif_sha256": "748f528197930f144ebdcd0d7f0686fd3b4385b9e233b0884ce66d37cf7cf026"
+  }
+]

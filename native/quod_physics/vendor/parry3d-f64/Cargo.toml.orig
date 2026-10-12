@@ -1,0 +1,97 @@
+[package]
+name = "parry3d-f64"
+version.workspace = true
+authors.workspace = true
+description = "3 dimensional collision detection library in Rust. 64-bits precision version."
+documentation.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[lints]
+workspace = true
+
+[features]
+default = ["required-features", "std", "spade"]
+required-features = ["dim3", "f64"]
+std = [
+    "glamx/std",
+    "slab",
+    "simba/std",
+    "arrayvec/std",
+    "spade?/std",
+    "thiserror/std",
+    "ena",
+]
+dim3 = []
+f64 = []
+serde-serialize = [
+    "serde",
+    "serde_arrays",
+    "glamx/serde",
+    "bitflags/serde",
+    "hashbrown?/serde",
+    "spade?/serde",
+]
+rkyv = ["dep:rkyv", "glamx/rkyv"]
+bytemuck-serialize = ["bytemuck", "glamx/bytemuck"]
+# No-op for f64 (simba has no 8-lane f64 type); declared so the shared
+# `src/lib.rs` cfg resolves. f64 SIMD stays 4-lane.
+simd8 = []
+enhanced-determinism = ["simba/libm_force", "indexmap", "glamx/libm", "glamx/scalar-math"]
+parallel = ["rayon"]
+# Adds `TriMesh:to_obj_file` function.
+wavefront = ["obj"]
+alloc = ["hashbrown"]
+spade = ["dep:spade", "alloc"]
+improved_fixed_point_support = []
+
+[lib]
+name = "parry3d_f64"
+path = "src/lib.rs"
+required-features = ["required-features"]
+
+[dependencies]
+either = { workspace = true }
+bitflags = { workspace = true }
+downcast-rs = { workspace = true }
+num-traits = { workspace = true }
+slab = { workspace = true, optional = true }
+arrayvec = { workspace = true }
+simba = { workspace = true, features = ["wide"] }
+glamx = { workspace = true, features = ["approx", "f64", "i64"] }
+approx = { workspace = true }
+serde = { workspace = true, optional = true, features = ["rc"] }
+serde_arrays = { workspace = true, optional = true }
+rkyv = { workspace = true, optional = true }
+num-derive = { workspace = true }
+indexmap = { workspace = true, optional = true }
+hashbrown = { workspace = true, optional = true }
+foldhash = { workspace = true }
+spade = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
+rstar = { workspace = true }
+obj = { workspace = true, optional = true }
+ena = { workspace = true, optional = true }
+smallvec = { workspace = true }
+
+log = { workspace = true }
+ordered-float = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+oorandom = { workspace = true }
+ptree = { workspace = true }
+rand = { workspace = true }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
+features = ["wavefront"]

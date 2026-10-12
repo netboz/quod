@@ -314,10 +314,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "parry3d"
+name = "parry3d-f64"
 version = "0.31.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b626edc0b497dba4bdf6e1e0797895294ed9f61dac2bd28cb5d34d37ad2ca7e"
 dependencies = [
  "approx",
  "arrayvec",
@@ -337,7 +335,6 @@ dependencies = [
  "slab",
  "smallvec",
  "spade",
- "static_assertions",
  "thiserror",
 ]
 
@@ -373,7 +370,7 @@ dependencies = [
 name = "quod_physics"
 version = "0.1.0"
 dependencies = [
- "rapier3d",
+ "rapier3d-f64",
  "rustler",
 ]
 
@@ -387,10 +384,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rapier3d"
+name = "rapier3d-f64"
 version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2e2b20538584bb3ba5bfe6a66c2d9a242ee17d15e5398be0fa35279c7d73739"
+checksum = "c28c8d3fba1ae7bd3051fa8295217a695f5cac724c5be71921514fe3e14c5dd9"
 dependencies = [
  "approx",
  "arrayvec",
@@ -399,13 +396,12 @@ dependencies = [
  "log",
  "nalgebra",
  "num-traits",
- "parry3d",
+ "parry3d-f64",
  "profiling",
  "serde",
  "simba",
  "static_assertions",
  "thiserror",
- "wide",
 ]
 
 [[package]]

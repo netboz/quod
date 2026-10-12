@@ -50,9 +50,8 @@ The Prolog selection supplies:
   DefinitionRevision, Digest))`;
 - `physics_next_body(World, NextUnusedId)` for admission and door allocation.
 
-This allowance schema replaces the earlier four-field `limits` term. Existing
-world policy must explicitly supply geometry allowances before deployment;
-this change does not migrate or wipe ontology history.
+World policy explicitly supplies geometry allowances; package changes do not
+rewrite committed ontology rules or founding manifests.
 
 ## Live definitions and atomic admission
 
@@ -154,7 +153,7 @@ Governed body edits share the Prolog `physics_valid_body/6` schema for body
 identity, kind, authored pose, geometry, density and coordinate allowance.
 It accepts every shape above; the supported hinge requires box solids and a
 `vector/3` baseline, with no authored frame or leaf rotation. Integer rotations,
-density, motor scalars and dimensions must fit the adapter's finite binary32 representation;
+density, motor scalars and dimensions must fit the adapter's finite binary64 representation before unit conversion;
 this encoding envelope is independent of coordinate and geometry policy.
 Native installation additionally checks numeric representation, convex volume,
 triangle area, compound bounds and supported joint mechanics.
@@ -168,7 +167,7 @@ movement-induced impulses to dynamic obstacles.
 
 The limits are policy inputs, not Erlang constants. The native numeric envelope
 bounds positions and physical dimensions. Gravity, velocity, density and all
-other numeric values must be finite and representable as Rapier `f32`; density
+other numeric values must be finite and representable as Rapier `f64`; density
 is not compared to a distance allowance. IDs and body revisions use unsigned
 64-bit native fields. Positive mass, dimensions and step are representation
 requirements. The ordinary hosted-agent admission policy still owns actor
@@ -291,7 +290,9 @@ Inputs are `drive(vector(Vx,Vy,Vz),angular(Wx,Wy,Wz))`, `snap(AngleMrad)`,
 leased and applied at the server timestep. Translation stops/slides; rotational
 sweeps check all parts and stop at contact. Snap may therefore stop short of its
 requested angle. Teleport keeps orientation, checks the complete straight body
-path, then searches downward for valid support. Occupied destinations, blocked
+path against physical geometry without an added margin, then searches downward
+for valid support using the authored skin. A body inside that support margin
+can travel along a clear floor. Occupied destinations, blocked
 paths, unsupported slopes, missing support and exhausted queries leave the pose
 unchanged. Previews never authorize a later landing. A pending discrete command
 cannot be overwritten before its outcome; there is no command accumulation queue.
@@ -777,13 +778,26 @@ request-worker crash; a simulator never outlives its selected signing executor.
 ## Native safety audit and port decision
 
 The Quod adapter is independent of ontology semantics. Exact dependencies are
-Rapier 0.36.0 and Rustler 0.36.2, with the complete Cargo lockfile committed;
+Rapier3d-f64 0.36.0 and Rustler 0.36.2, with the complete Cargo lockfile committed;
 Rapier 0.36.0 was verified as the latest stable crate on 2026-10-05 against
 Cargo and the upstream changelog. Rapier's `parallel` and `simd8` features are
 disabled; its normal solver still uses upstream vector math. Enable
 `solver-bounds-checks`: stale solver IDs and empty contact lanes must raise an
 unwind panic before unchecked solver gathers. This does not remove every
 upstream unsafe operation.
+Parry3d-f64 0.31.1 is pinned through Cargo to the vendored, verified release source.
+The [source record](../native/quod_physics/vendor/parry3d-f64-source.json) and
+[minimal patch](../native/quod_physics/vendor/parry3d-f64.patch) identify its single
+algorithm correction: shape casts retain a conservative impact on GJK
+stagnation or iteration exhaustion, while preserving certified separation exits. The existing shape-cast contact refinement decides approach
+at time zero; composite traversal still checks every triangle and part. Raw ray
+casts retain their own semantics. The upstream refinement can still return no
+contact on its own GJK iteration exhaustion; bounded traces observed none, but
+this is not a universal certified-miss guarantee. Near-tangent contact can also
+conservatively block travel. Final occupancy is checked, while iteration and
+query allowances bound work. No second geometry query is added to Quod.
+Replace this dependency patch when an upstream release supplies the correction.
+
 There are no native worker threads, event channels, foreign callbacks or unsafe
 blocks in the adapter. Upstream Rapier/Rustler and their dependencies do contain
 unsafe code. This is a boundary and lifecycle audit, not a formal verification
@@ -823,9 +837,24 @@ case covers this small graph, not a general destructor latency bound. A killed
 process executing a dirty NIF also cannot release that graph before the NIF
 returns.
 
-Keep the recorded in-process choice for this small, policy-admitted cuboid
-profile. The fixture admits 64 bodies/64 poses/256 contact pairs, and measurements
-include four simultaneous 64-body worlds. Do not infer suitability for arbitrary
+Keep the recorded in-process choice for the measured, policy-admitted profile.
+The binary64 audit measured 64-body step/sample p95 at 201 microseconds, 256-body
+p95 at 2.313 milliseconds, and four concurrent 64-body worlds at 360–685
+microseconds. The dense 64-body case (2,016 contact candidates, explicitly granted
+by the benchmark) reached 9.435 milliseconds. Normal-scheduler ping p95/p99 was
+3/17 microseconds; explicit 256-body retirement took 538 microseconds and owner
+kill through DOWN took 231 microseconds. These are local release-build samples,
+not latency bounds or packaged deployment acceptance.
+
+Native inline sizes are 24 bytes per vertex, 12 per triangle index triple,
+64 per BVH node, 768 per rigid body and 288 per collider. At the deployed
+16-body/256-vertex policy, body plus collider values account for 16,896 bytes
+and raw vertices for 6,144 bytes, before heap allocations, shapes, BVH storage,
+contacts, retained author definitions and Erlang terms. Process RSS is not an
+exact per-world allocation: the serial 2/64/256-body run measured about
+68/69/79 MB. Geometry and contact growth remain governed by the declared budgets;
+no byte or wall-clock guarantee is inferred from a body count.
+Do not infer suitability for arbitrary
 untrusted geometry, unconstrained quotas or hard real-time service. If native
 crash isolation is required, or measured scheduler/destructor/memory cost at the
 intended policy limits is unacceptable, replace this adapter's execution boundary

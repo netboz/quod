@@ -628,14 +628,13 @@ physics_valid_triangles([triangle(A,B,C) | Rest], Count) :-
     A \= B, B \= C, A \= C, physics_valid_triangles(Rest, Count).
 physics_vertex_index(Index, Count) :-
     integer(Index), Index >= 0, Index < 4294967296, Index < Count.
-%% IEEE-754 binary32's largest finite value; this is an encoding envelope,
-%% not a resource allowance. Policy still supplies each coordinate limit.
-physics_native_scalar_limit(340282346638528859811704183484516925440).
+%% Largest finite binary64 integer accepted before the interface's unit division.
+%% This is an encoding envelope; policy supplies each coordinate allowance.
+physics_native_scalar_limit(179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368).
 physics_positive_scalar(X) :-
     integer(X), X > 0, physics_native_scalar_limit(Max), X =< Max.
 physics_milli_integer(X) :-
-    integer(X), physics_native_scalar_limit(Max), Limit is Max * 1000,
-    X >= -Limit, X =< Limit.
+    integer(X), physics_native_scalar_limit(Max), X >= -Max, X =< Max.
 physics_coordinate(X, Limit) :-
     physics_milli_integer(X), X >= -Limit, X =< Limit.
 physics_body_vector(vector(X,Y,Z), Limit) :-

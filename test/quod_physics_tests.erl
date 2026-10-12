@@ -805,6 +805,21 @@ invalid_geometry_signed_edit_leaves_state_unchanged_test_() ->
 
 numeric_geometry_and_hinge_refusals_test_() ->
     {timeout,60,fun() -> with_door(fun(#{namespace := Ns}) ->
+        %% The envelope protects the existing integer-to-double conversion before
+        %% unit division. Policy range failures below remain a separate refusal.
+        {ok,[#{'NativeMax' := Max}],_} = quod_prolog:prove_ro(Ns,
+            {physics_native_scalar_limit,{'NativeMax'}}),
+        ?assertEqual(((1 bsl 53)-1) bsl 971,Max),
+        [?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
+            || X <- [-Max,0,Max]],
+        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
+            || X <- [-Max-1,Max+1]],
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max})),
+        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max+1})),
+        ?assertEqual(1.7976931348623157e308,float(Max)),
+        ?assert(is_float(Max/1000)), ?assert(is_float(-Max/1000000)),
+        %% Max+1 still rounds to Max; test actual conversion overflow separately.
+        ?assertError(badarith,(Max+(1 bsl 971))/1000),
         Huge = 1 bsl 2048,
         Position = {vector,0,3000,0}, Shape = {box,500,500,500},
         Bodies = [{physics_body_definition, room, 2, 1, fixed, Position, {owned, Shape, Huge}},
@@ -1677,12 +1692,26 @@ ordinary_space_views_test_() ->
             Selection(<<"disabled">>),
             Change({retract,{can_view_physics,room,{'_'}}}), Selection(<<"denied">>),
             Change({assertz,{can_view_physics,room,{'_'}}}), Selection(<<"disabled">>),
-            {_Pid,_World} = enable(F), _ = simulation_reply(Socket,<<"refresh">>),
+            {Pid,World} = enable(F), _ = simulation_reply(Socket,<<"refresh">>),
             Selection(<<"active">>),
             renew_simulation(Socket,Open,20),
-            Change({',',{retract,{instance_of,physical_space,room}},
-                        {assertz,{instance_of,space,room}}}),
-            reconcile(N), ?assertEqual(#{},worlds(N)),
+            Runtime = quod_reg:where({quod_runtime,N}), Token = make_ref(),
+            Retired = fun(State,{in,{physics_down,_,process,P,_}},_) when P =:= Pid ->
+                              Parent ! {retired,Token}, State;
+                         (State,_,_) -> State end,
+            ok = sys:install(Runtime,{Retired,none}),
+            try
+                ok = sys:suspend(Pid),
+                try
+                    Change({',',{retract,{instance_of,physical_space,room}},
+                                {assertz,{instance_of,space,room}}}),
+                    reconcile(N),
+                    ?assertMatch(#{World := #{pid := Pid,stopping := true}},worlds(N))
+                after sys:resume(Pid) end,
+                receive {retired,Token} -> ok after 10000 -> error(world_not_retired) end,
+                %% This snapshot joins the runtime's DOWN handler, not just process death.
+                ?assertEqual(#{},worlds(N))
+            after sys:remove(Runtime,Retired) end,
             ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(N,{agent_hosting_projection,all,Human,all,[]})),
             Selection(<<"nonphysical">>),
             renew_simulation(Socket,Open,20),
@@ -2878,8 +2907,8 @@ submit_fixture(F,Goal) ->
     quod_client_goal_ingress:submit(Bytes,Signature).
 
 native_nonfinite_quarantine_retires_world_test() ->
-    {ok,R} = quod_physics_native:new_world({1,1,1,3.4e38,256,4096,4096},1/60,-9.81),
-    {ok,1} = quod_physics_native:install(R,[{1,1,dynamic,{{3.0e38,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0e38,1.0e-20,1.0e-20}},1.0}]),
+    {ok,R} = quod_physics_native:new_world({1,1,1,1.7e308,256,4096,4096},1/60,-9.81),
+    {ok,1} = quod_physics_native:install(R,[{1,1,dynamic,{{1.5e308,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0e308,1.0e-150,1.0e-150}},1.0}]),
     ?assertEqual({error,non_finite_state},quod_physics_native:step(R,false)),
     ?assertEqual({error,retired},quod_physics_native:step(R,false)).
 

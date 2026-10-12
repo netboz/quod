@@ -1,0 +1,29 @@
+OTP=28 schedulers=2 dirty_cpu=2
+world #{chunks => 0,active_calls => 35,bodies => 2,create_us => 103,
+        idle_call_us => #{max => 1159,p50 => 1,p95 => 2,p99 => 11},
+        install_us => 35,joints => 0,max_contacts => 1,
+        query_us => #{max => 188,p50 => 1,p95 => 3,p99 => 7},
+        retire_us => 24,rss_kb_after => 67616,
+        step_including_sample_us => #{max => 89,p50 => 8,p95 => 19,p99 => 89},
+        steps => 500,unchanged_us => 8}
+world #{chunks => 0,active_calls => 35,bodies => 64,create_us => 11,
+        idle_call_us => #{max => 533,p50 => 1,p95 => 2,p99 => 17},
+        install_us => 115,joints => 0,max_contacts => 63,
+        query_us => #{max => 41,p50 => 8,p95 => 19,p99 => 26},
+        retire_us => 47,rss_kb_after => 68564,
+        step_including_sample_us =>
+            #{max => 583,p50 => 113,p95 => 204,p99 => 583},
+        steps => 500,unchanged_us => 43}
+world #{chunks => 0,active_calls => 42,bodies => 256,create_us => 14,
+        idle_call_us => #{max => 7,p50 => 2,p95 => 3,p99 => 4},
+        install_us => 304,joints => 0,max_contacts => 591,
+        query_us => #{max => 220,p50 => 49,p95 => 97,p99 => 188},
+        retire_us => 524,rss_kb_after => 78904,
+        step_including_sample_us =>
+            #{max => 2505,p50 => 979,p95 => 1432,p99 => 2505},
+        steps => 500,unchanged_us => 87}
+Error! Failed to eval: true=quod_physics_native:available(), quod_physics_bench:run(), halt().
+
+Runtime terminating during boot ({{badmatch,false},[{quod_physics_bench,'-surface_motion/0-lc$^7/1-6-',2,[{file,"_build/quod27-native-precision-bench-02/quod_physics_bench.erl"},{line,39}]},{quod_physics_bench,surface_motion,0,[{file,"_build/quod27-native-precision-bench-02/quod_physics_bench.erl"},{line,41}]},{quod_physics_bench,run,0,[{file,"_build/quod27-native-precision-bench-02/quod_physics_bench.erl"},{line,8}]},{erl_eval,do_apply,7,[{file,"erl_eval.erl"},{line,920}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
+
+Crash dump is being written to: erl_crash.dump...done

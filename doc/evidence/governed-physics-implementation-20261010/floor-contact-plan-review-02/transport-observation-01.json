@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-11T23:54:59.188749+00:00",
+  "review_pid": 1950485,
+  "owned_connections": [
+    {
+      "state": "ESTAB",
+      "bytes_sent": 111479,
+      "bytes_acked": 111480,
+      "bytes_received": 528459,
+      "segs_out": 1845,
+      "segs_in": 2100,
+      "lastsnd": 828266,
+      "lastrcv": 1406,
+      "lastack": 1406
+    }
+  ],
+  "no_remote_addresses_or_payloads_recorded": true
+}

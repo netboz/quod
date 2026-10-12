@@ -23,6 +23,22 @@ pauses (383, 151 and 434 ms). Their exact captured poses reproduce native
 occupied-floor refusals in the [isolated investigation](floor-occupancy-investigation-01/README.md).
 Sustained smoothness remains unaccepted. The test browser is closed.
 
+The first native contact-precheck candidate was [withdrawn](floor-contact-disposition.md).
+The next [GJK candidate](floor-gjk-correction-01/README.md) passed its initial tests
+but received an implementation NO-GO; its [passing gate campaign](release-263-gates-03/README.md)
+is explicitly not for release. Broader checks reproduced a further isolated
+triangle-edge freeze in binary32. The [single binary64 replacement](native-precision-correction-01/README.md)
+passes the native debug/release suites, wider face/edge/vertex checks and resource
+benchmarks. The [plan review](native-precision-plan-review-01/disposition.md)
+approved that design with corrections. The [implementation review](native-precision-implementation-review-01/disposition.md)
+returned GO with corrections applied. [Gate04](release-263-gates-04/README.md)
+stopped on two lifecycle test synchronization failures; their owner-processing
+corrections pass the focused six tests. The separate [gate05 campaign](release-263-gates-05/README.md)
+passes all eleven release gates, including 3,884 EUnit tests and146 Common Test cases.
+No server mutation or new desktop acceptance is
+claimed. Prolog policy, identity/history and the one physics owner are preserved;
+there is no old/new runtime branch.
+
 The [actual signed personal world](personal-world-259-01/README.md) now has an
 established identity/history baseline, complete atomic physics activation and
 native floor contact in the normal view, with all six scene marks preserved.

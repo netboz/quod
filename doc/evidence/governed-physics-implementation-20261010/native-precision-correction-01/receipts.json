@@ -1,0 +1,372 @@
+[
+  {
+    "campaign": "floor-gjk-trace-04",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-trace-04/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:31:41.868263+00:00",
+      "finished": "2026-10-12T00:32:16.779113+00:00",
+      "elapsed_seconds": 34.91085306904279,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-trace-05",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-trace-05/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:33:27.834359+00:00",
+      "finished": "2026-10-12T00:33:55.424968+00:00",
+      "elapsed_seconds": 27.59061077691149,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-final-01",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-final-01/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:34:57.542391+00:00",
+      "finished": "2026-10-12T00:35:21.746771+00:00",
+      "elapsed_seconds": 24.204380436916836,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-trace-06",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-trace-06/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:36:18.378331+00:00",
+      "finished": "2026-10-12T00:36:47.842170+00:00",
+      "elapsed_seconds": 29.463844971964136,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-trace-07",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-trace-07/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:37:47.583603+00:00",
+      "finished": "2026-10-12T00:38:17.888165+00:00",
+      "elapsed_seconds": 30.30456185003277,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-edge-01",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-edge-01/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "grazing_near_a_single_triangle_edge",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:39:56.940574+00:00",
+      "finished": "2026-10-12T00:40:13.926425+00:00",
+      "elapsed_seconds": 16.985853215912357,
+      "child_exit": 101,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-precision-03",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-precision-03/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:41:39.009346+00:00",
+      "finished": "2026-10-12T00:42:08.667546+00:00",
+      "elapsed_seconds": 29.65820070798509,
+      "child_exit": 101,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-precision-04",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-precision-04/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "sliding_keeps_obstacles_in_the_same_surface",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:43:33.071417+00:00",
+      "finished": "2026-10-12T00:43:47.888570+00:00",
+      "elapsed_seconds": 14.817154287011363,
+      "child_exit": 101,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-precision-05",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-precision-05/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:44:36.026061+00:00",
+      "finished": "2026-10-12T00:45:00.212306+00:00",
+      "elapsed_seconds": 24.18624499591533,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "floor-gjk-precision-06",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-floor-gjk-precision-06/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture"
+      ],
+      "started": "2026-10-12T00:50:21.402556+00:00",
+      "finished": "2026-10-12T00:50:49.356736+00:00",
+      "elapsed_seconds": 27.95417904795613,
+      "child_exit": 0,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-root-01",
+    "record": "receipt.json",
+    "value": {
+      "child_exit": 101,
+      "elapsed_seconds": 15.915954194962978,
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "--",
+        "--nocapture"
+      ],
+      "finished": "2026-10-12T00:53:21.536097+00:00",
+      "sources_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-trace-01",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-native-precision-trace-01/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:53:58.220688+00:00",
+      "finished": "2026-10-12T00:54:28.337046+00:00",
+      "elapsed_seconds": 30.116361762979068,
+      "child_exit": 101,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-normal-02",
+    "record": "before-exit.json",
+    "value": {
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/home/yan/src/quod/_build/quod27-native-precision-normal-02/crate/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "started": "2026-10-12T00:54:47.969440+00:00",
+      "finished": "2026-10-12T00:55:17.647846+00:00",
+      "elapsed_seconds": 29.678410910069942,
+      "child_exit": 101,
+      "inputs_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-root-02",
+    "record": "results.json",
+    "value": [
+      {
+        "name": "test",
+        "child_exit": 101,
+        "elapsed_seconds": 12.410268583917059,
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "native/quod_physics/Cargo.toml",
+          "--",
+          "--nocapture"
+        ],
+        "finished": "2026-10-12T00:56:14.112637+00:00",
+        "sources_unchanged": true
+      }
+    ]
+  },
+  {
+    "campaign": "native-precision-root-02",
+    "record": "STOP.json",
+    "value": {
+      "name": "test",
+      "child_exit": 101,
+      "elapsed_seconds": 12.410268583917059,
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "--",
+        "--nocapture"
+      ],
+      "finished": "2026-10-12T00:56:14.112637+00:00",
+      "sources_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-root-03",
+    "record": "results.json",
+    "value": [
+      {
+        "name": "oracle",
+        "exit": 0,
+        "seconds": 0.9897683940362185,
+        "sources_unchanged": true
+      },
+      {
+        "name": "clippy",
+        "exit": 101,
+        "seconds": 20.200934352935292,
+        "sources_unchanged": true
+      }
+    ]
+  },
+  {
+    "campaign": "native-precision-root-03",
+    "record": "STOP.json",
+    "value": {
+      "name": "clippy",
+      "exit": 101,
+      "seconds": 20.200934352935292,
+      "sources_unchanged": true
+    }
+  },
+  {
+    "campaign": "native-precision-build-01",
+    "record": "results.json",
+    "value": [
+      {
+        "name": "clippy",
+        "exit": 0,
+        "seconds": 0.7117126140510663,
+        "sources_unchanged": true
+      },
+      {
+        "name": "release",
+        "exit": 0,
+        "seconds": 45.325172141892835,
+        "sources_unchanged": true
+      }
+    ]
+  }
+]

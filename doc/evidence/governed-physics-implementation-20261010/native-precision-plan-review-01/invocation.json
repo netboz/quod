@@ -1,0 +1,26 @@
+{
+  "started": "2026-10-12T00:46:36.008471+00:00",
+  "args": [
+    "/home/yan/src/quod/_build/quod27-opus-review-cli/node_modules/@anthropic-ai/claude-code-linux-x64/claude",
+    "--print",
+    "--model",
+    "claude-opus-5-5",
+    "--effort",
+    "high",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ],
+  "payload_sha256": "d26bd39e82f7cad7e9528ca4bfa37b0fcfd3942d4b60076a931b3758300b56be",
+  "scope": "Plan: replace native32 with64 after concrete triangle-edge failure, numeric conversion cleanup and measured resource validation"
+}

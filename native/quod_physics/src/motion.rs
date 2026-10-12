@@ -38,17 +38,17 @@ pub enum Answer {
 }
 
 fn position(p: Pose) -> Position {
-    ((p.translation.x as f64,p.translation.y as f64,p.translation.z as f64),
-     (p.rotation.x as f64,p.rotation.y as f64,p.rotation.z as f64,p.rotation.w as f64))
+    ((p.translation.x,p.translation.y,p.translation.z),
+     (p.rotation.x,p.rotation.y,p.rotation.z,p.rotation.w))
 }
-fn tuple(v: Vector) -> V3 { (v.x as f64,v.y as f64,v.z as f64) }
+fn tuple(v: Vector) -> V3 { (v.x,v.y,v.z) }
 
 struct Space<'a> {
     query: QueryPipeline<'a>,
     shape: &'a dyn Shape,
     checks: usize,
     remaining: usize,
-    tolerance: f32,
+    tolerance: f64,
 }
 
 impl Space<'_> {
@@ -71,8 +71,8 @@ impl Space<'_> {
         Ok(None)
     }
 
-    fn cast(&mut self, pose: Pose, travel: Vector, turn: Vector, skin: f32)
-        -> Result<Option<(f32,u64,Vector)>,Answer> {
+    fn cast(&mut self, pose: Pose, travel: Vector, turn: Vector, skin: f64)
+        -> Result<Option<(f64,u64,Vector)>,Answer> {
         let motion = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn);
         let bounds = if turn == Vector::ZERO {
             self.shape.compute_aabb(&pose).merged(&self.shape.compute_aabb(&motion.position_at_time(1.0)))
@@ -85,7 +85,7 @@ impl Space<'_> {
                 .merged(&Aabb::from_half_extents(pose.translation+travel,Vector::splat(radius)))
         }.loosened(skin);
         let pipeline = self.query;
-        let mut earliest: Option<(f32,u64,Vector)> = None;
+        let mut earliest: Option<(f64,u64,Vector)> = None;
         for (_,other) in pipeline.intersect_aabb_conservative(bounds) {
             self.charge()?;
             let hit = if turn == Vector::ZERO {
@@ -118,8 +118,8 @@ pub fn apply(world: &mut World, id: u64, revision: u64, input: Query, limits: Li
     let answer = evaluate(world,id,revision,input,limits);
     if let Answer::Clear((p,q),_) | Answer::Clipped((p,q),_,_) = &answer {
         let handle = world.rows[&id].1;
-        let pose = Pose::from_parts(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32),
-            Rotation::from_xyzw(q.0 as f32,q.1 as f32,q.2 as f32,q.3 as f32));
+        let pose = Pose::from_parts(Vector::new(p.0,p.1,p.2),
+            Rotation::from_xyzw(q.0,q.1,q.2,q.3));
         if *world.bodies[handle].position() != pose {
             let collider = world.bodies[handle].colliders()[0];
             world.bodies[handle].set_position(pose,true);
@@ -153,7 +153,7 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
     let shape = world.colliders[body.colliders()[0]].shape();
     let mut space = Space { query: world.broad.as_query_pipeline(&DefaultQueryDispatcher,
         &world.bodies,&world.colliders,QueryFilter::default().exclude_rigid_body(body_handle)),
-        shape, checks: 0, remaining: checks, tolerance: tolerance as f32 };
+        shape, checks: 0, remaining: checks, tolerance };
     let mut pose = *body.position();
     let (mut travel,mut turn) = match input {
         Query::View(local,radius) => {
@@ -161,7 +161,7 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
             let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
             let point = pose.transform_point(local);
             let pipeline = space.query;
-            let mut clearance = radius as f32;
+            let mut clearance = radius;
             for (_,other) in pipeline.intersect_aabb_conservative(Aabb::from_half_extents(point,Vector::splat(clearance))) {
                 space.charge()?;
                 let projected = other.shape().project_point(other.position(),point,true);
@@ -169,7 +169,7 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
                 if !distance.is_finite() { return Err(Answer::Unavailable); }
                 clearance = clearance.min(distance);
             }
-            return Ok(Answer::ViewClearance((clearance-skin as f32).max(0.0) as f64,space.checks));
+            return Ok(Answer::ViewClearance((clearance-skin).max(0.0),space.checks));
         }
         Query::Place(target) => {
             let target = geometry::transform(target,world.limits.3).map_err(|_| Answer::Invalid)?;
@@ -184,22 +184,24 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
                 || !up.is_finite() || up <= 0.0 || up > 1.0 { return Err(Answer::Invalid); }
             let target = geometry::vector(target,world.limits.3).map_err(|_| Answer::Invalid)?;
             let delta = target-pose.translation;
-            if delta.length() as f64 > reach { return Err(Answer::Invalid); }
+            if delta.length() > reach { return Err(Answer::Invalid); }
             if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
             let mut landing = pose;
             landing.translation = target;
             if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
             if delta != Vector::ZERO {
-                if let Some((_,other,_)) = space.cast(pose,delta,Vector::ZERO,skin as f32)? {
+                // The path tests physical geometry; only the support search uses skin.
+                // A clear body already inside the support margin may travel along it.
+                if let Some((_,other,_)) = space.cast(pose,delta,Vector::ZERO,0.0)? {
                     return Ok(Answer::Blocked(other,space.checks));
                 }
             }
-            let descent = Vector::new(0.0,-(drop as f32),0.0);
-            let Some((fraction,other,normal)) = space.cast(landing,descent,Vector::ZERO,skin as f32)?
+            let descent = Vector::new(0.0,-(drop),0.0);
+            let Some((fraction,other,normal)) = space.cast(landing,descent,Vector::ZERO,skin)?
                 else { return Ok(Answer::NoSupport); };
-            if normal.y < up as f32 { return Ok(Answer::NoSupport); }
+            if normal.y < up { return Ok(Answer::NoSupport); }
             landing.translation += descent*fraction;
-            if landing.translation.abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+            if landing.translation.abs().max_element() > world.limits.3 { return Err(Answer::Invalid); }
             if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
             return Ok(Answer::Clipped(position(landing),vec![(other,tuple(normal))],space.checks));
         }
@@ -208,27 +210,27 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
             geometry::vector(rotation,std::f64::consts::PI).map_err(|_| Answer::Invalid)?),
     };
     if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
-    if (pose.translation+travel).abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+    if (pose.translation+travel).abs().max_element() > world.limits.3 { return Err(Answer::Invalid); }
     let mut contacts = Vec::new();
     for _ in 0..iterations {
         if travel == Vector::ZERO && turn == Vector::ZERO { break; }
-        let Some((time,other,normal)) = space.cast(pose,travel,turn,skin as f32)? else {
+        let Some((time,other,normal)) = space.cast(pose,travel,turn,skin)? else {
             pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(1.0);
             break;
         };
         let radius = shape.compute_local_aabb().mins.abs().max(shape.compute_local_aabb().maxs.abs()).length();
         let speed_bound = travel.length()+turn.length()*radius;
         let fraction = if turn == Vector::ZERO { time }
-            else { (time-(skin as f32)/speed_bound).max(0.0) };
+            else { (time-(skin)/speed_bound).max(0.0) };
         pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(fraction);
         contacts.push((other,tuple(normal)));
         travel *= 1.0-fraction;
         // Rotation stops at contact. Translation may continue along the surface.
         turn = Vector::ZERO;
         travel -= normal*travel.dot(normal).min(0.0);
-        // Cover f32 projection and pose-frame roundoff in Parry's approach test.
+        // Separate repeated contacts by the solver's relative geometric tolerance.
         // Subsequent casts still check every collider, including this one.
-        travel += normal*(16.0*f32::EPSILON*travel.length());
+        travel += normal*(query::gjk::eps_tol().sqrt()*travel.length());
     }
     // The query never returns an overlapping endpoint, including after a
     // conservative cast or exhausted sliding iterations.
@@ -366,8 +368,8 @@ mod tests {
         let second = end(apply(&mut world,3,1,Query::Travel((-2.5,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
         assert!(second.0-first.0 >= 1.0,"{first:?} {second:?}");
         world.step().unwrap();
-        assert_eq!(world.bodies[world.rows[&1].1].translation().x,first.0 as f32);
-        assert_eq!(world.bodies[world.rows[&3].1].translation().x,second.0 as f32);
+        assert_eq!(world.bodies[world.rows[&1].1].translation().x,first.0);
+        assert_eq!(world.bodies[world.rows[&3].1].translation().x,second.0);
     }
 
     #[test]
@@ -439,7 +441,7 @@ mod tests {
     fn surface_world(start: V3, roll: f64, yaw: f64, offset: V3, walls: bool) -> (World,Pose) {
         let mut world = World::new((16,16,128,1000.0,32,256,256),0.016667,-9.81).unwrap();
         let frame = geometry::transform((offset,(0.0,0.0,roll)),1000.0).unwrap();
-        let position = frame.transform_point(Vector::new(start.0 as f32,start.1 as f32,start.2 as f32));
+        let position = frame.transform_point(Vector::new(start.0,start.1,start.2));
         world.install(vec![
             (1,1,Kind::Fixed,(offset,(0.0,0.0,roll)),annular_surface(walls),1.0),
             (2,1,Kind::Controlled,(tuple(position),(0.0,yaw,roll)),Geometry::Solid(Primitive::Capsule(0.5,0.25)),1.0),
@@ -448,39 +450,39 @@ mod tests {
         (world,frame)
     }
 
-    fn surface_distance(world: &World) -> f32 {
+    fn surface_intersects(world: &World) -> bool {
         let collider = |id| &world.colliders[world.bodies[world.rows[&id].1].colliders()[0]];
         let (agent,surface) = (collider(2),collider(1));
-        query::contact(agent.position(),agent.shape(),surface.position(),surface.shape(),1.0)
-            .unwrap().unwrap().dist
+        query::intersection_test(agent.position(),agent.shape(),surface.position(),surface.shape())
+            .unwrap().intersecting
     }
 
     #[test]
     fn capsule_slides_over_surface_in_rotated_frames() {
         let start = (2.68794584274292,0.7519908547401428,0.36940792202949524);
         for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(0.0,0.83,(0.0,0.0,0.0)),
-                (-0.37,0.83,(13.4,-7.0,12.5))] {
+                (-0.37,0.83,(13.4,-7.0,12.5)),(0.0,0.0,(990.0,-990.0,990.0)),(-0.37,0.83,(-990.0,990.0,-990.0))] {
             let (mut world,frame) = surface_world(start,roll,yaw,offset,false);
             let movement = tuple(frame.rotation*Vector::new(0.033334,-0.002725109,0.0));
             let p = end(apply(&mut world,2,1,Query::Travel(movement,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
-            let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
-            assert!(local.x as f64 > start.0+0.03,"roll={roll} yaw={yaw}: {p:?}");
-            assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+            let local = frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
+            assert!(local.x > start.0+0.03,"roll={roll} yaw={yaw}: {p:?}");
+            assert!(!surface_intersects(&world),"surface overlap: {p:?}");
         }
     }
 
     #[test]
     fn sliding_keeps_obstacles_in_the_same_surface() {
-        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5)),(0.0,0.0,(990.0,-990.0,990.0)),(-0.37,0.83,(-990.0,990.0,-990.0))] {
             for desired in [Vector::new(1.0,-0.002725109,0.0),Vector::new(1.0,-0.002725109,1.0)] {
                 let (mut world,frame) = surface_world((2.7,0.752,2.7),roll,yaw,offset,true);
                 let answer = apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*desired),(0.0,0.0,0.0)),(0.002,0.0,8,128));
                 let Answer::Clipped((p,_),_,checks) = answer else {panic!("missed obstacle: {answer:?}")};
-                let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
+                let local = frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
                 assert!(local.x > 2.94 && local.x < 2.951,"wall: {local:?}");
                 assert!(local.z < 2.951,"corner: {local:?}");
                 assert!(checks < 10,"slide budget consumed by repeated contact: {checks}");
-                assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+                assert!(!surface_intersects(&world),"surface overlap: {p:?}");
             }
         }
     }
@@ -493,7 +495,7 @@ mod tests {
             let after = std::f64::consts::TAU*(i+1) as f64/2048.0;
             let delta = (4.0*(after.sin()-before.sin()),-0.002725109,4.0*(after.cos()-before.cos()));
             let p = end(apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
-            assert!(surface_distance(&world) >= 0.0,"surface overlap at {i}: {p:?}");
+            assert!(!surface_intersects(&world),"surface overlap at {i}: {p:?}");
             world.step().unwrap();
         }
         let pose = world.bodies[world.rows[&2].1].translation();
@@ -509,7 +511,302 @@ mod tests {
         let answer = apply(&mut world,2,1,Query::Travel(tuple(-n),(0.0,0.0,0.0)),(0.002,0.0,8,128));
         let Answer::Clipped(_,_,checks) = answer else {panic!("head-on: {answer:?}")};
         assert!(checks <= 4,"head-on repeats: {checks}");
-        assert!(surface_distance(&world) >= 0.0);
+        assert!(!surface_intersects(&world));
+    }
+
+    #[test]
+    fn captured_clear_floor_travel_makes_progress() {
+        let cases = [
+            ((5.128269672393799,0.7517002820968628,1.5401973724365234),(-0.423,-1.954)),
+            ((5.241491794586182,0.751920759677887,2.8427703380584717),(-1.954,0.423)),
+            ((5.593716621398926,0.751710057258606,1.9480516910552979),(0.423,1.954)),
+        ];
+        let mut failures = Vec::new();
+        for (start,(x,z)) in cases {
+            let (mut world,_) = surface_world(start,0.0,0.0,(0.0,0.0,0.0),false);
+            let delta = (x*0.016667,-9.81*0.016667*0.016667,z*0.016667);
+            assert!(!surface_intersects(&world) && start.1 > 0.75,"initial overlap: {start:?}");
+            let answer = apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128));
+            assert!(!surface_intersects(&world),"surface overlap: {start:?}");
+            match answer {
+                Answer::Clear((p,_),_) | Answer::Clipped((p,_),_,_) => {
+                    if (p.0-start.0).hypot(p.2-start.2) < 0.03 { failures.push(start); }
+                }
+                _ => failures.push(start),
+            }
+        }
+
+        assert!(failures.is_empty(),"clear floor failed to advance: {failures:?}");
+    }
+
+    #[test]
+    fn separating_floor_keeps_close_walls_in_the_same_mesh() {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+            for (start,delta) in [((2.9485,0.7510,2.7),Vector::new(0.04,0.02,0.0)),
+                                  ((2.9485,0.7510,2.9485),Vector::new(0.04,0.02,0.04))] {
+                let (mut world,frame)=surface_world(start,roll,yaw,offset,true);
+                let answer=apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*delta),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+                let p=end(answer);
+                let local=frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
+                assert!(local.x<=2.9501 && local.z<=2.9501,"wall missed: {local:?}");
+                assert!(local.y>0.77,"separating travel blocked: {local:?}");
+                assert!(!surface_intersects(&world));
+            }
+            let (mut world,frame)=surface_world((2.9485,0.7510,2.9485),roll,yaw,offset,true);
+            let start=world.bodies[world.rows[&2].1].translation();
+            let result=apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*Vector::new(-0.04,0.02,-0.04)),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+            let p=end(result);let local=frame.rotation.inverse()*(Vector::new(p.0,p.1,p.2)-start);
+            assert!(local.x < -0.039 && local.z < -0.039 && local.y>0.019,"separating contact blocked: {local:?}");
+        }
+    }
+
+    #[test]
+    fn shape_cast_preserves_authored_hole() {
+        let (world,_)=surface_world((0.0,0.8,0.0),0.0,0.0,(0.0,0.0,0.0),false);
+        let p=end(evaluate(&world,2,1,Query::Travel((0.0,-1.0,0.0),(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+        assert!(p.1 < -0.19,"hole filled: {p:?}");
+        assert_eq!(evaluate(&world,2,1,Query::Land((0.0,0.8,0.0),1.0,1.0,0.9),(0.002,0.0,8,128)),Answer::NoSupport);
+    }
+
+    #[test]
+    fn shape_cast_obeys_the_existing_allowance() {
+        let (world,_)=surface_world((5.128269672393799,0.7517002820968628,1.5401973724365234),0.0,0.0,(0.0,0.0,0.0),false);
+        let make=||Query::Travel((-0.007050141,-0.002725109001090001,-0.032567318),(0.0,0.0,0.0));
+        let full=evaluate(&world,2,1,make(),(0.002,0.0,8,128));
+        let Answer::Clipped(_,_,used)=full else {panic!("unexpected {full:?}")};
+        assert!(used>0);
+        assert_eq!(evaluate(&world,2,1,make(),(0.002,0.0,8,used)),full);
+        assert_eq!(evaluate(&world,2,1,make(),(0.002,0.0,8,used-1)),Answer::Exhausted);
+    }
+
+    #[test]
+    fn long_reciprocal_surface_walk_makes_progress() {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+            let (mut world,frame)=surface_world((5.2685847,0.751785,1.8875018),roll,yaw,offset,false);
+            let mut total=0;
+            for cycle in 0..42 {
+                for (x,z,ticks) in [(-0.423,-1.954,36),(0.423,1.954,36),(-1.954,0.423,16),(1.954,-0.423,16)] {
+                    for _ in 0..ticks {
+                        let before=world.bodies[world.rows[&2].1].translation();
+                        let delta=frame.rotation*Vector::new(x*0.016667,-0.002725109,z*0.016667);
+                        let answer=apply(&mut world,2,1,Query::Travel(tuple(delta),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+                        let p=match answer {
+                            Answer::Clear((p,_),_) | Answer::Clipped((p,_),_,_) => p,
+                            _ => panic!("roll={roll} cycle={cycle} step={total} before={before:?}: {answer:?}"),
+                        };
+                        let progress=frame.rotation.inverse()*(Vector::new(p.0,p.1,p.2)-before);
+                        assert!(progress.x.hypot(progress.z)>0.03,"floor stall roll={roll} step={total}: {progress:?}");
+                        assert!(!surface_intersects(&world),"overlap roll={roll} step={total}: {p:?}");
+                        world.step().unwrap();total+=1;
+                    }
+                }
+            }
+        }
+
+    }
+
+    #[test]
+    fn skin_boundary_travel_and_landing_paths_remain_clear() {
+        let positions=[(5.1282697,1.5401974),(5.241492,2.8427703),(5.5937166,1.9480517),
+            (5.0,0.0),(4.829629,1.294095),(4.330127,2.5),(3.535534,3.535534),
+            (0.0,5.0),(-4.0,3.0),(-5.0,0.0),(0.0,-5.0),
+            (5.155712127685547,1.3666876554489136),(-2.826486825942993,2.83035945892334)];
+        let mut travel_bad=Vec::new();let mut land_bad=Vec::new();let mut path_bad=Vec::new();
+        let mut count=0;let mut queries=0;
+        for (speed_scale,down) in [(1.0,-0.002725109),(2.0,-0.002725109),(4.0,-0.002725109),(1.0,0.0),(4.0,0.0)] {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+            for (x,z) in positions {
+                for y in (0..=40).map(|gap_step|0.7515+gap_step as f64*0.000025).chain([0.7517002820968628,0.751920759677887,0.751710057258606,0.7522839307785034,0.7521604299545288]) {
+                    let start=(x,y,z);
+                    for (vx,vz) in [(-0.423,-1.954),(0.423,1.954),(-1.954,0.423),(1.954,-0.423)] {
+                        let (mut world,frame)=surface_world(start,roll,yaw,offset,false);
+                        let answer=apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*Vector::new(vx*0.016667*speed_scale,down,vz*0.016667*speed_scale)),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+                        count+=1;
+                        assert!(!surface_intersects(&world),"sweep overlap: {start:?}");
+                        match answer {
+                            Answer::Clear((p,_),n) | Answer::Clipped((p,_),_,n) => {
+                                queries+=n;
+                                let v=frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
+                                assert!(v.y>=0.75,"analytic floor penetration: {v:?}");
+                                if (v.x-x).hypot(v.z-z)<0.03*speed_scale {travel_bad.push(format!("roll={roll} start={start:?} v=({vx},{vz}) scale={speed_scale} down={down} end={v:?}"));}
+                            }
+                            _=>travel_bad.push(format!("roll={roll} start={start:?} v=({vx},{vz}) scale={speed_scale} down={down} answer={answer:?}")),
+                        }
+                    }
+                    // Landing descends along world Y, so use identity floor frames.
+                    if roll==0.0 {
+                        let (world,_)=surface_world(start,roll,yaw,offset,false);
+                        let answer=evaluate(&world,2,1,Query::Land(start,1.0,0.1,0.9),(0.002,0.0,8,128));
+                        if !matches!(answer,Answer::Clipped(_,_,_)) {land_bad.push(format!("start={start:?} answer={answer:?}"));}
+                        let target=(x+0.1,start.1,z);
+                        let answer=evaluate(&world,2,1,Query::Land(target,1.0,0.1,0.9),(0.002,0.0,8,128));
+                        if !matches!(answer,Answer::Clipped(_,_,_)) {path_bad.push(format!("start={start:?} answer={answer:?}"));}
+                    }
+                }
+            }
+        }
+        }
+        eprintln!("SUMMARY count={count} queries={queries} travel_bad={} land_bad={} path_bad={}",travel_bad.len(),land_bad.len(),path_bad.len());
+        for (label,rows) in [("travel",&travel_bad),("land",&land_bad),("path",&path_bad)] {
+            for row in rows.iter() {eprintln!("{label}: {row}");}
+        }
+        assert!(travel_bad.is_empty() && land_bad.is_empty() && path_bad.is_empty());
+    }
+
+
+    #[test]
+    fn target_distance_cast_finds_captured_triangle() {
+        use rapier3d::parry::shape::{Capsule,Triangle};
+        let Geometry::Surface(points,faces)=annular_surface(false) else {unreachable!()};
+        let (a,b,c)=faces[2];
+        let v=|i: usize| Vector::new(points[i].0,points[i].1,points[i].2);
+        let triangle=Triangle::new(v(a as usize),v(b as usize),v(c as usize));
+        let capsule=Capsule::new_y(0.5,0.25);
+        let pose=Pose::translation(5.1282697,0.7517003,1.5401974);
+        let velocity=Vector::new(-0.007050141,-0.002725109,-0.03256732);
+        let options=ShapeCastOptions {max_time_of_impact:1.0,target_distance:0.002,
+            stop_at_penetration:false,compute_impact_geometry_on_penetration:true};
+        let hit=query::cast_shapes(&Pose::IDENTITY,Vector::ZERO,&triangle,&pose,velocity,&capsule,options)
+            .unwrap().expect("within-skin approach must find the triangle");
+        assert_eq!(hit.time_of_impact,0.0);
+        assert!(hit.normal1.x.hypot(hit.normal1.z).atan2(hit.normal1.y) < 0.02,"bad floor normal: {hit:?}");
+        assert!(query::cast_shapes(&Pose::IDENTITY,Vector::ZERO,&triangle,&pose,-velocity,&capsule,options).unwrap().is_none(),
+            "separation must remain clear");
+    }
+
+    #[test]
+    fn compound_parts_keep_each_nearby_face() {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.0,(13.4,-7.0,12.5))] {
+            for z in [2.7,2.9485] {
+                let (mut world,frame)=surface_world((2.5485,0.7515,z),roll,yaw,offset,true);
+                let mut rows:Vec<_>=world.rows.values().map(|(row,_)|row.clone()).collect();
+                let agent=rows.iter_mut().find(|row|row.0==2).unwrap();
+                agent.1=2;
+                agent.4=Geometry::Parts(vec![
+                    (((-0.4,0.0,0.0),(0.0,0.0,0.0)),Primitive::Capsule(0.5,0.25)),
+                    (((0.4,0.0,0.0),(0.0,0.0,0.0)),Primitive::Capsule(0.5,0.25)),
+                ]);
+                world.install(rows).unwrap();world.step().unwrap();
+                let delta=frame.rotation*Vector::new(0.04,0.02,0.04);
+                let p=end(apply(&mut world,2,2,Query::Travel(tuple(delta),(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+                let local=frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
+                assert!(local.x<=2.5501 && local.z<=2.9501,"compound missed wall: {local:?}");
+                assert!(local.y>0.77,"compound separating floor blocked: {local:?}");
+                assert!(!surface_intersects(&world));
+            }
+        }
+    }
+
+    #[test]
+    fn rotation_then_translation_keeps_surface_clearance() {
+        let (mut world,_)=surface_world((5.0,0.7517,0.0),0.0,0.0,(0.0,0.0,0.0),false);
+        let rotated=end(apply(&mut world,2,1,Query::Travel((0.0,0.0,0.0),(0.0,0.7,0.0)),(0.002,0.0,8,128)));
+        assert!(!surface_intersects(&world));
+        world.step().unwrap();
+        for step in 0..32 {
+            let before=world.bodies[world.rows[&2].1].translation();
+            let p=end(apply(&mut world,2,1,Query::Travel((0.033334,-0.002725109,0.0),(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+            assert!(p.0-before.x>0.03,"rotation left a floor stall at {step}: {rotated:?} {p:?}");
+            assert!(!surface_intersects(&world));world.step().unwrap();
+        }
+    }
+
+    #[test]
+    fn resting_landing_path_still_checks_the_complete_body() {
+        let (mut world,_)=surface_world((2.8,0.7517,2.7),0.0,0.0,(0.0,0.0,0.0),true);
+        let before=world.sample().unwrap();
+        assert!(matches!(apply(&mut world,2,1,Query::Land((3.6,0.7517,2.7),2.0,0.1,0.9),(0.002,0.0,8,128)),Answer::Blocked(1,_)));
+        assert_eq!(before,world.sample().unwrap());
+        assert!(matches!(apply(&mut world,2,1,Query::Land((3.1,0.7517,2.7),2.0,0.1,0.9),(0.002,0.0,8,128)),Answer::Occupied(1,_)));
+        assert_eq!(before,world.sample().unwrap());
+    }
+
+
+    #[test]
+    fn triangle_face_edge_vertex_normal_accuracy() {
+        use rapier3d::parry::shape::{Capsule,Triangle};
+        let Geometry::Surface(points,faces)=annular_surface(false) else {unreachable!()};
+        let capsule=Capsule::new_y(0.5,0.25);
+        let positions=[(5.1282697,1.5401974),(5.241492,2.8427703),(5.5937166,1.9480517),
+            (5.0,0.0),(4.829629,1.294095),(4.330127,2.5),(3.535534,3.535534),
+            (0.0,5.0),(-4.0,3.0),(-5.0,0.0),(0.0,-5.0),
+            (5.155712127685547,1.3666876554489136),(-2.826486825942993,2.83035945892334),
+            (9.003,-0.003),(-9.003,0.003),(0.003,9.003)];
+        let mut count=0;let mut features=[0_usize;3];let mut within_worst=(0.0,String::new());let mut all_worst=(0.0,String::new());let mut missing=0;
+        for (x,z) in positions {
+            for y in (0..=40).map(|gap_step|0.7515+gap_step as f64*0.000025).chain([0.7517002820968628,0.751920759677887,0.751710057258606,0.7522839307785034,0.7521604299545288]) {
+                let pose=Pose::translation(x,y,z);
+                let pos=(pose.translation.x,pose.translation.z);
+                for (i,&(a,b,c)) in faces.iter().enumerate() {
+                    let v=|k|Vector::new(points[k as usize].0,0.0,points[k as usize].2);
+                    let [a,b,c]=[v(a),v(b),v(c)];
+                    let cross=|u:Vector,v:Vector| (v.x-u.x)*(pos.1-u.z)-(v.z-u.z)*(pos.0-u.x);
+                    let signs=[cross(a,b),cross(b,c),cross(c,a)];
+                    let inside=signs.iter().all(|s|*s>=-1.0e-9)||signs.iter().all(|s|*s<=1.0e-9);
+                    let (q,feature)=if inside {(pos,0)} else {
+                        [(a,b),(b,c),(c,a)].map(|(u,v)| {
+                            let (ux,uz,vx,vz)=(u.x,u.z,v.x,v.z);
+                            let t=(((pos.0-ux)*(vx-ux)+(pos.1-uz)*(vz-uz))/((vx-ux).powi(2)+(vz-uz).powi(2))).clamp(0.0,1.0);
+                            ((ux+t*(vx-ux),uz+t*(vz-uz)),if t==0.0 || t==1.0 {2} else {1})
+                        }).into_iter().min_by(|u,v| (pos.0-u.0.0).hypot(pos.1-u.0.1).total_cmp(&(pos.0-v.0.0).hypot(pos.1-v.0.1))).unwrap()
+                    };
+                    let expected=[pos.0-q.0,pose.translation.y-0.5,pos.1-q.1];
+                    let length=expected.iter().map(|x|x*x).sum::<f64>().sqrt();
+                    let true_gap=length-0.25;
+                    if true_gap>0.0025 {continue;}
+                    count+=1;features[feature]+=1;
+                    let tri=Triangle::new(a,b,c);
+                    let velocity=Vector::new(0.0,-0.002725109,0.0);
+                    let options=ShapeCastOptions {max_time_of_impact:1.0,target_distance:0.002,
+                        stop_at_penetration:false,compute_impact_geometry_on_penetration:true};
+                    if let Some(hit)=query::cast_shapes(&Pose::IDENTITY,Vector::ZERO,&tri,&pose,velocity,&capsule,options).unwrap() {
+                        let expected=Vector::new(expected[0],expected[1]+velocity.y*hit.time_of_impact,expected[2]).normalize();
+                        let n=hit.normal1;
+                        // At time zero, refinement is independent of cast velocity.
+                        // Check sign classification for these sampled approaches and
+                        // separations; later vertical hits only measure slide quality.
+                        if true_gap<=0.002 { for speed in [2.0,4.0,8.0] {
+                            for (dx,dz) in [(1.0,1.0),(1.0,-1.0),(-1.0,1.0),(-1.0,-1.0)] {
+                                let horizontal=speed*0.016667/2.0_f64.sqrt();
+                                let travel=Vector::new(dx*horizontal,-0.002725109,dz*horizontal);
+                                let approach=expected.dot(travel);
+                                assert!((n-expected).length()*travel.length() < approach.abs(),
+                                    "normal error can reverse approach: n={n:?} expected={expected:?} travel={travel:?}");
+                                assert_eq!(n.dot(travel).is_sign_negative(),approach.is_sign_negative());
+                            }
+                        }
+                        }
+                        let angle=(n.cross(expected).length()).atan2(n.dot(expected));
+                        let row=format!("x={x} y={y} z={z} triangle={i} normal={n:?} expected={expected:?} true_gap={true_gap} toi={}",hit.time_of_impact);
+                        if angle>all_worst.0 {all_worst=(angle,row.clone());}
+                        if true_gap<=0.002 && angle>within_worst.0 {within_worst=(angle,row);}
+                    }else{missing+=1;}
+                }
+            }
+        }
+        assert_eq!(missing,0);
+        assert!(features.iter().all(|n|*n>0),"missing face/edge/vertex coverage: {features:?}");
+        assert!(within_worst.0<0.0003,"within-skin normal error: {within_worst:?}");
+        eprintln!("ANALYTIC_CONTACT features={features:?} count={count} missing={missing} within={within_worst:?} all={all_worst:?}");
+    }
+
+
+    #[test]
+    fn grazing_near_a_single_triangle_edge() {
+        for speed in [2.0_f64,4.0,8.0] {
+            let start=(-2.826486825942993,0.751575,2.83035945892334);
+            let (mut world,_)=surface_world(start,0.0,0.0,(0.0,0.0,0.0),false);
+            let mut rows:Vec<_>=world.rows.values().map(|(row,_)|row.clone()).collect();
+            let ground=rows.iter_mut().find(|row|row.0==1).unwrap();ground.1=2;
+            let Geometry::Surface(points,faces)=annular_surface(false) else {unreachable!()};
+            let (a,b,c)=faces[18];ground.4=Geometry::Surface(vec![points[a as usize],points[b as usize],points[c as usize]],vec![(0,1,2)]);
+            world.install(rows).unwrap();world.step().unwrap();
+            let d=speed*0.016667/std::f64::consts::SQRT_2;
+            let answer=apply(&mut world,2,1,Query::Travel((d,-0.002725109,-d),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+            eprintln!("SINGLE_EDGE speed={speed} answer={answer:?}");
+            let p=end(answer);assert!((p.0-start.0).hypot(p.2-start.2)>speed*0.016667*0.9);
+            assert!(!surface_intersects(&world));
+        }
     }
 
 }

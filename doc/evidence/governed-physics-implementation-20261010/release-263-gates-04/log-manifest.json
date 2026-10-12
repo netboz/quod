@@ -1,0 +1,16 @@
+{
+  "logs/client-tests.json": "ff8335ac9db9c0f5e3711b46bf942976b1fa71571e9e34396ef74a7ef902c4a6",
+  "logs/client-tests.log": "c695b0abe454d2f7219eb205980c21ad51d672466392f996571153d6e6fb6d33",
+  "logs/eunit.json": "57675d5dc75534a6f5d90b6e2a72e75242f245b185c730aadb7014e47160be8c",
+  "logs/eunit.log": "a290e2b6954c867d9d1680a39ead8d211819f66c3f6e10fba68499c191e3cc84",
+  "logs/native-clippy.json": "5173d440ae5e7c71f3331ee6e2cd9501c50ed5510720e987c029055918d77311",
+  "logs/native-clippy.log": "647da07a3cd549b769bd83d466c7c5f8c276922c82d27b144875cb8da296469c",
+  "logs/native-release-tests.json": "f2e04bb683960568c0d7afb0a26450a9e7ecd4f6bf9b5a00c711d63a880088b7",
+  "logs/native-release-tests.log": "4bc7d048a9cc15c5dd2823cbd942a04b9cc2ca52f2988292bd6176fdcf703e8a",
+  "logs/native-tests.json": "5f8de36c5b399d339a9da0f69e0c662c5365498b5ec4422f249491c2a2338806",
+  "logs/native-tests.log": "e5ad52a4003d4dcd668499986f3b79e754f7286eea66c2138122a603239d582a",
+  "logs/ui-build.json": "d0404b114c0e369ec06be387c493578faf2fac9982361ba5a0f914ef3e95a062",
+  "logs/ui-build.log": "bc27361c8a646664f9d15add4db60764d5347db4a5d1627362074654d4fbc2d1",
+  "logs/ui-lint.json": "f391899fdd3c9f9da6a00c8fdc96f4267f72f142d06e7de570778b1fe6b0ddb4",
+  "logs/ui-lint.log": "a455d3b5ebe2fd02a932c89080b2d25c33732baa29cda9a5d24cf17f2b20760a"
+}

@@ -1,0 +1,73 @@
+--- a/src/query/gjk/gjk.rs
++++ b/src/query/gjk/gjk.rs
+@@ -571,6 +571,7 @@
+         ray,
+         max_time_of_impact,
+         simplex,
++        false,
+     )
+ }
+ 
+@@ -682,7 +683,7 @@
+     G2: ?Sized + SupportMap,
+ {
+     let ray = Ray::new(Vector::ZERO, dir);
+-    minkowski_ray_cast(pos12, g1, g2, &ray, Real::max_value(), simplex).map(
++    minkowski_ray_cast(pos12, g1, g2, &ray, Real::max_value(), simplex, true).map(
+         |(time_of_impact, normal)| {
+             let witnesses = if !time_of_impact.is_zero() {
+                 result(simplex, simplex.dimension() == DIM)
+@@ -698,6 +699,9 @@
+ }
+ 
+ // Ray-cast on the Minkowski Difference `g1 - pos12 * g2`.
++// Shape casts retain a candidate when convergence is uncertain. The dispatcher
++// refines TOIs below 1e-4 by contact query; larger candidates keep the lower
++// bound and the last separating-plane normal.
+ fn minkowski_ray_cast<G1, G2>(
+     pos12: &Pose,
+     g1: &G1,
+@@ -705,6 +709,7 @@
+     ray: &Ray,
+     max_time_of_impact: Real,
+     simplex: &mut VoronoiSimplex,
++    conservative: bool,
+ ) -> Option<(Real, Vector)>
+ where
+     G1: ?Sized + SupportMap,
+@@ -749,21 +754,22 @@
+         }
+ 
+         let support_point = if max_bound >= old_max_bound {
+-            // Upper bounds inconsistencies. Keep the projection as a valid support point
+-            // for the last-chance path below.
++            // Stagnation does not prove separation. Shape casts keep the current
++            // lower bound. At zero TOI, ray casts try the projected point once more;
++            // positive TOIs in both modes use the witness refinement below.
+             last_chance = true;
+             CsoPoint::single_point(proj + curr_ray.origin)
+         } else {
+             CsoPoint::from_shapes(pos12, g1, g2, dir)
+         };
+ 
+-        if last_chance && ltoi > 0.0 {
++        if last_chance && (ltoi > 0.0 || conservative) {
+             // The witnesses stay precise when large support coordinates stop the upper
+             // bound from decreasing, so refine the lower bound with their separation
+             // along the cast direction before accepting the impact.
+             let (witness1, witness2) = result(simplex, simplex.dimension() == DIM);
+             let witness_ltoi = (witness1 - witness2 - ray.origin).dot(curr_ray.dir);
+-            if witness_ltoi.is_finite() && witness_ltoi > ltoi {
++            if ltoi > 0.0 && witness_ltoi.is_finite() && witness_ltoi > ltoi {
+                 ltoi = witness_ltoi;
+ 
+                 if ltoi / ray_length > max_time_of_impact {
+@@ -848,7 +854,7 @@
+ 
+         niter += 1;
+         if niter == 100 {
+-            return None;
++            return conservative.then_some((ltoi / ray_length, ldir));
+         }
+     }
+ }

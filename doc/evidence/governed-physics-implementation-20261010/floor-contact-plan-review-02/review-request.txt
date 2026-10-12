@@ -1,0 +1,2027 @@
+# Clear-floor travel: proposed correction for review
+
+Observed: desktop 0.7.262 completes 80.73 seconds and six signed view renewals,
+but three held-input pauses coincide with native occupied(1,...) feedback.
+The unchanged solver reproduces all three with the exact captured poses,
+authored annular surface and quantized ordinary movement. Contact distances
+at the initial poses are positive (about 1.7–1.9 mm). The linear shape cast
+with the policy's 2 mm target distance returns None, then the endpoint overlap
+check correctly refuses the resulting penetration. Direct casts at target
+zero find the floor; toggling stop_at_penetration does not fix the 2 mm cast.
+The endpoint check must remain. The library is the unmodified locked Parry
+0.31.1; cached source matches the .crate archive SHA256
+7b626edc0b497dba4bdf6e1e0797895294ed9f61dac2bd28cb5d34d37ad2ca7e.
+
+Proposed bounded plan (no production change yet):
+1. Keep policy, authorization, budgets, world geometry and all owner lifecycles
+   unchanged. No compatibility, ledger format change, refound or lobby branch.
+2. In the existing native linear cast, explicitly recognize a contact already
+   within the authored skin before asking the library for a later impact. Use
+   its existing contact query and world-space normal; approach produces a
+   zero-time contact. A separating contact does not exclude the collider: run
+   the ordinary full cast so another face in the same surface remains visible.
+   Charge every actual contact and cast query against the existing Prolog
+   narrow-phase allowance. Keep the nonlinear rotation path and final overlap
+   refusal unless the evidence demonstrates that they also require change.
+3. Review whether nearest-contact semantics are sufficient for a mesh corner;
+   this is an unresolved correctness question, not an approved fallback. Do not
+   accept weaker guarantees or a second uncounted cast. A dependency-level fix
+   may be smaller conceptually if the exact GJK convergence defect can be fixed
+   and pinned cleanly. Investigate that while this review runs.
+4. Regression coverage: all captured cases; transformed capsule/surface frames;
+   tangential and separating travel; a wall/corner in the same surface; the
+   real hole remains empty; zero tolerated penetration; budget exhaustion;
+   repeated travel with direct geometric nonpenetration checks. Retain the
+   unchanged failing reproduction, separate each diagnostic/candidate campaign.
+5. Review the eventual implementation against this decision, run the established
+   clean sequential gates, and only then use the existing candidate release
+   owner. A fresh signed foreground movement campaign is required afterwards.
+
+Please review this plan, not hypothetical implementation. Give GO/NO-GO and
+concrete correctness blockers. In particular: does the proposed contact-first
+linear cast preserve multi-face collision and rotated-shape behavior, or would
+it merely mask a lower-level defect? Recommend the smallest sound integration
+using existing owners. Do not advise raising skin/tolerance/budgets, weakening
+collision/occupancy checks, hiding uncertainty, inferring collision from GLBs,
+adding retry/compatibility paths or duplicating Prolog policy. Do not claim the
+feature accepted. Advice is consultative and will be checked against code.
+
+
+Read-only review; all materials follow. No tools are enabled.
+
+
+===== AGENTS.md =====
+# Working agreement
+
+## Shared engineering rules
+
+These are Yan's standing rules for this repository, not optional suggestions.
+Read this file before starting work. When delegating, require each agent to
+read it and pass on the relevant scope, invariants and verification requirements.
+Keep these rules in one place; task handoffs should reference them, not maintain
+divergent copies. Read the relevant specs and `doc/multiwrite-architecture.md`
+before changing architecture or semantics. Flag conflicts rather than guessing.
+
+### Architecture and Erlang processes
+
+- Prolog ontologies are the core of the system. Domain state, policy, actions,
+  authorization and protocol/conversation rules belong there. External Erlang
+  predicates are the governed interface to the real world and runtime services;
+  they must not become a second domain engine or private knowledge base.
+- Do not hardcode resource budgets or population ceilings in Erlang. Resource
+  allocation is Prolog policy, including future pricing of scarce resources.
+  When an existing numeric cap blocks ordinary work, fix its policy ownership
+  and related enforcement paths; do not silently raise the constant or split
+  domain transactions to evade it. Distinguish actual encoding constraints from
+  configurable budgets, and report the resource that was actually exceeded.
+- Build every new domain, including FIPA, on Quod's existing actions,
+  multi-ontology transactions, ontology recovery and reaction framework. This
+  is a foundational rule, not an optional optimization. Before proposing new
+  machinery, trace the use case through those paths and identify a concrete
+  missing capability. Commit related domain changes and receiver consequences
+  in one existing atomic transaction where they form one transition; do not
+  artificially separate them and then build messaging, acknowledgements or
+  recovery to reconnect them. Preserve event-pattern unification and distinguish
+  restoring ontology state from replaying reactions. Extend the existing owner
+  only for a demonstrated gap; do not duplicate guarantees already provided.
+- Refactor to the domain concept: one authoritative implementation and one
+  owner for each mutable truth. Reuse existing functions and lifecycle
+  machinery; extract shared algorithms into pure modules when appropriate.
+  A module does not need its own process.
+- Prefer asynchronous messages for cross-process work. Use the existing
+  gproc/`quod_reg` pub/sub facilities for shared local events; use direct
+  messages when the recipient is already owned or known. Do not add a broker,
+  second executor, shadow inventory or queue merely to connect existing owners.
+- Publish meaningful installed-state changes, scoped to the affected identity
+  and owner incarnation. Wake only work whose dependencies changed, not all
+  pending work. Preserve subscription/snapshot ordering, cancellation and
+  absolute caller deadlines; stale or duplicate notices must be harmless.
+- No polling, sleeps or recurring retry timers to discover readiness when the
+  owning process can notify it. Protocol-required expiry/failure detection is
+  distinct from readiness polling. Do not block a state owner on network I/O.
+- Share verified results, references and deltas, not another mutable copy of
+  the truth. Do not copy Prolog state between nodes during proofs or re-read
+  ledger prefixes on ordinary requests. Recovery and rebuilds need explicit
+  lifecycle reasons, not hidden request-time repair paths.
+- Keep reusable verified state alive for the lifetime of its real consumer,
+  not just one request. Proofs, renewals and readiness checks must reuse it
+  and process only changes; they must not repeatedly parse history, rebuild
+  projections or recreate disposable disk indexes. Unchanged checks must not
+  cause disk writes or syncs. Preserve required durability for actual changes;
+  do not hide an I/O lifecycle defect by weakening persistence or moving an
+  unbounded history into memory.
+
+### Simplification and maintenance
+
+- "No Akira code": no ad-hoc special cases, exception-driven workarounds,
+  hidden fallback behavior or clever patches that obscure the architecture.
+  Fix the underlying abstraction instead of layering around the symptom.
+- Replace the old path when introducing its replacement. Do not keep parallel
+  old/new implementations, permanent fast-path forks or compatibility shims.
+  New behavior belongs in the shared model, not an alternative execution path.
+  Clean format breaks still require the applicable review/deployment authority;
+  this rule alone never authorizes a data wipe.
+- Remove superseded code, unused exports, duplicate validation and stale
+  comments/docs in the same scope. Verify callers and runtime reachability;
+  neither Dialyzer/xref alone nor absence from one trace proves code is dead.
+  Preserve user-owned files and pinned document prefixes.
+- Aim for fewer production lines and fewer concepts after a refinement. Report
+  the actual delta and explain unavoidable growth; do not achieve a smaller
+  count by compressing formatting, hiding code elsewhere or deleting coverage.
+- Keep comments about current invariants and intent. Put run logs, historical
+  status diaries and review narration in handoffs, not implementation docs.
+
+### Diagnosis and verification
+
+- Understand the causal chain before optimizing. Use traces and deterministic
+  reproductions to distinguish computation, mailbox residence, I/O and protocol
+  waits. Add bounded, redacted, removable tracing when needed; observation must
+  not change authority, mask errors or require another execution engine.
+- Check repeated-operation cost as well as first-use correctness. For changes
+  to shared-state lifecycles, verify through the real owner that an unchanged
+  repeat does not replay history, rebuild state or write/sync files, and that
+  a real update is still applied. Measure the relevant work, not just latency.
+- Preserve consensus, authorization, custody, proof/backtracking/cut and
+  commit guarantees. Performance goals do not authorize weaker checks, extended
+  deadlines, uncertain-operation resubmission or changed client semantics.
+- Test the behavior and the failure it prevents, using real production seams.
+  Retire obsolete tests by identifying where their still-valid obligations are
+  covered; do not preserve obsolete machinery just to satisfy its old fixtures.
+  Synchronize tests with delivery/processing evidence, not sleeps or send traces.
+- At required release/review boundaries, use the standing clean sequential
+  gates, full logs and true child exits. Retain and triage failures before
+  trusting a run; no silent reruns or weakened assertions. Freeze each scope's
+  exact tree and evidence, keep label bumps separate, and report partial work
+  honestly. Do not turn routine edits into unnecessary review rounds.
+
+## Continuity
+
+Yan's standing instruction (2026-09-24): do not initiate Claude reviews or
+consultations unless Yan explicitly requests one. Review the work independently.
+When explicitly requested, use the Fable model; its advice remains consultative
+and must be checked against the code and architecture.
+
+Yan's standing instruction (2026-09-10): keep progressing through authorized
+work without stopping at routine intermediate steps, including while Yan is
+away. Use the authority already granted for the current workflow; do not ask
+again for an unchanged, already-authorized operation.
+
+Stop only for a genuine blocker, an unresolved safety/correctness question,
+a required architecture or review-before-commit gate, or a material expansion
+of scope requiring a user decision. Explain the concrete reason. This is not
+permission to bypass review, resubmit uncertain writes, alter deadlines to
+hide failures, or broaden destructive operations beyond the authorized scope.
+
+Preserve user-owned changes. Keep failed measurements and stop markers intact;
+an explicitly authorized new campaign must be separately labeled, not replace
+or silently resume a failed campaign. Report actual results, including failures.
+
+## Stop notifications
+
+Yan requested a desktop notification whenever work finishes or pauses
+(2026-09-10). Before ending a main-agent turn, invoke
+`/bin/sh /home/yan/.codex/notify-stop.sh` when available, and state any actual
+blocker in the final response. The local notifier deliberately omits conversation
+and source content. If notification delivery fails, report that failure rather
+than claiming delivery. A Codex `notify` hook is also configured for future turns;
+neither mechanism guarantees an alert after an abrupt process or host failure.
+
+
+===== native/quod_physics/src/motion.rs =====
+//! Collision queries over the installed world. This module never moves a body
+//! or chooses an agent's permissions, speed, gravity, or locomotion mode.
+use crate::{geometry::{self, Kind, Transform, V3}, World};
+use rapier3d::{math::Pose, parry::{bounding_volume::{Aabb, BoundingVolume},
+    query::{self, DefaultQueryDispatcher, NonlinearRigidMotion, ShapeCastOptions}, shape::Shape}, prelude::*};
+use rustler::NifTaggedEnum;
+
+#[derive(NifTaggedEnum)]
+pub enum Query {
+    Place(Transform),
+    Travel(V3, V3),
+    // Body-origin destination, maximum travel, support search, minimum upward
+    // normal. Policy chooses these values; the complete body follows a clear
+    // straight path, retains its orientation and lands on declared geometry.
+    Land(V3, f64, f64, f64),
+    // Sensory clearance around an authored body-local camera mount. This does
+    // not add a collider or move the agent when a human moves their head.
+    View(V3, f64),
+}
+
+// Skin, permitted numerical penetration, slide iterations, narrow-phase tests.
+// All allowances are supplied by ontology policy through the owner.
+pub type Limits = (f64, f64, usize, usize);
+pub type Position = (V3, (f64,f64,f64,f64));
+
+#[derive(Debug, PartialEq, NifTaggedEnum)]
+pub enum Answer {
+    Clear(Position, usize),
+    Clipped(Position, Vec<(u64,V3)>, usize),
+    Occupied(u64, usize),
+    Blocked(u64, usize),
+    NoSupport,
+    ViewClearance(f64, usize),
+    Unavailable,
+    Unsupported,
+    Invalid,
+    Exhausted,
+}
+
+fn position(p: Pose) -> Position {
+    ((p.translation.x as f64,p.translation.y as f64,p.translation.z as f64),
+     (p.rotation.x as f64,p.rotation.y as f64,p.rotation.z as f64,p.rotation.w as f64))
+}
+fn tuple(v: Vector) -> V3 { (v.x as f64,v.y as f64,v.z as f64) }
+
+struct Space<'a> {
+    query: QueryPipeline<'a>,
+    shape: &'a dyn Shape,
+    checks: usize,
+    remaining: usize,
+    tolerance: f32,
+}
+
+impl Space<'_> {
+    fn charge(&mut self) -> Result<(),Answer> {
+        self.remaining = self.remaining.checked_sub(1).ok_or(Answer::Exhausted)?;
+        self.checks += 1;
+        Ok(())
+    }
+
+    fn occupied(&mut self, pose: Pose) -> Result<Option<u64>,Answer> {
+        let query = self.query;
+        for (_,other) in query.intersect_aabb_conservative(self.shape.compute_aabb(&pose)) {
+            self.charge()?;
+            let contact = query::contact(&pose,self.shape,other.position(),other.shape(),0.0)
+                .map_err(|_| Answer::Unsupported)?;
+            if contact.is_some_and(|c| c.dist < -self.tolerance) {
+                return Ok(Some(other.user_data as u64));
+            }
+        }
+        Ok(None)
+    }
+
+    fn cast(&mut self, pose: Pose, travel: Vector, turn: Vector, skin: f32)
+        -> Result<Option<(f32,u64,Vector)>,Answer> {
+        let motion = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn);
+        let bounds = if turn == Vector::ZERO {
+            self.shape.compute_aabb(&pose).merged(&self.shape.compute_aabb(&motion.position_at_time(1.0)))
+        } else {
+            // A sphere around the body origin contains every rotated part,
+            // including parts whose centres are offset from that origin.
+            let local = self.shape.compute_local_aabb();
+            let radius = local.mins.abs().max(local.maxs.abs()).length();
+            Aabb::from_half_extents(pose.translation,Vector::splat(radius))
+                .merged(&Aabb::from_half_extents(pose.translation+travel,Vector::splat(radius)))
+        }.loosened(skin);
+        let pipeline = self.query;
+        let mut earliest: Option<(f32,u64,Vector)> = None;
+        for (_,other) in pipeline.intersect_aabb_conservative(bounds) {
+            self.charge()?;
+            let hit = if turn == Vector::ZERO {
+                query::cast_shapes(&pose,travel,self.shape,other.position(),Vector::ZERO,other.shape(),
+                    ShapeCastOptions { max_time_of_impact: 1.0, target_distance: skin,
+                        stop_at_penetration: false, compute_impact_geometry_on_penetration: true })
+            } else {
+                query::cast_shapes_nonlinear(&motion,self.shape,
+                    &NonlinearRigidMotion::constant_position(*other.position()),other.shape(),0.0,1.0,false)
+            }.map_err(|_| Answer::Unsupported)?;
+            if let Some(hit) = hit {
+                let normal = other.position().rotation * hit.normal2;
+                if !hit.time_of_impact.is_finite() || !normal.is_finite() { return Err(Answer::Unavailable); }
+                let id = other.user_data as u64;
+                if earliest.is_none_or(|(time,old,_)| hit.time_of_impact < time
+                    || (hit.time_of_impact == time && id < old)) {
+                    earliest = Some((hit.time_of_impact,id,normal));
+                }
+            }
+        }
+        Ok(earliest)
+    }
+}
+
+pub fn evaluate(world: &World, id: u64, revision: u64, input: Query, limits: Limits) -> Answer {
+    match solve(world,id,revision,input,limits) { Ok(answer) | Err(answer) => answer }
+}
+
+pub fn apply(world: &mut World, id: u64, revision: u64, input: Query, limits: Limits) -> Answer {
+    let answer = evaluate(world,id,revision,input,limits);
+    if let Answer::Clear((p,q),_) | Answer::Clipped((p,q),_,_) = &answer {
+        let handle = world.rows[&id].1;
+        let pose = Pose::from_parts(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32),
+            Rotation::from_xyzw(q.0 as f32,q.1 as f32,q.2 as f32,q.3 as f32));
+        if *world.bodies[handle].position() != pose {
+            let collider = world.bodies[handle].colliders()[0];
+            world.bodies[handle].set_position(pose,true);
+            world.bodies[handle].set_linvel(Vector::ZERO,true);
+            world.bodies[handle].set_angvel(Vector::ZERO,true);
+            // Make the new transform visible to the next controlled body in
+            // this same step. Rapier retains pair-change detection for its
+            // next integration; no second query index is constructed.
+            world.colliders[collider].set_position(pose);
+            let bounds = world.colliders[collider].compute_aabb();
+            world.broad.set_aabb(&IntegrationParameters {dt: world.dt,..Default::default()},collider,bounds);
+            world.changed = true;
+        }
+    }
+    answer
+}
+
+fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,iterations,checks): Limits)
+    -> Result<Answer,Answer> {
+    // Installation mutates collider sets before the physics step updates the
+    // retained BVH. Never treat that interval as empty collision coverage.
+    if !world.query_ready { return Err(Answer::Unavailable); }
+    if !skin.is_finite() || skin <= 0.0 || skin > world.limits.3
+        || !tolerance.is_finite() || tolerance < 0.0 || tolerance >= skin
+        || iterations == 0 || checks == 0 { return Err(Answer::Invalid); }
+    let Some((row,body)) = world.rows.get(&id) else { return Err(Answer::Unavailable); };
+    if row.1 != revision { return Err(Answer::Unavailable); }
+    if row.2 != Kind::Controlled { return Err(Answer::Unsupported); }
+    let body_handle = *body;
+    let body = &world.bodies[body_handle];
+    let shape = world.colliders[body.colliders()[0]].shape();
+    let mut space = Space { query: world.broad.as_query_pipeline(&DefaultQueryDispatcher,
+        &world.bodies,&world.colliders,QueryFilter::default().exclude_rigid_body(body_handle)),
+        shape, checks: 0, remaining: checks, tolerance: tolerance as f32 };
+    let mut pose = *body.position();
+    let (mut travel,mut turn) = match input {
+        Query::View(local,radius) => {
+            if !radius.is_finite() || radius <= 0.0 || radius > world.limits.3 { return Err(Answer::Invalid); }
+            let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
+            let point = pose.transform_point(local);
+            let pipeline = space.query;
+            let mut clearance = radius as f32;
+            for (_,other) in pipeline.intersect_aabb_conservative(Aabb::from_half_extents(point,Vector::splat(clearance))) {
+                space.charge()?;
+                let projected = other.shape().project_point(other.position(),point,true);
+                let distance = if projected.is_inside { 0.0 } else { (point-projected.point).length() };
+                if !distance.is_finite() { return Err(Answer::Unavailable); }
+                clearance = clearance.min(distance);
+            }
+            return Ok(Answer::ViewClearance((clearance-skin as f32).max(0.0) as f64,space.checks));
+        }
+        Query::Place(target) => {
+            let target = geometry::transform(target,world.limits.3).map_err(|_| Answer::Invalid)?;
+            return Ok(match space.occupied(target)? {
+                Some(other) => Answer::Occupied(other,space.checks),
+                None => Answer::Clear(position(target),space.checks),
+            });
+        }
+        Query::Land(target,reach,drop,up) => {
+            if !reach.is_finite() || reach <= 0.0 || reach > world.limits.3
+                || !drop.is_finite() || drop <= 0.0 || drop > world.limits.3
+                || !up.is_finite() || up <= 0.0 || up > 1.0 { return Err(Answer::Invalid); }
+            let target = geometry::vector(target,world.limits.3).map_err(|_| Answer::Invalid)?;
+            let delta = target-pose.translation;
+            if delta.length() as f64 > reach { return Err(Answer::Invalid); }
+            if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+            let mut landing = pose;
+            landing.translation = target;
+            if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
+            if delta != Vector::ZERO {
+                if let Some((_,other,_)) = space.cast(pose,delta,Vector::ZERO,skin as f32)? {
+                    return Ok(Answer::Blocked(other,space.checks));
+                }
+            }
+            let descent = Vector::new(0.0,-(drop as f32),0.0);
+            let Some((fraction,other,normal)) = space.cast(landing,descent,Vector::ZERO,skin as f32)?
+                else { return Ok(Answer::NoSupport); };
+            if normal.y < up as f32 { return Ok(Answer::NoSupport); }
+            landing.translation += descent*fraction;
+            if landing.translation.abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+            if let Some(other) = space.occupied(landing)? { return Ok(Answer::Occupied(other,space.checks)); }
+            return Ok(Answer::Clipped(position(landing),vec![(other,tuple(normal))],space.checks));
+        }
+        Query::Travel(delta,rotation) => (
+            geometry::vector(delta,world.limits.3).map_err(|_| Answer::Invalid)?,
+            geometry::vector(rotation,std::f64::consts::PI).map_err(|_| Answer::Invalid)?),
+    };
+    if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+    if (pose.translation+travel).abs().max_element() as f64 > world.limits.3 { return Err(Answer::Invalid); }
+    let mut contacts = Vec::new();
+    for _ in 0..iterations {
+        if travel == Vector::ZERO && turn == Vector::ZERO { break; }
+        let Some((time,other,normal)) = space.cast(pose,travel,turn,skin as f32)? else {
+            pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(1.0);
+            break;
+        };
+        let radius = shape.compute_local_aabb().mins.abs().max(shape.compute_local_aabb().maxs.abs()).length();
+        let speed_bound = travel.length()+turn.length()*radius;
+        let fraction = if turn == Vector::ZERO { time }
+            else { (time-(skin as f32)/speed_bound).max(0.0) };
+        pose = NonlinearRigidMotion::new(pose,Vector::ZERO,travel,turn).position_at_time(fraction);
+        contacts.push((other,tuple(normal)));
+        travel *= 1.0-fraction;
+        // Rotation stops at contact. Translation may continue along the surface.
+        turn = Vector::ZERO;
+        travel -= normal*travel.dot(normal).min(0.0);
+        // Cover f32 projection and pose-frame roundoff in Parry's approach test.
+        // Subsequent casts still check every collider, including this one.
+        travel += normal*(16.0*f32::EPSILON*travel.length());
+    }
+    // The query never returns an overlapping endpoint, including after a
+    // conservative cast or exhausted sliding iterations.
+    if let Some(other) = space.occupied(pose)? { return Ok(Answer::Occupied(other,space.checks)); }
+    Ok(if contacts.is_empty() { Answer::Clear(position(pose),space.checks) }
+        else { Answer::Clipped(position(pose),contacts,space.checks) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::{Geometry,Primitive};
+    const LIMITS: Limits = (0.002,0.00001,8,128);
+    fn box_at(id: u64, kind: Kind, p: V3, size: V3) -> crate::Body {
+        (id,1,kind,(p,(0.0,0.0,0.0)),Geometry::Solid(Primitive::Box(size.0,size.1,size.2)),1.0)
+    }
+    fn world(extra: Vec<crate::Body>) -> World {
+        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
+        let mut rows = vec![box_at(1,Kind::Controlled,(0.0,1.002,0.0),(0.5,1.0,0.5)),
+            box_at(2,Kind::Fixed,(0.0,-0.5,0.0),(20.0,0.5,20.0))];
+        rows.extend(extra);
+        world.install(rows).unwrap(); world.step().unwrap(); world
+    }
+    fn travel(world: &World, p: V3) -> Answer { evaluate(world,1,1,Query::Travel(p,(0.0,0.0,0.0)),LIMITS) }
+    fn end(answer: Answer) -> V3 {
+        match answer { Answer::Clear((p,_),_) | Answer::Clipped((p,_),_,_) => p,
+            other => panic!("unexpected query answer: {other:?}") }
+    }
+
+    #[test]
+    fn floor_wall_slide_and_corner_do_not_move_native_body() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,10.0)),
+                              box_at(4,Kind::Fixed,(0.0,2.0,3.0),(10.0,3.0,0.1))]);
+        let before = world.sample().unwrap();
+        let p = end(travel(&world,(10.0,0.0,2.0)));
+        assert!(p.0 > 1.39 && p.0 < 1.4,"{p:?}");
+        assert!((p.2-2.0).abs() < 0.001,"sliding: {p:?}");
+        let p = end(travel(&world,(10.0,0.0,10.0)));
+        assert!(p.0 < 1.4 && p.2 < 2.4,"corner: {p:?}");
+        let p = end(travel(&world,(0.0,-20.0,0.0)));
+        assert!(p.1 >= 1.0,"floor: {p:?}");
+        assert_eq!(before,world.sample().unwrap());
+    }
+
+    #[test]
+    fn placement_overlap_and_unavailable_are_explicit() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,1.0,0.0),(0.5,1.0,0.5))]);
+        assert!(matches!(evaluate(&world,1,1,Query::Place(((2.0,1.0,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Occupied(3,_)));
+        assert!(matches!(evaluate(&world,1,1,Query::Place(((5.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Clear(_,_)));
+        assert_eq!(evaluate(&world,1,0,Query::Travel((1.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS),Answer::Unavailable);
+        assert_eq!(evaluate(&world,99,1,Query::Place(((0.0,1.0,0.0),(0.0,0.0,0.0))),LIMITS),Answer::Unavailable);
+        assert_eq!(evaluate(&world,1,1,Query::Travel((10.0,0.0,0.0),(0.0,0.0,0.0)),(0.002,0.00001,8,1)),Answer::Exhausted);
+    }
+
+    #[test]
+    fn installed_move_and_deletion_replace_collision_geometry() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(2.0,1.0,0.0),(0.5,1.0,0.5))]);
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 < 1.0);
+        let mut rows: Vec<_> = world.rows.values().map(|(row,_)| row.clone()).collect();
+        rows[2].1 = 2; rows[2].3.0 = (10.0,1.0,0.0);
+        world.install(rows.clone()).unwrap(); world.step().unwrap();
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 > 4.99);
+        rows.pop(); world.install(rows).unwrap(); world.step().unwrap();
+        assert!(end(travel(&world,(15.0,0.0,0.0))).0 > 14.99);
+    }
+
+    #[test]
+    fn compound_opening_and_rotation_use_all_parts() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(0.0,1.0,4.0),(0.3,0.8,0.3))]);
+        let mut rows: Vec<_> = world.rows.values().map(|(row,_)| row.clone()).collect();
+        rows[0].1 = 2;
+        rows[0].4 = Geometry::Parts(vec![
+            (((-1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
+            (((1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
+        ]);
+        world.install(rows).unwrap(); world.step().unwrap();
+        let p = end(evaluate(&world,1,2,Query::Travel((0.0,0.0,6.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(p.2 > 5.99,"opening was incorrectly filled: {p:?}");
+        let pose = ((0.0,1.002,3.0),(0.0,std::f64::consts::FRAC_PI_2,0.0));
+        assert!(matches!(evaluate(&world,1,2,Query::Place(pose),LIMITS),Answer::Occupied(3,_)));
+        // An offset part's arc collides even when the body origin stays still.
+        let row = world.rows.get_mut(&1).unwrap();
+        world.bodies[row.1].set_position(Pose::translation(0.0,1.002,3.0),true);
+        world.changed=true; world.step().unwrap();
+        assert!(matches!(evaluate(&world,1,2,Query::Travel((0.0,0.0,0.0),(0.0,std::f64::consts::FRAC_PI_2,0.0)),LIMITS),Answer::Clipped(_,_,_)));
+    }
+
+    #[test]
+    fn triangular_slope_blocks_downward_sweep() {
+        let terrain = (3,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(vec![(3.0,0.0,-3.0),(7.0,0.0,-3.0),(5.0,3.0,3.0)],vec![(0,2,1)]),1.0);
+        let mut world = world(vec![terrain]);
+        let body = world.rows[&1].1;
+        world.bodies[body].set_position(Pose::translation(5.0,5.0,0.0),true);
+        world.changed=true;world.step().unwrap();
+        let p = end(travel(&world,(0.0,-4.0,0.0)));
+        assert!(p.1 > 1.01,"slope missed: {p:?}");
+    }
+
+    #[test]
+    fn explicit_surface_opening_remains_passable_with_solid_rim() {
+        let mut world = World::new((32,32,64,100.0,64,128,128),0.016,0.0).unwrap();
+        let floor = (2,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(
+                vec![(-5.0,0.0,-5.0),(5.0,0.0,-5.0),(5.0,0.0,5.0),(-5.0,0.0,5.0),
+                     (-1.0,0.0,-1.0),(1.0,0.0,-1.0),(1.0,0.0,1.0),(-1.0,0.0,1.0)],
+                vec![(0,4,1),(1,4,5),(1,5,2),(2,5,6),
+                     (2,6,3),(3,6,7),(3,7,0),(0,7,4)]),1.0);
+        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor]).unwrap();
+        world.step().unwrap();
+        assert!(matches!(travel(&world,(0.0,-6.0,0.0)),Answer::Clear(_,_)));
+        let moved = apply(&mut world,1,1,Query::Place(((3.0,3.0,0.0),(0.0,0.0,0.0))),LIMITS);
+        assert!(matches!(moved,Answer::Clear(_,_)));
+        world.step().unwrap();
+        let answer = travel(&world,(0.0,-6.0,0.0));
+        assert!(matches!(answer,Answer::Clipped(_,_,_)),"rim missed: {answer:?}");
+        let p = end(answer);
+        assert!(p.1 >= 1.0 && p.1 < 1.01,"rim contact: {p:?}");
+    }
+
+    #[test]
+    fn movement_stops_before_dynamic_objects_without_pushing_them() {
+        let mut world = world(vec![box_at(3,Kind::Dynamic,(2.0,1.002,0.0),(0.5,1.0,0.5))]);
+        let obstacle = *world.bodies[world.rows[&3].1].position();
+        let p = end(apply(&mut world,1,1,Query::Travel((10.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(p.0 > 0.99 && p.0 < 1.0,"{p:?}");
+        world.step().unwrap();
+        assert_eq!(*world.bodies[world.rows[&3].1].position(),obstacle);
+    }
+
+    #[test]
+    fn next_agent_queries_the_previous_agents_new_position() {
+        let mut world = world(vec![box_at(3,Kind::Controlled,(5.0,1.002,0.0),(0.5,1.0,0.5))]);
+        let first = end(apply(&mut world,1,1,Query::Travel((2.5,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        let second = end(apply(&mut world,3,1,Query::Travel((-2.5,0.0,0.0),(0.0,0.0,0.0)),LIMITS));
+        assert!(second.0-first.0 >= 1.0,"{first:?} {second:?}");
+        world.step().unwrap();
+        assert_eq!(world.bodies[world.rows[&1].1].translation().x,first.0 as f32);
+        assert_eq!(world.bodies[world.rows[&3].1].translation().x,second.0 as f32);
+    }
+
+    #[test]
+    fn landing_checks_full_path_occupied_target_and_support() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,2.0))]);
+        let land = |p| Query::Land(p,10.0,2.0,0.7);
+        let initial = world.sample().unwrap();
+        assert!(matches!(apply(&mut world,1,1,land((2.0,2.0,0.0)),LIMITS),Answer::Occupied(3,_)));
+        assert!(matches!(apply(&mut world,1,1,land((4.0,2.0,0.0)),LIMITS),Answer::Blocked(3,_)));
+        assert_eq!(apply(&mut world,1,1,land((0.0,8.0,0.0)),LIMITS),Answer::NoSupport);
+        assert_eq!(initial,world.sample().unwrap());
+        let p = end(apply(&mut world,1,1,land((0.0,2.0,4.0)),LIMITS));
+        assert!(p.1 >= 1.0 && p.1 < 1.003 && p.2 == 4.0,"{p:?}");
+    }
+
+    #[test]
+    fn authored_camera_clearance_is_sensory_and_excludes_its_own_body() {
+        let world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,2.0))]);
+        let before = world.sample().unwrap();
+        let Answer::ViewClearance(distance,_) = evaluate(&world,1,1,Query::View((1.0,0.0,0.0),2.0),LIMITS)
+            else { panic!("no view clearance"); };
+        assert!(distance > 0.897 && distance < 0.901,"{distance}");
+        assert_eq!(evaluate(&world,1,1,Query::View((2.0,0.0,0.0),2.0),LIMITS),Answer::ViewClearance(0.0,2));
+        assert_eq!(before,world.sample().unwrap());
+        assert_eq!(evaluate(&world,1,1,Query::View((0.0,0.0,0.0),2.0),(0.002,0.0,8,1)),Answer::Exhausted);
+    }
+
+    #[test]
+    fn occupied_spawn_freezes_travel_until_explicit_clear_reposition() {
+        let mut world = world(vec![box_at(3,Kind::Fixed,(0.0,1.0,0.0),(0.2,0.2,0.2))]);
+        let before = world.sample().unwrap();
+        assert!(matches!(apply(&mut world,1,1,Query::Travel((5.0,0.0,0.0),(0.0,0.0,0.0)),LIMITS),Answer::Occupied(3,_)));
+        assert_eq!(before,world.sample().unwrap());
+        let corrected = end(apply(&mut world,1,1,Query::Place(((3.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS));
+        assert_eq!(corrected.0,3.0);
+        assert!(end(travel(&world,(1.0,0.0,0.0))).0 > 3.99);
+    }
+
+    #[test]
+    fn declared_triangle_wall_blocks_travel_from_both_sides() {
+        let sheet = (3,1,Kind::Fixed,((0.0,0.0,0.0),(0.0,0.0,0.0)),
+            Geometry::Surface(vec![(2.0,0.0,-5.0),(2.0,4.0,-5.0),(2.0,4.0,5.0),(2.0,0.0,5.0)],
+                vec![(0,1,2),(0,2,3)]),1.0);
+        let mut world = world(vec![sheet]);
+        assert!(end(travel(&world,(5.0,0.0,0.0))).0 < 1.5);
+        assert_eq!(end(apply(&mut world,1,1,Query::Place(((4.0,1.002,0.0),(0.0,0.0,0.0))),LIMITS)).0,4.0);
+        assert!(end(travel(&world,(-6.0,0.0,0.0))).0 > 2.5);
+    }
+    fn annular_surface(walls: bool) -> Geometry {
+        let mut points = Vec::new();
+        for radius in [2200.0,9000.0] {
+            for i in 0..24 {
+                let angle = std::f64::consts::TAU*i as f64/24.0;
+                let x = (radius*(angle.cos()*1000000.0).round()/1000000.0).trunc()/1000.0;
+                let z = (radius*(angle.sin()*1000000.0).round()/1000000.0).trunc()/1000.0;
+                points.push((x,0.0,z));
+            }
+        }
+        let mut faces = Vec::new();
+        for i in 0..24 { faces.extend([(i,24+(i+1)%24,24+i),(i,(i+1)%24,24+(i+1)%24)]); }
+        if walls {
+            points.extend([(3.2,0.0,-5.0),(3.2,4.0,-5.0),(3.2,4.0,5.0),(3.2,0.0,5.0),
+                (-5.0,0.0,3.2),(-5.0,4.0,3.2),(5.0,4.0,3.2),(5.0,0.0,3.2)]);
+            faces.extend([(48,49,50),(48,50,51),(52,53,54),(52,54,55)]);
+        }
+        Geometry::Surface(points,faces)
+    }
+
+    fn surface_world(start: V3, roll: f64, yaw: f64, offset: V3, walls: bool) -> (World,Pose) {
+        let mut world = World::new((16,16,128,1000.0,32,256,256),0.016667,-9.81).unwrap();
+        let frame = geometry::transform((offset,(0.0,0.0,roll)),1000.0).unwrap();
+        let position = frame.transform_point(Vector::new(start.0 as f32,start.1 as f32,start.2 as f32));
+        world.install(vec![
+            (1,1,Kind::Fixed,(offset,(0.0,0.0,roll)),annular_surface(walls),1.0),
+            (2,1,Kind::Controlled,(tuple(position),(0.0,yaw,roll)),Geometry::Solid(Primitive::Capsule(0.5,0.25)),1.0),
+        ]).unwrap();
+        world.step().unwrap();
+        (world,frame)
+    }
+
+    fn surface_distance(world: &World) -> f32 {
+        let collider = |id| &world.colliders[world.bodies[world.rows[&id].1].colliders()[0]];
+        let (agent,surface) = (collider(2),collider(1));
+        query::contact(agent.position(),agent.shape(),surface.position(),surface.shape(),1.0)
+            .unwrap().unwrap().dist
+    }
+
+    #[test]
+    fn capsule_slides_over_surface_in_rotated_frames() {
+        let start = (2.68794584274292,0.7519908547401428,0.36940792202949524);
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(0.0,0.83,(0.0,0.0,0.0)),
+                (-0.37,0.83,(13.4,-7.0,12.5))] {
+            let (mut world,frame) = surface_world(start,roll,yaw,offset,false);
+            let movement = tuple(frame.rotation*Vector::new(0.033334,-0.002725109,0.0));
+            let p = end(apply(&mut world,2,1,Query::Travel(movement,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+            let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
+            assert!(local.x as f64 > start.0+0.03,"roll={roll} yaw={yaw}: {p:?}");
+            assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+        }
+    }
+
+    #[test]
+    fn sliding_keeps_obstacles_in_the_same_surface() {
+        for (roll,yaw,offset) in [(0.0,0.0,(0.0,0.0,0.0)),(-0.37,0.83,(13.4,-7.0,12.5))] {
+            for desired in [Vector::new(1.0,-0.002725109,0.0),Vector::new(1.0,-0.002725109,1.0)] {
+                let (mut world,frame) = surface_world((2.7,0.752,2.7),roll,yaw,offset,true);
+                let answer = apply(&mut world,2,1,Query::Travel(tuple(frame.rotation*desired),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+                let Answer::Clipped((p,_),_,checks) = answer else {panic!("missed obstacle: {answer:?}")};
+                let local = frame.inverse_transform_point(Vector::new(p.0 as f32,p.1 as f32,p.2 as f32));
+                assert!(local.x > 2.94 && local.x < 2.951,"wall: {local:?}");
+                assert!(local.z < 2.951,"corner: {local:?}");
+                assert!(checks < 10,"slide budget consumed by repeated contact: {checks}");
+                assert!(surface_distance(&world) >= 0.0,"surface overlap: {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_capsule_travel_keeps_surface_clearance() {
+        let (mut world,_) = surface_world((0.0,0.752,4.0),0.0,0.83,(0.0,0.0,0.0),false);
+        for i in 0..2048 {
+            let before = std::f64::consts::TAU*i as f64/2048.0;
+            let after = std::f64::consts::TAU*(i+1) as f64/2048.0;
+            let delta = (4.0*(after.sin()-before.sin()),-0.002725109,4.0*(after.cos()-before.cos()));
+            let p = end(apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128)));
+            assert!(surface_distance(&world) >= 0.0,"surface overlap at {i}: {p:?}");
+            world.step().unwrap();
+        }
+        let pose = world.bodies[world.rows[&2].1].translation();
+        assert!((pose-Vector::new(0.0,0.752,4.0)).length() < 0.02,"walk failed: {pose:?}");
+        assert!((pose.y-0.752).abs() <= 0.002,"accumulated height drift: {pose:?}");
+    }
+
+
+    #[test]
+    fn head_on_surface_contact_converges() {
+        let (mut world,_) = surface_world((2.68794584274292,0.7519908547401428,0.36940792202949524),0.0,0.0,(0.0,0.0,0.0),false);
+        let n = Vector::new(2.232_312e-5,0.999_999_94,-3.348_468e-5);
+        let answer = apply(&mut world,2,1,Query::Travel(tuple(-n),(0.0,0.0,0.0)),(0.002,0.0,8,128));
+        let Answer::Clipped(_,_,checks) = answer else {panic!("head-on: {answer:?}")};
+        assert!(checks <= 4,"head-on repeats: {checks}");
+        assert!(surface_distance(&world) >= 0.0);
+    }
+
+}
+
+
+===== native/quod_physics/src/geometry.rs =====
+//! Authored physical geometry. No visual meshes, inferred hulls, or avatar defaults.
+use rapier3d::{math::Pose, prelude::*};
+use rustler::{Atom, NifTaggedEnum, NifUnitEnum};
+use crate::atoms;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Error { InvalidBody, CoordinateAllowance, GeometryAllowance }
+impl From<Error> for Atom {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::InvalidBody => atoms::invalid_body(),
+            Error::CoordinateAllowance => atoms::coordinate_allowance(),
+            Error::GeometryAllowance => atoms::geometry_allowance(),
+        }
+    }
+}
+
+pub type V3 = (f64, f64, f64);
+pub type Transform = (V3, V3);
+
+#[derive(Clone, Copy, Debug, PartialEq, NifUnitEnum)]
+pub enum Kind { Fixed, Dynamic, Controlled }
+
+#[derive(Clone, Debug, PartialEq, NifTaggedEnum)]
+pub enum Primitive {
+    Box(f64, f64, f64),
+    Ball(f64),
+    Capsule(f64, f64), // Half segment length along local Y, then radius.
+    Convex(Vec<V3>),    // Explicitly authored convex hull semantics.
+}
+
+#[derive(Clone, Debug, PartialEq, NifTaggedEnum)]
+pub enum Geometry {
+    Solid(Primitive),
+    Parts(Vec<(Transform, Primitive)>),
+    Surface(Vec<V3>, Vec<(u32, u32, u32)>),
+}
+
+pub fn vector(v: V3, limit: f64) -> Result<Vector, Error> {
+    let a = [v.0, v.1, v.2];
+    if a.iter().any(|x| !x.is_finite() || x.abs() > limit || !(*x as f32).is_finite()) {
+        return Err(Error::CoordinateAllowance);
+    }
+    Ok(Vector::new(v.0 as f32, v.1 as f32, v.2 as f32))
+}
+
+pub fn transform((p, r): Transform, limit: f64) -> Result<Pose, Error> {
+    let p = vector(p, limit)?;
+    let r = vector(r, f32::MAX as f64)?;
+    // Same convention as authored rendering transforms: local X, then Y, then Z.
+    let q = Rotation::from_rotation_z(r.z) * Rotation::from_rotation_y(r.y)
+        * Rotation::from_rotation_x(r.x);
+    Ok(Pose::from_parts(p, q))
+}
+
+pub struct Budget {
+    pub parts: usize,
+    pub vertices: usize,
+    pub triangles: usize,
+    pub coordinate: f64,
+}
+
+fn take(left: &mut usize, count: usize) -> Result<(), Error> {
+    *left = left.checked_sub(count).ok_or(Error::GeometryAllowance)?;
+    Ok(())
+}
+
+impl Primitive {
+    fn build(&self, budget: &mut Budget) -> Result<SharedShape, Error> {
+        take(&mut budget.parts, 1)?;
+        let positive = |x: f64| {
+            if !x.is_finite() || x > budget.coordinate || (x as f32) <= 0.0 {
+                Err(Error::InvalidBody)
+            } else { Ok(x as f32) }
+        };
+        match self {
+            Self::Box(x,y,z) => Ok(SharedShape::cuboid(positive(*x)?,positive(*y)?,positive(*z)?)),
+            Self::Ball(r) => Ok(SharedShape::ball(positive(*r)?)),
+            Self::Capsule(h,r) => Ok(SharedShape::capsule_y(positive(*h)?,positive(*r)?)),
+            Self::Convex(points) => {
+                take(&mut budget.vertices, points.len())?;
+                let points = points.iter().map(|p| vector(*p,budget.coordinate)).collect::<Result<Vec<_>,_>>()?;
+                let hull = SharedShape::convex_hull(&points).ok_or(Error::InvalidBody)?;
+                let volume = hull.mass_properties(1.0).mass();
+                if !volume.is_finite() || volume <= 0.0 { return Err(Error::InvalidBody); }
+                Ok(hull)
+            }
+        }
+    }
+}
+
+impl Geometry {
+    pub fn charge(&self, budget: &mut Budget) -> Result<(), Error> {
+        let mut primitive = |p: &Primitive| {
+            take(&mut budget.parts,1)?;
+            if let Primitive::Convex(points) = p { take(&mut budget.vertices,points.len())?; }
+            Ok(())
+        };
+        match self {
+            Self::Solid(p) => primitive(p),
+            Self::Parts(parts) => { for (_,p) in parts { primitive(p)?; } Ok(()) },
+            Self::Surface(points,faces) => {
+                take(&mut budget.parts,1)?;
+                take(&mut budget.vertices,points.len())?;
+                take(&mut budget.triangles,faces.len())
+            }
+        }
+    }
+
+    pub fn build(&self, kind: Kind, budget: &mut Budget) -> Result<SharedShape, Error> {
+        match self {
+            Self::Solid(p) => p.build(budget),
+            Self::Parts(parts) => {
+                if parts.is_empty() { return Err(Error::InvalidBody); }
+                let mut shapes = Vec::new();
+                for (pose, primitive) in parts {
+                    let pose = transform(*pose,budget.coordinate)?;
+                    let shape = primitive.build(budget)?;
+                    let bounds = shape.compute_aabb(&pose);
+                    if bounds.mins.abs().max_element() as f64 > budget.coordinate
+                        || bounds.maxs.abs().max_element() as f64 > budget.coordinate {
+                        return Err(Error::CoordinateAllowance);
+                    }
+                    shapes.push((pose,shape));
+                }
+                Ok(SharedShape::compound(shapes))
+            }
+            Self::Surface(points, faces) => {
+                if kind != Kind::Fixed || faces.is_empty() { return Err(Error::InvalidBody); }
+                take(&mut budget.parts,1)?;
+                take(&mut budget.vertices,points.len())?;
+                take(&mut budget.triangles,faces.len())?;
+                let points = points.iter().map(|p| vector(*p,budget.coordinate)).collect::<Result<Vec<_>,_>>()?;
+                let mut indices = Vec::new();
+                for &(a,b,c) in faces {
+                    let [Some(pa),Some(pb),Some(pc)] = [points.get(a as usize),points.get(b as usize),points.get(c as usize)] else {
+                        return Err(Error::InvalidBody);
+                    };
+                    let area = (*pb-*pa).cross(*pc-*pa).length_squared();
+                    if !area.is_finite() || area <= 0.0 {
+                        return Err(Error::InvalidBody);
+                    }
+                    indices.push([a,b,c]);
+                }
+                SharedShape::trimesh(points,indices).map_err(|_| Error::InvalidBody)
+            }
+        }
+    }
+
+    pub fn box_half_x(&self) -> Option<f32> {
+        match self { Self::Solid(Primitive::Box(x,_,_)) => Some(*x as f32), _ => None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn budget() -> Budget { Budget { parts: 8, vertices: 32, triangles: 16, coordinate: 100.0 } }
+
+    #[test]
+    fn compound_preserves_an_authored_opening_and_rotation() {
+        let shape = Geometry::Parts(vec![
+            (((-2.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.5,1.0,0.5)),
+            (((2.0,0.0,0.0),(0.0,0.0,std::f64::consts::FRAC_PI_2)),Primitive::Box(1.0,0.25,0.5)),
+        ]);
+        let mut b = budget();
+        let built = shape.build(Kind::Controlled,&mut b).unwrap();
+        assert_eq!(b.parts,6);
+        assert!(!built.contains_point(&Pose::IDENTITY,Vector::ZERO));
+        assert!(built.contains_point(&Pose::IDENTITY,Vector::new(2.0,0.8,0.0)));
+        assert!(!built.contains_point(&Pose::IDENTITY,Vector::new(2.8,0.0,0.0)));
+        let mut repeated = budget();
+        shape.charge(&mut repeated).unwrap();
+        assert_eq!((b.parts,b.vertices,b.triangles),(repeated.parts,repeated.vertices,repeated.triangles));
+    }
+
+    #[test]
+    fn non_cubic_surface_and_explicit_hull_are_distinct() {
+        let vertices = vec![(-2.0,0.0,-2.0),(2.0,0.0,-2.0),(0.0,1.0,2.0)];
+        let surface = Geometry::Surface(vertices.clone(),vec![(0,2,1)]);
+        assert!(surface.build(Kind::Fixed,&mut budget()).is_ok());
+        assert_eq!(surface.build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Solid(Primitive::Convex(vertices)).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        let hull = Geometry::Solid(Primitive::Convex(vec![(0.0,0.0,0.0),(1.0,0.0,0.0),(0.0,1.0,0.0),(0.0,0.0,1.0)]));
+        assert!(hull.build(Kind::Controlled,&mut budget()).is_ok());
+    }
+
+    #[test]
+    fn malformed_geometry_and_resource_exhaustion_fail() {
+        let mut b = budget(); b.parts = 0;
+        assert_eq!(Geometry::Solid(Primitive::Ball(0.5)).build(Kind::Controlled,&mut b).err(),Some(Error::GeometryAllowance));
+        let invalid = Geometry::Surface(vec![(0.0,0.0,0.0)],vec![(0,1,2)]);
+        assert_eq!(invalid.build(Kind::Fixed,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Parts(vec![]).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+        assert_eq!(Geometry::Solid(Primitive::Ball(f64::NAN)).build(Kind::Controlled,&mut budget()).err(),Some(Error::InvalidBody));
+    }
+}
+
+
+===== doc/physics-native.md =====
+# Retained server physics profile
+
+The authority and lifecycle contract is [world.md](world.md). This first adapter
+supports authored solid and surface geometry, baseline poses, uniform gravity,
+and coherent pose/contact snapshots. Vertical revolute cuboid doors add an
+ordinary close action, mechanical obstruction braking and signed blocked/closed
+consequences with an atomic stopped-angle checkpoint. One local client view
+can consume current poses. Governed body-state and collision queries read the
+installed owner. Signed transient controls move ontology-defined rigid agents and push eligible
+free dynamic bodies. Explicit rest checkpoints preserve their recovery poses;
+impact occurrences remain outside this profile. Unsupported joint/checkpoint declarations fail installation visibly;
+there is no silent baseline fallback.
+
+## Installation and policy
+
+Physics bridges are registered in every ontology's common startup base. This
+allocates no simulation and grants no invocation or control rights. Compose
+[quod_physics.pl](../priv/ontologies/quod_physics.pl) with the existing agent
+hosting rules in the world owner. Give the selected actor explicit `can_invoke`
+grants for `physics_store_request/6` and `physics_activate/3` through ordinary
+signing policy. The real-owner server fixture in
+[quod_physics_tests.erl](../test/quod_physics_tests.erl) supplies those grants,
+a ground collider and one falling body; run `rebar3 as test eunit
+--module=quod_physics_tests`.
+
+Deploy the shared startup base through the existing release authority, with
+participating validators and projection consumers on the same implementation.
+Founding manifests remain immutable provenance. World rules, authority custody
+and enablement remain Prolog state, installed through ordinary edits and actions.
+
+`physics_space(World, disabled, Instance)` suppresses both hosting that physics
+agent and allocating its native world. Enabling it selects only the node in the
+actor's committed hosting assignment. Other nodes have no local simulator for
+that assignment. Each space can select a different host.
+Each space uses a dedicated physics actor in this profile; sharing one actor
+between independently enabled spaces is unsupported. Tests cover different
+world-owning ontologies and independently hosted worlds in one ontology.
+Existing per-predicate OCC also means activation
+custody changes in one ontology can conflict across its worlds.
+
+The Prolog selection supplies:
+
+- `physics_run(World, Generation, IncarnationToken)` and
+  `physics_structure(World, Revision)`;
+- `physics_allowances(World, limits(Bodies, Poses, Contacts, CoordinateMm,
+  geometry(Parts, Vertices, Triangles)),
+  StepMicroseconds, GravityMmPerSecondSquared, RequestBudgetMs)`;
+- `physics_body_definition(World, Id, Revision, fixed|dynamic|controlled, Pose,
+  owned(Shape, DensityKgPerM3)|live(EntityRef, AssignmentRevision,
+  DefinitionRevision, Digest))`;
+- `physics_next_body(World, NextUnusedId)` for admission and door allocation.
+
+This allowance schema replaces the earlier four-field `limits` term. Existing
+world policy must explicitly supply geometry allowances before deployment;
+this change does not migrate or wipe ontology history.
+
+## Live definitions and atomic admission
+
+Compose the [space transitions](spaces.md) with
+`space_physical_change(W,S,Change) :- physics_space_change(W,S,Change)`.
+The source entity owns `physics_definition(Entity, Revision,
+geometry(Shape,Density))` and `physics_definition_allowance(Entity,CoordinateMm)`.
+The destination supplies `physics_admission(World,EntityRef,Kind,Pose)` and an
+authored ground `subscribes(SourceNamespace,SourceAnchor)` fact. Derived
+subscription answers are not runtime declarations. Admission requires an
+enabled simulation; merely classifying a space allocates no body.
+
+`space_place/3` commits the exclusive assignment, destination admission,
+source installation delegation, live body binding and structure revision in
+one existing atomic transaction. The source's
+`can_delegate_physics_definition(Entity,Principal,WorldRef,AuthorityRef)`
+controls its exact delegation. It does not grant invocation, disclosure,
+control or hosting. Each participating scope still needs its ordinary entry
+ACL for the exact anchored callback. Callbacks verify the staged counterpart;
+they are not independent public editing entries.
+
+`physics_edit_definition(Entity,ExpectedRevision,geometry(Shape,Density))`
+requires source `can_edit_physics_definition/2` and destination
+`can_refresh_physics_definition(World,Principal,EntityRef)`. It changes the
+source definition and the destination body/structure revisions and checkpoint
+state atomically. This destination permission does not grant arbitrary world
+editing. The binding stores an exact source reference, assignment/definition
+revisions and canonical term digest, never a mutable geometry copy.
+
+`space_withdraw/3` removes the exact body/delegation and retains the assignment
+tombstone. `physics_delete_definition/2` composes that withdrawal and a
+revisioned `none` definition. Unsupported constraints, an existing agent/body
+binding or unresolved original checkpoint custody refuse removal; compose an
+authorized binding release first in the same transaction. Body IDs never
+return to the allocator. An existing world must initialize the allocator
+explicitly above its authored IDs through an authorized edit.
+
+`physics_assign_authority(World,BeforeInstance,AfterInstance)` requires world
+editing permission, an already hosted successor, completed activation custody
+and every source's delegation permission for that successor. It changes the
+world assignment and all live source grants atomically. Host/key assignment
+uses the existing agent lifecycle; replacement starts a new run generation.
+This is not an inter-simulation transfer.
+
+The runtime resolves live definitions over its existing retained verified
+source projections in its bounded resource worker. Source predicate changes
+wake the affected resources independently of reaction delivery. Installation
+checks the exact source follow, projection height/identity and materializer
+generation alongside local body/structure fences and the original deadline.
+Ready subscription notices carry the exact retained reader. Selection and
+installation compare its current follow row and reader lifetime locally;
+they neither block on the shared log owner nor fetch or rebuild source state.
+An established reader's death triggers reconstruction from the current retained
+verified cache. Failure before publishing a replacement parks the source until
+new progress, rather than repeatedly rebuilding the same failed input.
+
+While a source verifies a new delta, its consuming simulation pauses without
+discarding the viewer or extending input expiry. An unrelated delta resumes
+the same controls. A relevant change retires the old view; missing or denied
+geometry keeps its world unavailable, never turns the collider into empty
+space. Independent valid worlds continue. Recovery selects current verified
+state without replaying reactions. Unchanged selections do not rebuild native
+geometry or write/sync storage. Geometry and installation-authorization
+changes reach existing viewers through this same physics owner and its normal
+refresh/installed notices. A viewer needs the world's viewing/control grants,
+not entry grants to every collider source. The signed view separately retains
+its actual visible-world, acting-agent, physics and Prolog authorization reads.
+Hot inputs and authenticated contact matching use installed body/run fences
+without reading source geometry again.
+
+Explicit reusable door recipes produce owned geometry. They are deliberately
+materialized recipes, not the default semantics of admitted live instances.
+In this adapter, a live definition belongs to a different ontology with an
+explicit subscription; geometry authored in the world's own scope uses owned
+body definitions. Repositioning a live body revalidates its source geometry,
+so the editor needs the corresponding source entry grants. An entity admitted
+only to an unsimulated space has no installation delegation; its definition
+can be edited without a simulated receiver consequence.
+
+## Geometry and resource policy
+
+`Pose` is `pose(vector(X,Y,Z), rotation(Rx,Ry,Rz))`, with millimetres and
+milliradians. Rotation applies X, then Y, then Z. `vector(X,Y,Z)` authors an
+identity rotation. Supported solids are `box(HalfX,HalfY,HalfZ)`, `ball(Radius)`,
+`capsule(HalfSegment,Radius)` along local Y, and `convex(Vertices)` with explicit
+convex-hull semantics and positive volume. `parts([part(LocalPose,Solid),...])`
+authors a rigid compound: gaps between parts remain gaps, and parts have their
+own position and orientation. Articulated geometry requires supported joints;
+it is not flattened into a hull or replaced with a capsule.
+
+Fixed bodies additionally support `surface(Vertices,Triangles)`. Vertices are
+`vector/3`; each `triangle(A,B,C)` names zero-based vertex indices. Invalid or
+degenerate triangles fail installation. This is an explicitly authored physical
+surface, independent of rendered meshes, picking bounds and voxel indexing.
+It represents sloped/non-cubic terrain without introducing a grid controller.
+Surface geometry cannot be used as a moving solid body.
+
+Governed body edits share the Prolog `physics_valid_body/6` schema for body
+identity, kind, authored pose, geometry, density and coordinate allowance.
+It accepts every shape above; the supported hinge requires box solids and a
+`vector/3` baseline, with no authored frame or leaf rotation. Integer rotations,
+density, motor scalars and dimensions must fit the adapter's finite binary32 representation;
+this encoding envelope is independent of coordinate and geometry policy.
+Native installation additionally checks numeric representation, convex volume,
+triangle area, compound bounds and supported joint mechanics.
+
+Geometry allowances count all installed parts, convex/surface vertices, and
+surface triangles across the world, including unchanged retained bodies.
+Unchanged geometry consumes its declared allowance without rebuilding native
+shapes. Geometry and body revisions install together. `controlled` selects a
+kinematic body; the governed motion path below applies checked poses without
+movement-induced impulses to dynamic obstacles.
+
+The limits are policy inputs, not Erlang constants. The native numeric envelope
+bounds positions and physical dimensions. Gravity, velocity, density and all
+other numeric values must be finite and representable as Rapier `f32`; density
+is not compared to a distance allowance. IDs and body revisions use unsigned
+64-bit native fields. Positive mass, dimensions and step are representation
+requirements. The ordinary hosted-agent admission policy still owns actor
+population and request capacity. Body/contact limits are not a hard byte or
+wall-clock allocation guarantee: broad/narrow-phase pairs can grow quadratically
+with the admitted body count. Policy authors must budget aggregate worlds too.
+
+## Live Prolog physics queries
+
+`physics_body_state(World, Body, Result)` requires the ordinary `can_invoke/4`
+grant and `can_read_physics_body(World, Principal, Body)`. It returns
+`body_state(Frame, Tick, body(Id,Revision), metres_seconds, Pose, Velocity)`.
+`Frame` is `physics_frame(WorldRef, Authority, HostEpoch, RunGeneration,
+Incarnation, Structure)`; pose rotations use `quaternion(X,Y,Z,W)`.
+The owner copies its retained sample. A stale installed frame, missing body or
+retired run may bind `unavailable`, never an inferred baseline. A missing owner
+or failed owner call is a reasoned failure under the [proof contract](proofs.md),
+distinct from that valid answer. Malformed request or policy values are errors.
+
+`physics_motion_query(World, Body, Query, Result)` additionally uses
+`can_query_physics_motion(World, Principal, Body, Query)` and
+`physics_query_allowances(World, Principal,
+query_allowances(SkinMm, PenetrationToleranceMm, SlideIterations,
+NarrowPhaseTests, TranslationComponentMm, RotationComponentMrad))`.
+Each allowance is ontology policy. Both predicates require a read-only proof;
+they cannot validate staged grants or a durable edit using transient state.
+Unauthorized queries fail. Their Erlang continuations require an opaque handle
+created by the public predicate before evaluating ordinary Prolog policy.
+
+Queries are `place(pose(vector(X,Y,Z),rotation(Rx,Ry,Rz)))`,
+`travel(vector(Dx,Dy,Dz),angular(Ax,Ay,Az))` and
+`landing(vector(X,Y,Z), ReachMm, DropMm, MinUpPermille)`. Placement rotation uses the authored
+Euler convention; travel rotation is an angular displacement vector in world
+coordinates. Distances/angles in inputs are millimetres/milliradians. The native travel
+rotation query accepts at most pi radians per component. This is a single
+bounded rotation sweep, not an unbounded spin command.
+
+The result is `motion_query(Frame, Tick, body(Id,Revision), metres_seconds,
+Answer)`. `Answer` is `clear(Pose,Checks)`,
+`clipped(Pose,Contacts,Checks)`, `occupied(Body,Checks)`,
+`blocked(Body,Checks)`, `no_support`, `unsupported`,
+`unavailable`, `invalid`, or `exhausted`. Contacts name the collider and world
+normal. Translation slides along contact surfaces; rotation stops at contact.
+Slide exhaustion returns the conservative clipped pose; narrow-phase allowance
+exhaustion returns no usable pose. Unsupported shape pairs fail closed.
+
+Queries use the installed broad-phase index and current collider poses, including
+doors; they do not rebuild terrain or move any body. Collider installation must
+finish updating that index before queries become available. Results describe
+that tick only: a clear preview is neither a movement authorization nor a future
+landing guarantee. The command owner checks again at application.
+
+## Played-agent movement
+
+`physics_agent(World, Agent, Revision, Body, Motion)` selects an existing local
+agent instance and its declared rigid body. `physics_viewpoint(World, Agent,
+Name, Body, LocalPose, Tracking)` defines both position and orientation of the
+camera in that body frame. There is no universal capsule or browser eye height.
+The human principal may belong to another ontology and never impersonates the
+controlled agent. A compound body may have arbitrary authored local parts;
+unsupported articulated controllers fail closed.
+
+`physics_control_agent(World, ExpectedEpoch, ExpectedSelection, Selection)` is
+an ordinary transaction. Selection is `none` or `controlled(Agent, Viewpoint)`.
+It requires `can_control_physics_agent/3` plus ordinary invocation admission,
+checks exclusive target ownership, and advances an enduring binding epoch.
+Release retains the epoch tombstone. A revoked holder cannot be silently
+replaced while its durable binding still exists.
+
+The first movement profile is:
+
+```prolog
+motion(free, SpeedMmPerSecond, TurnMradPerSecond, LeaseMs,
+       query_limits(SkinMm, ToleranceMm, SlideIterations, NarrowPhaseTests), Capabilities)
+motion(grounded(MinUpPermille), Speed, Turn, Lease, Limits, Capabilities)
+```
+
+Grounded means world-Y gravity, horizontal commanded travel and support normals
+meeting the authored upward threshold. It is an explicit mechanical profile,
+not an inference from agent shape. Capabilities are unique entries from
+`snap(AngleMrad)`, `teleport(ReachMm, DropMm, MinUpPermille)` and `reposition`.
+Unknown modes/capabilities are refused. Policy supplies speeds, lease and query
+allowances; packet frequency does not multiply continuous travel distance.
+
+The signed `control` mode (wire tag 3; `/api/goals/control`) reuses the existing
+signed ingress and proof engine. Its database is read-only. The root uses the
+existing distributed savepoint, and an external predicate stages at most one
+indivisible transient effect in the immutable proof overlay. Only the first
+surviving answer, after successful scope finalization, releases it through
+`quod_effect` to the existing physics owner. Failure, abandoned branches,
+negation, cut failure, expiry or proof cleanup release nothing. Ordinary read,
+execute and cursor requests cannot stage this effect. This lane has no ledger,
+operation journal, automatic replay or remote control forwarding.
+
+```prolog
+physics_control_input(World, control_frame(PhysicsFrame, Registration),
+                      BindingEpoch, Sequence, Input, queued(Sequence)).
+```
+
+`PhysicsFrame` is the same exact frame used by live queries. Registration is
+created by the current signed view and checked by the physics owner, together
+with installed control configuration, authority, structure, sequence and expiry.
+A refresh/disconnect revokes it and clears voluntary input, including unapplied
+discrete requests. Grounded fall state survives a view disconnect or a reinstall
+of the same control configuration. Changed physical geometry wakes support
+checks even for a settled body. A clipped descent with no downward progress
+settles mechanically; it does not make that contact a valid teleport landing.
+While the physical configuration is unavailable, mechanics pause and old inputs
+do not keep the step timer awake. A new view reads the retained sequence high-water mark,
+including after configuration edits with the same binding; its prior result is
+reported as suspended when the configuration changed. An
+old registration cannot take over with a higher sequence. The browser sends one
+request at a time and suspends commands after an uncertain response, without
+replaying it. Proof success means queued admission; the view supplies the actual
+mechanical outcome.
+
+Inputs are `drive(vector(Vx,Vy,Vz),angular(Wx,Wy,Wz))`, `snap(AngleMrad)`,
+`teleport(vector(X,Y,Z))`, and explicitly permitted
+`reposition(pose(Position,Rotation))`. Drive is the latest desired velocity,
+leased and applied at the server timestep. Translation stops/slides; rotational
+sweeps check all parts and stop at contact. Snap may therefore stop short of its
+requested angle. Teleport keeps orientation, checks the complete straight body
+path, then searches downward for valid support. Occupied destinations, blocked
+paths, unsupported slopes, missing support and exhausted queries leave the pose
+unchanged. Previews never authorize a later landing. A pending discrete command
+cannot be overwritten before its outcome; there is no command accumulation queue.
+
+An occupied authored spawn or collider edit does not trigger hidden
+unbounded depenetration: travel is refused with `occupied`. Numerical
+penetration is admitted only up to the authored query tolerance, including
+contacts with dynamic bodies; it never excludes a class of physical obstacles. Explicit reposition
+checks the complete destination and may repair an occupied start without a
+travel path. Reposition is live motion, not a durable baseline edit. Restart
+restores authored body baselines under a new run/registration, making any
+correction visible. Free dynamic bodies support the rest checkpoints below; played-agent checkpoints
+remain outside this profile. Durable placement changes use the ordinary authored
+edit or request/observation/committed-consequence path, never a live query as
+evidence inside a durable proof.
+
+Relevant committed physical/control changes invalidate a runtime-owned shared
+generation before asynchronous reinstallation. Owners stop accepting/advancing
+old commands immediately on that token, coalesce invalidation notices, and
+notify only installed state. Shapes, indices and the simulation resource remain
+owned by the same retained physics process. No browser mesh or picking result
+becomes collision authority.
+
+### Desktop and tracked viewing
+
+The desktop adapter removes Babylon's translating inputs for a controlled
+physical space in the ordinary view. Keys submit bounded desired travel through the predicate; the camera
+mount follows accepted poses without interpolation through walls. Look remains
+local. Unknown/unavailable worlds freeze commanded travel instead of enabling
+observer flight.
+
+`view_only` supports desktop look. `tracking(view_only, MaxOffsetMm)` additionally
+provides a calibrated XR reference-to-mount mapping. Calibration recentres
+position and heading while preserving tracked pitch and roll. Head motion is view motion;
+it does not change collision shape or body position. For each delivered frame,
+the owner measures a conservative clearance ball around the authored mount
+against the installed world, excluding its own body and using the same query
+allowance. This is sensory clearance, not a new player collider. Each tracked
+eye must stay within that clearance and the authored offset allowance. Otherwise
+an opaque mask asks the human to return; tracking continues behind it. Missing
+clearance, missing mappings, lost tracking and unavailable authority also mask.
+A moved door can reduce clearance at the next authoritative frame; this is not
+a physical barrier against a human moving in their room.
+
+Default XR mesh teleportation is disabled. On the intended Vive mapping, the
+left grip plus touchpad drives smooth travel; a left-pad left/right click requests
+snap turn and a forward click requests a half-range teleport in the controller's
+horizontal pointing direction. The right pad owns the action menu. Menus and
+workspaces suppress locomotion. Components are discovered by WebXR type; missing
+components are not guessed. Teleport placement uses body-origin coordinates and
+physical support, without a visual-floor ray granting permission. The current
+adapter has no landing preview marker. Hardware qualification must separately
+check Vive runtime/browser mappings, masking, comfort and contact feedback.
+
+## Chair pushes and rest checkpoints
+
+A chair is an ordinary `dynamic` body with a stable numeric body identity in its
+anchored world. Its projected mark binds `body_pose(Id, BodyRevision)` to the
+anchored domain subject in `depicts`; neither a mesh name nor a visual occurrence
+is a physics identity. Body identities must not be recycled after deletion.
+`physics_move_body/5` retains the identity and advances its body revision to the
+new world structure revision.
+
+The existing signed `control` request accepts:
+
+```prolog
+physics_control_input(World, control_frame(PhysicsFrame, Registration),
+    BindingEpoch, Sequence, push(body(Id, BodyRevision), vector(X,Y,Z)), Result).
+```
+
+The caller needs an active played-agent binding/view registration, ordinary
+invocation admission, `can_push_physics_body(World, Principal, Id)`, and
+`physics_push_allowances(World, Principal, Id, push_limits(MaxImpulse, MaxSpeed))`.
+Prolog checks eligibility, the exact dynamic-body revision, and nonzero impulse
+magnitude. Hinged bodies are ineligible. Policy supplies maximum impulse in
+milli-newton-seconds and maximum resulting speed in millimetres per second;
+input components use milli-newton-seconds. Eligibility policy may impose domain
+restrictions; the adapter does not infer reach or ownership from a rendered hit.
+The native owner refuses a push whose resulting linear speed exceeds the limit,
+including accumulated velocity from earlier pushes. This bound governs the
+command's application, not later velocity caused by gravity or collisions.
+
+The client helper `pushInput(id, revision, impulse)` in
+[locomotion.js](../client/src/locomotion.js) accepts newton-seconds and preserves
+64-bit IDs. Pass its term to the simulation connection's `command` method.
+The current profile exposes this programmatic action; it does not add a desktop
+or headset grab/push gesture.
+
+The owner rechecks installed policy, world/authority/host/run/incarnation,
+structure, body revision, registration, sequence and expiry at admission and
+application. A committed physical or policy change invalidates old commands
+before asynchronous reinstallation. Each sequence can apply once within its
+binding; a fresh registration reads the retained sequence and a new run discards
+all inputs. `queued(Sequence)` is admission, while the projected control feedback
+reports `pushed`, `refused` or expiry. A definite proof refusal keeps the current
+view available and clears the rejected discrete command; a later command has
+a fresh sequence and signed request. The client keeps one request in flight,
+waits for discrete feedback before sending another input, and suspends commands
+on an uncertain reply. Refresh obtains a fresh authorized view and never
+resubmits the lost push. Physics frames move the existing visual body without
+writing its author baseline; appearance refresh and checkpoint-only installation
+retain the live pose and native resource.
+
+A durable checkpoint is explicitly requested through an ordinary action:
+
+```prolog
+physics_checkpoint_body(World, Id, ExpectedBodyRevision, ExpectedSequence, RequestId).
+```
+
+`RequestId` is 32 bytes and the initial sequence is zero. The world must be
+enabled. The caller needs
+`can_checkpoint_physics_body(World, Id, Principal)` and ordinary invocation
+admission. The world supplies `physics_rest_policy(World, Id,
+recovery(PenetrationToleranceMm, NarrowPhaseChecks))`. The action records
+`physics_rest(World, Id, NextSequence, waiting(rest(NextSequence, RequestId)))`.
+It never accepts a caller-supplied measured pose. Once the native body sleeps,
+the current authority emits a fenced, completed-tick rest observation. Give that
+actor explicit invocation grants for `physics_store_rest_request/4` and
+`physics_finish_rest/1`. Their existing custody lane saves exact signed bytes,
+then commits the finished request and checkpoint together:
+
+```prolog
+physics_checkpoint(World, rest_v1(Id, BodyRevision,
+    source(Authority, HostEpoch, Generation, Incarnation, Structure, Tick),
+    world_mm_quaternion_million,
+    pose(vector(X,Y,Z), quaternion(Qx,Qy,Qz,Qw)), zero_velocity)).
+```
+
+Positions are rounded millimetres and quaternion components are rounded to
+millionths; linear and angular recovery velocities are zero. The authored
+`physics_body/7` remains unchanged. Only the current checkpoint is selected;
+replacement cannot move backward in `(Generation, Tick)`. Each new explicit
+request and renewal of expired, certainly-unsent evidence completes a new
+mechanical step even for a sleeping body. Unknown signed outcomes are resolved using the original bytes, without
+resubmission or a fresh checkpoint request. A saved-but-never-submitted request
+can remain visibly unresolved. A new request cannot bypass active custody.
+
+An authored `physics_move_body/5` transaction advances structure/body revision,
+removes that body's checkpoint and cancels its waiting checkpoint activity
+atomically. It retains old signed custody for outcome resolution until a new
+explicit checkpoint request replaces it. Cancellation and the changed body
+revision fence the old finish permanently, so that distinct request may proceed
+even if the old backend outcome remains unknown; it never resubmits the old
+action or asserts a rejection. If the
+checkpoint commits first, the edit removes it; if the edit commits first, the
+old checkpoint loses ordinary OCC validation. Neither ordering restores the
+pre-edit pose. Editing an unrelated body keeps this chair's checkpoint but
+fences any pending observation against the old world structure.
+
+Request, custody and checkpoint commits each refresh the signed live view and
+suspend voluntary inputs. The retained body pose survives these refreshes.
+
+Owner death, runtime collapse/restart, ontology replay and host restart discard
+unsaved motion and unapplied pushes. The successor must commit a fresh run
+before installing the current compatible rest checkpoint, or the authored
+baseline with zero velocity when no checkpoint exists. Hosted-agent recovery
+selects any replacement host; uncertainty or missing commit quorum leaves the
+world unavailable. Replayed facts do not replay push or checkpoint reactions.
+An unresolved saved checkpoint operation is resolved, never submitted again.
+Frames under the new run expose the recovery reset and reject old commands.
+
+Rest recovery uses zero displacement: it checks all restored bodies against the
+current installed geometry with the policy's bounded narrow-phase allowance
+and penetration tolerance. It cannot move through a newer wall or open a closed
+door to repair overlap. Bad rotation, incompatible revision, unsupported shape
+checks, exhausted allowance or excessive overlap visibly fail installation;
+there is no silent baseline fallback. An authorized body edit invalidates the
+checkpoint and supplies a new baseline as the explicit recovery exit.
+
+## Door actions and effective definitions
+
+`physics_add_door(World, DoorId, FrameId, Source, Position, ExpectedStructure)`
+requires `can_edit_physics(World, Principal)`. `Source` is either
+`local(Name, Version)` or `class_ref(Namespace, GenesisAnchor, Name, Version)`.
+The latter resolves `physics_door_class/3` through the ordinary authorized
+cross-ontology proof. The action materializes the resulting versioned leaf,
+frame and joint in one world transaction. The retained, local-only selector
+never resolves a shared class. Later class edits do not silently change an
+installed instance.
+
+A class contains `door(FrameBox, LeafBox, Density, BaselineAngleMrad,
+motor(Stiffness, Damping, MaximumTorque, ClosedToleranceMrad))`. The supported
+joint rotates a dynamic cuboid around a fixed frame's vertical axis. Its
+collider is the leaf cuboid; frame/leaf collision is disabled. Each leaf has
+one hinge, bounded by the existing body allowance, without a separate fixed
+joint-count ceiling.
+
+`physics_close_door(World, Door, ExpectedSequence, RequestId)` requires
+`can_close_physics_door/3` and a 32-byte request id. It advances an activity
+sequence and commits `closing(close(Sequence, RequestId))`. The retained owner
+starts the selected motor. Native mechanics brake that hinge on non-frame
+contact or arrival within its closed-angle tolerance; other bodies continue.
+Only Prolog interprets the sample as `blocked(OtherBody)` or `closed`.
+
+`physics_move_body/5` edits an unconnected obstacle with expected body and
+structure revisions. Its new position retains authored geometry and orientation,
+including non-box and compound bodies. `physics_move_door/5` edits the whole supported joint
+group, advances its revisions, invalidates its checkpoint and cancels an
+active close. Both require `can_edit_physics/2`. `physics_cancel_door/3`,
+authorized by `can_cancel_physics_door/3`, explicitly ends a pending close
+while retaining its original request for exact outcome resolution.
+
+## Observation and consequence
+
+The runtime authenticates the current simulator PID and incarnation before
+matching `react_on(observed(Sample), Goal)` through the existing Prolog event
+matcher. Private `physics_observation/1` metadata is available only there; an
+ordinary event with the same term conveys no simulator authority. A private
+physics request selects a custodied consequence; a generic observed callback
+without signed-request preparation cannot consume it. The selected
+actor signs a goal containing the entire frozen sample: world/activity,
+authority assignment, generation/token, structure and participating body
+revisions, completed-step tick, quantized angle, one bounded contact partner
+(or clear), and its original validity interval.
+
+The actor's existing custody lane first stores those exact signed bytes and
+signature with `physics_store_door_request/5`, then submits
+`physics_finish_door/2`. Grant both entry actions explicitly to the physics
+actor. Prolog checks authority, sample bounds, revisions, current activity and
+exact signed-request binding. One existing transaction replaces closing with
+the finished result, records the compatible stopped-angle checkpoint, and
+emits `physics_door_finished/4`. No durable proof reads live native physics,
+and sealing has no physics exemption.
+
+The checkpoint is an insertion-only restoration input, separate from the
+joint's structural identity. Selecting its own new checkpoint does not reset
+a retained body. A fresh simulator restores the compatible checkpoint or
+baseline, after committing its new run, without replaying the earlier reaction.
+A finished or cancelled activity does not restart its motor.
+
+Required samples use the runtime's existing bounded owned-event cursor and
+actor queue. Refusal retains the unsent sample; actual queue-capacity release
+wakes it. Expired unsent evidence requires another completed native step and
+a new validity interval, never an extension of old signed bytes. A rejected
+request can be replaced only after the ordinary server proof checks the exact
+original operation's immutable, consensus-applied terminal outcome at or
+before the proof's pinned height. The simulator cannot certify rejection.
+Outcome notifications are scoped to that request and retained across a
+concurrent resolution read.
+
+Pending, unknown and failed resolution leave the hinge held with a visible
+observation status. Recovery resolves the original saved request without
+resubmitting it. A saved-but-never-submitted request may remain pending;
+authorized cancellation is its explicit exit. A certainly unsent policy
+refusal is visible and waits for a relevant selection change. There is no
+readiness polling or retry timer, and absence never means an unobstructed door.
+
+## Owner and recovery
+
+The existing ontology runtime selects `physics_worlds` from its retained
+snapshot. One registered `quod_physics` process per anchored WorldRef owns all
+native mutation. The runtime waits for its DOWN before replacing its slot;
+the registration also prevents overlap when the runtime itself restarts.
+Every native operation verifies the creator PID. The runtime authenticates
+selection, status, result and death messages by current PID/reference.
+
+```mermaid
+sequenceDiagram
+    participant R as Existing runtime
+    participant P as Simulation owner
+    participant A as Hosted actor
+    participant O as Ontology transaction/outcome owners
+    participant N as Native resource
+    R->>P: Committed selection
+    P->>A: Activation through runtime admission
+    A->>O: Store exact signed activation bytes/signature
+    O-->>A: Certified custody commit
+    A->>O: Submit original activation
+    O-->>R: Committed generation and token
+    O-->>P: Correlated activation result via actor/runtime
+    P->>N: Create, install, complete first step
+    P-->>R: Installed status
+```
+
+The activation compares the expected committed generation and exact preceding
+custody record. Its original bytes/signature are committed before submission,
+using the existing transaction path. A successor resolves those exact bytes
+through the existing outcome service. Even if its predecessor's activation
+committed, the successor must activate a fresh generation with its own token.
+It never adopts the dead incarnation's generation. Result-before-selection and
+selection-before-result both wait for matching evidence.
+
+`physics_activation_status(World, OriginalRequest, Status)` derives pending,
+activated or cancelled from committed custody/run facts. It is not a separately
+updated “sent” flag: a crash between send and recording send would still be
+ambiguous. A successor resolves the saved original operation; it does not
+resubmit an uncertain activation or adopt an older incarnation's token.
+
+Pending, unknown, timeout and an unresolved custody-write result leave physics
+visibly unavailable. None means rejection. Capacity waits retain the original
+absolute deadline. Confirmed unsent failure, certified terminal rejection and
+failed resolution reads have distinct statuses. A newer custody or run-generation
+selection that arrived before a failed reply is processed once after that reply. Explicit
+resource reconciliation can re-resolve unavailable activation using the same
+original request, without recreating native state. A certainly unsent attempt may
+start a new request on explicit reconciliation; it does not extend its old
+deadline. An uncertain custody write stays closed while its issued
+generation/token/custody selection is unchanged, including when it still shows
+a predecessor's completed request. `activation_custody_unresolved` means the new
+custody has not been observed: if it never lands, there is no matching request
+to cancel. Explicit lifecycle retirement (for example disabling then enabling
+the space) permits a fresh incarnation. Any late old store still competes on
+its exact prior custody and generation; it cannot overwrite the new request.
+If old custody does land first, recovery resolves it and policy cancellation
+provides the pending-request exit. There is no retry timer.
+
+A stored request might never have been submitted, so an outcome need not ever
+appear. `physics_cancel_activation(World, ExpectedGeneration, ExactRequest)`
+provides the explicit safety exit. The current principal must satisfy
+`can_cancel_physics_activation(World, Principal)` as well as ordinary entry
+and signing policy. No default policy authorizes it. In one transaction it
+requires ground arguments, compares current custody and the still-unactivated generation, removes that
+request's activation permission, and retains its exact bytes/signature in
+`physics_cancelled_request/2`. It does not assert a backend operation outcome.
+
+Cancellation and activation conflict on ordinary OCC dependencies, including an
+activation whose proof already read/staged the old state. If activation commits
+first, cancellation fails. If cancellation commits first, the old request cannot
+later install a world or be restored as current custody. The waiting simulator retires and its replacement
+activates a fresh token/generation. Cancellation never runs automatically due
+to elapsed time, absent outcome or ordinary reconciliation. Policy decides who
+may invoke it, including for a certified terminal failure.
+
+For an active world, unchanged reconciliation sends no installation message, creates no resource,
+and performs no ledger fold or file write/sync. Changed body definitions install
+at a step boundary: unchanged IDs keep their live state, removed IDs retire,
+and changed IDs require increasing revisions and reset to their authored pose
+and zero velocity. The owner completes a step before exposing a coherent frame.
+Changes to engine allowances, timestep or gravity require a new run.
+
+At most one selection is in flight to the simulator; subsequent selections
+coalesce into the runtime's latest desired specification. Frames stay with the
+simulator and do not enter the runtime queue each tick. One timer exists while
+awake, with no elapsed-time catch-up queue. A sleeping world cancels it and does
+no stepping or publishing until a changed physical input wakes it. Explicit
+queries copy the retained frame rather than call Rapier again.
+The timer waits the timestep rounded to milliseconds after the previous call;
+simulation time advances by the fixed timestep per completed integration and
+can lag wall time under load. Installing changed bodies completes an immediate
+step. This profile makes no real-time cadence guarantee.
+
+Frames contain the anchored world/authority/host-epoch/run-generation fence,
+structure revision, incarnation token, completed tick, per-body revisions,
+metre/second units and world coordinate space. The owner snapshot API requires the expected fence/structure. A newer tick
+returns a frame; the same tick returns `unchanged`, including for a sleeping
+world. A stale fence, structure or future tick is unavailable. This snapshot API
+is internal; the client boundary below governs pose delivery. Neither API
+provides a remotely authorized contact-proof interface.
+
+## One client view
+
+The ordinary browser view opens `/api/simulation` with an exact visible
+space reference, representation mode and the dependencies of its signed
+navigation read. Physics is selected at that space's owner. The acting agent
+retains its identity and ordinary local or remote signed ingress route. Only an
+active pose authority must be hosted here. There is still one native viewer;
+a second receives `view_busy`.
+
+The space defines `world_view(Instance, Mode, Marks)`, its ordinary
+`can_invoke/4` policy and a pinned rendering vocabulary. The common wrapper
+requires one complete, valid scene and established `space_instance/2`
+classification. Composed physics policy supplies `physics_space/3`, per-world
+gravity/budgets, viewing and control grants. One derived `physics_enabled/2`
+rule governs native resource selection, authority hosting and live input.
+Classification alone allocates nothing. The canonical signed goal is:
+
+```prolog
+Namespace::(current_ontology_identity(Namespace, Anchor),
+            client_world_view(Instance, Mode, ExpectedDependencies, View)).
+```
+
+`ExpectedDependencies` is a sorted list of `dependency(Namespace, Anchor,
+Height)` from the navigation proof. The wrapper visits these scopes under their
+ordinary ACLs; the endpoint compares every triple with the actual signed proof
+envelope before installation. Public vocabulary ontologies opting into
+`public_source_query/1` expose the identity read; other owners must grant that
+read explicitly. This grants neither private source access nor body control.
+Direct navigation can supply an empty list. Derived navigation must retain its
+complete list and reread navigation after a mismatch.
+
+The endpoint accepts this fixed parsed goal with one named `View` variable.
+It uses one monitored opening worker calling existing signed ingress; socket
+cancellation, death or the original expiry reaps that worker. Another opening
+waits for its death and pending subscription cleanup. No second proof executor
+or alternative admission route is introduced.
+
+The result distinguishes nonphysical, disabled, denied, recovering, unavailable
+and active selections. Every selection retains actual proof dependencies and
+can renew before authorization expiry. A retained controller in a space whose physical
+classification was removed cannot become an observer; authorized unbinding and
+withdrawal remain domain transitions. An active view checks installed state
+separately from its committed selection.
+
+Marks may mix authored transforms and body-driven `mark/7` occurrences using
+`body_pose(Id, Revision)` and anchored `depicts/3`. Occurrence identity and body
+identity remain distinct. The depicted subject may belong to another ontology;
+that reference grants no permission there. Decorative marks need no body.
+Both kinds preserve parent order. `relative(Parent, transform(...))` retains an
+authored local frame; `relative(Parent, body_pose(Id, Revision))` retains the
+parent while expressing the body's world pose in that parent's current frame.
+Decorative children then follow the body, including their authored offsets.
+Only the body pose writer updates a body-driven occurrence. Missing poses hide
+that occurrence and its attached children instead of restoring an authored pose.
+The world pins its ordinary `rendering_vocabulary(Namespace, Anchor)`; the
+signed view proves `well_formed_scene/1` there for the shared scene budget,
+descriptor schema and parent ordering. Physics adds only exact body binding.
+The ordinary modelling vocabulary accepts both body-pose forms in recipes.
+The selected controlled body is also projected when it has no visible mark.
+The endpoint checks the complete body set against the current owner. Numeric
+identities, heights and sequences use decimal strings in JSON, preserving uint64
+values beyond JavaScript's safe integer range.
+
+`open` carries `session_id`, signed `request`, `signature`, `world_namespace`
+and base64url `world_anchor`. `projection` returns the signed-request digest as
+`view`, `height`, `expires_ms`, marks and an explicit `selection`. An active
+selection additionally carries its Prolog control configuration and current frame. Schema 1 frames carry world/authority/run/structure/tick,
+metre positions, XYZW quaternions, this view's random registration, selected
+control's last accepted sequence and operation outcome, and optional sensory
+clearance. Other principals' inputs are not exposed.
+
+An `ack` for the exact view and last tick releases one delivery credit. The
+owner retains one latest frame, not a motion queue. Unchanged sleeping worlds
+send nothing; repeated acknowledgements neither step nor write. Command outcomes
+advance feedback even when the body does not move. This is transport credit,
+not durable acknowledgement. The original signed expiry is enforced by server
+and browser; a lost connection cannot keep an authorized view indefinitely.
+
+The browser signs one replacement read halfway through the view's remaining
+lifetime, unless the view already reaches sign-in expiry. An unchanged ready
+view remains usable while that proof runs, under its original expiry. The
+socket retains exact dependency subscriptions and monitors; equal proof
+dependencies undergo fresh asynchronous local snapshots before replacement.
+The same session, principal, anchored actor, world and goal are required. A
+changed dependency, denial, expiry or failed candidate takes the ordinary
+invalidation path. There is no renewal retry loop or extension of old authority.
+
+The native owner replaces only the same socket's exact previous reference and
+unchanged physical selection. It issues a new random registration and delivery
+reference, retains admitted input sequences and deadlines, and waits for the
+new projection acknowledgement. Old references cannot detach or acknowledge
+the replacement. Browser command sequence and pending discrete-command
+obligations survive renewal; uncertainty still stops control without resubmission.
+An uncertain attachment closes the socket, whose death releases any registration
+installed by a late local call. The socket alone owns the view expiry timer.
+
+Durable changes, owner death, expiry and structural invalidation require a fresh
+signed read. Installation waits use owner notices, not polling. The ordinary
+view rereads navigation when refreshing. One scene update owner installs marks
+and poses, preserving authored parents and camera mounts. Unavailable selection
+pauses commanded travel without enabling observer flight. Observer travel is
+explicitly selected by nonphysical or active unbound views. Old view IDs,
+registrations, physical fences and non-increasing ticks cannot drive the current
+scene. The socket subscribes to every actual proof scope before sampling
+current state. A local scope must still have the same ready engine incarnation,
+anchor and height. Engine registration alone is not readiness. Recovery detaches
+native poses while retaining dependency subscriptions until the exact engine/run
+publishes ready; stale or duplicate notices cannot renew the view. The same
+asynchronous snapshot checks an engine registered after a name follow.
+A foreign scope follows the existing verifier's progress;
+attachment waits for its certified height to equal the pinned read height.
+Higher heights invalidate the view, lower/building states wait under the original
+expiry. Follow notices are acknowledged and follows released with the view.
+Logical denial retains dependencies so a later policy grant can wake the view.
+Each commit in a read dependency conservatively costs a new read/watch; a busy
+ontology can still starve view availability. This does not claim row-level
+invalidation or alter per-predicate OCC.
+
+Replay, runtime queue collapse, actor death, changed assignment and explicit
+disable retire the current simulator. Replay reconstructs desired resources
+without replaying historical reactions. A recoverable native error retires the
+resource and leaves a visible failed selection in its existing owner; unchanged
+reconciliation cannot loop on the poison definition. A changed physical
+specification or an explicit lifecycle restart can start a new incarnation.
+An unexpected simulator crash leaves a failed slot in the runtime until the
+physical inputs/assignment change, explicit cancellation removes custody, or
+the containing lifecycle restarts. Late custody/generation-only changes do not
+clear that slot. It does
+not repeatedly activate the same crashing selection. Normal retirement and an
+explicit process kill still restore through original-operation recovery. Actor
+death is conservatively a lifecycle boundary, including an unrelated actor
+request-worker crash; a simulator never outlives its selected signing executor.
+
+## Native safety audit and port decision
+
+The Quod adapter is independent of ontology semantics. Exact dependencies are
+Rapier 0.36.0 and Rustler 0.36.2, with the complete Cargo lockfile committed;
+Rapier 0.36.0 was verified as the latest stable crate on 2026-10-05 against
+Cargo and the upstream changelog. Rapier's `parallel` and `simd8` features are
+disabled; its normal solver still uses upstream vector math. Enable
+`solver-bounds-checks`: stale solver IDs and empty contact lanes must raise an
+unwind panic before unchecked solver gathers. This does not remove every
+upstream unsafe operation.
+There are no native worker threads, event channels, foreign callbacks or unsafe
+blocks in the adapter. Upstream Rapier/Rustler and their dependencies do contain
+unsafe code. This is a boundary and lifecycle audit, not a formal verification
+of all upstream code. The evidence record includes a dated check of every
+locked package name against a pinned RustSec advisory-database snapshot and
+review of its affected version ranges.
+
+All entry points, including creation, decoding, queries and explicit retirement,
+run on dirty CPU schedulers. The mutex uses `try_lock`, never an ordinary
+scheduler-blocking lock. One step is one fixed Rapier integration; it cannot
+yield halfway through or be safely interrupted. Solver iterations remain
+Rapier's finite defaults. The benchmark includes both separated cuboids and
+a densely overlapping case; body count alone does not predict cost.
+
+The resource owns its entire Rapier graph. No Erlang term, environment or borrowed
+input pointer survives a NIF call. A bounded list decoder checks the body
+allowance before allocating another decoded row. Full validation precedes
+mutation. Sampling allocates at most the actual admitted bodies and configured
+active solver-contact pair output count, with finite checks before returning a
+complete snapshot. These are Rapier contact candidates, not Prolog domain
+consequences. An overflow returns a named failure instead of a partial snapshot. Input,
+retained definitions and returned terms still occupy distinct bounded copies.
+No growing pose history or contact-event channel is retained.
+
+Typed native errors, Rapier non-finite-state quarantine and unwind panics
+discard the world. The required soft-body container stays empty in this profile.
+The improper-list boundary test exercises a real Rustler panic under the adapter's unwind catch,
+then checks that the retired handle cannot be reused and the VM still runs.
+The release uses `panic=unwind`. Allocator abort, process abort, memory corruption,
+segmentation fault, double panic during unwinding and undefined behavior can
+still terminate the entire BEAM. Catching unwinds does not contain those risks.
+
+Explicit retirement frees the graph on dirty CPU. If an owner is killed without
+termination, Rustler's final resource destructor runs wherever BEAM releases the
+last reference; it is not guaranteed a dirty scheduler. The measured owner-death
+case covers this small graph, not a general destructor latency bound. A killed
+process executing a dirty NIF also cannot release that graph before the NIF
+returns.
+
+Keep the recorded in-process choice for this small, policy-admitted cuboid
+profile. The fixture admits 64 bodies/64 poses/256 contact pairs, and measurements
+include four simultaneous 64-body worlds. Do not infer suitability for arbitrary
+untrusted geometry, unconstrained quotas or hard real-time service. If native
+crash isolation is required, or measured scheduler/destructor/memory cost at the
+intended policy limits is unacceptable, replace this adapter's execution boundary
+with the recorded supervised-port fallback before enabling that profile. Keep
+the same authority, activation custody, fences and resource owner; a second
+physics domain engine is unnecessary.
+
+Build/release hooks compile with `--locked` and atomically rename the completed
+library into place, preserving any inode already mapped by a running BEAM.
+Native hot-code upgrade is unsupported; a release restart loads a new library.
+CI/release images install Rust
+1.90.0 and package the resulting library under application `priv/native`.
+Availability is an Erlang read of the retained module-load result. A missing
+or incompatible library leaves the module loadable with availability false, so optional physics does not break embedded node startup. An enabled
+selection reports `native_unavailable` with the retained load error before
+submitting activation.
+Native tests precede the normal sequential Erlang gates. Measured costs and
+retained verification logs belong in the [evidence record](evidence/physics/README.md).
+
+
+===== _build/quod27-floor-occupancy-repro-01/test-source.rs =====
+
+    #[test]
+    fn captured_clear_floor_travel_makes_progress() {
+        let cases = [
+            ((5.128269672393799,0.7517002820968628,1.5401973724365234),(-0.423,-1.954)),
+            ((5.241491794586182,0.751920759677887,2.8427703380584717),(-1.954,0.423)),
+            ((5.593716621398926,0.751710057258606,1.9480516910552979),(0.423,1.954)),
+        ];
+        let mut failures = Vec::new();
+        for (start,(x,z)) in cases {
+            let (mut world,_) = surface_world(start,0.0,0.0,(0.0,0.0,0.0),false);
+            let delta = (x*0.016667,-9.81*0.016667*0.016667,z*0.016667);
+            let before = surface_distance(&world);
+            let answer = apply(&mut world,2,1,Query::Travel(delta,(0.0,0.0,0.0)),(0.002,0.0,8,128));
+            eprintln!("captured start={start:?} delta={delta:?} distance={before:?} answer={answer:?}");
+            match answer {
+                Answer::Clear((p,_),_) | Answer::Clipped((p,_),_,_) => {
+                    if (p.0-start.0).hypot(p.2-start.2) < 0.03 { failures.push(start); }
+                }
+                _ => failures.push(start),
+            }
+        }
+        assert!(failures.is_empty(),"clear floor failed to advance: {failures:?}");
+    }
+
+
+===== _build/quod27-floor-occupancy-repro-01/before.log =====
+   Compiling autocfg v1.5.1
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling libm v0.2.16
+   Compiling num-traits v0.2.19
+   Compiling bytemuck v1.25.2
+   Compiling matrixmultiply v0.3.11
+   Compiling safe_arch v1.2.0
+   Compiling heapless v0.8.0
+   Compiling rawpointer v0.2.1
+   Compiling byteorder v1.5.0
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling wide v1.7.1
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.47
+   Compiling num-rational v0.4.2
+   Compiling glam v0.33.12
+   Compiling hash32 v0.3.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling thiserror v2.0.21
+   Compiling typenum v1.20.1
+   Compiling nalgebra-macros v0.3.0
+   Compiling thiserror-impl v2.0.21
+   Compiling foldhash v0.2.0
+   Compiling log v0.4.34
+   Compiling regex-lite v0.1.9
+   Compiling smallvec v1.16.2
+   Compiling simba v0.10.2
+   Compiling rstar v0.13.0
+   Compiling rustler v0.36.2
+   Compiling ena v0.14.4
+   Compiling hashbrown v0.17.1
+   Compiling profiling-procmacros v1.0.18
+   Compiling num-derive v0.5.1
+   Compiling ordered-float v5.5.0
+   Compiling bitflags v2.13.2
+   Compiling arrayvec v0.7.8
+   Compiling cfg-if v1.0.5
+   Compiling either v1.18.0
+   Compiling downcast-rs v2.0.2
+   Compiling heck v0.5.0
+   Compiling static_assertions v1.1.0
+   Compiling inventory v0.3.24
+   Compiling slab v0.4.12
+   Compiling libloading v0.8.9
+   Compiling rustler_codegen v0.36.2
+   Compiling profiling v1.0.18
+   Compiling nalgebra v0.35.0
+   Compiling glamx v0.3.1
+   Compiling parry3d v0.31.1
+   Compiling rapier3d v0.36.0
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-occupancy-repro-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.21s
+     Running unittests src/lib.rs (_build/quod27-floor-occupancy-repro-01/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+captured start=(5.128269672393799, 0.7517002820968628, 1.5401973724365234) delta=(-0.007050141, -0.002725109001090001, -0.032567318000000005) distance=0.0017026722 answer=Occupied(1, 3)
+captured start=(5.241491794586182, 0.751920759677887, 2.8427703380584717) delta=(-0.032567318000000005, -0.002725109001090001, 0.007050141) distance=0.0019368303 answer=Occupied(1, 3)
+captured start=(5.593716621398926, 0.751710057258606, 1.9480516910552979) delta=(0.007050141, -0.002725109001090001, 0.032567318000000005) distance=0.0017820866 answer=Occupied(1, 3)
+
+thread 'motion::tests::captured_clear_floor_travel_makes_progress' (997) panicked at src/motion.rs:536:9:
+clear floor failed to advance: [(5.128269672393799, 0.7517002820968628, 1.5401973724365234), (5.241491794586182, 0.751920759677887, 2.8427703380584717), (5.593716621398926, 0.751710057258606, 1.9480516910552979)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::captured_clear_floor_travel_makes_progress ... FAILED
+
+failures:
+
+failures:
+    motion::tests::captured_clear_floor_travel_makes_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+
+
+===== _build/quod27-floor-occupancy-trace-01/before.log =====
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-occupancy-trace-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.83s
+     Running unittests src/lib.rs (_build/quod27-floor-occupancy-repro-01/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.1282697, 0.7517003, 1.5401974), padding: 0 } other=1 contact=None
+cast_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.1282697, 0.7517003, 1.5401974), padding: 0 } travel=Vec3(-0.007050141, -0.002725109, -0.03256732) other=1 hit=None
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.1212196, 0.74897516, 1.5076301), padding: 0 } other=1 contact=Some(Contact { point1: Vec3(5.1211925, -0.0010248423, 1.5076922), point2: Vec3(5.1211925, 0.0, 1.5076922), normal1: Vec3(0.0, -1.0, 0.0), normal2: Vec3(0.0, 1.0, 0.0), dist: -0.0010248423, subshape1: 0, subshape2: 2 })
+captured start=(5.128269672393799, 0.7517002820968628, 1.5401973724365234) delta=(-0.007050141, -0.002725109001090001, -0.032567318000000005) distance=0.0017026722 answer=Occupied(1, 3)
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.241492, 0.75192076, 2.8427703), padding: 0 } other=1 contact=None
+cast_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.241492, 0.75192076, 2.8427703), padding: 0 } travel=Vec3(-0.03256732, -0.002725109, 0.007050141) other=1 hit=None
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.2089243, 0.74919564, 2.8498204), padding: 0 } other=1 contact=Some(Contact { point1: Vec3(5.2089343, -0.0008043647, 2.8498015), point2: Vec3(5.208935, 0.0, 2.8498013), normal1: Vec3(0.0, -1.0, 0.0), normal2: Vec3(0.0, 1.0, 0.0), dist: -0.0008043647, subshape1: 0, subshape2: 3 })
+captured start=(5.241491794586182, 0.751920759677887, 2.8427703380584717) delta=(-0.032567318000000005, -0.002725109001090001, 0.007050141) distance=0.0019368303 answer=Occupied(1, 3)
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.5937166, 0.75171006, 1.9480517), padding: 0 } other=1 contact=None
+cast_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.5937166, 0.75171006, 1.9480517), padding: 0 } travel=Vec3(0.007050141, -0.002725109, 0.03256732) other=1 hit=None
+occupied_check pose=Pose3 { rotation: Quat(0.0, 0.0, 0.0, 1.0), translation: Vec3(5.6007667, 0.74898493, 1.980619), padding: 0 } other=1 contact=Some(Contact { point1: Vec3(5.600766, -0.0010150671, 1.9806238), point2: Vec3(5.6007667, 0.0, 1.9806237), normal1: Vec3(0.0, -1.0, 0.0), normal2: Vec3(0.0, 1.0, 0.0), dist: -0.0010150671, subshape1: 0, subshape2: 2 })
+captured start=(5.593716621398926, 0.751710057258606, 1.9480516910552979) delta=(0.007050141, -0.002725109001090001, 0.032567318000000005) distance=0.0017820866 answer=Occupied(1, 3)
+
+thread 'motion::tests::captured_clear_floor_travel_makes_progress' (228) panicked at src/motion.rs:538:9:
+clear floor failed to advance: [(5.128269672393799, 0.7517002820968628, 1.5401973724365234), (5.241491794586182, 0.751920759677887, 2.8427703380584717), (5.593716621398926, 0.751710057258606, 1.9480516910552979)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::captured_clear_floor_travel_makes_progress ... FAILED
+
+failures:
+
+failures:
+    motion::tests::captured_clear_floor_travel_makes_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+
+
+===== _build/quod27-floor-occupancy-query-01/before.log =====
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/_build/quod27-floor-occupancy-query-01/crate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.64s
+     Running unittests src/lib.rs (_build/quod27-floor-occupancy-repro-01/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 1 test
+probe start=(5.128269672393799, 0.7517002820968628, 1.5401973724365234) contact_skin=Ok(Some(Contact { point1: Vec3(5.128327, 0.0017026663, 1.5399704), point2: Vec3(5.1283274, 0.0, 1.5399704), normal1: Vec3(0.00014002612, -1.0, 7.001306e-5), normal2: Vec3(-0.00014002612, 1.0, -7.001306e-5), dist: 0.0017026722, subshape1: 0, subshape2: 2 }))
+probe target=0 stop=false hit=Ok(Some(ShapeCastHit { time_of_impact: 0.47400504, witness1: Vec3(-0.00036001205, -0.7499915, -0.00036644936), witness2: Vec3(5.124575, 0.0, 1.5244272), normal1: Vec3(0.00016310117, -1.0, -8.1550585e-5), normal2: Vec3(-0.00016310117, 1.0, 8.1550585e-5), status: Converged, subshape1: 0, subshape2: 2 }))
+probe target=0 stop=true hit=Ok(Some(ShapeCastHit { time_of_impact: 0.47400504, witness1: Vec3(-0.00036001205, -0.7499915, -0.00036644936), witness2: Vec3(5.124575, 0.0, 1.5244272), normal1: Vec3(0.00016310117, -1.0, -8.1550585e-5), normal2: Vec3(-0.00016310117, 1.0, 8.1550585e-5), status: Converged, subshape1: 0, subshape2: 2 }))
+probe target=0.002 stop=false hit=Ok(None)
+probe target=0.002 stop=true hit=Ok(None)
+captured start=(5.128269672393799, 0.7517002820968628, 1.5401973724365234) delta=(-0.007050141, -0.002725109001090001, -0.032567318000000005) distance=0.0017026722 answer=Occupied(1, 3)
+probe start=(5.241491794586182, 0.751920759677887, 2.8427703380584717) contact_skin=Ok(Some(Contact { point1: Vec3(5.24125, 0.0019368529, 2.8433878), point2: Vec3(5.24125, 0.0, 2.8433878), normal1: Vec3(-0.0001230973, -1.0, -6.154865e-5), normal2: Vec3(0.0001230973, 1.0, 6.154865e-5), dist: 0.0019368303, subshape1: 0, subshape2: 3 }))
+probe target=0 stop=false hit=Ok(Some(ShapeCastHit { time_of_impact: 0.6141884, witness1: Vec3(0.0007123947, -0.74971914, -0.008793116), witness2: Vec3(5.222244, 0.0, 2.8382976), normal1: Vec3(0.00039291492, -0.99999964, -0.00060246955), normal2: Vec3(-0.00039291492, 0.99999964, 0.00060246955), status: Converged, subshape1: 0, subshape2: 3 }))
+probe target=0 stop=true hit=Ok(Some(ShapeCastHit { time_of_impact: 0.6141884, witness1: Vec3(0.0007123947, -0.74971914, -0.008793116), witness2: Vec3(5.222244, 0.0, 2.8382976), normal1: Vec3(0.00039291492, -0.99999964, -0.00060246955), normal2: Vec3(-0.00039291492, 0.99999964, 0.00060246955), status: Converged, subshape1: 0, subshape2: 3 }))
+probe target=0.002 stop=false hit=Ok(None)
+probe target=0.002 stop=true hit=Ok(None)
+captured start=(5.241491794586182, 0.751920759677887, 2.8427703380584717) delta=(-0.032567318000000005, -0.002725109001090001, 0.007050141) distance=0.0019368303 answer=Occupied(1, 3)
+probe start=(5.593716621398926, 0.751710057258606, 1.9480516910552979) contact_skin=Ok(Some(Contact { point1: Vec3(5.5929003, 0.0017820597, 1.9519836), point2: Vec3(5.5929, 0.0, 1.9519836), normal1: Vec3(-6.6893095e-5, -1.0, -1.6723274e-5), normal2: Vec3(6.6893095e-5, 1.0, 1.6723274e-5), dist: 0.0017820866, subshape1: 0, subshape2: 2 }))
+probe target=0 stop=false hit=Ok(Some(ShapeCastHit { time_of_impact: 0.5897779, witness1: Vec3(-0.0028595924, -0.7497746, 0.0040888786), witness2: Vec3(5.5950093, 0.0, 1.9713218), normal1: Vec3(-5.3992582e-5, -1.0, 0.00020922125), normal2: Vec3(5.3992582e-5, 1.0, -0.00020922125), status: Converged, subshape1: 0, subshape2: 2 }))
+probe target=0 stop=true hit=Ok(Some(ShapeCastHit { time_of_impact: 0.5897779, witness1: Vec3(-0.0028595924, -0.7497746, 0.0040888786), witness2: Vec3(5.5950093, 0.0, 1.9713218), normal1: Vec3(-5.3992582e-5, -1.0, 0.00020922125), normal2: Vec3(5.3992582e-5, 1.0, -0.00020922125), status: Converged, subshape1: 0, subshape2: 2 }))
+probe target=0.002 stop=false hit=Ok(None)
+probe target=0.002 stop=true hit=Ok(None)
+captured start=(5.593716621398926, 0.751710057258606, 1.9480516910552979) delta=(0.007050141, -0.002725109001090001, 0.032567318000000005) distance=0.0017820866 answer=Occupied(1, 3)
+
+thread 'motion::tests::captured_clear_floor_travel_makes_progress' (228) panicked at src/motion.rs:543:9:
+clear floor failed to advance: [(5.128269672393799, 0.7517002820968628, 1.5401973724365234), (5.241491794586182, 0.751920759677887, 2.8427703380584717), (5.593716621398926, 0.751710057258606, 1.9480516910552979)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test motion::tests::captured_clear_floor_travel_makes_progress ... FAILED
+
+failures:
+
+failures:
+    motion::tests::captured_clear_floor_travel_makes_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+
+
+===== locked dependency shape_cast_support_map_support_map.rs =====
+use crate::math::{Pose, Real, Vector};
+use crate::query::details;
+use crate::query::details::ShapeCastOptions;
+use crate::query::gjk::{self, VoronoiSimplex};
+use crate::query::{ShapeCastHit, ShapeCastStatus};
+use crate::shape::{RoundShapeRef, SupportMap};
+use num::Zero;
+
+/// Time of impacts between two support-mapped shapes under translational movement.
+pub fn cast_shapes_support_map_support_map<G1, G2>(
+    pos12: &Pose,
+    vel12: Vector,
+    g1: &G1,
+    g2: &G2,
+    options: ShapeCastOptions,
+) -> Option<ShapeCastHit>
+where
+    G1: ?Sized + SupportMap,
+    G2: ?Sized + SupportMap,
+{
+    let gjk_result = if options.target_distance > 0.0 {
+        let round_g1 = RoundShapeRef {
+            inner_shape: g1,
+            border_radius: options.target_distance,
+        };
+        gjk::directional_distance(pos12, &round_g1, g2, vel12, &mut VoronoiSimplex::new())
+    } else {
+        gjk::directional_distance(pos12, g1, g2, vel12, &mut VoronoiSimplex::new())
+    };
+
+    gjk_result.and_then(|(time_of_impact, normal1, witness1, witness2)| {
+        if time_of_impact > options.max_time_of_impact {
+            None
+        } else if (options.compute_impact_geometry_on_penetration || !options.stop_at_penetration)
+            && time_of_impact < 1.0e-4
+        {
+            // The GJK-derived normal becomes unreliable for very small TOIs — typically
+            // when the cast starts at (or very close to) the `target_distance` boundary
+            // with a direction nearly tangent to the contact. Fall back on the contact
+            // query, which gives a robust closest-point normal and lets us detect the
+            // case where the cast direction is actually moving away from the contact.
+            let contact = details::contact_support_map_support_map(pos12, g1, g2, Real::MAX)?;
+            let normal_vel = contact.normal1.dot(vel12);
+
+            if !options.stop_at_penetration && normal_vel >= 0.0 {
+                None
+            } else {
+                Some(ShapeCastHit {
+                    time_of_impact,
+                    normal1: contact.normal1,
+                    normal2: contact.normal2,
+                    witness1: contact.point1,
+                    witness2: contact.point2,
+                    // A cast starting exactly touching, neither penetrating nor within
+                    // the target distance, converged like ball-ball does.
+                    status: if contact.dist < options.target_distance {
+                        ShapeCastStatus::PenetratingOrWithinTargetDist
+                    } else {
+                        ShapeCastStatus::Converged
+                    },
+                    subshape1: 0,
+                    subshape2: 0,
+                })
+            }
+        } else {
+            Some(ShapeCastHit {
+                time_of_impact,
+                normal1,
+                normal2: pos12.rotation.inverse() * -normal1,
+                witness1: witness1 - normal1 * options.target_distance,
+                witness2: pos12.inverse_transform_point(witness2),
+                status: if time_of_impact.is_zero() {
+                    // A zero TOI means either a real penetration (or a start within the
+                    // target distance) or a mere touching contact; only the former is
+                    // `PenetratingOrWithinTargetDist`, as for ball-ball.
+                    match details::contact_support_map_support_map(pos12, g1, g2, Real::MAX) {
+                        Some(contact) if contact.dist >= options.target_distance => {
+                            ShapeCastStatus::Converged
+                        }
+                        _ => ShapeCastStatus::PenetratingOrWithinTargetDist,
+                    }
+                } else {
+                    ShapeCastStatus::Converged
+                },
+                subshape1: 0,
+                subshape2: 0,
+            })
+        }
+    })
+}

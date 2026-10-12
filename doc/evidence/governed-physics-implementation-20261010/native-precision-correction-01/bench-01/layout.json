@@ -1,0 +1,32 @@
+[
+  {
+    "label": "binary32",
+    "version": "0.36.0",
+    "artifacts": [
+      "rapier3d-09cb1dab302175ae",
+      "rapier3d-4d29931d5bdf9c8a",
+      "rapier3d-d3cd7ebf04e84d5f"
+    ],
+    "vertex": 12,
+    "triangle_indices": 12,
+    "triangle_value": 36,
+    "aabb": 24,
+    "bvh_node": 32,
+    "rigid_body": 464,
+    "collider": 240
+  },
+  {
+    "label": "binary64",
+    "version": "0.36.0",
+    "artifacts": [
+      "rapier3d_f64-845706a25d3b6abc"
+    ],
+    "vertex": 24,
+    "triangle_indices": 12,
+    "triangle_value": 72,
+    "aabb": 48,
+    "bvh_node": 64,
+    "rigid_body": 768,
+    "collider": 288
+  }
+]

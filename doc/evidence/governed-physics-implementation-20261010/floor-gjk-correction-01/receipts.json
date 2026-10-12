@@ -1,0 +1,220 @@
+[
+  {
+    "campaign": "floor-occupancy-gjk-trace-03",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-occupancy-gjk-trace-03/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "captured_clear_floor_travel_makes_progress",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-11T23:59:04.559801+00:00",
+    "finished": "2026-10-11T23:59:20.647689+00:00",
+    "elapsed_seconds": 16.087890111026354,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-contact-boundary-01",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-contact-boundary-01/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "review_skin_boundary_and_land_sweep",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-11T23:59:38.662789+00:00",
+    "finished": "2026-10-11T23:59:42.628469+00:00",
+    "elapsed_seconds": 3.965677937027067,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-contact-withdrawn-01",
+    "record": "STOP.json",
+    "at": "2026-10-12T00:00:22.999364+00:00",
+    "reason": "Boundary regression found 8 travel failures including 2 occupied-floor refusals, and 152 resting-path landing refusals. Contact-precheck candidate withdrawn. GJK trace confirms last_chance=true/ltoi=0 uses a non-support projection point in the separating-halfspace miss for each captured failing triangle.",
+    "deployed": false,
+    "review": "Opus plan NO-GO independently substantiated",
+    "full_gate_campaign": "263-02 remains a frozen historical candidate; not release clearance"
+  },
+  {
+    "campaign": "floor-gjk-candidate-01",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-gjk-candidate-01/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:01:20.284665+00:00",
+    "finished": "2026-10-12T00:01:38.766067+00:00",
+    "elapsed_seconds": 18.48140275501646,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-boundary-baseline-01",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-boundary-baseline-01/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "review_skin_boundary_and_land_sweep",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:04:07.563707+00:00",
+    "finished": "2026-10-12T00:04:13.054419+00:00",
+    "elapsed_seconds": 5.4907106689643115,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-distance-probe-01",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-distance-probe-01/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "review_separated_surface_distance",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:06:53.533464+00:00",
+    "finished": "2026-10-12T00:07:14.645199+00:00",
+    "elapsed_seconds": 21.111729557043873,
+    "child_exit": 0,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-precision-probe-01",
+    "record": "STOP.json",
+    "exit": 101,
+    "operation": "cargo generate-lockfile --offline",
+    "reason": "rapier3d-f64 missing from local index; no build or tests ran",
+    "at": "2026-10-12T00:05:51.542759+00:00"
+  },
+  {
+    "campaign": "floor-precision-probe-02",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-precision-probe-02/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:06:49.267467+00:00",
+    "finished": "2026-10-12T00:07:15.682496+00:00",
+    "elapsed_seconds": 26.415027968003415,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-precision-probe-02",
+    "record": "resolve-exit.json",
+    "child_exit": 0,
+    "finished": "2026-10-12T00:05:58.184834+00:00"
+  },
+  {
+    "campaign": "floor-gjk-candidate-02",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-gjk-candidate-02/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:15:12.567753+00:00",
+    "finished": "2026-10-12T00:15:29.224642+00:00",
+    "elapsed_seconds": 16.656890593934804,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-gjk-candidate-03",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-gjk-candidate-03/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:18:18.537332+00:00",
+    "finished": "2026-10-12T00:18:35.986412+00:00",
+    "elapsed_seconds": 17.449084096006118,
+    "child_exit": 0,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-gjk-candidate-04",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-gjk-candidate-04/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:19:09.581785+00:00",
+    "finished": "2026-10-12T00:19:27.443660+00:00",
+    "elapsed_seconds": 17.86187477502972,
+    "child_exit": 0,
+    "inputs_unchanged": true
+  },
+  {
+    "campaign": "floor-gjk-negative-control-01",
+    "record": "before-exit.json",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "/home/yan/src/quod/_build/quod27-floor-gjk-negative-control-01/crate/Cargo.toml",
+      "--locked",
+      "--offline",
+      "target_distance_cast_finds_captured_triangle",
+      "--",
+      "--nocapture"
+    ],
+    "started": "2026-10-12T00:22:28.187608+00:00",
+    "finished": "2026-10-12T00:22:47.593022+00:00",
+    "elapsed_seconds": 19.405417302972637,
+    "child_exit": 101,
+    "inputs_unchanged": true
+  }
+]

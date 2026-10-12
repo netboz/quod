@@ -1,0 +1,6 @@
+{
+  "failure": "The standalone Erlang runner omitted the compiled test-helper directory; six tests failed undef before any fixture could start.",
+  "correction": "Add gate04 tree _build/test/lib/quod/test to code path before the two override beams.",
+  "production_changes": false,
+  "superseded_by": "quod27-lifecycle-sync-02"
+}

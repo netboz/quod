@@ -1,0 +1,20 @@
+{
+  "base_commit": "66d43855f63798902bf6ec3913b324b5b3977cdb",
+  "version": "0.7.263",
+  "purpose": "candidate release 263; implementation frozen with proposed separate version label",
+  "label_files": [
+    "rebar.config",
+    "src/quod.app.src"
+  ],
+  "frozen_at": "2026-10-11T23:43:50.797858+00:00",
+  "owned_changes": [
+    "native/quod_physics/src/motion.rs",
+    "client/src/controlled-navigation.js",
+    "doc/physics-native.md"
+  ],
+  "excluded_user_changes": [
+    "doc/README.md",
+    "untracked sibling native-client/planning files"
+  ],
+  "tree": "/home/yan/src/quod/_build/quod27-release-263/gates-02/tree"
+}

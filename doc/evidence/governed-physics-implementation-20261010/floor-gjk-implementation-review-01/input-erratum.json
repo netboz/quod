@@ -1,0 +1,7 @@
+{
+  "field": "RustSec locked package count in scope.md and frozen review-request.txt",
+  "stated": 64,
+  "actual": 69,
+  "evidence": "_build/quod27-native-dependency-audit-01/rustsec-matches.json",
+  "effect": "All 69 package names were actually scanned; 12 name matches all satisfy patched ranges. Frozen review input remains unchanged."
+}

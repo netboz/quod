@@ -1,0 +1,298 @@
+quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+├── rapier3d-f64 feature "dim3"
+│   └── rapier3d-f64 v0.36.0
+│       ├── approx v0.5.1
+│       │   └── num-traits v0.2.19
+│       │       └── libm feature "default"
+│       │           ├── libm v0.2.16
+│       │           └── libm feature "arch"
+│       │               └── libm v0.2.16
+│       │       [build-dependencies]
+│       │       └── autocfg feature "default"
+│       │           └── autocfg v1.5.1
+│       ├── arrayvec v0.7.8
+│       ├── glamx v0.3.1
+│       │   ├── approx v0.5.1 (*)
+│       │   ├── glam v0.33.12
+│       │   │   ├── approx v0.5.1 (*)
+│       │   │   └── libm v0.2.16
+│       │   ├── simba v0.10.2
+│       │   │   ├── approx v0.5.1 (*)
+│       │   │   ├── num-complex v0.4.6
+│       │   │   │   └── num-traits feature "i128"
+│       │   │   │       └── num-traits v0.2.19 (*)
+│       │   │   ├── num-traits v0.2.19 (*)
+│       │   │   └── wide v1.7.1
+│       │   │       ├── bytemuck feature "default"
+│       │   │       │   └── bytemuck v1.25.2
+│       │   │       ├── safe_arch feature "bytemuck"
+│       │   │       │   └── safe_arch v1.2.0
+│       │   │       │       └── bytemuck feature "default" (*)
+│       │   │       └── safe_arch feature "default"
+│       │   │           └── safe_arch v1.2.0 (*)
+│       │   ├── num-traits feature "libm"
+│       │   │   └── num-traits v0.2.19 (*)
+│       │   └── nalgebra feature "convert-glam033"
+│       │       ├── nalgebra v0.35.0
+│       │       │   ├── approx v0.5.1 (*)
+│       │       │   ├── num-complex v0.4.6 (*)
+│       │       │   ├── num-rational v0.4.2
+│       │       │   │   ├── num-traits feature "i128" (*)
+│       │       │   │   └── num-integer feature "i128"
+│       │       │   │       └── num-integer v0.1.47
+│       │       │   │           └── num-traits feature "i128" (*)
+│       │       │   ├── num-traits v0.2.19 (*)
+│       │       │   ├── simba v0.10.2 (*)
+│       │       │   ├── glam feature "f64"
+│       │       │   │   └── glam v0.33.12 (*)
+│       │       │   ├── glam feature "i32"
+│       │       │   │   └── glam v0.33.12 (*)
+│       │       │   ├── glam feature "u32"
+│       │       │   │   └── glam v0.33.12 (*)
+│       │       │   ├── matrixmultiply feature "default"
+│       │       │   │   ├── matrixmultiply v0.3.11
+│       │       │   │   │   └── rawpointer feature "default"
+│       │       │   │   │       └── rawpointer v0.2.1
+│       │       │   │   │   [build-dependencies]
+│       │       │   │   │   └── autocfg feature "default" (*)
+│       │       │   │   ├── matrixmultiply feature "avx512"
+│       │       │   │   │   └── matrixmultiply v0.3.11 (*)
+│       │       │   │   └── matrixmultiply feature "std"
+│       │       │   │       └── matrixmultiply v0.3.11 (*)
+│       │       │   ├── nalgebra-macros feature "default"
+│       │       │   │   └── nalgebra-macros v0.3.0 (proc-macro)
+│       │       │   │       ├── proc-macro2 feature "default"
+│       │       │   │       │   ├── proc-macro2 v1.0.107
+│       │       │   │       │   │   └── unicode-ident feature "default"
+│       │       │   │       │   │       └── unicode-ident v1.0.26
+│       │       │   │       │   └── proc-macro2 feature "proc-macro"
+│       │       │   │       │       └── proc-macro2 v1.0.107 (*)
+│       │       │   │       ├── quote feature "default"
+│       │       │   │       │   ├── quote v1.0.47
+│       │       │   │       │   │   └── proc-macro2 v1.0.107 (*)
+│       │       │   │       │   └── quote feature "proc-macro"
+│       │       │   │       │       ├── quote v1.0.47 (*)
+│       │       │   │       │       └── proc-macro2 feature "proc-macro" (*)
+│       │       │   │       ├── syn feature "default"
+│       │       │   │       │   ├── syn v2.0.119
+│       │       │   │       │   │   ├── proc-macro2 v1.0.107 (*)
+│       │       │   │       │   │   ├── quote v1.0.47 (*)
+│       │       │   │       │   │   └── unicode-ident feature "default" (*)
+│       │       │   │       │   ├── syn feature "clone-impls"
+│       │       │   │       │   │   └── syn v2.0.119 (*)
+│       │       │   │       │   ├── syn feature "derive"
+│       │       │   │       │   │   └── syn v2.0.119 (*)
+│       │       │   │       │   ├── syn feature "parsing"
+│       │       │   │       │   │   └── syn v2.0.119 (*)
+│       │       │   │       │   ├── syn feature "printing"
+│       │       │   │       │   │   └── syn v2.0.119 (*)
+│       │       │   │       │   └── syn feature "proc-macro"
+│       │       │   │       │       ├── syn v2.0.119 (*)
+│       │       │   │       │       ├── proc-macro2 feature "proc-macro" (*)
+│       │       │   │       │       └── quote feature "proc-macro" (*)
+│       │       │   │       └── syn feature "full"
+│       │       │   │           └── syn v2.0.119 (*)
+│       │       │   └── typenum feature "default"
+│       │       │       └── typenum v1.20.1
+│       │       └── nalgebra feature "glam033"
+│       │           └── nalgebra v0.35.0 (*)
+│       ├── num-traits v0.2.19 (*)
+│       ├── simba v0.10.2 (*)
+│       ├── thiserror v2.0.21
+│       │   └── thiserror-impl feature "default"
+│       │       └── thiserror-impl v2.0.21 (proc-macro)
+│       │           ├── proc-macro2 feature "default" (*)
+│       │           ├── quote feature "default" (*)
+│       │           └── syn feature "default"
+│       │               ├── syn v3.0.6
+│       │               │   ├── proc-macro2 v1.0.107 (*)
+│       │               │   ├── quote v1.0.47 (*)
+│       │               │   └── unicode-ident feature "default" (*)
+│       │               ├── syn feature "clone-impls"
+│       │               │   └── syn v3.0.6 (*)
+│       │               ├── syn feature "derive"
+│       │               │   └── syn v3.0.6 (*)
+│       │               ├── syn feature "parsing"
+│       │               │   └── syn v3.0.6 (*)
+│       │               ├── syn feature "printing"
+│       │               │   └── syn v3.0.6 (*)
+│       │               └── syn feature "proc-macro"
+│       │                   ├── syn v3.0.6 (*)
+│       │                   ├── proc-macro2 feature "proc-macro" (*)
+│       │                   └── quote feature "proc-macro" (*)
+│       ├── bitflags feature "default"
+│       │   └── bitflags v2.13.2
+│       ├── glamx feature "nalgebra"
+│       │   └── glamx v0.3.1 (*)
+│       ├── nalgebra feature "macros"
+│       │   ├── nalgebra v0.35.0 (*)
+│       │   └── nalgebra feature "nalgebra-macros"
+│       │       └── nalgebra v0.35.0 (*)
+│       ├── log feature "default"
+│       │   └── log v0.4.34
+│       ├── parry3d-f64 feature "required-features"
+│       │   ├── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64)
+│       │   │   ├── approx v0.5.1 (*)
+│       │   │   ├── arrayvec v0.7.8
+│       │   │   ├── either v1.18.0
+│       │   │   ├── ena v0.14.4
+│       │   │   │   └── log feature "default" (*)
+│       │   │   ├── foldhash v0.2.0
+│       │   │   ├── num-traits v0.2.19 (*)
+│       │   │   ├── ordered-float v5.5.0
+│       │   │   │   └── num-traits v0.2.19 (*)
+│       │   │   ├── thiserror v2.0.21 (*)
+│       │   │   ├── bitflags feature "default" (*)
+│       │   │   ├── glamx feature "approx"
+│       │   │   │   ├── glamx v0.3.1 (*)
+│       │   │   │   └── glam feature "approx"
+│       │   │   │       ├── glam v0.33.12 (*)
+│       │   │   │       └── glam feature "approx-05"
+│       │   │   │           └── glam v0.33.12 (*)
+│       │   │   ├── glamx feature "f64"
+│       │   │   │   ├── glamx v0.3.1 (*)
+│       │   │   │   └── glam feature "f64" (*)
+│       │   │   ├── glamx feature "i64"
+│       │   │   │   ├── glamx v0.3.1 (*)
+│       │   │   │   └── glam feature "i64"
+│       │   │   │       └── glam v0.33.12 (*)
+│       │   │   ├── glamx feature "nostd-libm"
+│       │   │   │   ├── glamx v0.3.1 (*)
+│       │   │   │   ├── glam feature "nostd-libm"
+│       │   │   │   │   └── glam v0.33.12 (*)
+│       │   │   │   └── simba feature "libm"
+│       │   │   │       ├── simba v0.10.2 (*)
+│       │   │   │       └── num-traits feature "libm" (*)
+│       │   │   ├── simba feature "wide"
+│       │   │   │   └── simba v0.10.2 (*)
+│       │   │   ├── log feature "default" (*)
+│       │   │   ├── downcast-rs feature "sync"
+│       │   │   │   └── downcast-rs v2.0.2
+│       │   │   ├── hashbrown feature "default-hasher"
+│       │   │   │   └── hashbrown v0.17.1
+│       │   │   │       └── foldhash v0.2.0
+│       │   │   ├── num-derive feature "default"
+│       │   │   │   └── num-derive v0.5.1 (proc-macro)
+│       │   │   │       ├── proc-macro2 feature "default" (*)
+│       │   │   │       ├── quote feature "default" (*)
+│       │   │   │       └── syn feature "default" (*)
+│       │   │   ├── rstar feature "default"
+│       │   │   │   └── rstar v0.13.0
+│       │   │   │       ├── heapless v0.8.0
+│       │   │   │       │   ├── stable_deref_trait v1.2.1
+│       │   │   │       │   └── hash32 feature "default"
+│       │   │   │       │       └── hash32 v0.3.1
+│       │   │   │       │           └── byteorder v1.5.0
+│       │   │   │       ├── num-traits feature "libm" (*)
+│       │   │   │       └── smallvec feature "default"
+│       │   │   │           └── smallvec v1.16.2
+│       │   │   ├── smallvec feature "default" (*)
+│       │   │   └── slab feature "default"
+│       │   │       ├── slab v0.4.12
+│       │   │       └── slab feature "std"
+│       │   │           └── slab v0.4.12
+│       │   ├── parry3d-f64 feature "dim3"
+│       │   │   └── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│       │   └── parry3d-f64 feature "f64"
+│       │       └── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│       ├── profiling feature "default"
+│       │   ├── profiling v1.0.18
+│       │   │   └── profiling-procmacros feature "default"
+│       │   │       └── profiling-procmacros v1.0.18 (proc-macro)
+│       │   │           ├── quote v1.0.47 (*)
+│       │   │           ├── syn feature "default" (*)
+│       │   │           └── syn feature "full" (*)
+│       │   └── profiling feature "procmacros"
+│       │       ├── profiling v1.0.18 (*)
+│       │       └── profiling feature "profiling-procmacros"
+│       │           └── profiling v1.0.18 (*)
+│       └── static_assertions feature "default"
+│           └── static_assertions v1.1.0
+├── rapier3d-f64 feature "f64"
+│   └── rapier3d-f64 v0.36.0 (*)
+├── rapier3d-f64 feature "solver-bounds-checks"
+│   └── rapier3d-f64 v0.36.0 (*)
+├── rapier3d-f64 feature "std"
+│   ├── rapier3d-f64 v0.36.0 (*)
+│   ├── rapier3d-f64 feature "alloc"
+│   │   ├── rapier3d-f64 v0.36.0 (*)
+│   │   ├── nalgebra feature "alloc"
+│   │   │   └── nalgebra v0.35.0 (*)
+│   │   └── parry3d-f64 feature "alloc"
+│   │       ├── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│   │       └── parry3d-f64 feature "hashbrown"
+│   │           └── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│   ├── approx feature "std"
+│   │   └── approx v0.5.1 (*)
+│   ├── num-traits feature "std"
+│   │   └── num-traits v0.2.19 (*)
+│   ├── nalgebra feature "std"
+│   │   ├── nalgebra v0.35.0 (*)
+│   │   ├── approx feature "std" (*)
+│   │   ├── num-traits feature "std" (*)
+│   │   ├── glam feature "std"
+│   │   │   └── glam v0.33.12 (*)
+│   │   ├── nalgebra feature "matrixmultiply"
+│   │   │   └── nalgebra v0.35.0 (*)
+│   │   ├── num-complex feature "std"
+│   │   │   ├── num-complex v0.4.6 (*)
+│   │   │   └── num-traits feature "std" (*)
+│   │   ├── num-rational feature "std"
+│   │   │   ├── num-rational v0.4.2 (*)
+│   │   │   ├── num-traits feature "std" (*)
+│   │   │   └── num-integer feature "std"
+│   │   │       ├── num-integer v0.1.47 (*)
+│   │   │       └── num-traits feature "std" (*)
+│   │   └── simba feature "std"
+│   │       ├── simba v0.10.2 (*)
+│   │       ├── simba feature "wide" (*)
+│   │       └── wide feature "std"
+│   │           └── wide v1.7.1 (*)
+│   ├── simba feature "std" (*)
+│   ├── parry3d-f64 feature "std"
+│   │   ├── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│   │   ├── arrayvec feature "std"
+│   │   │   └── arrayvec v0.7.8
+│   │   ├── glamx feature "std"
+│   │   │   ├── glamx v0.3.1 (*)
+│   │   │   ├── approx feature "std" (*)
+│   │   │   ├── glam feature "std" (*)
+│   │   │   └── simba feature "std" (*)
+│   │   ├── simba feature "std" (*)
+│   │   ├── parry3d-f64 feature "ena"
+│   │   │   └── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│   │   ├── parry3d-f64 feature "slab"
+│   │   │   └── parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64) (*)
+│   │   └── thiserror feature "std"
+│   │       └── thiserror v2.0.21 (*)
+│   └── thiserror feature "std" (*)
+└── rustler feature "default"
+    ├── rustler v0.36.2
+    │   ├── inventory feature "default"
+    │   │   └── inventory v0.3.24
+    │   ├── libloading feature "default"
+    │   │   └── libloading v0.8.9
+    │   │       └── cfg-if feature "default"
+    │   │           └── cfg-if v1.0.5
+    │   └── rustler_codegen feature "default"
+    │       └── rustler_codegen v0.36.2 (proc-macro)
+    │           ├── proc-macro2 feature "default" (*)
+    │           ├── quote feature "default" (*)
+    │           ├── syn feature "default" (*)
+    │           ├── syn feature "extra-traits"
+    │           │   └── syn v2.0.119 (*)
+    │           ├── syn feature "full" (*)
+    │           ├── inventory feature "default" (*)
+    │           └── heck feature "default"
+    │               └── heck v0.5.0
+    │   [build-dependencies]
+    │   └── regex-lite feature "default"
+    │       ├── regex-lite v0.1.9
+    │       ├── regex-lite feature "std"
+    │       │   └── regex-lite v0.1.9
+    │       └── regex-lite feature "string"
+    │           └── regex-lite v0.1.9
+    └── rustler feature "nif_version_2_15"
+        ├── rustler v0.36.2 (*)
+        └── rustler feature "nif_version_2_14"
+            └── rustler v0.36.2 (*)

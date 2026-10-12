@@ -1,0 +1,6 @@
+{
+  "release_clearance": false,
+  "reason": "The frozen contact-precheck candidate passed this established suite but was rejected by the additional reviewed boundary/landing tests. Its production changes are withdrawn.",
+  "deployed": false,
+  "root_production_changed_since_freeze": true
+}

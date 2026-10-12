@@ -1,0 +1,1 @@
+{"elapsed_seconds": 80.73106346896384, "animation_frames": 4839, "network_events": {"simulation_frame": 4385, "projection": 6}, "control_results": {"ok": 454, "fail": 1}, "longest_stationary_ms": 434.0, "acceptance": "not passed"}

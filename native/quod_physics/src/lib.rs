@@ -50,8 +50,8 @@ struct World {
     rows: BTreeMap<u64, (Body, RigidBodyHandle)>,
     hinges: BTreeMap<u64, InstalledHinge>,
     limits: Limits,
-    dt: f32,
-    gravity: f32,
+    dt: f64,
+    gravity: f64,
     changed: bool,
     query_ready: bool,
 }
@@ -65,14 +65,14 @@ impl rustler::Resource for WorldResource {}
 
 impl World {
     fn new(limits: Limits, dt: f64, gravity: f64) -> Result<Self, Atom> {
-        if !limits.3.is_finite() || limits.3 <= 0.0 || limits.3 > f32::MAX as f64 {
+        if !limits.3.is_finite() || limits.3 <= 0.0 {
             return Err(atoms::invalid_allowance());
         }
         // These are representation/algorithm requirements, not population budgets.
-        if !dt.is_finite() || dt <= 0.0 || !(dt as f32).is_finite() || (dt as f32) == 0.0 {
+        if !dt.is_finite() || dt <= 0.0 || !dt.recip().is_finite() {
             return Err(atoms::invalid_step());
         }
-        if !gravity.is_finite() || !(gravity as f32).is_finite() {
+        if !gravity.is_finite() {
             return Err(atoms::invalid_gravity());
         }
         Ok(Self {
@@ -89,8 +89,8 @@ impl World {
             rows: BTreeMap::new(),
             hinges: BTreeMap::new(),
             limits,
-            dt: dt as f32,
-            gravity: gravity as f32,
+            dt,
+            gravity,
             changed: false,
             query_ready: false,
         })
@@ -103,8 +103,8 @@ impl World {
         let mut seen = BTreeSet::new();
         let mut prepared = Vec::new();
         for row @ (id, revision, kind, pose, shape, density) in &definitions {
-            if !seen.insert(*id) || *revision == 0 || (*density as f32) <= 0.0
-                || !(*density as f32).is_finite() { return Err(atoms::invalid_body()); }
+            if !seen.insert(*id) || *revision == 0 || *density <= 0.0
+                || !density.is_finite() { return Err(atoms::invalid_body()); }
             if let Some((old, _)) = self.rows.get(id) {
                 if old == row { shape.charge(&mut budget)?; continue; }
                 if old.1 >= *revision { return Err(atoms::stale_revision()); }
@@ -112,7 +112,7 @@ impl World {
             let pose = geometry::transform(*pose,self.limits.3)?;
             let shape = shape.build(*kind,&mut budget)?;
             if *kind != Kind::Fixed {
-                let mass = shape.mass_properties(*density as f32).mass();
+                let mass = shape.mass_properties(*density).mass();
                 if !mass.is_finite() || mass <= 0.0 { return Err(atoms::invalid_body()); }
             }
             prepared.push((row.clone(),pose,shape));
@@ -130,7 +130,7 @@ impl World {
             };
             let body = self.bodies.insert(builder.pose(pose));
             self.colliders.insert_with_parent(ColliderBuilder::new(shape)
-                .density(row.5 as f32).user_data(id as u128),body,&mut self.bodies);
+                .density(row.5).user_data(id as u128),body,&mut self.bodies);
             self.rows.insert(id,(row,body));
         }
         self.changed |= changes != 0;
@@ -151,7 +151,7 @@ impl World {
                 return Err(atoms::invalid_checkpoint());
             }
             let position = geometry::vector(*p,self.limits.3).map_err(Atom::from)?;
-            let rotation = Rotation::from_xyzw(q.0 as f32,q.1 as f32,q.2 as f32,q.3 as f32);
+            let rotation = Rotation::from_xyzw(q.0,q.1,q.2,q.3);
             if !rotation.is_finite() || (rotation.length_squared()-1.0).abs() > 0.000004 {
                 return Err(atoms::invalid_checkpoint());
             }
@@ -174,7 +174,7 @@ impl World {
                 };
                 let contact = rapier3d::parry::query::contact(body.position(),collider.shape(),
                     &other_pose,other.shape(),0.0).map_err(|_| atoms::invalid_checkpoint())?;
-                if contact.is_some_and(|c| c.dist < -(*tolerance as f32)) {
+                if contact.is_some_and(|c| c.dist < -*tolerance) {
                     return Err(atoms::invalid_checkpoint());
                 }
             }
@@ -187,23 +187,23 @@ impl World {
         let b = &self.bodies[*handle];
         if row.1 != rev || row.2 != Kind::Dynamic || !b.is_sleeping() { return None; }
         let p = b.translation(); let q = b.rotation();
-        Some((((p.x as f64*1000.0).round() as i64,(p.y as f64*1000.0).round() as i64,
-               (p.z as f64*1000.0).round() as i64),
-              ((q.x as f64*1e6).round() as i64,(q.y as f64*1e6).round() as i64,
-               (q.z as f64*1e6).round() as i64,(q.w as f64*1e6).round() as i64)))
+        Some((((p.x*1000.0).round() as i64,(p.y*1000.0).round() as i64,
+               (p.z*1000.0).round() as i64),
+              ((q.x*1e6).round() as i64,(q.y*1e6).round() as i64,
+               (q.z*1e6).round() as i64,(q.w*1e6).round() as i64)))
     }
 
     fn push_body(&mut self, id:u64, rev:u64, impulse:geometry::V3, max_speed:f64) -> bool {
         let Some((row, handle)) = self.rows.get(&id) else { return false; };
         if row.1 != rev || row.2 != Kind::Dynamic
             || self.hinges.values().any(|h| h.row.0 == id || h.row.2 == id)
-            || !max_speed.is_finite() || max_speed <= 0.0 || !(max_speed as f32).is_finite() { return false; }
-        let Ok(impulse) = geometry::vector(impulse,f32::MAX as f64) else { return false; };
+            || !max_speed.is_finite() || max_speed <= 0.0 { return false; }
+        let Ok(impulse) = geometry::vector(impulse,f64::MAX) else { return false; };
         let b = &mut self.bodies[*handle];
         let velocity = b.linvel() + impulse * b.mass().recip();
         // Policy bounds the resulting speed, so rapid signed packets cannot
         // accumulate an unbounded velocity. A refused push changes nothing.
-        if !velocity.is_finite() || velocity.length() as f64 > max_speed { return false; }
+        if !velocity.is_finite() || velocity.length() > max_speed { return false; }
         b.apply_impulse(impulse,true);
         self.changed = true;
         true
@@ -234,13 +234,13 @@ impl World {
                 || *rev != frame_row.1
                 || [baseline, restore, stiffness, damping, force, tolerance]
                     .iter()
-                    .any(|v| !v.is_finite() || !(**v as f32).is_finite())
+                    .any(|v| !v.is_finite())
                 || baseline.abs() >= std::f64::consts::PI
                 || restore.abs() >= std::f64::consts::PI
-                || (*stiffness as f32) <= 0.0
-                || (*damping as f32) <= 0.0
-                || (*force as f32) <= 0.0
-                || (*tolerance as f32) <= 0.0
+                || *stiffness <= 0.0
+                || *damping <= 0.0
+                || *force <= 0.0
+                || *tolerance <= 0.0
                 || *tolerance >= baseline.abs()
             {
                 return Err(atoms::invalid_hinge());
@@ -280,9 +280,9 @@ impl World {
             let (leaf_row, leaf) = &self.rows[&id];
             let leaf = *leaf;
             let frame = self.rows[&frame_id].1;
-            let pivot = Vector::new(x as f32, y as f32, z as f32);
+            let pivot = Vector::new(x, y, z);
             let offset = Vector::new(leaf_row.4.box_half_x().ok_or_else(atoms::invalid_hinge)?, 0.0, 0.0);
-            let rotation = rapier3d::math::rotation_from_angle(Vector::Y * restore as f32);
+            let rotation = rapier3d::math::rotation_from_angle(Vector::Y * restore);
             let position = self.bodies[frame].translation() + pivot + rotation * offset;
             self.bodies[leaf].set_translation(position, true);
             self.bodies[leaf].set_rotation(rotation, true);
@@ -292,7 +292,7 @@ impl World {
                 .local_anchor1(pivot)
                 .local_anchor2(-offset)
                 .contacts_enabled(false)
-                .limits([restore as f32, restore as f32]);
+                .limits([restore, restore]);
             let handle = self.impulse.insert(frame, leaf, joint, true);
             self.hinges.insert(
                 id,
@@ -311,7 +311,7 @@ impl World {
         Ok(changes)
     }
 
-    fn hinge_angle(&self, h: &InstalledHinge) -> Result<f32, Atom> {
+    fn hinge_angle(&self, h: &InstalledHinge) -> Result<f64, Atom> {
         let joint = self
             .impulse
             .get(h.handle)
@@ -337,17 +337,17 @@ impl World {
             .get_mut(h.handle, true)
             .ok_or_else(atoms::invalid_hinge)?;
         if drive {
-            let limit = h.row.4.abs() as f32;
+            let limit = h.row.4.abs();
             joint.data.set_limits(JointAxis::AngX, [-limit, limit]);
             joint.data.set_motor_position(
                 JointAxis::AngX,
                 0.0,
-                h.row.5 .0 as f32,
-                h.row.5 .1 as f32,
+                h.row.5 .0,
+                h.row.5 .1,
             );
             joint
                 .data
-                .set_motor_max_force(JointAxis::AngX, h.row.5 .2 as f32);
+                .set_motor_max_force(JointAxis::AngX, h.row.5 .2);
         } else {
             joint.data.set_limits(JointAxis::AngX, [angle, angle]);
             joint.data.set_motor_max_force(JointAxis::AngX, 0.0);
@@ -364,7 +364,7 @@ impl World {
     fn brake_hinges(&mut self) -> Result<(), Atom> {
         let mut stopped = BTreeSet::new();
         for (id, h) in &self.hinges {
-            if h.driving && self.hinge_angle(h)?.abs() <= h.row.5 .3 as f32 {
+            if h.driving && self.hinge_angle(h)?.abs() <= h.row.5 .3 {
                 stopped.insert(*id);
             }
         }
@@ -395,7 +395,7 @@ impl World {
             .map(|(id, h)| {
                 Ok((
                     *id,
-                    (self.hinge_angle(h)? as f64 * 1000.0).round() as i64,
+                    (self.hinge_angle(h)? * 1000.0).round() as i64,
                     h.driving,
                 ))
             })
@@ -471,14 +471,14 @@ impl World {
             if !p.is_finite() || !v.is_finite() || !q.is_finite() {
                 return Err(atoms::non_finite_state());
             }
-            if p.to_array().iter().any(|x| x.abs() as f64 > self.limits.3) {
+            if p.to_array().iter().any(|x| x.abs() > self.limits.3) {
                 return Err(atoms::coordinate_allowance());
             }
             poses.push((
                 *id,
-                (p.x as f64, p.y as f64, p.z as f64),
-                (q.x as f64, q.y as f64, q.z as f64, q.w as f64),
-                (v.x as f64, v.y as f64, v.z as f64),
+                (p.x, p.y, p.z),
+                (q.x, q.y, q.z, q.w),
+                (v.x, v.y, v.z),
             ));
         }
         let mut contacts = Vec::new();

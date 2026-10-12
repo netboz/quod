@@ -63,7 +63,6 @@ export function createControlledNavigation(scene, camera, canvas, {
     }
     camera.keysUp = []; camera.keysDown = []; camera.keysLeft = []; camera.keysRight = []
     camera.cameraDirection.setAll(0); camera.inertia = 0
-    // A view renewal pauses input but does not recenter a human's headset.
     // Only a changed run, binding, body or authored mount resets calibration.
     if (value === null) { reset(); return }
     const run = value.physicalFrame

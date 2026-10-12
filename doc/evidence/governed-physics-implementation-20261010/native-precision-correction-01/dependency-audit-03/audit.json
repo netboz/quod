@@ -1,0 +1,182 @@
+{
+  "archive_sha256": "ffb9e04261f1783d8f66f36767b2b73132a63c9b30b12a5ed47e1faa240f7591",
+  "vendor_files": 350,
+  "changed_files": [
+    "src/query/gjk/gjk.rs"
+  ],
+  "patch_exit": 0,
+  "packages": 69,
+  "binary32_packages_absent": true,
+  "solver_bounds_checks": true,
+  "database_commit": "7eebec69c352c7191b1f13eb95dd510eeca5d1de",
+  "method": "Package-name match against pinned RustSec archive; each matching stable version satisfies a complete standalone >= patched range (other syntax not interpreted).",
+  "advisories": [
+    {
+      "id": "RUSTSEC-2024-0402",
+      "package": "hashbrown",
+      "locked": "0.16.1",
+      "patched": [
+        ">= 0.15.1"
+      ],
+      "satisfies": [
+        ">= 0.15.1"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2024-0402",
+      "package": "hashbrown",
+      "locked": "0.17.1",
+      "patched": [
+        ">= 0.15.1"
+      ],
+      "satisfies": [
+        ">= 0.15.1"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2020-0145",
+      "package": "heapless",
+      "locked": "0.8.0",
+      "patched": [
+        ">= 0.6.1"
+      ],
+      "satisfies": [
+        ">= 0.6.1"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2023-0057",
+      "package": "inventory",
+      "locked": "0.3.24",
+      "patched": [
+        ">= 0.2.0"
+      ],
+      "satisfies": [
+        ">= 0.2.0"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2023-0058",
+      "package": "inventory",
+      "locked": "0.3.24",
+      "patched": [
+        ">= 0.2.0"
+      ],
+      "satisfies": [
+        ">= 0.2.0"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2021-0070",
+      "package": "nalgebra",
+      "locked": "0.35.0",
+      "patched": [
+        ">= 0.27.1"
+      ],
+      "satisfies": [
+        ">= 0.27.1"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2020-0082",
+      "package": "ordered-float",
+      "locked": "5.5.0",
+      "patched": [
+        "^1.1.1",
+        ">= 2.0.1"
+      ],
+      "satisfies": [
+        ">= 2.0.1"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2025-0047",
+      "package": "slab",
+      "locked": "0.4.12",
+      "patched": [
+        ">= 0.4.11"
+      ],
+      "satisfies": [
+        ">= 0.4.11"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2018-0003",
+      "package": "smallvec",
+      "locked": "1.16.2",
+      "patched": [
+        ">= 0.6.3",
+        "^0.3.4",
+        "^0.4.5",
+        "^0.5.1"
+      ],
+      "satisfies": [
+        ">= 0.6.3"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2018-0018",
+      "package": "smallvec",
+      "locked": "1.16.2",
+      "patched": [
+        ">= 0.6.13"
+      ],
+      "satisfies": [
+        ">= 0.6.13"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2019-0009",
+      "package": "smallvec",
+      "locked": "1.16.2",
+      "patched": [
+        ">= 0.6.10"
+      ],
+      "satisfies": [
+        ">= 0.6.10"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2019-0012",
+      "package": "smallvec",
+      "locked": "1.16.2",
+      "patched": [
+        ">= 0.6.10"
+      ],
+      "satisfies": [
+        ">= 0.6.10"
+      ],
+      "withdrawn": ""
+    },
+    {
+      "id": "RUSTSEC-2021-0003",
+      "package": "smallvec",
+      "locked": "1.16.2",
+      "patched": [
+        ">= 0.6.14, < 1.0.0",
+        ">= 1.6.1"
+      ],
+      "satisfies": [
+        ">= 1.6.1"
+      ],
+      "withdrawn": ""
+    }
+  ],
+  "lock_sha256": "105404af2dfe79b989119542ddd843a6d47fd97db2401368a499794602fe12bb",
+  "distinct_names": 64,
+  "vendor_integrity_source": "../quod27-native-precision-audit-01",
+  "patch_sha256": "57cb288b13f079a489b46ba322b70cc91e5c23066e75d5542e68d9a76ffd71d9",
+  "patched_gjk_sha256": "0a73c9381a0b75e1eb8429099e3768100fc4eabaf67545acf41bf0c75f190465",
+  "comment_correction_only": true
+}

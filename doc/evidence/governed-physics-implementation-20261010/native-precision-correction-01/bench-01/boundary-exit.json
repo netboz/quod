@@ -1,0 +1,17 @@
+{
+  "exit": 0,
+  "command": [
+    "erl",
+    "+S",
+    "2:2",
+    "+SDcpu",
+    "2",
+    "+SDio",
+    "2",
+    "-noshell",
+    "-pa",
+    "/home/yan/src/quod/_build/quod27-native-precision-bench-01/binary64/lib/quod/ebin",
+    "-eval",
+    "ok=eunit:test([{quod_physics_tests,native_boundary_retires_on_unwind_test},{quod_physics_tests,native_nonfinite_quarantine_retires_world_test}],[verbose]), halt()."
+  ]
+}

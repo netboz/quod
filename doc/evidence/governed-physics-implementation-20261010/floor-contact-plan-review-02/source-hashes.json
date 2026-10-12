@@ -1,0 +1,11 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "native/quod_physics/src/motion.rs": "437de079d293608049eb2f4621d4294dec68cca6dc0f29e72781d597f13333ec",
+  "native/quod_physics/src/geometry.rs": "3ab51b0ec968a653ccf0748c89dfc80e05b5d765a790887546853e741fa792ae",
+  "doc/physics-native.md": "e4da25e7d6778a620ac9c306f750414fcb2379d131956e3af4530f6f5dee77ac",
+  "_build/quod27-floor-occupancy-repro-01/test-source.rs": "29e7d6dd738a2565ae5bfb909bce9f9761f466cdbc06f3f5c9db63a7d58a053f",
+  "_build/quod27-floor-occupancy-repro-01/before.log": "5e7dcf7d053d19d7c060e263aaea43bf9cedbc99d64727ac1abf5af33a2f0fdc",
+  "_build/quod27-floor-occupancy-trace-01/before.log": "0047ff48df7d0bf9c4a59436e987c7a86501b588b3f95f7a3cd2309bcf091a2b",
+  "_build/quod27-floor-occupancy-query-01/before.log": "50d7defbad6db28b9a74cfe78d4c9ca9232eead2102e74d8a811b7548b9d860f",
+  "/home/yan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/parry3d-0.31.1/src/query/shape_cast/shape_cast_support_map_support_map.rs": "8225dafcd03e43c52def722404a6b9ff063589e1968d7d551f7153598c1524e4"
+}

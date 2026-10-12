@@ -196,11 +196,31 @@ fails(Ns, Goal) -> ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, Goal)).
 
 no_simulation(Namespaces) ->
     [begin
+        await_runtime(Ns),
         ok = quod_runtime:reconcile_resource(Ns, quod_prolog:applied(Ns), physics_worlds,
                                             all, quod_time:mono_ms() + 10000),
         ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds)),
         ?assertMatch({_, []}, quod_agent_hosting_tests:domain_agents(Ns))
     end || Ns <- Namespaces].
+
+%% Prolog replay readiness precedes the runtime's asynchronous reconciliation.
+%% Observe completion before the snapshot so a ready transition cannot be lost.
+await_runtime(Ns) ->
+    Runtime = quod_reg:where({quod_runtime,Ns}), Parent = self(), Token = make_ref(),
+    Observe = fun(State,{in,{'$gen_cast',{runner_done,_,_}}},_) ->
+                      Parent ! {runtime_processed,Token}, State;
+                 (State,_,_) -> State end,
+    ok = sys:install(Runtime,{Observe,none}),
+    try await_runtime(Ns,Token,quod_time:mono_ms()+10000)
+    after sys:remove(Runtime,Observe) end.
+
+await_runtime(Ns,Token,Deadline) ->
+    case quod_runtime:stats(Ns) of
+        #{mode := live} -> ok;
+        State ->
+            receive {runtime_processed,Token} -> await_runtime(Ns,Token,Deadline)
+            after max(0,Deadline-quod_time:mono_ms()) -> error({runtime_not_ready,Ns,State}) end
+    end.
 
 start(#{directory := Dir, identity := Identity}, Ns, Terms, Options) ->
     true = quod_reg:subscribe({runtime, Ns}),
@@ -210,7 +230,8 @@ start(#{directory := Dir, identity := Identity}, Ns, Terms, Options) ->
           external_predicate_modules => [quod_agent_predicates, quod_agent_hosting_tests],
           genesis_diff => quod_prolog:terms_to_diff(Terms)}, Options)),
     unlink(Sup),
-    receive {replay_ready, _, _} -> ok after 10000 -> error({not_ready, Ns}) end,
+    Engine = quod_reg:where({quod_prolog,Ns}),
+    receive {replay_ready, {Engine,_}, _} -> ok after 10000 -> error({not_ready, Ns}) end,
     quod_reg:unsubscribe({runtime, Ns}),
     {ok, #{content := Content} = Projection} = application:get_env(quod, namespace_desired),
     application:set_env(quod, namespace_desired,

@@ -1,0 +1,15 @@
+{
+  "started": "2026-10-12T00:46:36.008471+00:00",
+  "finished": "2026-10-12T00:49:57.555147+00:00",
+  "child_exit": 0,
+  "is_error": false,
+  "models": [
+    "claude-opus-5-5"
+  ],
+  "payload_unchanged": true,
+  "payload_sha256": "d26bd39e82f7cad7e9528ca4bfa37b0fcfd3942d4b60076a931b3758300b56be",
+  "tools": [],
+  "timeout_seconds": 1200,
+  "timed_out": false,
+  "parse_error": null
+}

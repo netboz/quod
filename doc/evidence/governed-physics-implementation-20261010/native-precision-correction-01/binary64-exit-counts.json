@@ -1,0 +1,137 @@
+[
+  {
+    "scope": "captured",
+    "kernel_calls": 28,
+    "outcome_columns": [
+      "kernel_miss",
+      "beyond_cast_end",
+      "contact_none",
+      "separating_contact",
+      "approaching_contact",
+      "far_candidate"
+    ],
+    "counts": [
+      12,
+      10,
+      0,
+      3,
+      3,
+      0
+    ],
+    "unrecorded": 0,
+    "zero_stagnation": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "positive_stagnation": [
+      0,
+      10,
+      0,
+      0,
+      0,
+      0
+    ],
+    "iteration_exhaustion": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "scope": "reciprocal",
+    "kernel_calls": 50932,
+    "outcome_columns": [
+      "kernel_miss",
+      "beyond_cast_end",
+      "contact_none",
+      "separating_contact",
+      "approaching_contact",
+      "far_candidate"
+    ],
+    "counts": [
+      21989,
+      17308,
+      0,
+      2397,
+      8669,
+      569
+    ],
+    "unrecorded": 0,
+    "zero_stagnation": [
+      0,
+      0,
+      0,
+      2000,
+      5541,
+      0
+    ],
+    "positive_stagnation": [
+      0,
+      17281,
+      0,
+      0,
+      2513,
+      562
+    ],
+    "iteration_exhaustion": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "scope": "sweep",
+    "kernel_calls": 164123,
+    "outcome_columns": [
+      "kernel_miss",
+      "beyond_cast_end",
+      "contact_none",
+      "separating_contact",
+      "approaching_contact",
+      "far_candidate"
+    ],
+    "counts": [
+      69953,
+      39787,
+      0,
+      23921,
+      14972,
+      15490
+    ],
+    "unrecorded": 0,
+    "zero_stagnation": [
+      0,
+      0,
+      0,
+      1839,
+      627,
+      0
+    ],
+    "positive_stagnation": [
+      0,
+      39748,
+      0,
+      2,
+      27,
+      14940
+    ],
+    "iteration_exhaustion": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

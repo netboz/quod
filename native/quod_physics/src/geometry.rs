@@ -38,15 +38,15 @@ pub enum Geometry {
 
 pub fn vector(v: V3, limit: f64) -> Result<Vector, Error> {
     let a = [v.0, v.1, v.2];
-    if a.iter().any(|x| !x.is_finite() || x.abs() > limit || !(*x as f32).is_finite()) {
+    if a.iter().any(|x| !x.is_finite() || x.abs() > limit) {
         return Err(Error::CoordinateAllowance);
     }
-    Ok(Vector::new(v.0 as f32, v.1 as f32, v.2 as f32))
+    Ok(Vector::new(v.0, v.1, v.2))
 }
 
 pub fn transform((p, r): Transform, limit: f64) -> Result<Pose, Error> {
     let p = vector(p, limit)?;
-    let r = vector(r, f32::MAX as f64)?;
+    let r = vector(r, f64::MAX)?;
     // Same convention as authored rendering transforms: local X, then Y, then Z.
     let q = Rotation::from_rotation_z(r.z) * Rotation::from_rotation_y(r.y)
         * Rotation::from_rotation_x(r.x);
@@ -69,9 +69,9 @@ impl Primitive {
     fn build(&self, budget: &mut Budget) -> Result<SharedShape, Error> {
         take(&mut budget.parts, 1)?;
         let positive = |x: f64| {
-            if !x.is_finite() || x > budget.coordinate || (x as f32) <= 0.0 {
+            if !x.is_finite() || x > budget.coordinate || x <= 0.0 {
                 Err(Error::InvalidBody)
-            } else { Ok(x as f32) }
+            } else { Ok(x) }
         };
         match self {
             Self::Box(x,y,z) => Ok(SharedShape::cuboid(positive(*x)?,positive(*y)?,positive(*z)?)),
@@ -117,8 +117,8 @@ impl Geometry {
                     let pose = transform(*pose,budget.coordinate)?;
                     let shape = primitive.build(budget)?;
                     let bounds = shape.compute_aabb(&pose);
-                    if bounds.mins.abs().max_element() as f64 > budget.coordinate
-                        || bounds.maxs.abs().max_element() as f64 > budget.coordinate {
+                    if bounds.mins.abs().max_element() > budget.coordinate
+                        || bounds.maxs.abs().max_element() > budget.coordinate {
                         return Err(Error::CoordinateAllowance);
                     }
                     shapes.push((pose,shape));
@@ -147,8 +147,8 @@ impl Geometry {
         }
     }
 
-    pub fn box_half_x(&self) -> Option<f32> {
-        match self { Self::Solid(Primitive::Box(x,_,_)) => Some(*x as f32), _ => None }
+    pub fn box_half_x(&self) -> Option<f64> {
+        match self { Self::Solid(Primitive::Box(x,_,_)) => Some(*x), _ => None }
     }
 }
 

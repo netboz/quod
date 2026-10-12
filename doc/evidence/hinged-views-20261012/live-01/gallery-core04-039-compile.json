@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_remove_door_checkpoint,2),<<\"physics_remove_door_checkpoint(V0, V1) :- findall(V2, (physics_checkpoint(V0, V2) , V2 = hinge(V1, V3, V4, V5, V6)), V7) , (V7 = [] -> true ; V7 = [V8] , retract(physics_checkpoint(V0, V8))).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_remove_door_checkpoint,2)))),','('$quod_retract_exact'(':-'(physics_remove_door_checkpoint(V2,V3),','(findall(V4,','(physics_checkpoint(V2,V4),'='(V4,hinge(V3,V5,V6,V7,V8))),V9),';'('->'('='(V9,[]),true),','('='(V9,[V10]),retract(physics_checkpoint(V2,V10))))))),';'('->'('$quod_predicate_source'('/'(physics_remove_door_checkpoint,2),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_remove_door_checkpoint,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "570",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 570,
+  "operation_id": "ltZokBykM7h1fNKL1e07SbpbLS82Vfo380h5W_X9WIA",
+  "request_digest": "r0BslIN9NePhuYpcopN9-t2OFy0mC0NFVYWvnMyB65M",
+  "result": "ok"
+}

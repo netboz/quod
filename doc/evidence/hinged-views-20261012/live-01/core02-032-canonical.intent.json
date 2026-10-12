@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_move_body(V0, V1, V2, V3, V4) :- term_variables([V0, V1, V2, V3, V4], []) , transaction((current_principal(V5) , can_edit_physics(V0, V5) , physics_structure(V0, V3) , physics_body_definition(V0, V1, V2, V6, V7, V8) , physics_resolve_definition(V0, V8, V9, V10) , physics_unconstrained_body(V0, V1) , physics_required_allowances(V0, limits(V11, V12, V13, V14, V15), V16, V17, V18) , V4 = vector(V19, V20, V21) , physics_relocated_pose(V7, V4, V22) , physics_checked_body(V1, V6, V22, V9, V10, V14) , V23 is V3 + 1 , retract(physics_structure(V0, V3)) , assertz(physics_structure(V0, V23)) , retract(physics_body_definition(V0, V1, V2, V6, V7, V8)) , assertz(physics_body_definition(V0, V1, V23, V6, V22, V8)) , physics_remove_rest_checkpoint(V0, V1) , physics_cancel_rest_edit(V0, V1))).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:42:51.618362+00:00"
+}

@@ -1,0 +1,7 @@
+{
+  "action": "read",
+  "args": [
+    "<<\"quod:prolog\">>::(current_ontology_identity(<<\"quod:prolog\">>,<<\"\\x12\\\\xc5\\\\xc4\\\\xb5\\\\xf6\\\\xf1\\\\xb2\\\\xc7\\\\x2a\\\\x8e\\\\x94\\\\x69\\\\xab\\\\x00\\\\x36\\\\xdc\\\\xe0\\\\xcb\\\\xbb\\\\xd1\\\\x8c\\\\x72\\\\xfa\\\\xf8\\\\x53\\\\x70\\\\xc9\\\\xab\\\\x11\\\\x56\\\\xf9\\\\x81\\\">>),prolog_source(ontology_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"\\x70\\\\x82\\\\xC1\\\\x50\\\\x26\\\\x9E\\\\x5B\\\\x82\\\\x75\\\\x4C\\\\x06\\\\xCB\\\\x79\\\\x28\\\\xF6\\\\xE5\\\\x5F\\\\xFB\\\\xCE\\\\xDA\\\\xBD\\\\x25\\\\xE6\\\\x42\\\\xC2\\\\xCC\\\\xF8\\\\x74\\\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),can_close_physics_door / 3,Source))."
+  ],
+  "at": "2026-10-12T13:40:35.392574+00:00"
+}

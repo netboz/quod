@@ -1,0 +1,7 @@
+{
+  "action": "execute",
+  "args": [
+    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>::(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"\\x70\\\\x82\\\\xC1\\\\x50\\\\x26\\\\x9E\\\\x5B\\\\x82\\\\x75\\\\x4C\\\\x06\\\\xCB\\\\x79\\\\x28\\\\xF6\\\\xE5\\\\x5F\\\\xFB\\\\xCE\\\\xDA\\\\xBD\\\\x25\\\\xE6\\\\x42\\\\xC2\\\\xCC\\\\xF8\\\\x74\\\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction((physics_run(personal_lobby,G,_),physics_custody(personal_lobby,C),physics_previous_complete(C,G),retract(physics_space(personal_lobby,enabled,physics_authority)),assertz(physics_space(personal_lobby,disabled,physics_authority)))))."
+  ],
+  "at": "2026-10-12T13:39:18.292038+00:00"
+}

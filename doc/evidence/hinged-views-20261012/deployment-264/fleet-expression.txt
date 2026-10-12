@@ -1,0 +1,35 @@
+
+{ok,Height,Descriptors,Rejected}=quod_system_ontology:catalog(),
+NotReady=[{Ns,State} || #{namespace := Ns} <- Descriptors,
+                         State <- [quod_ontology:local_state(Ns)], State =/= {ok,ready}],
+Principal=case quod_node_actor:principal() of
+  {ok,{agent,Blob}=P} ->
+    {ok,#{identity := {ActorNs,ActorAnchor},reference := Ref}}=quod_agent_ref:decode(Blob),
+    {ok,Dir}=application:get_env(quod,identity_dir),
+    Pointer=case quod_identity:load_node_actor_pointer(Dir) of {ok,Blob}->stored; _->not_stored end,
+    Hosting=case quod_prolog:prove_ro(ActorNs,{hosts_ontology,Ref,ActorNs,ActorAnchor,discoverable}) of
+      {ok,[_],_}->committed; _->missing end,
+    {ok,Ref}=quod_agent_ref:materialize_principal(P),
+    #{status => available,pointer => Pointer,self_hosting => Hosting,
+      namespace => ActorNs,anchor => binary:encode_hex(ActorAnchor)};
+  _ -> #{status => unavailable}
+end,
+RootStats=quod_simplex:stats(<<"quod:root">>),
+{CustodyCount,CustodyBytes}=quod_effect_journal:limits(),
+{ok,[#{'Count' := CustodyCount,'PreparedBytes' := CustodyBytes}],_}=
+  quod_prolog:prove_ro(<<"quod:root">>,
+    {effect_custody_limits,{'Count'},{'PreparedBytes'}}),
+#{version => list_to_binary(element(2,application:get_key(quod,vsn))),
+  custody_limits => #{count => CustodyCount,prepared_bytes => CustodyBytes},
+  root_anchor => binary:encode_hex(quod_simplex:genesis_hash(<<"quod:root">>)),
+  root_state => case quod_ontology:local_state(<<"quod:root">>) of
+    {ok,S}->S; Other->iolist_to_binary(io_lib:format("~0p",[Other])) end,
+  root_committee_size => length(quod_simplex:committee(<<"quod:root">>)),
+  root_committed => maps:get(committed,RootStats),
+  root_applied => maps:get(last_applied,RootStats),
+  catalogue_height => Height,catalogue_count => length(Descriptors),
+  rejected_count => map_size(Rejected),not_ready => NotReady,
+  manager => quod_namespace_manager:stats(),principal => Principal,
+  vault_ready => is_pid(quod_reg:where({agent_vault,node})),
+  vault_provider_disabled => maps:get(provider,element(2,application:get_env(quod,agent_vault))) =:= none}
+

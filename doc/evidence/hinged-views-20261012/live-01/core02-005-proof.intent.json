@@ -1,0 +1,7 @@
+{
+  "action": "cursor",
+  "args": [
+    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(hinged_example_label / 2, <<\"\">>) -> true ; fail_with_reason(edit_conflict(hinged_example_label / 2))), (assertz((hinged_example_label(idle, <<\"Ready to close\">>) :- true)), assertz((hinged_example_label(closing(V2), <<\"Closing\">>) :- true)), assertz((hinged_example_label(cancelled(V3), <<\"Cancelled\">>) :- true))), assertz((hinged_example_label(finished(V4, closed), <<\"Closed\">>) :- true)), assertz((hinged_example_label(finished(V5, blocked(V6)), <<\"Blocked\">>) :- true)), ('$quod_predicate_source'(hinged_example_label / 2, <<\"hinged_example_label(idle, <<\\\"Ready to close\\\">>) :- true.\\nhinged_example_label(closing(V0), <<\\\"Closing\\\">>) :- true.\\nhinged_example_label(cancelled(V0), <<\\\"Cancelled\\\">>) :- true.\\nhinged_example_label(finished(V0, closed), <<\\\"Closed\\\">>) :- true.\\nhinged_example_label(finished(V0, blocked(V1)), <<\\\"Blocked\\\">>) :- true.\\n\">>) -> true ; fail_with_reason(edit_not_representable(hinged_example_label / 2))))))."
+  ],
+  "at": "2026-10-12T13:40:42.077602+00:00"
+}

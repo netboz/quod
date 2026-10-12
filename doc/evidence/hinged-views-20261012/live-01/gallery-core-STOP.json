@@ -1,0 +1,5 @@
+{
+  "type": "AssertionError",
+  "reason": "('gallery-core-001', {'error': 'Error: invalid_goal', 'operationId': None, 'outcomeUnknown': None})",
+  "rule": "Resolve original operation; never rerun"
+}

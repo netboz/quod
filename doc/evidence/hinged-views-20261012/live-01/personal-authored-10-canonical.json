@@ -1,0 +1,1 @@
+"physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\nphysics_hinged_consequence(personal_lobby, 5, V0, closed, assertz(hinged_result(passage_closed, V0))) :- true.\n"

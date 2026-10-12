@@ -1,0 +1,19 @@
+{
+  "bindings": [
+    {
+      "V2": "V9",
+      "V3": "V10",
+      "V4": "V11",
+      "V5": "V12",
+      "V6": "V13",
+      "V7": "V14",
+      "V8": "V15",
+      "V9": "V16"
+    }
+  ],
+  "cursor": "[redacted transient capability]",
+  "height": 392,
+  "operation_id": "OPvjBYyW2gZGFfxsPGQY6r_ntYtLDZdLtOtitAxsUAs",
+  "request_digest": "ymjsPFdWXsF3k91ejxoh0Z6rx4nW9VIodpt69v8WX2w",
+  "result": "solution"
+}

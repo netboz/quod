@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"hinged_example_parts([], V0, []) :- true.\\xA\\hinged_example_parts([part(V0, V1, V2, V3, V4) | V5], V6, [mark(V0, V1, V2, relative(V6, V3), V4, unlabelled, depicts_nothing) | V7]) :- hinged_example_parts(V5, V6, V7).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "374",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+      "height": "198",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 374,
+  "operation_id": "-ccmTiSb_z82GiyD5QuODiKhQSOD80YS7limAKIVx3I",
+  "request_digest": "sXXWlY6x5vr2CNE2n42s7_ZAz49FcHnNB-T2ygGeTOo",
+  "result": "ok"
+}

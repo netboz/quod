@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"physics_rest_replaceable(V0, V1, V2) :- physics_rest_state(V1, V2, V3, V4) , physics_free_body(V1, V2, V5) , (V4 = finished(V6) -> V6 = physics_sample(V7, activity(V8, V9, V10), V11, V12, V13, V14) , V15 = finished(V9) ; V15 = V4) , physics_observation_replaceable(V0, V15, [body(V2, V5)]).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "67",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "582",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 582,
+  "operation_id": "nUZMQc83Af_7sBCZjFO3JT3w_dAjjhnv6JQPZ4PlxBQ",
+  "request_digest": "Rlf1ZvmJQBzfDnOQrsJX-B2VJ031aRIRktTMWbp4_r8",
+  "result": "ok"
+}

@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_activity(V0, V1, V2, V3, V4) :- fail.\\xA\\physics_activity(V0, rest(V1, V2), V3, rest, V4) :- physics_rest(V0, V1, V5, V6) , physics_free_body(V0, V1, V2) , (V6 = waiting(V7) -> V3 = V7 ; V3 = none) , physics_rest_custody(V0, V1, V4).\\xA\\physics_activity(V0, V1, V2, V3, V4) :- physics_hinged(V0, V5, V6, V7) , physics_hinged_references(V0, V5, V1, V8) , (V7 = closing(V9) -> V2 = V9 , physics_hinged_control(V0, V5, V3) ; V2 = none , V3 = hold) , physics_hinged_custody(V0, V5, V4).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:55:02.103200+00:00"
+}

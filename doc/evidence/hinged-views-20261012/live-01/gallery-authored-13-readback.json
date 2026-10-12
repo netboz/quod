@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"can_cancel_physics_hinged(V0, V1, V2) :- fail.\\xA\\can_cancel_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "91",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "630",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 630,
+  "operation_id": "GEXGpJU11g_Oom5OFXE5tiQwOMS_J13v6WoejbdrSTs",
+  "request_digest": "8KCSQ4DnrnSD-OlDu6dHXP-L97A4B2_uvtbqCdRtCKI",
+  "result": "ok"
+}

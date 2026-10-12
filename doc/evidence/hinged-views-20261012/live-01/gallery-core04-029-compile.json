@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_measurement,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_measurement,2)))),','(assertz(':-'(physics_hinged_measurement(V2,V3),','('='(V2,physics_sample(V4,activity(V5,V6,V7),revisions(V8),V9,V10,joint_position_mrad(V11,V12))),','(physics_valid_sample(V2,V13),','('='(V5,hinge(V14,V15)),','(physics_hinged_references(V13,V14,V5,V8),','(physics_hinged(V13,V14,V16,closing(V6)),','(physics_hinged_control(V13,V14,V7),','(physics_joint(V13,hinge(body(V14,V17),V18,body(V19,V20),V21,V22,V23,V24)),','('='(V23,limits(V25,V26)),','(integer(V11),','('>='(V11,V25),','('=<'(V11,V26),','(physics_valid_joint_command(V7,V23),','('='(V7,position(V27,V28,stop(V29,target_or_contact))),physics_hinged_result(V13,V14,V19,V11,V27,V29,V12,V3)))))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_hinged_measurement,2),<<\"physics_hinged_measurement(V0, V1) :- V0 = physics_sample(V2, activity(V3, V4, V5), revisions(V6), V7, V8, joint_position_mrad(V9, V10)) , physics_valid_sample(V0, V11) , V3 = hinge(V12, V13) , physics_hinged_references(V11, V12, V3, V6) , physics_hinged(V11, V12, V14, closing(V4)) , physics_hinged_control(V11, V12, V5) , physics_joint(V11, hinge(body(V12, V15), V16, body(V17, V18), V19, V20, V21, V22)) , V21 = limits(V23, V24) , integer(V9) , V9 >= V23 , V9 =< V24 , physics_valid_joint_command(V5, V21) , V5 = position(V25, V26, stop(V27, target_or_contact)) , physics_hinged_result(V11, V12, V17, V9, V25, V27, V10, V1).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_measurement,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "550",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 550,
+  "operation_id": "AQKUEj9OF5TbhfU_9vEt_wxPMH5GU7Gu83f6xbfSfUo",
+  "request_digest": "NW1JhIG4x67eC8Nz15UtNhiCnlB3ztOL_MG8CQUAhjE",
+  "result": "ok"
+}

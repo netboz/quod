@@ -1,0 +1,9 @@
+{
+  "approved": true,
+  "at": "2026-10-12T13:37:00.669751+00:00",
+  "reviewer": "Codex independent exact-diff review under existing Yan deployment authorization",
+  "mutation_manifest_sha256": "6d7d425a11256b69dc63d63627e0ab74cfdc4ab8a3ade526ad4a58b60aebb1b5",
+  "scope": "Existing candidate only; count8 to0 then count8 and five pinned264 image substitutions. Retain same ledger volumes, placements, principal identities and histories. Main and ingress unchanged.",
+  "rollback": "Exact prior263 body retained; no automatic revert or state rewrite.",
+  "uncertain_submission": "Observe original job/index; never resubmit."
+}

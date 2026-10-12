@@ -1,0 +1,14 @@
+{
+  "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+  "bindings": [
+    {
+      "V2": "V3",
+      "V3": "V4"
+    }
+  ],
+  "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+  "operation_id": "YlJtpw5c_H1W4r0PahTaHGN7_I8h50mBp8PtFi4ZO7U",
+  "request_digest": "YmuCI-hCh9PCCATMjzezbN2dMWTqS-vtRLBCcPrRtEA",
+  "result": "ok",
+  "tx_id": "67fcb0a7d60e637d16a248803f3ef65440c3aadef289e52c1fa16f3278866c4d"
+}

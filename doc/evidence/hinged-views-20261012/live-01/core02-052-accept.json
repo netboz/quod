@@ -1,0 +1,20 @@
+{
+  "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+  "bindings": [
+    {
+      "V2": "V9",
+      "V3": "V10",
+      "V4": "V11",
+      "V5": "V12",
+      "V6": "V13",
+      "V7": "V14",
+      "V8": "V15",
+      "V9": "V16"
+    }
+  ],
+  "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+  "operation_id": "BKTf1mxH9WSu28g2zujVkETvU-IkfhkOYBO1xsVMpxw",
+  "request_digest": "Wyda2ibsNWiY15m9Sxyn7ge-zyBmvJUKOuoKqCUchBc",
+  "result": "ok",
+  "tx_id": "23771e4a129cd51278de8bf0fee48f548355b04a8831fa57e640293d09aef45c"
+}

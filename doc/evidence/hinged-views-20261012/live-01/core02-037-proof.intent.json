@@ -1,0 +1,7 @@
+{
+  "action": "cursor",
+  "args": [
+    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(physics_observation_replaceable / 3, <<\"\">>) -> true ; fail_with_reason(edit_conflict(physics_observation_replaceable / 3))), assertz((physics_observation_replaceable(none, V2, V3) :- true)), assertz((physics_observation_replaceable(request(V4, V5, V6, V7), V8, V9) :- V4 = physics_sample(V10, activity(V11, V12, V13), revisions(V14), V15, V16, V17), ((V8 = finished(V12) ; V8 = cancelled(V12), V14 \\= V9) -> true ; physics_request_rejected(V6, V7)))), ('$quod_predicate_source'(physics_observation_replaceable / 3, <<\"physics_observation_replaceable(none, V0, V1) :- true.\\nphysics_observation_replaceable(request(V0, V1, V2, V3), V4, V5) :- V0 = physics_sample(V6, activity(V7, V8, V9), revisions(V10), V11, V12, V13) , ((V4 = finished(V8) ; V4 = cancelled(V8) , V10 \\\\= V5) -> true ; physics_request_rejected(V2, V3)).\\n\">>) -> true ; fail_with_reason(edit_not_representable(physics_observation_replaceable / 3))))))."
+  ],
+  "at": "2026-10-12T13:43:12.892376+00:00"
+}

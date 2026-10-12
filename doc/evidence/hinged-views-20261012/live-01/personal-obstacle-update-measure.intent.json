@@ -1,0 +1,5 @@
+{
+  "expression": "binary_to_list(base64:encode(iolist_to_binary(json:encode(quod36_work_probe:updated(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,8))))).",
+  "read_only_trace": true,
+  "change": "ordinary signed console shared move body7 to revision8"
+}

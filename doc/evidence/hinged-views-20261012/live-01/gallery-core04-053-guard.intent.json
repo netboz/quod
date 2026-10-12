@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_valid_motor,2),<<\"physics_valid_motor(V0, motor(V1, V2, V3, V4)) :- integer(V0) , V0 > 0 , V0 < 3142 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , integer(V4) , V4 > 0 , V4 < V0.\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_valid_motor,2)))),','('$quod_retract_exact'(':-'(physics_valid_motor(V2,motor(V3,V4,V5,V6)),','(integer(V2),','('>'(V2,0),','('<'(V2,3142),','(physics_positive_scalar(V3),','(physics_positive_scalar(V4),','(physics_positive_scalar(V5),','(integer(V6),','('>'(V6,0),'<'(V6,V2))))))))))),';'('->'('$quod_predicate_source'('/'(physics_valid_motor,2),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_valid_motor,2)))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:59:04.825134+00:00"
+}

@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_valid_motor,2),<<\"physics_valid_motor(V0, motor(V1, V2, V3, V4)) :- integer(V0) , V0 > 0 , V0 < 3142 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , integer(V4) , V4 > 0 , V4 < V0.\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_valid_motor,2)))),','('$quod_retract_exact'(':-'(physics_valid_motor(V2,motor(V3,V4,V5,V6)),','(integer(V2),','('>'(V2,0),','('<'(V2,3142),','(physics_positive_scalar(V3),','(physics_positive_scalar(V4),','(physics_positive_scalar(V5),','(integer(V6),','('>'(V6,0),'<'(V6,V2))))))))))),';'('->'('$quod_predicate_source'('/'(physics_valid_motor,2),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_valid_motor,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "464",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 464,
+  "operation_id": "Kd30nKHpTnnRFL1ViX9rnGxMhuDB_dPx4O_1Ng4RBhs",
+  "request_digest": "j4CybdWjDz5lqEMvDqEmXDYtyYSeKmOXYPPIKfQvnX8",
+  "result": "ok"
+}

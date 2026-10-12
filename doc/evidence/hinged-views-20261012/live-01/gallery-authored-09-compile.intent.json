@@ -1,0 +1,7 @@
+{
+  "action": "read",
+  "args": [
+    "<<\"quod:prolog\">>::(current_ontology_identity(<<\"quod:prolog\">>,<<\"\\x12\\\\xc5\\\\xc4\\\\xb5\\\\xf6\\\\xf1\\\\xb2\\\\xc7\\\\x2a\\\\x8e\\\\x94\\\\x69\\\\xab\\\\x00\\\\x36\\\\xdc\\\\xe0\\\\xcb\\\\xbb\\\\xd1\\\\x8c\\\\x72\\\\xfa\\\\xf8\\\\x53\\\\x70\\\\xc9\\\\xab\\\\x11\\\\x56\\\\xf9\\\\x81\\\">>),prolog_edit_goal(ontology_ref(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>),hinged_fixture_view / 2,<<\"\">>,<<\"hinged_fixture_view(V0, V1) :- current_ontology_identity(V2, V3) , findall(mark(V4, V5, V6, body_pose(V7, V8), V9, unlabelled, depicts(V2, V3, V10)), (hinged_fixture_appearance(V0, V7, V4, V5, V6, V9, V10) , physics_body_definition(V0, V7, V8, V11, V12, V13)), V14) , append(V14, [mark(<<\\\"console\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 1200), f(<<\\\"height\\\">>, 800), f(<<\\\"depth\\\">>, 200)], transform(3200, 500, 0, 0, 0, 0), surface(<<\\\"#174452\\\">>, 0, 900, 0, []), label(<<\\\"Console\\\">>, <<\\\"above\\\">>), depicts(V2, V3, console))], V1).\\n\">>,Edit))."
+  ],
+  "at": "2026-10-12T14:01:27.922605+00:00"
+}

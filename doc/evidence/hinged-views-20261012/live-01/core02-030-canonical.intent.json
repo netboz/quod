@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_hinged_references(V0, V1, hinge(V1, V2), [joint(V1, V2), body(V1, V3), body(V4, V5)]) :- physics_joint(V0, hinge(body(V1, V3), V2, body(V4, V5), V6, V7, V8, V9)) , physics_body_definition(V0, V1, V3, dynamic, V10, V11) , physics_body_definition(V0, V4, V5, fixed, V12, V13).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:42:42.584545+00:00"
+}

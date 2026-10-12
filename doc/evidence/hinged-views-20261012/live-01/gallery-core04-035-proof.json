@@ -1,0 +1,41 @@
+{
+  "bindings": [
+    {
+      "V10": "V39",
+      "V11": "V40",
+      "V12": "V41",
+      "V13": "V42",
+      "V14": "V43",
+      "V15": "V44",
+      "V16": "V45",
+      "V17": "V46",
+      "V18": "V47",
+      "V19": "V48",
+      "V2": "V31",
+      "V20": "V49",
+      "V21": "V50",
+      "V22": "V51",
+      "V23": "V52",
+      "V24": "V53",
+      "V25": "V54",
+      "V26": "V55",
+      "V27": "V56",
+      "V28": "V57",
+      "V29": "V58",
+      "V3": "V32",
+      "V30": "V59",
+      "V31": "V60",
+      "V4": "V33",
+      "V5": "V34",
+      "V6": "V35",
+      "V7": "V36",
+      "V8": "V37",
+      "V9": "V38"
+    }
+  ],
+  "cursor": "[redacted transient capability]",
+  "height": 562,
+  "operation_id": "kmpDlQIED8cFzUZ0PGP54ofMPLuiOjGIyXXN7TKRwGc",
+  "request_digest": "ffqvbTVWK0mGehvl-LFNUKCTrvuwqAx2fhdnKyF6MOA",
+  "result": "solution"
+}

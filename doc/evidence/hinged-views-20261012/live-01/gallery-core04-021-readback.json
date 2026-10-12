@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "44",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "536",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 536,
+  "operation_id": "BCn8FQHlf0FFHwIR1rdCFOsIUDnMk-yD78NxmMYiqa4",
+  "request_digest": "Hi80R7rHkV2zJD4U3ovk3xgWsdQOuWOQvOVWDzk35xQ",
+  "result": "ok"
+}

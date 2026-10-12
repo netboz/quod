@@ -1,0 +1,4 @@
+{
+  "error": "TypeError: Cannot read properties of undefined (reading 'transformNodes')",
+  "stack": "TypeError: Cannot read properties of undefined (reading 'transformNodes')\n    at eval (eval at executeAsyncScript (:464:26), <anonymous>:3:239)"
+}

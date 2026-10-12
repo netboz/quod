@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_remove_hinged_request,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_remove_hinged_request,2)))),','(assertz(':-'(physics_remove_hinged_request(V2,V3),','(physics_hinged_custody(V2,V3,V4),';'('->'('='(V4,none),true),retract(physics_hinged_request(V2,V3,V4)))))),';'('->'('$quod_predicate_source'('/'(physics_remove_hinged_request,2),<<\"physics_remove_hinged_request(V0, V1) :- physics_hinged_custody(V0, V1, V2) , (V2 = none -> true ; retract(physics_hinged_request(V0, V1, V2))).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_remove_hinged_request,2)))))))))",
+    "personal_lobby"
+  ],
+  "at": "2026-10-12T13:43:36.852491+00:00"
+}

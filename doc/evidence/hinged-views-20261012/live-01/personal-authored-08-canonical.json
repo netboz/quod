@@ -1,0 +1,1 @@
+"hinged_example_appearance(personal_lobby, 5, <<\"hinged-door\">>, vertical_door, [part(<<\"hinged-door/panel\">>, <<\"box\">>, [f(<<\"width\">>, 2000), f(<<\"height\">>, 2000), f(<<\"depth\">>, 200)], transform(0, 0, 0, 0, 0, 0), surface(<<\"#4678AB\">>, 0, 900, 0, []))]) :- true.\n"

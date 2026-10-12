@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_store_door_request,5),<<\"physics_store_door_request(V0, V1, V2, V3, V4) :- term_variables([V0, V1, V2, V3, V4], []) , transaction((physics_door_measurement(V0, V1) , V0 = door_sample(V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18) , physics_actor(V5) , physics_door_custody(V5, V6, V2) , physics_door_replaceable(V2, V0) , signed_physics_request(physics_finish_door(V0, V1), V3, V4) , physics_remove_door_request(V5, V6) , assertz(physics_door_request(V5, V6, request(V0, V1, V3, V4))))).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_store_door_request,5)))),','('$quod_retract_exact'(':-'(physics_store_door_request(V2,V3,V4,V5,V6),','(term_variables([V2,V3,V4,V5,V6],[]),transaction(','(physics_door_measurement(V2,V3),','('='(V2,door_sample(V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20)),','(physics_actor(V7),','(physics_door_custody(V7,V8,V4),','(physics_door_replaceable(V4,V2),','(signed_physics_request(physics_finish_door(V2,V3),V5,V6),','(physics_remove_door_request(V7,V8),assertz(physics_door_request(V7,V8,request(V2,V3,V5,V6)))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_store_door_request,5),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_store_door_request,5)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "448",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 448,
+  "operation_id": "YSJymha7oUTBE9QfHVw3an22C3UpUmLjGpW9LOsBEAQ",
+  "request_digest": "awruyRLZEagxsz-e2bp2fC5VN_XojWlO89Q9VzPitr4",
+  "result": "ok"
+}

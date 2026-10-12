@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"world_view(V0, V1, V2) :- instance_of(lobby, V0) , lobby_view(V1, V3) , hinged_example_view(V0, V4) , hinged_fixture_view(V0, V5) , append(V3, V4, V6) , append(V6, V5, V2).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:45:16.691728+00:00"
+}

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod/_build/quod36/browser-03/install_gallery_core.py", line 14, in <module>
+    op=c.install('gallery-core-'+str(n).zfill(3),row['indicator'],row['expected'],row['draft'])
+  File "/home/yan/src/quod/_build/quod36/browser-03/install_core02.py", line 12, in install
+    c=s.run(label+'-compile','read',q);assert c.get('result')=='ok',(label,c)
+                                              ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('gallery-core-001', {'error': 'Error: invalid_goal', 'operationId': None, 'outcomeUnknown': None})

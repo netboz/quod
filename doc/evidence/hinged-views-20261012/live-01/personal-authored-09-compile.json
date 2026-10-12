@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_fixture_appearance,7),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_fixture_appearance,7)))),','(assertz(':-'(hinged_fixture_appearance(personal_lobby,6,<<\"hinged-door/frame\">>,<<\"box\">>,[f(<<\"width\">>,100),f(<<\"height\">>,2000),f(<<\"depth\">>,100)],surface(<<\"#737373\">>,0,900,0,[]),door_frame),true)),','(assertz(':-'(hinged_fixture_appearance(personal_lobby,7,<<\"hinged-door/obstacle\">>,<<\"box\">>,[f(<<\"width\">>,400),f(<<\"height\">>,2000),f(<<\"depth\">>,400)],surface(<<\"#AB4646\">>,0,900,0,[]),door_obstacle),true)),';'('->'('$quod_predicate_source'('/'(hinged_fixture_appearance,7),<<\"hinged_fixture_appearance(personal_lobby, 6, <<\\\"hinged-door/frame\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 100), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 100)], surface(<<\\\"#737373\\\">>, 0, 900, 0, []), door_frame) :- true.\\xA\\hinged_fixture_appearance(personal_lobby, 7, <<\\\"hinged-door/obstacle\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 400), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 400)], surface(<<\\\"#AB4646\\\">>, 0, 900, 0, []), door_obstacle) :- true.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_fixture_appearance,7))))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "486",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 486,
+  "operation_id": "31AplENjYzdssBLbRc0uA4YzxOlv9kxcl-Y87Nkspx0",
+  "request_digest": "obvr4uBmbr6tgzZUMjfz3JotCG7ZNV0nbd8UXeEHsJg",
+  "result": "ok"
+}

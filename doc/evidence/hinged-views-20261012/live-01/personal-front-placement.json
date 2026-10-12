@@ -1,0 +1,15 @@
+{
+  "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+  "bindings": [
+    {
+      "OZ": "-4500",
+      "X": "-1500",
+      "Z": "-4000"
+    }
+  ],
+  "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+  "operation_id": "VrsP72SYELQEfw59CUODPCkO3me_fRXs98Q_r_D08sU",
+  "request_digest": "_maDJgiYj4zUr5O9ZOIKfp21GXv8plfSKdRBxaNqaZA",
+  "result": "ok",
+  "tx_id": "c47f129a2fa71d0324ac29f7d99991672c85b1527f7512f8c5aed52c3f1af8d6"
+}

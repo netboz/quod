@@ -1,0 +1,7 @@
+{
+  "action": "cursor",
+  "args": [
+    "<<\"acceptance:physics:259:04:gallery\">> :: (current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>), transaction((physics_space(room, disabled, physics_authority), ('$quod_predicate_source'(world_view / 3, <<\"\">>) -> true ; fail_with_reason(edit_conflict(world_view / 3))), assertz((world_view(room, playing, V2) :- hinged_example_view(room, V3), hinged_fixture_view(room, V4), append(V3, V4, V2))), ('$quod_predicate_source'(world_view / 3, <<\"world_view(room, playing, V0) :- hinged_example_view(room, V1) , hinged_fixture_view(room, V2) , append(V1, V2, V0).\\n\">>) -> true ; fail_with_reason(edit_not_representable(world_view / 3))))))."
+  ],
+  "at": "2026-10-12T14:00:48.978369+00:00"
+}

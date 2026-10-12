@@ -1,0 +1,7 @@
+{
+  "action": "cursor",
+  "args": [
+    "<<\"acceptance:physics:259:04:gallery\">> :: (current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>), transaction((physics_space(room, disabled, physics_authority), ('$quod_predicate_source'(physics_hinged_result / 8, <<\"\">>) -> true ; fail_with_reason(edit_conflict(physics_hinged_result / 8))), assertz((physics_hinged_result(V2, V3, V4, V5, V6, V7, contact(V8, V9), blocked(V8)) :- V8 \\= V3, V8 \\= V4, physics_body_definition(V2, V8, V9, V10, V11, V12))), assertz((physics_hinged_result(V13, V14, V15, V16, V17, V18, clear, closed) :- V16 >= V17 - V18, V16 =< V17 + V18)), ('$quod_predicate_source'(physics_hinged_result / 8, <<\"physics_hinged_result(V0, V1, V2, V3, V4, V5, contact(V6, V7), blocked(V6)) :- V6 \\\\= V1 , V6 \\\\= V2 , physics_body_definition(V0, V6, V7, V8, V9, V10).\\nphysics_hinged_result(V0, V1, V2, V3, V4, V5, clear, closed) :- V3 >= V4 - V5 , V3 =< V4 + V5.\\n\">>) -> true ; fail_with_reason(edit_not_representable(physics_hinged_result / 8))))))."
+  ],
+  "at": "2026-10-12T13:57:11.251602+00:00"
+}

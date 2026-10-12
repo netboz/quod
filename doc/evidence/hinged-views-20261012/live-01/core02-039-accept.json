@@ -1,0 +1,21 @@
+{
+  "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+  "bindings": [
+    {
+      "V10": "V18",
+      "V2": "V10",
+      "V3": "V11",
+      "V4": "V12",
+      "V5": "V13",
+      "V6": "V14",
+      "V7": "V15",
+      "V8": "V16",
+      "V9": "V17"
+    }
+  ],
+  "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+  "operation_id": "pRwz4yf3k3SfV6rnpP4Fhty5etG6WywE6JdRzYVK6LA",
+  "request_digest": "MsdqIViLRcaVyU32GjAOpGrz558aFKWmmNzAsRzHpbU",
+  "result": "ok",
+  "tx_id": "1893eadf9208f812a060c0e4416edafc6824bcc31b70b2771a665facdc89929b"
+}

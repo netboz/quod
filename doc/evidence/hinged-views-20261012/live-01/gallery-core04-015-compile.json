@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_close_hinged,4),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_close_hinged,4)))),','(assertz(':-'(physics_close_hinged(V2,V3,V4,V5),','(term_variables([V2,V3,V4,V5],[]),','(agent_identifier(V5),transaction(','(current_principal(V6),','(can_close_physics_hinged(V2,V3,V6),','(physics_hinged(V2,V3,V4,V7),','('\\\\='(V7,closing(V8)),','(physics_enabled(V2,V9),','(physics_hinged_references(V2,V3,V10,V11),','(physics_hinged_custody(V2,V3,V12),','(';'('->'('='(V7,finished(V13,V14)),'='(V15,finished(V13))),'='(V15,V7)),','(';'('->'(physics_observation_replaceable(V12,V15,V11),true),fail_with_reason(hinged_custody_held(V3))),','(physics_joint(V2,hinge(body(V3,V16),V17,V18,V19,V20,V21,V22)),','(physics_hinged_control(V2,V3,V23),','('='(V23,position(V24,V25,V26)),','(physics_valid_joint_command(V23,V21),','(retract(physics_hinged(V2,V3,V4,V7)),','(is(V27,'+'(V4,1)),','(assertz(physics_hinged(V2,V3,V27,closing(close(V27,V5)))),physics_remove_hinged_request(V2,V3)))))))))))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_close_hinged,4),<<\"physics_close_hinged(V0, V1, V2, V3) :- term_variables([V0, V1, V2, V3], []) , agent_identifier(V3) , transaction((current_principal(V4) , can_close_physics_hinged(V0, V1, V4) , physics_hinged(V0, V1, V2, V5) , V5 \\\\= closing(V6) , physics_enabled(V0, V7) , physics_hinged_references(V0, V1, V8, V9) , physics_hinged_custody(V0, V1, V10) , (V5 = finished(V11, V12) -> V13 = finished(V11) ; V13 = V5) , (physics_observation_replaceable(V10, V13, V9) -> true ; fail_with_reason(hinged_custody_held(V1))) , physics_joint(V0, hinge(body(V1, V14), V15, V16, V17, V18, V19, V20)) , physics_hinged_control(V0, V1, V21) , V21 = position(V22, V23, V24) , physics_valid_joint_command(V21, V19) , retract(physics_hinged(V0, V1, V2, V5)) , V25 is V2 + 1 , assertz(physics_hinged(V0, V1, V25, closing(close(V25, V3)))) , physics_remove_hinged_request(V0, V1))).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_close_hinged,4)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "522",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 522,
+  "operation_id": "aIOIqK6gVJUOZN914nh91hKH1nefgIe3Nnwb_SHxGag",
+  "request_digest": "BBoMKII7osLZNeHxQ0Bx6TdlhRLXjDYJNTD9MYan2tc",
+  "result": "ok"
+}

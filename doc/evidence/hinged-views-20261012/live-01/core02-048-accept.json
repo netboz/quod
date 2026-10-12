@@ -1,0 +1,32 @@
+{
+  "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+  "bindings": [
+    {
+      "V10": "V29",
+      "V11": "V30",
+      "V12": "V31",
+      "V13": "V32",
+      "V14": "V33",
+      "V15": "V34",
+      "V16": "V35",
+      "V17": "V36",
+      "V18": "V37",
+      "V19": "V38",
+      "V2": "V21",
+      "V20": "V39",
+      "V21": "V40",
+      "V3": "V22",
+      "V4": "V23",
+      "V5": "V24",
+      "V6": "V25",
+      "V7": "V26",
+      "V8": "V27",
+      "V9": "V28"
+    }
+  ],
+  "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+  "operation_id": "_Oe4wZZzmvVkydbBNBBiM8BnWXQ016tPmCDpNCXZ_Fo",
+  "request_digest": "dwS9778uiHuETAcPyI7X-Tw18CCSqg6IjzWHnKToijs",
+  "result": "ok",
+  "tx_id": "e3c9268a0042c74fd22a68c1d88ee01cbaa843eb218afe05bcedf177c4564703"
+}

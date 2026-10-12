@@ -1,0 +1,14 @@
+{
+  "anchor": "41ef1e056943b629ac1dca71b13ba0028abde7fb7b0f91756604334a2f07b69b",
+  "bindings": [
+    {
+      "V2": "V3",
+      "V3": "V4"
+    }
+  ],
+  "ns": "acceptance:physics:259:04:gallery",
+  "operation_id": "AHUZRpkfEzac-jigJDE0SjsnigafwRG7q6SPCALZv50",
+  "request_digest": "r15k7tzNQfyy3n1N6yuAteZmOYiPXHPX7vRlp_zS2qQ",
+  "result": "ok",
+  "tx_id": "3ffa30c1120a8d55bbcfcb925decb162cb369debf316f2ec734ccbc31c57326f"
+}

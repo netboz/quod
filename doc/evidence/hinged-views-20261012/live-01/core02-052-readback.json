@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"physics_valid_joint_command(hold, V0) :- true.\\xA\\physics_valid_joint_command(position(V0, motor(V1, V2, V3), stop(V4, target_or_contact)), limits(V5, V6)) :- integer(V0) , V0 >= V5 , V0 =< V6 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , physics_positive_scalar(V4).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "464",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+      "height": "243",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 464,
+  "operation_id": "J78aIjSMtwlOcgBRaE1Cl9ZdoOC0xAxmgjh4QkSzZR4",
+  "request_digest": "9qIkJC-vNhSGnRxFs5--kSyH84RDgfs7UgzP060no_k",
+  "result": "ok"
+}

@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"can_invoke(V0, V1, [], V2) :- true.\\xA\\can_invoke(V0, V1, V2, V3) :- acceptance_actor(V1).\\xA\\can_invoke(physics_store_request(V0, V1, V2, V3, V4, V5), agent_instance_ref(<<\\\"acceptance:physics:259:04:gallery\\\">>, <<\\\"A\\\\xEF\\\\\\\\x1E\\\\\\\\x5\\\\iC\\\\xB6\\\\)\\\\xAC\\\\\\\\x1D\\\\\\\\xCA\\\\q\\\\xB1\\\\;\\\\xA0\\\\\\\\x2\\\\\\\\x8A\\\\\\\\xBD\\\\\\\\xE7\\\\\\\\xFB\\\\{\\\\xF\\\\\\\\x91\\\\uf\\\\x4\\\\3J/\\\\x7\\\\\\\\xB6\\\\\\\\x9B\\\\\\\">>, physics_authority), V6, <<\\\"acceptance:physics:259:04:gallery\\\">>) :- true.\\xA\\can_invoke(physics_activate(V0, V1, V2), agent_instance_ref(<<\\\"acceptance:physics:259:04:gallery\\\">>, <<\\\"A\\\\xEF\\\\\\\\x1E\\\\\\\\x5\\\\iC\\\\xB6\\\\)\\\\xAC\\\\\\\\x1D\\\\\\\\xCA\\\\q\\\\xB1\\\\;\\\\xA0\\\\\\\\x2\\\\\\\\x8A\\\\\\\\xBD\\\\\\\\xE7\\\\\\\\xFB\\\\{\\\\xF\\\\\\\\x91\\\\uf\\\\x4\\\\3J/\\\\x7\\\\\\\\xB6\\\\\\\\x9B\\\\\\\">>, physics_authority), V3, <<\\\"acceptance:physics:259:04:gallery\\\">>) :- true.\\xA\\can_invoke(physics_store_hinged_request(V0, V1, V2, V3), V4, V5, V6) :- current_ontology_identity(V6, V7) , V4 = agent_instance_ref(V6, V7, physics_authority).\\xA\\can_invoke(physics_finish_hinged(V0, V1), V2, V3, V4) :- current_ontology_identity(V4, V5) , V2 = agent_instance_ref(V4, V5, physics_authority).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "79",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "606",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 606,
+  "operation_id": "8h94uNlsUGZ81EABK0JfOmxbK99heUvmQMGNMEr9yxE",
+  "request_digest": "UXf7tsD-0-nWHup37mp-9zKCkp0nKZb36Ur5xRp07u4",
+  "result": "ok"
+}

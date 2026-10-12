@@ -1,0 +1,7 @@
+{
+  "action": "read",
+  "args": [
+    "<<\"quod:prolog\">>::(current_ontology_identity(<<\"quod:prolog\">>,<<\"\\x12\\\\xc5\\\\xc4\\\\xb5\\\\xf6\\\\xf1\\\\xb2\\\\xc7\\\\x2a\\\\x8e\\\\x94\\\\x69\\\\xab\\\\x00\\\\x36\\\\xdc\\\\xe0\\\\xcb\\\\xbb\\\\xd1\\\\x8c\\\\x72\\\\xfa\\\\xf8\\\\x53\\\\x70\\\\xc9\\\\xab\\\\x11\\\\x56\\\\xf9\\\\x81\\\">>),prolog_edit_goal(ontology_ref(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>),hinged_fixture_appearance / 7,<<\"\">>,<<\"hinged_fixture_appearance(room, 1, <<\\\"floor\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 16000), f(<<\\\"height\\\">>, 500), f(<<\\\"depth\\\">>, 16000)], surface(<<\\\"#736E5D\\\">>, 0, 900, 0, []), gallery_floor) :- true.\\nhinged_fixture_appearance(room, 4, <<\\\"hinged-lid/frame\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 400), f(<<\\\"depth\\\">>, 200)], surface(<<\\\"#737373\\\">>, 0, 900, 0, []), lid_frame) :- true.\\nhinged_fixture_appearance(room, 5, <<\\\"hinged-lid/obstacle\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 400), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 400)], surface(<<\\\"#AB4646\\\">>, 0, 900, 0, []), lid_obstacle) :- true.\\n\">>,Edit))."
+  ],
+  "at": "2026-10-12T14:02:10.243692+00:00"
+}

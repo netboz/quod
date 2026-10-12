@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_door_result,7),<<\"physics_door_result(V0, V1, V2, V3, V4, contact(V5, V6), blocked(V5)) :- V5 \\\\= V1 , V5 \\\\= V2 , physics_body_definition(V0, V5, V6, V7, V8, V9).\\xA\\physics_door_result(V0, V1, V2, V3, V4, clear, closed) :- V3 >= - V4 , V3 =< V4.\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_door_result,7)))),','('$quod_retract_exact'(':-'(physics_door_result(V2,V3,V4,V5,V6,contact(V7,V8),blocked(V7)),','('\\\\='(V7,V3),','('\\\\='(V7,V4),physics_body_definition(V2,V7,V8,V9,V10,V11))))),','('$quod_retract_exact'(':-'(physics_door_result(V12,V13,V14,V15,V16,clear,closed),','('>='(V15,'-'(V16)),'=<'(V15,V16)))),';'('->'('$quod_predicate_source'('/'(physics_door_result,7),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_door_result,7))))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:56:06.309686+00:00"
+}

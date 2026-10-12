@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_class,3),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_class,3)))),','(assertz(':-'(physics_hinged_class(container_lid,1,hinged(box(1000,200,100),parts([part(vector(0,0,0),box(1000,100,1000)),part(vector(0,150,V2),ball(150))]),1,vector(1,0,0),anchors(vector(0,0,0),vector(0,0,V3)),limits(V4,1200),V5,position(400,motor(1000,100,1000),stop(20,target_or_contact)))),','(is(V2,-700),','(is(V3,-1000),','(is(V4,-1300),is(V5,-1200)))))),';'('->'('$quod_predicate_source'('/'(physics_hinged_class,3),<<\"physics_hinged_class(container_lid, 1, hinged(box(1000, 200, 100), parts([part(vector(0, 0, 0), box(1000, 100, 1000)), part(vector(0, 150, V0), ball(150))]), 1, vector(1, 0, 0), anchors(vector(0, 0, 0), vector(0, 0, V1)), limits(V2, 1200), V3, position(400, motor(1000, 100, 1000), stop(20, target_or_contact)))) :- V0 is (-700) , V1 is (-1000) , V2 is (-1300) , V3 is (-1200).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_class,3)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "622",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 622,
+  "operation_id": "XPW1XGC1x9CRSR8BFSnNfiYrg7Vys7uq-vsMpHWk4DY",
+  "request_digest": "nEyZRmKoaFaJNBqZfS7FQSt0C3ki_VPCxl9e-1fQaRo",
+  "result": "ok"
+}

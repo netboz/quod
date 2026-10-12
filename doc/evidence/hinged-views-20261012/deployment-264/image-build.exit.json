@@ -1,0 +1,14 @@
+{
+  "command": [
+    "docker",
+    "build",
+    "--progress=plain",
+    "--label",
+    "org.quod.source-manifest.sha256=20cca290b723cca72d1c766ffeff414b6b6344d828656cd95855d8fb267ba835",
+    "-t",
+    "192.168.1.11:5000/quod:0.7.264",
+    "/home/yan/src/quod/_build/quod36/release-264/deployment/image-context"
+  ],
+  "exit": 0,
+  "seconds": 94.1155890460359
+}

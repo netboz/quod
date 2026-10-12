@@ -1,0 +1,35 @@
+{
+  "captured": "2026-10-12T13:31:50.249115+00:00",
+  "origin": "https://192.168.1.10:30519",
+  "blocks": [
+    {
+      "file": "human-tip-before.json",
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "height": 358,
+      "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+      "sha256": "d58c33b5ea59c9efc0c2c46d085ae6b4c0456156fbe1191c3702591a8d008cc5"
+    },
+    {
+      "file": "human-retained-prefix-before.json",
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE",
+      "height": 350,
+      "anchor": "758f8aa13d54cf626ba493a6bfbec24548ac96b49dd0feda3bc0843e0838cbf2",
+      "sha256": "df29f435c564ebca5946775e43e87a7685b72799ca662c5a2ddf7d8cccf23065"
+    },
+    {
+      "file": "world-tip-before.json",
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "height": 188,
+      "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+      "sha256": "20e21f6ec9476863c5bb3b3d4166bbd735a7414652e5ce0c3616081d6c37c080"
+    },
+    {
+      "file": "world-retained-prefix-before.json",
+      "namespace": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby",
+      "height": 176,
+      "anchor": "7082c150269e5b82754c06cb7928f6e55ffbcedabd25e642c2ccf874a3a6f77f",
+      "sha256": "e21fbfac42db245b2797434008f4333f6c277023f8df3dc928097042f8b79bb8"
+    }
+  ],
+  "read_only": true
+}

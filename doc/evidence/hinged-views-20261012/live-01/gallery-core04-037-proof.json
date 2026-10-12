@@ -1,0 +1,27 @@
+{
+  "bindings": [
+    {
+      "V10": "V25",
+      "V11": "V26",
+      "V12": "V27",
+      "V13": "V28",
+      "V14": "V29",
+      "V15": "V30",
+      "V16": "V31",
+      "V17": "V32",
+      "V2": "V17",
+      "V3": "V18",
+      "V4": "V19",
+      "V5": "V20",
+      "V6": "V21",
+      "V7": "V22",
+      "V8": "V23",
+      "V9": "V24"
+    }
+  ],
+  "cursor": "[redacted transient capability]",
+  "height": 566,
+  "operation_id": "8K0llxBuSoCt_-UOo5XyAWvnd5XK8iWb2mCHVYq2QtQ",
+  "request_digest": "othDng6GA1g2ahAvwHZ14mqkPq9P1oVAHTf4NOUF4ME",
+  "result": "solution"
+}

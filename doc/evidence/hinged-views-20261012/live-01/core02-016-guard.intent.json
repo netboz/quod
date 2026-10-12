@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_door_custody,3),<<\"physics_door_custody(V0, V1, V2) :- findall(V3, physics_door_request(V0, V1, V3), V4) , (V4 = [] -> V2 = none ; V4 = [V2]).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_door_custody,3)))),','('$quod_retract_exact'(':-'(physics_door_custody(V2,V3,V4),','(findall(V5,physics_door_request(V2,V3,V5),V6),';'('->'('='(V6,[]),'='(V4,none)),'='(V6,[V4]))))),';'('->'('$quod_predicate_source'('/'(physics_door_custody,3),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_door_custody,3)))))))))",
+    "personal_lobby"
+  ],
+  "at": "2026-10-12T13:41:33.591734+00:00"
+}

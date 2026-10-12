@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_observation_replaceable(none, V0, V1) :- true.\\xA\\physics_observation_replaceable(request(V0, V1, V2, V3), V4, V5) :- V0 = physics_sample(V6, activity(V7, V8, V9), revisions(V10), V11, V12, V13) , ((V4 = finished(V8) ; V4 = cancelled(V8) , V10 \\\\= V5) -> true ; physics_request_rejected(V2, V3)).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:57:45.176090+00:00"
+}

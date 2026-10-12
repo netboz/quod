@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"physics_activity(V0, V1, V2, V3, V4) :- fail.\\xA\\physics_activity(V0, rest(V1, V2), V3, rest, V4) :- physics_rest(V0, V1, V5, V6) , physics_free_body(V0, V1, V2) , (V6 = waiting(V7) -> V3 = V7 ; V3 = none) , physics_rest_custody(V0, V1, V4).\\xA\\physics_activity(V0, V1, V2, V3, V4) :- physics_hinged(V0, V5, V6, V7) , physics_hinged_references(V0, V5, V1, V8) , (V7 = closing(V9) -> V2 = V9 , physics_hinged_control(V0, V5, V3) ; V2 = none , V3 = hold) , physics_hinged_custody(V0, V5, V4).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "378",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+      "height": "200",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 378,
+  "operation_id": "GoxFxgzmjGWHxZUvgUzlCCCakAD1kNoVpYFV-iBlFwg",
+  "request_digest": "fOsBULS46KYkpCfs5zkpSHYZP9KO5M8VFj1MtmAeW2o",
+  "result": "ok"
+}

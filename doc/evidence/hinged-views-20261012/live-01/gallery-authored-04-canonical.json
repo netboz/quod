@@ -1,0 +1,1 @@
+"lobby_owner(V0) :- hinged_example_owner(room, V0).\n"

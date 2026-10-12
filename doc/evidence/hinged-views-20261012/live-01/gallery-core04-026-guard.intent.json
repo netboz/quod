@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_consequences,1),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_consequences,1)))),','(assertz(':-'(physics_hinged_consequences([]),true)),','(assertz(':-'(physics_hinged_consequences([V2|V3]),','(call(V2),physics_hinged_consequences(V3)))),';'('->'('$quod_predicate_source'('/'(physics_hinged_consequences,1),<<\"physics_hinged_consequences([]) :- true.\\xA\\physics_hinged_consequences([V0 | V1]) :- call(V0) , physics_hinged_consequences(V1).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_consequences,1))))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:56:45.397152+00:00"
+}

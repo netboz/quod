@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_finish_door,2),<<\"physics_finish_door(V0, V1) :- term_variables([V0, V1], []) , transaction((physics_door_measurement(V0, V1) , V0 = door_sample(V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15) , physics_actor(V2) , physics_door_request(V2, V3, request(V0, V1, V16, V17)) , current_signed_request(V16, V17) , retract(physics_door(V2, V3, V18, closing(V4))) , assertz(physics_door(V2, V3, V18, finished(V4, V1))) , physics_remove_door_checkpoint(V2, V3) , assertz(physics_checkpoint(V2, hinge(V3, V10, V7, V12, V13))) , trigger_event(physics_door_finished(V2, V3, V4, V1)))).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_finish_door,2)))),','('$quod_retract_exact'(':-'(physics_finish_door(V2,V3),','(term_variables([V2,V3],[]),transaction(','(physics_door_measurement(V2,V3),','('='(V2,door_sample(V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17)),','(physics_actor(V4),','(physics_door_request(V4,V5,request(V2,V3,V18,V19)),','(current_signed_request(V18,V19),','(retract(physics_door(V4,V5,V20,closing(V6))),','(assertz(physics_door(V4,V5,V20,finished(V6,V3))),','(physics_remove_door_checkpoint(V4,V5),','(assertz(physics_checkpoint(V4,hinge(V5,V12,V9,V14,V15))),trigger_event(physics_door_finished(V4,V5,V6,V3))))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_finish_door,2),<<\"\">>),true),fail_with_reason(edit_not_representable('/'(physics_finish_door,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "534",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 534,
+  "operation_id": "-9rKWab-BqePgmHcHqBK1MXiH_D9ch0Iq-bYfsu9Jks",
+  "request_digest": "q7OYdGCsquwVTns8WBFvLUQNyc_a6n7ol9DVMIrCrEA",
+  "result": "ok"
+}

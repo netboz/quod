@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "V2": "V3",
+      "V3": "V4"
+    }
+  ],
+  "cursor": "[redacted transient capability]",
+  "height": 544,
+  "operation_id": "2RAL0OUv-YnnxwP9tflZkm3MQU3spYtFJ46v3sOT95k",
+  "request_digest": "HhwZ-hVrCAWMrwyow1g0BwshdOgLv2eP7NpuGUK4UwY",
+  "result": "solution"
+}

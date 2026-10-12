@@ -1,0 +1,82 @@
+[
+  {
+    "indicator": "can_invoke / 4",
+    "expected": "can_invoke(V0, V1, [], V2) :- true.\ncan_invoke(V0, V1, V2, V3) :- acceptance_actor(V1).\ncan_invoke(physics_store_request(V0, V1, V2, V3, V4, V5), agent_instance_ref(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>, physics_authority), V6, <<\"acceptance:physics:259:04:gallery\">>) :- true.\ncan_invoke(physics_activate(V0, V1, V2), agent_instance_ref(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>, physics_authority), V3, <<\"acceptance:physics:259:04:gallery\">>) :- true.\n",
+    "draft": "can_invoke(V0, V1, [], V2) :- true.\ncan_invoke(V0, V1, V2, V3) :- acceptance_actor(V1).\ncan_invoke(physics_store_request(V0, V1, V2, V3, V4, V5), agent_instance_ref(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>, physics_authority), V6, <<\"acceptance:physics:259:04:gallery\">>) :- true.\ncan_invoke(physics_activate(V0, V1, V2), agent_instance_ref(<<\"acceptance:physics:259:04:gallery\">>, <<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>, physics_authority), V3, <<\"acceptance:physics:259:04:gallery\">>) :- true.\ncan_invoke(physics_store_hinged_request(V0, V1, V2, V3), V4, V5, V6) :- current_ontology_identity(V6, V7) , V4 = agent_instance_ref(V6, V7, physics_authority).\ncan_invoke(physics_finish_hinged(V0, V1), V2, V3, V4) :- current_ontology_identity(V4, V5) , V2 = agent_instance_ref(V4, V5, physics_authority).\n"
+  },
+  {
+    "indicator": "lobby_menu / 2",
+    "expected": "",
+    "draft": "lobby_menu(console, [menu_entry(prove_goal, <<\"Prove a goal\">>, open_view(proof_console))]) :- true.\n"
+  },
+  {
+    "indicator": "world_view / 3",
+    "expected": "",
+    "draft": "world_view(room, playing, V0) :- hinged_example_view(room, V1) , hinged_fixture_view(room, V2) , append(V1, V2, V0).\n"
+  },
+  {
+    "indicator": "lobby_owner / 1",
+    "expected": "",
+    "draft": "lobby_owner(V0) :- hinged_example_owner(room, V0).\n"
+  },
+  {
+    "indicator": "lobby_space / 2",
+    "expected": "",
+    "draft": "lobby_space(room, [playing]) :- true.\n"
+  },
+  {
+    "indicator": "lobby_workspace / 3",
+    "expected": "",
+    "draft": "lobby_workspace(console, prove_console, form(<<\"Prolog console\">>, [editor(goal, <<\"Prolog goal\">>), bindings(results, <<\"Bindings\">>), button(run, <<\"Run\">>), button(next, <<\"Next solution\">>), button(accept, <<\"Accept solution\">>), button(stop, <<\"Stop\">>), button(resolve, <<\"Check saved outcome\">>)])) :- true.\n"
+  },
+  {
+    "indicator": "can_edit_physics / 2",
+    "expected": "can_edit_physics(V0, V1) :- fail.\n",
+    "draft": "can_edit_physics(V0, V1) :- fail.\ncan_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\n"
+  },
+  {
+    "indicator": "can_view_physics / 2",
+    "expected": "can_view_physics(V0, V1) :- fail.\n",
+    "draft": "can_view_physics(V0, V1) :- fail.\ncan_view_physics(V0, V1) :- hinged_example_owner(V0, V1).\n"
+  },
+  {
+    "indicator": "hinged_fixture_view / 2",
+    "expected": "",
+    "draft": "hinged_fixture_view(V0, V1) :- current_ontology_identity(V2, V3) , findall(mark(V4, V5, V6, body_pose(V7, V8), V9, unlabelled, depicts(V2, V3, V10)), (hinged_fixture_appearance(V0, V7, V4, V5, V6, V9, V10) , physics_body_definition(V0, V7, V8, V11, V12, V13)), V14) , append(V14, [mark(<<\"console\">>, <<\"box\">>, [f(<<\"width\">>, 1200), f(<<\"height\">>, 800), f(<<\"depth\">>, 200)], transform(3200, 500, 0, 0, 0, 0), surface(<<\"#174452\">>, 0, 900, 0, []), label(<<\"Console\">>, <<\"above\">>), depicts(V2, V3, console))], V1).\n"
+  },
+  {
+    "indicator": "physics_hinged_class / 3",
+    "expected": "",
+    "draft": "physics_hinged_class(container_lid, 1, hinged(box(1000, 200, 100), parts([part(vector(0, 0, 0), box(1000, 100, 1000)), part(vector(0, 150, V0), ball(150))]), 1, vector(1, 0, 0), anchors(vector(0, 0, 0), vector(0, 0, V1)), limits(V2, 1200), V3, position(400, motor(1000, 100, 1000), stop(20, target_or_contact)))) :- V0 is (-700) , V1 is (-1000) , V2 is (-1300) , V3 is (-1200).\n"
+  },
+  {
+    "indicator": "rendering_vocabulary / 2",
+    "expected": "",
+    "draft": "rendering_vocabulary(<<\"quod:rendering\">>, <<\"Y\\xD5\\\\xDF\\\\x7\\\\xA7\\\\xE6\\YD4\\xA7\\mTa\\xA6\\\\x8F\\M\\xC3\\\\xB5\\\\xA4\\\\x8E\\\\xDB\\\\xC1\\\\xB8\\\\xA6\\\\x2\\\\xC9\\\\x9A\\Hy3\\xA1\\=\">>) :- true.\n"
+  },
+  {
+    "indicator": "can_close_physics_hinged / 3",
+    "expected": "can_close_physics_hinged(V0, V1, V2) :- fail.\n",
+    "draft": "can_close_physics_hinged(V0, V1, V2) :- fail.\ncan_close_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\n"
+  },
+  {
+    "indicator": "can_cancel_physics_hinged / 3",
+    "expected": "can_cancel_physics_hinged(V0, V1, V2) :- fail.\n",
+    "draft": "can_cancel_physics_hinged(V0, V1, V2) :- fail.\ncan_cancel_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\n"
+  },
+  {
+    "indicator": "hinged_example_appearance / 5",
+    "expected": "",
+    "draft": "hinged_example_appearance(room, 3, <<\"hinged-lid\">>, container_lid, [part(<<\"hinged-lid/panel\">>, <<\"box\">>, [f(<<\"width\">>, 2000), f(<<\"height\">>, 200), f(<<\"depth\">>, 2000)], transform(0, 0, 0, 0, 0, 0), surface(<<\"#C48A45\">>, 0, 900, 0, [])), part(<<\"hinged-lid/handle\">>, <<\"sphere\">>, [f(<<\"diameter\">>, 300)], transform(0, 150, V0, 0, 0, 0), surface(<<\"#D7CB9F\">>, 600, 450, 0, []))]) :- V0 is (-700).\n"
+  },
+  {
+    "indicator": "hinged_fixture_appearance / 7",
+    "expected": "",
+    "draft": "hinged_fixture_appearance(room, 1, <<\"floor\">>, <<\"box\">>, [f(<<\"width\">>, 16000), f(<<\"height\">>, 500), f(<<\"depth\">>, 16000)], surface(<<\"#736E5D\">>, 0, 900, 0, []), gallery_floor) :- true.\nhinged_fixture_appearance(room, 4, <<\"hinged-lid/frame\">>, <<\"box\">>, [f(<<\"width\">>, 2000), f(<<\"height\">>, 400), f(<<\"depth\">>, 200)], surface(<<\"#737373\">>, 0, 900, 0, []), lid_frame) :- true.\nhinged_fixture_appearance(room, 5, <<\"hinged-lid/obstacle\">>, <<\"box\">>, [f(<<\"width\">>, 400), f(<<\"height\">>, 2000), f(<<\"depth\">>, 400)], surface(<<\"#AB4646\">>, 0, 900, 0, []), lid_obstacle) :- true.\n"
+  },
+  {
+    "indicator": "physics_hinged_consequence / 5",
+    "expected": "physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\n",
+    "draft": "physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\nphysics_hinged_consequence(room, 3, V0, closed, assertz(hinged_result(container_closed, V0))) :- true.\n"
+  }
+]

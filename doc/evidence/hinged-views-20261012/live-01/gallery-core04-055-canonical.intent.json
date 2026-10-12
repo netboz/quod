@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"react_on(observed(V0), physics_finish_rest(V0)) :- physics_observation(V0) , physics_rest_measurement(V0) , prepare_signed_request(V1, V2, physics_store_rest_request(V0, V1, V2)).\\xA\\react_on(observed(V0), physics_finish_hinged(V0, V1)) :- physics_observation(V0) , physics_hinged_measurement(V0, V1) , prepare_signed_request(V2, V3, physics_store_hinged_request(V0, V1, V2, V3)).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:59:18.799547+00:00"
+}

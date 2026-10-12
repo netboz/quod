@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"hinged_fixture_appearance(room, 1, <<\\\"floor\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 16000), f(<<\\\"height\\\">>, 500), f(<<\\\"depth\\\">>, 16000)], surface(<<\\\"#736E5D\\\">>, 0, 900, 0, []), gallery_floor) :- true.\\xA\\hinged_fixture_appearance(room, 4, <<\\\"hinged-lid/frame\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 400), f(<<\\\"depth\\\">>, 200)], surface(<<\\\"#737373\\\">>, 0, 900, 0, []), lid_frame) :- true.\\xA\\hinged_fixture_appearance(room, 5, <<\\\"hinged-lid/obstacle\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 400), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 400)], surface(<<\\\"#AB4646\\\">>, 0, 900, 0, []), lid_obstacle) :- true.\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "93",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "634",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 634,
+  "operation_id": "gMYmuGLYFgrB7MDIuwWEjmtxqfm4LLfaf2m_7YwO_L4",
+  "request_digest": "3-tn7Eoai4m5fBSBlEGWWWDFsW7DsMFNrBLwsiagUOQ",
+  "result": "ok"
+}

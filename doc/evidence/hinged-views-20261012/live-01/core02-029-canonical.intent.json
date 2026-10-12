@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_hinged_measurement(V0, V1) :- V0 = physics_sample(V2, activity(V3, V4, V5), revisions(V6), V7, V8, joint_position_mrad(V9, V10)) , physics_valid_sample(V0, V11) , V3 = hinge(V12, V13) , physics_hinged_references(V11, V12, V3, V6) , physics_hinged(V11, V12, V14, closing(V4)) , physics_hinged_control(V11, V12, V5) , physics_joint(V11, hinge(body(V12, V15), V16, body(V17, V18), V19, V20, V21, V22)) , V21 = limits(V23, V24) , integer(V9) , V9 >= V23 , V9 =< V24 , physics_valid_joint_command(V5, V21) , V5 = position(V25, V26, stop(V27, target_or_contact)) , physics_hinged_result(V11, V12, V17, V9, V25, V27, V10, V1).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:42:37.903501+00:00"
+}

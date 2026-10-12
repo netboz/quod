@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_definition,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_definition,2)))),','(assertz(':-'(physics_hinged_definition(local(V2,V3),V4),physics_hinged_class(V2,V3,V4))),','(assertz(':-'(physics_hinged_definition(class_ref(V5,V6,V7,V8),V9),'::'(V5,','(current_ontology_identity(V5,V6),physics_hinged_class(V7,V8,V9))))),';'('->'('$quod_predicate_source'('/'(physics_hinged_definition,2),<<\"physics_hinged_definition(local(V0, V1), V2) :- physics_hinged_class(V0, V1, V2).\\xA\\physics_hinged_definition(class_ref(V0, V1, V2, V3), V4) :- V0 :: (current_ontology_identity(V0, V1) , physics_hinged_class(V2, V3, V4)).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_definition,2))))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "548",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 548,
+  "operation_id": "fBPZz89Mcv5NioPAucvOhunx_fyLJSbN-kiJfUlHzc4",
+  "request_digest": "5wed7j2AA8gmE5yqiHEorUi7wMBjAc6aCOWO5RU9UDo",
+  "result": "ok"
+}

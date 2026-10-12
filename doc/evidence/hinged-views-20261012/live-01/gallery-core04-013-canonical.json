@@ -1,0 +1,1 @@
+"physics_cancel_hinged(V0, V1, V2) :- term_variables([V0, V1, V2], []) , transaction((current_principal(V3) , can_cancel_physics_hinged(V0, V1, V3) , retract(physics_hinged(V0, V1, V4, closing(V2))) , assertz(physics_hinged(V0, V1, V4, cancelled(V2))))).\n"

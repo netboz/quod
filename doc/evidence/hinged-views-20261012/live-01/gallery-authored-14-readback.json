@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"hinged_example_appearance(room, 3, <<\\\"hinged-lid\\\">>, container_lid, [part(<<\\\"hinged-lid/panel\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 200), f(<<\\\"depth\\\">>, 2000)], transform(0, 0, 0, 0, 0, 0), surface(<<\\\"#C48A45\\\">>, 0, 900, 0, [])), part(<<\\\"hinged-lid/handle\\\">>, <<\\\"sphere\\\">>, [f(<<\\\"diameter\\\">>, 300)], transform(0, 150, V0, 0, 0, 0), surface(<<\\\"#D7CB9F\\\">>, 600, 450, 0, []))]) :- V0 is (-700).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "92",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "632",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 632,
+  "operation_id": "9ypcadvXIKo9XYbzL_lG9GZ0h-ZNrPoU9ePa6OyWhMQ",
+  "request_digest": "I8Lr5BKBw1vvRmzjru2c4if8EjBRy9b-UeEdwS9NrWU",
+  "result": "ok"
+}

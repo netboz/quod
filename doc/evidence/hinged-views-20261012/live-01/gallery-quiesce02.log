@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod/_build/quod36/browser-03/gallery_quiesce02.py", line 12, in <module>
+    r=owner.read('gallery-quiesce02-prepare',expression)
+  File "/home/yan/src/quod/_build/quod36/browser-03/owner.py", line 17, in read
+    assert 'error' not in a,a
+           ^^^^^^^^^^^^^^^^
+AssertionError: {'error': '{error,{badmatch,{error,invalid_goal}}}'}

@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_example_appearance,5),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_example_appearance,5)))),','(assertz(':-'(hinged_example_appearance(personal_lobby,5,<<\"hinged-door\">>,vertical_door,[part(<<\"hinged-door/panel\">>,<<\"box\">>,[f(<<\"width\">>,2000),f(<<\"height\">>,2000),f(<<\"depth\">>,200)],transform(0,0,0,0,0,0),surface(<<\"#4678AB\">>,0,900,0,[]))]),true)),';'('->'('$quod_predicate_source'('/'(hinged_example_appearance,5),<<\"hinged_example_appearance(personal_lobby, 5, <<\\\"hinged-door\\\">>, vertical_door, [part(<<\\\"hinged-door/panel\\\">>, <<\\\"box\\\">>, [f(<<\\\"width\\\">>, 2000), f(<<\\\"height\\\">>, 2000), f(<<\\\"depth\\\">>, 200)], transform(0, 0, 0, 0, 0, 0), surface(<<\\\"#4678AB\\\">>, 0, 900, 0, []))]) :- true.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_example_appearance,5)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "484",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 484,
+  "operation_id": "RSGwN62mLWWa1MzGZ9lSd38SOHI_0isqZTNyVs_auXE",
+  "request_digest": "EQrEtibMPYN0ApwyFzEarzFhlB-Z8iUK7nk79d3v3D8",
+  "result": "ok"
+}

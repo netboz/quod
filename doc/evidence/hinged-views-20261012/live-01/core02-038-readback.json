@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"physics_projection(V0, V1) :- findall(world(V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, baseline(V15, V16, V17, control_selection(V18, V19))), (physics_enabled(V2, V3) , agent_hosted(V3, V0, V4, V5) , physics_run(V2, V6, V7) , physics_structure(V2, V9) , physics_required_allowances(V2, V10, V11, V12, V14) , physics_custody(V2, V8) , findall(V20, physics_recovery_checkpoint(V2, V20), V15) , findall(V21, physics_joint(V2, V21), V16) , findall(activity(V22, V23, V24, V25), physics_activity(V2, V22, V23, V24, V25), V17) , findall(binding(V26, V27, V28), physics_control(V2, V26, V27, V28), V18) , findall(control(V26, V29, V30), (physics_control(V2, V26, V31, controlled(V32, V33)) , physics_control_configuration(V2, V26, V29, V30)), V34) , findall(push(V26, V35, V36, V37, V38), (physics_control(V2, V26, V39, controlled(V40, V41)) , physics_push_configuration(V2, V26, V35, V36, V37, V38)), V42) , append(V34, V42, V19) , findall(body(V43, V44, V45, V46, V47), physics_body_definition(V2, V43, V44, V45, V46, V47), V13)), V1).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "436",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+      "height": "229",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 436,
+  "operation_id": "017rtb1dpWUT0klJbY2meaE5iM5_BTk2546c1nIWR1U",
+  "request_digest": "uFEmfRUZk9ahn-nvvPPfrx5A3DrQgq8373CqmvJdI8o",
+  "result": "ok"
+}

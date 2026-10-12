@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"can_cancel_physics_hinged(V0, V1, V2) :- fail.\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:40:31.756217+00:00"
+}

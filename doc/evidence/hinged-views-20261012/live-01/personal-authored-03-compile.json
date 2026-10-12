@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(can_edit_physics,2),<<\"can_edit_physics(V0, V1) :- fail.\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(can_edit_physics,2)))),','(assertz(':-'(can_edit_physics(V2,V3),hinged_example_owner(V2,V3))),';'('->'('$quod_predicate_source'('/'(can_edit_physics,2),<<\"can_edit_physics(V0, V1) :- fail.\\xA\\can_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(can_edit_physics,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "474",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 474,
+  "operation_id": "xL8tDRxjLJLVLn0x5T5Tl9XbRfyn9hi9n2YPqTLIf5U",
+  "request_digest": "h-70BVj1NMQG7MyfuizY-gRYXH9TDTF_DVbHz05WL8I",
+  "result": "ok"
+}

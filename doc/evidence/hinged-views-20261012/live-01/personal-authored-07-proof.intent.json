@@ -1,0 +1,7 @@
+{
+  "action": "cursor",
+  "args": [
+    "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">> :: (current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xc1\\P&\\x9e\\[\\x82\\uL\\x06\\\\xcb\\y(\\xf6\\\\xe5\\_\\xfb\\\\xce\\\\xda\\\\xbd\\%\\xe6\\B\\xc2\\\\xcc\\\\xf8\\t\\xa3\\\\xa6\\\\xf7\\\\x7f\\\">>), transaction((physics_space(personal_lobby, disabled, physics_authority), ('$quod_predicate_source'(can_cancel_physics_hinged / 3, <<\"can_cancel_physics_hinged(V0, V1, V2) :- fail.\\n\">>) -> true ; fail_with_reason(edit_conflict(can_cancel_physics_hinged / 3))), assertz((can_cancel_physics_hinged(V2, V3, V4) :- hinged_example_permission(V2, V3, V4))), ('$quod_predicate_source'(can_cancel_physics_hinged / 3, <<\"can_cancel_physics_hinged(V0, V1, V2) :- fail.\\ncan_cancel_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\\n\">>) -> true ; fail_with_reason(edit_not_representable(can_cancel_physics_hinged / 3))))))."
+  ],
+  "at": "2026-10-12T13:45:18.848326+00:00"
+}

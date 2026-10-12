@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_finish_rest,1),<<\"physics_finish_rest(V0) :- term_variables(V0, []) , transaction((physics_rest_measurement(V0) , V0 = rest_sample(V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12) , physics_actor(V1) , physics_rest_request(V1, V2, request(V0, rest, V13, V14)) , current_signed_request(V13, V14) , retract(physics_rest(V1, V2, V15, waiting(V3))) , assertz(physics_rest(V1, V2, V15, finished(V0))) , physics_remove_rest_checkpoint(V1, V2) , assertz(physics_checkpoint(V1, rest_v1(V2, V9, source(V4, V5, V6, V7, V8, V10), world_mm_quaternion_million, V11, zero_velocity))) , trigger_event(physics_body_checkpointed(V1, V2, V3)))).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_finish_rest,1)))),','('$quod_retract_exact'(':-'(physics_finish_rest(V2),','(term_variables(V2,[]),transaction(','(physics_rest_measurement(V2),','('='(V2,rest_sample(V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14)),','(physics_actor(V3),','(physics_rest_request(V3,V4,request(V2,rest,V15,V16)),','(current_signed_request(V15,V16),','(retract(physics_rest(V3,V4,V17,waiting(V5))),','(assertz(physics_rest(V3,V4,V17,finished(V2))),','(physics_remove_rest_checkpoint(V3,V4),','(assertz(physics_checkpoint(V3,rest_v1(V4,V11,source(V6,V7,V8,V9,V10,V12),world_mm_quaternion_million,V13,zero_velocity))),trigger_event(physics_body_checkpointed(V3,V4,V5))))))))))))))),','(assertz(':-'(physics_finish_rest(V18),','(term_variables(V18,[]),transaction(','(physics_rest_measurement(V18),','('='(V18,physics_sample(physics_frame(world_ref(V19,V20,V21),V22,V23,V24,V25,V26),activity(rest(V27,V28),V29,rest),V30,V31,V32,rest_pose_mm_quaternion_million(V33))),','(physics_actor(V21),','(physics_rest_request(V21,V27,request(V18,rest,V34,V35)),','(current_signed_request(V34,V35),','(retract(physics_rest(V21,V27,V36,waiting(V29))),','(assertz(physics_rest(V21,V27,V36,finished(V18))),','(physics_remove_rest_checkpoint(V21,V27),','(assertz(physics_checkpoint(V21,rest_v1(V27,V28,source(V22,V23,V24,V25,V26,V31),world_mm_quaternion_million,V33,zero_velocity))),trigger_event(physics_body_checkpointed(V21,V27,V29))))))))))))))),';'('->'('$quod_predicate_source'('/'(physics_finish_rest,1),<<\"physics_finish_rest(V0) :- term_variables(V0, []) , transaction((physics_rest_measurement(V0) , V0 = physics_sample(physics_frame(world_ref(V1, V2, V3), V4, V5, V6, V7, V8), activity(rest(V9, V10), V11, rest), V12, V13, V14, rest_pose_mm_quaternion_million(V15)) , physics_actor(V3) , physics_rest_request(V3, V9, request(V0, rest, V16, V17)) , current_signed_request(V16, V17) , retract(physics_rest(V3, V9, V18, waiting(V11))) , assertz(physics_rest(V3, V9, V18, finished(V0))) , physics_remove_rest_checkpoint(V3, V9) , assertz(physics_checkpoint(V3, rest_v1(V9, V10, source(V4, V5, V6, V7, V8, V13), world_mm_quaternion_million, V15, zero_velocity))) , trigger_event(physics_body_checkpointed(V3, V9, V11)))).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_finish_rest,1))))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "538",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 538,
+  "operation_id": "FVmLIjVA9MLWNIO6hyg3qj_BalWO5a6r7RUDzrFC05s",
+  "request_digest": "fHTvgV_tpHf2Z8jAsVuZiOmz6_6LnD7VCe2YMQcbroY",
+  "result": "ok"
+}

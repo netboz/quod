@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(lobby_workspace,3),<<\"\">>),true),fail_with_reason(edit_conflict('/'(lobby_workspace,3)))),','(assertz(':-'(lobby_workspace(console,prove_console,form(<<\"Prolog console\">>,[editor(goal,<<\"Prolog goal\">>),bindings(results,<<\"Bindings\">>),button(run,<<\"Run\">>),button(next,<<\"Next solution\">>),button(accept,<<\"Accept solution\">>),button(stop,<<\"Stop\">>),button(resolve,<<\"Check saved outcome\">>)])),true)),';'('->'('$quod_predicate_source'('/'(lobby_workspace,3),<<\"lobby_workspace(console, prove_console, form(<<\\\"Prolog console\\\">>, [editor(goal, <<\\\"Prolog goal\\\">>), bindings(results, <<\\\"Bindings\\\">>), button(run, <<\\\"Run\\\">>), button(next, <<\\\"Next solution\\\">>), button(accept, <<\\\"Accept solution\\\">>), button(stop, <<\\\"Stop\\\">>), button(resolve, <<\\\"Check saved outcome\\\">>)])) :- true.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(lobby_workspace,3)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "614",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 614,
+  "operation_id": "JSN8_xJkzcPSmQGxnMJTi9I4lnvJBlQBFNEdJHpKrK0",
+  "request_digest": "6iKovzk1ZcKbyDp1AMN7ko7dGBv4JwsucrKOFiKwcHA",
+  "result": "ok"
+}

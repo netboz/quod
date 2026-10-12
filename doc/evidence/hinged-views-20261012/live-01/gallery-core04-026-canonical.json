@@ -1,0 +1,1 @@
+"physics_hinged_consequences([]) :- true.\nphysics_hinged_consequences([V0 | V1]) :- call(V0) , physics_hinged_consequences(V1).\n"

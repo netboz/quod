@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_remove_hinged_request,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_remove_hinged_request,2)))),','(assertz(':-'(physics_remove_hinged_request(V2,V3),','(physics_hinged_custody(V2,V3,V4),';'('->'('='(V4,none),true),retract(physics_hinged_request(V2,V3,V4)))))),';'('->'('$quod_predicate_source'('/'(physics_remove_hinged_request,2),<<\"physics_remove_hinged_request(V0, V1) :- physics_hinged_custody(V0, V1, V2) , (V2 = none -> true ; retract(physics_hinged_request(V0, V1, V2))).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_remove_hinged_request,2)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "576",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 576,
+  "operation_id": "exNf4NHyImaBqdnKRZI6LU91sptD8B3C6Jqg0GpaXrY",
+  "request_digest": "eEsHXf5jvUjS5PpYj-g-xW3eFZI7M0pGZW7oYNnHUqU",
+  "result": "ok"
+}

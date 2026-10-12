@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "submitted": false,
+  "failure": "pre-add extended view requires the not-yet-added authored body; original lobby scene is the baseline"
+}

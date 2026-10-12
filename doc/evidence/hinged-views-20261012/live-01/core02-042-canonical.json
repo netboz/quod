@@ -1,0 +1,1 @@
+"physics_remove_hinged_request(V0, V1) :- physics_hinged_custody(V0, V1, V2) , (V2 = none -> true ; retract(physics_hinged_request(V0, V1, V2))).\n"

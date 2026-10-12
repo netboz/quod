@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_free_body,3),<<\"physics_free_body(V0, V1, V2) :- physics_body_definition(V0, V1, V2, dynamic, V3, V4) , \\\\+ physics_joint(V0, hinge(V1, V5, V6, V7, V8, V9)) , \\\\+ physics_joint(V0, hinge(V10, V11, V1, V12, V13, V14)).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(physics_free_body,3)))),','('$quod_retract_exact'(':-'(physics_free_body(V2,V3,V4),','(physics_body_definition(V2,V3,V4,dynamic,V5,V6),','('\\\\+'(physics_joint(V2,hinge(V3,V7,V8,V9,V10,V11))),'\\\\+'(physics_joint(V2,hinge(V12,V13,V3,V14,V15,V16))))))),','(assertz(':-'(physics_free_body(V17,V18,V19),','(physics_body_definition(V17,V18,V19,dynamic,V20,V21),','('\\\\+'(physics_joint(V17,hinge(body(V18,V22),V23,V24,V25,V26,V27,V28))),'\\\\+'(physics_joint(V17,hinge(V29,V30,body(V18,V31),V32,V33,V34,V35))))))),';'('->'('$quod_predicate_source'('/'(physics_free_body,3),<<\"physics_free_body(V0, V1, V2) :- physics_body_definition(V0, V1, V2, dynamic, V3, V4) , \\\\+ physics_joint(V0, hinge(body(V1, V5), V6, V7, V8, V9, V10, V11)) , \\\\+ physics_joint(V0, hinge(V12, V13, body(V1, V14), V15, V16, V17, V18)).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_free_body,3))))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:56:31.458438+00:00"
+}

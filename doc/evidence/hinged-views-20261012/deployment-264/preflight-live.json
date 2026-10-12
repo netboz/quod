@@ -1,0 +1,9 @@
+{
+  "captured": "2026-10-12T13:31:50.249218+00:00",
+  "version": 71,
+  "index": 847862,
+  "healthy": 8,
+  "zero_restarts": true,
+  "same_volumes": true,
+  "read_only": true
+}

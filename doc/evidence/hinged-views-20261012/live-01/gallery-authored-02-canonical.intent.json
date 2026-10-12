@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"lobby_menu(console, [menu_entry(prove_goal, <<\\\"Prove a goal\\\">>, open_view(proof_console))]) :- true.\\xA\\\">>"
+  ],
+  "at": "2026-10-12T14:00:45.445316+00:00"
+}

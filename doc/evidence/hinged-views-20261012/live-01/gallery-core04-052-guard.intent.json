@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_valid_joint_command,2),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_valid_joint_command,2)))),','(assertz(':-'(physics_valid_joint_command(hold,V2),true)),','(assertz(':-'(physics_valid_joint_command(position(V3,motor(V4,V5,V6),stop(V7,target_or_contact)),limits(V8,V9)),','(integer(V3),','('>='(V3,V8),','('=<'(V3,V9),','(physics_positive_scalar(V4),','(physics_positive_scalar(V5),','(physics_positive_scalar(V6),physics_positive_scalar(V7))))))))),';'('->'('$quod_predicate_source'('/'(physics_valid_joint_command,2),<<\"physics_valid_joint_command(hold, V0) :- true.\\xA\\physics_valid_joint_command(position(V0, motor(V1, V2, V3), stop(V4, target_or_contact)), limits(V5, V6)) :- integer(V0) , V0 >= V5 , V0 =< V6 , physics_positive_scalar(V1) , physics_positive_scalar(V2) , physics_positive_scalar(V3) , physics_positive_scalar(V4).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_valid_joint_command,2))))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:58:59.772531+00:00"
+}

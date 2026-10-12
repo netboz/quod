@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"acceptance:physics:259:04:gallery\">>,','(current_ontology_identity(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xEF\\\\x1E\\\\x5\\iC\\xB6\\)\\xAC\\\\x1D\\\\xCA\\q\\xB1\\;\\xA0\\\\x2\\\\x8A\\\\xBD\\\\xE7\\\\xFB\\{\\xF\\\\x91\\uf\\x4\\3J/\\x7\\\\xB6\\\\x9B\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(hinged_example_marks,3),<<\"\">>),true),fail_with_reason(edit_conflict('/'(hinged_example_marks,3)))),','(assertz(':-'(hinged_example_marks([],V2,[]),true)),','(assertz(':-'(hinged_example_marks([object(V3,V4,V5,V6)|V7],V8,[mark(V4,<<\"group\">>,[],body_pose(V3,V9),no_surface,label(V10,<<\"above\">>),depicts(V11,V12,V5))|V13]),','(current_ontology_identity(V11,V12),','(findall(V14,physics_body_definition(V8,V3,V14,V15,V16,V17),[V9]),','(findall(V18,physics_hinged(V8,V3,V19,V18),[V20]),','(hinged_example_label(V20,V10),','(hinged_example_parts(V6,V4,V21),','(hinged_example_marks(V7,V8,V22),append(V21,V22,V13))))))))),';'('->'('$quod_predicate_source'('/'(hinged_example_marks,3),<<\"hinged_example_marks([], V0, []) :- true.\\xA\\hinged_example_marks([object(V0, V1, V2, V3) | V4], V5, [mark(V1, <<\\\"group\\\">>, [], body_pose(V0, V6), no_surface, label(V7, <<\\\"above\\\">>), depicts(V8, V9, V2)) | V10]) :- current_ontology_identity(V8, V9) , findall(V11, physics_body_definition(V5, V0, V11, V12, V13, V14), [V6]) , findall(V15, physics_hinged(V5, V0, V16, V15), [V17]) , hinged_example_label(V17, V7) , hinged_example_parts(V3, V1, V18) , hinged_example_marks(V4, V5, V19) , append(V18, V19, V10).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(hinged_example_marks,3))))))))))",
+    "room"
+  ],
+  "at": "2026-10-12T13:54:42.273628+00:00"
+}

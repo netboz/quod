@@ -1,0 +1,8 @@
+{
+  "action": "guard",
+  "args": [
+    "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(world_view,3),<<\"world_view(V0, V1, V2) :- instance_of(lobby, V0) , lobby_view(V1, V2).\\xA\\\">>),true),fail_with_reason(edit_conflict('/'(world_view,3)))),','('$quod_retract_exact'(':-'(world_view(V2,V3,V4),','(instance_of(lobby,V2),lobby_view(V3,V4)))),','(assertz(':-'(world_view(V5,V6,V7),','(instance_of(lobby,V5),','(lobby_view(V6,V8),','(hinged_example_view(V5,V9),','(hinged_fixture_view(V5,V10),','(append(V8,V9,V11),append(V11,V10,V7)))))))),';'('->'('$quod_predicate_source'('/'(world_view,3),<<\"world_view(V0, V1, V2) :- instance_of(lobby, V0) , lobby_view(V1, V3) , hinged_example_view(V0, V4) , hinged_fixture_view(V0, V5) , append(V3, V4, V6) , append(V6, V5, V2).\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(world_view,3))))))))))",
+    "personal_lobby"
+  ],
+  "at": "2026-10-12T13:45:13.947208+00:00"
+}

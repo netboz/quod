@@ -1,0 +1,1 @@
+"hinged_example_label(idle, <<\"Ready to close\">>) :- true.\nhinged_example_label(closing(V0), <<\"Closing\">>) :- true.\nhinged_example_label(cancelled(V0), <<\"Cancelled\">>) :- true.\nhinged_example_label(finished(V0, closed), <<\"Closed\">>) :- true.\nhinged_example_label(finished(V0, blocked(V1)), <<\"Blocked\">>) :- true.\n"

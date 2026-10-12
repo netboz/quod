@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_valid_hinge(vector(V0, V1, V2), anchors(V3, V4), limits(V5, V6), V7, V8) :- physics_milli_integer(V0) , physics_milli_integer(V1) , physics_milli_integer(V2) , (V0 =\\\\= 0 ; V1 =\\\\= 0 ; V2 =\\\\= 0) , physics_body_vector(V3, V8) , physics_body_vector(V4, V8) , integer(V5) , integer(V6) , V5 >= (-3141) , V6 =< 3141 , V5 =< V6 , V6 - V5 =< 3141 , integer(V7) , V7 >= V5 , V7 =< V6.\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:58:53.040928+00:00"
+}

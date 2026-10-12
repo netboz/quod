@@ -1,0 +1,28 @@
+{
+  "bindings": [
+    {
+      "Edit": "'::'(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,','(current_ontology_identity(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>,<<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>),transaction(','(';'('->'('$quod_predicate_source'('/'(physics_hinged_consequence,5),<<\"\">>),true),fail_with_reason(edit_conflict('/'(physics_hinged_consequence,5)))),','(assertz(':-'(physics_hinged_consequence(V2,V3,V4,V5,V6),fail)),';'('->'('$quod_predicate_source'('/'(physics_hinged_consequence,5),<<\"physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\\xA\\\">>),true),fail_with_reason(edit_not_representable('/'(physics_hinged_consequence,5)))))))))"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "408",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 408,
+  "operation_id": "zQZRMoDNeNHSq_UuGJ-NWZ57GNFa9dQgcuAUWurUFqk",
+  "request_digest": "aerW0wNiY5HR9G5acNPa9dyJBmBQ_ORd7hzs9CdUESE",
+  "result": "ok"
+}

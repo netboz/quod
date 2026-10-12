@@ -1,0 +1,7 @@
+{
+  "action": "source",
+  "args": [
+    "<<\"physics_move_hinged_members([], V0, V1, V2, V3, V4) :- true.\\xA\\physics_move_hinged_members([V0 | V1], V2, V3, V4, V5, V6) :- V0 = hinge(body(V7, V8), V9, body(V10, V3), V11, V12, V13, V14) , findall(state(V15, V16), physics_hinged(V2, V7, V15, V16), [state(V17, V18)]) , physics_body_definition(V2, V7, V8, dynamic, V19, V20) , physics_resolve_definition(V2, V20, V21, V22) , physics_checked_body(V7, dynamic, V5, V21, V22, V6) , retract(physics_body_definition(V2, V7, V8, dynamic, V19, V20)) , assertz(physics_body_definition(V2, V7, V4, dynamic, V5, V20)) , retract(physics_joint(V2, V0)) , assertz(physics_joint(V2, hinge(body(V7, V4), V4, body(V10, V4), V11, V12, V13, V14))) , physics_remove_hinge_checkpoint(V2, V7) , retract(physics_hinged(V2, V7, V17, V18)) , (V18 = closing(V23) -> V24 = cancelled(V23) ; V24 = V18) , assertz(physics_hinged(V2, V7, V17, V24)) , physics_move_hinged_members(V1, V2, V3, V4, V5, V6).\\xA\\\">>"
+  ],
+  "at": "2026-10-12T13:57:34.780081+00:00"
+}

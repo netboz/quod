@@ -1,0 +1,229 @@
+[
+  {
+    "awaiting_job_version": 73
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849783,
+    "ModifyTime": 1791812235035898688,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 0,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:15.035898688+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849800,
+    "ModifyTime": 1791812254303523728,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 1,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:33.598155558+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849805,
+    "ModifyTime": 1791812266231181614,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 3,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:43.264091611+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849806,
+    "ModifyTime": 1791812266476786452,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 4,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:45.610867679+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849809,
+    "ModifyTime": 1791812270405913902,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 6,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:49.595262653+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849810,
+    "ModifyTime": 1791812271554724069,
+    "Namespace": "default",
+    "Status": "running",
+    "StatusDescription": "Deployment is running",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 8,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:50.610499464+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  },
+  {
+    "CreateIndex": 849783,
+    "CreateTime": 1791812235034130826,
+    "EvalPriority": 50,
+    "ID": "243ef8e2-3472-9f1a-ae64-23a7dac2761b",
+    "IsMultiregion": false,
+    "JobCreateIndex": 780429,
+    "JobID": "quod-finality-candidate-v6-20260926",
+    "JobModifyIndex": 849782,
+    "JobSpecModifyIndex": 849782,
+    "JobVersion": 73,
+    "ModifyIndex": 849812,
+    "ModifyTime": 0,
+    "Namespace": "default",
+    "Status": "successful",
+    "StatusDescription": "Deployment completed successfully",
+    "TaskGroups": {
+      "quod-node": {
+        "AutoPromote": false,
+        "AutoRevert": false,
+        "DesiredCanaries": 0,
+        "DesiredTotal": 8,
+        "HealthyAllocs": 8,
+        "PlacedAllocs": 8,
+        "PlacedCanaries": null,
+        "ProgressDeadline": 1200000000000,
+        "Promoted": false,
+        "RequireProgressBy": "2026-10-12T15:57:50.610499464+02:00",
+        "UnhealthyAllocs": 0
+      }
+    }
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "action": "read",
+  "args": [
+    "<<\"quod:prolog\">>::(current_ontology_identity(<<\"quod:prolog\">>,<<\"\\x12\\\\xc5\\\\xc4\\\\xb5\\\\xf6\\\\xf1\\\\xb2\\\\xc7\\\\x2a\\\\x8e\\\\x94\\\\x69\\\\xab\\\\x00\\\\x36\\\\xdc\\\\xe0\\\\xcb\\\\xbb\\\\xd1\\\\x8c\\\\x72\\\\xfa\\\\xf8\\\\x53\\\\x70\\\\xc9\\\\xab\\\\x11\\\\x56\\\\xf9\\\\x81\\\">>),prolog_source(ontology_ref(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>),physics_close_hinged / 4,Source))."
+  ],
+  "at": "2026-10-12T13:55:45.296818+00:00"
+}

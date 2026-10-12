@@ -1,0 +1,7 @@
+{
+  "action": "read",
+  "args": [
+    "<<\"quod:prolog\">>::(current_ontology_identity(<<\"quod:prolog\">>,<<\"\\x12\\\\xc5\\\\xc4\\\\xb5\\\\xf6\\\\xf1\\\\xb2\\\\xc7\\\\x2a\\\\x8e\\\\x94\\\\x69\\\\xab\\\\x00\\\\x36\\\\xdc\\\\xe0\\\\xcb\\\\xbb\\\\xd1\\\\x8c\\\\x72\\\\xfa\\\\xf8\\\\x53\\\\x70\\\\xc9\\\\xab\\\\x11\\\\x56\\\\xf9\\\\x81\\\">>),prolog_edit_goal(ontology_ref(<<\"acceptance:physics:259:04:gallery\">>,<<\"A\\xef\\\\x1e\\\\x05\\iC\\xb6\\)\\xac\\\\x1d\\\\xca\\q\\xb1\\;\\xa0\\\\x02\\\\x8a\\\\xbd\\\\xe7\\\\xfb\\{\\x0f\\\\x91\\uf\\x04\\3J/\\x07\\\\xb6\\\\x9b\\\">>),physics_hinged_measurement / 2,<<\"\">>,<<\"physics_hinged_measurement(V0, V1) :- V0 = physics_sample(V2, activity(V3, V4, V5), revisions(V6), V7, V8, joint_position_mrad(V9, V10)) , physics_valid_sample(V0, V11) , V3 = hinge(V12, V13) , physics_hinged_references(V11, V12, V3, V6) , physics_hinged(V11, V12, V14, closing(V4)) , physics_hinged_control(V11, V12, V5) , physics_joint(V11, hinge(body(V12, V15), V16, body(V17, V18), V19, V20, V21, V22)) , V21 = limits(V23, V24) , integer(V9) , V9 >= V23 , V9 =< V24 , physics_valid_joint_command(V5, V21) , V5 = position(V25, V26, stop(V27, target_or_contact)) , physics_hinged_result(V11, V12, V17, V9, V25, V27, V10, V1).\\n\">>,Edit))."
+  ],
+  "at": "2026-10-12T13:57:00.268721+00:00"
+}

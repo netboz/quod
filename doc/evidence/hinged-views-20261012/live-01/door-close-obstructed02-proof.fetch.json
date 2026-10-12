@@ -1,0 +1,96 @@
+[
+  {
+    "body": "{\"session_id\": \"[redacted transient capability]\", \"request\": \"cXVvZC5hZ2VudC5nb2FsLnYxAOmkhakpvmBdwB4bunggrZVvhN5rUCwk0bRaXUgZERCW7n_lHNMzUqS_W2ofTVlP_mckiNzVyWhuJ6zzFyCyp47gabQrufbzmu2ZqPQTWMUZmCh5xdDeYIrg5RaCj735vwAxaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRXWPiqE9VM9ia6STpr--wkVIrJa0ndD-2jvAhD4IOMvyAAAAA21lLgADAAABoTBhbNoAAAEwPDwiaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRS9sb2JieSI-PiA6OiAoY3VycmVudF9vbnRvbG9neV9pZGVudGl0eSg8PCJodW1hbjo1cFUzWDhldmhmSDA5ZzFjdGwwTFJSUDgwem1oZDZNN2c4T1E3RHlPZWFFL2xvYmJ5Ij4-LDw8InBceDgyXFx4YzFcUCZceDllXFtceDgyXHVMXHgwNlxceGNiXHkoXHhmNlxceGU1XF9ceGZiXFx4Y2VcXHhkYVxceGJkXCVceGU2XEJceGMyXFx4Y2NcXHhmOFx0XHhhM1xceGE2XFx4ZjdcXHg3ZlwiPj4pLCBsb2JieV9tZW51KGNvbnNvbGUsRW50cmllcykpLg\", \"signature\": \"QLlrUm2QxzM4rLy9FGIMmwgzgH3fr3-WzOIn6DGA3ObYgP-sefzigwBZQKZTlxXmgbQWRmvxY2lieFokcOYBAA\"}",
+    "reply": {
+      "bindings": [
+        {
+          "Entries": "[menu_entry(prove_goal,<<\"Prove a goal\">>,open_view(proof_console))]"
+        }
+      ],
+      "dependencies": [
+        {
+          "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+          "height": "492",
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+        },
+        {
+          "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+          "height": "259",
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+        },
+        {
+          "genesis_anchor": "U5sXSdIVqtbH4KWBC7MMAFnIDY2h_nKVdadbCDlHRaQ",
+          "height": "13",
+          "ns": "quod:lobby"
+        }
+      ],
+      "height": 492,
+      "operation_id": "4Gm0K7n285rtmaj0E1jFGZgoecXQ3mCK4OUWgo-9-b8",
+      "request_digest": "u3x74JLyZg1kSTkpwe-fEUai0zalEif7tQ3IJdzJTrY",
+      "result": "ok"
+    },
+    "url": "/api/goals/read"
+  },
+  {
+    "body": "{\"session_id\": \"[redacted transient capability]\", \"request\": \"cXVvZC5hZ2VudC5nb2FsLnYxAOmkhakpvmBdwB4bunggrZVvhN5rUCwk0bRaXUgZERCW7n_lHNMzUqS_W2ofTVlP_mckiNzVyWhuJ6zzFyCyp467UsJsnLqhu9P9wfC1fxn-AncTEIXuYn3M5G8pWd7HWAAxaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRXWPiqE9VM9ia6STpr--wkVIrJa0ndD-2jvAhD4IOMvyAAAAA21lLgADAAABoTBhbeQAAAFAPDwiaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRS9sb2JieSI-PiA6OiAoY3VycmVudF9vbnRvbG9neV9pZGVudGl0eSg8PCJodW1hbjo1cFUzWDhldmhmSDA5ZzFjdGwwTFJSUDgwem1oZDZNN2c4T1E3RHlPZWFFL2xvYmJ5Ij4-LDw8InBceDgyXFx4YzFcUCZceDllXFtceDgyXHVMXHgwNlxceGNiXHkoXHhmNlxceGU1XF9ceGZiXFx4Y2VcXHhkYVxceGJkXCVceGU2XEJceGMyXFx4Y2NcXHhmOFx0XHhhM1xceGE2XFx4ZjdcXHg3ZlwiPj4pLCBsb2JieV93b3Jrc3BhY2UoY29uc29sZSxwcm9vZl9jb25zb2xlLFZpZXcpKS4\", \"signature\": \"ThEtHryyR71m3XLioEe8GfDFE2QLCdBSgZhuUV-cay_EtzgKueo7YjTF6nLUKVPL6Hn3nkF8Q95ABFU9VOuECQ\"}",
+    "reply": {
+      "bindings": [
+        {
+          "View": "form(<<\"Prolog console\">>,[editor(goal,<<\"Prolog goal\">>),bindings(results,<<\"Bindings\">>),button(run,<<\"Run\">>),button(next,<<\"Next solution\">>),button(accept,<<\"Accept solution\">>),button(stop,<<\"Stop\">>),button(resolve,<<\"Check saved outcome\">>)])"
+        }
+      ],
+      "dependencies": [
+        {
+          "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+          "height": "492",
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+        },
+        {
+          "genesis_anchor": "cILBUCaeW4J1TAbLeSj25V_7ztq9JeZCwsz4dKOm938",
+          "height": "259",
+          "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby"
+        },
+        {
+          "genesis_anchor": "Dx96ajKskD6qNAhQypXrytUVbVRgQzBHt_VLd0uq5Do",
+          "height": "1",
+          "ns": "quod:gui"
+        },
+        {
+          "genesis_anchor": "U5sXSdIVqtbH4KWBC7MMAFnIDY2h_nKVdadbCDlHRaQ",
+          "height": "13",
+          "ns": "quod:lobby"
+        }
+      ],
+      "height": 492,
+      "operation_id": "u1LCbJy6obvT_cHwtX8Z_gJ3ExCF7mJ9zORvKVnex1g",
+      "request_digest": "Pl-L6HTdocgUJPE6wkFkNp-LRiatBpipJnm5NGnBQKE",
+      "result": "ok"
+    },
+    "url": "/api/goals/read"
+  },
+  {
+    "body": "{\"session_id\": \"[redacted transient capability]\", \"request\": \"cXVvZC5hZ2VudC5nb2FsLnYxAOmkhakpvmBdwB4bunggrZVvhN5rUCwk0bRaXUgZERCW7n_lHNMzUqS_W2ofTVlP_mckiNzVyWhuJ6zzFyCyp47srb8nlSFabfUtqEdS4AxjelQ44geEpqhjyjFW0Cs8YQAxaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRXWPiqE9VM9ia6STpr--wkVIrJa0ndD-2jvAhD4IOMvyAAAAA21lLgIDAAABoTBh7r8AAACwPDwiaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRS9sb2JieSI-Pjo6cGh5c2ljc19jbG9zZV9oaW5nZWQocGVyc29uYWxfbG9iYnksNSwwLDw8IjRiYmFmNmE4NzdjNzUzNTNiMzhjYjQ3OGQyZGYzYjdmN2Q2ODFiMWMzZDk0NTBhZDk5OTJmNGU3NmE2YmRjMmQiPj4pCi4\", \"signature\": \"C5ThnMJ8ZJG_uP6OtG-dpD6Ia14AJSgcayX2rQJgQ0fIjQKVytxG7IjxYECbUZ_D68W4FkKipjQuJYSJgjipDA\"}",
+    "reply": {
+      "operation_id": "7K2_J5UhWm31LahHUuAMY3pUOOIHhKaoY8oxVtArPGE",
+      "reasons": [
+        "<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>::physics_close_hinged(personal_lobby, 5, 0, <<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>)",
+        "physics_close_hinged(personal_lobby, 5, 0, <<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>)",
+        "term_variables([personal_lobby, 5, 0, <<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>], [])",
+        "term_variables([personal_lobby, 5, 0, <<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>], [], [])",
+        "agent_identifier(<<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>)",
+        "binary_codes(<<\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\">>, unbound)",
+        "length(\"4bbaf6a877c75353b38cb478d2df3b7f7d681b1c3d9450ad9992f4e76a6bdc2d\", 32)"
+      ],
+      "request_digest": "eSg-cPnwHhTLxnztusCz3q88PaZ_joRIouhk6YI2gGc",
+      "result": "fail"
+    },
+    "url": "/api/goals/cursors"
+  },
+  {
+    "body": "{\"session_id\": \"[redacted transient capability]\", \"request\": \"cXVvZC5hZ2VudC5nb2FsLnYxAOmkhakpvmBdwB4bunggrZVvhN5rUCwk0bRaXUgZERCW7n_lHNMzUqS_W2ofTVlP_mckiNzVyWhuJ6zzFyCyp441RLu-jQVhU_PBSnGGxNejiLZJi_70qbZFWnVCvMX92gAxaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRXWPiqE9VM9ia6STpr--wkVIrJa0ndD-2jvAhD4IOMvyAAAAA21lLgIDAAABoTBjFUwAAAE_PDwiaHVtYW46NXBVM1g4ZXZoZkgwOWcxY3RsMExSUlA4MHptaGQ2TTdnOE9RN0R5T2VhRS9sb2JieSI-Pjo6cGh5c2ljc19jbG9zZV9oaW5nZWQocGVyc29uYWxfbG9iYnksNSwwLDw8IjRiYmFmNmE4NzdjNzUzNTNiMzhjYjQ3OGQyZGYzYjdmN2Q2ODFiMWMzZDk0NTBhZDk5OTJmNGU3NmE2YmRjMmQiPj4pLjw8Imh1bWFuOjVwVTNYOGV2aGZIMDlnMWN0bDBMUlJQODB6bWhkNk03ZzhPUTdEeU9lYUUvbG9iYnkiPj46OnBoeXNpY3NfY2xvc2VfaGluZ2VkKHBlcnNvbmFsX2xvYmJ5LDUsMCw8PCI0ZDVmZTZhZjk0OWUwOWIxMDIxM2E4M2ZjYzIzMjY3MSI-PikKLg\", \"signature\": \"X635S8H6jT1m86oQiZJaUZ_s9vrFKIh2WRmXU1gxTV1SR7Q3JNCuJGm12mdxpDYFimRoxmEQn9GwkYnhSvSiBg\"}",
+    "reply": {
+      "error": "invalid_goal"
+    },
+    "url": "/api/goals/cursors"
+  }
+]

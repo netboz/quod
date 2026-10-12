@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "Source": "<<\"physics_move_hinged_members([], V0, V1, V2, V3, V4) :- true.\\xA\\physics_move_hinged_members([V0 | V1], V2, V3, V4, V5, V6) :- V0 = hinge(body(V7, V8), V9, body(V10, V3), V11, V12, V13, V14) , findall(state(V15, V16), physics_hinged(V2, V7, V15, V16), [state(V17, V18)]) , physics_body_definition(V2, V7, V8, dynamic, V19, V20) , physics_resolve_definition(V2, V20, V21, V22) , physics_checked_body(V7, dynamic, V5, V21, V22, V6) , retract(physics_body_definition(V2, V7, V8, dynamic, V19, V20)) , assertz(physics_body_definition(V2, V7, V4, dynamic, V5, V20)) , retract(physics_joint(V2, V0)) , assertz(physics_joint(V2, hinge(body(V7, V4), V4, body(V10, V4), V11, V12, V13, V14))) , physics_remove_hinge_checkpoint(V2, V7) , retract(physics_hinged(V2, V7, V17, V18)) , (V18 = closing(V23) -> V24 = cancelled(V23) ; V24 = V18) , assertz(physics_hinged(V2, V7, V17, V24)) , physics_move_hinged_members(V1, V2, V3, V4, V5, V6).\\xA\\\">>"
+    }
+  ],
+  "dependencies": [
+    {
+      "genesis_anchor": "Qe8eBWlDtimsHcpxsTugAoq95_t7D5F1ZgQzSi8Htps",
+      "height": "58",
+      "ns": "acceptance:physics:259:04:gallery"
+    },
+    {
+      "genesis_anchor": "dY-KoT1Uz2JrpJOmv77CRUislrSd0P7aO8CEPgg4y_I",
+      "height": "564",
+      "ns": "human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE"
+    },
+    {
+      "genesis_anchor": "aZvpb6u1zEhWol4CABlsQ8NFkItxMgicaswGvmXCknc",
+      "height": "1",
+      "ns": "quod:lens"
+    },
+    {
+      "genesis_anchor": "EsXEtfbxsscqjpRpqwA23ODLu9GMcvr4U3DJqxFW-YE",
+      "height": "1",
+      "ns": "quod:prolog"
+    },
+    {
+      "genesis_anchor": "6aSFqSm-YF3AHhu6eCCtlW-E3mtQLCTRtFpdSBkREJY",
+      "height": "87",
+      "ns": "quod:root"
+    }
+  ],
+  "height": 564,
+  "operation_id": "wPGE0C2QgqVzTPjGnCv4W5zbs7FDcWiBM0twAEgUhoc",
+  "request_digest": "En_DOeNfNd4fuRgCW-KtSpVntOou-0VFzenct96RyA0",
+  "result": "ok"
+}

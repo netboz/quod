@@ -1,0 +1,52 @@
+[
+  {
+    "indicator": "can_invoke / 4",
+    "expected": "can_invoke(V0, V1, [], V2) :- true.\ncan_invoke(V0, V1, V2, V3) :- lobby_owner(V1).\ncan_invoke((agent_hosted(physics_authority, agent_instance_ref(<<\"node:617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e\">>, <<\"a\\xBD\\)\\x95\\\\xAA\\q\\x18\\\\xB7\\\\xE3\\\\x1A\\\\xE3\\\\xA4\\\\xEE\\\\xA1\\\\x17\\\\xD8\\~\\xEA\\Fy\\x94\\\\x2\\e\\xB8\\(\\xE1\\\\x9A\\\\xB9\\.#TW\">>, me), 1, V0) , sign_agent_request(V1, V2)), agent_instance_ref(<<\"node:617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e\">>, <<\"a\\xBD\\)\\x95\\\\xAA\\q\\x18\\\\xB7\\\\xE3\\\\x1A\\\\xE3\\\\xA4\\\\xEE\\\\xA1\\\\x17\\\\xD8\\~\\xEA\\Fy\\x94\\\\x2\\e\\xB8\\(\\xE1\\\\x9A\\\\xB9\\.#TW\">>, me), V3, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\ncan_invoke(physics_store_request(personal_lobby, V0, V1, V2, V3, V4), agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>, physics_authority), V5, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\ncan_invoke(physics_activate(personal_lobby, V0, V1), agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>, physics_authority), V2, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\n",
+    "draft": "can_invoke(V0, V1, [], V2) :- true.\ncan_invoke(V0, V1, V2, V3) :- lobby_owner(V1).\ncan_invoke((agent_hosted(physics_authority, agent_instance_ref(<<\"node:617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e\">>, <<\"a\\xBD\\)\\x95\\\\xAA\\q\\x18\\\\xB7\\\\xE3\\\\x1A\\\\xE3\\\\xA4\\\\xEE\\\\xA1\\\\x17\\\\xD8\\~\\xEA\\Fy\\x94\\\\x2\\e\\xB8\\(\\xE1\\\\x9A\\\\xB9\\.#TW\">>, me), 1, V0) , sign_agent_request(V1, V2)), agent_instance_ref(<<\"node:617e237fd538bc0f14e0d65389d9e2e9646bab3a16c782ab0a6d0900172f4d8e\">>, <<\"a\\xBD\\)\\x95\\\\xAA\\q\\x18\\\\xB7\\\\xE3\\\\x1A\\\\xE3\\\\xA4\\\\xEE\\\\xA1\\\\x17\\\\xD8\\~\\xEA\\Fy\\x94\\\\x2\\e\\xB8\\(\\xE1\\\\x9A\\\\xB9\\.#TW\">>, me), V3, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\ncan_invoke(physics_store_request(personal_lobby, V0, V1, V2, V3, V4), agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>, physics_authority), V5, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\ncan_invoke(physics_activate(personal_lobby, V0, V1), agent_instance_ref(<<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>, <<\"p\\x82\\\\xC1\\P&\\x9E\\[\\x82\\uL\\x6\\\\xCB\\y(\\xF6\\\\xE5\\_\\xFB\\\\xCE\\\\xDA\\\\xBD\\%\\xE6\\B\\xC2\\\\xCC\\\\xF8\\t\\xA3\\\\xA6\\\\xF7\\\\x7F\\\">>, physics_authority), V2, <<\"human:5pU3X8evhfH09g1ctl0LRRP80zmhd6M7g8OQ7DyOeaE/lobby\">>) :- true.\ncan_invoke(physics_store_hinged_request(V0, V1, V2, V3), V4, V5, V6) :- current_ontology_identity(V6, V7) , V4 = agent_instance_ref(V6, V7, physics_authority).\ncan_invoke(physics_finish_hinged(V0, V1), V2, V3, V4) :- current_ontology_identity(V4, V5) , V2 = agent_instance_ref(V4, V5, physics_authority).\n"
+  },
+  {
+    "indicator": "world_view / 3",
+    "expected": "world_view(V0, V1, V2) :- instance_of(lobby, V0) , lobby_view(V1, V2).\n",
+    "draft": "world_view(V0, V1, V2) :- instance_of(lobby, V0) , lobby_view(V1, V3) , hinged_example_view(V0, V4) , hinged_fixture_view(V0, V5) , append(V3, V4, V6) , append(V6, V5, V2).\n"
+  },
+  {
+    "indicator": "can_edit_physics / 2",
+    "expected": "can_edit_physics(V0, V1) :- fail.\n",
+    "draft": "can_edit_physics(V0, V1) :- fail.\ncan_edit_physics(V0, V1) :- hinged_example_owner(V0, V1).\n"
+  },
+  {
+    "indicator": "hinged_fixture_view / 2",
+    "expected": "",
+    "draft": "hinged_fixture_view(V0, V1) :- current_ontology_identity(V2, V3) , findall(mark(V4, V5, V6, body_pose(V7, V8), V9, unlabelled, depicts(V2, V3, V10)), (hinged_fixture_appearance(V0, V7, V4, V5, V6, V9, V10) , physics_body_definition(V0, V7, V8, V11, V12, V13)), V1).\n"
+  },
+  {
+    "indicator": "physics_hinged_class / 3",
+    "expected": "",
+    "draft": "physics_hinged_class(vertical_door, 1, hinged(box(50, 1000, 50), box(1000, 1000, 100), 1, vector(0, 1, 0), anchors(vector(0, 0, 0), vector(V0, 0, 0)), limits(V1, 1500), 1500, position(0, motor(100, 10, 1000), stop(20, target_or_contact)))) :- V0 is (-1000) , V1 is (-1500).\n"
+  },
+  {
+    "indicator": "can_close_physics_hinged / 3",
+    "expected": "can_close_physics_hinged(V0, V1, V2) :- fail.\n",
+    "draft": "can_close_physics_hinged(V0, V1, V2) :- fail.\ncan_close_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\n"
+  },
+  {
+    "indicator": "can_cancel_physics_hinged / 3",
+    "expected": "can_cancel_physics_hinged(V0, V1, V2) :- fail.\n",
+    "draft": "can_cancel_physics_hinged(V0, V1, V2) :- fail.\ncan_cancel_physics_hinged(V0, V1, V2) :- hinged_example_permission(V0, V1, V2).\n"
+  },
+  {
+    "indicator": "hinged_example_appearance / 5",
+    "expected": "",
+    "draft": "hinged_example_appearance(personal_lobby, 5, <<\"hinged-door\">>, vertical_door, [part(<<\"hinged-door/panel\">>, <<\"box\">>, [f(<<\"width\">>, 2000), f(<<\"height\">>, 2000), f(<<\"depth\">>, 200)], transform(0, 0, 0, 0, 0, 0), surface(<<\"#4678AB\">>, 0, 900, 0, []))]) :- true.\n"
+  },
+  {
+    "indicator": "hinged_fixture_appearance / 7",
+    "expected": "",
+    "draft": "hinged_fixture_appearance(personal_lobby, 6, <<\"hinged-door/frame\">>, <<\"box\">>, [f(<<\"width\">>, 100), f(<<\"height\">>, 2000), f(<<\"depth\">>, 100)], surface(<<\"#737373\">>, 0, 900, 0, []), door_frame) :- true.\nhinged_fixture_appearance(personal_lobby, 7, <<\"hinged-door/obstacle\">>, <<\"box\">>, [f(<<\"width\">>, 400), f(<<\"height\">>, 2000), f(<<\"depth\">>, 400)], surface(<<\"#AB4646\">>, 0, 900, 0, []), door_obstacle) :- true.\n"
+  },
+  {
+    "indicator": "physics_hinged_consequence / 5",
+    "expected": "physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\n",
+    "draft": "physics_hinged_consequence(V0, V1, V2, V3, V4) :- fail.\nphysics_hinged_consequence(personal_lobby, 5, V0, closed, assertz(hinged_result(passage_closed, V0))) :- true.\n"
+  }
+]

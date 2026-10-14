@@ -54,6 +54,8 @@ flowchart TD
     Projection -->|Successful scene read| Ready[Display the personal lobby]
     Projection -->|Missing, pending or unavailable| Status[Show the actual setup or view status]
     Ready -->|Sign out| Entry
+    Ready -->|Session expires| Expired[Hide the scene and show Restore session]
+    Expired -->|Restore session| Authenticate
 ```
 
 These are presentation states derived by the existing session and view owners,
@@ -68,9 +70,15 @@ not another persistent state machine. Their display rules are:
 | Entry failure | Actual error and **Try again** | Retry restoration/authentication without replacing the retained key |
 | Authenticated identity and selected agent, entry work finished | Lobby shell, followed by the signed scene projection or its actual error/setup status | Use the lobby when available; otherwise use the existing recovery controls |
 | Signed out | Identity entry screen; lobby unmounted | Explicitly create, unlock or import a key |
+| Session expired | Scene hidden and inert; identity card with **Restore session** | Authenticate again with the retained key |
 
-The shell's exact current mounting condition is
-`!entering && identity && agent`. It is not proof that a personal lobby has
+The shell first opens when `!entering && identity && agent` and the session
+has not expired. An opened shell stays mounted but hidden and inert during
+expiry and restoration, keeping source and console drafts. Sessions default to 15 minutes;
+the browser uses the expiry returned by authentication. Restoring uses the
+existing key and account flow, retires the old proof cursor, and recovers saved
+operation outcomes without resubmitting writes. This does not extend a signed
+goal's original deadline. An open shell is not proof that a personal lobby has
 been provisioned, that the selected agent is authorized, or that its scene is
 available. Those facts come from signed Prolog queries. A session error after
 this condition is met is displayed in the world status instead of being

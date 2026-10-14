@@ -46,7 +46,7 @@ export default function World() {
   const [menu, setMenu] = useState<{ subject: Subject; entries: MenuEntry[]; error?: string } | null>(null)
   const [eidolons, setEidolons] = useState<{ subject: Subject; choices: EidolonChoice[]; error?: string; accessDenied?: boolean } | null>(null)
   const [workspace, setWorkspace] = useState<
-    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace } |
+    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace; subject: Subject; choice: EidolonChoice } |
     { kind: 'inspection'; key: string; representation: Extract<EidolonRepresentation, { kind: 'lens' }>; title: string } |
     { kind: 'question'; key: string; reference: GuiQuestionReference; controller: QuestionController } | { kind: 'questions'; key: string } | null>(null)
   const [focused, setFocused] = useState(false)
@@ -102,7 +102,9 @@ export default function World() {
   const pick = useRef(setSelected)
   pick.current = setSelected
   // Async view reads are invalidated when the acting identity or target changes.
-  const projection = useRef({ identity, agent, view })
+  const projectionScope = JSON.stringify([identity && b64url(identity.networkId),
+    identity && b64url(identity.provider.publicKey), agent?.id, view])
+  const projection = useRef(projectionScope)
   const context = useRef({ identity, agent, selected, view, mode, revision })
   context.current = { identity, agent, selected, view, mode, revision }
   const currentRequest = (request: typeof context.current) =>
@@ -174,9 +176,8 @@ export default function World() {
     let active = true
     let stream: ReturnType<typeof connectWorldView> | undefined
     scene?.update(null)
-    const previous = projection.current
-    const sameScope = previous.identity === identity && previous.agent === agent && previous.view === view
-    projection.current = { identity, agent, view }
+    const sameScope = projection.current === projectionScope
+    projection.current = projectionScope
     if (!sameScope) {
       setMarks([])
       scene?.update({ marks: [], selection: 'unavailable' })
@@ -239,7 +240,7 @@ export default function World() {
     const online = () => setRevision(n => n + 1)
     window.addEventListener('online', online)
     return () => { active = false; stream?.close(); scene?.update(null); window.removeEventListener('online', online) }
-  }, [identity, agent, view, mode, revision, viewUnavailable, scene])
+  }, [identity, agent, view, mode, revision, viewUnavailable, scene, projectionScope])
 
   useEffect(() => {
     let active = true
@@ -289,24 +290,24 @@ export default function World() {
     }
   }
 
-  const openEidolon = async (choice: EidolonChoice) => {
-    if (!identity || !agent || !selected?.anchor || openingTool) return
+  const openEidolon = async (choice: EidolonChoice, subject = selected) => {
+    if (!identity || !agent || !subject?.anchor || openingTool) return
     const request = context.current
-    const key = JSON.stringify([selected.ontology, [...selected.anchor], renderTerm(selected.entity),
+    const key = JSON.stringify([subject.ontology, [...subject.anchor], renderTerm(subject.entity),
       choice.recipe.namespace, [...choice.recipe.anchor], choice.recipe.name])
-    if (workspace?.key === key) { setFocused(true); return }
     setOpeningTool(true)
     setToolError(null)
     try {
-      const representation = await readEidolon(identity, agent, selected, choice)
+      const representation = await readEidolon(identity, agent, subject, choice)
       if (representation.kind === 'workspace') codeForm(representation.workspace.view)
       if (!currentRequest(request)) return
       setWorkspace(representation.kind === 'workspace'
-        ? { kind: 'code', key, code: representation.workspace }
+        ? { kind: 'code', key, code: representation.workspace, subject, choice }
         : { kind: 'inspection', key, representation, title: inspectionLabel(choice) })
       setFocused(true)
     } catch (error) {
       if (currentRequest(request)) setToolError(`Could not open the representation: ${String(error)}`)
+      return error instanceof Error ? error : new Error(String(error))
     } finally {
       if (currentRequest(request)) setOpeningTool(false)
     }
@@ -475,7 +476,11 @@ export default function World() {
         ? <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} scene={scene} visible={focused} />
         : workspace.kind === 'inspection'
         ? <OntologyInspection representation={workspace.representation} title={workspace.title} onClose={() => setFocused(false)} />
-        : <PrologEditor workspace={workspace.code} onClose={() => setFocused(false)} scene={scene} visible={focused} />}
+        : <PrologEditor workspace={workspace.code} onClose={() => setFocused(false)} scene={scene} visible={focused}
+            onRefresh={async () => {
+              const error = await openEidolon(workspace.choice, workspace.subject)
+              if (error) throw error
+            }} />}
     </section>}
   </div>
 }

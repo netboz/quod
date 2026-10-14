@@ -42,7 +42,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 
 -define(TTL_MS, 60000).
 -define(MAX_CHALLENGES, 256).
--define(SESSION_TTL_MS, 600000).
+-define(SESSION_TTL_MS, 900000).
 -define(MAX_SESSIONS, 256).
 -define(PRUNE_INTERVAL_MS, 30000).
 -include("quod_client_goal_limits.hrl").

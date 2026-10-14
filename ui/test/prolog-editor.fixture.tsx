@@ -1,10 +1,12 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { PrologEditor } from '../src/PrologEditor'
+import World from '../src/World'
+import { SessionEntry } from '../src/Session'
 import { SessionContext, type SessionState } from '../src/session-context'
 import { createKeyProvider, b64url, fromB64url } from '../../client/src/key-provider.js'
 import { signedOperationJournal } from '../../client/src/operation-journal.js'
 import { readTerm } from '../../client/src/prolog-read.js'
-import { binary, compound, formatTerm, renderTerm } from '../../client/src/prolog-term.js'
+import { atom, list, binary, compound, formatTerm, renderTerm } from '../../client/src/prolog-term.js'
 
 // Browser boundary fixture: real React, signing and IndexedDB, with explicit
 // HTTP responses. Server compilation/authorization are covered by lobby EUnit.
@@ -26,10 +28,13 @@ export async function createEditorFixture() {
   let accept: 'lost' | 'pending' = 'lost'
   let terminal = false
   let conflict = false
+  let refreshedReadOnly: boolean | undefined
+  let refreshError: string | null = null
+  let renewSession: (session: string) => void = () => { throw new Error('Editor is not mounted') }
   let cursorNumber = 0
   let lastDraft = source
   const labels = {
-    predicate: ['choice', 'Predicate'], new_predicate: ['input', 'New predicate'],
+    predicate: ['catalogue_selection', 'Predicate'], new_predicate: ['text_box', 'New predicate'],
     source: ['editor', 'Source code'], results: ['bindings', 'Edit result'],
     run: ['button', 'Preview changes'], accept: ['button', 'Save changes'],
     stop: ['button', 'Cancel preview'], create: ['button', 'Add predicate'],
@@ -44,6 +49,10 @@ export async function createEditorFixture() {
     const body = JSON.parse(String(init?.body ?? '{}'))
     const row: Record<string, unknown> = { path, body }
     calls.push(row)
+    if (path === '/api/ontologies/system') return response({
+      network_id: b64url(new Uint8Array(32).fill(1)),
+      ontologies: [{ namespace: 'personal:lobby', anchor: b64url(new Uint8Array(32).fill(7)) }],
+    })
     if (body.request) {
       const request = fromB64url(body.request)
       const signingKey = request.slice(19 + 32, 19 + 64)
@@ -63,6 +72,20 @@ export async function createEditorFixture() {
     }
     if (path === '/api/goals/read') {
       const goal = String(row.goal)
+      if (goal === 'lobby_navigation(Lobby,Modes).') return response({ result: 'fail' })
+      if (goal.includes('entity_eidolons(')) return response({ result: 'ok', bindings: [{ Choices:
+        renderTerm(list([compound('eidolon', [atom('prolog'), atom('source'),
+          compound('recipe', [bytes('quod:prolog'), binary(new Uint8Array(32).fill(8)), atom('source')])])])) }] })
+      if (goal.includes('eidolon(source,')) {
+        const target = compound('ontology_ref', [bytes('personal:lobby'), binary(new Uint8Array(32).fill(7))])
+        const tools = compound('ontology_ref', [bytes('quod:prolog'), binary(new Uint8Array(32).fill(8))])
+        const component = (role: string, kind: string, label: string, children: any[] = []) =>
+          compound('component', [atom(role), atom(kind), list([compound('property', [atom('label'), bytes(label)])]), list(children)])
+        const form = component('workspace', 'form', 'Prolog code', Object.entries(labels)
+          .map(([role, [kind, label]]) => component(role, kind, label)))
+        return response({ result: 'ok', bindings: [{ Representation:
+          renderTerm(compound('workspace', [target, target, tools, form])) }] })
+      }
       if (goal.includes('prolog_predicates(')) {
         const oldCatalogue = () => response({ result: 'ok', bindings: [{ Predicates: "['/'(sample,1)]" }] })
         if (holdCatalogue) return new Promise<Response>(resolve => catalogueWaiters.push(() => resolve(oldCatalogue())))
@@ -114,29 +137,48 @@ export async function createEditorFixture() {
     if (/\/api\/goals\/cursors\/edit-\d+$/.test(path) && init?.method === 'DELETE') return response({ result: 'stopped' })
     throw new Error(`unexpected HTTP endpoint ${path}`)
   }
-  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string; readOnly?: boolean } = {}) => {
+  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string; readOnly?: boolean; world?: boolean } = {}) => {
     root?.unmount()
     root = createRoot(document.getElementById('fixture')!)
-    const identity = { provider: options.key === 'other' ? other : owner,
+    let identity = { provider: options.key === 'other' ? other : owner,
       networkId: new Uint8Array(32).fill(1), session: { session_id: options.session ?? 'session',
         expires_ms: Date.now() + 60_000, public_key: b64url(owner.publicKey) } }
     const agent = { id: options.actor ?? 'owner', namespace: 'human:owner',
       anchor: b64url(new Uint8Array(32).fill(options.agentAnchor ?? 9)), instanceText: `human_user(${options.actor ?? 'owner'}).` }
-    const workspace = { target: { namespace: 'personal:lobby', anchor: new Uint8Array(32).fill(options.targetAnchor ?? 7) },
-      tools: { namespace: 'quod:prolog', anchor: new Uint8Array(32).fill(8) },
-      view: options.readOnly ? { ...view, fields: view.fields.filter(field => ['predicate', 'source'].includes(field.role)) } : view }
-    root.render(<SessionContext.Provider value={{ identity, agent, error: null } as SessionState}>
-      <PrologEditor workspace={workspace} onClose={() => { root?.unmount(); root = null }} scene={scene} visible={true} />
-    </SessionContext.Provider>)
+    let readOnly = options.readOnly ?? false
+    const render = () => {
+      const workspace = { target: { namespace: 'personal:lobby', anchor: new Uint8Array(32).fill(options.targetAnchor ?? 7) },
+        tools: { namespace: 'quod:prolog', anchor: new Uint8Array(32).fill(8) },
+        view: readOnly ? { ...view, fields: view.fields.filter(field => ['predicate', 'source'].includes(field.role)) } : view }
+      root?.render(<SessionContext.Provider value={{ identity, agent, agents: [agent], error: null,
+        busy: false, entering: false, saved: false, unresolved: 0, restore: async () => renewSession('restored'),
+      } as SessionState}>
+        {options.world ? <SessionEntry><World /></SessionEntry> : <PrologEditor workspace={workspace} onClose={() => { root?.unmount(); root = null }} scene={scene} visible={true}
+          onRefresh={async () => {
+            if (refreshError) throw new Error(refreshError)
+            readOnly = refreshedReadOnly ?? readOnly
+            render()
+          }} />}
+      </SessionContext.Provider>)
+    }
+    renewSession = session => {
+      identity = { ...identity, session: { ...identity.session, session_id: session, expires_ms: Date.now() + 60_000 } }
+      render()
+    }
+    render()
   }
-  return { mount, calls, compilerInputs, spatial: () => spatial, rows: () => journal.list(),
+  return { mount, renew: (session: string) => renewSession(session), calls, compilerInputs, spatial: () => spatial, rows: () => journal.list(),
     heldCatalogues: () => catalogueWaiters.length,
     releaseCatalogue() { holdCatalogue = false; for (const release of catalogueWaiters.splice(0)) release() },
-    configure(options: { accept?: 'lost' | 'pending'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean }) {
+    configure(options: { accept?: 'lost' | 'pending'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean;
+      readOnly?: boolean; source?: string; refreshError?: string | null }) {
       if (options.accept) accept = options.accept
       if (options.terminal !== undefined) terminal = options.terminal
       if (options.conflict !== undefined) conflict = options.conflict
       if (options.holdCatalogue !== undefined) holdCatalogue = options.holdCatalogue
+      if (options.readOnly !== undefined) refreshedReadOnly = options.readOnly
+      if (options.source !== undefined) sources.set('sample / 1', options.source)
+      if (options.refreshError !== undefined) refreshError = options.refreshError
     },
     close() { root?.unmount(); root = null },
     dispose() { root?.unmount(); root = null; window.fetch = previousFetch },

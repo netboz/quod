@@ -26,6 +26,10 @@ body {
   @apply bg-cream text-slate antialiased;
 }
 
+.prolog-editor button { padding: .65rem 1rem; border: 1px solid var(--color-teal); border-radius: .5rem; cursor: pointer; }
+.prolog-editor button:disabled { cursor: not-allowed; opacity: .4; }
+.prolog-editor button:enabled:hover { background: color-mix(in srgb, var(--color-teal) 10%, white); }
+
 /* a freshly committed row flashes gold, then settles */
 @keyframes tx-flash {
   0% { background-color: color-mix(in srgb, var(--color-gold-soft) 55%, white); }

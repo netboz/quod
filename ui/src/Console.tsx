@@ -14,6 +14,7 @@ import { shortNamespace } from './namespace'
 import type { ProofView } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
 import { pendingSignedOperations, resolveSignedOperations } from '../../client/src/signed-client.js'
+import { b64url } from '../../client/src/key-provider.js'
 
 const EXAMPLES = ['isa(X, Y)', 'assertz(capital(france, paris))', 'capital(france, X)']
 
@@ -27,9 +28,10 @@ type ConsoleProps = { ns: string; anchor: string; view?: ProofView;
 
 export function Console(props: ConsoleProps) {
   const { identity, agent } = useSignedSession()
-  // A cursor belongs to its signing session, actor and exact target. Changing
-  // any of them retires the old component, even within the same namespace.
-  const scope = JSON.stringify([identity?.session.session_id, agent?.id, props.ns, props.anchor])
+  // Drafts belong to the signer, actor and exact target; the hook below retires
+  // session-bound proofs when that signer restores its transport session.
+  const scope = JSON.stringify([identity && b64url(identity.networkId), identity && b64url(identity.provider.publicKey),
+    agent?.id, props.ns, props.anchor])
   return <ScopedConsole key={scope} {...props} />
 }
 
@@ -87,7 +89,7 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
   const [pendingOperation, setPendingOperation] = useState<string | null>(null)
   const unresolved = useRef<string | null>(null)
   const cursorRef = useRef<string | null>(null)
-  const active = useRef(true)
+  const active = useRef(identity)
   // Both renderers can dispatch before React paints the disabled controls.
   const working = useRef(false)
   const setWorking = (value: boolean) => { working.current = value; setBusy(value) }
@@ -120,11 +122,16 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
   }, [identity, agent, workspaceScope])
 
   useEffect(() => {
-    active.current = true
+    active.current = identity
+    rememberCursor(null)
+    setSolutionNumber(0)
+    setReply(null)
+    setWorking(false)
     return () => {
-      active.current = false
+      active.current = null
       const openCursor = cursorRef.current
       if (openCursor && identity) void stopProofCursor(identity, openCursor)
+        .catch(error => console.warn('Could not close the previous proof:', error))
     }
   }, [identity])
 
@@ -146,27 +153,28 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
   }
 
   const run = async (goal: string, metadata: Record<string, unknown> = {}) => {
-    if (!recovered.current || !active.current || !identity || !agent || !goal.trim() || working.current || cursorRef.current || unresolved.current) return
+    if (!recovered.current || active.current !== identity || !identity || !agent || !goal.trim() || working.current || cursorRef.current || unresolved.current) return
     setWorking(true)
     setReply(null)
     try {
       const next = await openProofCursor(identity, agent, ns, anchor, goal, { context: { ...metadata, flow: 'proof_workspace', scope: workspaceScope } })
-      if (!active.current) {
+      if (active.current !== identity) {
         if ('result' in next && next.result === 'solution') {
           void stopProofCursor(identity, next.cursor)
+            .catch(error => console.warn('Could not close the previous proof:', error))
         }
         return
       }
       applyReply(next)
     } catch (e) {
-      if (active.current) setReply({ error: String(e) })
+      if (active.current === identity) setReply({ error: String(e) })
     } finally {
-      if (active.current) setWorking(false)
+      if (active.current === identity) setWorking(false)
     }
   }
 
   const command = async (kind: 'next' | 'accept' | 'stop') => {
-    if (!active.current || !identity || !cursor || working.current) return
+    if (active.current !== identity || !identity || !cursor || working.current) return
     setWorking(true)
     try {
       const next =
@@ -175,14 +183,14 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
           : kind === 'accept'
             ? await acceptProofSolution(identity, cursor)
             : await stopProofCursor(identity, cursor)
-      if (!active.current) return
+      if (active.current !== identity) return
       if ('result' in next && next.result === 'pending' && next.operationId) {
         unresolved.current = next.operationId
         setPendingOperation(next.operationId)
       }
       applyReply(next, kind === 'next')
     } catch (e) {
-      if (active.current) {
+      if (active.current === identity) {
         if (e && typeof e === 'object' && 'outcomeUnknown' in e && e.outcomeUnknown &&
             'operationId' in e && typeof e.operationId === 'string') {
           unresolved.current = e.operationId
@@ -192,7 +200,7 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
         setReply({ error: String(e) })
       }
     } finally {
-      if (active.current) setWorking(false)
+      if (active.current === identity) setWorking(false)
     }
   }
 
@@ -200,8 +208,8 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
     if (!identity || !unresolved.current || working.current) return
     setWorking(true)
     try {
-      const [result] = await resolveSignedOperations(identity, { operationId: unresolved.current, onTerminal: async () => active.current })
-      if (!active.current) return
+      const [result] = await resolveSignedOperations(identity, { operationId: unresolved.current, onTerminal: async () => active.current === identity })
+      if (active.current !== identity) return
       if (!result || result.error) throw result?.error ?? new Error('The operation receipt is unavailable.')
       if (result.reply?.terminal !== true) {
         setReply({ error: 'The saved operation has no final result yet. Check again without resubmitting.' })
@@ -215,10 +223,10 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
         status: String(result.reply.status), evidence: result.reply })
       // Consume this result before offering the next saved edit, if any.
       setRecoveryContext(result.operation.context as Record<string, unknown> ?? null)
-    } catch (error) { if (active.current) setReply({ error: String(error) }) }
-    finally { if (active.current) setWorking(false) }
+    } catch (error) { if (active.current === identity) setReply({ error: String(error) }) }
+    finally { if (active.current === identity) setWorking(false) }
   }
-  const canEdit = () => recovered.current && active.current && !working.current && !cursorRef.current && !unresolved.current
+  const canEdit = () => recovered.current && active.current === identity && !working.current && !cursorRef.current && !unresolved.current
   return { busy: busy || recovering, reply, cursor, solutionNumber, run, command, canEdit, pendingOperation, resolve, recoveryContext }
 }
 

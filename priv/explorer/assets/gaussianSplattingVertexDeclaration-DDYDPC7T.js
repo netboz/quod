@@ -1,1 +1,0 @@
-import{gaussianSplattingVertexDeclarationWGSL as e}from"./Blocks-YlMUYndU.js";export{e as gaussianSplattingVertexDeclarationWGSL};

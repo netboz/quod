@@ -51,6 +51,9 @@ export async function checkPrologEditor(page, origin) {
     assert.equal(await source.inputValue(), 'sample(before).\n')
     const draft = 'sample(after).\n'
     await source.fill(draft)
+    await page.evaluate(() => window.editorFixture.renew('restored-session'))
+    await ready()
+    assert.equal(await source.inputValue(), draft, 'restoring the same signer preserves the unsaved draft')
     await preview.click()
     await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save changes' && !button.disabled))
     await save.click()
@@ -199,8 +202,78 @@ export async function checkPrologEditor(page, origin) {
     await page.getByRole('combobox').first().selectOption('')
     await page.getByRole('button', { name: 'Refresh current state' }).click()
     await value('policy(visible).\nsample(next).\nfresh(saved).\n')
+
+    // Refresh a selected predicate and its authorized representation, without
+    // remounting or executing an edit. An unsaved draft is never rebased.
+    await page.getByRole('combobox').first().selectOption('sample / 1')
+    await value('sample(next).\n')
+    const refresh = page.getByRole('button', { name: 'Refresh current state', exact: true })
+    assert.equal(await refresh.isEnabled(), true)
+    const external = 'sample(external).\n'
+    await configure({ source: external, readOnly: false })
+    const beforeRefresh = (await state()).calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length
+    await refresh.click()
+    await value(external)
+    await ready()
+    assert.equal(await source.getAttribute('readonly'), null, 'refresh observes newly granted edit access')
+    assert.equal((await state()).calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length, beforeRefresh,
+      'refresh never probes permission by executing an edit')
+    const unsaved = 'sample(unsaved).\n'
+    await source.fill(unsaved)
+    await configure({ source: 'sample(other_commit).\n', readOnly: true })
+    await refresh.click()
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Source code"]')?.readOnly)
+    await value(unsaved)
+    assert.equal(await preview.count(), 0, 'refresh observes revoked edit access while preserving the draft')
+    await configure({ readOnly: false })
+    await refresh.click()
+    await ready()
+    await preview.click()
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save changes' && !button.disabled))
+    assert.equal((await state()).compilerInputs.at(-1).baseline, external, 'refresh preserves the draft original baseline')
+    assert.equal((await state()).compilerInputs.at(-1).source, unsaved)
+    await page.getByRole('button', { name: 'Cancel preview', exact: true }).click()
+    await ready()
+    await configure({ refreshError: 'read access refused' })
+    await refresh.click()
+    await page.getByRole('alert').getByText('read access refused', { exact: false }).waitFor()
+    assert.equal(await source.getAttribute('readonly'), '', 'failed refresh does not advertise stale edit access')
+    assert.equal(await source.inputValue(), unsaved)
+    await configure({ refreshError: null })
+    await refresh.click()
+    await ready()
+    assert.equal(await source.inputValue(), unsaved)
+    await preview.click()
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save changes' && !button.disabled))
+    const beforeRestore = (await state()).calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length
+    await page.evaluate(() => window.editorFixture.renew('restored-after-preview'))
+    await ready()
+    assert.equal(await source.inputValue(), unsaved)
+    assert.equal(await save.isDisabled(), true, 'restoring retires the old session preview')
+    assert.equal((await state()).calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length, beforeRestore,
+      'restoring never replays a proof or edit')
+    snapshot = await state()
+    // The real world shell must retain the opened workspace on renewal.
+    await mount({ world: true })
+    await page.getByRole('region', { name: 'World controls' }).waitFor()
+    await page.locator('details.world-advanced summary').click()
+    await page.getByLabel('Inspect', { exact: true }).selectOption({ label: 'personal:lobby' })
+    await page.getByRole('button', { name: 'View Prolog source', exact: true }).click()
+    await page.getByRole('region', { name: 'Focused console' }).getByRole('combobox').first().selectOption('sample / 1')
+    await page.waitForFunction(() => {
+      const field = document.querySelector('textarea[aria-label="Source code"]')
+      return field && !field.disabled && !field.readOnly
+    })
+    await source.fill('sample(world_restore).\n')
+    await page.evaluate(() => window.editorFixture.renew('world-renewed'))
+    await value('sample(world_restore).\n')
+    await page.getByRole('region', { name: 'Focused console' }).waitFor()
+    assert.equal(await source.isVisible(), true, 'world retains the source panel for the same signer and actor')
     return { cursorSubmissions: snapshot.calls.filter(call => call.path === '/api/goals/cursors' && !String(call.goal).includes('prolog_source(')).length,
       outcomeLookups: snapshot.calls.filter(call => call.path === '/api/goals/outcomes').length,
       compilerInputs: snapshot.compilerInputs, editedCards, recoveredPredicate, pendingRows: snapshot.rows.length }
+  } catch (error) {
+    error.message += '\nFixture world state: ' + await page.locator('body').innerText()
+    throw error
   } finally { await page.evaluate(() => window.editorFixture?.dispose()) }
 }

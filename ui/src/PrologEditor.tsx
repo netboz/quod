@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useSignedSession } from './session-context'
 import { useProofCursor, replyText } from './Console'
 import { codeForm } from '../../client/src/world.js'
@@ -21,18 +21,20 @@ function mergePredicates(...catalogues: PrologTerm[][]) {
   return [...choices.values()]
 }
 
-type EditorProps = { workspace: EidolonWorkspace; onClose: () => void; scene: WorldScene | null; visible: boolean }
+type EditorProps = { workspace: EidolonWorkspace; onClose: () => void; onRefresh: () => Promise<void>; scene: WorldScene | null; visible: boolean }
 
 export function PrologEditor(props: EditorProps) {
   const { identity, agent } = useSignedSession()
-  const scope = JSON.stringify([identity?.session.session_id, agent?.id, props.workspace.target, props.workspace.tools])
+  const scope = JSON.stringify([identity && b64url(identity.networkId), identity && b64url(identity.provider.publicKey),
+    agent?.id, props.workspace.target, props.workspace.tools])
   return <ScopedEditor key={scope} {...props} />
 }
 
-function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
+function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorProps) {
   const { identity, agent } = useSignedSession()
   const view = codeForm(workspace.view)
-  const editable = view.editable
+  const [refreshFailed, setRefreshFailed] = useState(false)
+  const editable = view.editable && !refreshFailed
   const proof = useProofCursor(agent?.namespace ?? '', String(agent?.anchor ?? ''), JSON.stringify(['prolog', workspace.target]))
   const [predicates, setPredicates] = useState<PrologTerm[]>([])
   const [selected, setSelected] = useState('')
@@ -43,22 +45,36 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [goal, setGoal] = useState('')
-  const [refresh, setRefresh] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshingNow = useRef(false)
   const live = useRef(true)
   const pending = useRef(false)
   const submitted = useRef<{ indicator: string; source: string } | null>(null)
   const indicator = predicates.find(predicate => formatTerm(predicate) === selected)
   const draft = drafts[selected]
-  const locked = loading || proof.busy || proof.cursor !== null || proof.pendingOperation !== null
+  const locked = loading || refreshing || proof.busy || proof.cursor !== null || proof.pendingOperation !== null
+
+  const refreshSavedDrafts = useEffectEvent(() => {
+    // A newly authorized representation refreshes saved contents. Local edits
+    // keep their original baseline; refresh never silently rebases a draft.
+    if (!proof.cursor && !proof.pendingOperation && !pending.current) {
+      setDrafts(previous => Object.fromEntries(Object.entries(previous)
+        .filter(([, draft]) => draft.source !== draft.baseline)))
+      setLayout('text')
+    }
+  })
 
   useEffect(() => {
+    let current = true
     live.current = true
+    setRefreshFailed(false)
+    refreshSavedDrafts()
     if (identity && agent) {
       void readCodePredicates(identity, agent, workspace).then(items => {
-        if (live.current) setPredicates(previous => mergePredicates(items, previous))
-      }).catch(reason => { if (live.current) setError(String(reason)) })
+        if (current) setPredicates(previous => mergePredicates(items, previous))
+      }).catch(reason => { if (current) setError(String(reason)) })
     }
-    return () => { live.current = false }
+    return () => { current = false; live.current = false }
   }, [identity, agent, workspace])
 
   useEffect(() => {
@@ -73,7 +89,22 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
         .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     }
     return () => controller.abort()
-  }, [identity, agent, workspace, indicator, selected, draft, refresh])
+  }, [identity, agent, workspace, indicator, selected, draft])
+
+  const refresh = async () => {
+    if (locked || refreshingNow.current || pending.current || !proof.canEdit()) return
+    refreshingNow.current = true
+    setRefreshing(true)
+    setError(null)
+    try {
+      await onRefresh()
+    } catch (reason) {
+      if (live.current) { setRefreshFailed(true); setError(String(reason)) }
+    } finally {
+      refreshingNow.current = false
+      if (live.current) setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     const saved = proof.recoveryContext
@@ -212,17 +243,15 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
     } : null)
   })
 
-  return <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-5 p-8">
+  return <main className="prolog-editor mx-auto flex min-h-screen max-w-7xl flex-col gap-5 p-8">
     <header className="flex items-start justify-between gap-4">
       <div><h1 className="text-2xl font-semibold">{view.title}</h1>
         <p className="break-all font-mono text-sm">{workspace.target.namespace}<br />Genesis: {b64url(workspace.target.anchor)}</p></div>
       <button className="rounded-lg border px-4 py-2" onClick={onClose}>Return to lobby</button>
     </header>
     <p>The complete current state includes stored facts, rules and shared policy. Select a predicate lens to inspect a definition{editable ? ' or edit it' : ''}.</p>
-    <button disabled={locked || !!selected} onClick={() => {
-      setDrafts(previous => { const next = { ...previous }; delete next['']; return next })
-      setError(null); setRefresh(previous => previous + 1)
-    }}>Refresh current state</button>
+    <button disabled={locked} onClick={() => void refresh()}>{refreshing ? 'Refreshing…' : 'Refresh current state'}</button>
+    <p className="text-sm">Refresh reloads saved contents and access. Unsaved edits keep their original baseline.</p>
     <label>{view.predicate} <select value={selected} disabled={locked} onChange={event => edit('predicate', event.target.value)}>
       <option value="">Complete current state</option>
       {predicates.map(predicate => { const name = formatTerm(predicate); return <option key={name} value={name}>{name}</option> })}

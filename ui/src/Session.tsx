@@ -253,13 +253,38 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
 
 export function SessionEntry({ children }: { children: ReactNode }) {
   const session = useSignedSession()
-  if (!session.entering && session.identity && session.agent) return children
-  return <main className="session-entry">
+  const [expired, setExpired] = useState(false)
+  const opened = useRef('')
+  const identity = session.identity
+  useEffect(() => {
+    if (!identity) { setExpired(false); return }
+    const remaining = identity.session.expires_ms - Date.now()
+    setExpired(remaining <= 0)
+    const timer = window.setTimeout(() => setExpired(true), Math.max(0, remaining))
+    const checkExpiry = () => {
+      if (Date.now() >= identity.session.expires_ms) setExpired(true)
+    }
+    document.addEventListener('visibilitychange', checkExpiry)
+    return () => { window.clearTimeout(timer); document.removeEventListener('visibilitychange', checkExpiry) }
+  }, [identity])
+  const scope = identity && session.agent ? JSON.stringify([
+    b64url(identity.networkId), b64url(identity.provider.publicKey), session.agent.id,
+  ]) : ''
+  const ended = expired || !!identity && Date.now() >= identity.session.expires_ms
+  const ready = !!scope && !session.entering && !ended
+  if (ready) opened.current = scope
+  return <>
+    {scope && opened.current === scope && <div key={scope} hidden={!ready} inert={!ready}>{children}</div>}
+    {!ready && <main className="session-entry">
     <section className="session-card" aria-label="Your identity">
       <div className="world-brand">quod <span>∴</span></div>
-      <h1>{session.entering ? 'Opening your space…' : 'Welcome to Quod'}</h1>
+      <h1>{session.entering ? 'Opening your space…' : ended ? 'Your session has expired' : 'Welcome to Quod'}</h1>
       {session.entering ? <p role="status">Preparing your identity and lobby…</p>
-        : session.error ? <>
+        : ended ? <>
+          <p>Restore your session to continue.</p>
+          {session.error && <p role="alert">{session.error}</p>}
+          <button disabled={session.busy} onClick={() => void session.restore()}>Restore session</button>
+        </> : session.error ? <>
           <p role="alert">{session.error}</p>
           <button onClick={() => void session.restore()}>Try again</button>
         </> : session.identity ? <>
@@ -274,7 +299,8 @@ export function SessionEntry({ children }: { children: ReactNode }) {
           <SessionControls />
         </>}
     </section>
-  </main>
+    </main>}
+  </>
 }
 
 export function SessionControls() {

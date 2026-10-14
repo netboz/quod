@@ -34,6 +34,17 @@ session_is_node_local_and_bounded_test() ->
                       quod_client_auth:session(SessionId))
       end).
 
+default_session_lasts_fifteen_minutes_test() ->
+    with_auth(
+      fun() ->
+         Before = quod_time:now_ms(),
+         {ok, #{expires_ms := Expires}} =
+             open_session(quod_identity:generate(), <<16#43:256>>),
+         After = quod_time:now_ms(),
+         ?assert(Expires >= Before + 900000),
+         ?assert(Expires =< After + 900000)
+      end).
+
 default_client_goal_admission_has_no_rate_policy_test() ->
     with_auth(
       fun() ->

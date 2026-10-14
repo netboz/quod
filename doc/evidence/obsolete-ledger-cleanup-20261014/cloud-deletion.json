@@ -1,0 +1,16 @@
+{
+  "host": "quod-cloud-1",
+  "host_root": "/opt/quod/data",
+  "deleted_host_paths": [
+    "/opt/quod/data/0",
+    "/opt/quod/data/1",
+    "/opt/quod/data/arch172",
+    "/opt/quod/data/arch201",
+    "/opt/quod/data/arch203",
+    "/opt/quod/data/arch205"
+  ],
+  "preserved_host_path": "/opt/quod/data/arch206",
+  "exit": 0,
+  "stdout": "454656\t/quod/data/0\n454656\t/quod/data/1\n1036288\t/quod/data/arch172\n675840\t/quod/data/arch201\n47525888\t/quod/data/arch203\n3239936\t/quod/data/arch205\nremaining arch206 d\n",
+  "stderr": ""
+}

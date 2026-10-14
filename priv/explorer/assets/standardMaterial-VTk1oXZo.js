@@ -1,1 +1,0 @@
-import{i as e,t}from"./standardMaterial.pure-Li4TDOv1.js";e(),t();

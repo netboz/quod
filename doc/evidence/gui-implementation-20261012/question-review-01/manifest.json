@@ -1,0 +1,26 @@
+[
+  {
+    "path": "AGENTS.md",
+    "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+  },
+  {
+    "path": "priv/ontologies/gui_instance.pl",
+    "sha256": "b363f94ac89b79e992e992c3155d85c9870c372f505057c0804487ba9b67f0ad"
+  },
+  {
+    "path": "priv/ontologies/gui_question.pl",
+    "sha256": "e529c8f9ff3eed9a8b41f0fab2d13f5567f44665a7e26b9ee643ce32d67131e8"
+  },
+  {
+    "path": "priv/ontologies/gui_hud.pl",
+    "sha256": "ad396c043c1a4a313c735ed9c37c50bf2db3ac75a7da75529bd2d95454d359cc"
+  },
+  {
+    "path": "priv/ontologies/quod_gui.pl",
+    "sha256": "cc4111c9322028e41f8edfb508709579ee41a8bf91b74ffee9848dd84797cae1"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "sha256": "169dc64e5e30ffdf40b845cdd9f096b80c63a9521bdc2e0c049797628f7a8507"
+  }
+]

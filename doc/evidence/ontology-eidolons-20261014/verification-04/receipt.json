@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_lobby_tests:non_system_read_only_source_uses_the_same_recipe_test_"
+  ],
+  "started": "2026-10-14T10:19:50.582678+00:00",
+  "finished": "2026-10-14T10:19:53.477136+00:00",
+  "exit": 0
+}

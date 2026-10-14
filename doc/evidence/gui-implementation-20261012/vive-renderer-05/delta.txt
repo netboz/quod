@@ -1,0 +1,2 @@
+8	1	doc/evidence/gui-implementation-20261012/vive-renderer-05/{before => tree}/client/src/world-scene.js
+19	1	doc/evidence/gui-implementation-20261012/vive-renderer-05/{before => tree}/client/test/workspace-panel.fixture.js

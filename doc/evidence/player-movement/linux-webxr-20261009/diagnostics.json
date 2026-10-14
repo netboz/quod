@@ -1,0 +1,38 @@
+{
+  "diagnosis-01": [
+    "VK_LOADER_DEBUG=all",
+    "python3",
+    "client/test/linux-webxr-run.py",
+    "--browser",
+    "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome"
+  ],
+  "diagnosis-02": {
+    "instrumentation": "strace -ff -e trace=%file,connect,socket,ioctl; VK_LOADER_DEBUG=all",
+    "exit_code": 1
+  },
+  "diagnosis-03": {
+    "instrumentation": "LD_DEBUG=libs; VK_LOADER_DEBUG=all",
+    "exit_code": 1
+  },
+  "diagnosis-04": {
+    "instrumentation": "LD_DEBUG=libs; strace -ff -e trace=%file,connect,socket,ioctl",
+    "source": "chromium-egl-01/source-after.cc",
+    "exit_code": 1
+  },
+  "diagnosis-05": {
+    "instrumentation": "LD_DEBUG=libs; strace -ff -e trace=%file,connect,socket,ioctl",
+    "source": "chromium-egl-02/source-after.cc",
+    "exit_code": 1
+  },
+  "diagnosis-06": {
+    "instrumentation": "strace -ff -e trace=%file,connect,socket,ioctl",
+    "source": "chromium-egl-03/source-after.cc",
+    "exit_code": 1
+  },
+  "native-loader-01": {
+    "program": "client/_build/webxr-linux/prewarm-vulkan",
+    "instrumentation": "VK_LOADER_DEBUG=all; strace -e trace=%file,connect,socket,ioctl",
+    "exit_code": 0,
+    "no_display_exit_code": 0
+  }
+}

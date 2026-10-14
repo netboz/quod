@@ -1,0 +1,169 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 959 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::16:55:20.124192 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.7808.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_FCC338B44AFA56FD",
+                                       seed_peers => [],
+                                       node_id =>
+                                           <<107,53,110,111,96,160,40,79,104,
+                                             183,115,202,192,99,4,229,221,212,
+                                             24,207,111,37,126,210,191,152,101,
+                                             89,187,54,158,17>>,
+                                       genesis_file =>
+                                           "/tmp/quod_ask_FCC338B44AFA56FD/slow.pl",
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false,
+                                       transaction_ttl_ms => 30000,
+                                       external_predicate_modules => [],
+                                       max_proof_workers => 64,
+                                       max_scope_workers => 64,
+                                       proof_timeout_ms => 60000,
+                                       scope_timeout_ms => 60000,
+                                       scope_step_timeout_ms => 30000}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::16:55:22.693468 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<253,14,
+                                                                                   160,55,
+                                                                                   220,245,
+                                                                                   57,222,
+                                                                                   124,159,
+                                                                                   181,158,
+                                                                                   85,211,
+                                                                                   11,186>>,
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                deadline_ms =>
+                                                                                 -576460718704,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>},
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<81,87,
+                                                                                    193,53,
+                                                                                    182,229,
+                                                                                    225,0,9,
+                                                                                    69,140,
+                                                                                    207,54,
+                                                                                    37,94,
+                                                                                    196,9,
+                                                                                    141,64,
+                                                                                    34,77,5,
+                                                                                    183,61,
+                                                                                    73,252,
+                                                                                    133,169,
+                                                                                    38,167,
+                                                                                    153,160>>,
+                                                                                  <0.7707.0>,
+                                                                                  #Ref<0.2748838835.2269904898.103553>,
+                                                                                  <<253,14,
+                                                                                    160,55,
+                                                                                    220,245,
+                                                                                    57,222,
+                                                                                    124,159,
+                                                                                    181,158,
+                                                                                    85,211,
+                                                                                    11,186>>},
+                                                                                read_set =>
+                                                                                 true}],
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               99}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1296}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1269}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::16:55:26.923822 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::16:55:29.201658 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::16:55:30.903501 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 13-Oct-2026::16:55:31.684871 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m[0;32m.[0m
+Finished in 21.980 seconds
+[0;32m131 tests, 0 failures
+[0m

@@ -1,0 +1,7 @@
+# Installed handler observation
+
+The existing runtime owns installed actors and its normalized reaction catalogue. Add a bounded read of those existing values: exact anchored scope, snapshot height, actor epoch/key and complete reaction clause. Refuse until the runtime has processed the requested height, when recovering, when the actor is missing/retiring/dead, or when the exact normalized clause is absent. Return only current runtime/actor process references to the local bridge; its opaque digest identifies that incarnation. Do not register work, run a fabricated event, parse history, sign or queue a request.
+
+A read-only governed agent predicate exposes the observation inside selected native scopes. It is live_observation, not sealable material evidence. Native preparation will consume it privately. This establishes installed handling, not future guard success, future availability or authorization to write. Application/human/responder policy, pending capacity and question creation stay in the original material transaction; a future answer still invokes the ordinary guard and signed completion entry. It does not use the runtime request queue's limits as question capacity.
+
+The exact canonical handler clause is read from the scope's ontology, never asserted by the GUI caller. The installed runtime matches the full head and guard using its existing alpha normalization. Changes to supporting policy remain ordinary proof dependencies and future reaction checks. No parallel catalogue or per-question actor state.

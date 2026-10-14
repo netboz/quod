@@ -77,13 +77,18 @@ genesis encoding bounds remain separate from this resource policy.
 
 ## Exact terminal outcome reads
 
-`committed_operation_outcome(Bytes, Signature, Status)` reads the current
-scope's exact signed operation through its retained outcome index. It is an
-ordinary-proof query, unavailable to in-owner membership verdicts and reaction
-matching. Positive terminal evidence is captured monotonically before result
+`committed_operation_outcome(Bytes, Status)` reads the current scope's exact
+execute request through its retained outcome index. Canonical unsigned bytes
+identify the request; their digest must match committed evidence. Reading grants
+no execution authority and needs no retained signature. Identity decoding is
+atom-safe and does not parse or execute the goal. The containing ontology's ACL
+still governs the proof. Signed HTTP operation resolution remains unchanged.
+The query is unavailable to in-owner membership verdicts and reaction
+matching. Terminal evidence is captured monotonically before result
 unification; failed alternatives, negation and rollback retain the dependency.
-Missing, pending, unpublished and infrastructure-unavailable results raise an
-error. If caught, their live-bridge marker still prevents sealing a nonempty
+An absent request returns `expired` only with certified evidence described below.
+Pending, unpublished and infrastructure-unavailable results raise an error, as
+does absence without that evidence. If caught, their live-bridge marker still prevents sealing a nonempty
 diff; the existing read-only/effect-only boundary is unchanged.
 
 The canonical read set carries atom-free operation keys `{1, AgentBytes, Id}`
@@ -94,6 +99,22 @@ reason or mutable receipt vector is copied. Independent application vectors
 are outside this terminal query's supported result types. Every evidence height
 must fit the sealed base and published parent. A group's publication height is
 Complete's slot, even when its public result reports an earlier Resolve slot.
+
+Negative expiry uses `{2, AgentBytes, Id}` with the token
+`{OriginalUnsignedRequestBytes, PrefixHeight, CertifiedTimestamp}`. The bounded
+codec checks execute mode, canonical actor/id, uint64 height/time and time strictly
+after the request deadline. Validation checks the request's exact scope and trusted
+network, the retained timestamp at that published prefix, and absence of any claim
+at or before it. The prefix must fit the sealed base and current parent. A retained
+future claim for another request with the same actor/id cannot invalidate expiry
+of these exact bytes. A claim at or before the prefix, even without a published
+completion, prevents expiry. Neither wall-clock time nor key revocation proves it.
+
+Trusted network identity is captured by the existing content, vote and read-only
+certification owners. Missing identity produces their ordinary unavailable or
+abstention result before application; it is not a certified refusal or index
+corruption. Projection carries this immutable context through the second OCC check,
+so there is no readiness wait inside a partially applied batch.
 
 The same validators check exact evidence during ordinary apply, atomic prepare,
 remote application and read-only certification. Mismatch is the existing OCC
@@ -106,3 +127,15 @@ Existing predicate-only canonical bytes are unchanged. Older binaries reject
 this new read kind; enabling its ontology rules requires compatible validators
 and the applicable founded predicate-module deployment procedure. This change
 does not authorize a deployment, history rewrite or data migration.
+
+The existing outcome index retains an immutable timestamp for each applied
+material height. The shared committed projection passes the certified entry time
+to `advance_applied/3`; time, claims and the published floor share one flush.
+Times are nondecreasing and replay must match retained rows. Timestamp reads are
+unavailable above the published floor, including after reopening until replay
+advances it. They reuse the same bounded cache and disk index. Derived outcome
+format 9 refuses other integer versions without rewriting them; deployment or migration
+requires its own authority. Retained time alone does not provide a certified
+negative operation outcome: the exact request, source, network and prefix absence
+checks above are also required. `expired` authorizes no replay of an uncertain
+request; it only supplies a dependency for an ordinary ontology transition.

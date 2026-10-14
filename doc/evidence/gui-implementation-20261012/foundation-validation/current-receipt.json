@@ -1,0 +1,61 @@
+{
+  "scope": "GUI component foundations; opening, lifecycle, rendering and hardware not implemented",
+  "runs": [
+    {
+      "log": "quod-gui-foundation-tests-03.log",
+      "child_exit": 0,
+      "tests": 112,
+      "failures": 0,
+      "scope": "five module suite before final schema strictness and max_bytes edits"
+    },
+    {
+      "log": "quod-gui-components-tests-09.log",
+      "child_exit": 0,
+      "tests": 1,
+      "failures": 0,
+      "scope": "expanded signed integration scenario in lobby and independent nonphysical ontology, final component tree"
+    }
+  ],
+  "files": [
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "sha256": "540a8c3df9a586cfa40e3631d451c4e42d22452c791aa695d9ca7bdfad92b440"
+    },
+    {
+      "file": "priv/ontologies/quod_gui.pl",
+      "sha256": "f117371b9bc1751efb5a4e37c7d3dbb0039b28a768a675b5ba328b85babb2a18"
+    },
+    {
+      "file": "priv/ontologies/gui_instance.pl",
+      "sha256": "a32edc2b3d65f27ce16da3474d641edc290e839f0a49a4f437352757692ea368"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "sha256": "1b544d9af61a3414622f98f074a3d55bb4b2d796fdb92a389ec0e8114426a657"
+    },
+    {
+      "file": "src/quod_erlog_db_local_prove.erl",
+      "sha256": "5e6a5a849753c97c86156efeb8774f9a43e5efc6814d0e55ff87ece709d9a657"
+    },
+    {
+      "file": "test/quod_ask_tests.erl",
+      "sha256": "15a823c44d68a05a13bd54fd3534adf923f68e3f691ea51964576b56e9d44abc"
+    },
+    {
+      "file": "test/quod_common_primitives_tests.erl",
+      "sha256": "7d98e1b092198267bea95bce5959f167feacec41a15660f1ba577a77199ec1bf"
+    },
+    {
+      "file": "test/quod_gui_components_tests.erl",
+      "sha256": "9dd9e903933053b1decfe7e2df5a2a87b0387ad41f181749ab030184ff6ef9c8"
+    },
+    {
+      "file": "test/fixtures/gui-components.pl",
+      "sha256": "c8e958aaa82c0b36842eea185fa1912923278d990f8d90c26908bfd75c6ecbc8"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "sha256": "69344071e52797035b900e84ecd8d5c3d3c3219ab120ff98249b3e4f46d718fd"
+    }
+  ]
+}

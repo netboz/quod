@@ -1,0 +1,38 @@
+{
+  "removed_experiment_files": [
+    "src/quod_commit_validation.erl",
+    "src/quod_committed_projection.erl",
+    "src/quod_diff.erl",
+    "src/quod_erlog_db_mvcc.erl",
+    "test/quod_erlog_db_mvcc_tests.erl",
+    "src/quod_predicates.erl",
+    "src/quod_prolog.erl",
+    "src/quod_erlog_db_local_prove.erl",
+    "priv/ontologies/common_predicates.pl",
+    "test/quod_external_predicate_selection_tests.erl"
+  ],
+  "shared_files_equal_failure_owner": true,
+  "protected_failure_owner_files_unchanged": 26,
+  "deployment_changed": false,
+  "live_domain_writes": false,
+  "owned_stale_test_beam_archived_to": "/home/yan/src/quod/client/_build/cleanup-20261009/quod_external_predicate_selection_tests.beam",
+  "verification": {
+    "diff_check_exit": 0,
+    "selection_symbols_remaining_in_src_ontologies_tests": 0,
+    "behavioral_tests_run": false
+  },
+  "retained_cleanup_failures": [
+    {
+      "operation": "sandbox command startup for beam search",
+      "exit": 101,
+      "reason": "quota exceeded registering synthetic /tmp/.git mount"
+    },
+    {
+      "operation": "copy owned stale test beam to /tmp archive",
+      "exit": 1,
+      "reason": "disk quota exceeded; source beam preserved until later same-filesystem archive"
+    }
+  ],
+  "removed_net_production_lines": 134,
+  "removed_net_test_lines": 134
+}

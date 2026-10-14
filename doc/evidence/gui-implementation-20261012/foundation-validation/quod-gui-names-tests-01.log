@@ -1,0 +1,39 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.46s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Pending:
+[0;33m  quod_ask_tests:-ask_test_/0-fun-37-/0:300
+[0m[0;36m    %% Unknown error: {timeout,
+                   #{stacktrace =>
+                         [{quod_prolog,await_public_proof,5,
+                              [{file,"/home/yan/src/quod/src/quod_prolog.erl"},
+                               {line,588}]},
+                          {quod_prolog,'-public_proof/8-fun-0-',8,
+                              [{file,"/home/yan/src/quod/src/quod_prolog.erl"},
+                               {line,583}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,59}]},
+                          {quod_ask_tests,t_default_link_following,1,
+                              [{file,
+                                   "/home/yan/src/quod/test/quod_ask_tests.erl"},
+                               {line,750}]},
+                          {eunit_test,run_testfun,1,
+                              [{file,"eunit_test.erl"},{line,83}]},
+                          {eunit_proc,run_test,1,
+                              [{file,"eunit_proc.erl"},{line,554}]},
+                          {eunit_proc,with_timeout,3,
+                              [{file,"eunit_proc.erl"},{line,379}]}]}}
+[0m[0;33m  undefined
+[0m[0;36m    %% Unknown error: {blame,[2,15,1,5]}
+[0m
+
+Finished in 9.562 seconds
+[0;33m32 tests, 0 failures, 2 cancelled
+[0m===> Error running tests

@@ -1,0 +1,11 @@
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a4994c0, si_syscall=__NR_sched_getaffinity, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC) = -1 EPERM (Operation not permitted)
+openat(AT_FDCWD, "/proc/stat", O_RDONLY|O_CLOEXEC) = -1 EPERM (Operation not permitted)
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a5032eb, si_syscall=__NR_sched_getparam, si_arch=AUDIT_ARCH_X86_64} ---
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a50331b, si_syscall=__NR_sched_getscheduler, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/tmp/quod-webxr-fpcrwlq9/data/mime/mime.cache", 0x7f1f1d472490) = -1 EPERM (Operation not permitted)
+stat("/home/yan/.local/share/flatpak/exports/share/mime/mime.cache", 0x7f1f1d472490) = -1 EPERM (Operation not permitted)
+stat("/var/lib/flatpak/exports/share/mime/mime.cache", 0x7f1f1d472490) = -1 EPERM (Operation not permitted)
+stat("/usr/local/share/mime/mime.cache", 0x7f1f1d472490) = -1 EPERM (Operation not permitted)
+stat("/usr/share/mime/mime.cache", 0x7f1f1d472490) = -1 EPERM (Operation not permitted)
++++ exited with 0 +++

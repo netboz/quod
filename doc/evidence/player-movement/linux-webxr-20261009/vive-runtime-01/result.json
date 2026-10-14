@@ -1,0 +1,11 @@
+{
+  "simulated": false,
+  "startup_notice": true,
+  "runtime_exit": -11,
+  "runtime": "/home/yan/src/quod/client/_build/webxr-linux/monado-build/src/xrt/targets/service/monado-service",
+  "selection": {
+    "SIMULATED_ENABLE": "0",
+    "STEAMVR_LH_ENABLE": "1",
+    "STEAMVR_PATH": "/home/yan/.local/share/Steam/steamapps/common/SteamVR"
+  }
+}

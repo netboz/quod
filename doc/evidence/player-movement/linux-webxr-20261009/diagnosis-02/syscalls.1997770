@@ -1,0 +1,9 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff0f23f7780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff0f23f7780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/PKIMetadata", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/PKIMetadata", 0x7ff0f23f54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=580, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/PKIMetadata", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/PKIMetadata", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/PKIMetadata", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 687
++++ exited with 0 +++

@@ -1,0 +1,28 @@
+From cfa6078b8d7f368fa5296f540a436d59833e496c Mon Sep 17 00:00:00 2001
+From: Christoph Haag <christoph.haag@collabora.com>
+Date: Fri, 2 Oct 2026 19:40:01 +0200
+Subject: [PATCH] d/steamvr_lh: expose IVRDriverInput_005
+
+Fixes crash since SteamVR beta 2.18.2.
+
+Signed-off-by: Christoph Haag <christoph.haag@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/monado/monado/-/merge_requests/3027>
+---
+ src/xrt/drivers/steamvr_lh/steamvr_lh.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/xrt/drivers/steamvr_lh/steamvr_lh.cpp b/src/xrt/drivers/steamvr_lh/steamvr_lh.cpp
+index e75bb0e6bf..1434b56056 100644
+--- a/src/xrt/drivers/steamvr_lh/steamvr_lh.cpp
++++ b/src/xrt/drivers/steamvr_lh/steamvr_lh.cpp
+@@ -205,6 +205,7 @@ Context::GetGenericInterface(const char *pchInterfaceVersion, vr::EVRInitError *
+ 	MATCH_INTERFACE_THIS(vr::IVRDriverInput);
+ 	// This interface is not in a public header yet, but just passing IVRDriverInput_003 seems to work.
+ 	MATCH_INTERFACE("IVRDriverInput_004", static_cast<vr::IVRDriverInput *>(this));
++	MATCH_INTERFACE("IVRDriverInput_005", static_cast<vr::IVRDriverInput *>(this));
+ 	MATCH_INTERFACE_THIS(vr::IVRProperties);
+ 	MATCH_INTERFACE_THIS(vr::IVRDriverLog);
+ 	MATCH_INTERFACE(vr::IVRSettings_Version, &settings);
+-- 
+GitLab
+

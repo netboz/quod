@@ -1,0 +1,1 @@
+Gate03:5 tests/1 failure,true exit1. Fixture grants name the logical Node agent, but the later trusted local prove API uses the physical node principal. Use actual signed Node requests for the post-restriction administrative test writes, with exact anchored entry wrappers. Preserve both broad-grant removals and all signature assertions. No production change.

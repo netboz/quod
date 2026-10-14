@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_agent_hosting_tests.erl failed
+     ┌─ test/quod_agent_hosting_tests.erl:
+     │
+ 227 │                     {',', {current_signed_request, {'Bytes'}}, {record_ping, {'Value'}}}}],
+     │                                                                                          ╰── syntax error before: ']'
+
+

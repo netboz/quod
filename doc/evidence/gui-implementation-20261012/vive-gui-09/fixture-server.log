@@ -1,0 +1,11 @@
+
+  VITE v8.1.5  ready in 235 ms
+
+  ➜  Local:   http://127.0.0.1:5178/
+11:25:28 AM [vite] (client) Pre-transform error: Failed to load url /client/test/gui-hardware.fixture.js (resolved id: /client/test/gui-hardware.fixture.js). Does the file exist?
+The request id "/home/yan/src/quod/client/test/gui-hardware.fixture.js" is outside of Vite serving allow list.
+
+- /home/yan/src/quod/ui
+
+Refer to docs https://vite.dev/config/server-options.html#server-fs-allow for configurations and more details.
+

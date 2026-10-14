@@ -1,0 +1,13 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.86s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 5 tests
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+test tests::falling_and_retained_installation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+

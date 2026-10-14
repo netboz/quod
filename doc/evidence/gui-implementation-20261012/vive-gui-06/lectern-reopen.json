@@ -1,0 +1,307 @@
+{
+  "script": "const done=arguments[arguments.length-1];import(performance.getEntriesByType('resource').find(r=>r.name.includes('engineStore')).name).then(({EngineStore})=>{const scene=EngineStore.LastCreatedScene,m=scene.getMeshByName('workspace');if(!m){done({error:'no panel'});return;}if(window.guiTestFollow)scene.onBeforeRenderObservable.remove(window.guiTestFollow);if(window.guiPlacementObserver)scene.onAfterRenderObservable.remove(window.guiPlacementObserver);m.scaling.setAll(1.5);const height=.2881758093833923;const trace=window.guiPlacementTrace={frames:0,states:{},events:[],recent:[]};let previous=null;window.guiTestFollow=scene.onBeforeRenderObservable.add(()=>{const c=scene.activeCamera;c.getViewMatrix(true);const p=c.globalPosition,q=c.rotationQuaternion;if(c.trackingState!==2||!q||Math.hypot(q.y,q.w)<.001)return;const yaw=2*Math.atan2(q.y,q.w);m.position.set(p.x-Math.sin(yaw)*1.9,height,p.z-Math.cos(yaw)*1.9);m.rotationQuaternion=null;m.rotation.set(-40*Math.PI/180,yaw,0);});window.guiPlacementObserver=scene.onAfterRenderObservable.add(()=>{const c=scene.activeCamera;const row={t:performance.now(),tracking:c.trackingState,p:c.globalPosition.asArray(),q:c.rotationQuaternion?.asArray(),panel:m.position.asArray(),yaw:m.rotation.y,visible:m.isVisible};trace.frames++;trace.states[row.tracking]=(trace.states[row.tracking]??0)+1;if(previous&&row.tracking!==previous.tracking){trace.events.push({before:previous,after:row});if(trace.events.length>100)trace.events.shift();}trace.recent.push(row);if(trace.recent.length>900)trace.recent.shift();previous=row;});done({height,slopeDegrees:50,distance:1.9,scale:1.5,tracking:scene.activeCamera.trackingState,report:window.guiHardwareReport()});}).catch(e=>done({error:String(e)}));",
+  "result": {
+    "value": {
+      "distance": 1.9,
+      "height": 0.2881758093833923,
+      "report": {
+        "edits": [
+          {
+            "role": "phase",
+            "value": "2"
+          },
+          {
+            "role": "phase",
+            "value": "3"
+          },
+          {
+            "role": "phase",
+            "value": "26"
+          },
+          {
+            "role": "phase",
+            "value": "47"
+          },
+          {
+            "role": "phase",
+            "value": "72"
+          },
+          {
+            "role": "phase",
+            "value": "160"
+          },
+          {
+            "role": "phase",
+            "value": "223"
+          },
+          {
+            "role": "phase",
+            "value": "233"
+          },
+          {
+            "role": "phase",
+            "value": "245"
+          },
+          {
+            "role": "phase",
+            "value": "260"
+          },
+          {
+            "role": "phase",
+            "value": "272"
+          },
+          {
+            "role": "phase",
+            "value": "293"
+          },
+          {
+            "role": "phase",
+            "value": "315"
+          },
+          {
+            "role": "phase",
+            "value": "345"
+          },
+          {
+            "role": "phase",
+            "value": "336"
+          },
+          {
+            "role": "phase",
+            "value": "312"
+          },
+          {
+            "role": "phase",
+            "value": "309"
+          },
+          {
+            "role": "phase",
+            "value": "296"
+          },
+          {
+            "role": "phase",
+            "value": "280"
+          },
+          {
+            "role": "phase",
+            "value": "241"
+          },
+          {
+            "role": "phase",
+            "value": "215"
+          },
+          {
+            "role": "phase",
+            "value": "209"
+          },
+          {
+            "role": "phase",
+            "value": "0"
+          },
+          {
+            "role": "phase",
+            "value": "38"
+          },
+          {
+            "role": "phase",
+            "value": "34"
+          },
+          {
+            "role": "phase",
+            "value": "52"
+          },
+          {
+            "role": "phase",
+            "value": "85"
+          },
+          {
+            "role": "phase",
+            "value": "102"
+          },
+          {
+            "role": "phase",
+            "value": "137"
+          },
+          {
+            "role": "phase",
+            "value": "152"
+          },
+          {
+            "role": "phase",
+            "value": "156"
+          },
+          {
+            "role": "phase",
+            "value": "180"
+          },
+          {
+            "role": "phase",
+            "value": "189"
+          },
+          {
+            "role": "phase",
+            "value": "188"
+          },
+          {
+            "role": "phase",
+            "value": "173"
+          },
+          {
+            "role": "phase",
+            "value": "182"
+          },
+          {
+            "role": "phase",
+            "value": "177"
+          },
+          {
+            "role": "phase",
+            "value": "167"
+          },
+          {
+            "role": "phase",
+            "value": "151"
+          },
+          {
+            "role": "phase",
+            "value": "146"
+          },
+          {
+            "role": "phase",
+            "value": "138"
+          },
+          {
+            "role": "gain",
+            "value": "24"
+          },
+          {
+            "role": "gain",
+            "value": "27"
+          },
+          {
+            "role": "gain",
+            "value": "29"
+          },
+          {
+            "role": "gain",
+            "value": "32"
+          },
+          {
+            "role": "gain",
+            "value": "34"
+          },
+          {
+            "role": "gain",
+            "value": "37"
+          },
+          {
+            "role": "gain",
+            "value": "45"
+          },
+          {
+            "role": "gain",
+            "value": "49"
+          },
+          {
+            "role": "gain",
+            "value": "57"
+          },
+          {
+            "role": "gain",
+            "value": "63"
+          },
+          {
+            "role": "gain",
+            "value": "68"
+          },
+          {
+            "role": "gain",
+            "value": "75"
+          },
+          {
+            "role": "gain",
+            "value": "80"
+          },
+          {
+            "role": "gain",
+            "value": "83"
+          },
+          {
+            "role": "gain",
+            "value": "80"
+          },
+          {
+            "role": "gain",
+            "value": "76"
+          },
+          {
+            "role": "gain",
+            "value": "73"
+          },
+          {
+            "role": "gain",
+            "value": "70"
+          },
+          {
+            "role": "gain",
+            "value": "64"
+          },
+          {
+            "role": "gain",
+            "value": "60"
+          },
+          {
+            "role": "gain",
+            "value": "53"
+          },
+          {
+            "role": "gain",
+            "value": "47"
+          },
+          {
+            "role": "gain",
+            "value": "45"
+          },
+          {
+            "role": "gain",
+            "value": "43"
+          },
+          {
+            "role": "gain",
+            "value": "41"
+          },
+          {
+            "role": "gain",
+            "value": "44"
+          },
+          {
+            "role": "gain",
+            "value": "45"
+          },
+          {
+            "role": "mode",
+            "value": "sweep"
+          },
+          {
+            "role": "mode",
+            "value": "hold"
+          },
+          {
+            "role": "mode",
+            "value": "sweep"
+          }
+        ],
+        "entries": 1,
+        "errors": [
+          "Uncaught TypeError: Cannot read properties of undefined (reading 'target')",
+          "Uncaught TypeError: Cannot read properties of undefined (reading 'target')"
+        ],
+        "immersive": true,
+        "submissions": []
+      },
+      "scale": 1.5,
+      "slopeDegrees": 50,
+      "tracking": 0
+    }
+  }
+}

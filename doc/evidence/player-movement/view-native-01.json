@@ -1,0 +1,11 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "--locked"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.8898026943206787
+}

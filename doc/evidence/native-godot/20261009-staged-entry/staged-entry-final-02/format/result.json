@@ -1,0 +1,13 @@
+{
+  "command": [
+    "cargo",
+    "fmt",
+    "--manifest-path",
+    "client/native/Cargo.toml",
+    "--all",
+    "--check"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.3209637579857372
+}

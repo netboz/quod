@@ -1,0 +1,62 @@
+-- The CMake build type is: Release
+-- Ruby interpreter executable
+-- Ruby interpreter executable - /home/yan/src/quod/client/_build/webxr-linux/tools/usr/bin/ruby (version: 3.4.10)
+-- Enabling ccache: Couldn't find ccache program. Not enabling it.
+-- Linker variant in use: BFD 
+--   Linker supports thin archives - TRUE
+--   Linker supports split debug info - TRUE
+--   Linker supports --gdb-index - FALSE
+--   Linker supports --disable-new-dtags - TRUE
+--   Linker supports --gc-sections - TRUE
+-- Archiver variant in use: BFD
+--   Archiver supports thin archives - TRUE
+-- C++ standard library in use: GLIBCXX
+--   Assertions enabled, _GLIBCXX_ASSERTIONS=1
+-- Found hb-features.h
+-- Found the following HarfBuzz libraries:
+--  HarfBuzz (required): /usr/lib/libharfbuzz.so
+--  ICU (required): /usr/lib/libharfbuzz-icu.so
+-- Found the following WebP libraries:
+--  WebP (required): /usr/lib/libwebp.so
+--  demux (required): /usr/lib/libwebpdemux.so
+-- Found glib-compile-resources (required): /usr/bin/glib-compile-resources (2.88.3)
+-- Disabling USE_FLITE since ENABLE_SPEECH_SYNTHESIS is disabled.
+-- Found Enchant: /usr/lib/libenchant-2.so (found version "2.8.21")
+-- Found X11: /usr/include
+-- Looking for XOpenDisplay in /usr/lib/libX11.so;/usr/lib/libXext.so
+-- Looking for XOpenDisplay in /usr/lib/libX11.so;/usr/lib/libXext.so - found
+-- Looking for gethostbyname
+-- Looking for gethostbyname - found
+-- Looking for connect
+-- Looking for connect - found
+-- Looking for remove
+-- Looking for remove - found
+-- Looking for shmat
+-- Looking for shmat - found
+-- Looking for IceConnectionNumber in ICE
+-- Looking for IceConnectionNumber in ICE - found
+-- Checking for modules 'wayland-client;wayland-server;wayland-egl'
+--   Found wayland-client, version 1.26.0
+--   Found wayland-server, version 1.26.0
+--   Found wayland-egl, version 18.1.0
+-- Found Wayland: wayland-server;wayland-egl;wayland-client;m (Required is at least version "1.20")
+-- Checking for module 'wayland-protocols'
+--   Found wayland-protocols, version 1.49
+-- Found JPEGXL: /usr/lib/libjxl.so (found suitable version "0.12.0", minimum required is "0.7.0")
+-- Found Hyphen: /usr/lib/libhyphen.so
+-- Found Freetype: /usr/lib/libfreetype.so (found suitable version "2.14.3", minimum required is "2.9.0")
+-- Performing Test FREETYPE_WOFF2_SUPPORT_IS_AVAILABLE
+-- Performing Test FREETYPE_WOFF2_SUPPORT_IS_AVAILABLE - Success
+-- Using FreeType's WOFF2 support
+-- Found AVIF: /usr/include/avif (found suitable version "1.4.2", minimum required is "0.9.0")
+-- Found Journald: /usr/lib/libsystemd.so (found version "262")
+-- Found LCMS2: /usr/lib/liblcms2.so (found version "2.19")
+-- Could NOT find LibBacktrace (missing: LIBBACKTRACE_INCLUDE_DIR LIBBACKTRACE_LIBRARY) 
+CMake Error at Source/cmake/OptionsGTK.cmake:460 (message):
+  libbacktrace is required for USE_LIBBACKTRACE
+Call Stack (most recent call first):
+  Source/cmake/WebKitCommon.cmake:331 (include)
+  CMakeLists.txt:22 (include)
+
+
+-- Configuring incomplete, errors occurred!

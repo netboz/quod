@@ -1,0 +1,50 @@
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: browser events must not throw outside the fixture promise
++ actual - expected
+
++ [
++   "TypeError: Cannot read properties of undefined (reading 'isFocusInvisible')\n" +
++     '    at AdvancedDynamicTexture._manageFocus (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:1049:33)\n' +
++     '    at AdvancedDynamicTexture._doPicking (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:816:8)\n' +
++     '    at Observer.callback (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:990:11)\n' +
++     '    at Observable.notifyObservers (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_core_Misc_observable__js.js?v=ad33ebd0:232:38)\n' +
++     '    at InputManager._processPointerMove (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4036:75)\n' +
++     '    at InputManager._onPointerMove (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4351:9)\n' +
++     '    at Observer.callback (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4484:59)\n' +
++     '    at Observable.notifyObservers (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_core_Misc_observable__js.js?v=ad33ebd0:232:38)\n' +
++     '    at DeviceSourceManager._onInputChanged (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:3844:69)\n' +
++     '    at WebDeviceInputSystem.onInputChanged [as _onInputChanged] (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:3737:75)'
++ ]
+- []
+
+    at checkWorkspacePanelResult (file:///home/yan/src/quod/client/test/workspace-panel.browser.mjs:21:10)
+    at file:///home/yan/src/quod/[eval1]:4:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async node:internal/modules/esm/loader:226:26
+    at async ModuleLoader.executeModuleJob (node:internal/modules/esm/loader:223:20)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    "TypeError: Cannot read properties of undefined (reading 'isFocusInvisible')\n" +
+      '    at AdvancedDynamicTexture._manageFocus (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:1049:33)\n' +
+      '    at AdvancedDynamicTexture._doPicking (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:816:8)\n' +
+      '    at Observer.callback (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_gui_2D_advancedDynamicTexture__js.js?v=ad33ebd0:990:11)\n' +
+      '    at Observable.notifyObservers (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_core_Misc_observable__js.js?v=ad33ebd0:232:38)\n' +
+      '    at InputManager._processPointerMove (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4036:75)\n' +
+      '    at InputManager._onPointerMove (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4351:9)\n' +
+      '    at Observer.callback (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:4484:59)\n' +
+      '    at Observable.notifyObservers (http://127.0.0.1:5197/node_modules/.vite/deps/@babylonjs_core_Misc_observable__js.js?v=ad33ebd0:232:38)\n' +
+      '    at DeviceSourceManager._onInputChanged (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:3844:69)\n' +
+      '    at WebDeviceInputSystem.onInputChanged [as _onInputChanged] (http://127.0.0.1:5197/node_modules/.vite/deps/scene.pure-C6FFsJZC.js?v=ad33ebd0:3737:75)'
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0

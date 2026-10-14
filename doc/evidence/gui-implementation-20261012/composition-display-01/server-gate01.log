@@ -1,0 +1,88 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 14-Oct-2026::00:51:16.989344 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 14-Oct-2026::00:51:19.115087 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 14-Oct-2026::00:51:20.387157 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 14-Oct-2026::00:51:21.392814 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 14-Oct-2026::00:51:31.165523 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 11
+[0;32m.[0m=WARNING REPORT==== 14-Oct-2026::00:52:19.857000 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=group namespace=<<"lobby-test-user">> id=6715e14a14712a0b6c97884e2dbf62a8daef2ca0cf581c62b3c4f4e1d3ae6ac1
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_components_tests:-composition_uses_inherited_defaults_and_only_binds_inputs_test_/0-fun-19-/0
+[0;31m     Failure/Error: {throw,
+                        {genesis_failed,
+                            {read_file,"test/fixtures/gui-composition.pl",
+                                {27,erlog_parse,{expected,']'}}}},
+                        [{quod_committed_projection,read_terms,1,
+                             [{file,
+                                  "/home/yan/src/quod/src/quod_committed_projection.erl"},
+                              {line,79}]},
+                         {quod_gui_components_tests,
+                             '-composition_uses_inherited_defaults_and_only_binds_inputs_test_/0-fun-19-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_components_tests.erl"},
+                              {line,8}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+  2) quod_gui_examples_tests:examples/0: module 'quod_gui_examples_tests'
+[0;31m     Failure/Error: {error,
+                        {gui_open_missing,none,
+                            [<<"refresh">>,<<"gui_prepare">>]},
+                        [{quod_gui_question_tests,gui_open_result,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,394}]},
+                         {quod_gui_question_tests,'-with_receiver/3-fun-4-',
+                             6,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,373}]},
+                         {quod_gui_examples_tests,'-examples/0-fun-13-',13,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_examples_tests.erl"},
+                              {line,78}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {quod_gui_question_tests,with_receiver,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,377}]},
+                         {quod_gui_examples_tests,'-examples/0-fun-22-',8,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_examples_tests.erl"},
+                              {line,67}]},
+                         {quod_gui_examples_tests,with_responder,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_examples_tests.erl"},
+                              {line,162}]},
+                         {quod_gui_examples_tests,examples,0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_examples_tests.erl"},
+                              {line,23}]}]}
+[0m[0;36m     Output: Failed live GUI examples retained at /tmp/quod-gui-examples-A9A1FE2896D03645516F4F46
+[0m
+
+Finished in 335.218 seconds
+[0;31m26 tests, 2 failures
+[0m===> Error running tests

@@ -1,0 +1,15 @@
+✖ client/test/question-controller.test.js (95.44832ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 103.805794
+
+✖ failing tests:
+
+test at client/test/question-controller.test.js:1:1
+✖ client/test/question-controller.test.js (95.44832ms)
+  'test failed'

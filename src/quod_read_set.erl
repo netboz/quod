@@ -7,8 +7,8 @@ its symbol. Ascending name/arity order preserves the real .174 small-map
 bytes; map traversal is not a wire contract. An atom and an opaque symbol
 with the same name and arity are aliases, not two dependencies.
 
-Terminal operation evidence uses an atom-free three-tuple key and immutable
-claim/result token. Tuple ordering puts it after all predicate keys without
+Terminal operation evidence uses atom-free three-tuple keys and immutable
+claim/result or certified-prefix expiry tokens. Tuple ordering puts them after all predicate keys without
 changing any existing predicate-only bytes. It is still a signed, counted read;
 only mutable predicate reads contribute atomic reservation keys.
 
@@ -16,7 +16,8 @@ Consumers validate the carried pair list before constructing a lookup map or
 materializing vocabulary. This library neither creates atoms nor drops reads.
 """.
 
--export([encode/1, pairs/1, valid_pairs/1, valid/1, kind/1, at_height/2]).
+-export([encode/1, pairs/1, valid_pairs/1, valid/1, kind/1, at_height/2,
+         requires_network_identity/1]).
 
 -doc "Encode a valid read set in canonical name/arity order without allocating atoms.".
 -spec encode(term()) -> {ok, binary()} | {error, bad_term}.
@@ -82,6 +83,15 @@ pair_key({{1, Agent, <<_:256>>} = Key,
         true -> {ok, Key};
         false -> error
     end;
+pair_key({{2, Agent, Id} = Key, {Bytes, Height, Timestamp}})
+  when is_integer(Height), Height > 0, Height =< 16#FFFFFFFFFFFFFFFF,
+       is_integer(Timestamp), Timestamp > 0, Timestamp =< 16#FFFFFFFFFFFFFFFF ->
+    case quod_client_goal:request_identity(Bytes) of
+        {ok, #{operation_ref := {operation, _, _, Agent, Id},
+               request := #{mode := execute, not_after_ms := Expiry}}}
+          when Timestamp > Expiry -> {ok, Key};
+        _ -> error
+    end;
 pair_key(_) -> error.
 
 %% Integer tags keep this extension atom-free before vocabulary materialization.
@@ -98,13 +108,26 @@ kind({1, Agent, <<_:256>>}) ->
         true -> operation_outcome;
         false -> invalid
     end;
+kind({2, Agent, <<_:256>>}) ->
+    case quod_agent_ref:valid_principal({agent, Agent}) of
+        true -> operation_expiry;
+        false -> invalid
+    end;
 kind(_) -> invalid.
+
+%% Scan the decoded dependency keys; do not decode each request again merely
+%% to decide whether the containing entry needs trusted network context.
+requires_network_identity(ReadSet) ->
+    maps:fold(fun({2, _, _}, _, _) -> true;
+                 (_, _, Acc) -> Acc
+              end, false, ReadSet).
 
 %% Terminal evidence is independent of capture time, but must have been fully
 %% published in the anchored snapshot that the sealed plan names.
 at_height(ReadSet, Height) when is_integer(Height), Height >= 0 ->
     valid(ReadSet) andalso maps:fold(
       fun({1, _, _}, {_, _, _, _, _, Published}, Acc) -> Acc andalso Published =< Height;
+         ({2, _, _}, {_, Prefix, _}, Acc) -> Acc andalso Prefix =< Height;
          (_, _, Acc) -> Acc
       end, true, ReadSet);
 at_height(_, _) -> false.

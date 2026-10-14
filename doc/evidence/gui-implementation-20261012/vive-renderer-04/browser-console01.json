@@ -1,0 +1,206 @@
+[
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"",
+    "source": "console-api",
+    "timestamp": 1791930347159
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"",
+    "source": "console-api",
+    "timestamp": 1791930347204
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/@babylonjs_core_Meshes_Builders_capsuleBuilder__js.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347236
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/@babylonjs_core_Meshes_Builders_torusBuilder__js.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347237
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/@babylonjs_core_Materials_PBR_pbrMaterial__js.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347245
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/@babylonjs_core_Materials_Textures_texture__js.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347249
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/stackPanel.pure-Lej77mpC.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347249
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/math.viewport-C7Hydk6u.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347250
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/textBlock.pure-CgvWljK1.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347250
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/texture.pure-7H6tIjtx.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347253
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/tools-ch-03y0U.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347253
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/clipboardEvents-DOuv8ikq.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347275
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/constants-C1zt6fYv.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347276
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/control.pure-CYzmnSMk.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347277
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/container.pure-8CQqeryo.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347279
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/inputText.pure-DemWcTUe.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347279
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/buffer.pure-Da_AHFj2.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347279
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/math.path-BQWh8R3g.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347279
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/compatibilityOptions-KvDlFFaP.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347279
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/shapeBuilder.pure-C2v-QdVU.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347280
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/linesBuilder.pure-B2QiarXz.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347280
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/cylinderBuilder.pure-DKXOcgqg.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347281
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/capsuleBuilder.pure-CNZ1cScO.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347281
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/torusBuilder.pure-DIT2mkkg.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347282
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/groundBuilder.pure-Cpv475td.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347285
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/icoSphereBuilder.pure-CIiEgsi2.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347285
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/button.pure-D5sbeXnl.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347285
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/sphereBuilder.pure-CJ393nbO.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347286
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/inputTextArea.pure-Csjm0nec.js?v=6046aa05 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791930347287
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"",
+    "source": "console-api",
+    "timestamp": 1791930347454
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"",
+    "source": "console-api",
+    "timestamp": 1791930347471
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/favicon.ico - Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "source": "network",
+    "timestamp": 1791930347857
+  },
+  {
+    "level": "INFO",
+    "message": "http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=4ef7a055 39:23 \"BJS - [00:25:48]: Babylon.js v9.18.1 - WebGL2\"",
+    "source": "console-api",
+    "timestamp": 1791930348398
+  },
+  {
+    "level": "INFO",
+    "message": "http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=4ef7a055 39:23 \"BJS - [00:25:51]: Babylon.js v9.18.1 - WebGL2\"",
+    "source": "console-api",
+    "timestamp": 1791930351388
+  }
+]

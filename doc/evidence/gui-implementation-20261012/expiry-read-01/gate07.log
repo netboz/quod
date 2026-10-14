@@ -1,0 +1,51 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::13:40:06.169497 ===
+quod[quod:dtx-fixture-a]: DTX coordinator worker for <<191,166,172,34,240,20,
+                                                       182,67,78,33,82,164,247,
+                                                       152,218,53,3,188,203,
+                                                       161,226,134,118,241,104,
+                                                       228,66,227,160,246,123,
+                                                       183>> exited: killed
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 13-Oct-2026::13:40:07.981669 ===
+quod[t]: refusing divergent relay lane: {relay_lane_conflict,{<<13,1,154,105,160,166,248,15,90,243,173,75,101,182,53,2,40,20,175,48,125,101,0,87,192,182,245,190,253,62,155,21>>,5,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7>>},{<<41,186,143,40,76,23,102,2,188,60,41,28,173,215,244,185,26,100,106,139,194,217,71,234,120,155,69,89,159,244,110,244>>,6,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7>>}}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 13-Oct-2026::13:40:08.523413 ===
+quod[t]: refusing divergent relay terminal state for <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3>>
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_simplex_tests:era_live_archive_group_preserves_material_heights_and_reuses_proofs_test/0
+[0;31m     Failure/Error: ?assertEqual(#{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}, quod_simplex : test_engine_pool_sizes ( quod_simplex : engine_step ( [ { block , Regressed } ] , Owner1 ) ))
+       expected: #{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}
+            got: #{blocks => 1,certs => 0,share_buckets => 0,seen_votes => 0}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+  2) quod_simplex_tests:era_live_membership_group_retires_old_votes_and_starts_at_material_root_test/0
+[0;31m     Failure/Error: ?assertEqual(#{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}, quod_simplex : test_engine_pool_sizes ( quod_simplex : engine_step ( [ { block , Regressed } ] , Owner1 ) ))
+       expected: #{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}
+            got: #{blocks => 1,certs => 0,share_buckets => 0,seen_votes => 0}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+  3) quod_simplex_tests:era_recovery_group_restores_protocol_head_without_replaying_live_events_test/0
+[0;31m     Failure/Error: ?assertEqual(#{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}, quod_simplex : test_engine_pool_sizes ( quod_simplex : engine_step ( [ { block , Regressed } ] , Owner1 ) ))
+       expected: #{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}
+            got: #{blocks => 1,certs => 0,share_buckets => 0,seen_votes => 0}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+  4) quod_simplex_tests:era_recovery_membership_group_seals_old_votes_before_reseating_test/0
+[0;31m     Failure/Error: ?assertEqual(#{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}, quod_simplex : test_engine_pool_sizes ( quod_simplex : engine_step ( [ { block , Regressed } ] , Owner1 ) ))
+       expected: #{blocks => 0,certs => 0,share_buckets => 0,seen_votes => 0}
+            got: #{blocks => 1,certs => 0,share_buckets => 0,seen_votes => 0}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 6.060 seconds
+[0;31m275 tests, 4 failures
+[0m===> Error running tests

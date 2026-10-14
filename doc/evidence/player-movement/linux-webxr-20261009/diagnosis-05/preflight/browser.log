@@ -1,0 +1,296 @@
+   2008636:	find library=libpython3.14.so.1.0 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3:/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2:/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/libpython3.14.so.1.0
+   2008636:	    (no such file)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/libpython3.14.so.1.0
+   2008636:	    (no such file)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libpython3.14.so.1.0
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libpython3.14.so.1.0
+   2008636:	
+   2008636:	find library=libc.so.6 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libc.so.6
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libc.so.6
+   2008636:	
+   2008636:	find library=libm.so.6 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libm.so.6
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libm.so.6
+   2008636:	
+   2008636:	
+   2008636:	calling init: /lib64/ld-linux-x86-64.so.2
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libc.so.6
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libm.so.6
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libpython3.14.so.1.0
+   2008636:	
+   2008636:	
+   2008636:	initialize program: python3
+   2008636:	
+   2008636:	
+   2008636:	transferring control: python3
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	find library=libz.so.1 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libz.so.1
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libz.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libz.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/binascii.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_struct.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_socket.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	find library=libssl.so.3 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libssl.so.3
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libssl.so.3
+   2008636:	
+   2008636:	find library=libcrypto.so.3 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libcrypto.so.3
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libcrypto.so.3
+   2008636:	
+   2008636:	find library=libbrotlienc.so.1 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlienc.so.1
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libbrotlienc.so.1
+   2008636:	
+   2008636:	find library=libbrotlidec.so.1 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlidec.so.1
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libbrotlidec.so.1
+   2008636:	
+   2008636:	find library=libzstd.so.1 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libzstd.so.1
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libzstd.so.1
+   2008636:	
+   2008636:	find library=libbrotlicommon.so.1 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlicommon.so.1
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libbrotlicommon.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libbrotlicommon.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libzstd.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libbrotlidec.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libbrotlienc.so.1
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libcrypto.so.3
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libssl.so.3
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_ssl.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	find library=libbz2.so.1.0 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libbz2.so.1.0
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/libbz2.so.1.0
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/libbz2.so.1.0
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	find library=liblzma.so.5 [0]; searching
+   2008636:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   2008636:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/liblzma.so.5
+   2008636:	    (no such file)
+   2008636:	 search cache=/etc/ld.so.cache
+   2008636:	  trying file=/usr/lib/liblzma.so.5
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/liblzma.so.5
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/_blake2.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+   2008636:	
+   2008636:	calling init: /usr/lib/python3.14/lib-dynload/unicodedata.cpython-314-x86_64-linux-gnu.so
+   2008636:	
+{"event": "engine", "capabilities": {"acceptInsecureCerts": false, "browserName": "chrome", "browserVersion": "157.0.8091.0", "chrome": {"chromedriverVersion": "157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1})", "userDataDir": "/tmp/quod-webxr-h_qczpgn/data/chrome-profile"}, "fedcm:accounts": true, "goog:chromeOptions": {"debuggerAddress": "localhost:33469"}, "goog:processID": 2008647, "networkConnectionEnabled": false, "pageLoadStrategy": "normal", "platformName": "linux", "proxy": {}, "setWindowRect": true, "strictFileInteractability": false, "timeouts": {"implicit": 0, "pageLoad": 300000, "script": 30000}, "unhandledPromptBehavior": "dismiss and notify", "webauthn:extension:cmtgKey": true, "webauthn:extension:credBlob": true, "webauthn:extension:largeBlob": true, "webauthn:extension:minPinLength": true, "webauthn:extension:prf": true, "webauthn:virtualAuthenticators": true}}
+127.0.0.1 - - [09/Oct/2026 10:46:42] "GET /linux-webxr.fixture.html HTTP/1.1" 200 -
+127.0.0.1 - - [09/Oct/2026 10:46:42] code 404, message File not found
+127.0.0.1 - - [09/Oct/2026 10:46:42] "GET /favicon.ico HTTP/1.1" 404 -
+{"event": "ready", "immersiveVR": true, "secureContext": true, "webxr": true}
+{"event": "failed", "message": "The specified session configuration is not supported.", "name": "NotSupportedError", "cycle": 1}
+{"event": "harness-failed", "reason": "Native immersive session failed"}
+   2008636:	
+   2008636:	calling fini:  [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libpython3.14.so.1.0 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/binascii.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_struct.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_socket.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_ssl.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libssl.so.3 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libbz2.so.1.0 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/liblzma.so.5 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libcrypto.so.3 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libzstd.so.1 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libbrotlidec.so.1 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libbrotlienc.so.1 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libbrotlicommon.so.1 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libm.so.6 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libz.so.1 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/_blake2.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/python3.14/lib-dynload/unicodedata.cpython-314-x86_64-linux-gnu.so [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /usr/lib/libc.so.6 [0]
+   2008636:	
+   2008636:	
+   2008636:	calling fini: /lib64/ld-linux-x86-64.so.2 [0]
+   2008636:	

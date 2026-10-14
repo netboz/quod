@@ -1,0 +1,179 @@
+{
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636,
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/world.md",
+      "bytes": 42502,
+      "sha256": "723f814e83f59b649a91f8577904eeb2353f740cf5a8cc2a7d73227d577f62bb"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "bytes": 8757,
+      "sha256": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2"
+    },
+    {
+      "file": "doc/system-ontology-acls.md",
+      "bytes": 9094,
+      "sha256": "00df75364a94ba3256526d5f34ad2d42d401f16aa8ad29fe29257637ae8e8807"
+    },
+    {
+      "file": "doc/spaces.md",
+      "bytes": 10569,
+      "sha256": "8470e5a5f64e96c225c6387214ad601f2951a8ff02380eb28f48d7a744ff36ce"
+    },
+    {
+      "file": "doc/ontology-eidolons-plan.md",
+      "bytes": 4511,
+      "sha256": "49afb85b6e5cb6110ca9e324189c394e2125ce52bf97e9f6a8ddc359ed9ae86b"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "bytes": 15362,
+      "sha256": "1a3d0da85e385d47ad796c380809a91c919d167e0c82245175981a69ca763a3e"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog.pl",
+      "bytes": 7561,
+      "sha256": "1df8c4967423d405fba6e784eb2107227c1867d7db14e25d9957b80a98300be7"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog_eidolons.pl",
+      "bytes": 2604,
+      "sha256": "0026c455c9337822d2ad26bd8197b5bfee478a3d451303d88c4ed14caa16e60d"
+    },
+    {
+      "file": "priv/ontologies/quod_lens.pl",
+      "bytes": 20873,
+      "sha256": "db667b0a7fb5f528bec09996929904eb305162745ba1854aec664e6f0de9ed68"
+    },
+    {
+      "file": "priv/ontologies/quod_root.pl",
+      "bytes": 8319,
+      "sha256": "5b9cc76c0d4671762f2f19dbb2f81d982841273efb1ee046b03a11ab6e4d56d8"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "bytes": 3789,
+      "sha256": "91cedb9c1ae47e91384b90115433124cd3d9b5a3484280b5eab30e73b24c0b38"
+    },
+    {
+      "file": "priv/ontologies/human_user_instance.pl",
+      "bytes": 2780,
+      "sha256": "f6ad452a1c629ea6eb1e86f5912bc82a0712feb594f069b672ab5c5664e990f0"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "bytes": 22895,
+      "sha256": "3b516b00001432e2e6c11324a84334dc9816ac9287967ff2cb20722752ac6d2c"
+    },
+    {
+      "file": "src/predicates/quod_directory_predicates.erl",
+      "bytes": 3451,
+      "sha256": "3352607e064f2869e0ebfe3717543482e6e4543d8cbd587eb58cb769ac5ea5bb"
+    },
+    {
+      "file": "src/quod_directory.erl",
+      "bytes": 27292,
+      "sha256": "ad28f8c62554ab99a33d06bc2d03dce85eec67e48ca6d8868b6010d9ada36fc4"
+    },
+    {
+      "file": "client/src/world.js",
+      "bytes": 24384,
+      "sha256": "107631003ac50fc1bb60b4c13d66015e87d87611be3662cfa54780c8dc2ab73a"
+    },
+    {
+      "file": "client/src/world.d.ts",
+      "bytes": 4848,
+      "sha256": "b761b405a42bcf20fb9c3e2a97b85cd00599b5ac570e6f2f2d1ef20f16019fb7"
+    },
+    {
+      "file": "client/src/marks.js",
+      "bytes": 9516,
+      "sha256": "b98d47d66739b13bfd5dd2c7463f922f36ee216ce9ba5b22866954f5117ceacf"
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "bytes": 26831,
+      "sha256": "7c827b991369dec781dac9e095a5dd489e0f4259606f4a28e001599584908321"
+    },
+    {
+      "file": "test/quod_lobby_tests.erl",
+      "bytes": 94239,
+      "sha256": "1a29b00542385de84413d5928c2fe25488e8c67d90e53ea1ffb2297d7410f2ca"
+    },
+    {
+      "file": "test/quod_prolog_ontology_tests.erl",
+      "bytes": 11492,
+      "sha256": "db4ad8a4d5fb3efb397bfc40a6259c55bd4e42bd75fed53648d33a4b55ea1902"
+    },
+    {
+      "file": "test/quod_lens_tests.erl",
+      "bytes": 20690,
+      "sha256": "396519226a267968042f915b226faab71bd7c84c64929a6436c6afd8a29d045b"
+    },
+    {
+      "file": "test/quod_class_semantics_tests.erl",
+      "bytes": 4484,
+      "sha256": "27da2595ce64f41e2e67efe7423002c5cec4de557913e8fa834f47dd35099b99"
+    },
+    {
+      "file": "client/test/world.test.js",
+      "bytes": 20708,
+      "sha256": "98313548b3bbd6fc24ef9ab12bf479230bbc2dbbe5831a71b60eca32b1b695b3"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "bytes": 17660,
+      "sha256": "c900655887a22eb48bc11fc6f413e54df8c06bf0c5020141b16cc3c2af094776"
+    },
+    {
+      "file": "client/src/prolog-edit.js",
+      "bytes": 3722,
+      "sha256": "85697484a6ff8d2df08bc76a3bd7038b9f0e200bb21b79f26701fa7d6a648790"
+    },
+    {
+      "file": "client/src/prolog-edit.d.ts",
+      "bytes": 1118,
+      "sha256": "41d0395d94c6fc0b71bafb64ea42fd3e21e1afe75a3b5d69f7010911ab190af3"
+    },
+    {
+      "file": "ui/src/OntologyInspection.tsx",
+      "bytes": 1960,
+      "sha256": "df99a12e73b9aaab29715330417644b55b3d3c1f814621f9cc98fbd016449e72"
+    },
+    {
+      "file": "ui/test/ontology-inspection.fixture.tsx",
+      "bytes": 2732,
+      "sha256": "84c9af9a67be5c9c7c3c2856a325095cd231bbeb2541f2c16587beebf16beb5f"
+    },
+    {
+      "file": "ui/test/ontology-inspection.browser.mjs",
+      "bytes": 2731,
+      "sha256": "a6c60c18994e79695d132542ac22ffa5590538a8e7ce76fffc76e8d20aaa0dfe"
+    },
+    {
+      "file": "test/quod_common_primitives_tests.erl",
+      "bytes": 27258,
+      "sha256": "ef842e9a09c118075f349d9a8e833ddd81857680ed1aba0e9f482f78b1eca5c2"
+    },
+    {
+      "file": "client/test/marks.test.js",
+      "bytes": 10611,
+      "sha256": "412e4dc97f80fe7dfebb54d649bec1f4ab3969bbb444b262e20361f28f480682"
+    },
+    {
+      "file": "client/test/prolog-edit.test.js",
+      "bytes": 6530,
+      "sha256": "1cdca3aecc62333669b5cc1ef6b9bc0781324f1948c404fa4c576c6777b71558"
+    },
+    {
+      "file": "doc/evidence/ontology-eidolons-20261014/plan-disposition.md",
+      "bytes": 1946,
+      "sha256": "712569349bef43163663d2a4aeaf6a52b07c73a85f1da4e75c3abc166eb103b3"
+    }
+  ]
+}

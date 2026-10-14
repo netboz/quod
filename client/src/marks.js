@@ -148,10 +148,7 @@ function readMaterial(term) {
     const slot = oneOf(slotTerm, ['base_colour', 'normal', 'orm'], 'texture slot')
     if (slots.has(slot)) throw new Error('duplicate texture slot')
     slots.add(slot)
-    const [hash, mime] = args(asset, 'asset', 2)
-    const digest = binaryValue(hash, 'texture digest')
-    if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid texture SHA-256')
-    oneOf(mime, ['image/jpeg'], 'texture media type')
+    const digest = readImageAsset(asset)
     const [u, v] = args(tiling, 'repeat', 2)
     const repeat = [u, v].map(value => {
       const n = whole(value, 'texture repeat')
@@ -162,6 +159,14 @@ function readMaterial(term) {
   })
   return Object.freeze({ colour: readColour(colour), metallic: fraction(metallic),
     roughness: fraction(roughness), emission: fraction(emission), textures: Object.freeze(textures) })
+}
+
+export function readImageAsset(asset) {
+  const [hash, mime] = args(asset, 'asset', 2)
+  const digest = binaryValue(hash, 'texture digest')
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid texture SHA-256')
+  oneOf(mime, ['image/jpeg'], 'texture media type')
+  return digest
 }
 
 function readColour(colour) {

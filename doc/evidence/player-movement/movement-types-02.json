@@ -1,0 +1,9 @@
+{
+  "command": [
+    "ui/node_modules/.bin/tsc",
+    "-b",
+    "ui"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 2.752180814743042
+}

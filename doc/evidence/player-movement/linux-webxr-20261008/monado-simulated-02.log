@@ -1,0 +1,116 @@
+ INFO [ipc_server_main_common] Monado(XRT) by Collabora et al 'HEAD-HASH-NOTFOUND' starting up...
+ INFO [print_linux_end_user_started_information] 
+################################################################################
+#                                                                              #
+#                        The Monado service has started.                       #
+#                                                                              #
+################################################################################
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [p_create_system] Creating system:
+	Builders:
+		qwerty: Qwerty devices builder
+		remote: Remote simulation devices builder
+		simulated: Simulated devices builder
+		rift: Oculus Rift
+		rift_s: Oculus Rift S
+		psvr2: PlayStation VR 2
+		rgb_tracking: RGB tracking based devices (PSVR, PSMV, ...)
+		steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+		lighthouse: Lighthouse-tracked FLOSS (Vive, Index, Tundra trackers, etc.) devices builder
+		north_star: North Star headset
+		wmr: Windows Mixed Reality
+		xreal_air: Xreal Air
+		legacy: Legacy probing system
+	No builder selected in config (or wasn't compiled in)
+	Selected simulated because it was certain it could create a head
+	Using builder simulated: Simulated devices builder
+	Got devices:
+		0: Simulated HMD
+		1: Simple Controller (Simulated)
+		2: Simple Controller (Simulated)
+	In roles:
+		head: Simulated HMD (Simulated HMD), view count: 2
+		eyes: <none> (<none>)
+		face: <none> (<none>)
+		left: Simple Controller (Simulated) (Simple Controller (Simulated))
+		right: Simple Controller (Simulated) (Simple Controller (Simulated))
+		gamepad: <none> (<none>)
+		hand_tracking.unobstructed.left: <none> (<none>)
+		hand_tracking.unobstructed.right: <none> (<none>)
+		hand_tracking.conforming.left: <none> (<none>)
+		hand_tracking.conforming.right: <none> (<none>)
+	Result: XRT_SUCCESS
+DEBUG [comp_main_create_system_compositor] Doing init 0x55665b8db6e0
+ERROR [comp_window_peek_get_vk_instance_exts] comp_window_peek: Failed to init SDL2
+ERROR [select_instances_extensions] Failed to get required vulkan instance extensions for peek window.
+ERROR [compositor_init_vulkan] Failed to select additional instance extensions.
+ERROR [comp_main_create_system_compositor] Failed to init compositor 0x55665b8db6e0
+DEBUG [render_shaders_fini] Shaders destroyed!
+ERROR [ipc_server_init_system_if_available_locked] xrt_instance_create_system failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:699]
+ERROR [ipc_server_main_common] ipc_server_init_system_if_available_locked failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:974]
+ INFO [client_connected] Client 1 connected
+ INFO [ipc_handle_instance_describe_client] Client info:
+	id: 1
+	application_name: 'HelloXR'
+	pid: 4007090
+	extensions:
+		ext_hand_tracking_enabled: false
+		ext_hand_tracking_data_source_enabled: false
+		ext_eye_gaze_interaction_enabled: false
+		ext_future_enabled: false
+		ext_hand_interaction_enabled: false
+		htc_facial_tracking_enabled: false
+		fb_body_tracking_enabled: false
+		meta_body_tracking_full_body_enabled: false
+		meta_body_tracking_calibration_enabled: false
+		fb_face_tracking2_enabled: false
+		android_face_tracking_enabled: false
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [p_create_system] Creating system:
+	Builders:
+		qwerty: Qwerty devices builder
+		remote: Remote simulation devices builder
+		simulated: Simulated devices builder
+		rift: Oculus Rift
+		rift_s: Oculus Rift S
+		psvr2: PlayStation VR 2
+		rgb_tracking: RGB tracking based devices (PSVR, PSMV, ...)
+		steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+		lighthouse: Lighthouse-tracked FLOSS (Vive, Index, Tundra trackers, etc.) devices builder
+		north_star: North Star headset
+		wmr: Windows Mixed Reality
+		xreal_air: Xreal Air
+		legacy: Legacy probing system
+	No builder selected in config (or wasn't compiled in)
+	Selected simulated because it was certain it could create a head
+	Using builder simulated: Simulated devices builder
+	Got devices:
+		0: Simulated HMD
+		1: Simple Controller (Simulated)
+		2: Simple Controller (Simulated)
+	In roles:
+		head: Simulated HMD (Simulated HMD), view count: 2
+		eyes: <none> (<none>)
+		face: <none> (<none>)
+		left: Simple Controller (Simulated) (Simple Controller (Simulated))
+		right: Simple Controller (Simulated) (Simple Controller (Simulated))
+		gamepad: <none> (<none>)
+		hand_tracking.unobstructed.left: <none> (<none>)
+		hand_tracking.unobstructed.right: <none> (<none>)
+		hand_tracking.conforming.left: <none> (<none>)
+		hand_tracking.conforming.right: <none> (<none>)
+	Result: XRT_SUCCESS
+DEBUG [comp_main_create_system_compositor] Doing init 0x7fcc5403ff90
+ERROR [comp_window_peek_get_vk_instance_exts] comp_window_peek: Failed to init SDL2
+ERROR [select_instances_extensions] Failed to get required vulkan instance extensions for peek window.
+ERROR [compositor_init_vulkan] Failed to select additional instance extensions.
+ERROR [comp_main_create_system_compositor] Failed to init compositor 0x7fcc5403ff90
+DEBUG [render_shaders_fini] Shaders destroyed!
+ERROR [ipc_server_init_system_if_available_locked] xrt_instance_create_system failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:699]
+ERROR [ipc_handle_instance_is_system_available] ipc_server_init_system_if_available_locked failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_handler.c:482]
+ INFO [client_disconnected] Client 1 disconnected
+ INFO [ipc_server_main_common] Server exiting: '0'

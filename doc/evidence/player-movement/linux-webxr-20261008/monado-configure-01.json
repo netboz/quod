@@ -1,0 +1,23 @@
+{
+  "command": [
+    "cmake",
+    "-S",
+    "client/_build/webxr-linux/monado-src",
+    "-B",
+    "client/_build/webxr-linux/monado-build",
+    "-G",
+    "Ninja",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DXRT_HAVE_OPENCV=OFF",
+    "-DXRT_HAVE_ONNXRUNTIME=OFF",
+    "-DXRT_FEATURE_SLAM=OFF",
+    "-DXRT_FEATURE_STEAMVR_PLUGIN=OFF",
+    "-DXRT_HAVE_SYSTEM_CJSON=OFF",
+    "-DBUILD_TESTING=OFF",
+    "-DXRT_BUILD_DRIVER_SIMULATED=ON",
+    "-DXRT_BUILD_DRIVER_STEAMVR_LIGHTHOUSE=ON",
+    "-DXRT_FEATURE_SERVICE=ON"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 4.398362636566162
+}

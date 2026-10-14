@@ -1,0 +1,29 @@
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod physical Vive prerequisite
+	createInfo->applicationInfo.applicationVersion: 0
+	createInfo->applicationInfo.engineName: 
+	createInfo->applicationInfo.engineVersion: 0
+	createInfo->applicationInfo.apiVersion: 1.0.0
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+xrCreateInstance=0
+LOG in xrGetSystem: Selected devices
+	Head: 'HTC Vive. MV'
+	Eyes: '<none>'
+	Left: 'HTC Vive. Controller MV'
+	Right: 'HTC Vive. Controller MV'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+xrGetSystem=0 system=1
+xrGetSystemProperties=0 name=Monado: HTC Vive. MV orientation=1 position=1
+xrDestroyInstance=0

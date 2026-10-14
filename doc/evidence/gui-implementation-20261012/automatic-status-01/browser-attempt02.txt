@@ -1,0 +1,1 @@
+Diagnostic used a top-level return; MCP evaluation failed. Not a GUI result.

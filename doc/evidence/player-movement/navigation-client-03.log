@@ -1,0 +1,12 @@
+✔ client/test/controlled-navigation.test.js (230.34024ms)
+✔ client/test/navigation.test.js (105.86203ms)
+✔ client/test/signed-client.test.js (168.248942ms)
+✔ client/test/simulation.test.js (360.329367ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 384.289474

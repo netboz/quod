@@ -1,0 +1,16 @@
+[
+  {
+    "component": "chrome",
+    "version": "157.0.8091.0",
+    "url": "https://storage.googleapis.com/chrome-for-testing-public/157.0.8091.0/linux64/chrome-linux64.zip",
+    "bytes": 201688611,
+    "sha256": "d95c4aa9942f3e75353eeb876908ede3abfde25e0363bfbd2b30b28987df3289"
+  },
+  {
+    "component": "chromedriver",
+    "version": "157.0.8091.0",
+    "url": "https://storage.googleapis.com/chrome-for-testing-public/157.0.8091.0/linux64/chromedriver-linux64.zip",
+    "bytes": 11935947,
+    "sha256": "0bce77170cbd2e38dd3f448dab88609273efd48eeb61dad472908822d1cc8a6d"
+  }
+]

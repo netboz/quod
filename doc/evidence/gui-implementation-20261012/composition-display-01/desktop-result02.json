@@ -1,0 +1,33 @@
+{
+  "value": {
+    "checks": {
+      "controlsOpaque": true,
+      "disabledContainerInherited": true,
+      "gridReflowsForLargeText": true,
+      "helpIsDescribed": true,
+      "invalidDraftNotReplaced": true,
+      "invalidDraftVisible": true,
+      "keyboardTabNavigation": true,
+      "largerTextReflows": true,
+      "lockDisablesEntry": true,
+      "lockedVariants": true,
+      "multilineAndNumber": true,
+      "nativeChangesReachController": true,
+      "nestedScrollBounded": true,
+      "noHorizontalOverflow": true,
+      "offGridRotaryRetained": true,
+      "opaqueAlternative": true,
+      "reachableTargetSizes": true,
+      "readonlyCannotEdit": true,
+      "readonlyRemainsFocusable": true,
+      "submissionUsesCurrentDraft": true,
+      "tabFocusAndDraft": true,
+      "textScaleRestored": true,
+      "textualDisplays": true,
+      "typedVariants": true,
+      "unknownSelectionNotSubstituted": true,
+      "utf8Feedback": true
+    },
+    "errors": []
+  }
+}

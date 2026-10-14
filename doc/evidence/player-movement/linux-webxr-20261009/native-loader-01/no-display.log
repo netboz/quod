@@ -1,0 +1,14 @@
+prewarm libvulkan.so.1: loaded
+prewarm libvulkan_radeon.so: libvulkan_radeon.so: cannot open shared object file: No such file or directory
+prewarm libvulkan_intel.so: libvulkan_intel.so: cannot open shared object file: No such file or directory
+prewarm libvulkan_freedreno.so: libvulkan_freedreno.so: cannot open shared object file: No such file or directory
+prewarm libGLX_nvidia.so.0: loaded
+prewarm libxcb-dri3.so.0: loaded
+prewarm libxcb-glx.so.0: loaded
+prewarm libxcb-present.so.0: loaded
+prewarm libxcb-sync.so.1: loaded
+prewarm libvulkan_lvp.so: libvulkan_lvp.so: cannot open shared object file: No such file or directory
+prewarm libVkLayer_MESA_device_select.so: libVkLayer_MESA_device_select.so: cannot open shared object file: No such file or directory
+prewarm libVkLayer_MESA_anti_lag.so: libVkLayer_MESA_anti_lag.so: cannot open shared object file: No such file or directory
+vkCreateInstance: 0
+physical device: NVIDIA GeForce RTX 4090 vendor=10de

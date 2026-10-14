@@ -1,0 +1,14 @@
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr.fixture.html", {st_mode=S_IFREG|0644, st_size=4275, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/etc/mime.types", {st_mode=S_IFREG|0644, st_size=74869, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/mime.types", O_RDONLY|O_CLOEXEC) = 8
+newfstatat(AT_FDCWD, "/etc/httpd/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/httpd/conf/mime.types", {st_mode=S_IFREG|0644, st_size=61109, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/httpd/conf/mime.types", O_RDONLY|O_CLOEXEC) = 8
+newfstatat(AT_FDCWD, "/etc/apache/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/apache2/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/etc/httpd/conf/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/lib/netscape/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/etc/httpd/conf/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/etc/mime.types", 0x7f24eecf9460, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr.fixture.html", O_RDONLY|O_CLOEXEC) = 8
++++ exited with 0 +++

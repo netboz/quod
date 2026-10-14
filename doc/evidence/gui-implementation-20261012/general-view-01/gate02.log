@@ -1,0 +1,40 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_question_tests:-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-60-/0
+[0;31m     Failure/Error: {error,
+                        {badkey,installed},
+                        [{erlang,map_get,
+                             [installed,#{peer => {127,0,0,1}}],
+                             [{error_info,#{module => erl_erts_errors}}]},
+                         {quod_gui_question_tests,assert_gui_view_lifecycle,
+                             7,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,489}]},
+                         {quod_gui_question_tests,
+                             '-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-60-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,110}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 1.958 seconds
+[0;31m2 tests, 1 failures
+[0m===> Error running tests

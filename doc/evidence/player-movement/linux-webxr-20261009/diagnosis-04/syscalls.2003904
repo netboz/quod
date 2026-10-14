@@ -1,0 +1,5 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6261f4780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6261f4780) = -1 ENOENT (No such file or directory)
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 623
+connect(623, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 20) = 0
++++ exited with 0 +++

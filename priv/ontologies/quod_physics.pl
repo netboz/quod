@@ -212,8 +212,8 @@ physics_removable_body(W,B) :-
     (\+ physics_agent(W,_,_,B,_) -> true ; fail_with_reason(body_agent_binding(B))),
     physics_rest_custody(W,B,Custody),
     (Custody = none -> true
-    ; Custody = request(_,_,Bytes,Signature),
-      committed_operation_outcome(Bytes,Signature,Status), member(Status,[committed,rejected,aborted])).
+    ; Custody = request(_,_,Bytes,_),
+      committed_operation_outcome(Bytes,Status), member(Status,[committed,rejected,aborted])).
 
 %% A domain supplies one local view and its ordinary principal policy. Marks
 %% name occurrences; only body_pose/2 names their physical source. Live samples
@@ -516,8 +516,8 @@ physics_store_request(W, Generation, Prior, Token, Bytes, Signature) :-
 
 physics_activate(W, Generation, Token) :-
     transaction((physics_actor(W), physics_run(W, Generation, Previous),
-        physics_request(W, request(Token, Generation, Bytes, Signature)),
-        current_signed_request(Bytes, Signature),
+        physics_request(W, request(Token, Generation, Bytes, _Signature)),
+        current_signed_request(Bytes),
         retract(physics_run(W, Generation, Previous)), Next is Generation + 1,
         assertz(physics_run(W, Next, Token)))).
 
@@ -638,10 +638,10 @@ physics_valid_sample(physics_sample(
 %% New activity admission cannot discard unresolved original custody. An
 %% authored cancellation plus changed physical revisions is the explicit exit.
 physics_observation_replaceable(none,_,_).
-physics_observation_replaceable(request(Sample,_,Bytes,Signature),State,References) :-
+physics_observation_replaceable(request(Sample,_,Bytes,_),State,References) :-
     Sample = physics_sample(_,activity(_,R,_),revisions(Before),_,_,_),
     ((State = finished(R) ; State = cancelled(R), Before \= References) -> true
-    ; physics_request_rejected(Bytes,Signature)).
+    ; physics_request_rejected(Bytes)).
 
 physics_newer_sample(none,_).
 physics_newer_sample(request(Previous,_,_,_),Sample) :-
@@ -676,8 +676,8 @@ physics_relocated_pose(pose(_,Rotation),Position,pose(Position,Rotation)).
 
 % Replacement custody requires exact terminal evidence captured in the proof's
 % ordinary read set. Unknown or unpublished outcomes cannot prove rejection.
-physics_request_rejected(Bytes, Signature) :-
-    committed_operation_outcome(Bytes, Signature, Status),
+physics_request_rejected(Bytes) :-
+    committed_operation_outcome(Bytes, Status),
     (Status = rejected ; Status = aborted).
 
 
@@ -750,8 +750,8 @@ physics_finish_rest(Sample) :-
     transaction((physics_rest_measurement(Sample),
         Sample = physics_sample(physics_frame(world_ref(_,_,W),Authority,Epoch,G,Token,Structure),
             activity(rest(D,Revision),R,rest),_,Tick,_,rest_pose_mm_quaternion_million(Pose)),
-        physics_actor(W), physics_rest_request(W,D,request(Sample,rest,Bytes,Signature)),
-        current_signed_request(Bytes,Signature),
+        physics_actor(W), physics_rest_request(W,D,request(Sample,rest,Bytes,_Signature)),
+        current_signed_request(Bytes),
         retract(physics_rest(W,D,Sequence,waiting(R))),
         assertz(physics_rest(W,D,Sequence,finished(Sample))),
         physics_remove_rest_checkpoint(W,D),

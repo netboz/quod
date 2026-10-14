@@ -1,0 +1,248 @@
+--- before/test/quod_ask_SUITE.erl
++++ tree/test/quod_ask_SUITE.erl
+@@ -10,6 +10,8 @@
+          enrollment_wait_complete/0, enrollment_wait_generation/3,
+          enrollment_local_evidence_cost/2]).
+ -export([remote_plain_read_excludes_live_observer/1,
++         remote_gui_opening_observer_receiver/1,gui_host_actor/4,gui_complete_answer/4,gui_receiver_start/3,
++         gui_found_namespace/2,gui_bind_node/2,
+          remote_native_read_uses_selected_observer/1,
+          remote_plain_read_rejects_lying_validator/1,
+          remote_scope_solutions/1, remote_scope_trace_parentage/1,
+@@ -102,6 +104,7 @@
+           remote_signed_group_uses_exact_agent_request,
+           remote_group_recovers_after_origin_crash,
+           remote_four_scope_chain_recovers_empty_routes,
++          remote_gui_opening_observer_receiver,
+           node_enrollment_remote_custodian].
+ 
+ node_enrollment_remote_custodian(Config) ->
+@@ -746,6 +749,206 @@
+     ?assertMatch({fail,_},peer:call(Observer,quod_prolog,prove_ro,[?NS,native_scope_write])),
+     assert_fact_absent(Asker,?ASKER_NS,signed_pets_mark,987654321).
+ 
++
++%% GUI material owners remain on Asker; its native receiver is a separate node
++%% serving only an observer replica of the GUI capability. No Human replica or
++%% responder is installed on that connection host.
++remote_gui_opening_observer_receiver(Config) ->
++    Owner = ?config(asker,Config), Receiver = ?config(third,Config),
++    OwnerKey = ?config(asker_pub,Config), ReceiverKey = ?config(third_pub,Config),
++    OwnerAddr = {"127.0.0.1",?ASKER_PORT}, ReceiverAddr = {"127.0.0.1",?THIRD_PORT},
++    Source = fun(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/" ++ Name)) end,
++    Start = fun(Ns,Terms,Modules) ->
++        Dir = filename:join(?config(priv_dir,Config),binary_to_list(Ns)),
++        peer:call(Owner,?MODULE,gui_found_namespace,[Ns,#{node_id => OwnerKey,
++            mode => create,data_dir => Dir,external_predicate_modules => Modules,
++            genesis_diff => quod_prolog:terms_to_diff(Terms)}],15000)
++    end,
++    GuiNs = <<"quod:gui">>, NodeNs = <<"gui:remote-node">>, AppNs = <<"gui:remote-app">>,
++    GuiAnchor = Start(GuiNs,Source("quod_gui.pl") ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
++                      [quod_agent_predicates,quod_gui_predicates]),
++    start_brahms(Owner,GuiNs,OwnerAddr,[]),
++    start_join_namespace(Receiver,ReceiverKey,GuiNs,GuiAnchor,[OwnerAddr],Config),
++    start_brahms(Receiver,GuiNs,ReceiverAddr,[OwnerAddr]),
++    ok = peer:call(Receiver,?MODULE,enrollment_wait_ready,[GuiNs,true],15000),
++    ?assertMatch(#{role := observer},peer:call(Receiver,quod_simplex,status,[GuiNs])),
++    HumanNs = <<"gui:remote-human">>, HumanInstance = {human_user,test_agent},
++    HumanAnchor = Start(HumanNs,Source("gui_hud.pl") ++ [
++        {agent_key,HumanInstance,?config(agent_pub,Config),active},
++        {instance_of,human_user,HumanInstance},{gui_pending_allowance,HumanInstance,2},
++        {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},HumanInstance},{'_'},HumanNs}],
++        [quod_agent_predicates]),
++    Human = {agent_instance_ref,HumanNs,HumanAnchor,HumanInstance},
++    Ctx = #{agent => {HumanNs,HumanAnchor},key_pair => ?config(agent_key,Config),
++            network => ?config(network_id,Config)},
++    Admin = {can_invoke,{'_'},Human,{'_'},{'_'}},
++    NodeAnchor = Start(NodeNs,Source("node_execution.pl") ++ [Admin,
++        {can_invoke,{'_'},{node,OwnerKey},{'_'},NodeNs},
++        {node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,OwnerKey,active}],
++        [quod_agent_predicates]),
++    Node = {agent_instance_ref,NodeNs,NodeAnchor,physical_node},
++    {ok,#{start := {quod_ns,start_link,[?ROOT_NS,RootCfg]}}} = peer:call(Owner,supervisor,get_childspec,
++        [quod_reg:via({quod_ns_sup,node}),{quod_ns,?ROOT_NS}]),
++    ok = peer:call(Owner,application,set_env,[quod,namespace_static_content,#{?ROOT_NS => RootCfg}]),
++    ok = peer:call(Owner,application,set_env,[quod,identity_dir,filename:join(?config(priv_dir,Config),"gui-node-identity")]),
++    ok = peer:call(Owner,application,set_env,[quod,content_data_dir,filename:join(?config(priv_dir,Config),binary_to_list(NodeNs))]),
++    ok = peer:call(Owner,supervisor,terminate_child,[quod_reg:via({sup,node}),quod_namespace_manager]),
++    {ok,_} = peer:call(Owner,supervisor,restart_child,[quod_reg:via({sup,node}),quod_namespace_manager]),
++    ok = peer:call(Owner,?MODULE,gui_bind_node,[NodeNs,NodeAnchor],15000),
++    Unlock = filename:join(?config(priv_dir,Config),"remote-gui-unlock"),
++    ok = quod_file:write_atomic(Unlock,crypto:strong_rand_bytes(32),8#600),
++    VaultConfig = #{directory => filename:join(?config(priv_dir,Config),"remote-gui-keys"),unlock_file => Unlock},
++    ok = peer:call(Owner,application,set_env,[quod,agent_vault,VaultConfig]),
++    {ok,_} = peer:call(Owner,supervisor,restart_child,[quod_reg:via({sup,node}),quod_agent_vault]),
++    AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_question.pl") ++
++        Source("gui_instance.pl") ++ quod_prolog:read_terms(filename:join([
++            filename:dirname(code:which(?MODULE)),"fixtures","gui-components.pl"])) ++ [Admin,
++        {gui_vocabulary,GuiNs,GuiAnchor},{gui_pending_allowance,actor,2},{gui_completion_allowance,actor,30000},
++        {can_assign_agent_host,Human,actor,none,0,Node,{'_'}},
++        {':-',{settings_entered,{'N'},{'M'},{'L'},{'A'}},{assertz,{saved,{'N'},{'M'},{'L'},{'A'}}}}],
++        [quod_agent_predicates,quod_agent_work_predicates]),
++    Actor = {agent_instance_ref,AppNs,AppAnchor,actor},
++    Ref = {form_ref,AppNs,AppAnchor,settings},
++    Scope = fun(Ns,Anchor,Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,Anchor},Goal}} end,
++    Submit = fun(Goal) -> peer:call(Owner,quod_lobby_tests,submit,[Ctx,execute,Goal],60000) end,
++    {ok,ActorBlob} = quod_wire_term:encode_canonical(Actor),
++    {ok,Key} = peer:call(Owner,quod_agent_vault,prepare,[ActorBlob,0]),
++    ok = peer:call(Owner,?MODULE,gui_host_actor,[Ctx,Actor,Node,Key],30000),
++    lists:foreach(fun(Term) ->
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Submit(Scope(AppNs,AppAnchor,{assertz,Term})))
++    end,[{gui_question_policy,settings,Human,Actor},{gui_responder_policy,actor,Ref,Human}]),
++    ok = enrollment_route(Receiver,OwnerKey,OwnerAddr,
++        [{?ASKER_NS,?config(asker_anchor,Config),validator},
++         {HumanNs,HumanAnchor,validator},{GuiNs,GuiAnchor,validator},
++         {NodeNs,NodeAnchor,validator},{AppNs,AppAnchor,validator}]),
++    ok = enrollment_route(Owner,ReceiverKey,ReceiverAddr,
++        [{?THIRD_NS,?config(third_anchor,Config),validator},{?NS,?config(target_anchor,Config),observer},
++         {GuiNs,GuiAnchor,observer}]),
++    ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,HumanNs}])),
++    ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,AppNs}])),
++    ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Receiver,quod_lobby_tests,read,
++        [Ctx,Scope(HumanNs,HumanAnchor,{gui_pending_questions,{0}})],20000)),
++    Client = peer:call(Receiver,?MODULE,gui_receiver_start,[Ctx,HumanNs,HumanAnchor]),
++    ReceiverCall = fun(Command) -> peer:call(Receiver,gen_server,call,[Client,Command,20000],25000) end,
++    try
++        #{<<"receiver">> := #{<<"token">> := TokenText}} = ReceiverCall(renew),
++        Token = base64:decode(TokenText,#{mode => urlsafe,padding => false}),
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},
++            Submit({gui_select_receiver,HumanInstance,ReceiverKey,Token})),
++        _ = ReceiverCall(renew),
++        Opening = Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}})),
++        case Opening of
++            {ok,_,{normalized,{committed,_,_}}} -> ok;
++            {ok,_,Outcome} -> error({remote_gui_open_failed,Outcome});
++            Other -> error({remote_gui_open_failed,Other})
++        end,
++        ok = ReceiverCall(activated),
++        {ok,[#{<<"V0">> := [{question_ref,AppNs,AppAnchor,Q}]}],_} =
++            peer:call(Owner,quod_lobby_tests,read,[Ctx,{gui_pending_questions,{0}}]),
++        {ok,[#{<<"V0">> := Revision}],_} = peer:call(Owner,quod_lobby_tests,read,
++            [Ctx,Scope(AppNs,AppAnchor,{gui_schema,settings,{0},{'_'}})]),
++        Fields = [{field,name,<<"Remote">>},{field,mode,square},{field,level,75},{field,angle,180}],
++        ok = peer:call(Owner,?MODULE,gui_complete_answer,
++            [Ctx,Actor,Q,Scope(AppNs,AppAnchor,{gui_submit,Q,Revision,apply,Fields})],30000),
++        ?assertMatch({ok,[_],_},peer:call(Owner,quod_lobby_tests,read,
++            [Ctx,Scope(AppNs,AppAnchor,{saved,<<"Remote">>,square,75,180})])),
++        #{<<"value">> := <<"[]">>} = ReceiverCall(renew),
++        ok = ReceiverCall(stop),
++        %% The signed route remains, but the authoritative remote receiver is
++        %% absent. Public opening fails and creates no question or HUD row.
++        ?assertMatch({ok,_,{normalized,{failed,_}}},Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}}))),
++        ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Owner,quod_lobby_tests,read,
++            [Ctx,{gui_pending_questions,{0}}]))
++    after
++        _ = catch ReceiverCall(stop)
++    end.
++
++gui_found_namespace(Ns,Config) ->
++    true = quod_reg:subscribe({runtime,Ns}),
++    try
++        {ok,_} = quod_ns_sup:start_namespace(Ns,Config),
++        receive {replay_ready,_,_} -> quod_simplex:genesis_hash(Ns)
++        after 10000 -> error({gui_namespace_not_ready,Ns}) end
++    after quod_reg:unsubscribe({runtime,Ns}) end.
++
++gui_bind_node(Ns,Anchor) ->
++    true = quod_reg:subscribe({node_actor,node}),
++    try
++        {ok,Principal} = quod_node_actor:bind(Ns,Anchor,<<"physical_node.">>,3),
++        receive {node_actor_installed,_,{ok,Principal}} -> ok
++        after 10000 -> error(gui_node_not_installed) end
++    after quod_reg:unsubscribe({node_actor,node}) end.
++
++%% peer uses standard_io with a nondistributed CT parent. Keep socket delivery
++%% and its processing barriers inside the receiver VM; RPC carries assertions.
++gui_receiver_start(Ctx,Ns,Anchor) ->
++    Session = quod_gui_question_tests:gui_session(Ctx),
++    spawn(fun() ->
++        Parent = self(),
++        {Hud,M} = spawn_monitor(fun() -> quod_gui_question_tests:gui_socket(Parent,#{peer => {127,0,0,1}},true) end),
++        Message = fun() -> quod_gui_question_tests:gui_open_message(Ctx,Session,gui_hud,Ns,Anchor,none,0) end,
++        gui_receiver_loop(Hud,M,Message)
++    end).
++
++gui_receiver_loop(Hud,M,Message) ->
++    receive
++        {'$gen_call',From,renew} ->
++            Hud ! {client,Message()},
++            Projection = gui_receiver_projection(Hud,Message,quod_time:mono_ms()+15000),
++            gen_server:reply(From,Projection),gui_receiver_loop(Hud,M,Message);
++        {'$gen_call',From,activated} ->
++            receive {gui_view,Hud,#{<<"type">> := <<"gui_prepare">>}} -> ok
++            after 10000 -> error(remote_gui_prepare_missing) end,
++            receive {gui_view,Hud,#{<<"type">> := <<"gui_activate">>}} -> ok
++            after 10000 -> error(remote_gui_activation_missing) end,
++            gen_server:reply(From,ok),gui_receiver_loop(Hud,M,Message);
++        {'$gen_call',From,stop} ->
++            Hud ! stop,
++            receive {'DOWN',M,process,Hud,normal} -> gen_server:reply(From,ok)
++            after 5000 -> error(remote_gui_not_closed) end;
++        {'DOWN',M,process,Hud,Reason} -> error({remote_gui_socket_down,Reason})
++    end.
++
++gui_receiver_projection(Hud,Message,Deadline) ->
++    receive
++        {gui_view,Hud,#{<<"type">> := <<"projection">>} = Projection} -> Projection;
++        {gui_view,Hud,#{<<"type">> := <<"refresh">>}} ->
++            Hud ! {client,Message()},gui_receiver_projection(Hud,Message,Deadline);
++        %% Like the portable signed-view client, wait for the owner's refresh
++        %% when an earlier subscription is still being retired. No retry timer.
++        {gui_view,Hud,#{<<"type">> := <<"unavailable">>,
++                        <<"reason">> := <<"dependency_recovering">>}} ->
++            gui_receiver_projection(Hud,Message,Deadline);
++        {gui_view,Hud,Other} -> error({remote_gui_projection_failed,Other})
++    after max(0,Deadline-quod_time:mono_ms()) ->
++        Ref = make_ref(),Hud ! {inspect,Ref},
++        receive {Ref,State} -> error({remote_gui_projection_missing,
++            maps:with([installed,pending,follows,follow_requests,owners,local_ready],State),
++            quod_foreign_log:stats()})
++        after 1000 -> error(remote_gui_socket_unresponsive) end
++    end.
++
++gui_host_actor(Ctx,Actor = {agent_instance_ref,Ns,_,Instance},Node,Key) ->
++    true = quod_reg:subscribe({agent_hosting,Ns}),
++    try
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,
++            {'::',Ns,{goal,{agent_hosted,Instance,Node,1,Key}}})),
++        receive {agent_installed,_,_,#{reference := Actor},_} -> ok
++        after 10000 -> error(remote_gui_actor_not_installed) end
++    after quod_reg:unsubscribe({agent_hosting,Ns}) end.
++
++gui_complete_answer(Ctx,Actor,Q,Goal) ->
++    true = quod_reg:subscribe({agent,Actor}),
++    try
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,Goal)),
++        receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
++            {ok,#{request_bytes := Bytes},{normalized,{committed,_,_}}} = Result,
++            {ok,#{goal_text := Text}} = quod_client_goal:decode(Bytes),
++            {ok,Expected} = quod_client_goal_parser:format({gui_complete,Q}),
++            ?assertEqual(quod_client_goal_parser:parse(Expected,3),quod_client_goal_parser:parse(Text,3)),ok
++        after 10000 -> error(remote_gui_completion_missing) end
++    after quod_reg:unsubscribe({agent,Actor}) end.
++
+ %% The same live observer now lies in its next signed directory generation and
+ %% labels itself a validator. Its key sorts before the real validator, so a
+ %% role-trusting selector would open the scope there. The certified target
+--- before/test/quod_gui_question_tests.erl
++++ tree/test/quod_gui_question_tests.erl
+@@ -1,6 +1,7 @@
+ -module(quod_gui_question_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ -export([with_receiver/3,commit/2]).
++-export([gui_socket/3,gui_session/1,gui_open_message/7]).
+ 
+ %% Focused transition fixtures seed accepted rows. The live-opening fixture
+ %% exercises native acceptance and the original atomic transaction together.
+@@ -1106,7 +1107,10 @@
+     Session.
+ 
+ gui_open_message(Ctx, Session, Kind, Ns, Q, ExtraExpiry) ->
+-    {Source, SourceAnchor} = maps:get(agent, Ctx), Anchor = quod_simplex:genesis_hash(Ns),
++    gui_open_message(Ctx,Session,Kind,Ns,quod_simplex:genesis_hash(Ns),Q,ExtraExpiry).
++
++gui_open_message(Ctx, Session, Kind, Ns, Anchor, Q, ExtraExpiry) ->
++    {Source, SourceAnchor} = maps:get(agent, Ctx),
+     {Pub, _} = Pair = maps:get(key_pair, Ctx),
+     Inner = case Kind of gui_hud -> <<"gui_pending_questions(View)">>;
+         gui_question -> [<<"gui_question_form(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,

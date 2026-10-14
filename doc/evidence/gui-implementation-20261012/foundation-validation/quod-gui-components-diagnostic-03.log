@@ -1,0 +1,50 @@
+======================== EUnit ========================
+quod_gui_components_tests: -forms_use_the_same_signed_ontology_path_test_/0-fun-2- (module 'quod_gui_components_tests')...(<0.88.0>) call quod_client_result:public_error({erlog,{type_error,binary,degrees}})
+*failed*
+in function quod_gui_components_tests:exercise/2 (/home/yan/src/quod/test/quod_gui_components_tests.erl, line 101)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from quod_gui_components_tests:'-forms_use_the_same_signed_ontology_path_test_/0-fun-2-'/0 (/home/yan/src/quod/test/quod_gui_components_tests.erl, line 24)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertMatch,
+    [{module,quod_gui_components_tests},
+     {line,101},
+     {expression,
+         "read ( Ctx , Ns , { gui_schema , settings , { 0 } , { 1 } } )"},
+     {pattern,"{ fail , _ }"},
+     {value,
+         {ok,#{request =>
+                   #{mode => read,
+                     operation_id => <<160,55,121,27,2,38,...>>,
+                     agent_namespace => <<"lobby-test-user">>,
+                     agent_genesis_anchor => <<157,115,132,103,160,116,...>>,
+                     network_identity => <<44,147,228,117,28,59,...>>,
+                     signing_public_key => <<146,7,131,52,39,236,...>>,
+                     not_after_ms => 1791837479991,...},
+               signature => <<237,246,189,109,133,228,112,...>>,
+               request_digest => <<8,236,132,66,160,120,69,...>>,
+               agent_ref_blob => <<131,104,2,97,4,108,0,...>>,
+               goal =>
+                   {'::',<<"lobby-test-personal">>,
+                       {{'$quod_symbol',<<",">>},
+                        {{'$quod_symbol',...},<<...>>,...},
+                        {{...},...}}},
+               operation_ref =>
+                   {operation,<<"lobby-test-user">>,
+                       <<157,115,132,103,...>>,
+                       <<131,104,2,...>>,
+                       <<" 7y\e"...>>},
+               variables => [{<<"V0">>,0},{<<"V1">>,1}],
+               request_bytes => <<"quod.agent.goal.v1"...>>,...},
+             {normalized,
+                 {read,
+                     [{<<"lobb"...>>,<<...>>,...},{<<...>>,...},{...}],
+                     {error,proof_unavailable}}}}}]}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+error

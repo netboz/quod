@@ -1,0 +1,7 @@
+{
+  "client/src/question-controller.js": "ec0725935cefbe81aeddfdbc473338f397fa836344c85c49bd3208f1ed31930a",
+  "client/src/question-controller.d.ts": "ef9149b20a12cb60d7d32226e543629bb3afe4d11b6c8af7d7a6ca5434013368",
+  "client/test/question-controller.test.js": "fe60c3bcebbeeda14da83621cdafc02d57637a6e8ad9886e5386a5ce57281e37",
+  "ui/src/GuiQuestion.tsx": "a68fb893141248b5c18e648e79e629a9ed91f8ce26e7693d90c4bbacbfa0b6d9",
+  "ui/test/gui-question.fixture.tsx": "543ab91424c6aebbbed2732365594c60684f2c6ce79f0cb4389f1dbaa55c9521"
+}

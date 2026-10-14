@@ -77,7 +77,10 @@ initial_preparation_survives_restart_without_repeated_writes_test() ->
             [?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 0))
              || _ <- lists:seq(1, 20)]
         end,
+        Unrelated = {trace, self(), call, {fixture, prior_measurement, [make_ref()]}},
+        self() ! Unrelated,
         ?assertEqual([], vault_storage_calls(Repeat)),
+        receive Unrelated -> ok after 0 -> error(consumed_unrelated_trace) end,
         ok = gen_server:stop(quod_reg:where({agent_vault, node})),
         {ok, _} = quod_agent_vault:start_link(Config),
         ?assertEqual([], vault_storage_calls(Repeat)),
@@ -131,6 +134,28 @@ failed_mutation_requires_successful_directory_sync_test() ->
     end).
 
 vault_storage_calls(Fun) ->
+    %% EUnit may reuse the caller after other trace-based fixtures. A fresh
+    %% collector cannot mistake their queued argument traces for vault writes.
+    Parent = self(), Tag = make_ref(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        Result = try {ok, vault_storage_measurement(Fun)}
+                 catch Class:Reason:Stack -> {error, Class, Reason, Stack} end,
+        Parent ! {Tag, Result}
+    end),
+    try
+        receive
+            {Tag, Result} ->
+                receive {'DOWN', Monitor, process, Pid, normal} -> ok
+                after 5000 -> error(vault_measurement_not_joined) end,
+                case Result of
+                    {ok, Calls} -> Calls;
+                    {error, Class, Reason, Stack} -> erlang:raise(Class, Reason, Stack)
+                end;
+            {'DOWN', Monitor, process, Pid, Reason} -> error({vault_measurement_failed, Reason})
+        after 5000 -> error(vault_measurement_timeout) end
+    after exit(Pid, kill), demonitor(Monitor, [flush]) end.
+
+vault_storage_measurement(Fun) ->
     %% MFA-only traces: encrypted bytes and unlock material never enter logs.
     Trace = trace:session_create(vault_storage, self(), []),
     Watched = [{quod_file, write_atomic, 3}, {quod_file, sync_dir, 1},
@@ -302,6 +327,11 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
             {ok, Bindings} = signing_proof(Facts, true, Goal),
             {ok, Bytes} = quod_client_goal:encode(Request),
             ?assert(quod_identity:verify(maps:get('Signature', Bindings), Bytes, Pub)),
+            %% The pure encoder supplies exactly the governed signature's bytes
+            %% even without a signing grant and inside a material proof.
+            {{ok, #{'Bytes' := Bytes}}, _, []} = signing_proof([], false,
+                {',', {agent_request_bytes, Typed, {'Bytes'}},
+                 {assertz, {completion_intent, {'Bytes'}}}}, #{dependencies => true}),
             ?assertEqual(fail, signing_proof([Host, Key], true, Goal)),
             %% A foreign ontology's permissive policy cannot release another
             %% ontology's custody, even when it pins the same bridge module.

@@ -1,0 +1,14 @@
+{
+  "started": "2026-10-14T11:04:14.791Z",
+  "finished": "2026-10-14T11:04:16.504Z",
+  "result": {
+    "readonlyLens": true,
+    "exactTarget": true,
+    "completeUtf8": true,
+    "refreshed": true,
+    "targetSwitchClearedContent": true,
+    "denialClearedContent": true,
+    "executeRequests": 0
+  },
+  "errors": []
+}

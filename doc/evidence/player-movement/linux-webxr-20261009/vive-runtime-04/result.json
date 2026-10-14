@@ -1,0 +1,8 @@
+{
+  "simulated": false,
+  "runtime_exit": -11,
+  "probe_exit": 1,
+  "runtime_sha256": "1c7f7b3578ac5a1adcd2a4b7e0d0393281bd684b9b5d2b390cf349f9c29323c5",
+  "display_backend": "wayland-direct",
+  "runtime_pid": 2101990
+}

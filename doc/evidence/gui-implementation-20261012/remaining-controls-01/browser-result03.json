@@ -1,0 +1,3 @@
+{
+  "error": "TypeError: Cannot read properties of undefined (reading 'dispose')\n    at StackPanel.dispose (http://localhost:5178/node_modules/.vite/deps/container.pure-Dsp3so2E.js?v=f7e8e68f:471:89)\n    at rebuild (http://localhost:5178/@fs/home/yan/src/quod/client/src/workspace-panel.js:320:73)\n    at Object.update (http://localhost:5178/@fs/home/yan/src/quod/client/src/workspace-panel.js:663:6)\n    at exercisePanel (http://localhost:5178/@fs/home/yan/src/quod/client/test/workspace-panel.fixture.js:650:8)\n    at async exerciseWorkspacePanel (http://localhost:5178/@fs/home/yan/src/quod/client/test/workspace-panel.fixture.js:21:18)"
+}

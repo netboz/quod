@@ -12,8 +12,42 @@ export async function checkWorkspacePanel(page, origin) {
     const { exerciseWorkspacePanel } = await import(`/@fs${base}test/workspace-panel.fixture.js`)
     return exerciseWorkspacePanel()
   }, base)
+  return checkWorkspacePanelResult(result)
+}
+
+// The MCP browser runs the same fixture and records its real control/render
+// results. Both browser drivers verify them through these identical checks.
+export function checkWorkspacePanelResult(result) {
+  assert.deepEqual(result.browserErrors, [], 'browser events must not throw outside the fixture promise')
   assert.equal(result.typed, 'a(X).')
-  assert.deepEqual(result.calls, ['run', 'next', 'accept', 'stop', 'close', 'create', 'resolve'])
+  assert.equal(result.initialBackground, 'rgba(25,43,50,0.78)')
+  assert.equal(result.translucentBackground, 'rgba(25,43,50,0.6)')
+  assert.equal(result.opaqueBackground, 'rgba(25,43,50,1)')
+  assert.equal(result.steppedOpacity, 0.95)
+  assert.equal(result.opaqueControls, true)
+  assert.equal(result.steppedGain, '7')
+  assert.equal(result.clampedGain, '11')
+  assert.equal(result.invalidDraftRetained, true)
+  assert.equal(result.numericEntry, '3')
+  assert.equal(result.rotatedAngle, '20')
+  assert.equal(result.steppedAngle, '15')
+  assert.equal(result.frozenNumeric, true)
+  assert.equal(result.lockedNumeric, true)
+  assert.equal(result.semanticSelection, 'mode(run)')
+  assert.equal(result.commonText, 'Spectrum 2')
+  assert.equal(result.missingNumeric, true)
+  assert.equal(result.actionsScrollable, true)
+  assert.equal(result.lastActionReachable, true)
+  assert.equal(result.keyboardInsideTexture, true)
+  assert.equal(result.requiredFeedback, true)
+  assert.equal(result.byteFeedback, true)
+  assert.equal(result.releasedOutside, true)
+  assert.equal(result.outsideMesh, true, 'release ray must miss the panel')
+  for (const bounds of result.numericBounds) {
+    assert.ok(bounds.left >= 0 && bounds.right <= 1280 && bounds.top >= 0 && bounds.bottom <= 1440,
+      'composed numeric controls fit inside the texture')
+  }
+  assert.deepEqual(result.calls, ['run', 'next', 'accept', 'stop', 'close', 'create', 'resolve', 'apply'])
   assert.ok(result.resultText.includes('Binding59 = value(59)'))
   for (const field of ['scrollable', 'locked', 'sameMesh', 'hidden', 'retired', 'frontFacing',
     'cancelled', 'spatialOpen', 'spatialClosed']) assert.equal(result[field], true, field)

@@ -1,0 +1,14 @@
+{
+  "src/quod_client_goal.erl": {
+    "added": 22,
+    "removed": 1
+  },
+  "src/predicates/quod_agent_predicates.erl": {
+    "added": 6,
+    "removed": 20
+  },
+  "src/predicates/quod_common_primitives.erl": {
+    "added": 17,
+    "removed": 2
+  }
+}

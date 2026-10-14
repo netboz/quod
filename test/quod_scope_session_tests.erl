@@ -2,24 +2,37 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
+-export([read_request_auth/3]).
+
+read_request_auth({test_request_auth, Value}, Next, St) ->
+    {ok, Auth} = quod_scope_session:request_auth(),
+    erlog_int:unify_prove_body(Value, Auth, Next, St).
 
 scope_worker_retains_authenticated_request_expiry_test() ->
     Ns = <<"quod:expiry-scope">>,
     ProofId = key(90),
     #{principal := Principal, evidence := Evidence} = quod_ct:signed_goal_fixture(#{}),
     Expiry = maps:get(not_after_ms, maps:get(request, Evidence)),
-    Est = quod_ct:action_kb(<<>>, [quod_agent_predicates],
+    Operation = maps:get(operation_ref, Evidence),
+    Auth = quod_client_goal:request_auth(Evidence),
+    Base = quod_ct:action_kb(<<>>, [quod_agent_predicates],
                            [{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
+    Est = Base#est{db = erlog_int:add_compiled_proc({test_request_auth,1},
+                                                   ?MODULE,read_request_auth,Base#est.db)},
     {Handle, MRef} = quod_scope_session:start(
         id(91), ProofId, self(), Ns, key(92), 1, Est, self(),
         #{principal => Principal, request_binding => quod_client_goal:request_binding(Evidence),
-          signed_request => true, request_expiry => Expiry, deadline_ms => quod_time:mono_ms() + 5000}),
+          signed_request => true, request_expiry => Expiry, request_operation => Operation,
+          request_auth => Auth,
+          deadline_ms => quod_time:mono_ms() + 5000}),
     {quod_scope_session, Worker, _, ProofId, SessionRef, _, _} = Handle,
     try
         Invocation = id(94),
         {ok, Open} = quod_scope_session:invoke_open(
-            Handle, Invocation, {current_request_expiry, Expiry},
+            Handle, Invocation, {',', {test_request_auth,Auth},
+                {',', {current_request_expiry, Expiry}, {current_request_operation, Operation}}},
             [{<<"quod:origin">>, key(95)}], quod_transaction_scope:empty_selection()),
         ?assertEqual({opened, Invocation}, receive_scope_reply(Worker, ProofId, SessionRef, Open)),
         {ok, Next} = quod_scope_session:invoke_next(Handle, Invocation, 1),
@@ -32,6 +45,20 @@ scope_worker_retains_authenticated_request_expiry_test() ->
         end
     end.
 
+scope_auth_bytes_must_match_the_admitted_binding_test() ->
+    #{principal := Principal, evidence := Evidence} = quod_ct:signed_goal_fixture(#{}),
+    Auth = quod_client_goal:request_auth(Evidence),
+    Est = quod_ct:action_kb(<<>>,[],[]),
+    Base = #{principal => Principal,request_binding => quod_client_goal:request_binding(Evidence),
+             signed_request => true,request_auth => Auth,deadline_ms => quod_time:mono_ms()+5000},
+    lists:foreach(fun(Override) ->
+        ?assertError({badmatch,false},quod_scope_session:start(
+            id(91),key(90),self(),<<"quod:foreign-scope">>,key(92),1,Est,self(),maps:merge(Base,Override)))
+    end,[#{request_binding => none},#{signed_request => false},
+         #{request_auth => setelement(2,Auth,<<0:256>>)},
+         #{request_auth => setelement(3,Auth,<<"different bytes">>)},
+         #{request_auth => setelement(4,Auth,<<0>>)}]).
+
 unsigned_scope_cannot_supply_authenticated_expiry_test() ->
     Est = quod_ct:action_kb(<<>>, [quod_agent_predicates], []),
     lists:foreach(fun(Options) ->
@@ -42,6 +69,23 @@ unsigned_scope_cannot_supply_authenticated_expiry_test() ->
     end, [#{request_binding => none},
           #{request_binding => none, signed_request => true},
           #{request_binding => {agent_goal_v1, key(94)}, signed_request => false}]).
+
+scope_operation_metadata_requires_matching_signed_principal_test() ->
+    #{principal := Principal, evidence := Evidence} = quod_ct:signed_goal_fixture(#{}),
+    Operation = maps:get(operation_ref, Evidence),
+    Est = quod_ct:action_kb(<<>>, [], []),
+    Valid = #{principal => Principal, request_binding => quod_client_goal:request_binding(Evidence),
+              request_operation => Operation, signed_request => true,
+              deadline_ms => quod_time:mono_ms() + 5000},
+    lists:foreach(fun(Override) ->
+        ?assertError({badmatch, false}, quod_scope_session:start(
+          id(91), key(90), self(), <<"quod:foreign-scope">>, key(92), 1, Est, self(),
+          maps:merge(Valid, Override)))
+    end, [#{signed_request => false}, #{request_binding => none},
+          #{principal => {node, key(93)}},
+          #{request_operation => setelement(2, Operation, <<"forged">>)},
+          #{request_operation => setelement(3, Operation, <<0:256>>)},
+          #{request_operation => setelement(5, Operation, {'Unbound'})}]).
 
 invocation_worker_retains_received_trace_context_test() ->
     quod_trace_tests:with_tracer(fun() ->
@@ -1529,7 +1573,10 @@ sealed_read_session(Ctx, ProofId) ->
     Target = maps:get(target, Ctx),
     Origin = maps:get(origin, Ctx),
     Session = quod_proof_session:start(
-                committed(maps:get(facts, Ctx)),
+                %% These plans are certified by a real ontology owner. Its
+                %% shared height-zero predicates (including no_follow) must
+                %% be present so the captured read tokens describe that KB.
+                quod_ct:action_kb(<<>>, [], maps:get(facts, Ctx)),
                 #{read_set => true,
                   proof_context => {test, read_certificate},
                   signer => maps:get(signer, Ctx)}),
@@ -1552,7 +1599,7 @@ start_read_scope_worker(Ctx, ProofId) ->
     {Ns, Anchor} = maps:get(target, Ctx),
     quod_scope_session:start(
       crypto:strong_rand_bytes(16), ProofId, self(), Ns, Anchor, 2,
-      committed(maps:get(facts, Ctx)), self(),
+      quod_ct:action_kb(<<>>, [], maps:get(facts, Ctx)), self(),
       #{principal => anonymous, request_binding => none,
         signer => maps:get(signer, Ctx),
         deadline_ms => quod_time:mono_ms() + 10000}).

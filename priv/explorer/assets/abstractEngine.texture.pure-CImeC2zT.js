@@ -1,0 +1,1 @@
+import{c as e}from"./sceneLoaderFlags-CW-1rcYh.js";var t=!1;function n(){t||(t=!0,e.prototype.createDepthStencilTexture=function(e,t,n){if(t.isCube){let n=e.width||e;return this._createDepthStencilCubeTexture(n,t)}else return this._createDepthStencilTexture(e,t,n)})}export{n as t};

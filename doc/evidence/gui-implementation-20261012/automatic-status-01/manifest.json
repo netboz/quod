@@ -1,0 +1,14 @@
+[
+  {
+    "path": "client/src/question-controller.js",
+    "sha256": "cbf61043cb2273ef9c950567d6f37b088a18def66dfbfcb281d0faf2d93c0055"
+  },
+  {
+    "path": "client/test/question-controller.test.js",
+    "sha256": "09b176cbb668040f0f4e2717a8865250ba0eda685386d0366f24205f74925b73"
+  },
+  {
+    "path": "ui/test/gui-question.fixture.tsx",
+    "sha256": "b9f508b00719bd5ea18185df5c526c2185573443000fd5021b5e6da9df475ab7"
+  }
+]

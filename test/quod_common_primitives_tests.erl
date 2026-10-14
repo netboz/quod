@@ -13,6 +13,55 @@
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
 
+agent_request_bytes_are_inert_exact_intent_test() ->
+    with_authored([], fun(St) ->
+        Agent = {agent_instance_ref, ?NS, <<2:256>>, {worker, <<"one">>}},
+        Intent = {agent_goal_v1, <<1:256>>, Agent, <<"worker(<<\"one\">>).">>,
+                  <<3:256>>, <<4:256>>, 123456, execute, 3, <<"save(42).">>},
+        Bytes = value({'B'}, {agent_request_bytes, Intent, {'B'}}, St),
+        {ok, Request} = quod_client_goal:decode(Bytes),
+        ?assertMatch(#{agent_namespace := ?NS, agent_genesis_anchor := <<2:256>>,
+                       signing_public_key := <<3:256>>, operation_id := <<4:256>>,
+                       not_after_ms := 123456, mode := execute, goal_text := <<"save(42).">>}, Request),
+        ?assertEqual(Bytes, value({'B'}, {agent_request_bytes, Intent, {'B'}}, St)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal({agent_request_bytes, Intent, <<>>}, St)),
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St))),
+        lists:foreach(fun(Bad) ->
+            ?assertMatch({erlog_error, {domain_error, agent_request, Bad}, _},
+                catch erlog_int:prove_goal({agent_request_bytes, Bad, {'B'}}, St))
+        end, [setelement(4, Intent, <<"worker(<<\"two\">>).">>),
+              setelement(5, Intent, <<>>), setelement(7, Intent, -1),
+              setelement(8, Intent, unknown_mode),
+              setelement(9, Intent, 4), arbitrary]),
+        ?assertMatch({erlog_error, instantiation_error, _},
+            catch erlog_int:prove_goal(
+                {agent_request_bytes, setelement(6, Intent, {'Id'}), {'B'}}, St))
+    end).
+
+binary_type_test() ->
+    St = bare(),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal({binary, <<>>}, St)),
+    lists:foreach(fun(Value) ->
+        ?assertMatch({fail, _}, erlog_int:prove_goal({binary, Value}, St))
+    end, [42, text, "text", {compound, text}, {'Unbound'}]),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal(
+        {',', {'\\+', {binary, {'Value'}}}, {var, {'Value'}}}, St)).
+
+ontology_name_uses_selector_grammar_test() ->
+    St = bare(),
+    lists:foreach(fun(Name) ->
+        ?assertEqual(<<"quod:gui">>,
+                     value({'N'}, {ontology_name, Name, {'N'}}, St))
+    end, [<<"quod:gui">>, 'quod:gui', "quod:gui", {':', quod, gui}]),
+    ?assertEqual(<<"a:b:c">>, value({'N'},
+        {ontology_name, {':', {':', a, b}, c}, {'N'}}, St)),
+    ?assertEqual(<<"a:b:c">>, value({'N'},
+        {ontology_name, {':', a, {':', b, c}}, {'N'}}, St)),
+    ?assertMatch({fail, _}, erlog_int:prove_goal(
+        {ontology_name, {':', quod, gui}, <<"quod:other">>}, St)),
+    ?assertMatch({erlog_error, instantiation_error, _},
+        catch erlog_int:prove_goal({ontology_name, {':', quod, {'N'}}, {'B'}}, St)).
+
 term_digest_test() ->
     with_authored([],fun(St) ->
         Digest = value({'D'},{term_digest,{geometry,{ball,500},1},{'D'}},St),
@@ -22,6 +71,20 @@ term_digest_test() ->
         ?assertNotEqual(Digest,value({'D'},{term_digest,{geometry,{ball,501},1},{'D'}},St)),
         ?assertMatch({erlog_error,instantiation_error,_},
             catch erlog_int:prove_goal({term_digest,{geometry,{'Shape'},1},{'D'}},St))
+    end).
+
+variant_digest_preserves_variable_sharing_without_binding_test() ->
+    with_authored([], fun(St) ->
+        Digest = value({'D'}, {variant_digest, {fields, {'X'}, {'X'}}, {'D'}}, St),
+        ?assertEqual(Digest, value({'D'},
+            {variant_digest, {fields, {'Renamed'}, {'Renamed'}}, {'D'}}, St)),
+        ?assertNotEqual(Digest, value({'D'},
+            {variant_digest, {fields, {'X'}, {'Y'}}, {'D'}}, St)),
+        ?assertNotEqual(Digest, value({'D'},
+            {variant_digest, {fields, {'$VAR', 0}, {'$VAR', 0}}, {'D'}}, St)),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+            {',', {variant_digest, {fields, {'X'}}, {'D'}}, {var, {'X'}}}, St)),
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
     end).
 
 binary_codes_test() ->
@@ -58,7 +121,7 @@ source_chunk_empty_source_test() ->
     St = quod_erlog_db_local_prove:wrap_state(St1),
     try
         ?assertEqual({source_chunk, done, <<>>}, value({'Chunk'},
-            {'$quod_source_chunk', 4096, {'Chunk'}}, St))
+            {'$quod_source_chunk', all, 4096, {'Chunk'}}, St))
     after
         quod_erlog_db_mvcc:delete(EmptyRef)
     end.
@@ -66,11 +129,11 @@ source_chunk_empty_source_test() ->
 source_chunk_full_source_test() ->
     with_authored([{source_chunk_marker, preserved}], fun(St) ->
         {source_chunk, done, Text} = value({'Chunk'},
-            {'$quod_source_chunk', 1048576, {'Chunk'}}, St),
+            {'$quod_source_chunk', all, 1048576, {'Chunk'}}, St),
         ?assertNotEqual(nomatch, binary:match(
             Text, <<"source_chunk_marker(preserved) :- true.\n">>)),
         ?assertMatch({fail, _}, erlog_int:prove_goal(
-            {'$quod_source_chunk', 4096,
+            {'$quod_source_chunk', all, 4096,
              {source_chunk, done, <<"different">>}}, St))
     end).
 
@@ -78,11 +141,27 @@ source_chunk_argument_errors_test() ->
     St = bare(),
     lists:foreach(fun({Bytes, Error}) ->
         ?assertMatch({erlog_error, Error, _}, catch erlog_int:prove_goal(
-            {'$quod_source_chunk', Bytes, {'Chunk'}}, St))
+            {'$quod_source_chunk', all, Bytes, {'Chunk'}}, St))
     end, [{{'Bytes'}, instantiation_error},
           {bytes, {type_error, integer, bytes}},
           {0, {domain_error, source_chunk_bytes, 0}},
           {-1, {domain_error, source_chunk_bytes, -1}}]).
+
+filtered_source_uses_the_same_chunker_and_records_absence_test() ->
+    with_authored([{chosen, first}, {chosen, second}, {hidden, secret}], fun(St) ->
+        Selection = {predicates, [{'/', chosen, 1}, {'/', absent_policy, 4}]},
+        Goal = {findall, {'Chunk'}, {'$quod_source_chunk', Selection, 7, {'Chunk'}}, {'Chunks'}},
+        Chunks = value({'Chunks'}, Goal, St),
+        ?assertEqual(done, element(2, lists:last(Chunks))),
+        ?assert(lists:all(fun({source_chunk, _, B}) -> byte_size(B) =< 7 end, Chunks)),
+        ?assertEqual(<<"chosen(first) :- true.\nchosen(second) :- true.\n">>,
+                     iolist_to_binary([B || {source_chunk, _, B} <- Chunks])),
+        ?assert(maps:is_key({absent_policy, 4},
+            quod_erlog_db_local_prove:get_read_set(db_ref(St)))),
+        ?assertEqual({source_chunk, done, <<"route_status(live, unavailable).\n">>},
+            value({'Chunk'}, {'$quod_source_chunk',
+                {terms, [{route_status, live, unavailable}]}, 4096, {'Chunk'}}, St))
+    end).
 
 authored_clauses_hide_followers_and_preserve_scope_test() ->
     with_authored([{choice, first}, {choice, second}], fun(St) ->

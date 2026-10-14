@@ -1,0 +1,12 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "client/native/tools/run.py",
+    "--headless",
+    "--script",
+    "res://tests/viewer.gd"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.5913425280014053
+}

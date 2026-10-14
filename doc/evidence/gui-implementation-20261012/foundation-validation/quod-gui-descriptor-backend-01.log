@@ -1,0 +1,84 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.05s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_lobby_tests:-public_system_ontology_source_is_readable_but_not_mutable_test_/0-fun-29-/0
+[0;31m     Failure/Error: ?assertMatch({ workspace , Target , ontology , _ , { form , _ , [ { choice , predicate , _ } , { editor , source , _ } ] } }, Workspace)
+       expected: = { workspace , Target , ontology , _ , { form , _ , [ { choice , predicate , _ } , { editor , source , _ } ] } }
+            got: {workspace,
+                     {ontology_ref,<<"quod:modelling">>,
+                         <<183,138,66,59,40,172,58,185,169,76,85,137,113,197,
+                           232,130,100,19,30,195,9,230,187,131,201,100,135,
+                           138,94,97,172,41>>},
+                     ontology,
+                     {ontology_ref,<<"quod:prolog">>,
+                         <<146,11,207,231,126,110,148,147,136,98,161,165,216,
+                           152,231,230,86,2,20,113,124,129,204,9,178,19,173,
+                           234,241,55,149,9>>},
+                     {component,workspace,form,
+                         [{property,label,<<"Prolog source (read only)">>}],
+                         [{component,predicate,selection,
+                              [{property,label,<<"Source lens">>}],
+                              []},
+                          {component,source,editor,
+                              [{property,label,<<"Source code">>}],
+                              []}]}}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+  2) quod_lobby_tests:-system_ontology_editing_uses_universal_scope_identity_test_/0-fun-10-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , [ # { << "V0" >> := { workspace , Target , ontology , _ , { form , _ , [ { choice , predicate , _ } , { input , new_predicate , _ } , { editor , source , _ } | _ ] } } } ] , _ }, read ( Ctx , editor_scope ( Recipe , { eidolon , prolog_editor , { subject , Target , ontology } , { 0 } } ) ))
+       expected: = { ok , [ # { << "V0" >> := { workspace , Target , ontology , _ , { form , _ , [ { choice , predicate , _ } , { input , new_predicate , _ } , { editor , source , _ } | _ ] } } } ] , _ }
+            got: {ok,
+                  [#{<<"V0">> =>
+                      {workspace,
+                       {ontology_ref,<<"quod:root">>,
+                        <<46,224,84,199,3,88,33,63,13,112,224,22,73,153,9,248,
+                          182,223,15,115,240,28,205,9,37,242,137,93,120,161,
+                          155,30>>},
+                       ontology,
+                       {ontology_ref,<<"quod:prolog">>,
+                        <<207,245,119,152,14,133,104,130,122,236,248,98,243,
+                          228,183,133,138,12,131,93,253,33,63,223,24,236,210,
+                          89,144,251,177,208>>},
+                       {component,workspace,form,
+                        [{property,label,<<"Prolog code">>}],
+                        [{component,predicate,selection,
+                          [{property,label,<<"Source lens">>}],
+                          []},
+                         {component,new_predicate,text_box,
+                          [{property,label,<<"New predicate (name/arity)">>}],
+                          []},
+                         {component,source,editor,
+                          [{property,label,<<"Source code">>}],
+                          []},
+                         {component,results,bindings,
+                          [{property,label,<<"Edit result">>}],
+                          []},
+                         {component,run,button,
+                          [{property,label,<<"Preview changes">>}],
+                          []},
+                         {component,accept,button,
+                          [{property,label,<<"Save changes">>}],
+                          []},
+                         {component,stop,button,
+                          [{property,label,<<"Cancel preview">>}],
+                          []},
+                         {component,create,button,
+                          [{property,label,<<"Add predicate">>}],
+                          []},
+                         {component,resolve,button,
+                          [{property,label,<<"Check saved outcome">>}],
+                          []}]}}}],
+                  2}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 193.352 seconds
+[0;31m17 tests, 2 failures
+[0m===> Error running tests

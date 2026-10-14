@@ -1,0 +1,7 @@
+{
+  "desktop_checks": 36,
+  "passed": false,
+  "error": "{\"value\":{\"error\":\"javascript error\",\"message\":\"javascript error: Cannot read properties of undefined (reading 'then')\\nJavaScript stack:\\nTypeError: Cannot read properties of undefined (reading 'then')\\n    at eval (eval at executeAsyncScript (:464:26), \\u003Canonymous>:3:92)\\n    at eval (eval at executeAsyncScript (:464:26), \\u003Canonymous>:3:174)\\n    at executeAsyncScript (\\u003Canonymous>:464:47)\\n    at \\u003Canonymous>:479:29\\n    at callFunction (\\u003Canonymous>:386:22)\\n    at \\u003Canonymous>:400:23\\n    at \\u003Canonymous>:401:3\\n  (Session info: chrome=157.0.8091.0)\",\"stacktrace\":\"#0 0x558e9bb1e19a \\u003Cunknown>\\n#1 0x558e9b4533d5 \\u003Cunknown>\\n#2 0x558e9b45af11 \\u003Cunknown>\\n#3 0x558e9b4d5b61 \\u003Cunknown>\\n#4 0x558e9b4d53f3 \\u003Cunknown>\\n#5 0x558e9b4d4c09 \\u003Cunknown>\\n#6 0x558e9b48fb77 \\u003Cunknown>\\n#7 0x558e9b48ee8e \\u003Cunknown>\\n#8 0x558e9b48f961 \\u003Cunknown>\\n#9 0x558e9bae10fc \\u003Cunknown>\\n#10 0x558e9badf905 \\u003Cunknown>\\n#11 0x558e9bacaca5 \\u003Cunknown>\\n#12 0x558e9bae056a \\u003Cunknown>\\n#13 0x558e9bab39a9 \\u003Cunknown>\\n#14 0x558e9bb08758 \\u003Cunknown>\\n#15 0x558e9bb088f5 \\u003Cunknown>\\n#16 0x558e9bb1cb23 \\u003Cunknown>\\n#17 0x7efde7a98042 \\u003Cunknown>\\n#18 0x7efde7b2072c \\u003Cunknown>\\n\"}}",
+  "chromedriver07_exit": -15,
+  "fixture-server07_exit": 143
+}

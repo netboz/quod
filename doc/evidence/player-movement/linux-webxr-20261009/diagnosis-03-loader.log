@@ -1,0 +1,183 @@
+   1999720:	find library=libpython3.14.so.1.0 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3:/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2:/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/libpython3.14.so.1.0
+   1999720:	    (no such file)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/libpython3.14.so.1.0
+   1999720:	    (no such file)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libpython3.14.so.1.0
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libpython3.14.so.1.0
+   1999720:	
+   1999720:	find library=libc.so.6 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libc.so.6
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libc.so.6
+   1999720:	
+   1999720:	find library=libm.so.6 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libm.so.6
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libm.so.6
+   1999720:	
+   1999720:	
+   1999720:	calling init: /lib64/ld-linux-x86-64.so.2
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libc.so.6
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libm.so.6
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libpython3.14.so.1.0
+   1999720:	
+   1999720:	
+   1999720:	initialize program: python3
+   1999720:	
+   1999720:	
+   1999720:	transferring control: python3
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	find library=libz.so.1 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libz.so.1
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libz.so.1
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libz.so.1
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	find library=libbz2.so.1.0 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libbz2.so.1.0
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libbz2.so.1.0
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libbz2.so.1.0
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	find library=liblzma.so.5 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/liblzma.so.5
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/liblzma.so.5
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/liblzma.so.5
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	find library=libzstd.so.1 [0]; searching
+   1999720:	 search path=/tmp/.mount_NimbalVgnwSN/usr/lib		(LD_LIBRARY_PATH)
+   1999720:	  trying file=/tmp/.mount_NimbalVgnwSN/usr/lib/libzstd.so.1
+   1999720:	    (no such file)
+   1999720:	 search cache=/etc/ld.so.cache
+   1999720:	  trying file=/usr/lib/libzstd.so.1
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/libzstd.so.1
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+   1999720:	
+   1999720:	calling init: /usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so
+   1999720:	
+{"browser_exit": 1, "runtime_exit": 0, "simulated": true, "browser": "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome", "driver": "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64/chromedriver"}
+   1999720:	
+   1999720:	calling fini:  [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libpython3.14.so.1.0 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libm.so.6 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libz.so.1 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libbz2.so.1.0 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/liblzma.so.5 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libzstd.so.1 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /usr/lib/libc.so.6 [0]
+   1999720:	
+   1999720:	
+   1999720:	calling fini: /lib64/ld-linux-x86-64.so.2 [0]
+   1999720:	

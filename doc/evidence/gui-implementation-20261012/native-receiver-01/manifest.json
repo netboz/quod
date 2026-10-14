@@ -1,0 +1,42 @@
+[
+  {
+    "path": "client/src/gui-view.d.ts",
+    "before_sha256": "daef7a37158ae609fdd4b92835771b3c3838575d00351cb61cd4032760352284",
+    "sha256": "aba62df017535ba8cfb122c8e2d0e80076f0c357dc57ba6ec31472faa8f02488"
+  },
+  {
+    "path": "client/src/gui-view.js",
+    "before_sha256": "73f5a989e66a7ac03b39ea2e941f45231fed268f04725f5a9904987ebf570079",
+    "sha256": "bb17e119e64f1946a25b1a8e22b5870e089d1acf4ab0b30c344ee2e9fb58a24a"
+  },
+  {
+    "path": "client/src/signed-view.js",
+    "before_sha256": "6875fb6a2b9079a0389e3cba8636ea2db388861d8690452555980419a2d05eb7",
+    "sha256": "5276c564ceb4cda2e9b2916d12a882038af5801d6cf1cb9cd18a2f659d0e27c1"
+  },
+  {
+    "path": "client/test/gui-view.test.js",
+    "before_sha256": "69a4b8b87c47383bdb31bfcb5c65df7d9b4a560c58e12d5e9160c7af56ff279f",
+    "sha256": "a348d0832d1df85514b538ebfd1e51ba18509d0fbb7bb2ccb53f458326b04ab2"
+  },
+  {
+    "path": "src/quod_client_view.erl",
+    "before_sha256": "387d8256a3ae9af6c57354df6d59291591ce8fc341d28418eeeec78816cadeaa",
+    "sha256": "cfea79d3fe61f14a575792750de7f0512b551f3dad6bf98b3980e36402d2da21"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "before_sha256": "c21aff3c0cbdc98033c7ac72d87da1ed5a1a08e271fede91d719701ff1741c17",
+    "sha256": "3b5c5ef2a3c6511566d35725d0bcbd80f970f3e4c95e407760c3e56aa0b00ff4"
+  },
+  {
+    "path": "ui/src/World.tsx",
+    "before_sha256": "0b77ba40946e7f7f8b7859f29cdc4696c0614f12df94ea28073b758a7ccdecc2",
+    "sha256": "aeaa05487f80699a9f69b82c47f4463f033cb0d8e9342f558e587322341531d9"
+  },
+  {
+    "path": "ui/test/gui-question.fixture.tsx",
+    "before_sha256": "e362e8f791b38c22bf1507a7c3084474561f0600d3322093700cd902a7c3b116",
+    "sha256": "ee039aaf7b437126736934bd64a9c82e5474d36f0385ac87ddfe046c51728507"
+  }
+]

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-10 12:40:32 UTC",
+  "workspace": "/home/yan/src/quod",
+  "backup": {
+    "file": "tracker-recovery-20261010.json",
+    "items": 12,
+    "bytes": 107447,
+    "sha256": "01382f48be326d59b30943887ca82524dbd2bae8745fbc1367c9eb7e07bd76a9",
+    "jsonParseVerified": true,
+    "allDescriptionsUnchangedSinceAudit": true
+  },
+  "storageChecks": {
+    "all12CurrentBodiesPresent": true,
+    "all12CurrentBodyCachesMatch": true,
+    "all12HaveNoCollaborativeReplica": true,
+    "workspaceHasNoTeam": true,
+    "taskSharingPolicy": "team",
+    "sessionSyncEnabled": false,
+    "documentSyncEnabled": false
+  },
+  "diagnosis": {
+    "observed": "Packaged Nimbalyst 0.79.1 reports a team-only body write failure in a teamless workspace, after saving local tracker content and body-cache versions.",
+    "implementationTrace": [
+      "MainBodyDocService.resolveBodyRoomIdentity returns null without a workspace team.",
+      "initializeHeadlessBodyMarkdown throws when no body-room entry is available.",
+      "tracker_create uses the team sharing policy to attempt that room write.",
+      "tracker_update reports a failed team body write when applyHeadlessBodyMarkdown returns false under team policy.",
+      "The renderer useTrackerContentCollab keeps teamless workspaces on local editing."
+    ],
+    "constraint": "The supported tracker schema handler forbids demoting a team tracker to personal. Do not bypass this by changing the database or schema files directly.",
+    "deployment": "Installed app is packaged. Editing the separate Nimbalyst checkout would not repair the running app until a separately authorized build/restart."
+  },
+  "mutations": {
+    "createdRecoveryFilesOnly": true,
+    "recreatedTrackerItems": false,
+    "changedSharingPolicy": false,
+    "databaseWrites": false,
+    "restartedApplication": false
+  },
+  "remaining": "A permanent application fix is not implemented. No off-device backup or cloud synchronization is claimed."
+}

@@ -1,0 +1,5 @@
+{
+  "patch_application": "passed against exact tag source",
+  "runtime_validation": "not run",
+  "driver_loading_flags": "same as upstream GPU hook: RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE"
+}

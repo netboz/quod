@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "file": "priv/ontologies/gui_instance.pl",
+      "sha256": "a32edc2b3d65f27ce16da3474d641edc290e839f0a49a4f437352757692ea368"
+    },
+    {
+      "file": "priv/ontologies/quod_gui.pl",
+      "sha256": "f117371b9bc1751efb5a4e37c7d3dbb0039b28a768a675b5ba328b85babb2a18"
+    },
+    {
+      "file": "test/quod_gui_components_tests.erl",
+      "sha256": "9dd9e903933053b1decfe7e2df5a2a87b0387ad41f181749ab030184ff6ef9c8"
+    },
+    {
+      "file": "test/fixtures/gui-components.pl",
+      "sha256": "c8e958aaa82c0b36842eea185fa1912923278d990f8d90c26908bfd75c6ecbc8"
+    }
+  ]
+}

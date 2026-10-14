@@ -1,0 +1,8 @@
+{
+  "src/quod_runtime.erl": "80eccfd62845e16398639d34b57d6f1e0548591b3aedd6da1256e02abc0487c7",
+  "src/predicates/quod_runtime_predicates.erl": "c0fbb576ff7200c1e51fab7ae9bfd0cf83099381f508a020b7fd58010e43ce3c",
+  "test/quod_runtime_tests.erl": "ae09460ede3d48f5783b34d96369dd1f277d96fa5cbab367cc926b1bfa809a79",
+  "test/quod_diff_tests.erl": "ade67a71858fc796ba41cf1691154ac17de7dffd94022075e2d0748f13332978",
+  "test/quod_reaction_metadata_tests.erl": "3d723be2e0f2152ffe0ec414f28a6ced24e901b6a734872505ac001396a557fb",
+  "test/quod_agent_reaction_tests.erl": "b07537bb59fee4421063ea2eaa5bedf5eff1e52cb148824812b7171ae0f9c046"
+}

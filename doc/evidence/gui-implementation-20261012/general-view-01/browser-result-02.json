@@ -1,0 +1,14 @@
+{
+  "driver": "Nimbalyst MCP browser",
+  "fixture": "ui/test/gui-question.fixture.html",
+  "sharedDraft": true,
+  "lockedAfterLoss": true,
+  "lockedAfterReopen": true,
+  "lockedAfterResolution": true,
+  "executeCount": 1,
+  "outcomeCount": 1,
+  "exactRequest": true,
+  "retained": 0,
+  "errors": [],
+  "scope": "Real React controls, shared desktop/spatial model, controller and IndexedDB; fixture transport and scene sink. Not live opening, Babylon mesh interaction or headset validation."
+}

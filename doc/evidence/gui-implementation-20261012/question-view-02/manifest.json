@@ -1,0 +1,14 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "priv/ontologies/gui_instance.pl": "98d8d295c2740db75e8d4bfd2fdec56785cf809c6daaef4c8c8ea510f295e92f",
+  "priv/ontologies/gui_question.pl": "f15dfa4ee6cf547c72ca25ddd90598a51762b10a8491f199a938f83450dc8d53",
+  "priv/ontologies/gui_hud.pl": "ad396c043c1a4a313c735ed9c37c50bf2db3ac75a7da75529bd2d95454d359cc",
+  "priv/ontologies/quod_gui.pl": "cc4111c9322028e41f8edfb508709579ee41a8bf91b74ffee9848dd84797cae1",
+  "test/quod_gui_question_tests.erl": "6a193c12fc8a79ecdfa429e771418d3e69ca8eef30b2244e77f79647c0e85536",
+  "test/quod_gui_components_tests.erl": "49d9f895ff777e9d032016884114ab8d88daa363c2fc76ceb546cee8ae27bc6f",
+  "client/src/world.js": "7a288076f4c79609c555e6f0f3899576b6b509376072767fdfed91e553e64c7f",
+  "client/src/world.d.ts": "6285c124699667ee90cf227a910df79c825b9e0c04239478a19b89f34b32f895",
+  "client/src/prolog-read.js": "060aa24ad49f93029d47b8ef68b31cb962650bf0ace0ec9070ef6eb0f313fae8",
+  "client/test/world.test.js": "f2edc65222e5275482b276f6a71529c671d7838334193f07bc39a73e1a7902f9",
+  "test/fixtures/gui-components.pl": "c8e958aaa82c0b36842eea185fa1912923278d990f8d90c26908bfd75c6ecbc8"
+}

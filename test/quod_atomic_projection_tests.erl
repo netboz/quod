@@ -821,7 +821,7 @@ future_parent_is_not_a_negative_vote_test() ->
 
 
 admission_context(F, Target, Index, Parent) ->
-    quod_commit_validation:new(Target, Parent, admission_est(F, Target), Index, none).
+    quod_commit_validation:new(Target, Parent, admission_est(F, Target), Index, none, none).
 
 admission_est(F, {Ns, _} = Target) ->
     #{goal := FrozenGoal} = maps:get(evidence, F),
@@ -940,7 +940,7 @@ disjoint_selection_probe() ->
         {Done, _} = (fun() ->
             {Commands, Checking} = quod_atomic_admission:next(Parent, 1, Q),
             ?assertEqual(4, length(Commands)),
-            Context = quod_commit_validation:new(T, 1, Est, I, none),
+            Context = quod_commit_validation:new(T, 1, Est, I, none, none),
             Ready = lists:foldl(fun({_Id, Tag, M, _}, Rows) ->
                 {ok, {selection, {vote, M}, Basis}, _} = quod_commit_validation:prepare_vote(M, 1, Context),
                 ?assert(maps:is_key({fact, {unadvertised_policy, 0}}, Basis)),
@@ -983,7 +983,7 @@ key_revocation_and_signer_admission_invalidate_real_selections_test_() ->
         Material = quod_atomic:control_material(Control),
         try quod_ct:with_network_identity(maps:get(network, F), fun() ->
             {ok, {selection, {vote, Material}, Basis}, _} = quod_commit_validation:prepare_vote(
-                Material, 1, quod_commit_validation:new(T, 1, Est, I, none)),
+                Material, 1, quod_commit_validation:new(T, 1, Est, I, none, none)),
             {ok, Dropped} = quod_erlog_db_mvcc:abolish_clauses(Ref, {Name, Arity}),
             Changes = maps:from_keys([{fact, K} || K <- quod_erlog_db_mvcc:changed_functors(Dropped)], true),
             ?assert(quod_selection_basis:affected(Basis, Changes)),
@@ -991,7 +991,7 @@ key_revocation_and_signer_admission_invalidate_real_selections_test_() ->
                 {{{self(), {1, <<1:256>>}}, false}, Basis}, {self(), {2, <<2:256>>}}, Changes)),
             NewEst = quod_ct:commit_kb(quod_ct:set_ref(Est, Dropped), 2, 1),
             {ok, {selection, {vote, Negative}, _}, _} = quod_commit_validation:prepare_vote(
-                Material, 1, quod_commit_validation:new(T, 2, NewEst, I, none)),
+                Material, 1, quod_commit_validation:new(T, 2, NewEst, I, none, none)),
             ?assertEqual({ok, Negative}, quod_atomic:select_vote(Material, {refused, [Reason]}))
         end)
         after ok = quod_outcome:close(I), quod_erlog_db_mvcc:delete(Ref) end
@@ -1776,7 +1776,7 @@ outcome_stores_source_resolve_height_but_waits_for_complete_publication_test() -
     ?assertMatch(#{Id := #{blocking := false}}, outcome_fences(I3)),
     {I4, [none]} = outcome_wave(I3, [complete(F, commit, Resolves)]),
     ?assertMatch({ok, #{status := pending, phase := publication}}, public_group(F, I4)),
-    {ok, I5} = quod_outcome:advance_applied(I4, 4),
+    {ok, I5} = quod_outcome:advance_applied(I4, 4, 4),
     ?assertMatch({ok, #{status := pending, phase := publication}}, public_group(F, I5)),
     {ok, I6} = quod_outcome:flush(I5),
     ?assertMatch({ok, #{status := committed, height := 3,
@@ -1878,7 +1878,7 @@ outcome_wave(I0, Rows) ->
 memory_outcome({Ns, Anchor}) ->
     {ok, Index} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}), Index.
 publish_outcome(Index, Slot) ->
-    {ok, I1} = quod_outcome:advance_applied(Index, Slot),
+    {ok, I1} = quod_outcome:advance_applied(Index, Slot, Slot),
     {ok, I2} = quod_outcome:flush(I1), I2.
 outcome_fences(Index) ->
     maps:get(apply_fences, maps:get(projection, quod_outcome:dtx_state(Index))).

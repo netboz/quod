@@ -20,7 +20,7 @@ liveness observations while preserving the one existing authorization path
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([new/5, outcomes/1, content/4, dtx/4, read_only_plan/2,
+-export([new/6, outcomes/1, network/1, content/4, dtx/4, read_only_plan/2,
          prepared_material/1, vote_choice/3, prepare_vote/3,
          remote_application/2, validate_evidence/2]).
 -export_type([context/0, mode/0]).
@@ -30,7 +30,8 @@ liveness observations while preserving the one existing authorization path
           applied  :: non_neg_integer(),
           est      :: tuple() | undefined,
           outcomes :: quod_outcome:index(),
-          signer   :: quod_identity:signer() | none
+          signer   :: quod_identity:signer() | none,
+          network  :: none | <<_:256>>
          }).
 
 -opaque context() :: #context{}.
@@ -40,15 +41,30 @@ liveness observations while preserving the one existing authorization path
 
 -spec new({binary() | undefined, <<_:256>>}, non_neg_integer(),
           tuple() | undefined,
-          quod_outcome:index(), quod_identity:signer() | none) -> context().
-new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
+          quod_outcome:index(), quod_identity:signer() | none,
+          none | <<_:256>>) -> context().
+new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer, Network)
   when is_integer(Applied), Applied >= 0,
-       (is_tuple(Est) orelse Est =:= undefined) ->
+       (is_tuple(Est) orelse Est =:= undefined),
+       (Network =:= none orelse is_binary(Network) andalso byte_size(Network) =:= 32) ->
     #context{target = Target, applied = Applied, est = Est,
-             outcomes = Outcomes, signer = Signer}.
+             outcomes = Outcomes, signer = Signer, network = Network}.
 
 -spec outcomes(context()) -> quod_outcome:index().
 outcomes(#context{outcomes = Outcomes}) -> Outcomes.
+
+-spec network(context()) -> none | <<_:256>>.
+network(#context{network = Network}) -> Network.
+
+%% The root anchor is immutable verified context, not a readiness lease.
+%% Once captured, second checks during a batch must not consult live readiness.
+ensure_network(false, Context) -> {ok, Context};
+ensure_network(true, Context = #context{network = <<_:256>>}) -> {ok, Context};
+ensure_network(true, Context = #context{target = Target}) ->
+    case quod_ontology:network_identity(true, Target) of
+        {ok, Network} -> {ok, Context#context{network = Network}};
+        {error, _} = Error -> Error
+    end.
 
 -doc "Verify carried certificates against the already-verified exact entries.".
 -spec validate_evidence(#transaction{}, map()) -> ok | abstain | {error, term()}.
@@ -132,16 +148,15 @@ validate_foreign_reads([Certificate | Rest], ProofId, Evidence) ->
     end.
 
 -spec content(term(), term(), mode(), context()) -> result(term()).
-content(Transactions, BlockTimestamp, Mode,
-        Context = #context{target = Target})
+content(Transactions, BlockTimestamp, Mode, Context)
   when is_list(Transactions), is_integer(BlockTimestamp),
        BlockTimestamp >= 0 ->
-    case quod_ontology:network_identity(
+    case ensure_network(
            quod_transaction:requires_network_identity(Transactions),
-           Target) of
-        {ok, Network} ->
+           Context) of
+        {ok, Captured} ->
             validate_content_transactions(
-              Transactions, Network, BlockTimestamp, Mode, #{}, Context);
+              Transactions, network(Captured), BlockTimestamp, Mode, #{}, Captured);
         {error, Reason} ->
             dependency_verdict(Mode, Reason, Context)
     end;
@@ -176,7 +191,8 @@ read_only_plan(Plan, Context = #context{target = Target}) ->
          maps:get(read_functors, quod_dtx:core(Plan), 0) > 0 of
         true ->
             case validate_prepared_plan(Plan, Context) of
-                {ok, _Material} -> ok;
+                {ok, _Material, _Captured} -> ok;
+                {unavailable, network_identity, _} = Unavailable -> {error, Unavailable};
                 {outcome_error, _} = Error -> Error;
                 {error, _} = Error -> Error
             end;
@@ -207,6 +223,7 @@ validate_content_transactions(
   Network, BlockTimestamp, Mode, Seen, Context0) ->
     case remote_application(Change, Context0) of
         {outcome_error, _} = Error -> Error;
+        {unavailable, network_identity, Reason} -> dependency_verdict(Mode, Reason, Context0);
         {apply, _EventContext, _Material} ->
             validate_content_transactions(
               Rest, Network, BlockTimestamp, Mode, Seen, Context0);
@@ -417,7 +434,8 @@ transaction_outcome_ref(
 -doc "Evaluate one certified remote application at the target parent.".
 -spec remote_application(#transaction{}, context()) ->
           {apply, map(), map()} | {reject, term()} |
-          {invalid, term()} | abstain | {outcome_error, term()}.
+          {invalid, term()} | abstain | {outcome_error, term()} |
+          {unavailable, network_identity, term()}.
 remote_application(
   Change = #transaction{
              role = {remote_application, ClaimRef, _OperationRef, _Digest},
@@ -465,7 +483,8 @@ prepared_application_material(Plan, EventContext, Material, Context) ->
             case quod_effect:validate_plan(Plan, Material) of
                 true ->
                     case validate_prepared_plan_material(Plan, Material, Context) of
-                        {ok, Material} -> {ok, EventContext, Material};
+                        {ok, Material, _Captured} -> {ok, EventContext, Material};
+                        {unavailable, network_identity, _} = Unavailable -> Unavailable;
                         {outcome_error, _} = Error -> Error;
                         {error, _} = Error -> Error
                     end;
@@ -478,6 +497,7 @@ classify_remote_prepared(
   {ok, EventContext, Material}) ->
     {apply, EventContext, Material};
 classify_remote_prepared({outcome_error, _} = Error) -> Error;
+classify_remote_prepared({unavailable, network_identity, _} = Unavailable) -> Unavailable;
 classify_remote_prepared({error, future_base_height}) ->
     abstain;
 classify_remote_prepared({error, Reason}) ->
@@ -498,26 +518,26 @@ remote_rejection_reason(_) -> false.
 validate_vote(Control, Timestamp, Mode, History, Context) ->
     Material = quod_atomic:control_material(Control),
     case vote_request(Material, Timestamp, Mode, Context) of
-        ok ->
+        {ok, Captured} ->
             case quod_atomic:history_phase(vote, History) of
                 {ok, Ref} ->
                     %% An exact committed vote keeps its first policy verdict.
                     {ok, _, _, Digest} = quod_dtx:certified_ref_binding(Ref),
                     case Digest =:= quod_atomic:record_digest(Control) of
-                        true -> {ok, {valid, History}, Context};
-                        false -> {ok, {invalid, atomic_vote_conflict}, Context}
+                        true -> {ok, {valid, History}, Captured};
+                        false -> {ok, {invalid, atomic_vote_conflict}, Captured}
                     end;
-                not_found -> validate_vote_choice(Control, Timestamp, Mode, History, Context)
+                not_found -> validate_vote_choice(Control, Timestamp, Mode, History, Captured)
             end;
         Other -> Other
     end.
 
 vote_request(Material, Timestamp, Mode, Context = #context{target = Target}) ->
-    case quod_ontology:network_identity(quod_atomic:requires_network_identity(Material), Target) of
-        {ok, Network} ->
-            case quod_atomic:validate_request(Network, Target, Timestamp, Material) of
-                {ok, _} -> ok;
-                {error, Reason} -> {ok, {invalid, Reason}, Context}
+    case ensure_network(quod_atomic:requires_network_identity(Material), Context) of
+        {ok, Captured} ->
+            case quod_atomic:validate_request(network(Captured), Target, Timestamp, Material) of
+                {ok, _} -> {ok, Captured};
+                {error, Reason} -> {ok, {invalid, Reason}, Captured}
             end;
         {error, Reason} ->
             ok = quod_selection_basis:note(parent, Context#context.est),
@@ -528,6 +548,8 @@ validate_vote_choice(Control, Timestamp, Mode, History, Context0) ->
     Material = {{quod_dtx_vote, 4, _, _, _, Supplied}, _, _} =
         quod_atomic:control_material(Control),
     case vote_choice(Material, Timestamp, Context0) of
+        {ok, {unavailable, network_identity, Reason}, Context} ->
+            dependency_verdict(Mode, Reason, Context);
         {ok, wait, Context} -> {ok, abstain, Context};
         {ok, Expected, Context} ->
             Choice = case Supplied of
@@ -560,12 +582,14 @@ prepare_vote(_, _, Context) -> {ok, {invalid, invalid_vote_target}, Context}.
 
 prepare_observed_vote(Material, Timestamp, Context) ->
     case vote_choice(Material, Timestamp, Context) of
+        {ok, {unavailable, network_identity, Reason}, Next} ->
+            dependency_verdict(check, Reason, Next);
         {ok, wait, Next} -> {ok, abstain, Next};
         {ok, Choice, Next} ->
             case quod_atomic:select_vote(Material, Choice) of
                 {ok, Selected} ->
                     case vote_request(Selected, Timestamp, check, Next) of
-                        ok -> {ok, {vote, Selected}, Next};
+                        {ok, Captured} -> {ok, {vote, Selected}, Captured};
                         Other -> Other
                     end;
                 error -> {ok, {invalid, malformed_control}, Next}
@@ -585,7 +609,8 @@ classification stages no claim; dtx/4 does so only for a valid certified
 positive source vote. The timestamp is the candidate/certified block time.
 """.
 -spec vote_choice(quod_atomic:admission_material(), non_neg_integer(), context()) ->
-          result(prepared | {refused, nonempty_list()} | wait).
+          result(prepared | {refused, nonempty_list()} | wait |
+                 {unavailable, network_identity, term()}).
 vote_choice({{quod_dtx_vote, 4, _, Target, _, _}, _,
               #{group := Binding, plans := Plans}} = Material,
              Timestamp, Context = #context{target = Target})
@@ -648,7 +673,7 @@ own_vote_choice(Plan, #{origin := Origin}, Material,
             case materialize_prepared_plan(Plan) of
                 {ok, Decoded} ->
                     case validate_prepared_plan_material(Plan, Decoded, Context) of
-                        {ok, _} ->
+                        {ok, _, Captured} ->
                             ok = quod_selection_basis:note({reservations, Material}, Est),
                             Projection = maps:get(projection, quod_outcome:dtx_state(Outcomes)),
                             Choice = case quod_atomic:reservation_readiness(Material, Projection) of
@@ -656,7 +681,10 @@ own_vote_choice(Plan, #{origin := Origin}, Material,
                                 {blocked, active_group} -> wait;
                                 {refused, Reason} -> {refused, [Reason]}
                             end,
-                            {ok, Choice, Context};
+                            {ok, Choice, Captured};
+                        {unavailable, network_identity, _} = Unavailable ->
+                            ok = quod_selection_basis:note(parent, Est),
+                            {ok, Unavailable, Context};
                         {outcome_error, _} = Error -> Error;
                         {error, Reason} -> {ok, {refused, [Reason]}, Context}
                     end;
@@ -717,10 +745,14 @@ validate_prepared_plan(Plan, Context) ->
 validate_prepared_plan_material(Plan,
   #{diff := Diff, read_check := ReadCheck, transcript := Transcript} = Material,
   Context = #context{est = Est}) ->
-    case validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, Context) of
-        ok -> {ok, Material};
-        {outcome_error, _} = Error -> Error;
-        {error, _} = Error -> Error
+    case ensure_network(quod_read_set:requires_network_identity(ReadCheck), Context) of
+        {ok, Captured} ->
+            case validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, Captured) of
+                ok -> {ok, Material, Captured};
+                {outcome_error, _} = Error -> Error;
+                {error, _} = Error -> Error
+            end;
+        {error, Reason} -> {unavailable, network_identity, Reason}
     end.
 
 materialize_prepared_plan(Plan) ->
@@ -743,8 +775,8 @@ validate_prepared_material(
 
 validate_prepared_occ(
   Plan, Diff, ReadCheck, Transcript, Est,
-  Context = #context{outcomes = Outcomes, applied = Parent}) ->
-    case quod_diff:validate(ReadCheck, mvcc_ref(Est), {Outcomes, Parent}) of
+  Context = #context{outcomes = Outcomes, applied = Parent, target = Target, network = Network}) ->
+    case quod_diff:validate(ReadCheck, mvcc_ref(Est), {Outcomes, Parent, Target, Network}) of
         {outcome_error, _} = Error -> Error;
         {conflict, _Functor} ->
             {error, conflict_retry};
@@ -819,7 +851,8 @@ is_membership_change(Change) ->
     quod_simplex:committee_delta(Change) =/= {[], []}.
 
 membership_verdict(Mode, Change = #transaction{read_check = Reads}, Context) ->
-    case lists:any(fun(K) -> quod_read_set:kind(K) =:= operation_outcome end, maps:keys(Reads)) of
+    case lists:any(fun(K) -> lists:member(quod_read_set:kind(K),
+                              [operation_outcome, operation_expiry]) end, maps:keys(Reads)) of
         true -> {invalid, invalid_read_dependency};
         false -> membership_verdict_checked(Mode, Change, Context)
     end.

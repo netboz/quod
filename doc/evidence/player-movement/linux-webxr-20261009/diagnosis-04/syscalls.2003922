@@ -1,0 +1,24 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6141f8780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6141f8780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/PrivacySandboxAttestationsPreloaded", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/PrivacySandboxAttestationsPreloaded", 0x7fe6141f64e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=380, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/PrivacySandboxAttestationsPreloaded", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/PrivacySandboxAttestationsPreloaded", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 675
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/PrivacySandboxAttestationsPreloaded", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 677
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/indigo", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/indigo", 0x7fe6141f64e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=460, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/indigo", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/indigo", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 674
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/indigo", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 675
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload", F_OK) = 0
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", F_OK) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", O_RDONLY|O_CLOEXEC) = 674
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/preloaded_data.pb", F_OK) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/MEIPreload", 0x7fe6141f64e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=700, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/MEIPreload", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 687
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 675
++++ exited with 0 +++

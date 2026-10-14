@@ -1,0 +1,245 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 37831.
+[424615:424615:1008/120657.774650:WARNING:ui/ozone/platform/wayland/common/drm_render_node_path_finder.cc:178] Preferred drm_render_node not found, picking nvidia-drm
+[424615:424615:1008/120657.823047:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wl_shm version 1 but version 2 is available.
+[424615:424615:1008/120657.823108:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_cursor_shape_manager_v1 version 1 but version 2 is available.
+[424615:424615:1008/120657.823124:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_pointer_gestures_v1 version 1 but version 3 is available.
+[424615:424615:1008/120657.823144:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to ext_idle_notifier_v1 version 1 but version 2 is available.
+[424615:424615:1008/120657.823192:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_color_manager_v1 version 1 but version 3 is available.
+[424615:424615:1008/120657.823209:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_linux_dmabuf_v1 version 4 but version 5 is available.
+[424666:424666:1008/120657.990319:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+[424666:424666:1008/120657.992457:ERROR:ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc:248] '--ozone-platform=wayland' is not compatible with Vulkan. Consider switching to '--ozone-platform=x11' or disabling Vulkan
+
+DevTools listening on ws://127.0.0.1:42549/devtools/browser/1964733e-d215-4fa0-9aeb-0e1be3a4ffb7
+[424615:424615:1008/120658.062410:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+[424615:424615:1008/120658.062419:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+[424720:1:1008/120658.089331:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[424615:424615:1008/120658.127512:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[424615:424615:1008/120658.127549:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[424736:1:1008/120658.130119:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[424737:1:1008/120658.131303:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[424615:424615:1008/120658.223325:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[424799:1:1008/120658.502053:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[424811:1:1008/120658.545175:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrCreateInstance
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Google Chrome for Testing 157
+	createInfo->applicationInfo.applicationVersion: 8091
+	createInfo->applicationInfo.engineName: Chromium
+	createInfo->applicationInfo.engineVersion: 8091
+	createInfo->applicationInfo.apiVersion: 1.0.53
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetSystem
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+xrGetSystem
+xrGetSystem
+xrEnumerateEnvironmentBlendModes
+xrEnumerateEnvironmentBlendModes
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetSystem
+xrEnumerateViewConfigurationViews
+xrEnumerateViewConfigurationViews
+xrEnumerateViewConfigurations
+xrEnumerateViewConfigurations
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetVulkanGraphicsRequirementsKHR
+xrCreateVulkanInstanceKHR
+[Vulkan Loader] ERROR:          libGLX_nvidia.so.0: cannot open shared object file: Permission denied
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] ERROR:          libGLX_nvidia.so.0: cannot open shared object file: Permission denied
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] ERROR:          libGLX_nvidia.so.0: cannot open shared object file: Permission denied
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] ERROR:          libGLX_nvidia.so.0: cannot open shared object file: Permission denied
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] ERROR | DRIVER: vkCreateInstance: Found no drivers!
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_ERROR_INCOMPATIBLE_DRIVER
+	vulkanInstance: 0x0
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+[424615:424615:1008/120658.706152:INFO:CONSOLE:0] "Could not create a session because: Something went wrong initializing the session in the runtime", source: http://127.0.0.1:44963/linux-webxr.fixture.html (0)
+xrGetInstanceProcAddr
+xrDestroyInstance

@@ -1,0 +1,31 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe62ebf1780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe62ebf1780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/proc/2003809/status", O_RDONLY|O_CLOEXEC) = 625
+openat(AT_FDCWD, "/proc/2003809/status", O_RDONLY|O_CLOEXEC) = 626
+openat(AT_FDCWD, "/proc/2003809/clear_refs", O_WRONLY) = 626
+openat(AT_FDCWD, "/proc/2003809/status", O_RDONLY|O_CLOEXEC) = 639
+openat(AT_FDCWD, "/proc/2003809/status", O_RDONLY|O_CLOEXEC) = 639
+openat(AT_FDCWD, "/proc/2003809/clear_refs", O_WRONLY) = 639
+openat(AT_FDCWD, "/proc/2003915/status", O_RDONLY|O_CLOEXEC) = 639
+openat(AT_FDCWD, "/proc/2003915/status", O_RDONLY|O_CLOEXEC) = 638
+openat(AT_FDCWD, "/proc/2003915/clear_refs", O_WRONLY) = 638
+openat(AT_FDCWD, "/proc/2003916/status", O_RDONLY|O_CLOEXEC) = 638
+openat(AT_FDCWD, "/proc/2003916/status", O_RDONLY|O_CLOEXEC) = 638
+openat(AT_FDCWD, "/proc/2003916/clear_refs", O_WRONLY) = 638
+openat(AT_FDCWD, "/proc/2003920/status", O_RDONLY|O_CLOEXEC) = 638
+openat(AT_FDCWD, "/proc/2003920/status", O_RDONLY|O_CLOEXEC) = 638
+openat(AT_FDCWD, "/proc/2003920/clear_refs", O_WRONLY) = 638
+openat(AT_FDCWD, "/proc/2003943/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2003943/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2003943/clear_refs", O_WRONLY) = 714
+openat(AT_FDCWD, "/proc/2004023/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004023/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004023/clear_refs", O_WRONLY) = 714
+openat(AT_FDCWD, "/proc/2004173/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004173/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004173/clear_refs", O_WRONLY) = 714
+openat(AT_FDCWD, "/proc/2004210/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004210/status", O_RDONLY|O_CLOEXEC) = 714
+openat(AT_FDCWD, "/proc/2004210/clear_refs", O_WRONLY) = 714
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=2003916, si_uid=1000, si_status=0, si_utime=74 /* 0.74 s */, si_stime=18 /* 0.18 s */} ---
++++ exited with 0 +++

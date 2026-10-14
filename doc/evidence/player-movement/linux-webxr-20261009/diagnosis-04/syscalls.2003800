@@ -1,0 +1,99 @@
+execve("/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64/chromedriver", ["/home/yan/src/quod/client/_build"..., "--port=0", "--enable-chrome-logs"], 0x7ffe8f7d1640 /* 98 vars */) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/", 0x7ffe66927e80, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/", 0x7ffe66927e80, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/", {st_mode=S_IFDIR|0755, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libdl.so.2", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libpthread.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libpthread.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libglib-2.0.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libglib-2.0.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnspr4.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libnspr4.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnss3.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libnss3.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnssutil3.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libnssutil3.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libdbus-1.so.3", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libdbus-1.so.3", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libxcb.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libxcb.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libplds4.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libplds4.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libplc4.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libplc4.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libsystemd.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libsystemd.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libXau.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libXau.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libXdmcp.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libXdmcp.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/locale-archive", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/share/locale/locale.alias", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/gconv/gconv-modules.cache", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_NAME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_NAME", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_PAPER", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_PAPER", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_TIME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_TIME", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = 3
+access("/dev/shm", W_OK|X_OK)           = 0
+openat(AT_FDCWD, "/sys/devices/system/cpu/possible", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu1/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu2/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu3/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu4/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu5/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu6/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/sys/devices/system/cpu/cpu7/cpufreq/cpuinfo_max_freq", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC) = 3
++++ killed by SIGTERM +++

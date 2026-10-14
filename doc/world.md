@@ -18,6 +18,14 @@ The [governed space contract](spaces.md) defines organizational containment and
 optional exclusive physical admission independently of ontology ownership.
 Class membership alone enables no simulation.
 
+An exact ontology is an ordinary `ontology` instance identified by
+`ontology_ref(Namespace, GenesisAnchor)`. Its source workspace and ACL,
+explicit-interface and live-route inspection Eidolons use the same class and
+instance selection as other representations. Anchored ontology marks retain
+that identity across views. The [inspection contract](system-ontology-acls.md)
+describes authorized reads and edits; displaying an ontology in 3D changes
+neither its owner/history nor its independent space or physics policy.
+
 ## Application startup
 
 The normal application entry is the TLS client's root URL. Startup first

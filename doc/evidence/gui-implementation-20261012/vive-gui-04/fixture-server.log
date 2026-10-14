@@ -1,0 +1,19 @@
+
+  VITE v8.1.5  ready in 699 ms
+
+  ➜  Local:   http://127.0.0.1:5178/
+  ➜  press h + enter to show help
+8:47:26 PM [vite] (client) [console.error] BJS - [20:47:26]: Error initializing XR
+8:47:26 PM [vite] (client) [console.error] BJS - [20:47:26]: Error: feature not found - xr-controller-pointer-selection (latest)
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: glTF / glb loader was not registered, using generic controller instead
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Falling back to generic models
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Unable to find a plugin to load .babylon files. Trying to use .babylon default plugin. To load from a specific filetype (eg. gltf) see: https://doc.babylonjs.com/features/featuresDeepDive/importers/loadingFileTypes
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: glTF / glb loader was not registered, using generic controller instead
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Falling back to generic models
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Unable to find a plugin to load .babylon files. Trying to use .babylon default plugin. To load from a specific filetype (eg. gltf) see: https://doc.babylonjs.com/features/featuresDeepDive/importers/loadingFileTypes
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Failed to retrieve controller model of type htc-vive from the remote server: https://controllers.babylonjs.com/generic/generic.babylon
+8:47:28 PM [vite] (client) [console.warn] BJS - [20:47:28]: Failed to retrieve controller model of type htc-vive from the remote server: https://controllers.babylonjs.com/generic/generic.babylon
+8:47:28 PM [vite] (client) [Unhandled rejection] Unknown Error: No plugin or fallback for https://controllers.babylonjs.com/generic/generic.babylon
+
+8:47:28 PM [vite] (client) [Unhandled rejection] Unknown Error: No plugin or fallback for https://controllers.babylonjs.com/generic/generic.babylon
+

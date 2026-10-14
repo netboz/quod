@@ -1,0 +1,18 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6151fa780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6151fa780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Feedback Reports", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+inotify_add_watch(608, "/", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 1
+inotify_add_watch(608, "/etc", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 2
+inotify_add_watch(608, "/etc/localtime", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = -1 ENOTDIR (Not a directory)
+lstat("/etc/localtime", {st_mode=S_IFLNK|0777, st_size=32, ...}) = 0
+readlink("/etc/localtime", "/usr/share/zoneinfo/Europe/Paris", 4096) = 32
+inotify_add_watch(608, "/usr/share/zoneinfo/Europe", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 4
+inotify_add_watch(608, "/", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 1
+inotify_add_watch(608, "/etc", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 2
+inotify_add_watch(608, "/etc/timezone", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = -1 ENOENT (No such file or directory)
+lstat("/etc/timezone", 0x7fe6151f8600)  = -1 ENOENT (No such file or directory)
+inotify_add_watch(608, "/", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 1
+inotify_add_watch(608, "/etc", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = 2
+inotify_add_watch(608, "/etc/TZ", IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_CREATE|IN_DELETE|IN_ONLYDIR) = -1 ENOENT (No such file or directory)
+lstat("/etc/TZ", 0x7fe6151f8600)        = -1 ENOENT (No such file or directory)
++++ exited with 0 +++

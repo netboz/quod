@@ -2,13 +2,12 @@
 // cursor and Accept path execute it; this adapter owns no writes or retries.
 import { binary, compound, variable, formatClause, formatTerm } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
-import { anchoredGoal, singleBinding } from './world.js'
-import { signedGoal, signedCursorCommand } from './signed-client.js'
+import { anchoredGoal, singleBinding, readTextProjection, ontologyTerm } from './world.js'
+import { signedGoal } from './signed-client.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 const text = value => binary(encoder.encode(value))
-const targetTerm = target => compound('ontology_ref', [text(target.namespace), binary(target.anchor)])
 
 async function query(identity, agent, tools, goal, binding) {
   const reply = await signedGoal(identity, { mode: 'read', agent, goal: anchoredGoal(tools, goal) })
@@ -17,14 +16,14 @@ async function query(identity, agent, tools, goal, binding) {
 
 export async function readCodePredicates(identity, agent, workspace) {
   const result = await query(identity, agent, workspace.tools,
-    compound('prolog_predicates', [targetTerm(workspace.target), variable('Predicates')]), 'Predicates')
+    compound('prolog_predicates', [ontologyTerm(workspace.target), variable('Predicates')]), 'Predicates')
   if (result.type !== 'list' || result.tail !== null) throw new Error('invalid predicate list')
   return result.items
 }
 
 export async function readCodeSource(identity, agent, workspace, indicator) {
   const result = await query(identity, agent, workspace.tools,
-    compound('prolog_source', [targetTerm(workspace.target), indicator, variable('Source')]), 'Source')
+    compound('prolog_source', [ontologyTerm(workspace.target), indicator, variable('Source')]), 'Source')
   if (result.type !== 'binary') throw new Error('invalid source text')
   return decoder.decode(result.value)
 }
@@ -32,32 +31,13 @@ export async function readCodeSource(identity, agent, workspace, indicator) {
 // One signed cursor owns the snapshot for every chunk. Publish the assembled
 // text only after exhaustion; an interrupted read is never a complete view.
 export async function readCodeState(identity, agent, workspace, signal) {
-  let reply = await signedGoal(identity, { mode: 'cursor', agent,
-    goal: anchoredGoal(workspace.tools,
-      compound('prolog_source', [targetTerm(workspace.target), variable('Source')])) })
-  const stream = new TextDecoder('utf-8', { fatal: true })
-  const chunks = []
-  try {
-    while (reply.result === 'solution') {
-      signal?.throwIfAborted()
-      const term = readTerm(singleBinding({ ...reply, result: 'ok' }, 'Source'))
-      if (term.type !== 'compound' || term.functor !== 'source_chunk' || term.args.length !== 2 ||
-          term.args[0].type !== 'atom' || !['more', 'done'].includes(term.args[0].value) ||
-          term.args[1].type !== 'binary') throw new Error('invalid source chunk')
-      chunks.push(stream.decode(term.args[1].value, { stream: true }))
-      if (term.args[0].value === 'done') return chunks.join('') + stream.decode()
-      reply = await signedCursorCommand(identity, reply.cursor, 'next')
-    }
-    signal?.throwIfAborted()
-    throw new Error('Ontology source inspection was refused or incomplete.')
-  } finally {
-    if (reply.result === 'solution') await signedCursorCommand(identity, reply.cursor, 'stop')
-  }
+  return readTextProjection(identity, agent, workspace.tools,
+    compound('prolog_source', [ontologyTerm(workspace.target), variable('Source')]), 'Source', signal)
 }
 
 export async function prepareCodeEdit(identity, agent, workspace, indicator, baseline, source) {
   const result = await query(identity, agent, workspace.tools,
-    compound('prolog_edit_goal', [targetTerm(workspace.target), indicator,
+    compound('prolog_edit_goal', [ontologyTerm(workspace.target), indicator,
       text(baseline), text(source), variable('Edit')]), 'Edit')
   return formatClause(result)
 }

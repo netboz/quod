@@ -1,0 +1,21 @@
+{
+  "src/quod_client.erl": "33898275293bd21020ca4ec2ef6cd237a7b9d91b478395438018dd5b3326475e",
+  "test/quod_prolog_tests.erl": "6c15c61946b912eac9e4d49ba7ec2caac4ca7627bc9790ed34f6718c995c0103",
+  "test/quod_foreign_lifecycle_tests.erl": "e6e5df9641499515c5ad0ecd0f0e9559001bf3f87ca3f569624c741c3e762899",
+  "test/quod_physics_tests.erl": "8069b12dfaa433077a6af8073f7f7ef43bfea11c8a33265b71414806a029c028",
+  "client/src/simulation.js": "ba95231b28500f7ee68a85509700d4ffa4c20cc3b446a3c08d6a780295f7f4b0",
+  "client/test/simulation.test.js": "9b9fad6c51f32227a19f1a4b2d21bf3e51e67109ffd0440b181eedf03716877f",
+  "test/quod_gui_question_tests.erl": "1f81d846526dc1fd8ea2c1d7b91530efe2b44d17653062c646877a1d541fdc37",
+  "ui/src/World.tsx": "f41e58c4aca670aacf3065fcb8b7917faa8db26fae563a8323352e1df14184c5",
+  "src/quod_client_view.erl": "012d89027ef89bb13881c6f50478bbf1860d69eef00856734fcee10bd05dcce7",
+  "client/src/signed-view.js": "6875fb6a2b9079a0389e3cba8636ea2db388861d8690452555980419a2d05eb7",
+  "client/src/gui-view.js": "30a186a9d1211f4848a985ff20a4c4bf280c446c3476ad7fa0bcab2311ad2dee",
+  "client/src/gui-view.d.ts": "daef7a37158ae609fdd4b92835771b3c3838575d00351cb61cd4032760352284",
+  "client/src/question-controller.js": "b16bb46d1caf7ef367aee0095e1eb0e68652246001861f5725505121b01303db",
+  "client/src/question-controller.d.ts": "7aaaab330f8982561d7e589a186c55c8b1999c83f61a78b91b038d5b2e0678bf",
+  "client/test/gui-view.test.js": "e2b7226a0fa58076a20c0d7a7bfcd12d349d0e4ce8410e274e7d0058ef060412",
+  "client/test/question-controller.test.js": "f430e22bfbe2c8e7541cfe6ae4cfd693e9346bfdf264f3652673ccc9c68b1c08",
+  "ui/src/GuiQuestion.tsx": "ad7764830af1a4cfb0220755473bfa348d3f5fac59575b9c0c7d53bc34c359d2",
+  "ui/test/gui-question.fixture.html": "cbfbb414a845b53cecf7a73c92ed2f435b08b329e478971ec5879b1a4f00e0da",
+  "ui/test/gui-question.fixture.tsx": "df6f7b9696238ef304a34c7c224c1fbdd99bb4e0ffe3ba237d2c86e382e8cad9"
+}

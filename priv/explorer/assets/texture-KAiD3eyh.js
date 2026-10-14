@@ -1,0 +1,1 @@
+import{t as e}from"./texture.pure-DXuqJWwc.js";e();

@@ -1,0 +1,13 @@
+
+  VITE v8.1.5  ready in 645 ms
+
+  ➜  Local:   http://127.0.0.1:5178/
+1:33:07 AM [vite] (client) [Unhandled error] TypeError: Cannot read properties of null (reading 'material')
+ > test/gui-hardware.fixture.js:84:72
+    82 |  world.setWorkspace(model)
+    83 |  
+    84 |  const texture = EngineStore.LastCreatedScene.getMeshByName('workspace').material.emissiveTexture
+       |                                                                          ^
+    85 |  window.guiHardwareReady = Promise.all(['picture-image', 'icon_action-image'].map(name => {
+    86 |    const image = texture.getControlByName(name)
+

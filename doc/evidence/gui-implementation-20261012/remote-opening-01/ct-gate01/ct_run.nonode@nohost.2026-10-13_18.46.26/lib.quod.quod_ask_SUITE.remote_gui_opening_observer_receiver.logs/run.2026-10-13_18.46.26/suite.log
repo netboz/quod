@@ -1,0 +1,57 @@
+=== Suite started at 2026-10-13 18:46:26
+=== Starting test, 1 test cases
+=cases         1
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-10-13 18:46:26
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-10-13 18:46:27
+=ended         2026-10-13 18:46:35
+=result        ok
+=elapsed       8.108294s
+=case          quod_ask_SUITE:remote_gui_opening_observer_receiver
+=logfile       quod_ask_suite.remote_gui_opening_observer_receiver.html
+=started       2026-10-13 18:46:35
+=ended         2026-10-13 18:46:36
+=result        failed: {thrown,
+                           {{genesis_failed,
+                                {read_file,"test/fixtures/gui-components.pl",
+                                    enoent}},
+                            [{quod_committed_projection,read_terms,1,
+                                 [{file,
+                                      "/home/yan/src/quod/src/quod_committed_projection.erl"},
+                                  {line,79}]},
+                             {quod_ask_SUITE,
+                                 remote_gui_opening_observer_receiver,1,
+                                 [{file,
+                                      "/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                                  {line,792}]},
+                             {test_server,ts_tc,3,
+                                 [{file,"test_server.erl"},{line,1796}]},
+                             {test_server,run_test_case_eval1,6,
+                                 [{file,"test_server.erl"},{line,1305}]},
+                             {test_server,run_test_case_eval,9,
+                                 [{file,"test_server.erl"},{line,1237}]}]}}, [{quod_ask_SUITE,
+                                                                               remote_gui_opening_observer_receiver}]
+=elapsed       0.798112s
+=== *** FAILED test case 1 of 1 ***
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-10-13 18:46:36
+=ended         2026-10-13 18:46:36
+=result        ok
+=elapsed       0.004714s
+=group_time    9.001s
+=== TEST COMPLETE, 0 ok, 1 failed of 1 test cases
+
+=finished      2026-10-13 18:46:36
+=failed        1
+=successful    0
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  9270397

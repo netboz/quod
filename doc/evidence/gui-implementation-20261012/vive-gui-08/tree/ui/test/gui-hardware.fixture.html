@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Quod GUI headset check</title>
+<style>
+  body { margin: 0; background: #102029; color: #f5f1eb; font: 16px system-ui; }
+  header { padding: 12px; }
+  button { padding: 10px 18px; margin-right: 12px; }
+  canvas { display: block; width: 100vw; height: calc(100vh - 120px); }
+</style>
+<header>
+  <button id="enter">Enter VR</button><button id="show">Show panel</button>
+  <span id="status">Local control check. No ontology writes.</span>
+  <p>Try every control, scroll to the bottom, enter text with the keyboard, and adjust panel opacity.
+    Check readability, pointer targets and comfortable reach while wearing the headset.</p>
+</header>
+<canvas id="scene" aria-label="Quod GUI headset check"></canvas>
+<script type="module" src="./gui-hardware.fixture.js"></script>
+</html>

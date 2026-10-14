@@ -1,0 +1,43 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff1013ee780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff1013ee780) = -1 ENOENT (No such file or directory)
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47760, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", 0x7ff1013e9c00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", 0x7ff1013eb700) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 657
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(657, F2FS_IOC_GET_FEATURES, 0x7ff1013ebd34) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data-journal", 0x7ff1013ebc00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data-wal", 0x7ff1013ebbd0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 664
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 668
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/ActorSafetyLists", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/ActorSafetyLists", 0x7ff1013ec4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=420, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/ActorSafetyLists", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/ActorSafetyLists", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/ActorSafetyLists", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 684
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/FileTypePolicies", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/FileTypePolicies", 0x7ff1013ec4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=480, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/FileTypePolicies", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/FileTypePolicies", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 687
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/FileTypePolicies", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/DictationConnector", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/DictationConnector", 0x7ff1013ec4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=660, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/DictationConnector", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 689
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 687
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/History", {st_mode=S_IFREG|0600, st_size=4096, ...}) = 0
+unlink("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/History-wal") = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/History", {st_mode=S_IFREG|0600, st_size=204800, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Favicons", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Favicons", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
++++ exited with 0 +++

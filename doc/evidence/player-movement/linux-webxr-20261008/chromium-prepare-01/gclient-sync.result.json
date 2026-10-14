@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/home/yan/src/quod/client/_build/webxr-linux/depot_tools/gclient",
+    "sync",
+    "--no-history",
+    "--nohooks",
+    "--revision",
+    "src@refs/tags/157.0.8091.0",
+    "--jobs",
+    "4"
+  ],
+  "exit_code": 0,
+  "seconds": 1196.778
+}

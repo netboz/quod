@@ -1,0 +1,15 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "--release",
+    "--offline",
+    "--locked",
+    "--manifest-path",
+    "client/native/Cargo.toml",
+    "-p",
+    "quod-godot"
+  ],
+  "exit": 0,
+  "elapsed_seconds": 25.842209474998526
+}

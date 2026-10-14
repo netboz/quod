@@ -1,0 +1,28 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.27s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 5 tests
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... FAILED
+test tests::falling_and_retained_installation ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+
+failures:
+
+---- geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct stdout ----
+
+thread 'geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct' (348) panicked at src/geometry.rs:180:9:
+assertion `left == right` failed
+  left: None
+ right: Some(InvalidBody)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `--lib`

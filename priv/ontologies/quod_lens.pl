@@ -242,6 +242,8 @@ lifted(Encoding, Rank, High) :-
 %% stands for the view's own reading of the data — that nothing carries this
 %% work — depicts nothing rather than inventing a subject.
 subject(_Ontology, none, depicts_nothing) :- !.
+subject(_Ontology, ontology_ref(Namespace, Anchor),
+        depicts(Namespace, Anchor, ontology_ref(Namespace, Anchor))) :- !.
 subject(Ontology, Thing, depicts(Ontology, Thing)).
 
 %% A mark id is a view-scoped occurrence, short by construction: the subject's
@@ -280,8 +282,14 @@ leading(Count, [Code | Rest], [Code | Kept]) :-
 %% for editing; neither lens changes the target's source-read authorization.
 lens(<<"ontology_source">>, <<"complete current ontology state">>).
 lens(<<"predicate_source">>, <<"one predicate definition">>).
+lens(<<"ontology_policy">>, <<"ACL entry rules; actions reauthorize current state">>).
+lens(<<"ontology_interfaces">>, <<"explicit interface declarations; no invocation grant">>).
+lens(<<"ontology_routes">>, <<"live routes; addresses are not identities">>).
 encoding(<<"source_text">>, <<"ontology_source">>, <<"quod:prolog">>).
 encoding(<<"source_text">>, <<"predicate_source">>, <<"quod:prolog">>).
+encoding(<<"source_text">>, <<"ontology_policy">>, <<"quod:prolog">>).
+encoding(<<"source_text">>, <<"ontology_interfaces">>, <<"quod:prolog">>).
+encoding(<<"source_text">>, <<"ontology_routes">>, <<"quod:prolog">>).
 encoding_layout(<<"source_text">>, <<"text">>).
 source_chunk_bytes(16384).
 
@@ -290,6 +298,12 @@ rows(<<"ontology_source">>, [Target], [source(Chunk)]) :-
     source_rows(Target, chunks(Bytes), Chunk).
 rows(<<"predicate_source">>, [Target, Indicator], [source(Source)]) :-
     source_rows(Target, source(Indicator), Source).
+rows(<<"ontology_policy">>, [Target], [source(Chunk)]) :-
+    source_chunk_bytes(Bytes), source_rows(Target, policy_chunks(Bytes), Chunk).
+rows(<<"ontology_interfaces">>, [Target], [source(Chunk)]) :-
+    source_chunk_bytes(Bytes), source_rows(Target, interface_chunks(Bytes), Chunk).
+rows(<<"ontology_routes">>, [Target], [source(Chunk)]) :-
+    source_chunk_bytes(Bytes), source_rows(Target, route_chunks(Bytes), Chunk).
 source_rows(Target, Query, Source) :-
     quod:root::system_ontology(<<"quod:prolog">>, Anchor),
     <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, Anchor),
@@ -297,6 +311,9 @@ source_rows(Target, Query, Source) :-
 
 laid_out(Encoding, _Lens, [source(Source)], Source) :-
     encoding_layout(Encoding, <<"text">>).
+
+ontology_interface(view/3, <<"authored lens selection and encoding">>).
+ontology_interface(diagnosis/3, <<"unmet encoding requirements">>).
 
 %% --- the authored lens --------------------------------------------------------
 %% What may this work ship under. The front row is the answer: one mark per

@@ -1,0 +1,197 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 959 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Running Common Test suites...
+%%% quod_ask_SUITE: .
+%%% quod_ask_SUITE ==> remote_read_ignores_observer_routes: FAILED
+%%% quod_ask_SUITE ==> {undef,
+    [{quod_ask_SUITE,remote_read_ignores_observer_routes,
+         [[{watchdog,<0.7742.0>},
+           {target,<0.7734.0>},
+           {asker,<0.7736.0>},
+           {third,<0.7735.0>},
+           {target_pub,
+               <<106,149,209,21,76,187,129,68,151,125,158,211,151,109,235,107,
+                 127,126,130,119,54,235,120,238,223,25,216,16,88,171,67,219>>},
+           {asker_pub,
+               <<208,193,191,127,39,167,94,178,12,133,250,169,84,213,235,47,
+                 28,18,236,182,217,242,200,212,183,201,10,123,35,146,152,199>>},
+           {target_addr,{"127.0.0.1",15970}},
+           {third_pub,
+               <<45,116,157,27,134,113,35,169,58,230,38,217,226,11,3,183,236,
+                 20,195,85,128,76,235,219,97,240,0,102,87,44,199,27>>},
+           {third_addr,{"127.0.0.1",15972}},
+           {network_id,
+               <<244,230,127,207,191,165,123,15,189,99,43,102,153,131,81,190,
+                 86,10,231,127,98,247,146,213,76,172,78,246,157,194,197,121>>},
+           {target_anchor,
+               <<39,193,35,78,86,184,179,29,177,137,162,102,23,232,228,216,
+                 179,240,22,240,73,142,42,102,180,129,42,67,105,172,161,9>>},
+           {third_anchor,
+               <<17,154,161,140,56,141,216,70,163,215,183,170,13,241,145,8,
+                 165,221,161,92,4,133,127,161,161,215,133,111,134,50,4,110>>},
+           {fourth_anchor,
+               <<176,160,97,174,247,190,98,20,114,92,209,41,97,44,78,193,159,
+                 131,245,55,116,38,222,80,234,255,218,168,24,44,203,205>>},
+           {asker_anchor,
+               <<222,190,220,97,225,136,163,163,20,107,125,250,61,116,4,26,
+                 150,204,140,220,89,136,198,141,245,15,108,147,210,27,87,26>>},
+           {filter_symbol_name,<<"quod_r4_target_only_98EABAFF3CDD86F1">>},
+           {agent_ref,
+               {agent_instance_ref,<<"pets">>,
+                   <<222,190,220,97,225,136,163,163,20,107,125,250,61,116,4,26,
+                     150,204,140,220,89,136,198,141,245,15,108,147,210,27,87,26>>,
+                   {human_user,test_agent}}},
+           {agent_key,
+               {<<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,90,
+                  105,203,135,204,177,154,74,72,116,235,40,132,186,242,212,126>>,
+                <<112,109,49,160,78,140,187,76,42,164,151,222,11,220,216,89,
+                  167,207,86,232,185,221,80,90,72,101,99,217,211,141,87,120>>}},
+           {agent_pub,
+               <<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,90,
+                 105,203,135,204,177,154,74,72,116,235,40,132,186,242,212,126>>},
+           {client_peer,{127,0,0,1}},
+           {client_session,
+               #{public_key =>
+                     <<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,
+                       90,105,203,135,204,177,154,74,72,116,235,40,132,186,242,
+                       212,126>>,
+                 session_id =>
+                     <<49,81,30,57,171,232,102,42,63,70,18,161,75,255,21,186,
+                       151,191,180,227,216,129,230,10,203,248,43,255,200,197,
+                       161,181>>,
+                 expires_ms => 1791904002040}},
+           {client_auth,<80190.207.0>},
+           {tc_logfile,
+               "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-10-13_16.56.33/lib.quod.quod_ask_SUITE.cases.logs/run.2026-10-13_16.56.33/quod_ask_suite.remote_read_ignores_observer_routes.html"},
+           {tc_group_properties,[]},
+           {tc_group_path,[]},
+           {data_dir,
+               "/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+           {priv_dir,
+               "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-10-13_16.56.33/lib.quod.quod_ask_SUITE.cases.logs/run.2026-10-13_16.56.33/log_private/"}]],
+         []},
+     {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+     {test_server,run_test_case_eval1,6,
+         [{file,"test_server.erl"},{line,1305}]},
+     {test_server,run_test_case_eval,9,
+         [{file,"test_server.erl"},{line,1237}]}]}
+
+%%% quod_ask_SUITE ==> remote_read_ignores_lying_validator_route: FAILED
+%%% quod_ask_SUITE ==> {undef,
+    [{quod_ask_SUITE,remote_read_ignores_lying_validator_route,
+         [[{watchdog,<0.7745.0>},
+           {target,<0.7734.0>},
+           {asker,<0.7736.0>},
+           {third,<0.7735.0>},
+           {target_pub,
+               <<106,149,209,21,76,187,129,68,151,125,158,211,151,109,235,107,
+                 127,126,130,119,54,235,120,238,223,25,216,16,88,171,67,219>>},
+           {asker_pub,
+               <<208,193,191,127,39,167,94,178,12,133,250,169,84,213,235,47,
+                 28,18,236,182,217,242,200,212,183,201,10,123,35,146,152,199>>},
+           {target_addr,{"127.0.0.1",15970}},
+           {third_pub,
+               <<45,116,157,27,134,113,35,169,58,230,38,217,226,11,3,183,236,
+                 20,195,85,128,76,235,219,97,240,0,102,87,44,199,27>>},
+           {third_addr,{"127.0.0.1",15972}},
+           {network_id,
+               <<244,230,127,207,191,165,123,15,189,99,43,102,153,131,81,190,
+                 86,10,231,127,98,247,146,213,76,172,78,246,157,194,197,121>>},
+           {target_anchor,
+               <<39,193,35,78,86,184,179,29,177,137,162,102,23,232,228,216,
+                 179,240,22,240,73,142,42,102,180,129,42,67,105,172,161,9>>},
+           {third_anchor,
+               <<17,154,161,140,56,141,216,70,163,215,183,170,13,241,145,8,
+                 165,221,161,92,4,133,127,161,161,215,133,111,134,50,4,110>>},
+           {fourth_anchor,
+               <<176,160,97,174,247,190,98,20,114,92,209,41,97,44,78,193,159,
+                 131,245,55,116,38,222,80,234,255,218,168,24,44,203,205>>},
+           {asker_anchor,
+               <<222,190,220,97,225,136,163,163,20,107,125,250,61,116,4,26,
+                 150,204,140,220,89,136,198,141,245,15,108,147,210,27,87,26>>},
+           {filter_symbol_name,<<"quod_r4_target_only_98EABAFF3CDD86F1">>},
+           {agent_ref,
+               {agent_instance_ref,<<"pets">>,
+                   <<222,190,220,97,225,136,163,163,20,107,125,250,61,116,4,26,
+                     150,204,140,220,89,136,198,141,245,15,108,147,210,27,87,26>>,
+                   {human_user,test_agent}}},
+           {agent_key,
+               {<<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,90,
+                  105,203,135,204,177,154,74,72,116,235,40,132,186,242,212,126>>,
+                <<112,109,49,160,78,140,187,76,42,164,151,222,11,220,216,89,
+                  167,207,86,232,185,221,80,90,72,101,99,217,211,141,87,120>>}},
+           {agent_pub,
+               <<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,90,
+                 105,203,135,204,177,154,74,72,116,235,40,132,186,242,212,126>>},
+           {client_peer,{127,0,0,1}},
+           {client_session,
+               #{public_key =>
+                     <<245,129,193,220,0,68,138,31,155,254,141,145,115,116,87,
+                       90,105,203,135,204,177,154,74,72,116,235,40,132,186,242,
+                       212,126>>,
+                 session_id =>
+                     <<49,81,30,57,171,232,102,42,63,70,18,161,75,255,21,186,
+                       151,191,180,227,216,129,230,10,203,248,43,255,200,197,
+                       161,181>>,
+                 expires_ms => 1791904002040}},
+           {client_auth,<80190.207.0>},
+           {tc_logfile,
+               "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-10-13_16.56.33/lib.quod.quod_ask_SUITE.cases.logs/run.2026-10-13_16.56.33/quod_ask_suite.remote_read_ignores_lying_validator_route.html"},
+           {tc_group_properties,[]},
+           {tc_group_path,[]},
+           {data_dir,
+               "/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+           {priv_dir,
+               "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-10-13_16.56.33/lib.quod.quod_ask_SUITE.cases.logs/run.2026-10-13_16.56.33/log_private/"}]],
+         []},
+     {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+     {test_server,run_test_case_eval1,6,
+         [{file,"test_server.erl"},{line,1305}]},
+     {test_server,run_test_case_eval,9,
+         [{file,"test_server.erl"},{line,1237}]}]}
+
+EXPERIMENTAL: Writing retry specification at /home/yan/src/quod/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 2 tests. Passed 1 tests. 
+Results written to "/home/yan/src/quod/_build/test/logs/index.html".
+===> Failures occurred running tests: 2

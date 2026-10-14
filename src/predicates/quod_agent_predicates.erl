@@ -16,7 +16,7 @@ agent. The destination is explicit and its preparation policy is pure Prolog.
 
 -export([quod_predicate_module/0, load/1,
          sign_agent_request/3, reconcile_agent_hosts/3, reconcile_agent_observers/3,
-         local_node_agent/3, prepare_agent_key_custody/3]).
+         local_node_agent/3, installed_agent_reaction/3, prepare_agent_key_custody/3]).
 
 quod_predicate_module() -> true.
 
@@ -31,7 +31,9 @@ load(Est) ->
                                            ?MODULE, prepare_agent_key_custody),
     WithSigning = quod_predicates:register(WithCustody, {sign_agent_request, 2}, query,
                                            ?MODULE, sign_agent_request),
-    WithHosting = quod_predicates:register(WithSigning, {reconcile_agent_hosts, 1}, query,
+    WithHandler = quod_predicates:register(WithSigning, {installed_agent_reaction, 5}, query,
+                                            ?MODULE, installed_agent_reaction),
+    WithHosting = quod_predicates:register(WithHandler, {reconcile_agent_hosts, 1}, query,
                                             ?MODULE, reconcile_agent_hosts),
     quod_predicates:register(WithHosting, {reconcile_agent_observers, 1}, query,
                               ?MODULE, reconcile_agent_observers).
@@ -43,6 +45,47 @@ local_node_agent({local_node_agent, Node}, Next, St) ->
         {ok, NodeRef} ->
             erlog_int:unify_prove_body(Node, NodeRef, Next, St);
         _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+    end.
+
+%% This observation stays inside native read-only preparation. It grants no
+%% reaction authority and cannot turn current installation into a material read.
+installed_agent_reaction({installed_agent_reaction, I0, E0, K0, C0, Token}, Next,
+                         St = #est{bs = Bs}) ->
+    Context = quod_predicates:context(St),
+    case quod_predicates:ctx_kind(Context) of
+        proof -> ok;
+        Kind -> erlog_int:erlog_error(
+            {context_violation, installed_agent_reaction, query, Kind}, St)
+    end,
+    case quod_proof_session:read_only_state(St) of
+        true -> ok;
+        false -> erlog_int:erlog_error(
+            {context_violation, installed_agent_reaction, query, write_proof}, St)
+    end,
+    [Instance, Epoch, Key, Clause] = erlog_int:dderef([I0,E0,K0,C0], Bs),
+    case quod_wire_term:is_ground([Instance,Epoch,Key]) of
+        true -> ok;
+        false -> erlog_int:instantiation_error(St)
+    end,
+    case {Epoch, Key, Clause} of
+        {E, <<_:256>>, {':-', {react_on, _, _}, _}} when is_integer(E), E > 0 -> ok;
+        _ -> erlog_int:domain_error(agent_handler, {Instance,Epoch,Key,Clause}, St)
+    end,
+    case quod_runtime_predicates:scope_identity(St) of
+        {ok, {Ns, Anchor}} ->
+            Remaining = case quod_scope_session:remaining_ms() of
+                {ok, Budget} -> Budget;
+                error -> quod_proof_context:remaining_ms()
+            end,
+            case quod_runtime:installed_agent_reaction(
+                   Ns, Anchor, quod_predicates:ctx_height(Context),
+                   {agent,Instance,Epoch,Key}, Clause, quod_time:mono_ms()+Remaining) of
+                {ok, Incarnation} ->
+                    Digest = crypto:hash(sha256,term_to_binary(Incarnation)),
+                    erlog_int:unify_prove_body(Token,Digest,Next,St);
+                {error, Reason} -> quod_predicates:fail_reason(Reason,St)
+            end;
+        error -> quod_predicates:fail_reason(scope_identity_unavailable,St)
     end.
 
 -doc "Ask the existing resource owner to reconcile from its own committed selection.".
@@ -143,29 +186,20 @@ sign_agent_request({sign_agent_request, Typed0, Signature}, Next, #est{bs = Bs} 
         false -> erlog_int:erlog_error({context_violation,sign_agent_request,query,write_proof},St)
     end.
 
-sign_typed({agent_goal_v1, Network,
-            {agent_instance_ref, Ns, Anchor, _} = AgentRef, InstanceText, Pub,
-            Operation, Deadline, Mode, Parser, GoalText} = Typed, Signature, Next, St) ->
-    Request = #{network_identity => Network, agent_namespace => Ns,
-                agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
-                signing_public_key => Pub, operation_id => Operation,
-                not_after_ms => Deadline, mode => Mode, parser_version => Parser,
-                goal_text => GoalText},
+sign_typed(Typed, Signature, Next, St) ->
     case quod_wire_term:is_ground(Typed) of
         false -> erlog_int:instantiation_error(St);
         true ->
-            case quod_client_goal:encode(Request) of
-                {error,_} -> erlog_int:domain_error(agent_request,Typed,St);
-                {ok,_} ->
+            case quod_client_goal:encode_typed(Typed) of
+                {error, _} -> erlog_int:domain_error(agent_request, Typed, St);
+                {ok, #{agent_namespace := Ns, agent_genesis_anchor := Anchor} = Request, _} ->
                     case quod_runtime_predicates:scope_identity(St) of
                         error -> quod_predicates:fail_reason({scope_identity_unavailable,Ns},St);
                         {ok,{Ns,Anchor}} ->
                             case quod_node_actor:principal() of
                                 {ok,NodePrincipal} ->
-                                    case {quod_agent_ref:from_text(Ns,Anchor,InstanceText,Parser),
-                                          quod_wire_term:encode_canonical(AgentRef),
-                                          quod_agent_ref:materialize_principal(NodePrincipal)} of
-                                        {{ok,#{blob := Blob}},{ok,Blob},{ok,NodeRef}} ->
+                                    case quod_agent_ref:materialize_principal(NodePrincipal) of
+                                        {ok,NodeRef} ->
                                             authorize_sign(Request,Typed,NodeRef,Signature,Next,St);
                                         _ -> erlog_int:domain_error(agent_request,Typed,St)
                                     end;
@@ -175,11 +209,6 @@ sign_typed({agent_goal_v1, Network,
                             {context_violation,sign_agent_request,query,foreign_scope},St)
                     end
             end
-    end;
-sign_typed(Typed, _Signature, _Next, St) ->
-    case quod_wire_term:is_ground(Typed) of
-        false -> erlog_int:instantiation_error(St);
-        true -> erlog_int:domain_error(agent_request,Typed,St)
     end.
 
 authorize_sign(Request, Typed, NodeRef,

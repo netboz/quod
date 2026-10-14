@@ -4,6 +4,19 @@ import { test } from 'node:test'
 import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
 import { readTerm, readList } from '../src/prolog-read.js'
 import { readMarks } from '../src/marks.js'
+
+test('multiple ontology mark occurrences retain one exact instance and no body identity', () => {
+  const anchor = '\\x7\\'.repeat(32)
+  const target = `ontology_ref(<<"private:ontology">>,<<"${anchor}">>)`
+  const mark = id => `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,10),f(<<"height">>,10),f(<<"depth">>,10)],` +
+    `transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,[]),unlabelled,depicts(<<"private:ontology">>,<<"${anchor}">>,${target}))`
+  const [first, second] = readMarks(`[${mark('first')},${mark('second')}]`)
+  assert.notEqual(first.id, second.id)
+  assert.deepEqual(first.depicts, second.depicts)
+  assert.deepEqual(first.depicts.anchor, new Uint8Array(32).fill(7))
+  assert.equal(first.depicts.entity.functor, 'ontology_ref')
+  assert.equal(first.body, undefined)
+})
 import { diagnosisGoal, viewGoal } from '../src/lens.js'
 
 // Exactly what a signed read of quod:lens returns for the authored lens: one

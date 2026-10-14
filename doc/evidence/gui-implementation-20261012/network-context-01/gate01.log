@@ -1,0 +1,37 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_committed_projection_tests:network_absence_waits_before_the_entire_content_batch_test/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,
+                            {error,{outcome_index,outcome_index_conflict}}},
+                        [{quod_committed_projection_tests,
+                             network_absence_waits_before_the_entire_content_batch_test,
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_committed_projection_tests.erl"},
+                              {line,42}]},
+                         {eunit_test,'-mf_wrapper/2-fun-0-',2,
+                             [{file,"eunit_test.erl"},{line,285}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 0.641 seconds
+[0;31m27 tests, 1 failures
+[0m===> Error running tests

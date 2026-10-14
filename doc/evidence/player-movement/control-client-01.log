@@ -1,0 +1,10 @@
+✔ client/test/signed-client.test.js (234.459122ms)
+✔ client/test/simulation.test.js (552.053764ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 609.605842

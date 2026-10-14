@@ -1,0 +1,9 @@
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=57, si_uid=1000, si_status=0, si_utime=1 /* 0.01 s */, si_stime=1 /* 0.01 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=65, si_uid=1000, si_status=0, si_utime=1 /* 0.01 s */, si_stime=1 /* 0.01 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=73, si_uid=1000, si_status=0, si_utime=7 /* 0.07 s */, si_stime=5 /* 0.05 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=81, si_uid=1000, si_status=241, si_utime=9 /* 0.09 s */, si_stime=3 /* 0.03 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=30, si_uid=1000, si_status=0, si_utime=47 /* 0.47 s */, si_stime=13 /* 0.13 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=31, si_uid=1000, si_status=0, si_utime=151 /* 1.51 s */, si_stime=40 /* 0.40 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=14, si_uid=1000, si_status=0, si_utime=197 /* 1.97 s */, si_stime=57 /* 0.57 s */} ---
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=4, si_uid=1000, si_status=241, si_utime=3 /* 0.03 s */, si_stime=3 /* 0.03 s */} ---
++++ exited with 0 +++

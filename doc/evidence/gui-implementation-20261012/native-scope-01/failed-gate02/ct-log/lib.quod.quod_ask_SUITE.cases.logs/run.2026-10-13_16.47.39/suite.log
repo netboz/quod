@@ -1,0 +1,87 @@
+=== Suite started at 2026-10-13 16:47:39
+=== Starting test, 3 test cases
+=cases         3
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-10-13 16:47:39
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-10-13 16:47:40
+=ended         2026-10-13 16:47:50
+=result        ok
+=elapsed       9.925676s
+=case          quod_ask_SUITE:remote_native_read_uses_selected_observer
+=logfile       quod_ask_suite.remote_native_read_uses_selected_observer.html
+=started       2026-10-13 16:47:50
+=ended         2026-10-13 16:47:50
+=result        failed: {{assertEqual,
+                         [{module,quod_ask_SUITE},
+                          {line,734},
+                          {expression,
+                           "Read ( Identity , { current_executor_key , Key } )"},
+                          {expected,
+                           {ok,
+                            {current_executor_key,
+                             <<97,83,241,44,157,26,250,224,29,221,2,76,204,
+                               60,168,36,192,192,187,67,7,150,158,151,120,
+                               46,198,0,55,69,23,122>>}}},
+                          {value,
+                           {fail,
+                            [{current_executor_key,
+                              <<97,83,241,44,157,26,250,224,29,221,2,76,
+                                204,60,168,36,192,192,187,67,7,150,158,
+                                151,120,46,198,0,55,69,23,122>>}]}}]},
+                        [{quod_ask_SUITE,
+                          remote_native_read_uses_selected_observer,1,
+                          [{file,"/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                           {line,734}]},
+                         {test_server,ts_tc,3,
+                          [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                          [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                          [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                       remote_native_read_uses_selected_observer,
+                                                                       734},
+                                                                      {test_server,
+                                                                       ts_tc,
+                                                                       1796},
+                                                                      {test_server,
+                                                                       run_test_case_eval1,
+                                                                       1305},
+                                                                      {test_server,
+                                                                       run_test_case_eval,
+                                                                       1237}]
+=elapsed       0.089156s
+=== *** FAILED test case 1 of 3 ***
+=case          quod_ask_SUITE:remote_plain_read_excludes_live_observer
+=logfile       quod_ask_suite.remote_plain_read_excludes_live_observer.html
+=started       2026-10-13 16:47:50
+=ended         2026-10-13 16:47:50
+=result        ok
+=elapsed       0.059750s
+=case          quod_ask_SUITE:remote_plain_read_rejects_lying_validator
+=logfile       quod_ask_suite.remote_plain_read_rejects_lying_validator.html
+=started       2026-10-13 16:47:50
+=ended         2026-10-13 16:47:50
+=result        ok
+=elapsed       0.027175s
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-10-13 16:47:50
+=ended         2026-10-13 16:47:50
+=result        ok
+=elapsed       0.017966s
+=group_time    10.271s
+=== TEST COMPLETE, 2 ok, 1 failed of 3 test cases
+
+=finished      2026-10-13 16:47:50
+=failed        1
+=successful    2
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  10486348

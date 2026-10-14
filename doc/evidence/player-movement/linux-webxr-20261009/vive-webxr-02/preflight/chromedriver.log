@@ -1,0 +1,307 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 34437.
+[2120270:2120270:1009/121323.498594:WARNING:ui/ozone/platform/wayland/common/drm_render_node_path_finder.cc:178] Preferred drm_render_node not found, picking nvidia-drm
+[2120270:2120270:1009/121324.089144:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wl_shm version 1 but version 2 is available.
+[2120270:2120270:1009/121324.089201:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_cursor_shape_manager_v1 version 1 but version 2 is available.
+[2120270:2120270:1009/121324.089225:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_pointer_gestures_v1 version 1 but version 3 is available.
+[2120270:2120270:1009/121324.089255:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to ext_idle_notifier_v1 version 1 but version 2 is available.
+[2120270:2120270:1009/121324.089347:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_color_manager_v1 version 1 but version 3 is available.
+[2120270:2120270:1009/121324.089380:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_linux_dmabuf_v1 version 4 but version 5 is available.
+[2120270:2120270:1009/121324.089462:ERROR:ui/ozone/platform/wayland/host/wayland_seat.cc:91] Not implemented reached in static void ui::WaylandSeat::OnName(void *, wl_seat *, const char *). 
+[2120270:2120270:1009/121324.090946:ERROR:ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.cc:395] Not implemented reached in static void ui::WaylandZwpLinuxDmabuf::OnTrancheFlags(void *, zwp_linux_dmabuf_feedback_v1 *, uint32_t). 
+[2120270:2120270:1009/121324.546299:WARNING:chrome/browser/signin/account_consistency_mode_manager.cc:74] Desktop Identity Consistency cannot be enabled as no OAuth client ID and client secret have been configured.
+[2120270:2120270:1009/121324.565306:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565322:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565325:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565329:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565332:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565335:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565338:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565341:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565345:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565348:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565352:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565355:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565358:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565361:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565364:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565367:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565370:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565373:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565376:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565380:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565383:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565397:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565400:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565404:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565407:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565410:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565413:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565416:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565419:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565423:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565426:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565429:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565432:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565435:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565438:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.565441:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2120270:2120270:1009/121324.589146:ERROR:ui/ozone/platform/wayland/host/wayland_screen.cc:479] Not implemented reached in virtual bool ui::WaylandScreen::IsScreenSaverActive() const. 
+
+DevTools listening on ws://127.0.0.1:35291/devtools/browser/7cb61afa-c149-44f6-a3fa-86103568bf59
+[2120270:2120270:1009/121324.664193:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+[2120270:2120270:1009/121324.664206:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+[2120339:2120339:1009/121324.719331:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+[2120339:2120339:1009/121324.724266:ERROR:ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc:248] '--ozone-platform=wayland' is not compatible with Vulkan. Consider switching to '--ozone-platform=x11' or disabling Vulkan
+[2120373:1:1009/121324.748035:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2120270:2120270:1009/121324.936376:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[2120270:2120270:1009/121324.936749:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[2120403:1:1009/121324.951020:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2120405:1:1009/121324.958675:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2120270:2120270:1009/121324.988912:ERROR:ui/ozone/platform/wayland/host/xdg_toplevel.cc:289] Not implemented reached in static void ui::XdgToplevel::OnWmCapabilities(void *, xdg_toplevel *, wl_array *). 
+[2120270:2120270:1009/121325.208726:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[2120270:2120270:1009/121325.632006:ERROR:ui/ozone/platform/wayland/host/wayland_pointer.cc:281] Not implemented reached in static void ui::WaylandPointer::OnAxisRelativeDirection(void *, wl_pointer *, uint32_t, uint32_t). 
+[2120507:1:1009/121325.974981:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2120519:2120519:1009/121326.299251:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:91] OpenXrExtensionEnumeration: Supported Extensions Begin
+[2120519:2120519:1009/121326.299408:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_binding_modification version=1
+[2120519:2120519:1009/121326.299541:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_color_scale_bias version=5
+[2120519:2120519:1009/121326.299605:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_cylinder version=4
+[2120519:2120519:1009/121326.299639:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_depth version=6
+[2120519:2120519:1009/121326.299687:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_equirect2 version=1
+[2120519:2120519:1009/121326.299741:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_convert_timespec_time version=1
+[2120519:2120519:1009/121326.299774:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_extended_struct_name_lengths version=2
+[2120519:2120519:1009/121326.299825:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_locate_spaces version=1
+[2120519:2120519:1009/121326.299857:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_maintenance1 version=1
+[2120519:2120519:1009/121326.299897:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_opengl_enable version=12
+[2120519:2120519:1009/121326.299951:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_opengl_es_enable version=10
+[2120519:2120519:1009/121326.299983:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_swapchain_usage_input_attachment_bit version=3
+[2120519:2120519:1009/121326.300027:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_visibility_mask version=2
+[2120519:2120519:1009/121326.300088:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_enable version=10
+[2120519:2120519:1009/121326.300118:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_enable2 version=4
+[2120519:2120519:1009/121326.300158:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_swapchain_format_list version=5
+[2120519:2120519:1009/121326.300260:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_active_action_set_priority version=1
+[2120519:2120519:1009/121326.300291:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_dpad_binding version=1
+[2120519:2120519:1009/121326.300326:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_eye_gaze_interaction version=2
+[2120519:2120519:1009/121326.300385:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_future version=2
+[2120519:2120519:1009/121326.300417:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_interaction version=2
+[2120519:2120519:1009/121326.300453:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_tracking version=4
+[2120519:2120519:1009/121326.300506:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_tracking_data_source version=1
+[2120519:2120519:1009/121326.300666:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hp_mixed_reality_controller version=1
+[2120519:2120519:1009/121326.300847:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_local_floor version=1
+[2120519:2120519:1009/121326.300929:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_samsung_odyssey_controller version=1
+[2120519:2120519:1009/121326.300986:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_user_presence version=1
+[2120519:2120519:1009/121326.301040:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_ANDROID_face_tracking version=1
+[2120519:2120519:1009/121326.301114:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_BD_controller_interaction version=2
+[2120519:2120519:1009/121326.301155:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_display_refresh_rate version=1
+[2120519:2120519:1009/121326.301230:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_face_tracking2 version=1
+[2120519:2120519:1009/121326.301287:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_touch_controller_pro version=1
+[2120519:2120519:1009/121326.301344:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_touch_controller_proximity version=1
+[2120519:2120519:1009/121326.301401:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_facial_tracking version=3
+[2120519:2120519:1009/121326.301458:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_vive_cosmos_controller_interaction version=1
+[2120519:2120519:1009/121326.301516:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_vive_focus3_controller_interaction version=2
+[2120519:2120519:1009/121326.301574:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_META_touch_controller_plus version=1
+[2120519:2120519:1009/121326.301632:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_ML_ml2_controller_interaction version=1
+[2120519:2120519:1009/121326.301690:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MND_headless version=3
+[2120519:2120519:1009/121326.301748:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MND_swapchain_usage_input_attachment_bit version=2
+[2120519:2120519:1009/121326.301805:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MSFT_unbounded_reference_space version=1
+[2120519:2120519:1009/121326.301871:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_OPPO_controller_interaction version=1
+[2120519:2120519:1009/121326.301940:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXTX_overlay version=5
+[2120519:2120519:1009/121326.301998:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_ball_on_a_stick_controller version=1
+[2120519:2120519:1009/121326.302063:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_blubur_s1 version=1
+[2120519:2120519:1009/121326.302127:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_egl_enable version=2
+[2120519:2120519:1009/121326.302190:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_flipvr version=1
+[2120519:2120519:1009/121326.302250:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_force_feedback_curl version=1
+[2120519:2120519:1009/121326.302311:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_hydra version=1
+[2120519:2120519:1009/121326.302370:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_oculus_remote version=1
+[2120519:2120519:1009/121326.302427:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_psvr2_interaction version=1
+[2120519:2120519:1009/121326.302484:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_system_buttons version=1
+[2120519:2120519:1009/121326.302541:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_xdev_space version=1
+[2120519:2120519:1009/121326.302600:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_debug_utils version=5
+[2120519:2120519:1009/121326.302658:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:96] OpenXrExtensionEnumeration: Supported Extensions End
+[2120519:2120519:1009/121326.302769:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:123] CreateInstance
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Chromium 157
+	createInfo->applicationInfo.applicationVersion: 8091
+	createInfo->applicationInfo.engineName: Chromium
+	createInfo->applicationInfo.engineVersion: 8091
+	createInfo->applicationInfo.apiVersion: 1.0.53
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+LOG in xrGetSystem: Selected devices
+	Head: 'HTC Vive. MV'
+	Eyes: '<none>'
+	Left: 'HTC Vive. Controller MV'
+	Right: 'HTC Vive. Controller MV'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+[2120519:2120519:1009/121327.789209:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:97] CreateInstanceWithCreateInfo
+[2120519:2120519:1009/121327.789279:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:115] OnPlatformCreateInfoResult
+[2120519:2120614:1009/121327.789990:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=2160 maxImageRectHeight=2400 recommendedImageRectWidth=1512 recommendedImageRectHeight=1680
+[2120519:2120614:1009/121327.790118:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=2160 maxImageRectHeight=2400 recommendedImageRectWidth=1512 recommendedImageRectHeight=1680
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_SUCCESS
+	vulkanInstance: 0x3bd4009db800
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+[2120519:2120614:1009/121327.868158:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:189] Initialize maxImageDimension2D=32768
+LOG in xrGetVulkanGraphicsDeviceKHR: Creation of VkDevice:
+	result: VK_SUCCESS
+	vulkanDevice: 0x3bd4001cc050
+	vulkanInstance: 0x3bd4009db800
+	external_fence_fd: true
+	external_semaphore_fd: true
+	timelineSemaphore: true
+	extensions:
+		VK_KHR_dedicated_allocation
+		VK_KHR_external_fence
+		VK_KHR_external_memory
+		VK_KHR_external_semaphore
+		VK_KHR_get_memory_requirements2
+		VK_KHR_external_memory_fd
+		VK_KHR_image_format_list
+		VK_EXT_external_memory_dma_buf
+		VK_KHR_external_semaphore_fd
+		VK_KHR_external_fence_fd
+		VK_KHR_timeline_semaphore
+[2120519:2120614:1009/121327.930332:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:670] InitSession : Vendor Id: 42 : System Name: Monado: HTC Vive. MV
+[2120519:2120614:1009/121327.931933:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:104] OpenXR Vulkan swapchain format negotiated: 50
+[2120519:2120614:1009/121327.935203:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_VIEWER is_enabled=1 is_required=1
+[2120519:2120614:1009/121327.935358:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_LOCAL is_enabled=1 is_required=1
+[2120519:2120614:1009/121327.935478:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_LOCAL_FLOOR is_enabled=1 is_required=1
+[2120519:2120614:1009/121327.935580:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Unknown to: Idle
+[2120519:2120614:1009/121327.935671:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Idle to: Ready
+[2120519:2120614:1009/121327.935764:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:869] OnOpenXrSessionStarted Result: 0
+[2120519:2120614:1009/121327.945455:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:217] CreateSharedImages: SwapchainImageSize=3024x1680 TransferSize=3024x1680
+[2120519:2120614:1009/121327.946663:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120614:1009/121327.947340:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 0 via GBM native pixmap
+[2120519:2120614:1009/121327.948036:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120614:1009/121327.948631:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 1 via GBM native pixmap
+[2120519:2120614:1009/121327.948919:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120614:1009/121327.949561:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 2 via GBM native pixmap
+[2120519:2120614:1009/121327.950280:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:1350] OnContextProviderCreated GL_CHROMIUM_gpu_fence supported=1
+[2120519:2120614:1009/121328.180246:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=invalid, new_interaction_profile=invalid, from_hand_tracker=0
+[2120519:2120614:1009/121328.180320:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=invalid, new_interaction_profile=invalid, from_hand_tracker=0
+[2120519:2120614:1009/121328.188087:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Ready to: Synchronized
+[2120519:2120614:1009/121328.188200:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Synchronized to: Visible
+[2120519:2120614:1009/121328.188267:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Visible to: Focused
+[2120519:2120614:1009/121328.191873:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=invalid, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120614:1009/121328.191938:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=invalid, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120614:1009/121328.191997:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120614:1009/121328.192268:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120614:1009/121328.195075:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120614:1009/121328.195161:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120669:1:1009/121329.192881:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2120519:2120519:1009/121329.859575:VERBOSE1:device/vr/openxr/openxr_device.cc:289] ShutdownSession
+[2120519:2120614:1009/121329.859956:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:88] ExitPresent reason=8
+[2120519:2120614:1009/121329.862313:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:88] ExitPresent reason=2
+[2120519:2120614:1009/121329.862407:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Focused to: Unknown
+[2120519:2120614:1009/121329.911895:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:288] CleanUp
+[2120519:2120519:1009/121330.142235:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:97] CreateInstanceWithCreateInfo
+[2120519:2120519:1009/121330.142501:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:115] OnPlatformCreateInfoResult
+[2120519:2120519:1009/121330.142767:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:123] CreateInstance
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Chromium 157
+	createInfo->applicationInfo.applicationVersion: 8091
+	createInfo->applicationInfo.engineName: Chromium
+	createInfo->applicationInfo.engineVersion: 8091
+	createInfo->applicationInfo.apiVersion: 1.0.53
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+LOG in xrGetSystem: Selected devices
+	Head: 'HTC Vive. MV'
+	Eyes: '<none>'
+	Left: 'HTC Vive. Controller MV'
+	Right: 'HTC Vive. Controller MV'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+[2120519:2120706:1009/121330.197675:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=2160 maxImageRectHeight=2400 recommendedImageRectWidth=1512 recommendedImageRectHeight=1680
+[2120519:2120706:1009/121330.197976:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=2160 maxImageRectHeight=2400 recommendedImageRectWidth=1512 recommendedImageRectHeight=1680
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_SUCCESS
+	vulkanInstance: 0x3bd4009db800
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+[2120519:2120706:1009/121330.222270:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:189] Initialize maxImageDimension2D=32768
+LOG in xrGetVulkanGraphicsDeviceKHR: Creation of VkDevice:
+	result: VK_SUCCESS
+	vulkanDevice: 0x3bd4001cc050
+	vulkanInstance: 0x3bd4009db800
+	external_fence_fd: true
+	external_semaphore_fd: true
+	timelineSemaphore: true
+	extensions:
+		VK_KHR_dedicated_allocation
+		VK_KHR_external_fence
+		VK_KHR_external_memory
+		VK_KHR_external_semaphore
+		VK_KHR_get_memory_requirements2
+		VK_KHR_external_memory_fd
+		VK_KHR_image_format_list
+		VK_EXT_external_memory_dma_buf
+		VK_KHR_external_semaphore_fd
+		VK_KHR_external_fence_fd
+		VK_KHR_timeline_semaphore
+[2120519:2120706:1009/121330.343470:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:670] InitSession : Vendor Id: 42 : System Name: Monado: HTC Vive. MV
+[2120519:2120706:1009/121330.348635:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:104] OpenXR Vulkan swapchain format negotiated: 50
+[2120519:2120706:1009/121330.361208:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_VIEWER is_enabled=1 is_required=1
+[2120519:2120706:1009/121330.361549:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_LOCAL is_enabled=1 is_required=1
+[2120519:2120706:1009/121330.361919:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:617] EnableSupportedFeatures feature=REF_SPACE_LOCAL_FLOOR is_enabled=1 is_required=1
+[2120519:2120706:1009/121330.362843:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Unknown to: Idle
+[2120519:2120706:1009/121330.363224:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Idle to: Ready
+[2120519:2120706:1009/121330.363512:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:869] OnOpenXrSessionStarted Result: 0
+[2120519:2120706:1009/121330.380239:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:217] CreateSharedImages: SwapchainImageSize=3024x1680 TransferSize=3024x1680
+[2120519:2120706:1009/121330.381904:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120706:1009/121330.384775:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 0 via GBM native pixmap
+[2120519:2120706:1009/121330.386652:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120706:1009/121330.390813:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 1 via GBM native pixmap
+[2120519:2120706:1009/121330.392535:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:461] ImportDmaBufImage: planes=1 modifier=0x300000000606014
+[2120519:2120706:1009/121330.394653:VERBOSE1:device/vr/openxr/linux/openxr_graphics_binding_vulkan.cc:273] CreateSharedImages: slot 2 via GBM native pixmap
+[2120519:2120706:1009/121330.396480:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:1350] OnContextProviderCreated GL_CHROMIUM_gpu_fence supported=1
+[2120519:2120706:1009/121330.415436:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=invalid, new_interaction_profile=invalid, from_hand_tracker=0
+[2120519:2120706:1009/121330.415710:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=invalid, new_interaction_profile=invalid, from_hand_tracker=0
+[2120519:2120706:1009/121330.429288:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Ready to: Synchronized
+[2120519:2120706:1009/121330.430083:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Synchronized to: Visible
+[2120519:2120706:1009/121330.430688:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Visible to: Focused
+[2120519:2120706:1009/121330.437848:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=invalid, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120706:1009/121330.438240:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=invalid, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120706:1009/121330.439682:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120706:1009/121330.440941:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120706:1009/121330.449793:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=left, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120706:1009/121330.450154:VERBOSE1:device/vr/openxr/openxr_controller.cc:581] UpdateInteractionProfile: controller type=right, old_interaction_profile=htc-vive, new_interaction_profile=htc-vive, from_hand_tracker=0
+[2120519:2120519:1009/121331.903484:VERBOSE1:device/vr/openxr/openxr_device.cc:289] ShutdownSession
+[2120519:2120706:1009/121331.903621:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:88] ExitPresent reason=8
+[2120519:2120706:1009/121331.905596:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:88] ExitPresent reason=2
+[2120519:2120706:1009/121331.905662:VERBOSE1:device/vr/openxr/openxr_api_wrapper.cc:1804] SetXrSessionState Transitioning from: Focused to: Unknown
+[2120519:2120706:1009/121331.943571:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:288] CleanUp
+[2120519:2120519:1009/121331.948288:VERBOSE1:device/vr/openxr/openxr_device.cc:289] ShutdownSession
+[2120270:2120270:1009/121332.107133:ERROR:base/process/kill_posix.cc:33] waitpid(2120341): No child processes (10)

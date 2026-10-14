@@ -1,0 +1,45 @@
+{
+  "backend": {
+    "gate01": {
+      "exit": 1,
+      "tests": 3,
+      "failures": 3,
+      "seconds": 15.491,
+      "reason": "retained failed fixture directory collided with VM-local unique_integer; later failures were startup fallout"
+    },
+    "gate02": {
+      "exit": 0,
+      "tests": 3,
+      "failures": 0,
+      "seconds": 40.234
+    }
+  },
+  "client": {
+    "client01": {
+      "exit": 1,
+      "reason": "handwritten empty binary used invalid <<>> syntax"
+    },
+    "client02": {
+      "exit": 0,
+      "files": 15
+    },
+    "client03": {
+      "exit": 0,
+      "files": 15,
+      "milliseconds": 1064.905039,
+      "includes": "shared editability discriminant"
+    }
+  },
+  "build": {
+    "build01": {
+      "exit": null,
+      "reason": "success in log; child tool status lost during compaction"
+    },
+    "build02": {
+      "exit": 0,
+      "output": "/tmp/quod-gui-question-view-build-02",
+      "includes": "updated client type"
+    }
+  },
+  "claude": "source-only review and addendum01 complete; R1 accepted after shared editability classification"
+}

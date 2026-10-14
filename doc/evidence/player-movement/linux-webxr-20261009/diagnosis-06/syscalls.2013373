@@ -1,0 +1,5 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f09f47f6780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f09f47f6780) = -1 ENOENT (No such file or directory)
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 684
+creat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/DevToolsActivePort", 0666) = 677
++++ exited with 0 +++

@@ -207,6 +207,87 @@ hosted_reactions_and_incarnation_recovery_test_() ->
 hosted_agents_exchange_committed_events_test_() ->
     {timeout, 60, fun() -> with_host(fun exchange/1) end}.
 
+retained_request_uses_original_bytes_and_timeout_identity_test_() ->
+    [{atom_to_list(Case), {timeout, 60, fun() ->
+        Extra = [owned_reaction(actor, {assert, {retained_intent, {'Bytes'}, {'Value'}}},
+                   {record_retained, {'Value'}},
+                   {',', {use_agent_request, {'Bytes'}},
+                    {';', {',', {'=', {'Value'}, timeout},
+                           {limit_reaction_expiry, {'Expiry'}}},
+                          {'\\=', {'Value'}, timeout}}})],
+        %% The timeout guard gets its bound deadline from an authored fact.
+        [Rule] = Extra,
+        {':-', Head, Guard} = Rule,
+        Rules = [{':-', Head, {',', {retained_test_expiry, {'Expiry'}}, Guard}},
+                 owned_reaction(actor, try_different_request, {record_retained, success}),
+                 {can_invoke, {record_retained, {'_'}},
+                  {agent_instance_ref, {'Ns'}, {'_'}, actor}, {'_'}, {'Ns'}},
+                 {':-', {record_retained, {'Value'}},
+                  {',', {retained_intent, {'Bytes'}, {'Value'}},
+                   {',', {current_signed_request, {'Bytes'}}, {record_ping, {'Value'}}}}}],
+        with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            {Owner, Child} = installed(Ref, 1),
+            {ok, Network} = quod_ontology:network_identity(),
+            {ok, Text} = quod_client_goal_parser:format({record_retained, Case}),
+            RetainedKey = case Case of stale_key -> <<91:256>>; _ -> Key end,
+            Request = #{network_identity => Network, agent_namespace => Ns,
+                agent_genesis_anchor => element(3, Ref), agent_instance_text => <<"actor.">>,
+                signing_public_key => RetainedKey, operation_id => <<137:256>>,
+                not_after_ms => quod_time:now_ms() + 10000, mode => execute,
+                parser_version => 3, goal_text => Text},
+            {ok, Bytes} = quod_client_goal:encode(Request),
+            {ok, #{operation_ref := Operation}} = quod_client_goal:request_identity(Bytes),
+            Vault = quod_reg:where({agent_vault, node}),
+            case Case of
+                timeout -> ok = sys:suspend(Vault), 1 = erlang:trace(Child, true, [procs]);
+                _ -> ok
+            end,
+            try
+                commit(Ns, {',', {assertz, {retained_test_expiry, quod_time:now_ms() + 1000}},
+                           {assertz, {retained_intent, Bytes, Case}}}),
+                case Case of
+                    timeout ->
+                        Worker = receive {trace, Child, spawn, Pid, _} -> Pid
+                                 after 5000 -> error(retained_worker_missing) end,
+                        true = erlang:suspend_process(Worker),
+                        Monitor = monitor(process, Worker),
+                        receive {agent_request_finished, Owner, Child, _, _, Result} ->
+                            ?assertEqual({error, {outcome_unknown, Operation}}, Result)
+                        after 5000 -> error(retained_timeout_missing) end,
+                        receive {'DOWN', Monitor, process, Worker, killed} -> ok
+                        after 5000 -> error(retained_worker_not_joined) end;
+                    stale_key ->
+                        receive {agent_request_finished, Owner, Child, _, _, Result} ->
+                            ?assertEqual({error, retained_request_mismatch}, Result)
+                        after 5000 -> error(retained_refusal_missing) end;
+                    success ->
+                        receive {agent_request_finished, Owner, Child, _, _, Result} ->
+                            ?assertMatch({ok, #{request_bytes := Bytes, operation_ref := Operation},
+                                               {normalized, {committed, _, _}}}, Result)
+                        after 5000 -> error(retained_result_missing) end
+                end
+            after
+                case Case of
+                    timeout -> erlang:trace(Child, false, [procs]), sys:resume(Vault);
+                    _ -> ok
+                end
+            end,
+            Expected = case Case of success -> true; _ -> false end,
+            ?assertEqual(Expected, element(1, quod_prolog:prove_ro(Ns, {ping, Case})) =:= ok),
+            case Case of
+                success ->
+                    commit(Ns, {trigger_event, try_different_request}),
+                    receive {agent_request_finished, Owner, Child, _, _, Different} ->
+                        ?assertMatch({ok, _, {normalized, {failed, _}}}, Different)
+                    after 5000 -> error(different_request_result_missing) end,
+                    ?assertMatch({ok, [#{'Rows' := [success]}], _},
+                        quod_prolog:prove_ro(Ns, {findall, {'V'}, {ping, {'V'}}, {'Rows'}}));
+                _ -> ok
+            end
+        end, Rules)
+    end}} || Case <- [success, stale_key, timeout]].
+
 runtime_owner_death_reaps_blocked_workers_test_() ->
     [{atom_to_list(Kind) ++ "/" ++ atom_to_list(Reason), {timeout, 30, fun() ->
         with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
@@ -857,6 +938,73 @@ node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
         node_execution(Ctx)
     end, [], legacy) end}.
 
+installed_handler_observation_uses_actual_owner_test_() ->
+    Handler = {':-', {react_on, {assert, {handler_probe, {'Value'}}}, true},
+               {me, {agent_instance_ref, {'_'}, {'_'}, actor}}},
+    {timeout,60,fun() -> with_host(fun(Ctx) -> installed_handler(Ctx,Handler) end,[Handler]) end}.
+
+installed_handler(#{namespace := Ns, reference := Ref = {agent_instance_ref,Ns,Anchor,_},
+                    node := Node, key := Key}, Handler) ->
+    Observe = fun(A,E,K,C) -> quod_runtime:installed_agent_reaction(
+        Ns,A,quod_prolog:applied(Ns),{agent,actor,E,K},C,quod_time:mono_ms()+5000) end,
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,Key,Handler)),
+    commit(Ns,{goal,{agent_hosted,actor,Node,1,Key}}),
+    {Owner,Child} = installed(Ref,1),
+    ?assertEqual({ok,{Owner,Child}},Observe(Anchor,1,Key,Handler)),
+    ?assertEqual({error,runtime_unavailable},Observe(<<0:256>>,1,Key,Handler)),
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,2,Key,Handler)),
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,<<0:256>>,Handler)),
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,Key,setelement(3,Handler,true))),
+    Stats = quod_runtime:stats(Ns),
+    quod_lobby_tests:assert_read_has_no_io(fun() ->
+        lists:foreach(fun(_) -> ?assertEqual({ok,{Owner,Child}},Observe(Anchor,1,Key,Handler)) end,
+                      lists:seq(1,20))
+    end),
+    ?assertEqual(Stats,quod_runtime:stats(Ns)),
+    %% Read the real authored handler and its guard through the same scoped
+    %% interpreter that native preparation will use; no fake event is emitted.
+    Head = {react_on,{assert,{handler_probe,{0}}},true},
+    Query = {',',{clause,Head,{1}},
+                 {installed_agent_reaction,actor,1,Key,{':-',Head,{1}},{2}}},
+    {ok,Bytes,Signature} = quod_node_actor:signed_goal(
+        read,{'::',Ns,Query},crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
+    ?assertMatch({ok,_,{normalized,{read,_,{answers,1,[_]}}}},
+                 quod_client_goal_ingress:submit(Bytes,Signature)),
+    %% It remains a live observation: execute cannot use it as an ordinary
+    %% material dependency, even when the installed actor and handler match.
+    ?assertMatch({ok,_,{normalized,{error,_}}},node_goal(Ns,
+        {',',Query,{assertz,handler_observation_leak}},quod_time:now_ms()+10000)),
+    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,handler_observation_leak)),
+    commit(Ns,{retract,Handler}),
+    ok = quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),agent_hosts,all,
+                                         quod_time:mono_ms()+5000),
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,Key,Handler)),
+    %% A real catalogue update becomes visible without restarting the actor.
+    commit(Ns,{assertz,Handler}),
+    ok = quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),agent_hosts,all,
+                                         quod_time:mono_ms()+5000),
+    ?assertEqual({ok,{Owner,Child}},Observe(Anchor,1,Key,Handler)),
+    %% An unchanged assignment after runtime recovery is a new incarnation.
+    OldToken = crypto:hash(sha256,term_to_binary({Owner,Child})),
+    OwnerMonitor = monitor(process,Owner),
+    exit(Owner,kill),
+    receive {'DOWN',OwnerMonitor,process,Owner,killed} -> ok
+    after 5000 -> error(handler_runtime_not_stopped) end,
+    {NextOwner,NextChild} = installed(Ref,1),
+    ?assertNotEqual({Owner,Child},{NextOwner,NextChild}),
+    ?assertEqual({ok,{NextOwner,NextChild}},Observe(Anchor,1,Key,Handler)),
+    StaleQuery = {',',{clause,Head,{1}},
+                      {installed_agent_reaction,actor,1,Key,{':-',Head,{1}},OldToken}},
+    {ok,StaleBytes,StaleSignature} = quod_node_actor:signed_goal(
+        read,{'::',Ns,StaleQuery},crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
+    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
+                 quod_client_goal_ingress:submit(StaleBytes,StaleSignature)),
+    ChildMonitor = monitor(process,NextChild),
+    commit(Ns,{assertz,{agent_hosting_suspended,actor}}),
+    receive {'DOWN',ChildMonitor,process,NextChild,_} -> ok
+    after 5000 -> error(handler_actor_not_retired) end,
+    ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,Key,Handler)).
+
 node_executor_requires_exact_delegation_at_execution_test_() ->
     {timeout, 60, fun() -> with_host(fun node_execution/1) end}.
 
@@ -951,15 +1099,16 @@ delayed_node_identity_notice(NodeNs, Principal) ->
         application:set_env(quod, node_actor_principal, Principal)
     end.
 
-signed_node_request_expiry_survives_foreign_scope_test_() ->
+signed_node_request_context_survives_foreign_scope_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns}) ->
         Expiry = quod_time:now_ms() + 10000,
         Goal = {'::', Ns, {',', {current_request_expiry, {0}},
-                          {assertz, {recorded_expiry, {0}}}}},
+                         {',', {current_request_operation, {1}},
+                          {assertz, {recorded_request, {0}, {1}}}}}},
         {ok, Bytes, Signature} = quod_node_actor:signed_goal(
             execute, Goal, crypto:strong_rand_bytes(32), Expiry),
-        ?assertMatch({ok, _, _}, quod_client_goal_ingress:submit(Bytes, Signature)),
-        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {recorded_expiry, Expiry})),
+        {ok, #{operation_ref := Operation}, _} = quod_client_goal_ingress:submit(Bytes, Signature),
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {recorded_request, Expiry, Operation})),
         {ok, WrongBytes, WrongSignature} = quod_node_actor:signed_goal(
             read, {'::', Ns, {current_request_expiry, Expiry + 1}},
             crypto:strong_rand_bytes(32), Expiry),

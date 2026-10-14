@@ -1,0 +1,21 @@
+{
+  "dialogs": [
+    {
+      "open": false
+    }
+  ],
+  "focused": "<body><main id=\"fixture\"><section class=\"gui-form\" aria-label=\"Remaining controls\" data-large-text=\"false\" style=\"background-color: rgb(25, 43, 50); font-size: 1rem;\"><header><h2>Remaining controls</h2><button type=\"button\">Close</button></header><p class=\"gui-scope\">gui:independent-instrument</p><d",
+  "images": [
+    {
+      "loaded": true,
+      "src": "blob:http://localhost:5178/d6056314-46f4-4ae6-b975-66dbebad5b89",
+      "width": 8
+    },
+    {
+      "loaded": true,
+      "src": "blob:http://localhost:5178/d6056314-46f4-4ae6-b975-66dbebad5b89",
+      "width": 8
+    }
+  ],
+  "stage": "assets"
+}

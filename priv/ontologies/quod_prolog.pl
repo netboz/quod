@@ -15,6 +15,14 @@ prolog_query(prolog_edit_goal(_, _, _, _, _)).
 prolog_query(prolog_clauses(_, _)).
 prolog_query(Goal) :- public_source_query(Goal).
 
+%% Explicit interfaces describe callable operations; their declaration grants
+%% no target source-read, invocation, content-edit or policy-edit permission.
+ontology_interface(prolog_predicates/2, <<"current predicate catalogue">>).
+ontology_interface(prolog_source/2, <<"complete current source cursor">>).
+ontology_interface(prolog_source/3, <<"explicit predicate source">>).
+ontology_interface(prolog_inspect/3, <<"authorized target inspection">>).
+ontology_interface(prolog_edit_goal/5, <<"compile an exact-baseline content or policy edit">>).
+
 prolog_clauses(Source, Clauses) :-
     '$quod_program_source'(Clauses, Source).
 

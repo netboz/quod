@@ -1,0 +1,9 @@
+{
+  "base_tag": "157.0.8091.0",
+  "base_commit": "6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42",
+  "source": "content/services/isolated_xr_device/xr_sandbox_hook_linux.cc",
+  "source_sha256": "14a2856d0398d7583f114e1dba70cecfe6af81ad5d868ecec12c02abcbcf9dd7",
+  "patched_sha256": "28bec1022364a68459b25e6bc9852d4613acee46e20edd64d93addf4009dc1ef",
+  "patch_sha256": "ca2c92b31bf075944f93f3bb0ea68c2bb1451ff17049de52bdc6d484ab129641",
+  "status": "compiled; sandboxed native simulated preflight passed, with and without loader tracing; physical Vive untested"
+}

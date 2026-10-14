@@ -1,0 +1,10 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6111f2780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6111f2780) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", 0x7fe6111f0520) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=780, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 675
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", {st_mode=S_IFDIR|0700, st_size=40, ...}, AT_SYMLINK_NOFOLLOW) = 0
+unlinkat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/aim_eligibility_extension", AT_REMOVEDIR) = 0
++++ exited with 0 +++

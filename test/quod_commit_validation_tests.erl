@@ -35,7 +35,7 @@ inclusion_only_receipts_are_refused_in_admission_and_replay_test() ->
         try
             {new, I1} = quod_outcome:claim_operation(
                          I0, 2, ClaimData, {applications, [maps:get(target_ref, F)]}),
-            C0 = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), I1, none),
+            C0 = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), I1, none, none),
             #transaction{role = {remote_complete, Op, Digest, _}} = Completion,
             TargetRef = maps:get(target_ref, F),
             Old = Completion#transaction{role = {remote_complete, Op, Digest,
@@ -139,7 +139,7 @@ duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
     {new, Outcomes1} = quod_outcome:claim_operation(
                          Outcomes0, 2, ClaimData, {applications, [TargetRef]}),
     Context0 = quod_commit_validation:new(
-                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
+                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none, none),
     try
         {ok, valid, Context1} = quod_commit_validation:content(
                                   [Completion], 1, {claim, 4}, Context0),
@@ -175,7 +175,7 @@ non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
     {new, Outcomes1} = quod_outcome:claim_operation(
                          Outcomes0, 2, ClaimData, {applications, [TargetRef]}),
     Context0 = quod_commit_validation:new(
-                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
+                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none, none),
     try
         {ok, valid, Terminal} = quod_commit_validation:content(
                                   [Completion], 1, {claim, 4}, Context0),
@@ -297,6 +297,48 @@ source_vote_check_and_committed_claim_share_one_validator_test() ->
                Control, 1, {claim, 2}, Claimed))
       end).
 
+expired_request_cannot_acquire_a_first_source_claim_test() ->
+    with_signed_fixture(fun(Fixture, Context) ->
+        Deadline = maps:get(deadline, Fixture),
+        Transaction = maps:get(transaction, Fixture),
+        Vote = maps:get(vote_control, Fixture),
+        Operation = maps:get(operation_ref, Fixture),
+        %% Admission uses certified block time, including the exact boundary.
+        %% Wall-clock expiry alone is deliberately not a terminal outcome.
+        ?assertMatch({ok, valid, _}, quod_commit_validation:content(
+            [Transaction], Deadline, check, Context)),
+        ?assertMatch({ok, {valid, _}, _}, quod_commit_validation:dtx(
+            Vote, Deadline, check, Context)),
+        {ok, {invalid, _}, ContentAfter} = quod_commit_validation:content(
+            [Transaction], Deadline + 1, {claim, 2}, Context),
+        {ok, {invalid, _}, VoteAfter} = quod_commit_validation:dtx(
+            Vote, Deadline + 1, {claim, 2}, Context),
+        [?assertMatch({not_found, _}, quod_outcome:lookup_ref(
+            quod_commit_validation:outcomes(C), Operation))
+            || C <- [ContentAfter, VoteAfter]],
+        %% A previously prepared source remains claimed after expiry, even
+        %% before Resolve/Complete. It must never satisfy an absence proof.
+        {ok, {valid, _}, Prepared} = quod_commit_validation:dtx(
+            Vote, Deadline, {claim, 2}, Context),
+        {ok, GroupRef} = quod_atomic:source_group_ref(quod_atomic:control_material(Vote)),
+        ?assertMatch({{ok, #{first_slot := 2, outcome_ref := GroupRef}}, _},
+            quod_outcome:lookup_ref(quod_commit_validation:outcomes(Prepared), Operation)),
+        %% Historical revalidation retains its original certified timestamp.
+        ?assertMatch({ok, {valid, _}, _}, quod_commit_validation:dtx(
+            Vote, Deadline, {claim, 2}, Prepared))
+    end).
+
+expired_independent_source_claim_is_not_admissible_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Claim = maps:get(claim, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    Network = maps:get(network, Fixture),
+    Origin = maps:get(origin, Fixture),
+    ?assertMatch({ok, _}, quod_transaction:validate_request(
+        Network, Origin, Deadline, Claim)),
+    ?assertEqual({error, expired}, quod_transaction:validate_request(
+        Network, Origin, Deadline + 1, Claim)).
+
 missing_network_identity_splits_check_from_committed_claim_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     {Fixture, Context, Outcomes} = signed_fixture(),
@@ -321,6 +363,40 @@ missing_network_identity_splits_check_from_committed_claim_test() ->
                  quod_commit_validation:dtx(
                    Control, 1, {claim, 2}, Context))
           end)
+    after
+        ok = quod_outcome:close(Outcomes)
+    end.
+
+captured_network_survives_readiness_loss_in_content_and_vote_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {Fixture, Context, Outcomes} = signed_fixture(),
+    Network = maps:get(network, Fixture),
+    Transaction = maps:get(transaction, Fixture),
+    Control = maps:get(vote_control, Fixture),
+    try
+        {Content, Vote} = quod_ct:with_network_identity(Network, fun() ->
+            {ok, valid, C} = quod_commit_validation:content([Transaction], 1, check, Context),
+            {ok, {valid, _}, V} = quod_commit_validation:dtx(Control, 1, check, Context),
+            {C, V}
+        end),
+        ?assertEqual(Network, quod_commit_validation:network(Content)),
+        ?assertEqual(Network, quod_commit_validation:network(Vote)),
+        without_network_identity(fun() ->
+            quod_lobby_tests:assert_read_has_no_io(fun() ->
+                lists:foreach(fun(_) ->
+                    ?assertMatch({ok, valid, _},
+                        quod_commit_validation:content([Transaction], 1, check, Content)),
+                    ?assertMatch({ok, {valid, _}, _},
+                        quod_commit_validation:dtx(Control, 1, check, Vote))
+                end, lists:seq(1, 20))
+            end),
+            %% Captured trust still checks the request's network; it does not
+            %% take the embedded request's network as authority.
+            Other = quod_ct:signed_atomic_fixture(#{target => maps:get(target, Fixture),
+                network => <<223:256>>, submitted_at => 1}),
+            ?assertMatch({ok, {invalid, invalid_request_auth}, _},
+                quod_commit_validation:content([maps:get(transaction, Other)], 1, check, Content))
+        end)
     after
         ok = quod_outcome:close(Outcomes)
     end.
@@ -434,6 +510,117 @@ vote_validation_and_materialization_are_owned_here_test() ->
              quod_commit_validation:dtx(Control, 1, check, Context))
       end) end).
 
+expiry_remote_application_captures_network_before_its_second_check_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F = quod_ct:remote_operation_fixture(#{}),
+    Origin = {OriginNs, OriginAnchor} = maps:get(origin, F),
+    Target = {Ns, Anchor} = maps:get(participant_target, F),
+    Network = maps:get(network, F), Signer = maps:get(node_identity, F),
+    Pub = maps:get(pubkey, Signer), Admission = maps:get(admission, F),
+    Old = quod_ct:signed_goal_fixture(#{target => Target, network => Network, deadline => 10}),
+    {operation, _, _, Agent, Id} = maps:get(operation_ref, Old),
+    Key = {2, Agent, Id}, Token = {maps:get(request_bytes, Old), 2, 11},
+    P0 = maps:get(plan, F),
+    Plan = with_outcome_read(setelement(2, P0, (quod_dtx:core(P0))#{base_height := 2}), Key, Token, Signer),
+    {ok, Manifest} = quod_dtx:new_manifest(#{proof_id => maps:get(proof_id, F),
+        coordinator => {OriginNs, OriginAnchor, Pub, Admission}, nonce => <<207:256>>,
+        principal => maps:get(principal, F), goal => maps:get(goal_blob, F),
+        result => maps:get(result_blob, F), request_binding => maps:get(binding, F),
+        vote_deadline_ms => none, participants => [{Target, quod_dtx:digest(Plan)}]}),
+    {ok, Attestation} = quod_dtx:attest_plan(1, Target, Plan, Manifest, Signer),
+    {ok, Blob} = quod_dtx:encode(Plan),
+    Claim0 = quod_transaction:remote_claim(Origin, Manifest,
+        [{Target, quod_dtx:digest(Plan), Blob, Attestation}], maps:get(auth, F), []),
+    {ok, Claim} = quod_transaction:sign({OriginNs, OriginAnchor, Admission},
+        Claim0#transaction{author = Pub, author_seq = 1, submitted_at = 1}, Signer),
+    ClaimRef = {transaction, OriginNs, OriginAnchor, Claim#transaction.tx_id},
+    {ok, CertifiedRef} = quod_dtx:certified_ref(OriginNs, OriginAnchor, 2, <<213:256>>,
+        Claim#transaction.tx_id, quod_ct:fixture_finality(1, <<213:256>>)),
+    App0 = quod_transaction:attach_evidence(
+        quod_transaction:remote_application(ClaimRef, Claim, Target), CertifiedRef, Claim),
+    {ok, App} = quod_transaction:sign({Ns, Anchor, Admission},
+        App0#transaction{author = Pub, author_seq = 1, submitted_at = 12}, Signer),
+    ?assertEqual(#{Key => Token}, App#transaction.read_check),
+    ?assertEqual(none, App#transaction.request_auth),
+    Est = quod_ct:committed_kb([{can_invoke, {'G'}, {'P'}, {'C'}, Ns},
+                              {peer_admitted, Pub, "validator", 14567, Pub}]),
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    {ok, I1} = quod_outcome:advance_applied(I0, 1, 0),
+    {ok, I2} = quod_outcome:advance_applied(I1, 2, 11), {ok, I3} = quod_outcome:flush(I2),
+    Ctx = quod_commit_validation:new(Target, 2, Est, I3, none, none),
+    Projection = quod_committed_projection:new(Target, 2, Est, I3, none),
+    Era = quod_ledger:initial_era(Target),
+    {ok, Block} = quod_ledger:new_block({Era, 2}, {Era, 1, <<0:256>>}, 3, {batch, [App]}, 12),
+    Cert = #cert{kind = commit, era = Era, slot = 2,
+        block_hash = quod_simplex:block_hash(Block), sigs = [{<<1:256>>, <<0:512>>}]},
+    Entry = quod_ledger:entry(3, Block, Cert),
+    try
+        without_network_identity(fun() ->
+            ?assertMatch({unavailable, network_identity, _}, quod_commit_validation:remote_application(App, Ctx)),
+            ?assertMatch({ok, abstain, _}, quod_commit_validation:content([App], 12, check, Ctx)),
+            ?assertMatch({wait, network_identity, _, Projection},
+                         quod_committed_projection:apply_entry(Entry, 3, Projection)),
+            ?assertMatch({invalid, _}, quod_commit_validation:remote_application(App#transaction{read_check = #{}}, Ctx))
+        end),
+        quod_ct:with_network_identity(Network, fun() ->
+            ?assertMatch({apply, _, _}, quod_commit_validation:remote_application(App, Ctx)),
+            {ok, Next, #{transactions := [#{status := applied}]}} =
+                quod_committed_projection:apply_entry(Entry, 3, Projection),
+            ?assertMatch({ok, _, _, _}, quod_prolog:prove_est({saved, ok}, quod_committed_projection:est(Next)))
+        end)
+    after quod_outcome:close(I0) end.
+
+expiry_read_uses_certification_and_vote_admission_owners_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F = quod_ct:signed_atomic_fixture(#{goal_text => <<"\\+(missing(ok)).">>}),
+    Target = {Ns, Anchor} = maps:get(origin, F), Network = maps:get(network, F),
+    Signer = maps:get(node_identity, F), Pub = maps:get(pubkey, Signer),
+    Old = quod_ct:signed_goal_fixture(#{target => Target, network => Network, deadline => 10}),
+    Bytes = maps:get(request_bytes, Old),
+    {operation, _, _, Agent, Id} = maps:get(operation_ref, Old),
+    Key = {2, Agent, Id}, Token = {Bytes, 2, 11},
+    P0 = maps:get(plan, F),
+    Plan = with_outcome_read(setelement(2, P0, (quod_dtx:core(P0))#{base_height := 2}), Key, Token, Signer),
+    Est = quod_ct:committed_kb(quod_ct:signed_agent_facts(F) ++
+        [{can_invoke, {'G'}, {'P'}, {'C'}, Ns}, {peer_admitted, Pub, "validator", 14567, Pub}]),
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    {ok, I1} = quod_outcome:advance_applied(I0, 1, 0),
+    {ok, I2} = quod_outcome:advance_applied(I1, 2, 11), {ok, I3} = quod_outcome:flush(I2),
+    Ctx = quod_commit_validation:new(Target, 2, Est, I3, none, none),
+    Plans = (maps:get(plans, F))#{Target := Plan},
+    {ok, Manifest} = quod_dtx:new_manifest(#{proof_id => maps:get(proof_id, F),
+        coordinator => {Ns, Anchor, Pub, maps:get(admission, F)}, nonce => <<207:256>>,
+        principal => maps:get(principal, F), goal => maps:get(goal_blob, F),
+        result => maps:get(result_blob, F), request_binding => maps:get(binding, F),
+        vote_deadline_ms => maps:get(deadline, F),
+        participants => [{T, quod_dtx:digest(P)} || {T, P} <- maps:to_list(Plans)]}),
+    {ok, Attestation} = quod_dtx:attest_plan(1, Target, Plan, Manifest, Signer),
+    {ok, Group} = quod_atomic:new_group(Manifest, maps:get(auth, F), Attestation),
+    {ok, Blob} = quod_dtx:encode(Plan),
+    {ok, Vote} = quod_atomic:new_vote(Group, Target,
+        {Target, quod_dtx:digest(Plan), Blob, Attestation}, prepared),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F), 1, 12, Signer),
+    try
+        without_network_identity(fun() ->
+            ?assertMatch({error, {unavailable, network_identity, _}},
+                         quod_commit_validation:read_only_plan(Plan, Ctx)),
+            ?assertMatch({ok, {selection, abstain, _}, _},
+                         quod_commit_validation:prepare_vote(Material, 12, Ctx)),
+            ?assertMatch({ok, {unavailable, network_identity, _}, _},
+                         quod_commit_validation:dtx(Control, 12, {claim, 3}, Ctx))
+        end),
+        quod_ct:with_network_identity(Network, fun() ->
+            ?assertEqual(ok, quod_commit_validation:read_only_plan(Plan, Ctx)),
+            {ok, {selection, {vote, Material}, _}, Captured} =
+                quod_commit_validation:prepare_vote(Material, 12, Ctx),
+            ?assertEqual(Network, quod_commit_validation:network(Captured)),
+            ?assertMatch({ok, {valid, _}, _}, quod_commit_validation:dtx(Control, 12, {claim, 3}, Ctx)),
+            Bad = with_outcome_read(Plan, Key, {Bytes, 2, 12}, Signer),
+            ?assertEqual({error, conflict_retry}, quod_commit_validation:read_only_plan(Bad, Ctx))
+        end)
+    after quod_outcome:close(I0) end.
+
 read_certificate_validates_terminal_outcome_evidence_test() ->
     Fixture = valid_vote_fixture(#{goal_text => <<"\\+(missing(ok)).">>}),
     Target = {Ns,Anchor} = maps:get(participant_target,Fixture),
@@ -453,17 +640,17 @@ read_certificate_validates_terminal_outcome_evidence_test() ->
     {new,I1} = quod_outcome:claim_operation(I0,1,Claim,{transaction,Ns,Anchor,T#transaction.tx_id}),
     {new,Candidate,I2} = quod_outcome:classify(I1,T),
     {new,_,I3} = quod_outcome:terminal(I2,1,{rejected,conflict_retry},{new,Candidate}),
-    {ok,I4} = quod_outcome:advance_applied(I3,1),{ok,I5} = quod_outcome:flush(I4),
+    {ok,I4} = quod_outcome:advance_applied(I3, 1, 1),{ok,I5} = quod_outcome:flush(I4),
     {{ok,Token},I6} = quod_outcome:operation_dependency(I5,Key,1),
     Plan = with_outcome_read(Plan0,Key,Token,Signer),
-    Ctx = quod_commit_validation:new(Target,1,Est,I6,none),
+    Ctx = quod_commit_validation:new(Target,1,Est,I6,none, none),
     ?assertEqual(ok,quod_commit_validation:read_only_plan(Plan,Ctx)),
     Forged = with_outcome_read(Plan0,Key,setelement(1,Token,<<99:256>>),Signer),
     ?assertEqual({error,conflict_retry},quod_commit_validation:read_only_plan(Forged,Ctx)),
     Dir = filename:join("/tmp","quod-outcome-validation-" ++ integer_to_list(erlang:unique_integer([positive]))),
     {ok,Disk} = quod_outcome:open(Ns,Anchor,#{data_dir => Dir,outcome_backend => disk}),
     ok = quod_outcome:close(Disk),
-    Broken = quod_commit_validation:new(Target,1,Est,Disk,none),
+    Broken = quod_commit_validation:new(Target,1,Est,Disk,none, none),
     ?assertMatch({outcome_error,_},quod_commit_validation:read_only_plan(Plan,Broken)),
     ok = quod_outcome:close(I6).
 
@@ -572,7 +759,7 @@ signed_fixture() ->
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
     Context = quod_commit_validation:new(
-                {Ns, Anchor}, 1, ParentEst, Outcomes, none),
+                {Ns, Anchor}, 1, ParentEst, Outcomes, none, none),
     {Fixture, Context, Outcomes}.
 
 without_network_identity(Fun) ->
@@ -620,7 +807,7 @@ with_context(Ns, Anchor, Facts, Fun) ->
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
     Context = quod_commit_validation:new(
-                {Ns, Anchor}, 1, ParentEst, Outcomes, none),
+                {Ns, Anchor}, 1, ParentEst, Outcomes, none, none),
     try Fun(Context)
     after ok = quod_outcome:close(Outcomes)
     end.

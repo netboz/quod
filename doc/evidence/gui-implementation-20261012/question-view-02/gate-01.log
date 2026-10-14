@@ -1,0 +1,94 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;31mF[0m[0;31mF[0m
+Failures:
+
+  1) quod_gui_question_tests:-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-48-/0: module 'quod_gui_question_tests'
+[0;31m     Failure/Error: {error,
+                        {not_ready,<<"lobby-test-rendering">>},
+                        [{quod_lobby_tests,start_namespace,2,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_lobby_tests.erl"},
+                              {line,1265}]},
+                         {quod_lobby_tests,'-start/4-lc$^1/1-1-',3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_lobby_tests.erl"},
+                              {line,1191}]},
+                         {quod_lobby_tests,start,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_lobby_tests.erl"},
+                              {line,1192}]},
+                         {quod_gui_question_tests,
+                             '-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-48-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,10}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]}]}
+[0m[0;36m     Output: [0m
+  2) quod_gui_components_tests:-elaborate_form_uses_one_vocabulary_projection_test_/0-fun-12-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.565.0>}}},
+                        [{quod_lobby_tests,start,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_lobby_tests.erl"},
+                              {line,1145}]},
+                         {quod_gui_components_tests,
+                             '-elaborate_form_uses_one_vocabulary_projection_test_/0-fun-12-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_components_tests.erl"},
+                              {line,20}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+  3) quod_gui_components_tests:-forms_use_the_same_signed_ontology_path_test_/0-fun-2-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.565.0>}}},
+                        [{quod_lobby_tests,start,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_lobby_tests.erl"},
+                              {line,1145}]},
+                         {quod_gui_components_tests,
+                             '-forms_use_the_same_signed_ontology_path_test_/0-fun-2-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_components_tests.erl"},
+                              {line,49}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 15.491 seconds
+[0;31m3 tests, 3 failures
+[0m===> Error running tests

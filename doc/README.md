@@ -24,3 +24,15 @@ flag any conflict instead of silently selecting one version.
 
 The repository [working agreement](../AGENTS.md) governs architecture and
 verification. The current source is the final check for what is implemented.
+
+## Design proposals
+
+[GUI planning](gui-plan.md) proposes general component classes, Eidolon/mark
+integration, event-based forms and VR appearance. [Application form examples](gui-examples.md)
+exercise implemented components, field bindings and question completion. Live
+opening and headset acceptance remain unfinished.
+
+[World generation brainstorming](world-generation-brainstorm.md) explores RPG
+world-building sources, ontology-based generation, composable roleplaying rules,
+an AI game master through MCP, and models, animation and sound. It distinguishes
+existing capabilities from proposed integrations.

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "client/test/controlled-navigation.test.js",
+    "client/test/simulation.test.js",
+    "client/test/signed-client.test.js"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.3565523624420166,
+  "manifest": "source-manifest-final-01.json"
+}

@@ -1,0 +1,32 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_external_predicate_selection_tests.erl failed
+    ┌─ test/quod_external_predicate_selection_tests.erl:
+    │
+ 77 │      {catch, {physics_body_state, room, {'Body'}, {'Result'}}, {'Error'},
+    │            ╰── syntax error before: ','
+
+
+    ┌─ test/quod_external_predicate_selection_tests.erl:
+    │
+ 17 │              {'\\+', physics_bridge_probe()})),
+    │                      ╰── function physics_bridge_probe/0 undefined
+
+    ┌─ test/quod_external_predicate_selection_tests.erl:
+    │
+ 38 │              physics_bridge_probe())),
+    │              ╰── function physics_bridge_probe/0 undefined
+
+    ┌─ test/quod_external_predicate_selection_tests.erl:
+    │
+ 64 │                  {'\\+', physics_bridge_probe()})),
+    │                          ╰── function physics_bridge_probe/0 undefined
+
+    ┌─ test/quod_external_predicate_selection_tests.erl:
+    │
+ 68 │                  physics_bridge_probe()))
+    │                  ╰── function physics_bridge_probe/0 undefined
+
+

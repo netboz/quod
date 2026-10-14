@@ -10,6 +10,8 @@ human_user_owner(agent_instance_ref(Namespace, Anchor, Instance)) :-
     current_ontology_identity(Namespace, Anchor),
     instance_of(human_user, Instance).
 
+ontology_source_mode(editable) :- current_principal(Owner), human_user_owner(Owner).
+
 lobby_reference(Reference) :-
     current_principal(Owner),
     human_user_owner(Owner),

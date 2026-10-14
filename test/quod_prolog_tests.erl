@@ -547,7 +547,7 @@ absent_pending_group_keeps_exact_waiter_test() ->
     {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
     {ok, I1} = quod_outcome:project_pending_votes(I0, [GroupRef]),
     {ok, I2} = quod_outcome:project_pending_votes(I1, []),
-    {ok, I3} = quod_outcome:advance_applied(I2, 1),
+    {ok, I3} = quod_outcome:advance_applied(I2, 1, 1),
     {ok, I4} = quod_outcome:flush(I3),
     try
         {CallRef, Remaining} =
@@ -1890,7 +1890,7 @@ dtx_validation_waits_for_published_outcome_floor_test() ->
     Anchor = <<71:256>>,
     {ok, Outcomes0} = quod_outcome:open(
                         Ns, Anchor, #{outcome_backend => memory}),
-    {ok, OutcomesStaged} = quod_outcome:advance_applied(Outcomes0, 1),
+    {ok, OutcomesStaged} = quod_outcome:advance_applied(Outcomes0, 1, 1),
     %% The KB has reached the proposal parent, but the outcome floor is only
     %% staged.  The DTX request must remain parked; the old applied-only scan
     %% would consume this deliberately malformed request immediately.
@@ -2035,14 +2035,14 @@ t_replay_reentry({Ns, Engine}) ->
         %% A different owner and duplicate starts cannot invalidate this view.
         View = #{peer => {127,0,0,1},owners => #{Engine => Ns},
                  heights => #{Ns => 1},local_ready => #{Ns => true}},
-        ?assertEqual({ok,View},quod_client_simulation:websocket_info(
+        ?assertEqual({ok,View},quod_client_view:websocket_info(
             {replay_started,{self(),make_ref()},1},View)),
-        {reply,{text,Paused},Recovering} = quod_client_simulation:websocket_info(Started,View),
+        {reply,{text,Paused},Recovering} = quod_client_view:websocket_info(Started,View),
         ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,json:decode(Paused))),
-        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(Started,Recovering)),
-        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(
+        ?assertEqual({ok,Recovering},quod_client_view:websocket_info(Started,Recovering)),
+        ?assertEqual({ok,Recovering},quod_client_view:websocket_info(
             {replay_ready,{Engine,make_ref()},2},Recovering)),
-        ?assertEqual({ok,Recovering},quod_client_simulation:websocket_info(
+        ?assertEqual({ok,Recovering},quod_client_view:websocket_info(
             {projection_advanced,Engine,2},Recovering)),
         ok = refute_rt(applied_live),
         %% the resuming live apply at 3 closes the run (same Id, ready height 2), then fires the event
@@ -2050,7 +2050,7 @@ t_replay_reentry({Ns, Engine}) ->
         Ready = {replay_ready, Id, 2} = recv_rt(replay_ready),
         ?assertEqual(ready,maps:get(readiness,quod_prolog:stats(Ns))),
         {reply,{text,Refresh},#{peer := {127,0,0,1}}} =
-            quod_client_simulation:websocket_info(Ready,Recovering),
+            quod_client_view:websocket_info(Ready,Recovering),
         ?assertEqual(<<"refresh">>,maps:get(<<"type">>,json:decode(Refresh))),
         %% The socket released this consumer's subscription; reacquire it for
         %% the next independent recovery run below.

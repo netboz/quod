@@ -3,6 +3,95 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+expiry_dependency_uses_published_prefix_and_survives_future_claim_replay_test() ->
+    Target = {Ns, Anchor} = {<<"expiry:source">>, <<231:256>>},
+    Network = <<232:256>>,
+    F = quod_ct:signed_atomic_fixture(#{target => Target, network => Network, deadline => 10}),
+    Bytes = maps:get(request_bytes, F),
+    {operation, _, _, Agent, Id} = maps:get(operation_ref, F),
+    Key = {2, Agent, Id}, Token = {Bytes, 3, 11},
+    Dir = filename:join("/tmp", "quod-expiry-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    Config = #{data_dir => Dir, outcome_backend => disk},
+    {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
+    try
+        I1 = publish_time(I0, 1, 0), I2 = publish_time(I1, 2, 10),
+        [?assertMatch({{unavailable, _}, _}, quod_outcome:request_dependency(I2, Bytes, H, Network))
+         || H <- [0, 1, 2, 3]],
+        {ok, Staged} = quod_outcome:advance_applied(I2, 3, 11),
+        ?assertMatch({{unavailable, _}, _}, quod_outcome:request_dependency(Staged, Bytes, 3, Network)),
+        {ok, I3} = quod_outcome:flush(Staged),
+        ?assertMatch({{ok, Key, Token}, _}, quod_outcome:request_dependency(I3, Bytes, 3, Network)),
+        ?assertEqual(ok, quod_outcome:validate_expiry_dependency(I3, Key, Token, {3, Target, Network})),
+        ?assertEqual(ok, quod_diff:validate(#{Key => Token}, undefined, {I3, 3, Target, Network})),
+        ?assertEqual({conflict, Key}, quod_diff:validate(#{Key => Token}, undefined)),
+        [?assertEqual({conflict, Key}, quod_outcome:validate_expiry_dependency(I3, Key, Token, C)) ||
+          C <- [{2, Target, Network}, {3, Target, none}, {3, Target, <<233:256>>},
+                {3, {Ns, <<234:256>>}, Network}, {3, {<<"other">>, Anchor}, Network}]],
+        [?assertEqual({conflict, Key}, quod_outcome:validate_expiry_dependency(I3, Key, Bad, {3, Target, Network})) ||
+          Bad <- [{Bytes, 3, 12}, {Bytes, 2, 11}, {Bytes, 4, 11}, {<<Bytes/binary, 0>>, 3, 11}]],
+        ?assertNot(quod_read_set:valid(#{Key => {Bytes, 3, 10}})),
+        ?assertNot(quod_read_set:valid(#{Key => {Bytes, 0, 11}})),
+        ?assertNot(quod_read_set:valid(#{Key => {Bytes, 1 bsl 64, 11}})),
+        ?assertNot(quod_read_set:valid(#{{2, Agent, <<0:256>>} => Token})),
+        ?assertNot(quod_read_set:at_height(#{Key => Token}, 2)),
+        ?assertEqual(#{reads => [], writes => [], custody => []},
+                     quod_dtx:conflict_descriptor([], #{Key => Token}, [])),
+        {ok, Encoded} = quod_read_set:encode(#{{known, 1} => static, Key => Token}),
+        {ok, Pairs} = quod_wire_term:decode_canonical(Encoded, 100000),
+        ?assert(quod_read_set:valid_pairs(Pairs)),
+        ?assertNot(quod_read_set:valid_pairs(lists:reverse(Pairs))),
+
+        %% A different later request may use the same operation key. It cannot
+        %% change certified absence through the original captured prefix.
+        Future = quod_ct:signed_atomic_fixture(#{target => Target, network => Network,
+            deadline => 20, key_pair => maps:get(key_pair, F)}),
+        T = maps:get(transaction, Future),
+        {ok, Claim} = quod_transaction:request_claim(T),
+        {new, Claimed} = quod_outcome:claim_operation(I3, 4, Claim,
+            {transaction, Ns, Anchor, T#transaction.tx_id}),
+        I4 = publish_time(Claimed, 4, 12),
+        ?assertMatch({{unavailable, operation_claimed}, _}, quod_outcome:request_dependency(I4, Bytes, 4, Network)),
+        ?assertMatch({{ok, Key, Token}, _}, quod_outcome:request_dependency(I4, Bytes, 3, Network)),
+        ?assertEqual(ok, quod_outcome:validate_expiry_dependency(I4, Key, Token, {4, Target, Network})),
+        ok = quod_outcome:close(I4),
+        {ok, Reopened} = quod_outcome:open(Ns, Anchor, Config),
+        ?assertMatch({{unavailable, _}, _}, quod_outcome:request_dependency(Reopened, Bytes, 3, Network)),
+        Replayed = publish_time(publish_time(publish_time(Reopened, 1, 0), 2, 10), 3, 11),
+        quod_lobby_tests:assert_read_has_no_io(fun() ->
+            lists:foreach(fun(_) ->
+                ?assertMatch({{ok, Key, Token}, _}, quod_outcome:request_dependency(Replayed, Bytes, 3, Network)),
+                ?assertEqual(ok, quod_outcome:validate_expiry_dependency(Replayed, Key, Token, {3, Target, Network}))
+            end, lists:seq(1, 20))
+        end),
+        R4 = publish_time(Replayed, 4, 12),
+        ?assertMatch({{unavailable, operation_claimed}, _}, quod_outcome:request_dependency(R4, Bytes, 4, Network)),
+        ok = quod_outcome:close(R4),
+        ok = file:del_dir_r(Dir)
+    catch Class:Reason:Stack ->
+        io:format("Failed expiry fixture retained at ~s~n", [Dir]),
+        erlang:raise(Class, Reason, Stack)
+    end.
+
+claimed_uncompleted_request_never_expires_test() ->
+    F = quod_ct:signed_atomic_fixture(#{deadline => 10}),
+    {Ns, Anchor} = Target = maps:get(target, F), Network = maps:get(network, F),
+    Bytes = maps:get(request_bytes, F), T = maps:get(transaction, F),
+    {ok, Claim} = quod_transaction:request_claim(T),
+    {operation, _, _, Agent, Id} = maps:get(operation_ref, F),
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    try
+        {new, I1} = quod_outcome:claim_operation(I0, 1, Claim,
+            {group, Ns, Anchor, <<1:256>>, <<2:256>>, <<3:256>>}),
+        I2 = publish_time(publish_time(I1, 1, 10), 2, 100),
+        ?assertMatch({{unavailable, operation_claimed}, _}, quod_outcome:request_dependency(I2, Bytes, 2, Network)),
+        Key = {2, Agent, Id},
+        ?assertEqual({conflict, Key}, quod_outcome:validate_expiry_dependency(I2, Key, {Bytes, 2, 100}, {2, Target, Network}))
+    after quod_outcome:close(I0) end.
+
+publish_time(Index, Height, Time) ->
+    {ok, Next} = quod_outcome:advance_applied(Index, Height, Time),
+    {ok, Published} = quod_outcome:flush(Next), Published.
+
 terminal_operation_dependencies_test_() ->
     [?_test(terminal_operation_dependency(Verdict, Status)) ||
       {Verdict, Status} <- [{committed, 0}, {{rejected, conflict_retry}, 1}]].
@@ -32,8 +121,8 @@ terminal_operation_dependency(Verdict, Status) ->
               setelement(3,Token,1),setelement(4,Token,1-Status),
               setelement(5,Token,2),setelement(6,Token,2)]],
     ?assertEqual({conflict,Key},quod_diff:validate(#{Key => Token},undefined)),
-    ?assertEqual(ok,quod_diff:validate(#{Key => Token},undefined,{I5,3})),
-    ?assertEqual({conflict,Key},quod_diff:validate(#{Key => Token},undefined,{I5,2})),
+    ?assertEqual(ok,quod_diff:validate(#{Key => Token},undefined,{I5,3,{Ns,Anchor},none})),
+    ?assertEqual({conflict,Key},quod_diff:validate(#{Key => Token},undefined,{I5,2,{Ns,Anchor},none})),
     {ok, Bytes} = quod_read_set:encode(#{{known,1} => static, Key => Token}),
     {ok, Pairs} = quod_wire_term:decode_canonical(Bytes,100000),
     ?assert(quod_read_set:valid_pairs(Pairs)),
@@ -817,16 +906,65 @@ public_group_grammar_checks_phases_results_reasons_and_participant_slots_test() 
 applied_floor_is_ordered_idempotent_and_only_published_by_flush_test() ->
     {ok, I0} = quod_outcome:open(<<"quod:ordered-floor">>, <<1:256>>,
                                 #{outcome_backend => memory}),
-    ?assertEqual({error, outcome_index_gap}, quod_outcome:advance_applied(I0, 2)),
-    {ok, I1} = quod_outcome:advance_applied(I0, 1),
+    ?assertEqual({error, outcome_index_gap}, quod_outcome:advance_applied(I0, 2, 2)),
+    {ok, I1} = quod_outcome:advance_applied(I0, 1, 1),
     ?assertEqual(0, quod_outcome:applied_floor(I1)),
-    ?assertEqual({ok, I1}, quod_outcome:advance_applied(I1, 1)),
-    ?assertEqual({ok, I1}, quod_outcome:advance_applied(I1, 0)),
+    ?assertEqual({ok, I1}, quod_outcome:advance_applied(I1, 1, 1)),
+    ?assertEqual({ok, I1}, quod_outcome:advance_applied(I1, 0, 0)),
     {ok, I2} = quod_outcome:flush(I1),
     ?assertEqual(1, quod_outcome:applied_floor(I2)),
-    [?assertEqual({error, outcome_index_gap}, quod_outcome:advance_applied(I2, H)) ||
+    [?assertEqual({error, outcome_index_gap}, quod_outcome:advance_applied(I2, H, H)) ||
         H <- [-1, 3, 16#10000000000000000]],
     ok = quod_outcome:close(I2).
+
+certified_timestamps_are_immutable_floor_gated_and_retained_test() ->
+    Dir = outcome_dir("certified-time"),
+    Ns = <<"quod:certified-time">>, Anchor = <<71:256>>,
+    Config = #{data_dir => Dir, outcome_backend => disk},
+    try
+        {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
+        [?assertEqual({error, outcome_index_bad_timestamp},
+                       quod_outcome:advance_applied(I0, 1, Bad)) ||
+            Bad <- [-1, 1.0, invalid, 16#10000000000000000]],
+        {ok, I1} = quod_outcome:advance_applied(I0, 1, 100),
+        ?assertMatch({{unavailable, outside_snapshot}, _},
+                     quod_outcome:applied_timestamp(I1, 1)),
+        {ok, I2} = quod_outcome:flush(I1),
+        ?assertMatch({{ok, 100}, _}, quod_outcome:applied_timestamp(I2, 1)),
+        ?assertEqual({error, outcome_index_conflict},
+                     quod_outcome:advance_applied(I2, 2, 99)),
+        {ok, I3} = quod_outcome:advance_applied(I2, 2, 100),
+        ?assertMatch({{unavailable, outside_snapshot}, _},
+                     quod_outcome:applied_timestamp(I3, 2)),
+        {ok, I4} = quod_outcome:flush(I3),
+        ok = quod_outcome:close(I4),
+        {ok, R0} = quod_outcome:open(Ns, Anchor, Config),
+        ?assertMatch({{unavailable, outside_snapshot}, _},
+                     quod_outcome:applied_timestamp(R0, 1)),
+        ?assertEqual({error, outcome_index_conflict},
+                     quod_outcome:advance_applied(R0, 1, 101)),
+        {ok, R1} = quod_outcome:advance_applied(R0, 1, 100),
+        {ok, R2} = quod_outcome:flush(R1),
+        ?assertMatch({{unavailable, outside_snapshot}, _},
+                     quod_outcome:applied_timestamp(R2, 2)),
+        {ok, R3} = quod_outcome:advance_applied(R2, 2, 100),
+        {ok, R4} = quod_outcome:flush(R3),
+        quod_lobby_tests:assert_read_has_no_io(fun() ->
+            lists:foldl(fun(_, Index) ->
+                {{ok, 100}, Next} = quod_outcome:applied_timestamp(Index, 1),
+                ?assertEqual({ok, Next}, quod_outcome:advance_applied(Next, 1, 100)),
+                ?assertEqual({ok, Next}, quod_outcome:flush(Next)), Next
+            end, R4, lists:seq(1, 20))
+        end),
+        {ok, R5} = quod_outcome:advance_applied(R4, 3, 300),
+        {ok, R6} = quod_outcome:flush(R5),
+        ?assertMatch({{ok, 300}, _}, quod_outcome:applied_timestamp(R6, 3)),
+        ok = quod_outcome:close(R6),
+        ok = file:del_dir_r(Dir)
+    catch Class:Reason:Stack ->
+        io:format("Failed timestamp fixture retained at ~s~n", [Dir]),
+        erlang:raise(Class, Reason, Stack)
+    end.
 
 %% Retired shape-only obligations are covered more strongly in
 %% quod_atomic_projection_tests:
@@ -861,7 +999,7 @@ certified_complete_replay(I0, F) ->
     I3 = publish(I2, 3),
     {I4, _, none} = apply_atomic_phase(I3, maps:get(complete, F)),
     ?assertEqual({ok, #{status => pending, phase => publication, ref => Ref}}, public_group(I4, F)),
-    {ok, I5} = quod_outcome:advance_applied(I4, 4),
+    {ok, I5} = quod_outcome:advance_applied(I4, 4, 4),
     ?assertMatch({{unavailable,_},_},quod_outcome:operation_dependency(I5,Key,4)),
     ?assertEqual(3, quod_outcome:applied_floor(I5)),
     ?assertEqual(public_group(I4, F), public_group(I5, F)),
@@ -1085,7 +1223,7 @@ reduce_phase(#{control := Control, ref := Ref}, History, Projection) ->
 outcome_projection(Index) -> maps:get(projection, quod_outcome:dtx_state(Index)).
 
 publish(Index, Slot) ->
-    {ok, I1} = quod_outcome:advance_applied(Index, Slot),
+    {ok, I1} = quod_outcome:advance_applied(Index, Slot, Slot),
     {ok, I2} = quod_outcome:flush(I1),
     I2.
 

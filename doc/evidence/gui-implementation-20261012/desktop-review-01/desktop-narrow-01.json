@@ -1,0 +1,16 @@
+{
+  "checks": {
+    "nativeChangesReachController": true,
+    "invalidDraftVisible": true,
+    "invalidDraftNotReplaced": true,
+    "submissionUsesCurrentDraft": true,
+    "utf8Feedback": true,
+    "unknownSelectionNotSubstituted": true,
+    "lockDisablesEntry": true,
+    "controlsOpaque": true,
+    "reachableTargetSizes": true,
+    "opaqueAlternative": true,
+    "noHorizontalOverflow": true
+  },
+  "errors": []
+}

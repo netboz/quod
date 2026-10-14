@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSignedSession } from './session-context'
 import { useProofCursor, replyText } from './Console'
 import { codeForm } from '../../client/src/world.js'
@@ -179,20 +179,21 @@ function ScopedEditor({ workspace, onClose, scene, visible }: EditorProps) {
   const cards = draft?.cards ?? []
   const card = cards[cardIndex]
   const result = [error, replyText(proof.reply, proof.solutionNumber)].filter(Boolean).join('\n')
-  useEffect(() => () => { scene?.setWorkspace(null) }, [scene])
-  useEffect(() => {
-    scene?.setWorkspace(visible ? {
-      view: { title: workspace.view.title, fields: workspace.view.fields.flatMap(field => field.role !== 'source' ? [field]
+  const panelView = useMemo(() => ({ ...workspace.view, fields: workspace.view.fields.flatMap(field => field.role !== 'source' ? [field]
         : !editable || !selected ? [{ ...field, kind: 'bindings' }] : [
-        { kind: 'choice', role: 'layout', label: 'Code layout' },
+        { kind: 'catalogue_selection', role: 'layout', label: 'Code layout' },
         ...(layout === 'text' ? [field] : [
-          { kind: 'choice', role: 'clause', label: 'Clause order' },
-          { kind: 'input', role: 'head', label: 'Head' },
+          { kind: 'catalogue_selection', role: 'clause', label: 'Clause order' },
+          { kind: 'text_box', role: 'head', label: 'Head' },
           { kind: 'editor', role: 'body', label: 'Body (empty for a fact)' },
           ...[['add_clause', 'Add clause'], ['remove_clause', 'Remove clause'], ['move_up', 'Move up'], ['move_down', 'Move down']]
             .map(([role, label]) => ({ kind: 'button', role, label })),
         ]),
-      ]) }, scope: `${workspace.target.namespace}\nGenesis: ${b64url(workspace.target.anchor)}`,
+      ]) }), [workspace.view, editable, selected, layout])
+  useEffect(() => () => { scene?.setWorkspace(null) }, [scene])
+  useEffect(() => {
+    scene?.setWorkspace(visible ? {
+      view: panelView, scope: `${workspace.target.namespace}\nGenesis: ${b64url(workspace.target.anchor)}`,
       values: { predicate: selected, new_predicate: newPredicate, source: draft?.source ?? '', results: result,
         layout, clause: String(cardIndex), head: card?.head ?? '', body: card?.body ?? '' },
       choices: { layout: [{ value: 'text', label: 'Text' }, { value: 'cards', label: 'Clause cards' }],

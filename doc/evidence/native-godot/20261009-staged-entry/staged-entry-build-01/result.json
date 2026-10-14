@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "--manifest-path",
+    "client/native/Cargo.toml",
+    "--offline",
+    "--release",
+    "--locked"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 3.36967475397978
+}

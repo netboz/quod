@@ -1,0 +1,3 @@
+openat(AT_FDCWD, "/proc/stat", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f6eb38a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
++++ killed by SIGTERM +++

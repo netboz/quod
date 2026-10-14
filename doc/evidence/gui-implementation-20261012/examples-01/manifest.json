@@ -1,0 +1,8 @@
+{
+  "priv/ontologies/lobby_atmosphere.pl": "52e725869fb37f0c535fde08ed7576ab21b63b218559160e83d50a872414ebfd",
+  "priv/ontologies/instrument_configuration.pl": "97a299a4d1085b697169c807b0cced892cd8e8ffb37db089d7971ac3a54d5ffe",
+  "test/quod_gui_examples_tests.erl": "92f4637b30594d9791e28d3bd222d2757c8d0b5c874fba795b5c7694173b5e38",
+  "doc/gui-examples.md": "ec509de8defc48caa1ad9989071ce801fb2f867a6482a4f91323f6d9c15fff94",
+  "doc/README.md": "c386ccd90fe83a58d4dcafcb6591fc31c44ca87ca2de487a0f866c7352207165",
+  "doc/gui-implementation-plan.md": "9d9863ab4ebcc6196de2fc72bc6dc96b8ce77cae519578417796866107f34000"
+}

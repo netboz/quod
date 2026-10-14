@@ -1,0 +1,15 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_agent.erl:
+     │
+ 266 │  sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instance} = Agent,
+     │                                                                                       ╰── Warning: variable 'Agent' is unused
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 0.171 seconds
+[0;32m20 tests, 0 failures
+[0m

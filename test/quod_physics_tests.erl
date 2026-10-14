@@ -1880,7 +1880,7 @@ renewal_retains_certified_foreign_dependency_test_() ->
             Monitor = monitor(process,Foreign),
             true = quod_reg:subscribe({physics,Ns}),
             Timer = erlang:start_timer(30000,self(),expired),
-            State = #{peer => {127,0,0,1},namespace => Ns,anchor => Anchor,instance => room,
+            State = #{kind => world,peer => {127,0,0,1},namespace => Ns,anchor => Anchor,instance => room,
                 source => Ns,source_anchor => Anchor,expected_dependencies => [],
                 installed => true,expires => quod_time:now_ms()+30000,timer => Timer,
                 heights => #{},anchors => #{},owners => #{},local_ready => #{},dependency_names => #{},
@@ -1898,8 +1898,8 @@ renewal_retains_certified_foreign_dependency_test_() ->
                     Pending = S#{candidate_timer => Candidate,opening => {Ref,self(),M}},
                     Result = {ok,#{request_digest => crypto:strong_rand_bytes(32),request => #{not_after_ms => Expiry}},
                         {normalized,{read,[{Ns,Anchor,2}],{answers,2,[Binding]}}}},
-                    {ok,Completed} = quod_client_simulation:websocket_info({view_opened,Ref,Result},Pending),
-                    {reply,{text,Json},Renewed} = quod_client_simulation:websocket_info(
+                    {ok,Completed} = quod_client_view:websocket_info({view_opened,Ref,Result},Pending),
+                    {reply,{text,Json},Renewed} = quod_client_view:websocket_info(
                         {'DOWN',M,process,self(),normal},Completed),
                     ?assertMatch(#{<<"type">> := <<"projection">>,<<"selection">> := <<"nonphysical">>},json:decode(Json)),
                     ?assertEqual(maps:get(follows,State),maps:get(follows,Renewed)),
@@ -1908,10 +1908,10 @@ renewal_retains_certified_foreign_dependency_test_() ->
                     Renewed
                 end,State,lists:seq(1,20)),
                 ?assertMatch(#{follow_consumers := 1},quod_foreign_log:stats()),
-                quod_client_simulation:terminate(normal,unused,Final),
+                quod_client_view:terminate(normal,unused,Final),
                 ?assertMatch(#{follow_consumers := 0},quod_foreign_log:stats())
             end)
-            after catch quod_client_simulation:terminate(normal,unused,State) end
+            after catch quod_client_view:terminate(normal,unused,State) end
         after quod_foreign_log_tests:stop_owner(Foreign), file:del_dir_r(Dir) end
     end}.
 
@@ -2247,8 +2247,8 @@ simulation_open(F = #{namespace := Ns, reference := {agent_instance_ref,_,Anchor
         goal_text => Goal},
     {ok, Bytes} = quod_client_goal:encode(Request),
     Enc = fun(B) -> base64:encode(B, #{mode => urlsafe, padding => false}) end,
-    iolist_to_binary(json:encode(#{type => open, session_id => Enc(Session), request => Enc(Bytes),
-        world_namespace => Ns,world_anchor => Enc(Anchor),
+    iolist_to_binary(json:encode(#{type => open, view_kind => world, session_id => Enc(Session), request => Enc(Bytes),
+        view_namespace => Ns,view_anchor => Enc(Anchor),
         signature => Enc(quod_identity:sign(Bytes, Identity))})).
 
 simulation_reply(Socket, Type) ->
@@ -2259,19 +2259,19 @@ simulation_reply(Socket, Type) ->
 
 simulation_socket(Parent, S) ->
     receive
-        stop -> quod_client_simulation:terminate(normal, unused, S);
+        stop -> quod_client_view:terminate(normal, unused, S);
         {inspect, Ref} -> Parent ! {simulation_state, Ref, S}, simulation_socket(Parent, S);
         Message ->
             Result = case Message of
-                {client, Bytes} -> quod_client_simulation:websocket_handle({text, Bytes}, S);
-                _ -> quod_client_simulation:websocket_info(Message, S)
+                {client, Bytes} -> quod_client_view:websocket_handle({text, Bytes}, S);
+                _ -> quod_client_view:websocket_info(Message, S)
             end,
             Next = case Result of
                 {ok, State} -> State;
                 {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
                 {reply,{close,Code,Reason},State} ->
                     Parent ! {simulation_closed,self(),Code,Reason},
-                    quod_client_simulation:terminate(normal,unused,State), closed;
+                    quod_client_view:terminate(normal,unused,State), closed;
                 Other -> error({invalid_socket_result, Other})
             end,
             case {Message,S} of
@@ -3237,15 +3237,15 @@ terminal_outcome_bridge_captures_failed_alternatives_test_() ->
             quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
         {ok,#{operation_ref := {operation,_,_,Agent,Op}}} = quod_client_goal:verify(Bytes,Sig),
         Height = quod_prolog:applied(Ns),Key = {1,Agent,Op},
-        {{ok,Token},_} = {quod_prolog:operation_dependency(Ns,Key,Height,1000),ignored},
-        Query = {committed_operation_outcome,Bytes,Sig,committed},
+        {ok,Key,Token} = quod_prolog:operation_dependency(Ns,Bytes,Height,1000),
+        Query = {committed_operation_outcome,Bytes,committed},
         assert_no_physics_io(fun() ->
             [begin
-                ?assertEqual({ok,Token},quod_prolog:operation_dependency(Ns,Key,Height,1000)),
+                ?assertEqual({ok,Key,Token},quod_prolog:operation_dependency(Ns,Bytes,Height,1000)),
                 with_outcome_session(Ns,Height,fun(Session,Bind,Ctx) ->
                     Goal = case Mode of
                         alternative -> {';', {',',Query,fail},true};
-                        negation -> {'\\+',setelement(4,Query,rejected)};
+                        negation -> {'\\+',setelement(3,Query,rejected)};
                         cut -> {',',Query,'!'}
                     end,
                     ok = quod_proof_session:open(Session,<<1:128>>,Goal,allowed,Ctx,
@@ -3257,15 +3257,61 @@ terminal_outcome_bridge_captures_failed_alternatives_test_() ->
                 end)
             end || Mode <- [alternative,negation,cut]]
         end),
+        {ok,Request} = quod_client_goal:decode(Bytes),
+        {ok,ExpiredBytes} = quod_client_goal:encode(Request#{operation_id := <<113:256>>,
+                                                          not_after_ms := 1}),
+        ExpiredKey = {2,Agent,<<113:256>>},
+        {ok,ExpiredKey,ExpiredToken} = quod_prolog:operation_dependency(Ns,ExpiredBytes,Height,1000),
+        ?assertMatch({ExpiredBytes,Height,_},ExpiredToken),
+        ExpiredQuery = {committed_operation_outcome,ExpiredBytes,expired},
+        assert_no_physics_io(fun() ->
+            [with_outcome_session(Ns,Height,fun(Session,Bind,Ctx) ->
+                Goal = case Mode of
+                    alternative -> {';', {',',ExpiredQuery,fail},true};
+                    negation -> {'\\+',setelement(3,ExpiredQuery,committed)};
+                    cut -> {',',ExpiredQuery,'!'};
+                    rollback -> {';', {transaction,{',',ExpiredQuery,fail}},true}
+                end,
+                ok = quod_proof_session:open(Session,<<4:128>>,Goal,allowed,Ctx,
+                                             quod_transaction_scope:empty_selection()),
+                ?assertMatch({solution,_},quod_proof_session:next(Session,<<4:128>>)),
+                ?assertEqual(ExpiredToken,maps:get(ExpiredKey,quod_proof_session:read_set(Session))),
+                ok = quod_proof_session:open(Session,<<5:128>>,{assertz,{after_expired,true}},allowed,Ctx,
+                                             quod_transaction_scope:empty_selection()),
+                ?assertMatch({solution,_},quod_proof_session:next(Session,<<5:128>>)),
+                {ok,Sealed} = quod_proof_session:seal(Session,Bind),
+                ?assertEqual(ExpiredToken,maps:get(ExpiredKey,quod_ct:plan_material(read_check,Sealed)))
+            end) || Mode <- [alternative,negation,cut,rollback]]
+        end),
+        %% An unsigned selector can neither change the committed request nor
+        %% borrow another scope. Digest mismatches still retain the read that
+        %% influenced failure; malformed/foreign selectors perform no read.
+        lists:foreach(fun({Changed,ExpectedReads}) ->
+            {ok,ChangedBytes} = quod_client_goal:encode(Changed),
+            with_outcome_session(Ns,Height,fun(Session,_Bind,Ctx) ->
+                ok = quod_proof_session:open(Session,<<3:128>>,
+                    {committed_operation_outcome,ChangedBytes,{'Status'}},allowed,Ctx,
+                    quod_transaction_scope:empty_selection()),
+                ?assertMatch({complete,_},quod_proof_session:next(Session,<<3:128>>)),
+                ?assertEqual(ExpectedReads,quod_proof_session:read_set(Session)),
+                ?assertEqual([],quod_proof_session:live_bridges(Session))
+            end)
+        end, [{Request#{goal_text => <<"this is not a Prolog goal">>},#{Key => Token}},
+              {Request#{network_identity => <<198:256>>},#{Key => Token}},
+              {Request#{signing_public_key => <<199:256>>},#{Key => Token}},
+              {Request#{not_after_ms => maps:get(not_after_ms,Request)+1},#{Key => Token}},
+              {Request#{agent_genesis_anchor => <<200:256>>},#{}},
+              {Request#{agent_namespace => <<"another-outcome-source">>},#{}},
+              {Request#{mode => read},#{}}]),
         with_outcome_session(Ns,0,fun(Session,Bind,Ctx) ->
             ok = quod_proof_session:open(Session,<<1:128>>,{'\\+',Query},allowed,Ctx,
                                          quod_transaction_scope:empty_selection()),
             ?assertMatch({error,_},quod_proof_session:next(Session,<<1:128>>)),
-            ?assertEqual([{committed_operation_outcome,3}],quod_proof_session:live_bridges(Session)),
+            ?assertEqual([{committed_operation_outcome,2}],quod_proof_session:live_bridges(Session)),
             ok = quod_proof_session:open(Session,<<2:128>>,{assertz,{after_error,true}},allowed,Ctx,
                                          quod_transaction_scope:empty_selection()),
             ?assertMatch({solution,_},quod_proof_session:next(Session,<<2:128>>)),
-            ?assertEqual({error,{non_transactional_dependency,{committed_operation_outcome,3}}},
+            ?assertEqual({error,{non_transactional_dependency,{committed_operation_outcome,2}}},
                          quod_proof_session:seal(Session,Bind))
         end)
     end,true) end}.
@@ -3275,7 +3321,8 @@ with_outcome_session(Ns,Height,Fun) ->
     Proof = <<112:256>>,
     _ = quod_proof_context:start(Proof,false,{Ns,Anchor},quod_time:mono_ms()+10000,anonymous),
     Session = quod_proof_session:start(
-        quod_runtime_predicates:load(quod_ct:committed_kb([])),#{read_set => true}),
+        quod_transaction_predicates:load(quod_runtime_predicates:load(quod_ct:committed_kb([]))),
+        #{read_set => true}),
     try
         Fun(Session,#{target => {Ns,Anchor},origin => {Ns,Anchor},base_height => Height,
                       proof_id => Proof,principal => anonymous,request_binding => none},

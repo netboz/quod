@@ -1,0 +1,56 @@
+✔ HUD uses the authenticated human scope and renews without frame credit or losing its view (75.658692ms)
+✔ question adapter decodes the common form model without world state (18.735766ms)
+✔ HUD expiry discards authorization and late candidates without reconnecting (14.253846ms)
+✔ HUD disconnect discards authorization and late candidates without reconnecting (9.907858ms)
+✔ HUD refusal discards authorization and late candidates without reconnecting (8.155574ms)
+✔ GUI kind mismatch refuses the projection (4.527642ms)
+✔ a HUD cannot select a malformed receiver address (3.99914ms)
+✔ receiver pending retains exact bytes and blocks another selection after reopening (16.340641ms)
+✔ receiver lost response retains exact bytes and blocks another selection after reopening (9.733929ms)
+✔ receiver selection fails closed when its existing operation journal cannot be read (7.366771ms)
+✖ native preparation is hidden, idempotent, retained across refresh and activated only once (12.661944ms)
+✔ native malformed/unsupported preparation is refused: {"descriptor":"unsupported"} (7.646213ms)
+✔ native malformed/unsupported preparation is refused: {"connection":"foreign"} (4.43374ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"0"} (4.177558ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"99999999999999999"} (6.860115ms)
+✔ native malformed/unsupported preparation is refused: {"capacity":0} (7.55226ms)
+✔ native malformed/unsupported preparation is refused: {"question":"question_ref(bad,bad,bad)"} (4.288643ms)
+✖ native support is explicit and capacity/disconnect release only local resources (5.495974ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 16
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 254.77294
+
+✖ failing tests:
+
+test at client/test/gui-view.test.js:179:1
+✖ native preparation is hidden, idempotent, retained across refresh and activated only once (12.661944ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///home/yan/src/quod/client/test/gui-view.test.js:189:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at client/test/gui-view.test.js:220:1
+✖ native support is explicit and capacity/disconnect release only local resources (5.495974ms)
+  Error [ERR_INVALID_STATE]: Invalid state: MockTimers is already enabled!
+      at MockTimers.enable (node:internal/test_runner/mock/mock_timers:736:13)
+      at fixture (file:///home/yan/src/quod/client/test/gui-view.test.js:8:17)
+      at TestContext.<anonymous> (file:///home/yan/src/quod/client/test/gui-view.test.js:226:13)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'ERR_INVALID_STATE'
+  }

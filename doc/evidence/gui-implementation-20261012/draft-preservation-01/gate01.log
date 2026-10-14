@@ -1,0 +1,17 @@
+✔ both renderers share one local draft and synchronous submission lock (66.61763ms)
+✔ unknown submission survives reopening and resolves through outcomes without replay (15.869183ms)
+✔ definite refusal preserves editing; changed schema locks and preserves the previous draft (17.492354ms)
+✔ changed defaults preserve input until the human explicitly chooses to replace it (9.662018ms)
+✔ a question first read stale can become editable only with its accepted schema (14.17587ms)
+✔ a successful submission can be cancelled only after its completion is certified negative (10.528783ms)
+✔ only a terminal negative answer permits submitted cancellation (6.095935ms)
+✔ unreadable journal cannot authorize a new write (9.716205ms)
+✔ withdrawn form access does not prevent status-based cancellation of an awaiting question (4.7343ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 186.120389

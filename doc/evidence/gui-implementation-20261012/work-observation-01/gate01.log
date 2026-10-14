@@ -1,0 +1,11 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling src/quod_runtime.erl failed
+      ┌─ src/quod_runtime.erl:
+      │
+ 2778 │  selected_work_request({execute, Goal}, _Actor, _Est) -> {ok, {execute, Goal}};
+      │  ╰── head mismatch: previous function valid_resource_scope/3 is distinct from selected_work_request/3. Is the semicolon in valid_resource_scope/3 unwanted?
+
+

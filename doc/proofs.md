@@ -57,6 +57,37 @@ may receive `outcome_unknown` with an anchored operation reference. Resolution
 observes installed and certified evidence; it does not re-prove the goal or
 resubmit an uncertain write.
 
+`current_request_operation(Operation)` exposes the original authenticated
+`operation(SourceNamespace, SourceAnchor, AgentBytes, OperationId)` reference.
+It is the same reference in the origin and every foreign scope; it does not
+allocate another request. `AgentBytes` is the canonical signed agent reference,
+not a new GUI identifier. The accessor is proof-bound, so it can supply a
+correlation key in an ordinary write without consulting live state. Signed read,
+execute, cursor and control proofs expose their own reference. An unsigned proof
+fails this query. Reaction matching, membership verdict re-proofs and validator
+policy contexts cannot invent an operation reference; a reaction's later signed
+proof has its own request identity. The reference alone grants no permission and
+is not evidence that its operation committed.
+
+`current_signed_request(Bytes)` succeeds only when canonical retained request
+bytes match the original signed request already verified for this proof. It uses
+the same authenticated digest in the origin and every foreign scope, without a
+second signature check or a live observation. It fails for an unsigned proof or
+different bytes, even if they describe the same actor and goal. Reaction matching
+and validator policy contexts cannot use it. A domain can require this check
+before consuming retained work, preventing a fresh request from substituting for
+the exact intent it accepted.
+
+`agent_request_bytes(Intent, Bytes)` is a pure conversion of the existing
+`agent_goal_v1(Network, AgentReference, InstanceText, PublicKey, OperationId,
+Expiry, Mode, Parser, GoalText)` term into the canonical signed-request bytes.
+The instance text must describe the same exact agent reference. This operation
+can retain future intent in an ordinary transaction; it accesses no key,
+clock or live owner and grants no authority. `sign_agent_request/2` uses the
+same conversion, then independently requires its existing read-only scope,
+committed hosting/key policy and governed vault. Constructing or retaining
+bytes neither submits them nor permits replay after an uncertain outcome.
+
 ## Failure, reasoned failure and error
 
 Every refusal a proof can produce belongs to exactly one of three classes.

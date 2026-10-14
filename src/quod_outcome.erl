@@ -25,7 +25,9 @@ journal-derived local pending-Vote identities, the ledger-active own-role
 projection, and the ordered applied floor.  Exact per-GroupId rows remain on
 disk after their small in-memory cache entries are evicted, so an old direct
 abort tombstone can never become absence.  A committed block's transaction,
-group, state, and floor updates are staged and synced together by `flush/1`.
+group, state, timestamp and floor updates are staged and synced together by `flush/1`.
+Immutable per-height timestamps share the bounded cache and survive reopen;
+replay must match retained times before publishing each height again.
 When a new Prolog owner opens an existing file, it preserves ordinary outcome
 rows but clears this rebuildable DTX subset and resets its floor before the
 owner is exposed.  The mandatory slot-1 ledger replay then reconstructs both D
@@ -43,13 +45,14 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          check_completion/4, complete_operation/5, unresolved_operations/1,
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
          operation_dependency/3, validate_dependency/4,
+         request_dependency/4, validate_expiry_dependency/4,
          project_pending_votes/2, dtx_state/1,
          lookup_group/2, group_history/2,
-         apply_dtx/2, advance_applied/2, applied_floor/1, changed_requests/1]).
+         apply_dtx/2, advance_applied/3, applied_timestamp/2, applied_floor/1, changed_requests/1]).
 
 -export_type([index/0, outcome/0]).
 
--define(FORMAT, 8). %% own-role Vote/Resolve/Complete projection
+-define(FORMAT, 9). %% immutable certified material timestamps
 -define(CACHE_LIMIT, 4096).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -125,6 +128,64 @@ validate_dependency(Index, Key, Expected, Parent) ->
         _ -> {conflict, Key}
     end.
 
+%% Positive evidence keeps its established token and digest-mismatch behavior.
+%% Missing positive evidence is not absence: expiry also checks the source claim
+%% through the captured prefix, including claims whose completion is still pending.
+-spec request_dependency(index(), binary(), non_neg_integer(), term()) ->
+    {{ok, tuple(), tuple()} | {unavailable, term()} | {outcome_error, term()}, index()}.
+request_dependency(Index = #index{ns = Ns, anchor = Anchor}, Bytes, Height, Network) ->
+    case quod_client_goal:request_identity(Bytes) of
+        {ok, #{request := #{mode := execute},
+               operation_ref := {operation, Ns, Anchor, Agent, Id}}} ->
+            Key = {1, Agent, Id},
+            case operation_dependency(Index, Key, Height) of
+                {{ok, Token}, Next} -> {{ok, Key, Token}, Next};
+                {{outcome_error, _}, _} = Error -> Error;
+                {_, Next} -> expiry_dependency(Next, Bytes, Height, Network)
+            end;
+        _ -> {{unavailable, invalid_request}, Index}
+    end.
+
+expiry_dependency(Index = #index{ns = Ns, anchor = Anchor}, Bytes, Prefix,
+                  <<_:256>> = Network) ->
+    case quod_client_goal:request_identity(Bytes) of
+        {ok, #{request := #{mode := execute, network_identity := Network,
+                           not_after_ms := Expiry},
+               operation_ref := {operation, Ns, Anchor, Agent, Id} = Ref}} ->
+            case applied_timestamp(Index, Prefix) of
+                {{ok, Timestamp}, Timed} when Timestamp > Expiry ->
+                    case lookup_ref(Timed, Ref) of
+                        {not_found, Next} ->
+                            {{ok, {2, Agent, Id}, {Bytes, Prefix, Timestamp}}, Next};
+                        {{ok, #{first_slot := Claim}}, Next} when Claim > Prefix ->
+                            {{ok, {2, Agent, Id}, {Bytes, Prefix, Timestamp}}, Next};
+                        {{error, Reason}, Next} -> {{outcome_error, Reason}, Next};
+                        {_, Next} -> {{unavailable, operation_claimed}, Next}
+                    end;
+                {{error, Reason}, Next} -> {{outcome_error, Reason}, Next};
+                {_, Next} -> {{unavailable, expiry_not_established}, Next}
+            end;
+        _ -> {{unavailable, invalid_request}, Index}
+    end;
+expiry_dependency(Index, _Bytes, _Prefix, _Network) ->
+    {{unavailable, network_identity}, Index}.
+
+%% This pure check receives trust captured before batch application. It must
+%% never consult a live owner or introduce a wait after earlier material applied.
+validate_expiry_dependency(Index = #index{ns = Ns, anchor = Anchor}, Key,
+                            {Bytes, Prefix, _Time} = Token,
+                            {Parent, {Ns, Anchor}, Network}) ->
+    case quod_read_set:at_height(#{Key => Token}, Parent) of
+        true ->
+            case expiry_dependency(Index, Bytes, Prefix, Network) of
+                {{ok, Key, Token}, _} -> ok;
+                {{outcome_error, _} = Error, _} -> Error;
+                _ -> {conflict, Key}
+            end;
+        false -> {conflict, Key}
+    end;
+validate_expiry_dependency(_Index, Key, _Token, _Context) -> {conflict, Key}.
+
 -doc "Request identities changed by the pending flush; reads no durable rows.".
 -spec changed_requests(index()) -> [term()].
 changed_requests(#index{staged = Staged}) ->
@@ -150,6 +211,8 @@ changed_requests(#index{staged = Staged}) ->
                        outcome_index_bad_group |
                        outcome_index_bad_operation |
                        outcome_index_gap |
+                       outcome_index_bad_timestamp |
+                       outcome_index_missing_timestamp |
                        outcome_index_conflict |
                        {outcome_index_io, term()}.
 -type deferred_resolve_ack() ::
@@ -231,11 +294,11 @@ inspect_open_table(Ns, Anchor, Name, Path, MayReset) ->
             end;
         [{meta, ?FORMAT, Anchor}] ->
             open_existing_state(Ns, Anchor, Name, Path, MayReset);
-        [{meta, Version, _OldAnchor}] when is_integer(Version), Version < ?FORMAT ->
+        [{meta, Version, _OldAnchor}] when is_integer(Version), Version =/= ?FORMAT ->
             _ = dets:close(Name),
             {error, {unsupported_format, Version}};
         Other ->
-            %% Corrupt derived state may be reconstructed; a recognized old
+            %% Corrupt derived state may be reconstructed; a recognized other
             %% format above is refused by name without deleting its bytes.
             reset_open_table(Ns, Anchor, Name, Path, MayReset,
                              {format, Other})
@@ -364,33 +427,77 @@ dtx_state(#index{dtx = Dtx}) -> Dtx.
 -spec applied_floor(index()) -> non_neg_integer().
 applied_floor(#index{applied_floor = Floor}) -> Floor.
 
--doc "Stage the next ordered applied slot; replay at or below the floor is inert.".
--spec advance_applied(index(), non_neg_integer()) ->
+-doc "Read an exact certified timestamp only through the durably published floor.".
+-spec applied_timestamp(index(), pos_integer()) ->
+    {{ok, non_neg_integer()} | {unavailable, outside_snapshot} | {error, term()}, index()}.
+applied_timestamp(Index, Height) when is_integer(Height), Height > 0,
+                                      Height =< Index#index.applied_floor ->
+    case lookup_timestamp(Index, Height) of
+        {not_found, I1} -> {{error, outcome_index_missing_timestamp}, I1};
+        Found -> Found
+    end;
+applied_timestamp(Index, _) -> {{unavailable, outside_snapshot}, Index}.
+
+lookup_timestamp(Index = #index{anchor = Anchor}, Height) ->
+    lookup_cached(Index, {timestamp, Anchor, Height}).
+
+-doc "Stage one ordered slot and its immutable certified time for the same flush.".
+-spec advance_applied(index(), non_neg_integer(), non_neg_integer()) ->
           {ok, index()} | {error, index_error()}.
-advance_applied(Index = #index{dtx = Dtx}, Slot)
-  when is_integer(Slot), Slot >= 0, Slot =< ?MAX_UINT64 ->
+advance_applied(Index = #index{dtx = Dtx}, Slot, Timestamp)
+  when is_integer(Slot), Slot >= 0, Slot =< ?MAX_UINT64,
+       is_integer(Timestamp), Timestamp >= 0, Timestamp =< ?MAX_UINT64 ->
     Floor = maps:get(applied_floor, Dtx),
     case Slot of
+        0 when Timestamp =:= 0 -> {ok, Index};
         _ when Slot =< Floor ->
-            {ok, Index};
+            case lookup_timestamp(Index, Slot) of
+                {{ok, Timestamp}, _} -> {ok, Index};
+                {{error, _} = Error, _} -> Error;
+                _ -> {error, outcome_index_conflict}
+            end;
         _ when Slot =:= Floor + 1 ->
-            %% Every fact in this block has been applied before this boundary.
-            %% A whole reducer wave may carry several fences: acknowledge them
-            %% together here, so a later item cannot resurrect an earlier one.
-            Projection = maps:get(projection, Dtx),
-            Applied = maps:fold(
-              fun(Id, #{slot := H, generation := Gen}, Acc) when H =< Slot ->
-                      {ok, Next} = quod_atomic:acknowledge_resolve(Id, H, Gen, Acc),
-                      Next;
-                 (_, _, Acc) -> Acc
-              end, Projection, maps:get(apply_fences, Projection)),
-            {ok, stage_dtx_state(
-                   Index, Dtx#{applied_floor := Slot, projection := Applied})};
-        _ ->
-            {error, outcome_index_gap}
+            case stage_timestamp(Index, Slot, Timestamp) of
+                {ok, Timed} -> advance_floor(Timed, Slot);
+                Error -> Error
+            end;
+        _ -> {error, outcome_index_gap}
     end;
-advance_applied(_Index, _Slot) ->
-    {error, outcome_index_gap}.
+advance_applied(_Index, Slot, _Timestamp)
+  when is_integer(Slot), Slot >= 0, Slot =< ?MAX_UINT64 ->
+    {error, outcome_index_bad_timestamp};
+advance_applied(_Index, _Slot, _Timestamp) -> {error, outcome_index_gap}.
+
+stage_timestamp(Index, Slot, Timestamp) ->
+    Previous = case Slot of
+        1 -> {{ok, 0}, Index};
+        _ -> lookup_timestamp(Index, Slot - 1)
+    end,
+    case Previous of
+        {{ok, Before}, I1} when Timestamp >= Before ->
+            case lookup_timestamp(I1, Slot) of
+                {{ok, Timestamp}, I2} -> {ok, I2};
+                {not_found, I2 = #index{anchor = Anchor}} ->
+                    Key = {timestamp, Anchor, Slot},
+                    {ok, cache_put(Key, Timestamp, stage_row(Key, Timestamp, I2))};
+                {{error, _} = Error, _} -> Error;
+                _ -> {error, outcome_index_conflict}
+            end;
+        {{error, _} = Error, _} -> Error;
+        _ -> {error, outcome_index_conflict}
+    end.
+
+advance_floor(Index = #index{dtx = Dtx}, Slot) ->
+    %% Every fact in this block has been applied before this boundary.
+    %% A whole reducer wave may carry several fences: acknowledge them
+    %% together so a later item cannot resurrect an earlier one.
+    Projection = maps:get(projection, Dtx),
+    Applied = maps:fold(
+      fun(Id, #{slot := H, generation := Gen}, Acc) when H =< Slot ->
+              {ok, Next} = quod_atomic:acknowledge_resolve(Id, H, Gen, Acc), Next;
+         (_, _, Acc) -> Acc
+      end, Projection, maps:get(apply_fences, Projection)),
+    {ok, stage_dtx_state(Index, Dtx#{applied_floor := Slot, projection := Applied})}.
 
 stage_dtx_state(Index = #index{anchor = Anchor, staged = Staged}, Dtx) ->
     Index#index{dtx = Dtx,
@@ -400,17 +507,7 @@ stage_dtx_state(Index = #index{anchor = Anchor, staged = Staged}, Dtx) ->
 -spec lookup_group(index(), <<_:256>>) ->
           {{ok, map()} | not_found | {error, index_error()}, index()}.
 lookup_group(Index, <<_:256>> = GroupId) ->
-    Key = group_key(Index, GroupId),
-    case cache_get(Key, Index) of
-        {{ok, Row}, Index1} ->
-            {{ok, Row}, Index1};
-        {not_found, Index1} ->
-            case backend_lookup(Index1, Key) of
-                {ok, Row} -> {{ok, Row}, cache_put(Key, Row, Index1)};
-                not_found -> {not_found, Index1};
-                {error, Reason} -> {{error, Reason}, Index1}
-            end
-    end;
+    lookup_cached(Index, group_key(Index, GroupId));
 lookup_group(Index, _GroupId) ->
     {{error, outcome_index_bad_group}, Index}.
 
@@ -437,7 +534,7 @@ Contradictions in this internal contract remain loud.
 
 The caller applies the item's facts before staging it. The returned
 `resolve_applied` token must remain deferred until the block's common
-`advance_applied/2` -> `flush/1` -> MVCC publication boundary succeeds.
+`advance_applied/3` -> `flush/1` -> MVCC publication boundary succeeds.
 """.
 -spec apply_dtx(index(), map()) ->
           {ok, index(), none | deferred_resolve_ack()} | {error, index_error()}.
@@ -654,7 +751,7 @@ same_transaction(_Outcome, _Transaction) -> false.
 check_operation(Index, Claim, OutcomeRef) ->
     case operation_candidate(Index, Claim, OutcomeRef, 1) of
         {ok, Key, _Row} ->
-            case lookup_operation(Index, Key) of
+            case lookup_cached(Index, Key) of
                 {not_found, Index1} -> {new, Index1};
                 {{ok, Existing}, Index1} -> {{claimed, Existing}, Index1};
                 {{error, Reason}, _Index1} -> {error, Reason}
@@ -670,7 +767,7 @@ claim_operation(Index, Slot, Claim, OutcomeRef)
   when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
     case operation_candidate(Index, Claim, OutcomeRef, Slot) of
         {ok, Key, Row} ->
-            case lookup_operation(Index, Key) of
+            case lookup_cached(Index, Key) of
                 {not_found, Index1} ->
                     Index2 = stage_row(Key, Row, Index1),
                     {new, cache_put(Key, Row, Index2)};
@@ -756,7 +853,7 @@ check_completion(Index,
           quod_operation_vector:receipt_references(Receipt)} of
         {true, true, {ok, Refs}} ->
             Key = operation_key(Index, AgentRef, OperationId),
-            case lookup_operation(Index, Key) of
+            case lookup_cached(Index, Key) of
                 {{ok, #{ref := OperationRef, request_digest := Digest,
                         outcome_ref := {applications, Refs},
                         included := [], state := unresolved}},
@@ -788,7 +885,7 @@ complete_operation(Index, Slot,
           quod_operation_vector:receipt_references(Receipt)} of
         {true, true, {ok, Refs}} ->
             Key = operation_key(Index, AgentRef, OperationId),
-            case lookup_operation(Index, Key) of
+            case lookup_cached(Index, Key) of
                 {{ok, #{ref := OperationRef, request_digest := Digest,
                         outcome_ref := {applications, Refs},
                         included := [], state := unresolved} = Row},
@@ -838,7 +935,7 @@ unresolved_operations(Index = #index{backend = {dets, Name}}) ->
            end,
     {Rows, Index}.
 
-lookup_operation(Index, Key) ->
+lookup_cached(Index, Key) ->
     case cache_get(Key, Index) of
         {{ok, Row}, Index1} -> {{ok, Row}, Index1};
         {not_found, Index1} ->
@@ -864,7 +961,7 @@ lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
            {operation, Ns, Anchor, AgentRef,
             <<_:256>> = OperationId}) ->
     case quod_agent_ref:valid_principal({agent, AgentRef}) of
-        true -> lookup_operation(
+        true -> lookup_cached(
                   Index, operation_key(Index, AgentRef, OperationId));
         false -> {not_found, Index}
     end;
@@ -1089,6 +1186,9 @@ stored_result(Key, Value) ->
         false -> {error, outcome_index_conflict}
     end.
 
+valid_stored({timestamp, <<_:256>>, Height}, Timestamp)
+  when is_integer(Height), Height > 0, Height =< ?MAX_UINT64,
+       is_integer(Timestamp), Timestamp >= 0, Timestamp =< ?MAX_UINT64 -> true;
 valid_stored(
   {tx, Anchor, TxId},
   #{ref := {transaction, Ns, Anchor, TxId},

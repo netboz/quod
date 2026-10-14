@@ -6,6 +6,114 @@
 
 -import(quod_ct, [change/3, diff_for/1]).
 
+expiry_read_requires_network_before_applying_unsigned_content_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Target = {Ns, Anchor} = {<<"projection:expiry">>, <<235:256>>}, Network = <<236:256>>,
+    F = quod_ct:signed_atomic_fixture(#{target => Target, network => Network, deadline => 10}),
+    Signer = maps:get(node_identity, F), Bytes = maps:get(request_bytes, F),
+    {operation, _, _, Agent, Id} = maps:get(operation_ref, F),
+    Key = {2, Agent, Id}, Token = {Bytes, 2, 11},
+    Est = quod_ct:committed_kb([{can_invoke, {'G'}, {'P'}, [], {'N'}}]),
+    #est{db = #db{ref = Ref}} = Est,
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    {ok, I1} = quod_outcome:advance_applied(I0, 1, 0),
+    {ok, I2} = quod_outcome:advance_applied(I1, 2, 11), {ok, I3} = quod_outcome:flush(I2),
+    P0 = quod_committed_projection:new(Target, 2, Est, I3, none),
+    First = signed_change(Target, change(Ns, diff_for({expiry_batch, first}), #{}), Signer),
+    Read = signed_change(Target, change(Ns, diff_for({expiry_batch, expired}), #{Key => Token}), Signer),
+    Bad = signed_change(Target, change(Ns, diff_for({expiry_batch, forged}), #{Key => {Bytes, 2, 12}}), Signer),
+    ?assertEqual(none, Read#transaction.request_auth),
+    ?assert(quod_transaction:requires_network_identity([First, Read])),
+    Era = quod_ledger:initial_era(Target),
+    {ok, Block} = quod_ledger:new_block({Era, 2}, {Era, 1, <<0:256>>}, 3,
+                                       {batch, [First, Read, Bad]}, 12),
+    Cert = #cert{kind = commit, era = Era, slot = 2,
+                 block_hash = quod_simplex:block_hash(Block), sigs = [{<<1:256>>, <<0:512>>}]},
+    Entry = quod_ledger:entry(3, Block, Cert),
+    Root = quod_ontology:root_ns(), undefined = quod_reg:where({quod_simplex, Root}),
+    Saved = application:get_env(quod, namespace_desired),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Content = maps:remove(Root, maps:get(content, Desired, #{})),
+    application:set_env(quod, namespace_desired, Desired#{content => Content}),
+    try
+        ?assertMatch({wait, network_identity, not_hosted, P0},
+                     quod_committed_projection:apply_entry(Entry, 3, P0)),
+        ?assertNot(proves({expiry_batch, first}, P0)),
+        {ok, Applied, #{transactions := [#{status := applied}, #{status := applied},
+                                         #{status := rejected, reason := conflict_retry}]}} =
+            quod_ct:with_network_identity(Network, fun() ->
+                quod_committed_projection:apply_entry(Entry, 3, P0)
+            end),
+        ?assert(proves({expiry_batch, first}, Applied)),
+        ?assert(proves({expiry_batch, expired}, Applied)),
+        ?assertNot(proves({expiry_batch, forged}, Applied)),
+        ?assertMatch({{ok, 12}, _}, quod_outcome:applied_timestamp(
+            quod_committed_projection:outcomes(Applied), 3))
+    after
+        case Saved of
+            {ok, Value} -> application:set_env(quod, namespace_desired, Value);
+            undefined -> application:unset_env(quod, namespace_desired)
+        end,
+        quod_erlog_db_mvcc:delete(Ref), quod_outcome:close(I0)
+    end.
+
+network_absence_waits_before_the_entire_content_batch_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Target = {Ns, Anchor} = {<<"projection:network-batch">>, <<218:256>>},
+    Network = <<219:256>>,
+    F = quod_ct:signed_atomic_fixture(#{target => Target, network => Network,
+                                       submitted_at => 1}),
+    Signer = maps:get(node_identity, F),
+    NodeKey = maps:get(pubkey, Signer),
+    Est = quod_ct:committed_kb(quod_ct:signed_agent_facts(F) ++
+        [{can_invoke, {'G'}, {'P'}, [], {'N'}},
+         {peer_admitted, NodeKey, "validator", 14567, NodeKey}]),
+    #est{db = #db{ref = Ref}} = Est,
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    {ok, I1} = quod_outcome:advance_applied(I0, 1, 0),
+    {ok, I2} = quod_outcome:flush(I1),
+    P0 = quod_committed_projection:new(Target, 1, Est, I2, none),
+    First = signed_change(Target, change(Ns, diff_for({before_network_check, written}), #{}), Signer),
+    Signed = maps:get(transaction, F),
+    ?assertNot(quod_transaction:requires_network_identity([First])),
+    ?assert(quod_transaction:requires_network_identity([First, Signed])),
+    Root = quod_ontology:root_ns(),
+    undefined = quod_reg:where({quod_simplex, Root}),
+    Saved = application:get_env(quod, namespace_desired),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Content = maps:remove(Root, maps:get(content, Desired, #{})),
+    application:set_env(quod, namespace_desired, Desired#{content => Content}),
+    try
+        {wait, network_identity, not_hosted, Waiting} =
+            project(2, {batch, [First, Signed]}, P0),
+        ?assertEqual(P0, Waiting),
+        ?assertNot(proves({before_network_check, written}, Waiting)),
+        ?assertNot(proves({saved, ok}, Waiting)),
+        ?assertEqual(1, quod_outcome:applied_floor(quod_committed_projection:outcomes(Waiting))),
+        {ok, Applied, #{transactions := [#{status := applied}, #{status := applied}]}} =
+            quod_ct:with_network_identity(Network, fun() ->
+                project(2, {batch, [First, Signed]}, Waiting)
+            end),
+        ?assert(proves({before_network_check, written}, Applied)),
+        ?assert(proves({saved, ok}, Applied)),
+        %% Root readiness is gone again. The projection retains the immutable
+        %% anchor accepted before applying the previous batch.
+        Later = quod_ct:signed_atomic_fixture(#{target => Target, network => Network,
+            key_pair => maps:get(key_pair, F), node_identity => Signer,
+            operation_id => <<220:256>>, goal_text => <<"assertz(saved(next)).">>,
+            submitted_at => 1}),
+        {ok, Next, #{transactions := [#{status := applied}]}} =
+            project(3, {batch, [maps:get(transaction, Later)]}, Applied),
+        ?assert(proves({saved, next}, Next))
+    after
+        case Saved of
+            {ok, Value} -> application:set_env(quod, namespace_desired, Value);
+            undefined -> application:unset_env(quod, namespace_desired)
+        end,
+        quod_erlog_db_mvcc:delete(Ref),
+        ok = quod_outcome:close(I0)
+    end.
+
 ordinary_apply_rejects_unpublished_outcome_dependency_test() ->
     {ok,_} = application:ensure_all_started(gproc),
     Ns = <<"projection:outcome-read">>,Anchor = <<0:256>>,
@@ -345,9 +453,15 @@ founding_module_digest_does_not_lock_current_projection_code_test() ->
 
 project(Index, Data, Projection) ->
     Entry = quod_ct:committed_entry(<<"projection:codec-only">>, Index, Data),
-    quod_committed_projection:apply_entry(
-      Entry,
-      Index, Projection).
+    Result = quod_committed_projection:apply_entry(Entry, Index, Projection),
+    case Result of
+        {ok, Next, #{kind := Kind}} when Kind =/= already_applied ->
+            #entry{timestamp = Timestamp} = quod_ledger:entry_view(Entry),
+            ?assertMatch({{ok, Timestamp}, _}, quod_outcome:applied_timestamp(
+                quod_committed_projection:outcomes(Next), Index));
+        _ -> ok
+    end,
+    Result.
 
 proves(Goal, Projection) ->
     case quod_prolog:prove_est(Goal, quod_committed_projection:est(Projection)) of

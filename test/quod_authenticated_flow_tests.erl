@@ -19,7 +19,7 @@ decode_to_target_validation_authenticates_once_test() ->
           {can_invoke, Goal, Principal, [S || {S, _} <- tl(Chain)], Ns}]),
         {ok, Index} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
         try
-            Context = quod_commit_validation:new(Target, 1, Est, Index, none),
+            Context = quod_commit_validation:new(Target, 1, Est, Index, none, none),
             {Result, Counts} = counted(fun() ->
                 {ok, Decoded} = quod_transaction:decode_ledger_transaction(Bytes, materialized),
                 quod_commit_validation:remote_application(Decoded, Context)

@@ -1,0 +1,45 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff0f03f3780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff0f03f3780) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache", 0x7ff0f03f2640) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=780, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/index", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/index", O_RDWR|O_CREAT, 0600) = 690
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/index", O_RDWR) = 690
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_0", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 701
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_0", O_RDWR) = 701
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_1", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 702
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_1", O_RDWR) = 702
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_2", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 698
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_2", O_RDWR) = 698
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_3", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 703
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/GPUCache/data_3", O_RDWR) = 703
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache", 0x7ff0f03f2640) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=840, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/index", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/index", O_RDWR|O_CREAT, 0600) = 695
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/index", O_RDWR) = 694
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_0", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 695
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_0", O_RDWR) = 695
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_1", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 696
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_1", O_RDWR) = 696
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_2", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 697
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_2", O_RDWR) = 697
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_3", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 704
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnWebGPUCache/data_3", O_RDWR) = 704
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache", 0x7ff0f03f2640) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=860, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/index", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/index", O_RDWR|O_CREAT, 0600) = 705
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/index", O_RDWR) = 705
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_0", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 706
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_0", O_RDWR) = 706
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_1", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 707
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_1", O_RDWR) = 707
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_2", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 708
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_2", O_RDWR) = 708
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_3", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 709
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/DawnGraphiteCache/data_3", O_RDWR) = 709
++++ exited with 0 +++

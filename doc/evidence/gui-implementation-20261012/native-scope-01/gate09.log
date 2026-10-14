@@ -1,0 +1,27 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;31mF[0m=WARNING REPORT==== 13-Oct-2026::17:00:36.992467 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:00:37.955230 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:00:38.598382 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 13-Oct-2026::17:00:39.810108 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_question_tests:-native_scope_cancellation_closes_receiver_worker_test_/0-fun-3-/0
+[0;31m     Failure/Error: ?assertEqual({error,{proof_limit_exceeded,<<103,117,105,58,110,97,116,105,118,101,58,99,97,110,99,101,108>>}}, Reply)
+       expected: {error,{proof_limit_exceeded,<<"gui:native:cancel">>}}
+            got: {error,{scope_expired,<<"gui:native:cancel">>}}[0m
+[0;36m     %% eunit_proc.erl:593:in `eunit_proc:run_group/2`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 12.517 seconds
+[0;31m4 tests, 1 failures
+[0m===> Error running tests

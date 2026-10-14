@@ -1,0 +1,7 @@
+{"event": "engine", "capabilities": {"acceptInsecureCerts": false, "browserName": "chrome", "browserVersion": "157.0.8091.0", "chrome": {"chromedriverVersion": "157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1})", "userDataDir": "/tmp/quod-webxr-wwjyacaw/data/chrome-profile"}, "fedcm:accounts": true, "goog:chromeOptions": {"debuggerAddress": "localhost:46311"}, "goog:processID": 2006459, "networkConnectionEnabled": false, "pageLoadStrategy": "normal", "platformName": "linux", "proxy": {}, "setWindowRect": true, "strictFileInteractability": false, "timeouts": {"implicit": 0, "pageLoad": 300000, "script": 30000}, "unhandledPromptBehavior": "dismiss and notify", "webauthn:extension:cmtgKey": true, "webauthn:extension:credBlob": true, "webauthn:extension:largeBlob": true, "webauthn:extension:minPinLength": true, "webauthn:extension:prf": true, "webauthn:virtualAuthenticators": true}}
+127.0.0.1 - - [09/Oct/2026 10:45:32] "GET /linux-webxr.fixture.html HTTP/1.1" 200 -
+127.0.0.1 - - [09/Oct/2026 10:45:32] code 404, message File not found
+127.0.0.1 - - [09/Oct/2026 10:45:32] "GET /favicon.ico HTTP/1.1" 404 -
+{"event": "ready", "immersiveVR": true, "secureContext": true, "webxr": true}
+{"event": "failed", "message": "The specified session configuration is not supported.", "name": "NotSupportedError", "cycle": 1}
+{"event": "harness-failed", "reason": "Native immersive session failed"}

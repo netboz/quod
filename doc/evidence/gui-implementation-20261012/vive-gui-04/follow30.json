@@ -1,0 +1,8 @@
+{
+  "value": {
+    "elevationDegrees": 30,
+    "fixtureOnly": true,
+    "headFollowing": "position and yaw",
+    "roll": 0
+  }
+}

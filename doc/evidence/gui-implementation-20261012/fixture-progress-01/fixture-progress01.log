@@ -1,0 +1,3 @@
+FIXTURE_PROGRESS #{initial => 1,projection_workers => 0,
+                   before => {error,unavailable},
+                   updated => 2}

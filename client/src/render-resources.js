@@ -16,6 +16,7 @@ export function createRenderResources(scene, {
   const assets = new Map()
   const bindings = new Map()
   const models = new Map()
+  const images = new Map()
   let disposed = false
 
   function acquireBytes(kind, digest, maximum = Infinity) {
@@ -76,6 +77,37 @@ export function createRenderResources(scene, {
         if (--entry.users === 0) retire(key, entry)
       },
     }
+  }
+
+  // DOM and spatial GUI consumers share verified bytes with scene textures.
+  function acquireImage(digest) {
+    if (disposed) throw new Error('render resources are disposed')
+    let entry = images.get(digest)
+    if (!entry) {
+      const bytes = acquireBytes('texture', digest)
+      entry = { users: 0, active: true, url: null, bytes }
+      entry.ready = bytes.asset.ready.then(data => {
+        if (!entry.active) return null
+        entry.url = URL.createObjectURL(new Blob([data], { type: 'image/jpeg' }))
+        return entry.url
+      })
+      images.set(digest, entry)
+    }
+    entry.users++
+    let released = false
+    return { ready: entry.ready, release() {
+      if (released) return
+      released = true
+      if (--entry.users === 0) retireImage(digest, entry)
+    } }
+  }
+
+  function retireImage(digest, entry) {
+    if (!entry.active) return
+    entry.active = false
+    images.delete(digest)
+    if (entry.url) URL.revokeObjectURL(entry.url)
+    entry.bytes.release()
   }
 
   function retire(key, entry) {
@@ -149,10 +181,12 @@ export function createRenderResources(scene, {
   return {
     acquire,
     acquireModel,
+    acquireImage,
     dispose() {
       disposed = true
       for (const [key, entry] of bindings) retire(key, entry)
       for (const [key, entry] of models) retireModel(key, entry)
+      for (const [key, entry] of images) retireImage(key, entry)
     },
   }
 }

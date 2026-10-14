@@ -31,7 +31,8 @@ prepared material all pass through the existing canonical validators.
           applied = 0 :: non_neg_integer(),
           est :: tuple(),
           outcomes :: quod_outcome:index(),
-          signer :: quod_identity:signer() | none
+          signer :: quod_identity:signer() | none,
+          network = none :: none | <<_:256>>
          }).
 
 -opaque projection() :: #projection{}.
@@ -127,7 +128,7 @@ apply_entry_view(#entry{index = Index, data = Data,
               [Control || {_Kind, Control} <- TaggedControls],
               Entry, Floor, Projection0);
         invalid ->
-            publish(Index, Floor, Projection0,
+            publish(Index, Timestamp, Floor, Projection0,
                     (result(unexpected))#{payload => Data})
     end;
 apply_entry_view(_View, _Entry, _Floor, _Projection) ->
@@ -168,7 +169,7 @@ apply_prepared_content_entry(
             Projection1 = set_validation_context(Context, Projection0),
             case apply_transactions(Transactions, Index, Projection1) of
                 {ok, Projection2, Results, Stats} ->
-                    publish(Index, Floor, Projection2,
+                    publish(Index, Timestamp, Floor, Projection2,
                             #{kind => content, transactions => Results,
                               stats => Stats});
                 {error, _} = Error ->
@@ -290,7 +291,8 @@ apply_ordinary_transaction(
                   est = #est{db = #db{mod = quod_erlog_db_mvcc,
                                       ref = Ref}} = Est}) ->
     case quod_diff:validate(ReadCheck, Ref,
-                            {Projection#projection.outcomes, Projection#projection.applied}) of
+                            {Projection#projection.outcomes, Projection#projection.applied,
+                             Projection#projection.target, Projection#projection.network}) of
         {outcome_error, Reason} -> {error, {outcome_index_unavailable, Reason}};
         ok ->
             case quod_diff:apply_ops_preserving_policy_report(Est, Diff) of
@@ -381,7 +383,7 @@ apply_dtx_batch_entry(Controls, Entry, Floor, Projection0) ->
                    ControlRefs, Histories, ProjectionState0) of
                 {ok, _Histories1, _ProjectionState1, Items} ->
                     apply_reduced_dtx_batch(
-                      Items, Index, Floor, Projection1,
+                      Items, Index, Timestamp, Floor, Projection1,
                       [], [], [], [], [], stats());
                 Other ->
                     {error, {invalid_dtx_transition, Other}}
@@ -423,12 +425,12 @@ validate_dtx_batch([Control | Rest], Entry, Timestamp, Index,
             end
     end.
 
-apply_reduced_dtx_batch([], Index, Floor, Projection,
+apply_reduced_dtx_batch([], Index, Timestamp, Floor, Projection,
                         Controls, ResultItems, Publications, AppliedOpChunks,
                         DeferredAcks, Stats) ->
     AppliedOps = lists:append(lists:reverse(AppliedOpChunks)),
     publish(
-      Index, Floor, Projection,
+      Index, Timestamp, Floor, Projection,
       #{kind => dtx_batch, controls => lists:reverse(Controls),
         items => lists:reverse(ResultItems),
         publications => lists:reverse(Publications),
@@ -436,7 +438,7 @@ apply_reduced_dtx_batch([], Index, Floor, Projection,
         deferred_acks => lists:reverse(DeferredAcks), stats => Stats});
 apply_reduced_dtx_batch(
   [#{control := Control, effects := Effects} = Item | Rest],
-  Index, Floor, Projection0 = #projection{outcomes = Outcomes0},
+  Index, Timestamp, Floor, Projection0 = #projection{outcomes = Outcomes0},
   Controls0, ResultItems0, Publications0, AppliedOps0,
   DeferredAcks0, Stats0) ->
     case apply_dtx_effects(Effects, Index, Projection0) of
@@ -455,7 +457,7 @@ apply_reduced_dtx_batch(
                                    Control, Publication, AppliedOps,
                                    DeferredAck, Delta), Projection1),
                     apply_reduced_dtx_batch(
-                      Rest, Index, Floor,
+                      Rest, Index, Timestamp, Floor,
                       Projection1#projection{outcomes = Outcomes1},
                       [Control | Controls0],
                       [ResultItem#{selection_changes => quod_selection_basis:role_changes(Control, Effects)}
@@ -531,12 +533,12 @@ apply_dtx_effect(
 apply_dtx_effect(Effect, Index, _Projection) ->
     {error, {invalid_committed_dtx_effects, Index, Effect}}.
 
-publish(Index, Floor,
+publish(Index, Timestamp, Floor,
         Projection0 = #projection{
                         est = #est{db = #db{mod = quod_erlog_db_mvcc,
                                             ref = Ref0} = Db} = Est,
                         outcomes = Outcomes0}, Result) ->
-    case quod_outcome:advance_applied(Outcomes0, Index) of
+    case quod_outcome:advance_applied(Outcomes0, Index, Timestamp) of
         {ok, OutcomesStaged} ->
             Changes = maps:from_list([{Key, true} || Key <-
                 [{fact, F} || F <- quod_erlog_db_mvcc:changed_functors(Ref0)] ++
@@ -576,11 +578,12 @@ trace_publication(Name, Publish) ->
 
 validation_context(
   #projection{target = Target, applied = Applied, est = Est,
-              outcomes = Outcomes, signer = Signer}) ->
-    quod_commit_validation:new(Target, Applied, Est, Outcomes, Signer).
+              outcomes = Outcomes, signer = Signer, network = Network}) ->
+    quod_commit_validation:new(Target, Applied, Est, Outcomes, Signer, Network).
 
 set_validation_context(Context, Projection) ->
-    Projection#projection{outcomes = quod_commit_validation:outcomes(Context)}.
+    Projection#projection{outcomes = quod_commit_validation:outcomes(Context),
+                          network = quod_commit_validation:network(Context)}.
 
 membership_change(Change) ->
     quod_simplex:committee_delta(Change) =/= {[], []}.

@@ -1,0 +1,2 @@
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=2003800, si_uid=1000, si_status=SIGTERM, si_utime=4 /* 0.04 s */, si_stime=18 /* 0.18 s */} ---
++++ exited with 0 +++

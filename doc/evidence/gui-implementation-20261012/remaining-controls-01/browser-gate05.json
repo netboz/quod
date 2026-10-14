@@ -1,0 +1,6 @@
+{
+  "passed": false,
+  "error": "[{'level': 'DEBUG', 'message': 'http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"', 'source': 'console-api', 'timestamp': 1791934206299}, {'level': 'DEBUG', 'message': 'http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"', 'source': 'console-api', 'timestamp': 1791934206366}, {'level': 'SEVERE', 'message': 'http://localhost:5178/favicon.ico - Failed to load resource: the server responded with a status of 404 (Not Found)', 'source': 'network', 'timestamp': 1791934206866}, {'level': 'INFO', 'message': 'http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=f7e8e68f 39:23 \"BJS - [01:30:07]: Babylon.js v9.18.1 - WebGL2\"', 'source': 'console-api', 'timestamp': 1791934207481}, {'level': 'INFO', 'message': 'http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=f7e8e68f 39:23 \"BJS - [01:30:10]: Babylon.js v9.18.1 - WebGL2\"', 'source': 'console-api', 'timestamp': 1791934210575}]",
+  "chromedriver05_exit": -15,
+  "fixture-server05_exit": 143
+}

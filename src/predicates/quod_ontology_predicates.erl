@@ -78,8 +78,10 @@ lifecycle_request_predicate(Goal, Next, #est{bs = Bs} = St) ->
                     {Handle, St1} =
                         quod_erlog_db_local_prove:register_action_request(
                           St, RequestAction, Structural),
+                    Vn = St1#est.vn,
+                    Transition = {?CONTINUATION, Handle, Action, {Vn}},
                     erlog_int:prove_body(
-                      [{run_declared_action, Action, Handle} | Next], St1);
+                      [{run_declared_action, Transition} | Next], St1#est{vn = Vn + 1});
                 {error,invalid_arguments} -> erlog_int:instantiation_error(St);
                 {error,_} -> erlog_int:domain_error(ontology_action,Action,St)
             end;

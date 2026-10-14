@@ -1,0 +1,124 @@
+readlink("/proc/self/exe", "/home/yan/src/quod/client/_build"..., 4096) = 78
+openat(AT_FDCWD, "/proc/", O_RDONLY|O_CLOEXEC|O_DIRECTORY) = 596
+newfstatat(596, "self/task/", {st_mode=S_IFDIR|0555, st_size=0, ...}, 0) = 0
+access("/etc/xdg/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/local/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/monado-build/openxr_monado-dev.json", O_RDONLY) = 597
+access("/etc/xdg/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/local/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/xdg/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/local/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/share/openxr/1/api_layers/implicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/xdg/openxr/1/api_layers/explicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/etc/openxr/1/api_layers/explicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/local/share/openxr/1/api_layers/explicit.d", F_OK) = -1 ENOENT (No such file or directory)
+access("/usr/share/openxr/1/api_layers/explicit.d", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/openxr/1/api_layers/explicit.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+connect(597, {sa_family=AF_UNIX, sun_path="/tmp/quod-webxr-fpcrwlq9/runtime/monado_comp_ipc"}, 110) = 0
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}) = 0
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 0
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/glvnd/egl_vendor.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d/10_nvidia.json", O_RDONLY) = 597
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}) = 0
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d/50_mesa.json", O_RDONLY) = 597
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidiactl", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0xff), ...}) = 0
+stat("/dev/nvidiactl", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0xff), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidiactl", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0xff), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidiactl", O_RDWR) = 597
+openat(AT_FDCWD, "/sys/devices/system/memory/block_size_bytes", O_RDONLY) = 597
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR) = 597
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR) = 597
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR) = 597
+openat(AT_FDCWD, "/dev/nvidiactl", O_RDWR) = 597
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}) = 0
+openat(AT_FDCWD, "/dev/dri", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+stat("/dev/dri/renderD128", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xe2, 0x80), ...}) = 0
+openat(AT_FDCWD, "/dev/dri/renderD128", O_RDWR) = 597
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR) = 597
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 597
+stat("/dev/nvidia0", {st_mode=S_IFCHR|0666, st_rdev=makedev(0xc3, 0), ...}) = 0
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR) = 597
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}) = 0
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 0
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 597
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 0
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 0
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 597
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 0
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 597
+openat(AT_FDCWD, "/etc/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_DIRECTORY) = 597
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 0
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 597
++++ exited with 1 +++

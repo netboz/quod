@@ -1,0 +1,93 @@
+"""Software-only browser gate: no window, native XR runtime or display changes."""
+import hashlib, json, os, pathlib, re, selectors, subprocess, tempfile, threading, time, urllib.request
+
+root = pathlib.Path('/home/yan/src/quod')
+packet = pathlib.Path(__file__).resolve().parent
+base = root / 'client/_build/webxr-linux'
+children, logs = [], []
+session = None
+endpoint = None
+result = {}
+
+def start(executable, args, name, pattern):
+    log = (packet / (name + '.log')).open('x')
+    logs.append(log)
+    process = subprocess.Popen([str(executable), *args], cwd=root/'ui',
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    children.append((name, process))
+    data = b''
+    deadline = time.monotonic() + 30
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while not (match := re.search(pattern, data)):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise RuntimeError(name + ' startup deadline exceeded')
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk: raise RuntimeError(name + ' exited during startup')
+            data += chunk
+            log.write(chunk.decode(errors='replace')); log.flush()
+    def drain():
+        for line in process.stdout:
+            log.write(line.decode(errors='replace')); log.flush()
+    threading.Thread(target=drain, daemon=True).start()
+    return match
+
+def request(path, body=None, method='POST'):
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(endpoint + path, data=data, method=method,
+                                 headers={'Content-Type':'application/json'})
+    with urllib.request.urlopen(req, timeout=65) as response:
+        return json.load(response)['value']
+
+try:
+    start(root/'ui/node_modules/.bin/vite', ['--host','127.0.0.1','--port','5178','--strictPort'],
+          'fixture-server', rb'Local:')
+    match = start(base/'chrome-testing/chromedriver-linux64/chromedriver', ['--port=0'],
+                  'chromedriver', rb'started successfully on port (\d+)')
+    endpoint = 'http://127.0.0.1:' + match[1].decode()
+    with tempfile.TemporaryDirectory(prefix='quod-gui-headless-') as profile:
+        created = request('/session', {'capabilities': {'alwaysMatch': {
+            'browserName':'chrome', 'goog:loggingPrefs':{'browser':'ALL'},
+            'goog:chromeOptions':{'binary':str(base/'chromium/src/out/QuodWebXR/chrome'),
+                'args':['--headless=new', '--no-first-run', '--no-default-browser-check',
+                        '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                        '--window-size=1440,1100', '--user-data-dir='+profile]}}}})
+        session = created['sessionId']
+        prefix = '/session/' + session
+        request(prefix+'/timeouts', {'script':60000,'pageLoad':30000})
+        request(prefix+'/url', {'url':'http://localhost:5178/test/workspace-panel.fixture.html'})
+        value = request(prefix+'/execute/async', {'script':"""
+          const done = arguments[arguments.length - 1];
+          window.exerciseWorkspacePanel().then(({screenshot, ...value}) => done({value}),
+            error => done({error:String(error.stack ?? error)}));
+        """, 'args':[]})
+        (packet/'browser-result01.json').write_text(json.dumps(value,indent=2)+'\n')
+        console = request(prefix+'/log', {'type':'browser'})
+        (packet/'browser-console01.json').write_text(json.dumps(console,indent=2)+'\n')
+        assert 'error' not in value, value
+        checks = value['value']
+        assert all(v for v in checks.values() if isinstance(v,bool)), checks
+        assert checks['nodeMaterialRoundtrip'] and checks['xrFeatures']
+        assert checks['typed'] == 'a(X).' and checks['activations'] == 1
+        assert checks['browserErrors'] == [], checks['browserErrors']
+        assert not [e for e in console if e['level']=='SEVERE' and e['source']!='network'], console
+        manifest = json.loads((packet/'manifest.json').read_text())
+        assert all(hashlib.sha256((root/f).read_bytes()).hexdigest()==h for f,h in manifest.items())
+        result.update(passed=True, unchanged=True, boolean_checks=sum(isinstance(v,bool) for v in checks.values()))
+        request(prefix, method='DELETE'); session = None
+except Exception as error:
+    result.update(passed=False, error=str(error))
+finally:
+    if session:
+        try: request('/session/'+session, method='DELETE')
+        except Exception: pass
+    for name, process in reversed(children):
+        if process.poll() is None: process.terminate()
+        try: result[name+'_exit'] = process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill(); result[name+'_exit'] = process.wait()
+    for log in logs: log.close()
+    (packet/'browser-gate01.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps(result))
+raise SystemExit(0 if result.get('passed') else 1)

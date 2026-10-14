@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/run.py",
+    "--export"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 5.239037323975936
+}

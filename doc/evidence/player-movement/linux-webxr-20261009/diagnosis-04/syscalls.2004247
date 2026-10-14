@@ -1,0 +1,3 @@
+openat(AT_FDCWD, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC) = -1 EPERM (Operation not permitted)
+openat(AT_FDCWD, "/proc/stat", O_RDONLY|O_CLOEXEC) = -1 EPERM (Operation not permitted)
++++ exited with 0 +++

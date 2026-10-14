@@ -1,0 +1,15 @@
+Initialize godot-rust (API v4.5.stable.official, runtime v4.7.2.stable.official, safeguards balanced)
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+SCRIPT ERROR: Parse Error: Function "emit()" not found in base Dictionary.
+          at: GDScript::reload (res://main.gd:283)
+          GDScript backtrace (most recent call first):
+              [0] run (res://tests/live.gd:11)
+ERROR: Failed to load script "res://main.gd" with error "Parse error".
+   at: load (modules/gdscript/gdscript_resource_format.cpp:46)
+   GDScript backtrace (most recent call first):
+       [0] run (res://tests/live.gd:11)
+SCRIPT ERROR: Invalid assignment of property or key 'auto_restore' with value of type 'bool' on a base object of type 'Node3D'.
+          at: run (res://tests/live.gd:12)
+          GDScript backtrace (most recent call first):
+              [0] run (res://tests/live.gd:12)

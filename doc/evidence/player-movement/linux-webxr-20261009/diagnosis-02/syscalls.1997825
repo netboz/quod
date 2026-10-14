@@ -1,0 +1,3 @@
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cache/Cache_Data/sqldb1", {st_mode=S_IFREG|0600, st_size=53248, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cache/Cache_Data/sqldb1", {st_mode=S_IFREG|0600, st_size=53248, ...}) = 0
++++ exited with 0 +++

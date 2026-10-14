@@ -1,0 +1,69 @@
+=== Suite started at 2026-10-13 18:47:08
+=== Starting test, 1 test cases
+=cases         1
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-10-13 18:47:08
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-10-13 18:47:08
+=ended         2026-10-13 18:47:18
+=result        ok
+=elapsed       9.506065s
+=case          quod_ask_SUITE:remote_gui_opening_observer_receiver
+=logfile       quod_ask_suite.remote_gui_opening_observer_receiver.html
+=started       2026-10-13 18:47:18
+=ended         2026-10-13 18:47:35
+=result        failed: {remote_gui_projection_missing,
+                           [{quod_ask_SUITE,
+                                '-remote_gui_opening_observer_receiver/1-fun-10-',
+                                4,
+                                [{file,
+                                     "/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                                 {line,824}]},
+                            {quod_ask_SUITE,
+                                remote_gui_opening_observer_receiver,1,
+                                [{file,
+                                     "/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                                 {line,827}]},
+                            {test_server,ts_tc,3,
+                                [{file,"test_server.erl"},{line,1796}]},
+                            {test_server,run_test_case_eval1,6,
+                                [{file,"test_server.erl"},{line,1305}]},
+                            {test_server,run_test_case_eval,9,
+                                [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                             '-remote_gui_opening_observer_receiver/1-fun-10-',
+                                                                             824},
+                                                                            {quod_ask_SUITE,
+                                                                             remote_gui_opening_observer_receiver,
+                                                                             827},
+                                                                            {test_server,
+                                                                             ts_tc,
+                                                                             1796},
+                                                                            {test_server,
+                                                                             run_test_case_eval1,
+                                                                             1305},
+                                                                            {test_server,
+                                                                             run_test_case_eval,
+                                                                             1237}]
+=elapsed       16.695352s
+=== *** FAILED test case 1 of 1 ***
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-10-13 18:47:35
+=ended         2026-10-13 18:47:35
+=result        ok
+=elapsed       0.017452s
+=group_time    26.307s
+=== TEST COMPLETE, 0 ok, 1 failed of 1 test cases
+
+=finished      2026-10-13 18:47:35
+=failed        1
+=successful    0
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  26678268

@@ -1,0 +1,6 @@
+{
+  "passed": false,
+  "error": "[Errno 39] Directory not empty: '/tmp/quod-gui-headless-9iiquumn'",
+  "chromedriver04_exit": -15,
+  "fixture-server04_exit": 143
+}

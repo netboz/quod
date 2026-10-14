@@ -1,0 +1,23 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f09f4ff7780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f09f4ff7780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/HistorySearch", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/HistorySearch", 0x7f09f4ff54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=420, ...}) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/HistorySearch", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/HistorySearch", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 678
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/HistorySearch", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 677
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/OriginTrials", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/OriginTrials", 0x7f09f4ff54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=500, ...}) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/OriginTrials", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/OriginTrials", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/OriginTrials", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 677
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/Crowd Deny", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Crowd Deny", 0x7f09f4ff54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=600, ...}) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Crowd Deny", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 681
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", F_OK) = -1 ENOENT (No such file or directory)
++++ exited with 0 +++

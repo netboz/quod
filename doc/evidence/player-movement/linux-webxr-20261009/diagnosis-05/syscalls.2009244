@@ -1,0 +1,4 @@
+openat(AT_FDCWD, "/proc/self/cmdline", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f6eb38a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+--- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=2008647, si_uid=1000} ---
++++ killed by SIGTERM +++

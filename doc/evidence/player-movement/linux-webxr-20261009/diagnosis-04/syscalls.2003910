@@ -1,0 +1,20 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6231ee780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6231ee780) = -1 ENOENT (No such file or directory)
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47800, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=300, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data", 0x7fe6231e9c00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data", 0x7fe6231eb700) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 656
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(656, F2FS_IOC_GET_FEATURES, 0x7fe6231ebd34) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data-journal", 0x7fe6231ebc00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data-wal", 0x7fe6231ebbd0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Login Data-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 664
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 675
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Collaboration/MessageDB", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Collaboration/MessageDB", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
++++ exited with 0 +++

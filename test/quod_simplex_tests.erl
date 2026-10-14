@@ -951,6 +951,18 @@ era_live_archive_case(Mode, Origin) ->
                          signed_bytes = none, authentication = none}),
         {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(maps:get(pubkey, Signer), maps:get(admissions, P))}, Unsigned, Signer),
         {ok, Next} = quod_ledger:new_block({NextEra, NextView}, NextParent, 3, {batch, [Tx2]}, 2),
+        %% The real owner has just pruned or changed era, live or via catchup.
+        %% It must retain the certified time lower bound used by expiry reads.
+        {ok, Regressed} = quod_ledger:new_block(
+            {NextEra, NextView}, NextParent, 3, {batch, [Tx2]}, 0),
+        RegressedShare = quod_simplex:make_share(Domain, support,
+            {NextEra, NextView}, quod_simplex:block_hash(Regressed), Signer),
+        Pools = quod_simplex:test_engine_pool_sizes(Owner1),
+        ?assertEqual(quod_simplex:test_protocol_position(Owner1),
+            quod_simplex:test_protocol_position(quod_simplex:engine_step(
+                [{block, Regressed}, {share, RegressedShare}], Owner1))),
+        ?assertNotEqual(Pools, quod_simplex:test_engine_pool_sizes(
+            quod_simplex:engine_step([{block, Next}], Owner1))),
         E4 = Support(Next, Pruned), Cert2 = quod_ct:protocol_certificate(Next, F),
         {E5, _} = quod_simplex:eng_offer({cert, Cert2}, E4),
         {Source2, [Entry2], Summary2} =

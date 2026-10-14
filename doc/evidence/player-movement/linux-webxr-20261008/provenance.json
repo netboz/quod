@@ -1,0 +1,33 @@
+{
+  "sources": {
+    "client/_build/webxr-linux/downloads/gperf-3.3-2-x86_64.pkg.tar.zst": {
+      "sha256": "87c8fb6323a2609b77767d2820f26b4c0d3337367a753d0b84180a983a6a1aa3",
+      "bytes": 105091
+    },
+    "client/_build/webxr-linux/downloads/monado.tar": {
+      "sha256": "5f45a297f8003f7831ec1c71c364bb31c9bc9f7a9c8a9a5ce2dcc9b1a9468fce",
+      "bytes": 26040320
+    },
+    "client/_build/webxr-linux/downloads/ruby-3.4.10-1-x86_64.pkg.tar.zst": {
+      "sha256": "be09c30c49390151bfd67c146bf0a64a81843dae3ac5f695d2613eac1984cb92",
+      "bytes": 4374231
+    },
+    "client/_build/webxr-linux/downloads/ruby-erb-4.0.4.1-1-x86_64.pkg.tar.zst": {
+      "sha256": "04e3eb157e3f718cd6d6ad9b002bb045a7cae446f85d6b44412584f0bfd5f1d2",
+      "bytes": 27697
+    },
+    "client/_build/webxr-linux/downloads/rubygems-3.6.9-1-any.pkg.tar.zst": {
+      "sha256": "b7cd562ae0078cafb7ac4791f9088b6b0615221c548e8e1e28c545fa6b771ff1",
+      "bytes": 638479
+    },
+    "client/_build/webxr-linux/downloads/unifdef-2.12-4-x86_64.pkg.tar.zst": {
+      "sha256": "69126d5b148a9f3e7410048ef798a0c74b251a142a2d0b6a571706bdc3d9f7e2",
+      "bytes": 21290
+    },
+    "client/_build/webxr-linux/downloads/webkitgtk-2.54.1.tar.xz": {
+      "sha256": "ea0bbb02dbdbc596874a4e7ad35b66645b3e0a232bd0e4081de5ed92eb0a397d",
+      "bytes": 49729412
+    }
+  },
+  "monado_revision": "f4dc0ec36e1109a997c8b388fb30de3cf1dc01b0"
+}

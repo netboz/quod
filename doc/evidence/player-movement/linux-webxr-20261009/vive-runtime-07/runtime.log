@@ -1,0 +1,845 @@
+ INFO [ipc_server_main_common] Monado(XRT) by Collabora et al 'HEAD-HASH-NOTFOUND' starting up...
+ INFO [print_linux_end_user_started_information] 
+################################################################################
+#                                                                              #
+#                        The Monado service has started.                       #
+#                                                                              #
+################################################################################
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [steamvr_lh_create_devices] Found SteamVR install: /home/yan/.local/share/Steam/steamapps/common/SteamVR
+DEBUG [GetGenericInterface] Requested interface IVRServerDriverHost_006
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverLog_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-D006848D
+ INFO [TrackedDeviceAdded] Found lighthouse HMD: LHR-D006848D
+ INFO [init_chaperone] Found info for universe 1774552967
+ INFO [init_chaperone] Initialized chaperone data.
+DEBUG [handle_property_write] Unhandled property: 1037
+DEBUG [handle_property_write] Unhandled property: 2069
+DEBUG [handle_property_write] Unhandled property: 2091
+DEBUG [handle_property_write] Unhandled property: 2100
+DEBUG [handle_property_write] Unhandled property: 2101
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2011)
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2015)
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2006)
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2029)
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2030)
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2031)
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2032)
+DEBUG [GetGenericInterface] Requested interface IVRDriverInput_005
+ WARN [get_input_from_name] requested unknown input name /input/system/click for device LHR-D006848D
+ WARN [get_input_from_name] requested unknown input name /proximity for device LHR-D006848D
+DEBUG [handle_property_write] Unhandled property: 2081
+DEBUG [handle_property_write] Unhandled property: 1030
+DEBUG [handle_property_write] Unhandled property: 1055
+DEBUG [handle_property_write] Unhandled property: 1039
+DEBUG [handle_property_write] Unhandled property: 1058
+DEBUG [handle_property_write] Unhandled property: 2008
+DEBUG [handle_property_write] Unhandled property: 2009
+DEBUG [handle_property_write] Unhandled property: 2010
+DEBUG [handle_property_write] Unhandled property: 2012
+DEBUG [handle_property_write] Unhandled property: 2013
+DEBUG [handle_property_write] Unhandled property: 2110
+DEBUG [handle_property_write] Unhandled property: 2111
+DEBUG [handle_property_write] Unhandled property: 2112
+DEBUG [handle_property_write] Unhandled property: 2075
+DEBUG [handle_property_write] Unhandled property: 2014
+DEBUG [handle_property_write] Unhandled property: 2017
+DEBUG [handle_property_write] Unhandled property: 2018
+DEBUG [handle_property_write] Unhandled property: 2019
+DEBUG [handle_property_write] Unhandled property: 2020
+DEBUG [handle_property_write] Unhandled property: 2021
+DEBUG [handle_property_write] Unhandled property: 1040
+DEBUG [handle_property_write] Unhandled property: 2050
+DEBUG [handle_property_write] Unhandled property: 2049
+DEBUG [handle_property_write] Unhandled property: 2034
+DEBUG [handle_property_write] Unhandled property: 2035
+DEBUG [handle_property_write] Unhandled property: 2026
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2003)
+DEBUG [handle_property_write] Unhandled property: 2022
+DEBUG [handle_property_write] Unhandled property: 2023
+DEBUG [handle_property_write] Unhandled property: 2024
+DEBUG [handle_property_write] Unhandled property: 2025
+DEBUG [handle_property_write] Unhandled property: 2037
+DEBUG [handle_property_write] Unhandled property: 2070
+DEBUG [handle_property_write] Unhandled property: 2016
+DEBUG [handle_property_write] Unhandled property: 2055
+DEBUG [handle_property_write] Unhandled property: 2072
+DEBUG [handle_property_write] Unhandled property: 2073
+DEBUG [handle_property_write] Unhandled property: 2074
+DEBUG [handle_property_write] Unhandled property: 2300
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2300)
+DEBUG [handle_property_write] Unhandled property: 2301
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2301)
+DEBUG [handle_property_write] Unhandled property: 5100
+DEBUG [handle_property_write] Unhandled property: 5102
+DEBUG [handle_property_write] Unhandled property: 5104
+DEBUG [handle_property_write] Unhandled property: 5101
+DEBUG [handle_property_write] Unhandled property: 5103
+DEBUG [handle_property_write] Unhandled property: 5105
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_property_write] Unhandled property: 1025
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 10024
+DEBUG [handle_property_write] Unhandled property: 10025
+DEBUG [handle_property_write] Unhandled property: 10026
+DEBUG [handle_property_write] Unhandled property: 10027
+DEBUG [handle_property_write] Unhandled property: 10028
+DEBUG [handle_property_write] Unhandled property: 10029
+DEBUG [handle_property_write] Unhandled property: 10030
+DEBUG [handle_property_write] Unhandled property: 10031
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+ INFO [steamvr_lh_create_devices] Lighthouse initialization complete, giving time to setup connected devices...
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FFE4BFC4
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FFE4BFC4
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/grip/click for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/trigger/click for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/trigger/value for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x559b2b567380
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x559b2b567380
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x559b2b567380
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x559b2b567380
+DEBUG [set_haptic_handle] setting haptic handle for 12
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FDA99BC1
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FDA99BC1
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/grip/click for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/trigger/click for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/trigger/value for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x559b2b5f8560
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x559b2b5f8560
+DEBUG [set_haptic_handle] setting haptic handle for 24
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.400000
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.400000
+ INFO [steamvr_lh_create_devices] Device search time complete.
+ INFO [p_create_system] Creating system:
+	Builders:
+		qwerty: Qwerty devices builder
+		remote: Remote simulation devices builder
+		simulated: Simulated devices builder
+		rift: Oculus Rift
+		rift_s: Oculus Rift S
+		psvr2: PlayStation VR 2
+		rgb_tracking: RGB tracking based devices (PSVR, PSMV, ...)
+		steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+		lighthouse: Lighthouse-tracked FLOSS (Vive, Index, Tundra trackers, etc.) devices builder
+		north_star: North Star headset
+		wmr: Windows Mixed Reality
+		xreal_air: Xreal Air
+		legacy: Legacy probing system
+	No builder selected in config (or wasn't compiled in)
+	Selected steamvr because it was certain it could create a head
+	Using builder steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+	Got devices:
+		0: HTC Vive. MV
+		1: HTC Vive. Controller MV
+		2: HTC Vive. Controller MV
+	In roles:
+		head: HTC Vive. MV (LHR-D006848D), view count: 2
+		eyes: <none> (<none>)
+		face: <none> (<none>)
+		left: HTC Vive. Controller MV (LHR-FFE4BFC4)
+		right: HTC Vive. Controller MV (LHR-FDA99BC1)
+		gamepad: <none> (<none>)
+		hand_tracking.unobstructed.left: <none> (<none>)
+		hand_tracking.unobstructed.right: <none> (<none>)
+		hand_tracking.conforming.left: <none> (<none>)
+		hand_tracking.conforming.right: <none> (<none>)
+	Result: XRT_SUCCESS
+DEBUG [comp_main_create_system_compositor] Doing init 0x559b2b6756e0
+ WARN [compositor_check_and_prepare_xdev] Had to fill in meshuv on xdev 'HTC Vive. MV', this should be done in the driver.
+ INFO [comp_window_direct_wayland_init] No connector was chosen, will use first available connector
+ INFO [_drm_lease_device_drm_fd] Available DRM lease device: /dev/dri/card1
+ INFO [comp_window_direct_wayland_init] Found no connectors available for direct mode
+ERROR [compositor_init_window_pre_vulkan] Failed to init Wayland Direct-Mode backend!
+ERROR [comp_main_create_system_compositor] Failed to init compositor 0x559b2b6756e0
+DEBUG [render_shaders_fini] Shaders destroyed!
+DEBUG [handle_property_write] Unhandled property: 2069
+ERROR [ipc_server_init_system_if_available_locked] xrt_instance_create_system failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:699]
+ERROR [ipc_server_main_common] ipc_server_init_system_if_available_locked failed: XRT_ERROR_VULKAN [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:974]
+ INFO [client_connected] Client 1 connected
+ INFO [ipc_handle_instance_describe_client] Client info:
+	id: 1
+	application_name: 'Quod physical Vive prerequisite'
+	pid: 2110241
+	extensions:
+		ext_hand_tracking_enabled: false
+		ext_hand_tracking_data_source_enabled: false
+		ext_eye_gaze_interaction_enabled: false
+		ext_future_enabled: false
+		ext_hand_interaction_enabled: false
+		htc_facial_tracking_enabled: false
+		fb_body_tracking_enabled: false
+		meta_body_tracking_full_body_enabled: false
+		meta_body_tracking_calibration_enabled: false
+		fb_face_tracking2_enabled: false
+		android_face_tracking_enabled: false
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [steamvr_lh_create_devices] Found SteamVR install: /home/yan/.local/share/Steam/steamapps/common/SteamVR
+DEBUG [GetGenericInterface] Requested interface IVRServerDriverHost_006
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverLog_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-D006848D
+ INFO [TrackedDeviceAdded] Found lighthouse HMD: LHR-D006848D
+DEBUG [handle_property_write] Unhandled property: 1037
+DEBUG [handle_property_write] Unhandled property: 2069
+DEBUG [handle_property_write] Unhandled property: 2091
+DEBUG [handle_property_write] Unhandled property: 2100
+DEBUG [handle_property_write] Unhandled property: 2101
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2011)
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2015)
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2006)
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2029)
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2030)
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2031)
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2032)
+DEBUG [GetGenericInterface] Requested interface IVRDriverInput_005
+ WARN [get_input_from_name] requested unknown input name /input/system/click for device LHR-D006848D
+ WARN [get_input_from_name] requested unknown input name /proximity for device LHR-D006848D
+DEBUG [handle_property_write] Unhandled property: 2081
+DEBUG [handle_property_write] Unhandled property: 1030
+DEBUG [handle_property_write] Unhandled property: 1055
+DEBUG [handle_property_write] Unhandled property: 1039
+DEBUG [handle_property_write] Unhandled property: 1058
+DEBUG [handle_property_write] Unhandled property: 2008
+DEBUG [handle_property_write] Unhandled property: 2009
+DEBUG [handle_property_write] Unhandled property: 2010
+DEBUG [handle_property_write] Unhandled property: 2012
+DEBUG [handle_property_write] Unhandled property: 2013
+DEBUG [handle_property_write] Unhandled property: 2110
+DEBUG [handle_property_write] Unhandled property: 2111
+DEBUG [handle_property_write] Unhandled property: 2112
+DEBUG [handle_property_write] Unhandled property: 2075
+DEBUG [handle_property_write] Unhandled property: 2014
+DEBUG [handle_property_write] Unhandled property: 2017
+DEBUG [handle_property_write] Unhandled property: 2018
+DEBUG [handle_property_write] Unhandled property: 2019
+DEBUG [handle_property_write] Unhandled property: 2020
+DEBUG [handle_property_write] Unhandled property: 2021
+DEBUG [handle_property_write] Unhandled property: 1040
+DEBUG [handle_property_write] Unhandled property: 2050
+DEBUG [handle_property_write] Unhandled property: 2049
+DEBUG [handle_property_write] Unhandled property: 2034
+DEBUG [handle_property_write] Unhandled property: 2035
+DEBUG [handle_property_write] Unhandled property: 2026
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2003)
+DEBUG [handle_property_write] Unhandled property: 2022
+DEBUG [handle_property_write] Unhandled property: 2023
+DEBUG [handle_property_write] Unhandled property: 2024
+DEBUG [handle_property_write] Unhandled property: 2025
+DEBUG [handle_property_write] Unhandled property: 2037
+DEBUG [handle_property_write] Unhandled property: 2070
+DEBUG [handle_property_write] Unhandled property: 2016
+DEBUG [handle_property_write] Unhandled property: 2055
+DEBUG [handle_property_write] Unhandled property: 2072
+DEBUG [handle_property_write] Unhandled property: 2073
+DEBUG [handle_property_write] Unhandled property: 2074
+DEBUG [handle_property_write] Unhandled property: 2300
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2300)
+DEBUG [handle_property_write] Unhandled property: 2301
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2301)
+DEBUG [handle_property_write] Unhandled property: 5100
+DEBUG [handle_property_write] Unhandled property: 5102
+DEBUG [handle_property_write] Unhandled property: 5104
+DEBUG [handle_property_write] Unhandled property: 5101
+DEBUG [handle_property_write] Unhandled property: 5103
+DEBUG [handle_property_write] Unhandled property: 5105
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_property_write] Unhandled property: 1025
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 10024
+DEBUG [handle_property_write] Unhandled property: 10025
+DEBUG [handle_property_write] Unhandled property: 10026
+DEBUG [handle_property_write] Unhandled property: 10027
+DEBUG [handle_property_write] Unhandled property: 10028
+DEBUG [handle_property_write] Unhandled property: 10029
+DEBUG [handle_property_write] Unhandled property: 10030
+DEBUG [handle_property_write] Unhandled property: 10031
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+ INFO [steamvr_lh_create_devices] Lighthouse initialization complete, giving time to setup connected devices...
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FFE4BFC4
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FFE4BFC4
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/grip/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trigger/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trigger/value for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x7f7a48074650
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x7f7a48074650
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x7f7a48074650
+DEBUG [set_haptic_handle] setting haptic handle for 12
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FDA99BC1
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FDA99BC1
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/grip/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trigger/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trigger/value for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x7f7a48148d30
+DEBUG [set_haptic_handle] setting haptic handle for 24
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.400000
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+ INFO [steamvr_lh_create_devices] Device search time complete.

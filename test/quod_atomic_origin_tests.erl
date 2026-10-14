@@ -79,7 +79,7 @@ empty_source_vote_admission_uses_the_existing_own_plan_header_test() ->
                                   {peer_admitted, Signer, "validator", 14567, Signer}]),
         {ok, Index} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
         try
-            Context = quod_commit_validation:new(Origin, 1, Est, Index, none),
+            Context = quod_commit_validation:new(Origin, 1, Est, Index, none, none),
             ?assertMatch({ok, prepared, _}, quod_commit_validation:vote_choice(Material, 1, Context))
         after ok = quod_outcome:close(Index)
         end

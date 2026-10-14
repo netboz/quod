@@ -1,0 +1,163 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 959 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m=ERROR REPORT==== 13-Oct-2026::16:59:07.832492 ===
+** State machine {n,l,{quod_simplex,<<"gui:native:cancel">>}} terminating
+** When server state  = {undefined,undefined}
+** Reason for termination = error:{badmatch,
+                                   {error,
+                                    {predicate_module_unavailable,
+                                     quod_agent_hosting_tests}}}
+** Callback modules = [quod_simplex]
+** Callback mode = state_functions
+** Stacktrace =
+**  [{quod_simplex,genesis_entry,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3696}]},
+     {quod_simplex,initialize_empty_storage,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3624}]},
+     {quod_simplex,restore_storage,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3474}]},
+     {quod_simplex,init_store,3,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3211}]},
+     {gen_statem,init_it,6,[{file,"gen_statem.erl"},{line,3323}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]
+
+=CRASH REPORT==== 13-Oct-2026::16:59:07.833357 ===
+  crasher:
+    initial call: quod_simplex:init/1
+    pid: <0.8470.0>
+    registered_name: []
+    exception error: no match of right hand side value {error,
+                                                        {predicate_module_unavailable,
+                                                         quod_agent_hosting_tests}}
+      in function  quod_simplex:genesis_entry/2 (/home/yan/src/quod/src/quod_simplex.erl:3696)
+      in call from quod_simplex:initialize_empty_storage/2 (/home/yan/src/quod/src/quod_simplex.erl:3624)
+      in call from quod_simplex:restore_storage/2 (/home/yan/src/quod/src/quod_simplex.erl:3474)
+      in call from quod_simplex:init_store/3 (/home/yan/src/quod/src/quod_simplex.erl:3211)
+      in call from gen_statem:init_it/6 (gen_statem.erl:3323)
+    ancestors: [<0.8469.0>,<0.7712.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: [{'$__current_otel_ctx',undefined},{'$logger_metadata$',#{}}]
+    trap_exit: false
+    status: running
+    heap_size: 376
+    stack_size: 29
+    reductions: 14000
+  neighbours:
+
+=SUPERVISOR REPORT==== 13-Oct-2026::16:59:07.852346 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"gui:native:cancel">>}}}
+    errorContext: start_error
+    reason: {badmatch,
+                {error,
+                    {predicate_module_unavailable,quod_agent_hosting_tests}}}
+    offender: [{pid,undefined},
+               {id,quod_simplex},
+               {mfargs,
+                {quod_simplex,start_link,
+                 [<<"gui:native:cancel">>,
+                  #{mode => create,
+                    data_dir => "/tmp/quod-gui-native-cancel-4/target",
+                    node_id =>
+                     <<239,62,137,116,45,246,207,90,158,27,202,89,216,199,42,
+                       239,109,199,107,109,102,74,29,75,120,3,220,106,67,67,1,
+                       135>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<189,56,180,122,73,197,40,22,212,170,64,17,13,22,155,
+                           223,42,183,140,59,177,148,244,207,233,150,60,96,21,
+                           127,24,166>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<239,62,137,116,45,246,207,90,158,27,202,89,216,199,
+                           42,239,109,199,107,109,102,74,29,75,120,3,220,106,
+                           67,67,1,135>>,
+                         asn1_NOVALUE},
+                       cert =>
+                        <<48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,43,
+                          101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,112,
+                          95,101,102,51,101,56,57,55,52,48,30,23,13,50,54,48,
+                          49,48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,48,
+                          49,48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,85,4,3,
+                          12,11,107,112,95,101,102,51,101,56,57,55,52,48,42,48,
+                          5,6,3,43,101,112,3,33,0,239,62,137,116,45,246,207,90,
+                          158,27,202,89,216,199,42,239,109,199,107,109,102,74,
+                          29,75,120,3,220,106,67,67,1,135,48,5,6,3,43,101,112,
+                          3,65,0,50,57,146,129,80,163,5,172,134,109,77,234,217,
+                          130,110,151,57,190,24,17,251,125,49,108,134,89,233,
+                          212,39,91,94,84,21,6,106,103,149,82,48,218,189,140,
+                          89,63,42,92,146,50,102,131,7,34,33,11,132,105,181,
+                          201,252,241,222,190,165,6>>,
+                       pubkey =>
+                        <<239,62,137,116,45,246,207,90,158,27,202,89,216,199,
+                          42,239,109,199,107,109,102,74,29,75,120,3,220,106,
+                          67,67,1,135>>},
+                    genesis_diff =>
+                     [{assert,{{can_invoke,{0},{1},{2},{3}},{[],false}}}],
+                    external_predicate_modules =>
+                     [quod_agent_hosting_tests]}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+Pending:
+[0;33m  undefined
+[0m[0;36m    %% Related process exited with reason: {shutdown,
+                                     {failed_to_start_child,quod_simplex,
+                                      {badmatch,
+                                       {error,
+                                        {predicate_module_unavailable,
+                                         quod_agent_hosting_tests}}}}}
+[0m
+
+Finished in ? seconds
+[0;33m4 tests, 0 failures, 3 cancelled
+[0m===> Error running tests

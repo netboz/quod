@@ -602,7 +602,14 @@ subscribed_reaction_routes_live_certified_advance_once_test_() ->
         %% Inspect the real dispatcher without inventing a hosted principal.
         %% Signed execution of these candidates is covered by agent_reaction_tests.
         trace_dispatch(SubscriberNs),
+        erlang:trace(RuntimePid, true, ['receive']),
         ?assertMatch({ok, _, _}, rp(TargetNs, {assertz, {remote_ping, fresh}})),
+        Delivered = receive
+            {trace, RuntimePid, 'receive', Notice =
+                {quod_foreign_follow, _, _, {TargetNs, Anchor}, {advanced, _, _, _, _, _, [_ | _]}}} -> Notice
+        after 5000 -> error(missing_certified_source_delivery)
+        end,
+        erlang:trace(RuntimePid, false, ['receive']),
         await_route(SubscriberNs, {from, TargetNs, Anchor, {assert, {remote_ping, fresh}}}, 1),
         await_source_processed(SubscriberNs),
         ok = wait_stats(
@@ -612,6 +619,15 @@ subscribed_reaction_routes_live_certified_advance_once_test_() ->
                   (_) -> false
                end),
         assert_no_route(SubscriberNs),
+        %% Re-delivery of an already processed owner notice must not dispatch
+        %% the original committed occurrence again. Synchronize on processing,
+        %% not the send, before checking the real dispatcher.
+        quod_lobby_tests:assert_read_has_no_io(fun() ->
+            RuntimePid ! Delivered,
+            await_source_processed(SubscriberNs),
+            _ = quod_runtime:stats(SubscriberNs),
+            assert_no_route(SubscriberNs)
+        end),
         %% The canonical reducer suppresses this duplicate; the follower cannot
         %% manufacture a second occurrence from the requested diff.
         #{follow_entries := FollowedBefore} = quod_foreign_log:stats(),

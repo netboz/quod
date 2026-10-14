@@ -1,0 +1,6 @@
+{
+  "client/src/workspace-panel.js": "533bfb5d40f5672b2201fdcbb15972c32cb78b7959ae3e0f99f367361e3c42a5",
+  "client/src/world-scene.js": "98d6debdbf58568c72d4979f2cf6cc6ddd7ff721235efea31db473de650f6ed8",
+  "client/test/workspace-panel.fixture.js": "4c4c28e0a501b384f26782b4e28172768bdd3282813338c8db4b44f71f4cd440",
+  "ui/test/gui-hardware.fixture.js": "e604cda92cbf8aa4e9212717c25c7202f69ec932bf4eec1ce578a6fc3136b0d7"
+}

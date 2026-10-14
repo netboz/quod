@@ -1,0 +1,15 @@
+✔ HUD uses the authenticated human scope and renews without frame credit or losing its view (17.091794ms)
+✔ question adapter decodes the common form model without world state (2.225761ms)
+✔ HUD expiry discards authorization and late candidates without reconnecting (1.849772ms)
+✔ HUD disconnect discards authorization and late candidates without reconnecting (2.780221ms)
+✔ HUD refusal discards authorization and late candidates without reconnecting (2.027043ms)
+✔ GUI kind mismatch refuses the projection (0.937518ms)
+✔ a HUD cannot select an unsigned or malformed receiver address (0.860398ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34.640323

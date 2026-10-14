@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/run.py",
+    "--headless",
+    "--script",
+    "res://tests/navigation.gd"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.31281394202960655
+}

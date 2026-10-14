@@ -1,0 +1,1 @@
+Invalid build attempt: git apply from this untracked source subtree exited zero while skipping the patch. The unchanged source hash and Ninja no-work output prove no correction was installed. Retained; superseded by separately labeled monado-steamvr-03.

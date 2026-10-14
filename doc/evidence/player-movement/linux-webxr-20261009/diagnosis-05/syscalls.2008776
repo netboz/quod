@@ -1,0 +1,10 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f2001df9780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f2001df9780) = -1 ENOENT (No such file or directory)
+statfs("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache", 0x7f2001df7760) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/pc", 0x7f2001df7790) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache", 0x7f2001df7790) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=240, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache", 0700) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/pc", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/pc", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 646
++++ exited with 0 +++

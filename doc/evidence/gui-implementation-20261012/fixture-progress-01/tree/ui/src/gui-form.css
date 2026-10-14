@@ -1,0 +1,39 @@
+.gui-form { color: #f5f1eb; padding: 1.25rem; border: 1px solid #bac9cc; border-radius: 1rem; max-width: 60rem; }
+.gui-form header, .gui-opacity, .gui-number { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.gui-form header { justify-content: space-between; }
+.gui-form h2 { font-size: 1.4em; }
+.gui-form button, .gui-form input, .gui-form select, .gui-form textarea { min-height: 44px; font: inherit; color: #f5f1eb; background: #0f1b20; border: 1px solid #bac9cc; border-radius: .3rem; padding: .5rem; }
+.gui-form button { background: #304c56; padding-inline: 1rem; cursor: pointer; }
+.gui-form :disabled { color: #bac9cc; background: #243b43; cursor: default; opacity: 1; }
+.gui-form :focus-visible { outline: 3px solid #f9c80e; outline-offset: 3px; }
+.gui-form [aria-invalid="true"] { border-color: #ffd7a8; }
+.gui-group { display: grid; gap: 1rem; }
+.gui-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.gui-column { grid-template-columns: minmax(0, 1fr); }
+.gui-form[data-large-text="true"] .gui-row { grid-template-columns: minmax(0, 1fr); }
+.gui-container { border: 1px solid #bac9cc; padding: .75rem; border-radius: .4rem; min-width: 0; }
+.gui-container legend, .gui-field > label { display: block; font-weight: 600; margin-bottom: .4rem; }
+.gui-field { min-width: 0; }
+.gui-field > input, .gui-field > select, .gui-field > textarea { box-sizing: border-box; width: 100%; }
+.gui-number input[type="text"] { width: 7rem; }
+.gui-number input[type="range"] { flex: 1; min-width: 6rem; }
+.gui-description { font-size: .9em; }
+.gui-error { color: #ffd7a8; }
+.gui-scope { overflow-wrap: anywhere; }
+.gui-opacity { margin-block: 1rem; }
+.gui-dial { width: 5rem; height: 5rem; border: 2px solid #bac9cc; border-radius: 50%; background: #0f1b20; display: grid; place-items: center; }
+.gui-dial > span { height: 4rem; width: 4px; display: block; background: linear-gradient(#f9c80e 45%, transparent 45%); }
+
+.gui-choices { max-height: 12rem; overflow-y: auto; background: #0f1b20; padding: .5rem; }
+.gui-choices label { display: flex; align-items: center; gap: .75rem; min-height: 44px; }
+.gui-field > input[type="checkbox"] { width: 44px; }
+
+.gui-scroll { overflow-y: auto; padding: .5rem; }
+.gui-tablist { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; }
+.gui-tablist [aria-selected="true"] { border: 3px solid #f9c80e; }
+.gui-status { color: #c5e7a0; }
+.gui-display progress { width: 100%; height: 1.5em; }
+.gui-group > [hidden] { display: none; }
+.gui-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gui-form[data-large-text="true"] .gui-grid { grid-template-columns: minmax(0, 1fr) !important; }
+@media (max-width: 40rem) { .gui-grid { grid-template-columns: minmax(0, 1fr) !important; } }

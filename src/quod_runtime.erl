@@ -23,7 +23,7 @@ or of every local resource. Consumers wait for their actual resource owner.
 -export([start_link/2, stats/1, effect_frontier/1,
          reconcile_now/1, reconcile_resource/5,
          project_agents/3, project_agent_observers/3, agent_request/6,
-         agents/1, reaction_agents/2, catalog_after/2]).
+         agents/1, installed_agent_reaction/6, reaction_agents/2, catalog_after/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
@@ -150,6 +150,18 @@ project_agent_work(Ns, Height, Instance, Step) ->
 -doc "Return current hosted process references, owned by this runtime incarnation.".
 -spec agents(binary()) -> {pid(), [map()]}.
 agents(Ns) -> gen_server:call(quod_reg:via({quod_runtime, Ns}), agents).
+
+%% Native preparation observes installed resources without starting an actor,
+%% running a reaction guard or reserving its future request queue.
+installed_agent_reaction(Ns, Anchor, Height, Executor, Clause, Deadline) ->
+    case quod_reg:where({quod_runtime, Ns}) of
+        undefined -> {error, runtime_unavailable};
+        Owner ->
+            try gen_server:call(Owner,
+                {installed_agent_reaction, Anchor, Height, Executor, Clause},
+                max(0, Deadline - quod_time:mono_ms()))
+            catch exit:_ -> {error, runtime_unavailable} end
+    end.
 
 -doc "Operational counters + mode for `m:quod_metrics` and tests.".
 -spec stats(binary()) -> map().
@@ -350,6 +362,25 @@ handle_call({deliver_recovery, _, _, _, _}, _From, S) ->
     {reply, {error, stale_resource_owner}, S};
 handle_call(agents, _From, S) ->
     {reply, {self(), [maps:with([binding, pid], A) || A = #{stopping := false} <- maps:values(S#s.agents)]}, S};
+handle_call({installed_agent_reaction, Anchor, Height, {agent, Instance, Epoch, Key}, Clause},
+            _From, S = #s{mode = live, binding = #{identity := {_, Anchor}},
+                          e_frontier = Frontier, agents = Agents})
+  when is_integer(Height), Height >= 0, Frontier >= Height ->
+    Canonical = alpha_normalize(Clause),
+    Reply = case {maps:get({agent, Instance}, Agents, none), valid_reaction_clause(Canonical)} of
+        {#{binding := #{epoch := Epoch, public_key := Key}, pid := Pid, stopping := false},
+         {ok, local}} ->
+            Pattern = reaction_event_pattern(Canonical),
+            Installed = maps:get(functor_key(Pattern), S#s.reaction_index, []),
+            case is_process_alive(Pid) andalso lists:member(Canonical, Installed) of
+                true -> {ok, {self(), Pid}};
+                false -> {error, agent_handler_unavailable}
+            end;
+        _ -> {error, agent_handler_unavailable}
+    end,
+    {reply, Reply, S};
+handle_call({installed_agent_reaction, _, _, _, _}, _From, S) ->
+    {reply, {error, runtime_unavailable}, S};
 handle_call({reaction_agents, Audience}, {Caller, _},
             S = #s{runner = {events, Caller, _, _, _},
                    binding = #{request_timeout_ms := Timeout}}) ->
@@ -1643,6 +1674,11 @@ handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
                   when is_map_key(verified,Row0), H < element(1,map_get(verified,Row0)) ->
                     ack_source_notice(FollowRef,NoticeRef,S0);
                 {ok, State, Publications} ->
+                    %% The retained verified frontier also owns occurrence
+                    %% consumption. A duplicate or overlapping notice can
+                    %% refresh readiness, but cannot replay an earlier event.
+                    Known = case Row0 of #{verified := {Before, _}} -> Before; _ -> 0 end,
+                    Fresh = [{H, Ops} || {H, Ops} <- Publications, H > Known],
                     Row1 = case State of
                         {ready,H,P,_,_} -> Row0#{state => State,verified => {H,P}};
                         _ -> Row0#{state => State}
@@ -1650,7 +1686,7 @@ handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
                     S1 = S0#s{source_views =
                                   (S0#s.source_views)#{Identity => Row1}},
                     enqueue_source_publications(
-                      FollowRef, NoticeRef, Identity, Publications,
+                      FollowRef, NoticeRef, Identity, Fresh,
                       source_resources_changed(Identity,Row0,Row1,S1));
                 error ->
                     erlang:error({invalid_source_follow_notice, Notice})

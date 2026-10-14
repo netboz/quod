@@ -1,0 +1,13 @@
+{
+  "driver": "Nimbalyst MCP browser",
+  "fixture": "ui/test/gui-question.fixture.html",
+  "lockedAfterLoss": true,
+  "lockedAfterReopen": true,
+  "lockedAfterResolution": true,
+  "executeCount": 1,
+  "outcomeCount": 1,
+  "exactRequest": true,
+  "retained": 0,
+  "errors": [],
+  "scope": "Real React controls, shared question controller and IndexedDB journal; fixture transport. Not live opening or headset validation."
+}

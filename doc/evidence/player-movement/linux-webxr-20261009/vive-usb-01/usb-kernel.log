@@ -1,0 +1,7 @@
+Oct 08 12:11:17 prospero kernel: usb 1-3: can't set config #1, error -28
+Oct 08 12:11:17 prospero kernel: usb 1-3: Not enough bandwidth for new device state.
+Oct 08 12:11:17 prospero kernel: usb 1-3: Manufacturer: HTC                    
+Oct 08 12:11:17 prospero kernel: usb 1-3: Product: CB USB2                
+Oct 08 12:11:17 prospero kernel: usb 1-3: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+Oct 08 12:11:17 prospero kernel: usb 1-3: New USB device found, idVendor=0bb4, idProduct=2210, bcdDevice=90.30
+Oct 08 12:11:16 prospero kernel: usb 1-3: new high-speed USB device number 10 using xhci_hcd

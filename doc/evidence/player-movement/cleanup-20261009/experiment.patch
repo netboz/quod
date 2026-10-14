@@ -1,0 +1,465 @@
+--- a/src/quod_commit_validation.erl
++++ b/src/quod_commit_validation.erl
+@@ -490,6 +490,8 @@
+ remote_rejection_reason(conflict_retry) -> {true, conflict_retry};
+ remote_rejection_reason(policy_self_seal_forbidden) ->
+     {true, policy_self_seal_forbidden};
++remote_rejection_reason(invalid_external_predicate_selection) ->
++    {true, invalid_external_predicate_selection};
+ remote_rejection_reason(invalid_membership) -> {true, invalid_membership};
+ remote_rejection_reason(invalid_authorization_transcript) ->
+     {true, not_authorized};
+--- a/src/quod_committed_projection.erl
++++ b/src/quod_committed_projection.erl
+@@ -63,8 +63,8 @@
+     Est5 = quod_action_predicates:load(Est4),
+     Est6 = quod_common_primitives:load(Est5),
+     #est{db = #db{ref = Ref0} = Db} = Est7 = load_common_predicates(Est6),
+-    Est7#est{db = Db#db{
+-                       ref = quod_erlog_db_mvcc:publish_base(Ref0)}}.
++    quod_predicates:freeze_base_registry(Est7#est{db = Db#db{
++                       ref = quod_erlog_db_mvcc:publish_base(Ref0)}}).
+ 
+ -doc "Parse one Prolog source file with the canonical genesis error contract.".
+ -spec read_terms(file:filename()) -> [term()].
+@@ -297,9 +297,9 @@
+                 {ok, Est1, AppliedOps} ->
+                     commit_transaction(Change, Index, Prior, Diff, AppliedOps,
+                                        Projection#projection{est = Est1});
+-                {error, policy_self_seal_forbidden} ->
++                {error, Reason} ->
+                     reject_transaction(Change, Index, Prior,
+-                                       policy_self_seal_forbidden, Projection)
++                                       Reason, Projection)
+             end;
+         {conflict, _Functor} ->
+             reject_transaction(Change, Index, Prior, conflict_retry, Projection)
+--- a/src/quod_diff.erl
++++ b/src/quod_diff.erl
+@@ -106,13 +106,15 @@
+       end, ok, ReadCheck).
+ 
+ -doc "Apply a diff (`[op()]`) to a committed erlog state, with content-identity dedup.".
+--spec apply_ops(tuple(), [op()]) -> {ok, tuple()}.
++-spec apply_ops(tuple(), [op()]) -> {ok, tuple()} | {error, term()}.
+ apply_ops(#est{} = Est, Ops) ->
+-    {ok, Est1, _AppliedOps} = apply_ops_report(Est, Ops),
+-    {ok, Est1}.
++    case apply_ops_report(Est, Ops) of
++        {ok, Est1, _AppliedOps} -> {ok, Est1};
++        {error, _} = Error -> Error
++    end.
+ 
+ -doc "Apply a diff and return only the operations that changed the committed projection.".
+--spec apply_ops_report(tuple(), [op()]) -> {ok, tuple(), [op()]}.
++-spec apply_ops_report(tuple(), [op()]) -> {ok, tuple(), [op()]} | {error, term()}.
+ apply_ops_report(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
+     {R1, RevApplied} =
+         lists:foldl(
+@@ -122,7 +124,11 @@
+                       {RNext, unchanged} -> {RNext, Applied}
+                   end
+           end, {R0, []}, Ops),
+-    {ok, Est#est{db = Db#db{ref = R1}}, lists:reverse(RevApplied)}.
++    AppliedOps = lists:reverse(RevApplied),
++    case quod_predicates:reconcile_modules(Est#est{db = Db#db{ref = R1}}, AppliedOps) of
++        {ok, Candidate} -> {ok, Candidate, AppliedOps};
++        {error, _} = Error -> Error
++    end.
+ 
+ -doc """
+ Apply `Ops`, rejecting a final state with no interpreted `can_invoke/4` clause.
+@@ -143,7 +149,12 @@
+ -spec apply_ops_preserving_policy_report(tuple(), [op()]) ->
+           {ok, tuple(), [op()]} | {error, policy_self_seal_forbidden}.
+ apply_ops_preserving_policy_report(Est, Ops) ->
+-    {ok, Candidate, AppliedOps} = apply_ops_report(Est, Ops),
++    case apply_ops_report(Est, Ops) of
++        {ok, Candidate, AppliedOps} -> preserve_candidate_policy(Ops, Candidate, AppliedOps);
++        {error, _} = Error -> Error
++    end.
++
++preserve_candidate_policy(Ops, Candidate, AppliedOps) ->
+     case touches_functor(Ops, {can_invoke, 4}) of
+         false -> {ok, Candidate, AppliedOps};
+         true ->
+--- a/src/quod_erlog_db_mvcc.erl
++++ b/src/quod_erlog_db_mvcc.erl
+@@ -5,7 +5,8 @@
+ The ETS table is the only full knowledge-base representation. An erlog state carries
+ only a `#ref{table,snapshot,pending}` handle, so sending a frozen state to a proof
+ worker does not copy the knowledge base. Interpreted predicates are versioned by
+-committed block height; built-ins and compiled predicates are immutable table entries.
++committed block height. Built-ins and boot-time compiled predicates are static;
++compiled predicates installed after publication use the same versioned path.
+ 
+ Writes are accumulated in the handle's small `pending` map. `commit/3` publishes all
+ changed predicates at one height in a single engine turn, after which readers opened
+@@ -48,9 +49,14 @@
+     case raw_procedure(Ref, Functor) of
+         built_in -> error;
+         _ ->
+-            true = ets:insert(Table, [{{static, Functor}, {code, {Module, Function}}},
+-                                      {{functor, Functor}, true}]),
+-            {ok, Ref}
++            Procedure = {code, {Module, Function}},
++            case ets:lookup(Table, {meta, base}) of
++                [] when Ref#ref.snapshot =:= 0 ->
++                    true = ets:insert(Table, [{{static, Functor}, Procedure},
++                                              {{functor, Functor}, true}]),
++                    {ok, Ref};
++                _ -> {ok, put_pending(Ref, Functor, Procedure)}
++            end
+     end.
+ 
+ asserta_clause(Ref, Functor, Head, Body) ->
+--- a/test/quod_erlog_db_mvcc_tests.erl
++++ b/test/quod_erlog_db_mvcc_tests.erl
+@@ -2,6 +2,27 @@
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -import(quod_ct, [commit_kb/3, set_ref/2]).
++
++published_compiled_install_and_retirement_are_snapshot_scoped_test() ->
++    Base = quod_committed_projection:new_est(),
++    R0 = db_ref(Base),
++    F = {installed_bridge, 1},
++    ?assertEqual(never_present, quod_erlog_db_mvcc:version_token(R0, F)),
++    {ok, R1} = quod_erlog_db_mvcc:add_compiled_proc(R0, F, example, bridge),
++    ?assertEqual(undefined, quod_erlog_db_mvcc:get_procedure(R0, F)),
++    ?assertEqual(staged, quod_erlog_db_mvcc:version_token(R1, F)),
++    Installed = quod_erlog_db_mvcc:commit(R1, 1, 0),
++    ?assertEqual({code, {example, bridge}}, quod_erlog_db_mvcc:get_procedure(Installed, F)),
++    ?assertEqual({present, 1}, quod_erlog_db_mvcc:version_token(Installed, F)),
++    {ok, R2} = quod_erlog_db_mvcc:abolish_clauses(Installed, F),
++    Retired = quod_erlog_db_mvcc:commit(R2, 2, 0),
++    ?assertEqual({code, {example, bridge}}, quod_erlog_db_mvcc:get_procedure(Installed, F)),
++    ?assertEqual(undefined, quod_erlog_db_mvcc:get_procedure(Retired, F)),
++    ?assertEqual({absent, 2}, quod_erlog_db_mvcc:version_token(Retired, F)),
++    ?assertEqual(undefined, quod_erlog_db_mvcc:get_procedure(R0, F)),
++    ?assertEqual({conflict, F}, quod_diff:validate(#{F => {present, 1}}, Retired)),
++    ?assertEqual({conflict, F}, quod_diff:validate(#{F => never_present}, Retired)),
++    quod_erlog_db_mvcc:delete(R0).
+ 
+ shared_frozen_snapshots_test() ->
+     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+--- a/src/quod_predicates.erl
++++ b/src/quod_predicates.erl
+@@ -56,7 +56,7 @@
+ -include_lib("erlog/src/erlog_int.hrl").
+ 
+ %% registration + dispatch
+--export([load/1, load_manifest/2,
++-export([load/1, load_manifest/2, freeze_base_registry/1, reconcile_modules/2,
+          module_manifest/1, valid_module_names/1,
+          valid_manifest_shape/1, register/5, register/6, dispatch/3]).
+ -ifdef(TEST).
+@@ -75,6 +75,8 @@
+ 
+ -define(CTX_FLAG, '$quod_ctx').
+ -define(REGISTRY_FLAG, '$quod_predicate_registry').
++-define(REGISTRY_BASE_FLAG, '$quod_predicate_registry_base').
++-define(REGISTRY_PREVIOUS_FLAG, '$quod_predicate_registry_previous').
+ 
+ -type module_manifest() :: [{module(), <<_:256>>}].
+ -export_type([module_manifest/0]).
+@@ -114,6 +116,11 @@
+     load_modules(
+       Est, [quod_committee_predicates, quod_runtime_predicates]).
+ 
++-doc "Retain the complete immutable framework registry before domain modules are installed.".
++freeze_base_registry(#est{fs = Fs} = Est) ->
++    Est#est{fs = lists:keystore(?REGISTRY_BASE_FLAG, 1, Fs,
++                              {?REGISTRY_BASE_FLAG, registry(Fs), none})}.
++
+ -doc "Load the application's common bridge modules in their explicit order.".
+ -spec load_modules(tuple(), [module()]) -> tuple().
+ load_modules(Est, Modules) when is_list(Modules) ->
+@@ -190,6 +197,65 @@
+     case load_predicate_module(Est, Module) of
+         {ok, Loaded} -> load_manifest_modules(Loaded, Rest);
+         {error, _} = Error -> Error
++    end.
++
++-doc "Install a changed committed bridge selection; unrelated and unchanged writes do no work.".
++reconcile_modules(Est, AppliedOps) ->
++    case quod_diff:touches_functor(AppliedOps, {external_predicate_selection, 1}) of
++        false -> {ok, Est};
++        true ->
++            case selected_modules(Est) of
++                {ok, Modules} -> replace_modules(Est, Modules);
++                error -> {error, invalid_external_predicate_selection}
++            end
++    end.
++
++selected_modules(Est) ->
++    case quod_diff:interpreted_clauses(Est, {external_predicate_selection, 1}) of
++        {ok, [{{external_predicate_selection, Modules}, {[], false}}]} ->
++            case valid_module_names(Modules) of
++                true -> {ok, Modules};
++                false -> error
++            end;
++        {ok, []} ->
++            case quod_diff:interpreted_clauses(Est, {external_predicate_modules, 1}) of
++                {ok, [{{external_predicate_modules, Manifest}, {[], false}}]} ->
++                    case valid_manifest(Manifest) of
++                        {ok, Modules} -> {ok, Modules};
++                        _ -> error
++                    end;
++                _ -> error
++            end;
++        _ -> error
++    end.
++
++%% The founding manifest remains immutable provenance and the initial selection.
++%% Replacement operates on the candidate's versioned DB and immutable flags;
++%% neither a failed candidate nor installation can alter a pinned proof snapshot.
++replace_modules(#est{db = #db{mod = M} = Db, fs = Fs} = Est, Modules) ->
++    case module_manifest(Modules) of
++        {ok, _} ->
++            Previous = registry(Fs),
++            {?REGISTRY_BASE_FLAG, Framework, none} = lists:keyfind(?REGISTRY_BASE_FLAG, 1, Fs),
++            Empty = Est#est{fs = [{?REGISTRY_PREVIOUS_FLAG, Previous, none} |
++                lists:keystore(?REGISTRY_FLAG, 1, Fs, {?REGISTRY_FLAG, Framework, none})]},
++            case load_manifest_modules(Empty, Modules) of
++                {ok, #est{db = #db{ref = R1}, fs = InstalledFs} = Installed} ->
++                    Desired = registry(InstalledFs),
++                    R2 = maps:fold(fun(F, _, R) ->
++                        case maps:is_key(F, Desired) of
++                            true -> R;
++                            false -> {ok, Next} = M:abolish_clauses(R, F), Next
++                        end
++                    end, R1, Previous),
++                    {ok, Installed#est{db = Db#db{ref = R2},
++                        fs = lists:keydelete(?REGISTRY_PREVIOUS_FLAG, 1, InstalledFs)}};
++                {error, {predicate_module_load_failed, _, error,
++                         {external_predicate_conflict, _, _, _}, _}} ->
++                    {error, invalid_external_predicate_selection};
++                {error, Reason} -> error({predicate_modules_unavailable, Reason})
++            end;
++        {error, _} -> {error, invalid_external_predicate_selection}
+     end.
+ 
+ %% A cold coordinated release replaces native code and rebuilds every registry.
+@@ -309,8 +375,19 @@
+     Descriptor = {Class, Dependency, Module, Function},
+     case maps:get(Functor, Registry0, undefined) of
+         undefined ->
+-            Db1 = erlog_int:add_compiled_proc(
+-                    Functor, ?MODULE, dispatch, Db0),
++            case (Db0#db.mod):get_procedure(Db0#db.ref, Functor) of
++                undefined -> ok;
++                {code, {?MODULE, dispatch}} -> ok;
++                Existing -> error({external_predicate_conflict, Functor, Existing, Descriptor})
++            end,
++            BaseRegistry = case lists:keyfind(?REGISTRY_PREVIOUS_FLAG, 1, Fs0) of
++                               {?REGISTRY_PREVIOUS_FLAG, Previous, none} -> Previous;
++                               false -> #{}
++                           end,
++            Db1 = case maps:get(Functor, BaseRegistry, undefined) of
++                      Descriptor -> Db0;
++                      _ -> erlog_int:add_compiled_proc(Functor, ?MODULE, dispatch, Db0)
++                  end,
+             Registry1 = Registry0#{Functor => Descriptor},
+             Est#est{db = Db1,
+                     fs = lists:keystore(
+--- a/src/quod_prolog.erl
++++ b/src/quod_prolog.erl
+@@ -6456,6 +6456,8 @@
+ submit_outcome({error, conflict_retry}) -> {rejected, conflict_retry};
+ submit_outcome({error, policy_self_seal_forbidden}) ->
+     {rejected, policy_self_seal_forbidden};
++submit_outcome({error, invalid_external_predicate_selection}) ->
++    {rejected, invalid_external_predicate_selection};
+ submit_outcome({error, retry}) -> {rejected, retry};
+ submit_outcome({error, busy}) -> {rejected, retry};
+ submit_outcome({error, {ontology_rebuilding, _Ns}}) -> {rejected, retry};
+--- a/src/quod_erlog_db_local_prove.erl
++++ b/src/quod_erlog_db_local_prove.erl
+@@ -837,7 +837,7 @@
+         false ->
+             case M:get_procedure(R, F) of
+                 built_in     -> built_in;
+-                {code, _} = C -> C;
++                {code, _} = C -> record_read(RS, F, R), C;
+                 {clauses, Cs} ->
+                     record_read(RS, F, R),
+                     clauses_or_undef(A ++ filter_retracted(Cs, FS#fstate.retracted) ++ Z);
+@@ -999,7 +999,7 @@
+ clauses_or_undef(Cs) -> {clauses, Cs}.
+ 
+ %% First-read-wins. Local writes change the overlay's visible procedure, but every
+-%% interpreted lookup still depends on the committed predicate version underneath it:
++%% mutable procedure lookup still depends on the committed version underneath it:
+ %% a concurrent commit can change which clauses survive a retract/abolish or precede a
+ %% local assert. Always capture that original committed version token; write-only
+ %% operations use modifiable/2 and never enter this path. `staged` cannot be
+@@ -1009,5 +1009,9 @@
+ record_read(Ets, F, R) ->
+     case ets:member(Ets, F) of
+         true  -> ok;
+-        false -> ets:insert(Ets, {F, quod_erlog_db_mvcc:version_token(R, F)}), ok
+-    end.
++        false ->
++            case quod_erlog_db_mvcc:version_token(R, F) of
++                static -> ok;
++                Token -> ets:insert(Ets, {F, Token}), ok
++            end
++    end.
+--- a/priv/ontologies/common_predicates.pl
++++ b/priv/ontologies/common_predicates.pl
+@@ -2,6 +2,38 @@
+ %%
+ %% This file contains framework mechanics only. Domain rules belong in the
+ %% ontology that owns them.
++
++%% Founding provenance is immutable. Its module names are the initial bridge
++%% selection; an authored replacement changes only the effective selection.
++external_predicate_configuration(Modules) :-
++    findall(M, external_predicate_selection(M), [Modules]).
++external_predicate_configuration(Modules) :-
++    \+ external_predicate_selection(_),
++    external_predicate_modules(Manifest),
++    external_predicate_names(Manifest, Modules).
++
++external_predicate_names([], []).
++external_predicate_names([Entry | Rest], [Module | Modules]) :-
++    Entry =.. [Module, _Digest],
++    external_predicate_names(Rest, Modules).
++
++can_configure_external_predicates(_, _) :- fail.
++
++configure_external_predicates(Expected, Modules) :-
++    term_variables(Expected-Modules, []),
++    external_predicate_name_list(Modules, []),
++    transaction((me(Principal), can_configure_external_predicates(Principal, Modules),
++        external_predicate_configuration(Current),
++        (Current == Expected -> true ; fail_with_reason(external_predicate_configuration_conflict)),
++        (Current == Modules -> true
++        ; (\+ external_predicate_selection(_) -> true
++          ; retract(external_predicate_selection(Current))),
++          assertz(external_predicate_selection(Modules))))).
++
++external_predicate_name_list([], _).
++external_predicate_name_list([Name | Rest], Seen) :-
++    atom(Name), \+ member_eq(Name, Seen),
++    external_predicate_name_list(Rest, [Name | Seen]).
+ 
+ %% Code is an eidolon of every class. The root catalogue supplies the exact
+ %% recipe identity; an absent editing ontology simply offers no such recipe.
+--- /dev/null
++++ b/test/quod_external_predicate_selection_tests.erl
+@@ -0,0 +1,113 @@
++-module(quod_external_predicate_selection_tests).
++-include_lib("eunit/include/eunit.hrl").
++
++signed_selection_authorization_rollback_and_repeat_cost_test_() ->
++    {timeout, 60, fun() -> with_owner(fun(F = #{namespace := Ns, human := Human}) ->
++        Initial = selection(Ns),
++        WithoutPhysics = lists:delete(quod_physics_predicates, Initial),
++        ?assertMatch({normalized, {failed, _}}, signed(F, execute,
++            {configure_external_predicates, [], WithoutPhysics})),
++        ?assertMatch({normalized, {committed, _, _}}, signed(F, execute,
++            {';', {transaction, {',', configure(Initial, WithoutPhysics), fail}}, true})),
++        ?assertEqual(Initial, selection(Ns)),
++        ?assertMatch({normalized, {committed, _, _}},
++                     signed(F, execute, configure(Initial, WithoutPhysics))),
++        ?assertEqual(WithoutPhysics, selection(Ns)),
++        ?assertMatch({normalized, {answers, _, [_]}}, signed(F, read,
++            {'\\+', physics_bridge_probe()})),
++        Owner = quod_reg:where({quod_prolog, Ns}),
++        Height = quod_prolog:applied(Ns),
++        MFAs = [{quod_predicates, module_manifest, 1},
++                {quod_committed_projection, apply_entry, 3},
++                {file, read_file, 1}, {file, write_file, 2}, {file, sync, 1}],
++        lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, true, [local]) end, MFAs),
++        1 = erlang:trace(Owner, true, [call]),
++        try
++            ?assertMatch({normalized, {answers, _, [_]}},
++                         signed(F, read, {external_predicate_configuration, WithoutPhysics})),
++            ?assertEqual(Height, quod_prolog:applied(Ns)),
++            Barrier = erlang:trace_delivered(Owner),
++            ?assertEqual([], owner_calls(Owner, Barrier, []))
++        after
++            erlang:trace(Owner, false, [call]),
++            lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, false, [local]) end, MFAs)
++        end,
++        ?assertMatch({normalized, {committed, _, _}},
++                     signed(F, execute, configure(WithoutPhysics, Initial))),
++        ?assertMatch({normalized, {answers, _, [_]}}, signed(F, read,
++            physics_bridge_probe())),
++        commit(Ns, {retract, {can_configure_external_predicates, Human, {'_'}}}),
++        ?assertMatch({normalized, {failed, _}},
++                     signed(F, execute, configure(Initial, WithoutPhysics))),
++        ?assertEqual(Initial, selection(Ns))
++    end) end}.
++
++signed_selection_recovery_and_invalid_candidate_test_() ->
++    {timeout, 60, fun() -> with_owner(fun(F = #{namespace := Ns}) ->
++        Initial = selection(Ns),
++        WithoutPhysics = lists:delete(quod_physics_predicates, Initial),
++        ?assertMatch({normalized, {committed, _, _}},
++                     signed(F, execute, configure(Initial, WithoutPhysics))),
++        %% The invalid candidate must not publish its facts or alter the live registry.
++        ?assertMatch({normalized, {rejected, invalid_external_predicate_selection, _}},
++            signed(F, execute, configure(WithoutPhysics, [quod_ask]))),
++        ?assertEqual(WithoutPhysics, selection(Ns)),
++        true = quod_reg:subscribe({runtime, Ns}),
++        try
++            Supervisor = quod_reg:where({quod_ns, Ns}),
++            ok = supervisor:terminate_child(Supervisor, quod_prolog),
++            ?assertMatch({ok, _}, supervisor:restart_child(Supervisor, quod_prolog)),
++            receive {replay_ready, _, _} -> ok
++            after 10000 -> error(selection_replay_not_ready) end,
++            ?assertEqual(WithoutPhysics, selection(Ns)),
++            ?assertMatch({normalized, {answers, _, [_]}}, signed(F, read,
++                {'\\+', physics_bridge_probe()})),
++            ?assertMatch({normalized, {committed, _, _}},
++                signed(F, execute, configure(WithoutPhysics, Initial))),
++            ?assertMatch({normalized, {answers, _, [_]}}, signed(F, read,
++                physics_bridge_probe()))
++        after quod_reg:unsubscribe({runtime, Ns}) end
++    end) end}.
++
++configure(Current, Next) -> {configure_external_predicates, Current, Next}.
++
++%% An installed bridge validates the body argument before any world lookup.
++%% Catch that native error; an absent bridge simply fails under unknown=fail.
++physics_bridge_probe() ->
++    {'catch', {physics_body_state, room, {'Body'}, {'Result'}}, {'Error'},
++        {'=', {'Error'}, instantiation_error}}.
++
++selection(Ns) ->
++    {ok, [#{'Modules' := Modules}], _} = quod_prolog:prove_ro(
++        Ns, {external_predicate_configuration, {'Modules'}}), Modules.
++
++owner_calls(Owner, Barrier, Calls) ->
++    receive
++        {trace, Owner, call, MFA} -> owner_calls(Owner, Barrier, [MFA | Calls]);
++        {trace_delivered, Owner, Barrier} -> lists:reverse(Calls)
++    after 5000 -> error(owner_trace_not_delivered) end.
++
++signed(#{namespace := Ns, human := {agent_instance_ref, HNs, Anchor, human},
++         identity := Identity}, Mode, Goal) ->
++    {ok, Text} = quod_client_goal_parser:format_clause({'::', Ns, Goal}),
++    {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
++        agent_namespace => HNs, agent_genesis_anchor => Anchor,
++        agent_instance_text => <<"human.">>, signing_public_key => maps:get(pubkey, Identity),
++        operation_id => crypto:strong_rand_bytes(32), not_after_ms => quod_time:now_ms() + 10000,
++        mode => Mode, parser_version => 3, goal_text => Text}),
++    {ok, _, Outcome} = quod_client_goal_ingress:submit(Bytes, quod_identity:sign(Bytes, Identity)),
++    Outcome.
++
++commit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).
++
++with_owner(Fun) ->
++    Ns = <<"host-test-agent">>,
++    quod_agent_hosting_tests:with_host(fun(F = #{node := {agent_instance_ref, HNs, Anchor, _},
++                                                identity := Identity}) ->
++        Human = {agent_instance_ref, HNs, Anchor, human},
++        commit(HNs, {',', {assertz, {instance_of, human_user, human}},
++            {',', {assertz, {agent_key, human, maps:get(pubkey, Identity), active}},
++                  {assertz, {can_invoke, {'_'}, Human, {'_'}, HNs}}}}),
++        commit(Ns, {assertz, {can_configure_external_predicates, Human, {'_'}}}),
++        Fun(F#{human => Human})
++    end, [{can_invoke, {'_'}, {'_'}, {'_'}, Ns}]).

@@ -1,0 +1,15 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6131f6780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6131f6780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/TrustTokenKeyCommitments", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/TrustTokenKeyCommitments", 0x7fe6131f44e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=440, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/TrustTokenKeyCommitments", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/TrustTokenKeyCommitments", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 674
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/TrustTokenKeyCommitments", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 674
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/Crowd Deny", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Crowd Deny", 0x7fe6131f44e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=680, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Crowd Deny", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 675
++++ exited with 0 +++

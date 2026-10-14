@@ -1,0 +1,9 @@
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7ff5d52994c0, si_syscall=__NR_sched_getaffinity, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/tmp/quod-webxr-jlq3kxwe/data/mime/mime.cache", 0x7ff5c9a75490) = -1 EPERM (Operation not permitted)
+stat("/home/yan/.local/share/flatpak/exports/share/mime/mime.cache", 0x7ff5c9a75490) = -1 EPERM (Operation not permitted)
+stat("/var/lib/flatpak/exports/share/mime/mime.cache", 0x7ff5c9a75490) = -1 EPERM (Operation not permitted)
+stat("/usr/local/share/mime/mime.cache", 0x7ff5c9a75490) = -1 EPERM (Operation not permitted)
+stat("/usr/share/mime/mime.cache", 0x7ff5c9a75490) = -1 EPERM (Operation not permitted)
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7ff5d53032eb, si_syscall=__NR_sched_getparam, si_arch=AUDIT_ARCH_X86_64} ---
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7ff5d530331b, si_syscall=__NR_sched_getscheduler, si_arch=AUDIT_ARCH_X86_64} ---
++++ exited with 0 +++

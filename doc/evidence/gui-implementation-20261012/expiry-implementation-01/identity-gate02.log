@@ -1,0 +1,34 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 13-Oct-2026::12:10:30.157188 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.661.0>
+    registered_name: []
+    exception exit: invalid_vault_configuration
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.660.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.660.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 233
+    stack_size: 29
+    reductions: 110
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=NOTICE REPORT==== 13-Oct-2026::12:10:30.680565 ===
+TLS server: In state wait_cert at tls_handshake_1_3.erl:446 generated SERVER ALERT: Fatal - Certificate required
+ - certificate_required
+=NOTICE REPORT==== 13-Oct-2026::12:10:30.691760 ===
+TLS client: In state connection received SERVER ALERT: Fatal - Certificate required
+
+[0;32m.[0m[0;32m.[0m
+Finished in 3.466 seconds
+[0;32m47 tests, 0 failures
+[0m

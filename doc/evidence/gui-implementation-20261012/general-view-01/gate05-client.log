@@ -1,0 +1,33 @@
+npm notice run quod-client@0.1.0 test
+npm notice run node --test test/*.test.js
+✔ test/accounts.test.js (97.821754ms)
+✔ test/agent-references.test.js (68.346771ms)
+✔ test/controlled-navigation.test.js (255.084422ms)
+✔ test/glb-profile.test.js (79.401436ms)
+✔ test/gui-view.test.js (106.835676ms)
+✔ test/key-provider.test.js (985.466803ms)
+✔ test/locomotion.test.js (87.035065ms)
+✔ test/marks.test.js (90.335343ms)
+✔ test/navigation.test.js (67.265822ms)
+✔ test/prolog-edit.test.js (114.17558ms)
+✔ test/prolog-term.test.js (116.306733ms)
+✖ test/question-controller.test.js (122.639168ms)
+✔ test/render-resources.test.js (168.183618ms)
+✔ test/scene.test.js (496.153823ms)
+✔ test/signed-client.test.js (136.969822ms)
+✔ test/simulation.test.js (378.669159ms)
+✔ test/world.test.js (106.846578ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 16
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1012.57338
+
+✖ failing tests:
+
+test at test/question-controller.test.js:1:1
+✖ test/question-controller.test.js (122.639168ms)
+  'test failed'

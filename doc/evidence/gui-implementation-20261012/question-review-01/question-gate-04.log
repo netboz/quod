@@ -1,0 +1,86 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 746 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 959 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1439 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+=WARNING REPORT==== 13-Oct-2026::03:40:24.012912 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 3
+=WARNING REPORT==== 13-Oct-2026::03:40:24.713589 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 4
+=WARNING REPORT==== 13-Oct-2026::03:40:27.646471 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 7
+[0;31mF[0m
+Failures:
+
+  1) quod_gui_question_tests:-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-11-/0: module 'quod_gui_question_tests'
+[0;31m     Failure/Error: {error,
+                        {badmatch,
+                            {ok,[#{<<"V0">> => {6},
+                                   <<"V1">> => {7},
+                                   <<"V2">> => {8},
+                                   <<"V3">> => {9},
+                                   <<"V4">> => [true]}],
+                                14}},
+                        [{quod_gui_question_tests,
+                             '-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-11-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,76}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]},
+                         {eunit_proc,run_group,2,
+                             [{file,"eunit_proc.erl"},{line,593}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 5.937 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

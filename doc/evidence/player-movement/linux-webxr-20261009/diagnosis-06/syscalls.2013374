@@ -1,0 +1,9 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f09f3ff5780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f09f3ff5780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/DictationConnector", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/DictationConnector", 0x7f09f3ff34e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=620, ...}) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/DictationConnector", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 683
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 681
++++ exited with 0 +++

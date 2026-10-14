@@ -1,0 +1,17 @@
+    Checking quod-client-core v0.1.0 (/home/yan/src/quod/client/native/core)
+    Checking godot-core v0.5.5
+    Checking godot v0.5.5
+    Checking quod-godot v0.1.0 (/home/yan/src/quod/client/native/godot-extension)
+error: redundant field names in struct initialization
+  --> godot-extension/src/lib.rs:17:5
+   |
+17 |     base: Base<RefCounted>,
+   |     ^^^^^^^^^^ help: replace it with: `base`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#redundant_field_names
+   = note: `-D clippy::redundant-field-names` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::redundant_field_names)]`
+
+error: could not compile `quod-godot` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `quod-godot` (lib test) due to 1 previous error

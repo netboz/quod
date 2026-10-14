@@ -1,0 +1,192 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::11:46:19.337908 ===
+quod_prolog[rt:2]: can_invoke refused a top-level goal at pinned height 1
+[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::11:46:19.408550 ===
+quod_runtime[rt:82]: execution failure ({event_tier_failed,{invalid_reaction,{':-',{react_on,{0},true},true}}}) — collapsing to one reconciliation
+=ERROR REPORT==== 13-Oct-2026::11:46:19.409166 ===
+quod_runtime[rt:82]: unhealthy: {invalid_reaction,{':-',{react_on,{0},true},true}}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 13-Oct-2026::11:46:20.014367 ===
+quod_runtime[rt:498]: unhealthy: {resource_notice_capacity,0}
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::11:46:23.960409 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"rtidentity:787">>}}}
+    errorContext: child_terminated
+    reason: normal
+    offender: [{pid,<0.1790.0>},
+               {id,quod_runtime},
+               {mfargs,
+                {quod_runtime,start_link,
+                 [<<"rtidentity:787">>,
+                  #{mode => create,
+                    data_dir => "/tmp/quod_rt_identity_terms_787",
+                    node_id =>
+                     <<9,41,12,203,149,55,217,116,81,79,115,184,112,231,8,83,
+                       34,250,111,54,128,77,143,218,87,75,29,73,162,13,129,189>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<213,105,86,7,166,99,246,14,140,74,19,241,223,162,
+                           168,40,135,200,157,137,34,250,71,92,25,44,44,211,93,
+                           139,155,243>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<9,41,12,203,149,55,217,116,81,79,115,184,112,231,8,
+                           83,34,250,111,54,128,77,143,218,87,75,29,73,162,13,
+                           129,189>>,
+                         asn1_NOVALUE},
+                       pubkey =>
+                        <<9,41,12,203,149,55,217,116,81,79,115,184,112,231,8,
+                          83,34,250,111,54,128,77,143,218,87,75,29,73,162,13,
+                          129,189>>},
+                    genesis_diff =>
+                     [{assert,
+                       {{subscribes,<<"rtterms:626">>,
+                         <<6,7,245,33,4,254,147,21,166,49,139,250,2,88,79,207,
+                           78,130,205,105,169,198,164,176,179,226,187,92,47,
+                           100,238,235>>},
+                        {[],false}}},
+                      {assert,
+                       {{react_on,
+                         {from,<<"rtterms:626">>,
+                          <<6,7,245,33,4,254,147,21,166,49,139,250,2,88,79,207,
+                            78,130,205,105,169,198,164,176,179,226,187,92,47,
+                            100,238,235>>,
+                          {assert,{remote_ping,{0}}}},
+                         {member,
+                          {0},
+                          [fresh,fresh_after_restart,
+                           fresh_after_cache_rebuild]}},
+                        {[],false}}}]}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::11:46:24.378187 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"rtns:690">>}}}
+    errorContext: child_terminated
+    reason: normal
+    offender: [{pid,<0.2066.0>},
+               {id,quod_runtime},
+               {mfargs,
+                {quod_runtime,start_link,
+                 [<<"rtns:690">>,
+                  #{mode => create,data_dir => "/tmp/quod_rt_690",
+                    node_id =>
+                     <<46,171,46,14,95,26,173,15,58,159,43,17,155,138,106,84,
+                       201,179,220,183,222,229,194,192,224,29,54,44,238,137,45,
+                       34>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<95,129,19,95,247,86,148,139,102,226,89,32,251,240,
+                           99,53,107,135,174,54,57,77,151,162,85,153,238,236,
+                           174,143,23,233>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<46,171,46,14,95,26,173,15,58,159,43,17,155,138,106,
+                           84,201,179,220,183,222,229,194,192,224,29,54,44,238,
+                           137,45,34>>,
+                         asn1_NOVALUE},
+                       pubkey =>
+                        <<46,171,46,14,95,26,173,15,58,159,43,17,155,138,106,
+                          84,201,179,220,183,222,229,194,192,224,29,54,44,238,
+                          137,45,34>>},
+                    genesis_file => "/tmp/quod_rt_690/genesis.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::11:46:25.323811 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"rtns:883">>}}}
+    errorContext: child_terminated
+    reason: normal
+    offender: [{pid,<0.2243.0>},
+               {id,quod_runtime},
+               {mfargs,
+                {quod_runtime,start_link,
+                 [<<"rtns:883">>,
+                  #{mode => create,data_dir => "/tmp/quod_rt_883",
+                    node_id =>
+                     <<127,223,170,36,109,141,157,219,68,182,224,139,160,68,
+                       222,20,217,56,141,3,251,205,24,234,122,62,54,105,118,
+                       170,86,237>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<154,139,61,106,254,160,157,170,45,213,18,184,205,
+                           178,204,164,83,239,18,207,78,36,28,235,210,187,236,
+                           173,88,51,9,46>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<127,223,170,36,109,141,157,219,68,182,224,139,160,
+                           68,222,20,217,56,141,3,251,205,24,234,122,62,54,105,
+                           118,170,86,237>>,
+                         asn1_NOVALUE},
+                       pubkey =>
+                        <<127,223,170,36,109,141,157,219,68,182,224,139,160,
+                          68,222,20,217,56,141,3,251,205,24,234,122,62,54,105,
+                          118,170,86,237>>},
+                    genesis_file => "/tmp/quod_rt_883/genesis.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::11:46:26.038705 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"rtterms:914">>}}}
+    errorContext: child_terminated
+    reason: normal
+    offender: [{pid,<0.2395.0>},
+               {id,quod_runtime},
+               {mfargs,
+                {quod_runtime,start_link,
+                 [<<"rtterms:914">>,
+                  #{mode => create,data_dir => "/tmp/quod_rt_terms_914",
+                    node_id =>
+                     <<214,74,96,215,177,82,59,82,91,135,75,45,212,148,117,39,
+                       203,200,214,254,219,70,5,129,142,255,113,73,171,183,135,
+                       65>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<233,151,47,125,102,110,154,29,170,221,61,162,77,128,
+                           193,109,159,6,164,25,196,60,105,191,171,193,242,246,
+                           105,177,154,1>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<214,74,96,215,177,82,59,82,91,135,75,45,212,148,117,
+                           39,203,200,214,254,219,70,5,129,142,255,113,73,171,
+                           183,135,65>>,
+                         asn1_NOVALUE},
+                       pubkey =>
+                        <<214,74,96,215,177,82,59,82,91,135,75,45,212,148,117,
+                          39,203,200,214,254,219,70,5,129,142,255,113,73,171,
+                          183,135,65>>},
+                    genesis_diff =>
+                     [{assert,{{resource_value,initial},{[],false}}},
+                      {assert,
+                       {{agent_hosting_projection,{0},{1},all,[]},
+                        {[{member,{0},[read,block]},
+                          {resource_value,{2}},
+                          {test_resource_snapshot,{0},{2}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosting_projection,write,{0},all,[]},
+                        {[{assertz,illegal_selector_write}],false}}}],
+                    external_predicate_modules => [quod_runtime_tests]}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m=NOTICE REPORT==== 13-Oct-2026::11:46:26.429128 ===
+quod_runtime[rtterms:963]: event queue overflow — collapsing to one reconciliation (backpressure, not a fault)
+[0;32m.[0m=NOTICE REPORT==== 13-Oct-2026::11:46:26.544672 ===
+quod_runtime[rtterms:995]: event queue overflow — collapsing to one reconciliation (backpressure, not a fault)
+[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::11:46:27.172630 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 7
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 8.933 seconds
+[0;32m81 tests, 0 failures
+[0m

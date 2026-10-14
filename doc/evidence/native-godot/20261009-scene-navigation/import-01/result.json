@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/run.py",
+    "--headless",
+    "--editor",
+    "--quit"
+  ],
+  "exit": 0,
+  "diagnostic_failure": true,
+  "elapsed_seconds": 3.655559654987883
+}

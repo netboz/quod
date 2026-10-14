@@ -1,0 +1,608 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 39549.
+[2011130:2011130:1009/104750.658438:WARNING:ui/ozone/platform/wayland/common/drm_render_node_path_finder.cc:178] Preferred drm_render_node not found, picking nvidia-drm
+[2011130:2011130:1009/104751.416728:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wl_shm version 1 but version 2 is available.
+[2011130:2011130:1009/104751.416786:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_cursor_shape_manager_v1 version 1 but version 2 is available.
+[2011130:2011130:1009/104751.416813:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_pointer_gestures_v1 version 1 but version 3 is available.
+[2011130:2011130:1009/104751.416844:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to ext_idle_notifier_v1 version 1 but version 2 is available.
+[2011130:2011130:1009/104751.416914:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_color_manager_v1 version 1 but version 3 is available.
+[2011130:2011130:1009/104751.416951:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_linux_dmabuf_v1 version 4 but version 5 is available.
+[2011130:2011130:1009/104751.417038:ERROR:ui/ozone/platform/wayland/host/wayland_seat.cc:91] Not implemented reached in static void ui::WaylandSeat::OnName(void *, wl_seat *, const char *). 
+[2011130:2011130:1009/104751.418547:ERROR:ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.cc:395] Not implemented reached in static void ui::WaylandZwpLinuxDmabuf::OnTrancheFlags(void *, zwp_linux_dmabuf_feedback_v1 *, uint32_t). 
+[2011130:2011130:1009/104751.801849:WARNING:chrome/browser/signin/account_consistency_mode_manager.cc:74] Desktop Identity Consistency cannot be enabled as no OAuth client ID and client secret have been configured.
+[2011130:2011130:1009/104751.844783:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844803:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844807:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844810:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844813:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844815:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844818:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844822:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844826:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844830:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844832:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844835:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844839:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844842:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844845:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844847:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844850:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844853:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844857:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844859:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844862:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844879:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844884:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844887:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844890:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844893:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844896:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844899:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844902:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844904:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844907:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844910:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844913:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844915:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844918:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.844921:ERROR:chrome/browser/actor/tools/tool_request.cc:32] Not implemented reached in static std::optional<ToolDefinition> actor::ToolRequest::GetToolDefinition(). 
+[2011130:2011130:1009/104751.877178:ERROR:ui/ozone/platform/wayland/host/wayland_screen.cc:479] Not implemented reached in virtual bool ui::WaylandScreen::IsScreenSaverActive() const. 
+
+DevTools listening on ws://127.0.0.1:41557/devtools/browser/cdcc2c56-481a-426f-b026-0e92cd7b3601
+[2011211:2011211:1009/104751.942240:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+[2011211:2011211:1009/104751.950179:ERROR:ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc:248] '--ozone-platform=wayland' is not compatible with Vulkan. Consider switching to '--ozone-platform=x11' or disabling Vulkan
+[Vulkan Loader] INFO:           Vulkan Loader Version 1.4.365
+[Vulkan Loader] WARNING:        Vulkan Loader: unsafe searching is enabled
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[2011130:2011130:1009/104751.956571:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+[2011130:2011130:1009/104751.956657:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+[2011236:1:1009/104752.038378:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for explicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:             Found no files
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for explicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:             Found no files
+[Vulkan Loader] INFO:           vkCreateInstance: applicationName: "Chromium", applicationVersion: 0, engineName: "", engineVersion: 0, apiVersion: 1.1.0
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 0 instance layer(s):
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 3 instance extension(s):
+[Vulkan Loader] INFO:              VK_KHR_external_memory_capabilities
+[Vulkan Loader] INFO:              VK_KHR_external_semaphore_capabilities
+[Vulkan Loader] INFO:              VK_EXT_debug_report
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for explicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:             Found no files
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] LAYER:          vkCreateInstance layer callstack setup to:
+[Vulkan Loader] LAYER:             <Application>
+[Vulkan Loader] LAYER:               ||
+[Vulkan Loader] LAYER:             <Loader>
+[Vulkan Loader] LAYER:               ||
+[Vulkan Loader] LAYER:             <Drivers>
+[Vulkan Loader] INFO | DRIVER:  linux_read_sorted_physical_devices:
+[Vulkan Loader] INFO | DRIVER:       Original order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090
+[Vulkan Loader] INFO | DRIVER:       Sorted order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090  
+[Vulkan Loader] INFO | DRIVER:  linux_read_sorted_physical_devices:
+[Vulkan Loader] INFO | DRIVER:       Original order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090
+[Vulkan Loader] INFO | DRIVER:       Sorted order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090  
+[Vulkan Loader] DEBUG | DRIVER: Copying old device 0 into new device 0
+[Vulkan Loader] DRIVER:         vkCreateDevice layer callstack setup to:
+[Vulkan Loader] DRIVER:            <Application>
+[Vulkan Loader] DRIVER:              ||
+[Vulkan Loader] DRIVER:            <Loader>
+[Vulkan Loader] DRIVER:              ||
+[Vulkan Loader] DRIVER:            <Device>
+[Vulkan Loader] DRIVER:                Using "NVIDIA GeForce RTX 4090" with driver: "/usr/lib/libGLX_nvidia.so.0"
+[2011130:2011130:1009/104752.258261:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[2011130:2011130:1009/104752.258454:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[2011267:1:1009/104752.261619:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2011269:1:1009/104752.278709:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2011130:2011130:1009/104752.302764:ERROR:ui/ozone/platform/wayland/host/xdg_toplevel.cc:289] Not implemented reached in static void ui::XdgToplevel::OnWmCapabilities(void *, xdg_toplevel *, wl_array *). 
+[2011130:2011130:1009/104752.550841:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[2011373:1:1009/104753.396332:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[2011382:1:1009/104753.444129:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[Vulkan Loader] INFO:           Vulkan Loader Version 1.4.365
+[Vulkan Loader] WARNING:        Vulkan Loader: unsafe searching is enabled
+[2011393:2011393:1009/104753.715905:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:91] OpenXrExtensionEnumeration: Supported Extensions Begin
+[2011393:2011393:1009/104753.716065:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_binding_modification version=1
+[2011393:2011393:1009/104753.716133:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_color_scale_bias version=5
+[2011393:2011393:1009/104753.716161:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_cylinder version=4
+[2011393:2011393:1009/104753.716197:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_depth version=6
+[2011393:2011393:1009/104753.716222:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_composition_layer_equirect2 version=1
+[2011393:2011393:1009/104753.716246:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_convert_timespec_time version=1
+[2011393:2011393:1009/104753.716270:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_extended_struct_name_lengths version=2
+[2011393:2011393:1009/104753.716294:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_locate_spaces version=1
+[2011393:2011393:1009/104753.716317:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_maintenance1 version=1
+[2011393:2011393:1009/104753.716340:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_opengl_enable version=12
+[2011393:2011393:1009/104753.716382:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_opengl_es_enable version=10
+[2011393:2011393:1009/104753.716422:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_swapchain_usage_input_attachment_bit version=3
+[2011393:2011393:1009/104753.716461:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_visibility_mask version=2
+[2011393:2011393:1009/104753.716502:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_enable version=10
+[2011393:2011393:1009/104753.716528:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_enable2 version=4
+[2011393:2011393:1009/104753.716566:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_KHR_vulkan_swapchain_format_list version=5
+[2011393:2011393:1009/104753.716605:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_active_action_set_priority version=1
+[2011393:2011393:1009/104753.716644:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_dpad_binding version=1
+[2011393:2011393:1009/104753.716670:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_eye_gaze_interaction version=2
+[2011393:2011393:1009/104753.716693:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_future version=2
+[2011393:2011393:1009/104753.716716:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_interaction version=2
+[2011393:2011393:1009/104753.716754:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_tracking version=4
+[2011393:2011393:1009/104753.716797:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hand_tracking_data_source version=1
+[2011393:2011393:1009/104753.716829:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_hp_mixed_reality_controller version=1
+[2011393:2011393:1009/104753.716866:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_local_floor version=1
+[2011393:2011393:1009/104753.716906:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_samsung_odyssey_controller version=1
+[2011393:2011393:1009/104753.716947:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_user_presence version=1
+[2011393:2011393:1009/104753.716989:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_ANDROID_face_tracking version=1
+[2011393:2011393:1009/104753.717035:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_BD_controller_interaction version=2
+[2011393:2011393:1009/104753.717075:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_display_refresh_rate version=1
+[2011393:2011393:1009/104753.717114:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_face_tracking2 version=1
+[2011393:2011393:1009/104753.717159:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_touch_controller_pro version=1
+[2011393:2011393:1009/104753.717199:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_FB_touch_controller_proximity version=1
+[2011393:2011393:1009/104753.717240:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_facial_tracking version=3
+[2011393:2011393:1009/104753.717280:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_vive_cosmos_controller_interaction version=1
+[2011393:2011393:1009/104753.717321:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_HTC_vive_focus3_controller_interaction version=2
+[2011393:2011393:1009/104753.717361:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_META_touch_controller_plus version=1
+[2011393:2011393:1009/104753.717401:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_ML_ml2_controller_interaction version=1
+[2011393:2011393:1009/104753.717441:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MND_headless version=3
+[2011393:2011393:1009/104753.717482:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MND_swapchain_usage_input_attachment_bit version=2
+[2011393:2011393:1009/104753.717522:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MSFT_unbounded_reference_space version=1
+[2011393:2011393:1009/104753.717563:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_OPPO_controller_interaction version=1
+[2011393:2011393:1009/104753.717603:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXTX_overlay version=5
+[2011393:2011393:1009/104753.717665:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_ball_on_a_stick_controller version=1
+[2011393:2011393:1009/104753.717725:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_blubur_s1 version=1
+[2011393:2011393:1009/104753.717784:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_egl_enable version=2
+[2011393:2011393:1009/104753.717821:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_flipvr version=1
+[2011393:2011393:1009/104753.717863:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_force_feedback_curl version=1
+[2011393:2011393:1009/104753.717903:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_hydra version=1
+[2011393:2011393:1009/104753.717944:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_oculus_remote version=1
+[2011393:2011393:1009/104753.717984:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_psvr2_interaction version=1
+[2011393:2011393:1009/104753.718029:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_system_buttons version=1
+[2011393:2011393:1009/104753.718069:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_MNDX_xdev_space version=1
+[2011393:2011393:1009/104753.718109:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:93] OpenXrExtensionEnumeration: XR_EXT_debug_utils version=5
+[2011393:2011393:1009/104753.718149:VERBOSE1:device/vr/openxr/openxr_extension_helper.cc:96] OpenXrExtensionEnumeration: Supported Extensions End
+[2011393:2011393:1009/104753.718225:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:123] CreateInstance
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Chromium 157
+	createInfo->applicationInfo.applicationVersion: 8091
+	createInfo->applicationInfo.engineName: Chromium
+	createInfo->applicationInfo.engineVersion: 8091
+	createInfo->applicationInfo.apiVersion: 1.0.53
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+[2011393:2011393:1009/104753.902424:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:97] CreateInstanceWithCreateInfo
+[2011393:2011393:1009/104753.902607:VERBOSE1:device/vr/openxr/openxr_platform_helper.cc:115] OnPlatformCreateInfoResult
+[2011393:2011424:1009/104753.903637:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=1280 maxImageRectHeight=1440 recommendedImageRectWidth=320 recommendedImageRectHeight=360
+[2011393:2011424:1009/104753.904309:VERBOSE1:device/vr/openxr/openxr_view_configuration.cc:62] OpenXrViewProperties view_count_2 maxImageRectWidth=1280 maxImageRectHeight=1440 recommendedImageRectWidth=320 recommendedImageRectHeight=360
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] ERROR:          loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] ERROR:          loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] ERROR:          loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] INFO:           vkCreateInstance: applicationName: "Chromium", applicationVersion: 0, engineName: "", engineVersion: 0, apiVersion: 1.1.0
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 0 instance layer(s):
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 5 instance extension(s):
+[Vulkan Loader] INFO:              VK_KHR_external_fence_capabilities
+[Vulkan Loader] INFO:              VK_KHR_external_memory_capabilities
+[Vulkan Loader] INFO:              VK_KHR_external_semaphore_capabilities
+[Vulkan Loader] INFO:              VK_KHR_get_physical_device_properties2
+[Vulkan Loader] INFO:              VK_EXT_debug_utils
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for explicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/config/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /tmp/quod-webxr-mt76uqr2/data/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:             Found no files
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /tmp/quod-webxr-mt76uqr2/data/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] ERROR:          loader_scanned_icd_add: Could not get 'vkCreateInstance' via 'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0
+[Vulkan Loader] ERROR | DRIVER: loader_icd_scan: Failed loading library associated with ICD JSON libGLX_nvidia.so.0. Ignoring this JSON
+[Vulkan Loader] ERROR | DRIVER: vkCreateInstance: Found no drivers!
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_ERROR_INCOMPATIBLE_DRIVER
+	vulkanInstance: 0x0
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+[2011393:2011424:1009/104753.934441:VERBOSE1:device/vr/openxr/linux/openxr_vulkan_context.cc:153] Initialize xrCreateVulkanInstanceKHR failed: xr=0 vk=-9
+[2011393:2011424:1009/104753.934697:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:829] StartRuntime Could not create OpenXrApiWrapper
+[2011393:2011424:1009/104753.935062:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:88] ExitPresent reason=4
+[2011393:2011424:1009/104753.935199:VERBOSE1:device/vr/openxr/openxr_render_loop.cc:288] CleanUp
+[2011130:2011130:1009/104753.937805:INFO:CONSOLE:0] "Could not create a session because: Something went wrong initializing the session in the runtime", source: http://127.0.0.1:35395/linux-webxr.fixture.html (0)
+[2011130:2011130:1009/104754.280324:ERROR:base/process/kill_posix.cc:33] waitpid(2011213): No child processes (10)

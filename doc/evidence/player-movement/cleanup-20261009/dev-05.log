@@ -1,0 +1,81 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.04s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_external_predicate_selection_tests:-signed_selection_authorization_rollback_and_repeat_cost_test_/0-fun-16-/0
+[0;31m     Failure/Error: ?assertMatch({ normalized , { committed , _ , _ } }, signed ( F , execute , { ';' , { transaction , { ',' , configure ( Initial , WithoutPhysics ) , fail } } , true } ))
+       expected: = { normalized , { committed , _ , _ } }
+            got: {normalized,{answers,2,[<<131,104,1,97,5>>]}}[0m=ERROR REPORT==== 9-Oct-2026::18:21:23.213489 ===
+** Generic server {n,l,{agent_vault,node}} terminating 
+** Last message in was {'EXIT',<0.608.0>,killed}
+** When Server state == encrypted_custody
+** Reason for termination ==
+** killed
+
+
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_C915C0F961A94C35
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_C915C0F961A94C35
+[0m
+
+Pending:
+[0;33m  quod_external_predicate_selection_tests:-signed_selection_recovery_and_invalid_candidate_test_/0-fun-9-/0
+[0m[0;36m    %% Unknown error: {timeout,
+                   #{stacktrace =>
+                         [{quod_prolog,await_public_proof,5,
+                              [{file,"/home/yan/src/quod/src/quod_prolog.erl"},
+                               {line,587}]},
+                          {quod_prolog,'-public_proof/8-fun-0-',8,
+                              [{file,"/home/yan/src/quod/src/quod_prolog.erl"},
+                               {line,582}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,59}]},
+                          {quod_client_goal_target,'-execute/5-fun-2-',3,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_client_goal_target.erl"},
+                               {line,191}]},
+                          {quod_client_goal_target,'-trace_stage/3-fun-0-',2,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_client_goal_target.erl"},
+                               {line,234}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/home/yan/src/quod/src/quod_trace.erl"},
+                               {line,59}]}]}}
+[0m[0;33m  undefined
+[0m[0;36m    %% Unknown error: {blame,[1,2]}
+[0m
+
+Finished in ? seconds
+[0;31m4 tests, 1 failures, 3 cancelled
+[0m=CRASH REPORT==== 9-Oct-2026::18:21:23.213678 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.697.0>
+    registered_name: []
+    exception exit: killed
+      in function  gen_server:decode_msg/6 (gen_server.erl:2379)
+    ancestors: [<0.608.0>]
+    message_queue_len: 0
+    messages: []
+    links: []
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 8374
+  neighbours:
+
+===> Error running tests

@@ -1,0 +1,16 @@
+
+  VITE v8.1.5  ready in 525 ms
+
+  ➜  Local:   http://127.0.0.1:5178/
+  ➜  press h + enter to show help
+9:22:24 PM [vite] (client) [console.warn] BJS - [21:22:24]: Feature xr-hand-tracking failed to attach
+9:22:25 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'target')
+ > NodeMaterial.addOutputNode ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:438:25
+ > NodeMaterial.parseSerializedObject ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:1906:29
+ > XMLHttpRequest.<anonymous> ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:2133:33
+
+9:22:25 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'target')
+ > NodeMaterial.addOutputNode ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:438:25
+ > NodeMaterial.parseSerializedObject ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:1906:29
+ > XMLHttpRequest.<anonymous> ../client/node_modules/@babylonjs/core/Materials/Node/nodeMaterial.pure.js:2133:33
+

@@ -34,6 +34,22 @@ real_v7_outcome_index_is_named_and_unchanged_test() ->
         ?assertEqual({ok, Bytes}, file:read_file(Path))
     end).
 
+unsupported_outcome_formats_are_refused_without_rewrite_test_() ->
+    [?_test(with_dir(fun(Dir) ->
+        Ns = namespace(),
+        Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "outcomes.dets"),
+        ok = filelib:ensure_dir(Path),
+        {ok, Path} = dets:open_file(Path, [{file, Path}, {type, set}]),
+        %% Synthetic version header and opaque row: refusal must precede any
+        %% interpretation, reset or deletion of the prior derived format.
+        ok = dets:insert(Path, [{meta, Version, anchor()}, {retained, <<"retained bytes">>}]),
+        ok = dets:close(Path),
+        {ok, Before} = file:read_file(Path),
+        ?assertEqual({error, {unsupported_format, Version}},
+                     quod_outcome:open(Ns, anchor(), #{ledger_dir => Dir})),
+        ?assertEqual({ok, Before}, file:read_file(Path))
+    end)) || Version <- [8,10]].
+
 real_v1_phase_row_is_named_and_unchanged_test() ->
     with_dir(fun(Dir) ->
         Bytes = fixture("phase-history-v1"),

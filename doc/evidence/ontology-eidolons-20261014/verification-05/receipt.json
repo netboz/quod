@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_lobby_tests:presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_+ontology_instances_share_selection_and_authorized_inspection_test_+non_system_read_only_source_uses_the_same_recipe_test_+scoped_routes_reuse_the_directory_and_preserve_private_admission_test_+system_ontology_editing_uses_universal_scope_identity_test_+public_system_ontology_source_is_readable_but_not_mutable_test_"
+  ],
+  "started": "2026-10-14T10:46:32.659858+00:00",
+  "finished": "2026-10-14T10:46:42.957090+00:00",
+  "exit": 0
+}

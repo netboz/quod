@@ -39,8 +39,17 @@ client_space_selection(Space, Marks, Selection) :-
 %% Code is an eidolon of every class. The root catalogue supplies the exact
 %% recipe identity; an absent editing ontology simply offers no such recipe.
 %% This is a recipe association, never permission to change the target.
+isa(ontology, thing).
+instance_of(ontology, ontology_ref(Namespace, Anchor)) :-
+    current_ontology_identity(Namespace, Anchor).
+
 class_eidolon(Class, prolog, source, recipe(Namespace, Anchor, prolog_editor)) :-
     nonvar(Class),
+    Namespace = <<"quod:prolog:eidolons">>,
+    quod:root::system_ontology(Namespace, Anchor).
+
+class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
+    member(Style, [policy, interfaces, routes]),
     Namespace = <<"quod:prolog:eidolons">>,
     quod:root::system_ontology(Namespace, Anchor).
 
@@ -51,16 +60,11 @@ entity_eidolons(Entity, Eidolons) :-
             class_eidolon(Class, Purpose, Style, Recipe)), Choices),
     sort(Choices, Eidolons).
 
-ontology_eidolons(Eidolons) :-
-    findall(eidolon(Purpose, Style, Recipe),
-            class_eidolon(ontology, Purpose, Style, Recipe), Choices),
-    sort(Choices, Eidolons).
-
 %% Discovery grants no invocation or mutation authority.
 %% Ontologies opting into public source discovery also expose their identity;
 %% this permits an anchored dependency read without granting source access.
 public_source_query(current_ontology_identity(_, _)).
-public_source_query(ontology_eidolons(_)).
+public_source_query(instance_of(ontology, ontology_ref(_, _))).
 public_source_query(entity_eidolons(_, _)).
 
 %% Targets admit only these exact source/read and administrator-edit shapes.
@@ -73,8 +77,8 @@ system_source_query(
 system_prolog_introspection(Query, Result) :-
     current_ontology_identity(Namespace, Anchor),
     quod:root::(current_ontology_identity(<<"quod:root">>, _),
-                system_source_access(ontology_ref(Namespace, Anchor), _)),
-    prolog_introspection(Query, Result).
+                system_source_access(ontology_ref(Namespace, Anchor), Access)),
+    (Query == presentation -> Result = Access ; prolog_introspection(Query, Result)).
 
 prolog_introspection(predicates, Indicators) :-
     findall(Indicator, current_predicate(Indicator), Unsorted),
@@ -82,7 +86,32 @@ prolog_introspection(predicates, Indicators) :-
 prolog_introspection(source(Indicator), Source) :-
     '$quod_predicate_source'(Indicator, Source).
 prolog_introspection(chunks(Bytes), Chunk) :-
-    '$quod_source_chunk'(Bytes, Chunk).
+    '$quod_source_chunk'(all, Bytes, Chunk).
+prolog_introspection(identity, ontology_ref(Namespace, Anchor)) :-
+    current_ontology_identity(Namespace, Anchor).
+prolog_introspection(policy_chunks(Bytes), Chunk) :-
+    findall(Indicator, ontology_acl_indicator(Indicator), Indicators),
+    '$quod_source_chunk'(predicates(Indicators), Bytes, Chunk).
+prolog_introspection(interface_chunks(Bytes), Chunk) :-
+    '$quod_source_chunk'(predicates([ontology_interface/2]), Bytes, Chunk).
+prolog_introspection(route_chunks(Bytes), Chunk) :-
+    '$quod_ontology_routes'(Routes),
+    '$quod_source_chunk'(terms(Routes), Bytes, Chunk).
+%% Presentation is advisory and shares the target's existing ownership rules.
+%% No declaration means a read-only view; ambiguity never selects a grant.
+prolog_introspection(presentation, Mode) :-
+    findall(M, (current_predicate(ontology_source_mode/1),
+                ontology_source_mode(M)), Raw),
+    sort(Raw, Modes),
+    ontology_presentation_mode(Modes, Mode).
+
+ontology_presentation_mode([], read_only).
+ontology_presentation_mode([Mode], Mode) :-
+    term_variables(Mode, []), member(Mode, [read_only, editable]).
+
+ontology_acl_indicator(can_invoke/4).
+ontology_acl_indicator(can_join/3).
+ontology_acl_indicator(acl_sovereign/1).
 
 system_prolog_edit :-
     current_ontology_identity(Namespace, Anchor),
@@ -151,11 +180,18 @@ most_specific_classes(Subjects, Candidates, Selected) :-
 %% caller's graph. Generated argument-following clauses are routing machinery,
 %% not authored immediate class declarations, so '$quod_direct_isa'/2 excludes
 %% them below.
-'$quod_isa_path'(Ns:Class, Superclass, Seen) :-
+'$quod_isa_path'(Class, Superclass, _) :-
+    %% A directly declared qualified parent may use the other parenthesis
+    %% grouping. It is already the requested endpoint, not another graph edge.
+    nonvar(Class), nonvar(Superclass), Class \== Superclass,
+    '$quod_name_normalize'(Class, Canonical),
+    '$quod_name_normalize'(Superclass, Canonical).
+'$quod_isa_path'(Reference, Superclass, Seen) :-
+    '$quod_owner_name'(Reference, Ns, Class),
     Ns::isa(Class, RemoteSuperclass),
     '$quod_qualified_class'(Ns, RemoteSuperclass, QualifiedSuperclass),
     \+ member_eq(QualifiedSuperclass, Seen),
-    Superclass = QualifiedSuperclass.
+    '$quod_name_normalize'(Superclass, QualifiedSuperclass).
 '$quod_isa_path'(Class, Superclass, Seen) :-
     '$quod_direct_isa'(Class, Superclass),
     \+ member_eq(Superclass, Seen).
@@ -171,10 +207,56 @@ most_specific_classes(Subjects, Candidates, Selected) :-
 
 '$quod_isa_semantics'('$quod_transitive_isa'(_, _)).
 '$quod_isa_semantics'('$quod_known_class'(_)).
-'$quod_isa_semantics'((nonvar(_), (_, '$quod_follow_unique'(_)))).
+'$quod_isa_semantics'((nonvar(_), (_, (_, '$quod_follow_unique'(_))))).
 
-'$quod_qualified_class'(_, Ns:Class, Ns:Class) :- !.
-'$quod_qualified_class'(Ns, Class, Ns:Class).
+%% A qualified name's final segment is local to its owner. Parentheses change
+%% Prolog's term grouping, not that ownership: a:b:c and (a:b):c both select
+%% ontology a:b and local name c. An unbound local name remains enumerable.
+%% These manipulate name data locally; following their arguments would recurse
+%% into the routing machinery they implement, including on backtracking.
+no_follow('$quod_owner_name'/3).
+no_follow('$quod_name_tail'/4).
+no_follow('$quod_name_normalize'/2).
+no_follow('$quod_name_join'/3).
+no_follow('$quod_qualified_class'/3).
+no_follow('$quod_stricter_class'/2).
+no_follow('$quod_known_class'/1).
+no_follow('$quod_declared_class'/1).
+no_follow('$quod_transitive_isa'/2).
+no_follow('$quod_isa_requires_closure'/2).
+no_follow('$quod_isa_path'/3).
+no_follow('$quod_direct_isa'/2).
+no_follow('$quod_isa_semantics'/1).
+no_follow(most_specific_classes/3).
+no_follow(member_eq/2).
+
+'$quod_owner_name'(Ns:Tail, Owner, Name) :-
+    nonvar(Ns),
+    '$quod_name_tail'(Tail, Ns, Owner, Name).
+
+'$quod_name_tail'(Tail, Prefix, Owner, Name) :-
+    nonvar(Tail), Tail = Segment:Rest, !,
+    '$quod_name_tail'(Rest, Prefix:Segment, Owner, Name).
+'$quod_name_tail'(Name, Owner, Owner, Name).
+
+'$quod_qualified_class'(Ns, Class, Qualified) :-
+    (nonvar(Class), Class = _:_ -> Reference = Class
+    ; Reference = Ns:Class),
+    '$quod_name_normalize'(Reference, Canonical),
+    (var(Qualified) -> Qualified = Canonical
+    ; '$quod_name_normalize'(Qualified, Canonical)).
+
+'$quod_name_normalize'(Name, Canonical) :-
+    nonvar(Name), Name = Left:Right, !,
+    '$quod_name_normalize'(Left, L),
+    '$quod_name_normalize'(Right, R),
+    '$quod_name_join'(L, R, Canonical).
+'$quod_name_normalize'(Name, Name).
+
+'$quod_name_join'(Left, Right, Head:Tail) :-
+    nonvar(Left), Left = Head:Rest, !,
+    '$quod_name_join'(Rest, Right, Tail).
+'$quod_name_join'(Left, Right, Left:Right).
 
 %% action(Transition, Prerequisites, DesiredState).
 %%
@@ -205,12 +287,10 @@ resolve_goal(DesiredState, Visited) :-
                              [DesiredState | Visited]),
     !.
 
-%% A governed public bridge allocates `Handle` and enters this same action
-%% relation.  Declarations use the private transition shape below so the
-%% public functor never calls itself recursively and an ontology cannot invoke
-%% the continuation without the exact proof-local handle.
-run_declared_action(Action, Handle) :-
-    Transition = '$quod_stage_ontology'(Handle, Action, DesiredState),
+%% A governed bridge supplies its private transition, including its exact
+%% proof-local handle. The common action relation owns prerequisites and
+%% rollback independently of which native operation is being prepared.
+run_declared_action(Transition) :-
     action(Transition, Prerequisites, DesiredState),
     '$quod_action_shape'(Transition, Prerequisites, DesiredState),
     run_declared_candidate(Transition, Prerequisites, DesiredState).

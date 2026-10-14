@@ -1,0 +1,203 @@
+-- The CMake build type is: Release
+-- Ruby interpreter executable
+-- Ruby interpreter executable - /home/yan/src/quod/client/_build/webxr-linux/tools/usr/bin/ruby (version: 3.4.10)
+-- Enabling ccache: Couldn't find ccache program. Not enabling it.
+-- Linker variant in use: BFD 
+--   Linker supports thin archives - TRUE
+--   Linker supports split debug info - TRUE
+--   Linker supports --gdb-index - FALSE
+--   Linker supports --disable-new-dtags - TRUE
+--   Linker supports --gc-sections - TRUE
+-- Archiver variant in use: BFD
+--   Archiver supports thin archives - TRUE
+-- C++ standard library in use: GLIBCXX
+--   Assertions enabled, _GLIBCXX_ASSERTIONS=1
+-- Found hb-features.h
+-- Found the following HarfBuzz libraries:
+--  HarfBuzz (required): /usr/lib/libharfbuzz.so
+--  ICU (required): /usr/lib/libharfbuzz-icu.so
+-- Found the following WebP libraries:
+--  WebP (required): /usr/lib/libwebp.so
+--  demux (required): /usr/lib/libwebpdemux.so
+-- Found glib-compile-resources (required): /usr/bin/glib-compile-resources (2.88.3)
+-- Using FreeType's WOFF2 support
+-- Found Libseccomp: /usr/lib/libseccomp.so (found version "2.6.0")
+-- Checking for module 'gstreamer-1.0 >= 1.18.4'
+--   Found gstreamer-1.0, version 1.28.7
+-- Checking for module 'gstreamer-base-1.0 >= 1.18.4'
+--   Found gstreamer-base-1.0, version 1.28.7
+-- Checking for module 'gstreamer-full-1.0>=1.17.0'
+--   Package 'gstreamer-full-1.0' not found
+-- Checking for module 'gstreamer-allocators-1.0 >= 1.18.4'
+--   Found gstreamer-allocators-1.0, version 1.28.7
+-- Checking for module 'gstreamer-app-1.0 >= 1.18.4'
+--   Found gstreamer-app-1.0, version 1.28.7
+-- Checking for module 'gstreamer-audio-1.0 >= 1.18.4'
+--   Found gstreamer-audio-1.0, version 1.28.7
+-- Checking for module 'gstreamer-fft-1.0 >= 1.18.4'
+--   Found gstreamer-fft-1.0, version 1.28.7
+-- Checking for module 'gstreamer-gl-1.0 >= 1.18.4'
+--   Found gstreamer-gl-1.0, version 1.28.7
+-- Checking for module 'gstreamer-mpegts-1.0>=1.4.0'
+--   Found gstreamer-mpegts-1.0, version 1.28.7
+-- Checking for module 'gstreamer-pbutils-1.0 >= 1.18.4'
+--   Found gstreamer-pbutils-1.0, version 1.28.7
+-- Checking for module 'gstreamer-tag-1.0 >= 1.18.4'
+--   Found gstreamer-tag-1.0, version 1.28.7
+-- Checking for module 'gstreamer-video-1.0 >= 1.18.4'
+--   Found gstreamer-video-1.0, version 1.28.7
+-- Checking for module 'gstreamer-codecparsers-1.0 >= 1.18.4'
+--   Found gstreamer-codecparsers-1.0, version 1.28.7
+-- Checking for module 'gstreamer-transcoder-1.0 >= 1.18.4'
+--   Found gstreamer-transcoder-1.0, version 1.28.7
+-- Checking for module 'gstreamer-rtp-1.0 >= 1.18.4'
+--   Found gstreamer-rtp-1.0, version 1.28.7
+-- Checking for module 'gstreamer-sdp-1.0 >= 1.18.4'
+--   Found gstreamer-sdp-1.0, version 1.28.7
+-- Checking for module 'gstreamer-webrtc-1.0 >= 1.18.4'
+--   Found gstreamer-webrtc-1.0, version 1.28.7
+-- Found GStreamer: /usr/include/gstreamer-1.0;/usr/include;/usr/include/glib-2.0;/usr/lib/glib-2.0/include;/usr/include/sysprof-6 (found suitable version "1.28.7", minimum required is "1.18.4")
+-- Found Gperf: /home/yan/src/quod/client/_build/webxr-linux/tools/usr/bin/gperf (Required is at least version "3.0.1")
+-- Platform-specific CMakeLists not found: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/bmalloc/PlatformGTK.cmake
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WTF/wtf/PlatformGTK.cmake
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wunsafe-buffer-usage
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wunsafe-buffer-usage - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wunsafe-buffer-usage-in-libc-call
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wunsafe-buffer-usage-in-libc-call - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-unsafe-buffer-usage-in-format-attr-call
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-unsafe-buffer-usage-in-format-attr-call - Success
+-- Copying generate-unified-source-bundles.py to: /home/yan/src/quod/client/_build/webxr-linux/build/WTF/Scripts
+-- Found Unifdef: /home/yan/src/quod/client/_build/webxr-linux/tools/usr/bin/unifdef
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/JavaScriptCore/PlatformGTK.cmake
+-- Performing Test CXX_COMPILER_SUPPORTS_-ffp-contract__off
+-- Performing Test CXX_COMPILER_SUPPORTS_-ffp-contract__off - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-fno-slp-vectorize
+-- Performing Test CXX_COMPILER_SUPPORTS_-fno-slp-vectorize - Success
+-- Using source list file: Sources.txt
+-- Using source list file: inspector/remote/SourcesGLib.txt
+-- Platform-specific CMakeLists not found: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/JavaScriptCore/shell/PlatformGTK.cmake
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/ThirdParty/ANGLE/PlatformGTK.cmake
+-- Performing Test C_COMPILER_SUPPORTS_-w
+-- Performing Test C_COMPILER_SUPPORTS_-w - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-w
+-- Performing Test CXX_COMPILER_SUPPORTS_-w - Success
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-cast-align
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-cast-align - Success
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-cast-function-type
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-cast-function-type - Success
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-sign-compare
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-sign-compare - Success
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-unused-parameter
+-- Performing Test C_COMPILER_SUPPORTS_-Wno-unused-parameter - Success
+-- Found Fontconfig: /usr/lib/libfontconfig.so (found suitable version "2.18.3", minimum required is "2.13.0")
+-- Found the following WebP libraries:
+--  WebP (required): /usr/lib/libwebp.so
+--  mux (required): /usr/lib/libwebpmux.so
+-- Found EXPAT: /usr/lib/libexpat.so (found version "2.8.5")
+-- Performing Test CXX_COMPILER_SUPPORTS_-fstrict-aliasing
+-- Performing Test CXX_COMPILER_SUPPORTS_-fstrict-aliasing - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-attributes
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-attributes - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-cast-align
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-cast-align - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-dangling-reference
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-dangling-reference - Failed
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-deprecated
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-deprecated - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-maybe-musttail-local-addr
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-maybe-musttail-local-addr - Failed
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-redundant-move
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-redundant-move - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-suggest-attribute__format
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-suggest-attribute__format - Failed
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-nontrivial-memcall
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-nontrivial-memcall - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-undef
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-undef - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-uninitialized
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-uninitialized - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-unused-parameter
+-- Performing Test CXX_COMPILER_SUPPORTS_-Wno-unused-parameter - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mf16c
+-- Performing Test CXX_COMPILER_SUPPORTS_-mf16c - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx2
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx2 - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512f
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512f - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512dq
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512dq - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512cd
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512cd - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512bw
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512bw - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512vl
+-- Performing Test CXX_COMPILER_SUPPORTS_-mavx512vl - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-march__x86-64-v3
+-- Performing Test CXX_COMPILER_SUPPORTS_-march__x86-64-v3 - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-march__x86-64-v4
+-- Performing Test CXX_COMPILER_SUPPORTS_-march__x86-64-v4 - Success
+-- Performing Test CXX_COMPILER_SUPPORTS_-mprefer-vector-width__512
+-- Performing Test CXX_COMPILER_SUPPORTS_-mprefer-vector-width__512 - Success
+-- Checking for module 'sysprof-capture-4'
+--   Found sysprof-capture-4, version 50.0
+-- Found SysProfCapture: /usr/lib/libsysprof-capture-4.a (found version "50.0")
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WebInspectorUI/PlatformGTK.cmake
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WebCore/PAL/pal/PlatformGTK.cmake
+-- Using source list file: Sources.txt
+-- Looking for shm_open
+-- Looking for shm_open - found
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WebCore/PlatformGTK.cmake
+-- Using source list file: Sources.txt
+-- Using source list file: platform/SourcesAdwaita.txt
+-- Using source list file: platform/SourcesGCrypt.txt
+-- Using source list file: platform/SourcesGStreamer.txt
+-- Using source list file: platform/SourcesSkia.txt
+-- Using source list file: platform/SourcesSoup.txt
+-- Using source list file: SourcesGTK.txt
+-- Using source list file: platform/SourcesGLib.txt
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WebKit/PlatformGTK.cmake
+-- Using source list file: Sources.txt
+-- Using source list file: Platform/Sources.txt
+-- Using source list file: SourcesGTK.txt
+-- Using source list file: SourcesMessageReceivers.txt
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/WebDriver/PlatformGTK.cmake
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/PlatformGTK.cmake
+-- Found Gettext: /usr/bin/msgmerge (found version "1.0")
+-- Using platform-specific CMakeLists: /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Tools/PlatformGTK.cmake
+-- Enabled features:
+--  ENABLE_BUBBLEWRAP_SANDBOX .............................. ON
+--  ENABLE_DOCUMENTATION                                     OFF
+--  ENABLE_DRAG_SUPPORT .................................... ON
+--  ENABLE_GAMEPAD                                           ON
+--  ENABLE_INTROSPECTION ................................... OFF
+--  ENABLE_JOURNALD_LOG                                      ON
+--  ENABLE_MINIBROWSER ..................................... ON
+--  ENABLE_PDFJS                                             ON
+--  ENABLE_QUARTZ_TARGET ................................... OFF
+--  ENABLE_SPEECH_SYNTHESIS                                  OFF
+--  ENABLE_SPELLCHECK ...................................... ON
+--  ENABLE_TOUCH_EVENTS                                      ON
+--  ENABLE_VIDEO ........................................... ON
+--  ENABLE_WAYLAND_TARGET                                    ON
+--  ENABLE_WEBDRIVER ....................................... ON
+--  ENABLE_WEB_AUDIO                                         ON
+--  ENABLE_X11_TARGET ...................................... ON
+--  USE_AVIF                                                 ON
+--  USE_FLITE .............................................. OFF
+--  USE_GBM                                                  ON
+--  USE_GSTREAMER .......................................... ON
+--  USE_GSTREAMER_WEBRTC                                     OFF
+--  USE_GTK4 ............................................... ON
+--  USE_JPEGXL                                               ON
+--  USE_LCMS ............................................... ON
+--  USE_LIBBACKTRACE                                         OFF
+--  USE_LIBDRM ............................................. ON
+--  USE_LIBHYPHEN                                            ON
+--  USE_LIBSECRET .......................................... ON
+--  USE_SKIA_OPENTYPE_SVG                                    ON
+--  USE_SYSTEM_SYSPROF_CAPTURE ............................. ON
+--  USE_VULKAN                                               OFF
+--  USE_WOFF2 .............................................. OFF
+-- Configuring done (7.8s)
+-- Generating done (2.1s)
+-- Build files have been written to: /home/yan/src/quod/client/_build/webxr-linux/build

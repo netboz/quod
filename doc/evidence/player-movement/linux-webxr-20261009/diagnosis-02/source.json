@@ -1,0 +1,6 @@
+{
+  "client/test/linux-webxr-run.py": "79cf37ce250aaa469b5816d53ef84ad39f99bbbe527660719d8fd918e539cf04",
+  "client/test/linux-webxr-preflight.py": "f645a2abcf178c426c6c06a8f33f63c0802318f21249eea0478830e50df44fae",
+  "client/test/linux-webxr.fixture.html": "2cfdad3876b1af00087bcde32c5c98452ac9cc3add9c0a401d8684d954ff77c5",
+  "client/_build/webxr-linux/chromium/src/content/services/isolated_xr_device/xr_sandbox_hook_linux.cc": "dfb80e69473f7618e55abba8b598df74e2a3e7ff7348f7e538f3fbffb9fec701"
+}

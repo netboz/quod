@@ -1,0 +1,6 @@
+{
+  "src/quod_outcome.erl": "621d89e3f7e2e0a007e5a22b5d39f1372b1d17e5d1e59918a697e7f709b5b895",
+  "test/quod_outcome_tests.erl": "ba9a1919a6d1b96b35929026c1d4c2026d8d0dc663bef5814cde81928e63db87",
+  "test/quod_atomic_format_tests.erl": "0a3f1ea224e21bf0a37cbbe8284098cb86556e02f7184bb2e293740b5509b408",
+  "doc/multiwrite-architecture.md": "0f7118a49963b1bf1b351a605db6f6ec7b1c0fef0a70cf5a4c0ae251c292359d"
+}

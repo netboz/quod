@@ -105,7 +105,7 @@ routes() ->
         {"/api/ontologies/system", quod_client_http, system_ontologies},
         {"/api/auth/challenge", quod_client_http, auth_challenge},
         {"/api/auth/complete", quod_client_http, auth_complete},
-        {"/api/simulation", quod_client_simulation, []},
+        {"/api/views", quod_client_view, []},
         {"/api/goals/read", quod_client_http, signed_goal_read},
         {"/api/goals/control", quod_client_http, signed_goal_control},
         {"/api/goals/execute", quod_client_http, signed_goal_execute},

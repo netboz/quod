@@ -1,0 +1,25 @@
+{
+  "value": {
+    "checks": {
+      "controlsOpaque": true,
+      "disabledContainerInherited": true,
+      "helpIsDescribed": true,
+      "invalidDraftNotReplaced": true,
+      "invalidDraftVisible": true,
+      "largerTextReflows": true,
+      "lockDisablesEntry": true,
+      "nativeChangesReachController": true,
+      "noHorizontalOverflow": true,
+      "offGridRotaryRetained": true,
+      "opaqueAlternative": true,
+      "reachableTargetSizes": true,
+      "readonlyCannotEdit": true,
+      "readonlyRemainsFocusable": true,
+      "submissionUsesCurrentDraft": true,
+      "textScaleRestored": true,
+      "unknownSelectionNotSubstituted": true,
+      "utf8Feedback": true
+    },
+    "errors": []
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "command": [
+    "cmake",
+    "-S",
+    "client/_build/webxr-linux/webkitgtk-2.54.1",
+    "-B",
+    "client/_build/webxr-linux/build",
+    "-G",
+    "Ninja",
+    "-DPORT=GTK",
+    "-DUSE_GTK4=ON",
+    "-DENABLE_WEBXR=ON",
+    "-DENABLE_MINIBROWSER=ON",
+    "-DENABLE_DOCUMENTATION=OFF",
+    "-DENABLE_INTROSPECTION=OFF",
+    "-DENABLE_BUBBLEWRAP_SANDBOX=ON",
+    "-DENABLE_API_TESTS=OFF",
+    "-DENABLE_LAYOUT_TESTS=OFF",
+    "-DENABLE_SPEECH_SYNTHESIS=OFF",
+    "-DUSE_LIBBACKTRACE=OFF",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_C_COMPILER=clang",
+    "-DCMAKE_CXX_COMPILER=clang++",
+    "-DUSE_LD_LLD=ON"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 10.036514520645142
+}

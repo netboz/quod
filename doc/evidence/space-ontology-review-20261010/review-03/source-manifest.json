@@ -1,0 +1,204 @@
+{
+  "started": "2026-10-10T12:03:03.117Z",
+  "head": "4ba646223870c4706f3c2ca0de4b84c76e4d2a92",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 8636,
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+    },
+    {
+      "file": "doc/proofs.md",
+      "bytes": 7371,
+      "sha256": "2f76d43e0a1e15b2d1613f4a8e8c2ac390c25426ce2ebad7b0c74d17c89c8cfd"
+    },
+    {
+      "file": "doc/lifecycle-and-routing.md",
+      "bytes": 4561,
+      "sha256": "33352a2467a2dd998f1c65b757c2bb24d6e9f50c0c15925478ad1570cf84ec53"
+    },
+    {
+      "file": "doc/runtime-and-agents.md",
+      "bytes": 3414,
+      "sha256": "26eb5a4d819311dbcdbbd37b1ae97de4667b73cc5b94e119027225e3e186ca75"
+    },
+    {
+      "file": "doc/multiwrite-architecture.md",
+      "bytes": 5404,
+      "sha256": "9d4934e9bddada01bcf5c68d906aa7470c076c160f362e3edbf7a33a67ebc821"
+    },
+    {
+      "file": "doc/world.md",
+      "bytes": 41248,
+      "sha256": "22761af5c34755d2b404431d5b2697e8a3d7b5ee426d8bd6b7f5f085f8659208"
+    },
+    {
+      "file": "doc/physics-native.md",
+      "bytes": 42261,
+      "sha256": "6d62b0ac902d716510971751a036a8fa0f10e7c9b90556ce7d8ae13e6120d4f1"
+    },
+    {
+      "file": "doc/governed-physics-plan.md",
+      "bytes": 17856,
+      "sha256": "7bf35f4820ca217f1bdece61d42a3e0d2232def9a4b3b4572d87d5f527a1091e"
+    },
+    {
+      "file": "doc/outdated/ontology-actor-architecture.md",
+      "bytes": 49037,
+      "sha256": "341e68138895913a7c23a2f0cb5d8eb794de4c368fd8e555f0c2b63e68cdcff7"
+    },
+    {
+      "file": "doc/evidence/player-movement/live-lobby-20261009/README.md",
+      "bytes": 4764,
+      "sha256": "974cd6232c53f8332eecfd0da58e2f2c01a410dac144601f8bbcaabfbdb3d05f"
+    },
+    {
+      "file": "doc/evidence/player-movement/cleanup-20261009/README.md",
+      "bytes": 4064,
+      "sha256": "662347b92fe191b1931df112b157b44160ed3855e4bcbc8536290cd402881660"
+    },
+    {
+      "file": "doc/evidence/hot-controls/deployment-256-refound/README.md",
+      "bytes": 4276,
+      "sha256": "293b8587a8f0481fb47bf3f8879f3c91981f7af183e32fb7d0d1b4537c422fd5"
+    },
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "bytes": 10101,
+      "sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683"
+    },
+    {
+      "file": "priv/ontologies/quod_agent.pl",
+      "bytes": 513,
+      "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f"
+    },
+    {
+      "file": "priv/ontologies/agent_instance.pl",
+      "bytes": 14293,
+      "sha256": "1b970ad32f230e53d7a42019c3387d73e3488cafb84571d838115aa12d8115b4"
+    },
+    {
+      "file": "priv/ontologies/quod_environment.pl",
+      "bytes": 896,
+      "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43"
+    },
+    {
+      "file": "priv/ontologies/quod_lobby.pl",
+      "bytes": 13040,
+      "sha256": "9be812ab020665b691bcdf9e5058f1555703a027f7c99c7deacea510cbb0bfcb"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "bytes": 3376,
+      "sha256": "d8e128ce67a2168dd7b6fee9d805ebce76aee78768c540549635f877928491f4"
+    },
+    {
+      "file": "priv/ontologies/quod_physics.pl",
+      "bytes": 35125,
+      "sha256": "56793e8074e31ab06596bbf7344eeb39fb56d82156be746c00ddaae396b7ec67"
+    },
+    {
+      "file": "src/quod_agent_ref.erl",
+      "bytes": 5469,
+      "sha256": "ca5065c341b9f2ac5303bc0ec01bc4dd4cb1a4ae3b0c6c4150bd33cfb4acd81c"
+    },
+    {
+      "file": "src/quod_committed_projection.erl",
+      "bytes": 27882,
+      "sha256": "20d9e862a5a5eab1e8f25ba398d1403a6bcb0214b1e82040e712d9a1c3311fad"
+    },
+    {
+      "file": "src/quod_predicates.erl",
+      "bytes": 21619,
+      "sha256": "f9d12c07aa7689a2f4758fea50d101126a9b3c14c2d22547f003f2347a9144c8"
+    },
+    {
+      "file": "src/quod_commit_validation.erl",
+      "bytes": 39365,
+      "sha256": "b4a98d21f4c88d2db1ca105597e89c22768a6849130c773e1001a5fc5273f1d1"
+    },
+    {
+      "file": "src/quod_runtime.erl",
+      "bytes": 147962,
+      "sha256": "0e35abd2874adf27d59ef9d02f862da4d02bc3c7180cd6515e7e781efea22ebd"
+    },
+    {
+      "file": "src/quod_physics.erl",
+      "bytes": 51244,
+      "sha256": "495e93da98f016dbb9d8306696807f2b1583b1a630f99bed008ae1cf2d559a64"
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "bytes": 21176,
+      "sha256": "3dd142b8fd8bae6e01d732e4140d3e26140443c34d09f03d2cf500697cc88576"
+    },
+    {
+      "file": "client/src/simulation.js",
+      "bytes": 9878,
+      "sha256": "6d98f3b1a68c589ea02ed5cb9e07fc041cc40921779095d430fd390d78a1623a"
+    },
+    {
+      "file": "src/quod_client_simulation.erl",
+      "bytes": 13133,
+      "sha256": "c5e530452754ea5b8a996d03326eda91b75049e3cc6026012989abf00f10b5b6"
+    },
+    {
+      "file": "priv/ontologies/quod_lens.pl",
+      "bytes": 19707,
+      "sha256": "55cfeb093d6e9603123afbc4d27e83ef28769025056d3d9acaeb5dfaf85b2f0f"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog.pl",
+      "bytes": 7013,
+      "sha256": "da8e195d52072100f66ffe6ce2422b261aa3fc5c606a780a57effc61186e7174"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog_eidolons.pl",
+      "bytes": 1690,
+      "sha256": "6adc113df8b1de9fe06a82e9b65a39a2ddb30b315101ac2be64e41a86940360a"
+    },
+    {
+      "file": "priv/ontologies/quod_root.pl",
+      "bytes": 8292,
+      "sha256": "9e025c546c82e46837285a28e6ba0cf4e183de9bc8e1758b5359a3ea23a633ad"
+    },
+    {
+      "file": "priv/ontologies/quod_rendering.pl",
+      "bytes": 14575,
+      "sha256": "d5093b7214f99667e54723f9b14a84bce1a5b220e83a40d6f68e930753618089"
+    },
+    {
+      "file": "doc/evidence/space-ontology-review-20261010/review-02/fable-review.md",
+      "bytes": 15900,
+      "sha256": "59733391683535ac69717c95d35e79d19b7f12e50cb55bc724fa8966375961b5"
+    },
+    {
+      "file": "doc/evidence/space-ontology-review-20261010/disposition.md",
+      "bytes": 5900,
+      "sha256": "fccae151032190721a3155a57fa66414ffc8f47d86e23fcb94d68e30faa5637c"
+    }
+  ],
+  "request_name": "followup-request.md",
+  "request_sha256": "bb79c6b9c851642ffdc4db88a023c7ff79dfbf80547eabca31fabb257c8daaa4",
+  "runner_sha256": "93b5b95611e4679fa34c7d3c8946f7da04f9c39d4eb929daef079b39873e642e",
+  "args": [
+    "--print",
+    "--model",
+    "fable",
+    "--no-session-persistence",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--settings",
+    "{\"disableAllHooks\":true}",
+    "--output-format",
+    "json"
+  ]
+}

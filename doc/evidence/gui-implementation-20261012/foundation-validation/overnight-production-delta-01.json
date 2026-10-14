@@ -1,0 +1,74 @@
+{
+  "files": {
+    "src/quod_proof_context.erl": {
+      "baseline": "doc/evidence/gui-implementation-20261012/savepoint-review-01/tree/src/quod_proof_context.erl",
+      "added": 30,
+      "removed": 8,
+      "net": 22
+    },
+    "priv/ontologies/gui_instance.pl": {
+      "baseline": "doc/evidence/gui-implementation-20261012/renderer-review-01/delta-02/priv/ontologies/gui_instance.pl",
+      "added": 37,
+      "removed": 1,
+      "net": 36
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "baseline": "doc/evidence/gui-implementation-20261012/renderer-review-01/delta-01/priv/ontologies/quod_gui.pl",
+      "added": 1,
+      "removed": 0,
+      "net": 1
+    },
+    "client/src/numeric-control.js": {
+      "baseline": "doc/evidence/gui-implementation-20261012/renderer-review-01/delta-02/client/src/numeric-control.js",
+      "added": 6,
+      "removed": 7,
+      "net": -1
+    },
+    "client/src/workspace-panel.js": {
+      "baseline": "doc/evidence/gui-implementation-20261012/renderer-review-01/delta-04/client/src/workspace-panel.js",
+      "added": 2,
+      "removed": 3,
+      "net": -1
+    },
+    "priv/ontologies/gui_question.pl": {
+      "baseline": null,
+      "added": 127,
+      "removed": 0,
+      "net": 127
+    },
+    "priv/ontologies/gui_hud.pl": {
+      "baseline": null,
+      "added": 36,
+      "removed": 0,
+      "net": 36
+    },
+    "client/src/gui-values.js": {
+      "baseline": null,
+      "added": 19,
+      "removed": 0,
+      "net": 19
+    },
+    "client/src/gui-values.d.ts": {
+      "baseline": null,
+      "added": 4,
+      "removed": 0,
+      "net": 4
+    },
+    "ui/src/GuiForm.tsx": {
+      "baseline": null,
+      "added": 93,
+      "removed": 0,
+      "net": 93
+    },
+    "ui/src/gui-form.css": {
+      "baseline": null,
+      "added": 24,
+      "removed": 0,
+      "net": 24
+    }
+  },
+  "added": 379,
+  "removed": 19,
+  "net": 360,
+  "explanation": "New shared question transitions and desktop presentation adapter; existing owner batch reuse and extracted validation replace inline logic. Tests/docs and pre-existing request-context work excluded."
+}

@@ -1,0 +1,1049 @@
+execve("/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.npm-global/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.npm-global/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/lib/ccache/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("~/.local/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.asdf/shims/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.npm-global/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.npm-global/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/lib/ccache/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.codex/tmp/arg0/codex-arg0OEZFyk/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/tmp/.mount_NimbalVgnwSN/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/tmp/.mount_NimbalVgnwSN/usr/sbin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.cargo/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.local/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("~/.local/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.asdf/shims/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/home/yan/.npm-global/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/lib/ccache/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/local/sbin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/local/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = -1 ENOENT (No such file or directory)
+execve("/usr/bin/python3", ["python3", "/home/yan/src/quod/client/test/l"..., "--evidence", "/home/yan/src/quod/doc/evidence/"..., "--browser", "/home/yan/src/quod/client/_build"..., "--driver", "/home/yan/src/quod/client/_build"...], 0x5607b815a030 /* 98 vars */) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/libpython3.14.so.1.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/", 0x7ffe8f7d02c0, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/libpython3.14.so.1.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/", 0x7ffe8f7d02c0, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libpython3.14.so.1.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/", {st_mode=S_IFDIR|0755, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libpython3.14.so.1.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+open("/proc/sys/vm/overcommit_memory", O_RDONLY) = 3
+openat(AT_FDCWD, "/usr/lib/locale/locale-archive", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/share/locale/locale.alias", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/locale/C.UTF-8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/lib/locale/C.utf8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/gconv/gconv-modules.cache", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/proc/self/maps", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.npm-global/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.npm-global/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/ccache/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "~/.local/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.asdf/shims/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.npm-global/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.npm-global/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/ccache/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.codex/tmp/arg0/codex-arg0OEZFyk/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/resources/app.asar.unpacked/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/sbin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.cargo/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.local/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "~/.local/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.asdf/shims/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.npm-global/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/ccache/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/sbin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/local/bin/python3", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/python3", {st_mode=S_IFREG|0755, st_size=14424, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/pyvenv.cfg", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/pyvenv.cfg", O_RDONLY) = -1 ENOENT (No such file or directory)
+readlink("/usr/bin/python3", "python3.14", 4096) = 10
+readlink("/usr/bin/python3.14", 0x7ffe8f7cb8e0, 4096) = -1 EINVAL (Invalid argument)
+openat(AT_FDCWD, "/usr/lib/libpython3.14.so.1.0._pth", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/python3._pth", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/python3.14._pth", O_RDONLY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/usr/bin/pybuilddir.txt", O_RDONLY) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/lib/python314.zip", 0x7ffe8f7d0590, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python314.zip", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/lib/python3.14/os.py", 0x7ffe8f7d0590, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/lib/python3.14/os.pyc", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib/python314.zip", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python314.zip", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib/python3.14/os.py", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/bin/lib/python3.14/os.pyc", 0x7ffe8f7d08c0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/os.py", {st_mode=S_IFREG|0644, st_size=41958, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/localtime", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python314.zip", 0x7ffe8f7d01b0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib", {st_mode=S_IFDIR|0755, st_size=339968, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python314.zip", 0x7ffe8f7d0670, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7d0670, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.abi3.so", 0x7ffe8f7d0670, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.so", 0x7ffe8f7d0670, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.py", {st_mode=S_IFREG|0644, st_size=5945, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.py", {st_mode=S_IFREG|0644, st_size=5945, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/aliases.py", {st_mode=S_IFREG|0644, st_size=16255, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/aliases.py", {st_mode=S_IFREG|0644, st_size=16255, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__pycache__/aliases.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/aliases.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8.py", {st_mode=S_IFREG|0644, st_size=1005, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8.py", {st_mode=S_IFREG|0644, st_size=1005, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__pycache__/utf_8.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8.py", O_RDONLY|O_CLOEXEC) = 3
+ioctl(0, TCGETS2, 0x7ffe8f7d0bb0)       = -1 ENOTTY (Inappropriate ioctl for device)
+ioctl(0, TCGETS2, 0x7ffe8f7d0e70)       = -1 ENOTTY (Inappropriate ioctl for device)
+ioctl(1, TCGETS2, 0x7ffe8f7d0e70)       = -1 ENOTTY (Inappropriate ioctl for device)
+ioctl(2, TCGETS2, 0x7ffe8f7d0e70)       = -1 ENOTTY (Inappropriate ioctl for device)
+newfstatat(AT_FDCWD, "/usr/bin/pyvenv.cfg", 0x7ffe8f7cfe30, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/pyvenv.cfg", 0x7ffe8f7cfe30, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/a1_coverage.pth", {st_mode=S_IFREG|0644, st_size=205, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages/a1_coverage.pth", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8_sig.py", {st_mode=S_IFREG|0644, st_size=4133, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8_sig.py", {st_mode=S_IFREG|0644, st_size=4133, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__pycache__/utf_8_sig.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/utf_8_sig.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/distutils-precedence.pth", {st_mode=S_IFREG|0644, st_size=151, ...}, AT_SYMLINK_NOFOLLOW) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages/distutils-precedence.pth", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cf530, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.abi3.so", 0x7ffe8f7cf530, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.so", 0x7ffe8f7cf530, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.py", {st_mode=S_IFREG|0644, st_size=6800, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.py", {st_mode=S_IFREG|0644, st_size=6800, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/site-packages/_distutils_hack/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr-preflight.py", {st_mode=S_IFREG|0644, st_size=6673, ...}, 0) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr-preflight.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr-preflight.py", {st_mode=S_IFREG|0644, st_size=6673, ...}, 0) = 0
+readlink("/home/yan/src/quod/client/test/linux-webxr-preflight.py", 0x7ffe8f7bf2a0, 4096) = -1 EINVAL (Invalid argument)
+readlink("/home", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan/src", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan/src/quod", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan/src/quod/client", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan/src/quod/client/test", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+readlink("/home/yan/src/quod/client/test/linux-webxr-preflight.py", 0x7ffe8f7bfe90, 1023) = -1 EINVAL (Invalid argument)
+openat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr-preflight.py", O_RDONLY) = 3
+ioctl(3, FIOCLEX)                       = 0
+ioctl(3, TCGETS2, 0x7ffe8f7d12b0)       = -1 ENOTTY (Inappropriate ioctl for device)
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/test", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/argparse.py", {st_mode=S_IFREG|0644, st_size=106825, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/argparse.py", {st_mode=S_IFREG|0644, st_size=106825, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/argparse.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/argparse.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.abi3.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.py", {st_mode=S_IFREG|0644, st_size=17876, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.py", {st_mode=S_IFREG|0644, st_size=17876, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/enum.py", {st_mode=S_IFREG|0644, st_size=85450, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/enum.py", {st_mode=S_IFREG|0644, st_size=85450, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/enum.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/enum.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/types.py", {st_mode=S_IFREG|0644, st_size=11464, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/types.py", {st_mode=S_IFREG|0644, st_size=11464, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/types.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/types.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_compiler.py", {st_mode=S_IFREG|0644, st_size=26855, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_compiler.py", {st_mode=S_IFREG|0644, st_size=26855, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__pycache__/_compiler.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/re/_compiler.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_parser.py", {st_mode=S_IFREG|0644, st_size=40353, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_parser.py", {st_mode=S_IFREG|0644, st_size=40353, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__pycache__/_parser.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/re/_parser.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_constants.py", {st_mode=S_IFREG|0644, st_size=6036, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_constants.py", {st_mode=S_IFREG|0644, st_size=6036, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__pycache__/_constants.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/re/_constants.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_casefix.py", {st_mode=S_IFREG|0644, st_size=5444, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/re/_casefix.py", {st_mode=S_IFREG|0644, st_size=5444, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/re/__pycache__/_casefix.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/re/_casefix.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/functools.py", {st_mode=S_IFREG|0644, st_size=43564, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/functools.py", {st_mode=S_IFREG|0644, st_size=43564, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/functools.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/functools.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.abi3.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.py", {st_mode=S_IFREG|0644, st_size=53021, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.py", {st_mode=S_IFREG|0644, st_size=53021, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/collections/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/collections/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/keyword.py", {st_mode=S_IFREG|0644, st_size=1073, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/keyword.py", {st_mode=S_IFREG|0644, st_size=1073, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/keyword.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/keyword.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/operator.py", {st_mode=S_IFREG|0644, st_size=11158, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/operator.py", {st_mode=S_IFREG|0644, st_size=11158, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/operator.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/operator.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/reprlib.py", {st_mode=S_IFREG|0644, st_size=8064, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/reprlib.py", {st_mode=S_IFREG|0644, st_size=8064, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/reprlib.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/reprlib.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/copyreg.py", {st_mode=S_IFREG|0644, st_size=7716, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/copyreg.py", {st_mode=S_IFREG|0644, st_size=7716, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/copyreg.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/copyreg.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/gettext.py", {st_mode=S_IFREG|0644, st_size=21595, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/gettext.py", {st_mode=S_IFREG|0644, st_size=21595, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/gettext.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/gettext.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cff60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.abi3.so", 0x7ffe8f7cff60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.so", 0x7ffe8f7cff60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.py", {st_mode=S_IFREG|0644, st_size=9259, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.py", {st_mode=S_IFREG|0644, st_size=9259, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/http/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/http/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/http", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/server.py", {st_mode=S_IFREG|0644, st_size=53318, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/server.py", {st_mode=S_IFREG|0644, st_size=53318, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/http/__pycache__/server.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/http/server.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/copy.py", {st_mode=S_IFREG|0644, st_size=8582, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/copy.py", {st_mode=S_IFREG|0644, st_size=8582, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/copy.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/copy.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/weakref.py", {st_mode=S_IFREG|0644, st_size=17771, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/weakref.py", {st_mode=S_IFREG|0644, st_size=17771, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/weakref.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/weakref.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_weakrefset.py", {st_mode=S_IFREG|0644, st_size=3962, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_weakrefset.py", {st_mode=S_IFREG|0644, st_size=3962, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/_weakrefset.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/_weakrefset.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/datetime.py", {st_mode=S_IFREG|0644, st_size=331, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/datetime.py", {st_mode=S_IFREG|0644, st_size=331, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/datetime.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/datetime.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cf3e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.abi3.so", 0x7ffe8f7cf3e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.so", 0x7ffe8f7cf3e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.py", {st_mode=S_IFREG|0644, st_size=1759, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.py", {st_mode=S_IFREG|0644, st_size=1759, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/utils.py", {st_mode=S_IFREG|0644, st_size=16443, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/utils.py", {st_mode=S_IFREG|0644, st_size=16443, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/utils.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/utils.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7ce860, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.abi3.so", 0x7ffe8f7ce860, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.so", 0x7ffe8f7ce860, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/parse.py", {st_mode=S_IFREG|0644, st_size=46980, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/parse.py", {st_mode=S_IFREG|0644, st_size=46980, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__pycache__/parse.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/parse.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=78072, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/math.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/warnings.py", {st_mode=S_IFREG|0644, st_size=1966, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/warnings.py", {st_mode=S_IFREG|0644, st_size=1966, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/warnings.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/warnings.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_py_warnings.py", {st_mode=S_IFREG|0644, st_size=30631, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_py_warnings.py", {st_mode=S_IFREG|0644, st_size=30631, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/_py_warnings.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/_py_warnings.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ipaddress.py", {st_mode=S_IFREG|0644, st_size=81162, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ipaddress.py", {st_mode=S_IFREG|0644, st_size=81162, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/ipaddress.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/ipaddress.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_parseaddr.py", {st_mode=S_IFREG|0644, st_size=18121, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_parseaddr.py", {st_mode=S_IFREG|0644, st_size=18121, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/_parseaddr.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/_parseaddr.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.abi3.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.so", 0x7ffe8f7cfa70, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.py", {st_mode=S_IFREG|0644, st_size=4775, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.py", {st_mode=S_IFREG|0644, st_size=4775, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/html/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/html/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/html", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/entities.py", {st_mode=S_IFREG|0644, st_size=75512, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/html/entities.py", {st_mode=S_IFREG|0644, st_size=75512, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/html/__pycache__/entities.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/html/entities.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/client.py", {st_mode=S_IFREG|0644, st_size=59576, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/http/client.py", {st_mode=S_IFREG|0644, st_size=59576, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/http/__pycache__/client.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/http/client.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/parser.py", {st_mode=S_IFREG|0644, st_size=4970, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/parser.py", {st_mode=S_IFREG|0644, st_size=4970, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/parser.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/parser.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/feedparser.py", {st_mode=S_IFREG|0644, st_size=22864, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/feedparser.py", {st_mode=S_IFREG|0644, st_size=22864, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/feedparser.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/feedparser.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/errors.py", {st_mode=S_IFREG|0644, st_size=3809, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/errors.py", {st_mode=S_IFREG|0644, st_size=3809, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/errors.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/errors.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_policybase.py", {st_mode=S_IFREG|0644, st_size=15960, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_policybase.py", {st_mode=S_IFREG|0644, st_size=15960, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/_policybase.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/_policybase.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/header.py", {st_mode=S_IFREG|0644, st_size=24459, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/header.py", {st_mode=S_IFREG|0644, st_size=24459, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/header.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/header.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/binascii.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=27872, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/binascii.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libz.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libz.so.1", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/quoprimime.py", {st_mode=S_IFREG|0644, st_size=9866, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/quoprimime.py", {st_mode=S_IFREG|0644, st_size=9866, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/quoprimime.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/quoprimime.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7caf60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.abi3.so", 0x7ffe8f7caf60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.so", 0x7ffe8f7caf60, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.py", {st_mode=S_IFREG|0644, st_size=12807, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.py", {st_mode=S_IFREG|0644, st_size=12807, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/string/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/string/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/base64mime.py", {st_mode=S_IFREG|0644, st_size=3546, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/base64mime.py", {st_mode=S_IFREG|0644, st_size=3546, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/base64mime.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/base64mime.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/base64.py", {st_mode=S_IFREG|0644, st_size=22301, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/base64.py", {st_mode=S_IFREG|0644, st_size=22301, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/base64.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/base64.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/struct.py", {st_mode=S_IFREG|0644, st_size=285, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/struct.py", {st_mode=S_IFREG|0644, st_size=285, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/struct.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/struct.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_struct.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=54600, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_struct.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/charset.py", {st_mode=S_IFREG|0644, st_size=16993, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/charset.py", {st_mode=S_IFREG|0644, st_size=16993, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/charset.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/charset.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/encoders.py", {st_mode=S_IFREG|0644, st_size=1773, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/encoders.py", {st_mode=S_IFREG|0644, st_size=1773, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/encoders.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/encoders.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/quopri.py", {st_mode=S_IFREG|0644, st_size=7159, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/quopri.py", {st_mode=S_IFREG|0644, st_size=7159, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/quopri.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/quopri.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/message.py", {st_mode=S_IFREG|0644, st_size=48437, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/message.py", {st_mode=S_IFREG|0644, st_size=48437, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/message.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/message.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_encoded_words.py", {st_mode=S_IFREG|0644, st_size=8541, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/_encoded_words.py", {st_mode=S_IFREG|0644, st_size=8541, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/_encoded_words.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/_encoded_words.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/iterators.py", {st_mode=S_IFREG|0644, st_size=2124, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/email/iterators.py", {st_mode=S_IFREG|0644, st_size=2124, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/email/__pycache__/iterators.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/email/iterators.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/socket.py", {st_mode=S_IFREG|0644, st_size=37734, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/socket.py", {st_mode=S_IFREG|0644, st_size=37734, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/socket.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/socket.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_socket.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=119520, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_socket.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ssl.py", {st_mode=S_IFREG|0644, st_size=52715, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ssl.py", {st_mode=S_IFREG|0644, st_size=52715, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/ssl.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/ssl.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_ssl.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=176536, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_ssl.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libssl.so.3", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libssl.so.3", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libcrypto.so.3", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libcrypto.so.3", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlienc.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libbrotlienc.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlidec.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libbrotlidec.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libzstd.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libzstd.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libbrotlicommon.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libbrotlicommon.so.1", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/mimetypes.py", {st_mode=S_IFREG|0644, st_size=26747, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/mimetypes.py", {st_mode=S_IFREG|0644, st_size=26747, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/mimetypes.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/mimetypes.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=36392, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/select.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/shutil.py", {st_mode=S_IFREG|0644, st_size=60235, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/shutil.py", {st_mode=S_IFREG|0644, st_size=60235, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/shutil.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/shutil.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/fnmatch.py", {st_mode=S_IFREG|0644, st_size=6791, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/fnmatch.py", {st_mode=S_IFREG|0644, st_size=6791, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/fnmatch.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/fnmatch.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=45624, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/zlib.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/bz2.py", {st_mode=S_IFREG|0644, st_size=11978, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/bz2.py", {st_mode=S_IFREG|0644, st_size=11978, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/bz2.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/bz2.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cdce0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.abi3.so", 0x7ffe8f7cdce0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.so", 0x7ffe8f7cdce0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.abi3.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.so", 0x7ffe8f7ce370, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.py", {st_mode=S_IFREG|0644, st_size=0, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/_common", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/_streams.py", {st_mode=S_IFREG|0644, st_size=5670, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/_streams.py", {st_mode=S_IFREG|0644, st_size=5670, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/__pycache__/_streams.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/_common/_streams.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=27480, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_bz2.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libbz2.so.1.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libbz2.so.1.0", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lzma.py", {st_mode=S_IFREG|0644, st_size=13426, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lzma.py", {st_mode=S_IFREG|0644, st_size=13426, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/lzma.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/lzma.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=40280, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_lzma.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/liblzma.so.5", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/liblzma.so.5", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7ce8e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.abi3.so", 0x7ffe8f7ce8e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.so", 0x7ffe8f7ce8e0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.py", {st_mode=S_IFREG|0644, st_size=8769, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.py", {st_mode=S_IFREG|0644, st_size=8769, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=53912, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_zstd.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/_zstdfile.py", {st_mode=S_IFREG|0644, st_size=12325, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/_zstdfile.py", {st_mode=S_IFREG|0644, st_size=12325, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/__pycache__/_zstdfile.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/compression/zstd/_zstdfile.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/socketserver.py", {st_mode=S_IFREG|0644, st_size=28065, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/socketserver.py", {st_mode=S_IFREG|0644, st_size=28065, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/socketserver.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/socketserver.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/selectors.py", {st_mode=S_IFREG|0644, st_size=19457, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/selectors.py", {st_mode=S_IFREG|0644, st_size=19457, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/selectors.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/selectors.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/threading.py", {st_mode=S_IFREG|0644, st_size=56923, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/threading.py", {st_mode=S_IFREG|0644, st_size=56923, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/threading.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/threading.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.abi3.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.py", {st_mode=S_IFREG|0644, st_size=14132, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.py", {st_mode=S_IFREG|0644, st_size=14132, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/json/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/json/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/json", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/decoder.py", {st_mode=S_IFREG|0644, st_size=12877, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/decoder.py", {st_mode=S_IFREG|0644, st_size=12877, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/json/__pycache__/decoder.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/json/decoder.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/scanner.py", {st_mode=S_IFREG|0644, st_size=2434, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/scanner.py", {st_mode=S_IFREG|0644, st_size=2434, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/json/__pycache__/scanner.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/json/scanner.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=44368, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_json.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/encoder.py", {st_mode=S_IFREG|0644, st_size=16990, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/json/encoder.py", {st_mode=S_IFREG|0644, st_size=16990, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/json/__pycache__/encoder.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/json/encoder.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.abi3.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.so", 0x7ffe8f7d05f0, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.py", {st_mode=S_IFREG|0644, st_size=46807, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.py", {st_mode=S_IFREG|0644, st_size=46807, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/glob.py", {st_mode=S_IFREG|0644, st_size=20775, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/glob.py", {st_mode=S_IFREG|0644, st_size=20775, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/glob.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/glob.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/contextlib.py", {st_mode=S_IFREG|0644, st_size=27801, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/contextlib.py", {st_mode=S_IFREG|0644, st_size=27801, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/contextlib.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/contextlib.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=14936, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/grp.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/pathlib", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/_os.py", {st_mode=S_IFREG|0644, st_size=18161, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/pathlib/_os.py", {st_mode=S_IFREG|0644, st_size=18161, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/pathlib/__pycache__/_os.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/pathlib/_os.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=22768, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/fcntl.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/subprocess.py", {st_mode=S_IFREG|0644, st_size=90732, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/subprocess.py", {st_mode=S_IFREG|0644, st_size=90732, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/subprocess.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/subprocess.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/locale.py", {st_mode=S_IFREG|0644, st_size=87190, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/locale.py", {st_mode=S_IFREG|0644, st_size=87190, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/locale.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/locale.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/signal.py", {st_mode=S_IFREG|0644, st_size=2495, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/signal.py", {st_mode=S_IFREG|0644, st_size=2495, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/signal.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/signal.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/.local/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/site-packages", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=26776, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_posixsubprocess.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/error.py", {st_mode=S_IFREG|0644, st_size=2415, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/error.py", {st_mode=S_IFREG|0644, st_size=2415, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__pycache__/error.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/error.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/response.py", {st_mode=S_IFREG|0644, st_size=2361, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/response.py", {st_mode=S_IFREG|0644, st_size=2361, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__pycache__/response.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/response.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/tempfile.py", {st_mode=S_IFREG|0644, st_size=33112, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/tempfile.py", {st_mode=S_IFREG|0644, st_size=33112, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/tempfile.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/tempfile.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/random.py", {st_mode=S_IFREG|0644, st_size=37553, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/random.py", {st_mode=S_IFREG|0644, st_size=37553, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/random.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/random.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/bisect.py", {st_mode=S_IFREG|0644, st_size=3423, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/bisect.py", {st_mode=S_IFREG|0644, st_size=3423, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/bisect.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/bisect.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=23232, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_bisect.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=18856, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_random.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/request.py", {st_mode=S_IFREG|0644, st_size=76966, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/urllib/request.py", {st_mode=S_IFREG|0644, st_size=76966, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/__pycache__/request.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/urllib/request.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/hashlib.py", {st_mode=S_IFREG|0644, st_size=9459, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/hashlib.py", {st_mode=S_IFREG|0644, st_size=9459, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/hashlib.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/hashlib.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=63424, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/etc/ssl/openssl.cnf", O_RDONLY) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_blake2.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=93152, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/_blake2.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/usr/share/locale/C.UTF-8/LC_MESSAGES/messages.mo", 0x7ffe8f7d0730, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/share/locale/C.UTF-8/LC_MESSAGES/messages.mo", 0x7ffe8f7d0730, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/share/locale/C.UTF-8/LC_MESSAGES/messages.mo", 0x7ffe8f7d0730, 0) = -1 ENOENT (No such file or directory)
+ioctl(1, TIOCGWINSZ, 0x7ffe8f7d0280)    = -1 ENOTTY (Inappropriate ioctl for device)
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_colorize.py", {st_mode=S_IFREG|0644, st_size=11031, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_colorize.py", {st_mode=S_IFREG|0644, st_size=11031, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/_colorize.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/_colorize.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/dataclasses.py", {st_mode=S_IFREG|0644, st_size=71537, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/dataclasses.py", {st_mode=S_IFREG|0644, st_size=71537, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/dataclasses.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/dataclasses.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/inspect.py", {st_mode=S_IFREG|0644, st_size=127725, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/inspect.py", {st_mode=S_IFREG|0644, st_size=127725, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/inspect.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/inspect.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/annotationlib.py", {st_mode=S_IFREG|0644, st_size=44420, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/annotationlib.py", {st_mode=S_IFREG|0644, st_size=44420, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/annotationlib.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/annotationlib.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ast.py", {st_mode=S_IFREG|0644, st_size=25479, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/ast.py", {st_mode=S_IFREG|0644, st_size=25479, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/ast.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/ast.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/dis.py", {st_mode=S_IFREG|0644, st_size=45533, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/dis.py", {st_mode=S_IFREG|0644, st_size=45533, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/dis.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/dis.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/opcode.py", {st_mode=S_IFREG|0644, st_size=3152, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/opcode.py", {st_mode=S_IFREG|0644, st_size=3152, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/opcode.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/opcode.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_opcode_metadata.py", {st_mode=S_IFREG|0644, st_size=10115, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/_opcode_metadata.py", {st_mode=S_IFREG|0644, st_size=10115, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/_opcode_metadata.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/_opcode_metadata.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.cpython-314-x86_64-linux-gnu.so", 0x7ffe8f7cd240, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.abi3.so", 0x7ffe8f7cd240, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.so", 0x7ffe8f7cd240, 0) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.py", {st_mode=S_IFREG|0644, st_size=4767, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.py", {st_mode=S_IFREG|0644, st_size=4767, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/importlib/__pycache__/__init__.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/importlib/__init__.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/linecache.py", {st_mode=S_IFREG|0644, st_size=8044, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/linecache.py", {st_mode=S_IFREG|0644, st_size=8044, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/linecache.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/linecache.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/tokenize.py", {st_mode=S_IFREG|0644, st_size=21849, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/tokenize.py", {st_mode=S_IFREG|0644, st_size=21849, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/tokenize.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/tokenize.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/token.py", {st_mode=S_IFREG|0644, st_size=2584, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/token.py", {st_mode=S_IFREG|0644, st_size=2584, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/token.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/usr/lib/python3.14/token.py", O_RDONLY|O_CLOEXEC) = 3
+newfstatat(AT_FDCWD, "/home", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan", {st_mode=S_IFDIR|0700, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test/linux-webxr-preflight.py", {st_mode=S_IFREG|0644, st_size=6673, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan", {st_mode=S_IFDIR|0700, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR", {st_mode=S_IFDIR|0755, st_size=94208, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome", {st_mode=S_IFREG|0755, st_size=207625672, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan", {st_mode=S_IFDIR|0700, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64", {st_mode=S_IFDIR|0755, st_size=4096, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64/chromedriver", {st_mode=S_IFREG|0755, st_size=23288064, ...}, AT_SYMLINK_NOFOLLOW) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome", {st_mode=S_IFREG|0755, st_size=207625672, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64/chromedriver", {st_mode=S_IFREG|0755, st_size=23288064, ...}, 0) = 0
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_IP) = 3
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/idna.py", {st_mode=S_IFREG|0644, st_size=13248, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/encodings/idna.py", {st_mode=S_IFREG|0644, st_size=13248, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/__pycache__/idna.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 4
+openat(AT_FDCWD, "/usr/lib/python3.14/encodings/idna.py", O_RDONLY|O_CLOEXEC) = 4
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/stringprep.py", {st_mode=S_IFREG|0644, st_size=12917, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/stringprep.py", {st_mode=S_IFREG|0644, st_size=12917, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/__pycache__/stringprep.cpython-314.pyc", O_RDONLY|O_CLOEXEC) = 4
+openat(AT_FDCWD, "/usr/lib/python3.14/stringprep.py", O_RDONLY|O_CLOEXEC) = 4
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/test", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/unicodedata.cpython-314-x86_64-linux-gnu.so", {st_mode=S_IFREG|0755, st_size=742424, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/python3.14/lib-dynload/unicodedata.cpython-314-x86_64-linux-gnu.so", O_RDONLY|O_CLOEXEC) = 4
+newfstatat(AT_FDCWD, "/etc/resolv.conf", {st_mode=S_IFREG|0644, st_size=55, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/host.conf", O_RDONLY|O_CLOEXEC) = 4
+openat(AT_FDCWD, "/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 4
+newfstatat(AT_FDCWD, "/etc/nsswitch.conf", {st_mode=S_IFREG|0644, st_size=322, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/", {st_mode=S_IFDIR|0555, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/nsswitch.conf", O_RDONLY|O_CLOEXEC) = 4
+openat(AT_FDCWD, "/etc/hosts", O_RDONLY|O_CLOEXEC) = 4
+openat(AT_FDCWD, "/home/yan/src/quod/doc/evidence/player-movement/linux-webxr-20261009/diagnosis-04/preflight/chromedriver.log", O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0666) = 4
+openat(AT_FDCWD, "/etc/ssl/cert.pem", O_RDONLY) = 6
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+openat(AT_FDCWD, "/home/yan/src/quod/doc/evidence/player-movement/linux-webxr-20261009/diagnosis-04/preflight/console.json", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 6
+socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_TCP) = 6
+ioctl(6, FIONBIO, [1])                  = 0
+connect(6, {sa_family=AF_INET, sin_port=htons(35135), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
++++ exited with 1 +++

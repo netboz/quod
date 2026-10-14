@@ -1,0 +1,46 @@
+{
+  "scope": "Common desktop renderer over existing workspace model; shared pure presentation helpers. No live question workspace or opening.",
+  "runs": [
+    {
+      "log": "../desktop-review-01/client-02.log",
+      "tests": 15,
+      "failures": 0,
+      "exit": 0
+    },
+    {
+      "log": "../desktop-review-01/build-02.log",
+      "exit": 0,
+      "output": "/tmp/quod-gui-ui-desktop-build-02"
+    },
+    {
+      "log": "../desktop-review-01/desktop-after-02.log",
+      "exit": 0,
+      "normal_checks": 16,
+      "narrow_checks": 16,
+      "browser_errors": []
+    },
+    {
+      "log": "../desktop-review-01/spatial-after-01.log",
+      "exit": 0,
+      "browser_errors": []
+    }
+  ],
+  "files": {
+    "client/src/gui-values.js": "81941f0f61306b4f3af8652ddf09113e8a0bc8645afc3799f1f24fa8598822b6",
+    "client/src/gui-values.d.ts": "cf294709bc300499b587755aa6bae5ccf9c4d50c3a59511a0cfa3e39424a162a",
+    "client/src/numeric-control.js": "c7f96ef83e79c341b91d1be04eba3732694fedc25281579209490dd69c8c6826",
+    "client/src/workspace-panel.js": "0b389466c32c6b042a2fd42bda5245ab313097f62e2bb23c2e2bf42b44919f50",
+    "ui/src/GuiForm.tsx": "bf57aa7b03ff4703246c7cb6f40285ae8ee2b6710b03e7ecd6a372d54ea51546",
+    "ui/src/gui-form.css": "76b576073273d2f87e0b2269166dd90b8f5ea9a2b033bfd989815b41521585a8",
+    "ui/test/gui-form.fixture.html": "0c92897ef3adc5b7e1951c919e285865fc5aac66204fe80e53533a273f384fa2",
+    "ui/test/gui-form.fixture.tsx": "2c214887e9b912a57493852d7df3a8a198aa42a3ebed8e6c9f1d1c028f3fd6db",
+    "client/test/workspace-panel.fixture.js": "577257b84ed06ba4fce9f227acdcbc4ee71dc5258d5cfdf9ad5a12af967f56cd",
+    "client/test/workspace-panel.browser.mjs": "71ca2557c98468fa14e9cf5900c6ef2b175af61518aeaecb28dbe957c9673a87"
+  },
+  "review": "../desktop-review-01/fable-review.md",
+  "review_addendum": "../desktop-review-01/fable-review-addendum-01.md",
+  "assessment": "../desktop-review-01/assessment.md",
+  "hardware_acceptance": false,
+  "live_question_controller": false,
+  "committed": false
+}

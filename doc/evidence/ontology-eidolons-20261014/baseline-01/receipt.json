@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_class_semantics_tests,quod_common_primitives_tests,quod_prolog_ontology_tests,quod_lens_tests,quod_lobby_tests"
+  ],
+  "started": "2026-10-14T09:46:57.172811+00:00",
+  "finished": "2026-10-14T09:50:43.507030+00:00",
+  "exit": 0
+}

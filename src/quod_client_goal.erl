@@ -15,7 +15,7 @@ when they need the complete validator check.
 -include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([encode/1, decode/1, verify/2, verify_for/5,
+-export([encode/1, encode_typed/1, decode/1, request_identity/1, verify/2, verify_for/5,
          operation_ref/1, operation_ref/4,
          request_auth/1, request_binding/1,
          named_bindings/2, durable_bindings/2,
@@ -68,6 +68,27 @@ encode(Request) ->
         {error, _} = Error -> Error
     end.
 
+-doc "Encode ontology-authored intent; this grants neither signing nor execution authority.".
+-spec encode_typed(term()) -> {ok, request(), binary()} | {error, error_reason()}.
+encode_typed({agent_goal_v1, Network,
+              {agent_instance_ref, Ns, Anchor, _} = AgentRef, InstanceText, Pub,
+              Operation, Deadline, Mode, Parser, GoalText}) ->
+    Request = #{network_identity => Network, agent_namespace => Ns,
+                agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
+                signing_public_key => Pub, operation_id => Operation,
+                not_after_ms => Deadline, mode => Mode, parser_version => Parser,
+                goal_text => GoalText},
+    case encode(Request) of
+        {ok, Bytes} ->
+            case {quod_agent_ref:from_text(Ns, Anchor, InstanceText, Parser),
+                  quod_wire_term:encode_canonical(AgentRef)} of
+                {{ok, #{blob := Blob}}, {ok, Blob}} -> {ok, Request, Bytes};
+                _ -> {error, invalid_request}
+            end;
+        {error, _} = Error -> Error
+    end;
+encode_typed(_) -> {error, invalid_request}.
+
 -doc "Decode one exact signed-goal request without parsing or allocating goal symbols.".
 -spec decode(term()) -> {ok, request()} | {error, error_reason()}.
 decode(Bytes)
@@ -77,6 +98,25 @@ decode(Bytes) when is_binary(Bytes) ->
     {error, {too_large, request}};
 decode(_) ->
     {error, invalid_request}.
+
+-doc "Decode an unsigned request selector without materializing symbols or parsing its goal.".
+-spec request_identity(term()) -> {ok, map()} | {error, term()}.
+request_identity(Bytes) ->
+    case decode(Bytes) of
+        {ok, Request} -> request_identity(Request, Bytes);
+        Error -> Error
+    end.
+
+request_identity(#{agent_namespace := Ns, agent_genesis_anchor := Anchor,
+                   agent_instance_text := Instance, parser_version := Parser,
+                   operation_id := Id} = Request, Bytes) ->
+    case quod_agent_ref:from_text(Ns, Anchor, Instance, Parser) of
+        {ok, #{blob := Agent}} ->
+            {ok, #{request => Request, request_bytes => Bytes,
+                   agent_ref_blob => Agent, request_digest => crypto:hash(sha256, Bytes),
+                   operation_ref => operation_ref(Ns, Anchor, Agent, Id)}};
+        Error -> Error
+    end.
 
 -doc "Verify the agent signature and derive its canonical reference and goal.".
 -spec verify(term(), term()) -> {ok, evidence()} | {error, error_reason()}.
@@ -455,32 +495,15 @@ decode_mode(_) -> error.
 %% Verified evidence
 %% ------------------------------------------------------------------
 
-parsed_evidence(#{goal_text := GoalText,
-                  parser_version := ParserVersion,
-                  agent_namespace := AgentNs,
-                  agent_genesis_anchor := AgentAnchor,
-                  agent_instance_text := InstanceText} = Request0,
+parsed_evidence(#{goal_text := GoalText, parser_version := ParserVersion} = Request,
                 Bytes, Signature) ->
-    case {quod_agent_ref:from_text(
-            AgentNs, AgentAnchor, InstanceText, ParserVersion),
+    case {request_identity(Request, Bytes),
           quod_client_goal_parser:parse(GoalText, ParserVersion)} of
-        {{ok, #{blob := AgentRef}},
-         {ok, #{goal := Goal, variables := Variables}}} ->
+        {{ok, Identity}, {ok, #{goal := Goal, variables := Variables}}} ->
             case quod_durable_term:encode_goal(Goal) of
                 {ok, GoalBlob} ->
-                    Digest = crypto:hash(sha256, Bytes),
-                    Evidence0 = #{request => Request0,
-                                  request_bytes => Bytes,
-                                  request_digest => Digest,
-                                  signature => Signature,
-                                  agent_ref_blob => AgentRef,
-                                  goal => Goal,
-                                  goal_blob => GoalBlob,
-                                  variables => Variables},
-                    OperationRef = operation_ref(
-                                     AgentNs, AgentAnchor, AgentRef,
-                                     maps:get(operation_id, Request0)),
-                    {ok, Evidence0#{operation_ref => OperationRef}};
+                    {ok, Identity#{signature => Signature, goal => Goal,
+                                   goal_blob => GoalBlob, variables => Variables}};
                 {error, {too_large, goal}} ->
                     {error, {too_large, goal}};
                 {error, _} ->

@@ -15,7 +15,7 @@ apply.
 -export([new/6, validate/1, validate_list/1, validate_plan/2,
          validate_transaction/4,
          operation/1, effect_id/1, executor/1, actor/1, target/1,
-         request_digest/1, prepared_digest/1]).
+         request_digest/1, prepared_digest/1, prepared_bytes/2, decode_prepared/2]).
 -export_type([effect/0]).
 -export([valid_transient/1, release_transient/2]).
 
@@ -37,20 +37,20 @@ release_transient({physics_input,Pid,Expected,Control,Sequence,Input,Expiry},Dea
 -type identity() :: {binary(), <<_:256>>}.
 -type actor() :: {node, <<_:256>>} | {agent, binary()}.
 -type effect() ::
-        {quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
-         create | join, <<_:256>>, <<_:256>>, actor(), identity(),
+        {quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle | gui_presentation,
+         create | join | present, <<_:256>>, <<_:256>>, actor(), identity(),
          <<_:256>>, <<_:256>>}.
 
 -doc "Construct one closed direct-effect descriptor in the current format.".
--spec new(create | join, <<_:256>>, actor(), identity(), <<_:256>>, <<_:256>>) ->
+-spec new(create | join | present, <<_:256>>, actor(), identity(), <<_:256>>, <<_:256>>) ->
           {ok, effect()} | {error, invalid_direct_effect}.
 new(Operation, <<_:256>> = Executor, Actor,
     {Ns, <<_:256>> = Anchor}, <<_:256>> = RequestDigest,
     <<_:256>> = PreparedDigest)
-  when (Operation =:= create orelse Operation =:= join),
+  when (Operation =:= create orelse Operation =:= join orelse Operation =:= present),
        is_binary(Ns), byte_size(Ns) > 0 ->
     Effect =
-        {quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+        {quod_direct_effect, ?VERSION, local_durable, handler(Operation),
          Operation, crypto:strong_rand_bytes(32), Executor, Actor,
          {Ns, Anchor}, RequestDigest, PreparedDigest},
     case validate(Effect) of
@@ -61,11 +61,11 @@ new(_, _, _, _, _, _) ->
     {error, invalid_direct_effect}.
 
 -spec validate(term()) -> boolean().
-validate({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+validate({quod_direct_effect, ?VERSION, local_durable, Handler,
           Operation, <<_:256>>, <<_:256>>, Actor,
           {Ns, <<_:256>>}, <<_:256>>, <<_:256>>})
-  when Operation =:= create; Operation =:= join ->
-    is_binary(Ns) andalso byte_size(Ns) > 0 andalso valid_actor(Actor);
+  when Operation =:= create; Operation =:= join; Operation =:= present ->
+    Handler =:= handler(Operation) andalso is_binary(Ns) andalso byte_size(Ns) > 0 andalso valid_actor(Actor);
 validate(_) ->
     false.
 
@@ -122,34 +122,70 @@ validate_transaction(Ns, Anchor, Author, Effects)
 validate_transaction(_, _, _, _) ->
     false.
 
--spec operation(effect()) -> create | join.
-operation({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+-spec operation(effect()) -> create | join | present.
+operation({quod_direct_effect, ?VERSION, local_durable, _,
            Operation, _, _, _, _, _, _}) -> Operation.
 
 -spec effect_id(effect()) -> <<_:256>>.
-effect_id({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+effect_id({quod_direct_effect, ?VERSION, local_durable, _,
            _, Id, _, _, _, _, _}) -> Id.
 
 -spec executor(effect()) -> <<_:256>>.
-executor({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+executor({quod_direct_effect, ?VERSION, local_durable, _,
           _, _, Executor, _, _, _, _}) -> Executor.
 
 -spec actor(effect()) -> actor().
-actor({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+actor({quod_direct_effect, ?VERSION, local_durable, _,
        _, _, _, Actor, _, _, _}) -> Actor.
 
 -spec target(effect()) -> identity().
-target({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+target({quod_direct_effect, ?VERSION, local_durable, _,
         _, _, _, _, Target, _, _}) -> Target.
 
 -spec request_digest(effect()) -> <<_:256>>.
-request_digest({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+request_digest({quod_direct_effect, ?VERSION, local_durable, _,
                 _, _, _, _, _, Digest, _}) -> Digest.
 
 -spec prepared_digest(effect()) -> <<_:256>>.
-prepared_digest({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+prepared_digest({quod_direct_effect, ?VERSION, local_durable, _,
                  _, _, _, _, _, _, Digest}) -> Digest.
 
 valid_actor({node, <<_:256>>}) -> true;
 valid_actor(Actor = {agent, _}) -> quod_agent_ref:valid_principal(Actor);
 valid_actor(_) -> false.
+
+%% The effect catalogue owns handler dispatch; each native owner keeps its
+%% exact private codec. Unknown handler/operation pairs are never executable.
+handler(create) -> ontology_lifecycle;
+handler(join) -> ontology_lifecycle;
+handler(present) -> gui_presentation.
+
+prepared_bytes(Effect, Prepared) ->
+    case validate(Effect) of
+        false -> {error, invalid_direct_effect};
+        true -> case operation(Effect) of
+            present ->
+                case quod_gui_presentation:matches(Effect,Prepared) of
+                    true -> quod_gui_presentation:prepared_bytes(Prepared);
+                    false -> {error,invalid_direct_effect}
+                end;
+            _ -> quod_ontology:prepared_bytes(Prepared)
+        end
+    end.
+
+decode_prepared(Effect, Bytes) ->
+    case validate(Effect) of
+        false -> {error, invalid_direct_effect};
+        true -> case operation(Effect) of
+            present ->
+                case quod_gui_presentation:decode_prepared(Bytes) of
+                    {ok,Prepared} = Result ->
+                        case quod_gui_presentation:matches(Effect,Prepared) of
+                            true -> Result;
+                            false -> {error,invalid_direct_effect}
+                        end;
+                    Error -> Error
+                end;
+            _ -> quod_ontology:decode_prepared(Bytes)
+        end
+    end.

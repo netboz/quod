@@ -1,0 +1,1 @@
+import{shadowMapFragmentWGSL as e}from"./Blocks-YlMUYndU.js";export{e as shadowMapFragmentWGSL};

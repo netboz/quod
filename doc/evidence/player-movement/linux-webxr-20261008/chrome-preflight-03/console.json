@@ -1,0 +1,14 @@
+[
+  {
+    "level": "SEVERE",
+    "message": "http://127.0.0.1:44963/favicon.ico - Failed to load resource: the server responded with a status of 404 (File not found)",
+    "source": "network",
+    "timestamp": 1791454018619
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://127.0.0.1:44963/linux-webxr.fixture.html - Could not create a session because: Something went wrong initializing the session in the runtime",
+    "source": "javascript",
+    "timestamp": 1791454018708
+  }
+]

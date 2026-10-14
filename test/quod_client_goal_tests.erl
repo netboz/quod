@@ -10,6 +10,26 @@
 -define(INSTANCE_TEXT, <<"human_user(alice).">>).
 -define(DEADLINE, 1_800_000_000_000).
 
+unsigned_selector_does_not_parse_or_authorize_the_goal_test() ->
+    {PublicKey, _} = Key = quod_identity:generate(),
+    Request = request(PublicKey, execute, <<"assertz(saved(ok)).">>),
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(Key)),
+    {ok, Verified} = quod_client_goal:verify(Bytes, Signature),
+    {ok, Selector} = quod_client_goal:request_identity(Bytes),
+    ?assertEqual(maps:with(maps:keys(Selector), Verified), Selector),
+    ?assertNot(maps:is_key(signature, Selector)),
+    ?assertNot(maps:is_key(goal, Selector)),
+    {ok, InvalidGoal} = quod_client_goal:encode(Request#{goal_text => <<"not a goal">>}),
+    {ok, Inert} = quod_client_goal:request_identity(InvalidGoal),
+    ?assertEqual(maps:get(operation_ref, Selector), maps:get(operation_ref, Inert)),
+    ?assertNotEqual(maps:get(request_digest, Selector), maps:get(request_digest, Inert)),
+    ?assertEqual({error, invalid_goal}, quod_client_goal:verify(InvalidGoal,
+        quod_identity:sign(InvalidGoal, quod_identity:key_term(Key)))),
+    ?assertMatch({error, _}, quod_client_goal:request_identity(<<Bytes/binary, 0>>)),
+    {ok, InvalidActor} = quod_client_goal:encode(Request#{agent_instance_text => <<"X.">>}),
+    ?assertMatch({error, _}, quod_client_goal:request_identity(InvalidActor)).
+
 wire_bytes_are_browser_reproducible_test() ->
     PublicKey = <<16#40:256>>,
     Goal = <<"capital(france, X).">>,

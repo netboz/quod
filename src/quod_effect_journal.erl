@@ -561,7 +561,7 @@ encode_staged(Action, Desired, Effect, Prepared, Limits) ->
     case {quod_effect:validate(Effect),
           quod_durable_term:encode_goal(Action),
           quod_durable_term:encode_goal(Desired),
-          quod_ontology:prepared_bytes(Prepared)} of
+          quod_effect:prepared_bytes(Effect, Prepared)} of
         {true, {ok, ActionBytes}, {ok, DesiredBytes}, {ok, PreparedBytes}} ->
             case crypto:hash(sha256, ActionBytes) =:=
                      quod_effect:request_digest(Effect) andalso
@@ -1023,7 +1023,7 @@ execute_row(#row{effect = Effect, action = ActionBytes,
                  desired = DesiredBytes, prepared = PreparedBytes,
                  ref = Ref}) ->
     ControlNs = control_namespace(Ref),
-    case {quod_ontology:decode_prepared(PreparedBytes),
+    case {quod_effect:decode_prepared(Effect, PreparedBytes),
           quod_durable_term:decode_goal(ActionBytes),
           quod_durable_term:decode_goal(DesiredBytes)} of
         {{ok, Prepared}, {ok, _Action}, {ok, Desired}} ->
@@ -1031,12 +1031,15 @@ execute_row(#row{effect = Effect, action = ActionBytes,
             %% manager mutation but before this journal records `applied`
             %% restarts here and observes success without issuing a second
             %% create/join request.
-            case desired_state(ControlNs, Desired, Effect) of
-                satisfied -> ok;
-                absent -> execute_and_verify(
-                            ControlNs, Effect, Prepared, Desired);
-                incompatible -> {error, incompatible_local_state};
-                {unavailable, Reason} -> {retry, Reason}
+            case quod_effect:operation(Effect) of
+                present -> quod_gui_presentation:release(Effect, Prepared);
+                _ ->
+                    case desired_state(ControlNs, Desired, Effect) of
+                        satisfied -> ok;
+                        absent -> execute_and_verify(ControlNs, Effect, Prepared, Desired);
+                        incompatible -> {error, incompatible_local_state};
+                        {unavailable, Reason} -> {retry, Reason}
+                    end
             end;
         _ ->
             {error, corrupt_prepared_effect}

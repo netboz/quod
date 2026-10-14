@@ -55,6 +55,51 @@ own a visibility allowlist. The default editor selection is complete state, with
 the target's genesis anchor displayed. Editing uses an explicit predicate lens
 and retains the existing signed preview, Accept, recovery and conflict workflow.
 
+## Ontology instances and inspection representations
+
+Each executing owner derives `instance_of(ontology, ontology_ref(Ns, Anchor))`
+from its existing proof-bound identity. The instance uses ordinary
+`entity_eidolons/2` selection. Catalogue entries and anchored marks carry that
+same term; a mark id remains an occurrence. Ontology membership is independent
+of space membership, spatial placement, ownership and physics policy.
+
+The source recipe checks authorized target introspection before returning its
+workspace. Non-system presentation modes are advisory projections of existing
+ownership predicates; undeclared modes are read-only and ambiguous modes refuse
+selection. Systems retain root's exact source classification. A displayed
+editable mode never replaces admission of the separately signed edit.
+
+The ontology class also offers `lens_view/5` results for `ontology_policy`,
+`ontology_interfaces` and `ontology_routes`. These are inspection consumers,
+with no code-workspace assumption. Policy text selects the ACL entry rules
+`can_invoke/4`, `can_join/3` and `acl_sovereign/1`; referenced helper definitions
+remain available in complete source. Interface text selects explicitly authored
+`ontology_interface/2` declarations. Declaration absence means no declared
+interface, rather than an inferred catalogue from query-shape helpers.
+
+Both selections use the target's source-read admission and existing snapshot
+cursor. The common chunker accepts `all`, `predicates(Indicators)` and
+`terms(SelectedData)` selections. Its selection and byte allowance are supplied
+by Prolog. Inspection does not execute source or permission probes. Source read,
+policy read, invocation, content edit and policy edit remain separate operations;
+the target's current ACL governs actual invocation and every edit.
+
+Route inspection derives only the executing owner's namespace and anchor and
+reads the existing directory's exact confirmed-validator lookup. Private
+contacts remain behind target inspection admission; root's system catalogue and
+public directory API gain no personal-ontology enumeration. Results identify
+live availability or anchor conflict and carry endpoint and route-generation
+provenance. An endpoint is a route, not ontology identity or a committed field.
+The governed live dependency blocks a durable diff using that observation.
+Repeated unchanged inspection reads retained state and route indexes without
+history replay, projection rebuilding, file writes or syncs.
+
+This packaged refinement changes the common chunk primitive's arity and the
+authored selection/recipe/lens definitions. Activating it in retained histories
+requires the existing coordinated compatible-artifact procedure and authorized
+exact-baseline policy/source transition. Package editing authorizes no such
+deployment, history deletion or refounding.
+
 ## Retained-history activation
 
 Package files alone do not update deployed ledger policy. This change authorizes

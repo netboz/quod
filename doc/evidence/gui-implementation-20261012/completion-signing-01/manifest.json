@@ -1,0 +1,10 @@
+[
+  {
+    "path": "priv/ontologies/gui_question.pl",
+    "sha256": "27ee0a29a07c2ecd6d299e0c2f661a53b596d84f87ee55f90bc4c217b515327a"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "sha256": "c21aff3c0cbdc98033c7ac72d87da1ed5a1a08e271fede91d719701ff1741c17"
+  }
+]

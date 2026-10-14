@@ -1,0 +1,19 @@
+{
+  "device": "physical Vive",
+  "simulation": false,
+  "headset_only": true,
+  "report": {
+    "edits": [],
+    "entries": 0,
+    "errors": [
+      "TypeError: Cannot read properties of undefined (reading 'baseExperience')"
+    ],
+    "immersive": false,
+    "submissions": []
+  },
+  "chromedriver_exit": -15,
+  "runtime_exit": 0,
+  "fixture-server_exit": 143,
+  "restore_exit": 0,
+  "desktop_geometry_preserved": true
+}

@@ -1,0 +1,9 @@
+# Input variants independent review
+
+No Claude review claimed. The ontology remains the authority for class inheritance, defaults, constraints and submitted values. Six added concrete kinds inherit the existing input contracts. Multiple selections are proper duplicate-free lists of the declared stable option IDs. Required booleans require true; required lists require at least one choice. Defaults can be incomplete while editing, as with required text. Readonly/disabled fixed values still participate in the existing revision and are rechecked at submission.
+
+The tree compiler now returns input IDs during the same vocabulary call; application binding checks consume them. Both concrete-kind lists in gui_instance are removed. The old tree compiler arity is replaced at every production caller, including built-in proof/source workspaces. Shared numeric controls provide direct entry without constructing a hidden slider for number_input. Both renderers use the same typed draft family and strict choice parsing. Dedicated ontology editing remains with its existing controller.
+
+Gate01 caught improper-list tail loss in the new client helper; assessment.md retains the cause and correction. Gate02: 173 client tests pass; build exit0; 10 real-owner GUI tests, zero failures, true exit0 (81.642s including build); browser 50 spatial boolean checks plus the full existing result assertions, 21 desktop checks. Exact manifest02 verified after all gates. Negative server cases roll back a preceding assertion. The new six-field form retains one vocabulary call for schema, two for binding, and no writes/syncs on repeated signed reads. Existing question tests retain concurrency, authority and completion coverage.
+
+No completion owner, event queue, unknown-outcome retry, cap or transaction boundary changed. No actual VR acceptance claimed. Additional composition/display/table/transient controls remain outstanding against the original plan.

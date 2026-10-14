@@ -1,0 +1,186 @@
+======================== EUnit ========================
+quod_gui_components_tests: -elaborate_form_uses_one_vocabulary_projection_test_/0-fun-6-...scope_open <0.368.0> findall
+scope_open <0.435.0> assertz
+scope_open <0.438.0> '::'
+scope_open <0.442.0> ','
+scope_open <0.444.0> current_ontology_identity
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.444.0> ','
+scope_open <0.446.0> '::'
+scope_open <0.450.0> ','
+scope_open <0.452.0> current_ontology_identity
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+scope_open <0.452.0> ','
+=ERROR REPORT==== 12-Oct-2026::22:57:41.761853 ===
+     Process:            <0.450.0> 
+     Context:            maximum heap size reached
+     Max Heap Size:      8388608
+     Total Heap Size:    8456089
+     Kill:               true
+     Error Logger:       true
+     Message Queue Len:  0
+     GC Info:            [{old_heap_block_size,2984878},
+                          {heap_block_size,5472277},
+                          {mbuf_size,0},
+                          {recent_size,1572947},
+                          {stack_size,1062},
+                          {old_heap_size,0},
+                          {heap_size,2486328},
+                          {bin_vheap_size,53},
+                          {bin_vheap_block_size,46422},
+                          {bin_old_vheap_size,0},
+                          {bin_old_vheap_block_size,46422}]
+     Stacktrace:         [{erlog_int,well_form_body,4,
+                              [{file,
+                                   "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1269}]},
+                          {quod_erlog_db_local_prove,follower_clause,3,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_erlog_db_local_prove.erl"},
+                               {line,906}]},
+                          {quod_erlog_db_local_prove,follower_clauses,3,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_erlog_db_local_prove.erl"},
+                               {line,885}]},
+                          {quod_erlog_db_local_prove,append_followers,2,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_erlog_db_local_prove.erl"},
+                               {line,880}]},
+                          {quod_erlog_db_local_prove,add_followers,3,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_erlog_db_local_prove.erl"},
+                               {line,862}]},
+                          {erlog_int,prove_goal,3,
+                              [{file,
+                                   "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,560}]},
+                          {erlog_int,prove_findall,5,
+                              [{file,
+                                   "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,973}]},
+                          {quod_proof_scope,guarded,1,
+                              [{file,
+                                   "/home/yan/src/quod/src/quod_proof_scope.erl"},
+                               {line,102}]}]
+
+*failed*
+in function quod_gui_components_tests:'-elaborate_form_uses_one_vocabulary_projection_test_/0-fun-6-'/0 (/home/yan/src/quod/test/quod_gui_components_tests.erl, line 27)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{assertMatch,
+    [{module,quod_gui_components_tests},
+     {line,27},
+     {expression,
+         "read ( Ctx , Ns , { gui_bind , elaborate , Revision , apply , Values , { 0 } } )"},
+     {pattern,"{ ok , [ # { << \"V0\" >> := { entered , Values } } ] , _ }"},
+     {value,
+         {ok,#{request =>
+                   #{mode => read,agent_namespace => <<"lobby-test-user">>,
+                     agent_genesis_anchor => <<19,57,58,186,25,159,...>>,
+                     network_identity => <<249,10,255,92,184,157,...>>,
+                     signing_public_key => <<140,242,230,192,8,75,...>>,
+                     not_after_ms => 1791838690739,
+                     operation_id => <<186,179,169,101,134,36,...>>,...},
+               signature => <<46,254,152,238,123,111,67,...>>,
+               agent_ref_blob => <<131,104,2,97,4,108,0,...>>,
+               goal =>
+                   {'::',<<"lobby-test-personal">>,
+                       {{'$quod_symbol',<<",">>},
+                        {{'$quod_symbol',...},<<...>>,...},
+                        {{...},...}}},
+               request_digest => <<148,105,9,175,82,51,40,...>>,
+               operation_ref =>
+                   {operation,<<"lobby-test-user">>,
+                       <<19,57,58,186,...>>,
+                       <<131,104,2,...>>,
+                       <<"º³©e"...>>},
+               variables => [{<<"V0">>,0}],
+               request_bytes => <<"quod.agent.goal.v1"...>>,...},
+             {normalized,
+                 {read,
+                     [{<<"lobb"...>>,<<...>>,...},{<<...>>,...},{...}],
+                     {error,proof_unavailable}}}}}]}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.

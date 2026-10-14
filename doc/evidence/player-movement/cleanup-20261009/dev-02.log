@@ -1,0 +1,128 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_predicates.erl:
+     │
+ 229 │  replace_modules(#est{db = #db{mod = M, ref = R0} = Db, fs = Fs} = Est, Modules) ->
+     │                                               ╰── Warning: variable 'R0' is unused
+
+
+===> Performing EUnit tests...
+=WARNING REPORT==== 9-Oct-2026::18:13:08.863100 ===
+quod_proof_scope[<0.718.0>]: proof crashed: error:{illegal_bip,
+                                                   {retractall,
+                                                    {external_predicate_selection,
+                                                     {4}}}} [{erlog_bips,
+                                                              prove_goal,3,
+                                                              [{file,
+                                                                "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_bips.erl"},
+                                                               {line,243}]},
+                                                             {erlog_int,
+                                                              prove_findall,5,
+                                                              [{file,
+                                                                "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_int.erl"},
+                                                               {line,973}]},
+                                                             {quod_proof_continuation,
+                                                              run,4,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_continuation.erl"},
+                                                               {line,15}]},
+                                                             {quod_proof_scope,
+                                                              guarded,1,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_scope.erl"},
+                                                               {line,102}]},
+                                                             {quod_trace,
+                                                              '-with_span/6-fun-0-',
+                                                              3,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_trace.erl"},
+                                                               {line,81}]},
+                                                             {quod_trace,
+                                                              with_context,2,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_trace.erl"},
+                                                               {line,59}]},
+                                                             {quod_proof_scope,
+                                                              next,1,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_scope.erl"},
+                                                               {line,55}]},
+                                                             {quod_transaction_scope,
+                                                              with_invocation,
+                                                              4,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_transaction_scope.erl"},
+                                                               {line,87}]}]
+[0;31mF[0m=WARNING REPORT==== 9-Oct-2026::18:13:08.966932 ===
+quod_proof_scope[<0.787.0>]: proof crashed: error:{illegal_bip,
+                                                   {retractall,
+                                                    {external_predicate_selection,
+                                                     {4}}}} [{erlog_bips,
+                                                              prove_goal,3,
+                                                              [{file,
+                                                                "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_bips.erl"},
+                                                               {line,243}]},
+                                                             {erlog_int,
+                                                              prove_findall,5,
+                                                              [{file,
+                                                                "/home/yan/src/quod/_build/default/lib/erlog/src/erlog_int.erl"},
+                                                               {line,973}]},
+                                                             {quod_proof_continuation,
+                                                              run,4,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_continuation.erl"},
+                                                               {line,15}]},
+                                                             {quod_proof_scope,
+                                                              guarded,1,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_scope.erl"},
+                                                               {line,102}]},
+                                                             {quod_trace,
+                                                              '-with_span/6-fun-0-',
+                                                              3,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_trace.erl"},
+                                                               {line,81}]},
+                                                             {quod_trace,
+                                                              with_context,2,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_trace.erl"},
+                                                               {line,59}]},
+                                                             {quod_proof_scope,
+                                                              next,1,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_proof_scope.erl"},
+                                                               {line,55}]},
+                                                             {quod_transaction_scope,
+                                                              with_invocation,
+                                                              4,
+                                                              [{file,
+                                                                "/home/yan/src/quod/src/quod_transaction_scope.erl"},
+                                                               {line,87}]}]
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_external_predicate_selection_tests:-signed_selection_authorization_rollback_and_repeat_cost_test_/0-fun-16-/0
+[0;31m     Failure/Error: ?assertMatch({ normalized , { answers , _ , [ _ ] } }, signed ( F , execute , { ';' , { ',' , configure ( Initial , WithoutPhysics ) , fail } , true } ))
+       expected: = { normalized , { answers , _ , [ _ ] } }
+            got: {normalized,{error,proof_unavailable}}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_46073EE308B4AD3C
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_46073EE308B4AD3C
+[0m
+  2) quod_external_predicate_selection_tests:-signed_selection_recovery_and_invalid_candidate_test_/0-fun-9-/0
+[0;31m     Failure/Error: ?assertMatch({ normalized , { committed , _ , _ } }, signed ( F , execute , configure ( Initial , WithoutPhysics ) ))
+       expected: = { normalized , { committed , _ , _ } }
+            got: {normalized,{error,proof_unavailable}}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F19D47FB845DE449
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F19D47FB845DE449
+[0m
+
+Finished in 0.884 seconds
+[0;31m66 tests, 2 failures
+[0m===> Error running tests

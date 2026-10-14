@@ -1,0 +1,6 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f201bdf1780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f201bdf1780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/proc/2008647/status", O_RDONLY|O_CLOEXEC) = 625
+openat(AT_FDCWD, "/proc/2008647/status", O_RDONLY|O_CLOEXEC) = 625
+openat(AT_FDCWD, "/proc/2008647/clear_refs", O_WRONLY) = 625
++++ exited with 0 +++

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "compile"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 6.075630187988281
+}

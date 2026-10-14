@@ -16,10 +16,11 @@ no native preparation or submission occurs while eligibility is being proved.
 -include("quod_ledger.hrl").
 
 -export([quod_predicate_module/0, load/1, diff_to_events/1, run_reaction/6,
-         me/3, current_ontology_identity/3, scope_identity/1,
+         me/3, current_ontology_identity/3, scope_identity/1, ontology_routes/3,
          committed_operation_outcome/3,
+         current_request_operation/3, current_signed_request/3,
          current_request_expiry/3, limit_reaction_expiry/3, prepare_agent_custody/3,
-         recovery_observation/3, prepare_signed_request/3,
+         recovery_observation/3, prepare_signed_request/3, use_agent_request/3,
          reaction_match_5/3, reaction_result_2/3, reaction_metadata/1, request_resource/4]).
 
 quod_predicate_module() -> true.
@@ -28,11 +29,17 @@ load(Est) ->
     Actor = quod_predicates:register(Est, {me, 1}, query, proof_bound, ?MODULE, me),
     Identity = quod_predicates:register(Actor, {current_ontology_identity, 2}, query,
                                         proof_bound, ?MODULE, current_ontology_identity),
-    Outcome = quod_predicates:register(Identity, {committed_operation_outcome, 3}, query,
+    Routes = quod_predicates:register(Identity, {'$quod_ontology_routes', 1}, query,
+                                      ?MODULE, ontology_routes),
+    Outcome = quod_predicates:register(Routes, {committed_operation_outcome, 2}, query,
                                        committed_snapshot, ?MODULE, committed_operation_outcome),
     Expiry = quod_predicates:register(Outcome, {current_request_expiry, 1}, query,
                                       proof_bound, ?MODULE, current_request_expiry),
-    Limit = quod_predicates:register(Expiry, {limit_reaction_expiry, 1}, reaction,
+    Operation = quod_predicates:register(Expiry, {current_request_operation, 1}, query,
+                                         proof_bound, ?MODULE, current_request_operation),
+    Current = quod_predicates:register(Operation, {current_signed_request, 1}, query,
+                                        proof_bound, ?MODULE, current_signed_request),
+    Limit = quod_predicates:register(Current, {limit_reaction_expiry, 1}, reaction,
                                      ?MODULE, limit_reaction_expiry),
     Preparation = quod_predicates:register(Limit, {prepare_agent_custody, 3}, reaction,
                                            ?MODULE, prepare_agent_custody),
@@ -40,7 +47,9 @@ load(Est) ->
                                              ?MODULE, recovery_observation),
     Signed = quod_predicates:register(Observation, {prepare_signed_request, 3}, reaction,
                                       ?MODULE, prepare_signed_request),
-    Match = quod_predicates:register(Signed, {'$quod_reaction_match', 5}, reaction,
+    Retained = quod_predicates:register(Signed, {use_agent_request, 1}, reaction,
+                                       ?MODULE, use_agent_request),
+    Match = quod_predicates:register(Retained, {'$quod_reaction_match', 5}, reaction,
                                      ?MODULE, reaction_match_5),
     quod_predicates:register(Match, {'$quod_reaction_result', 2}, reaction,
                              ?MODULE, reaction_result_2).
@@ -73,9 +82,31 @@ scope_identity(St) ->
         _ -> error
     end.
 
-%% Positive terminal evidence is tracked before unification, so alternatives,
+%% Only the executing identity can be inspected; target ACL admission owns
+%% disclosure. Live route dependencies cannot seal a durable state change.
+ontology_routes({'$quod_ontology_routes', Result}, Next, St) ->
+    case scope_identity(St) of
+        {ok, {Ns, Anchor}} ->
+            Terms = case quod_directory:validator_routes(Ns, Anchor) of
+                {ok, Routes} ->
+                    [{route_status, live, available} |
+                     [route_term(Route) || Route <- Routes]];
+                {error, Reason} -> [{route_status, live, Reason}]
+            end,
+            erlog_int:unify_prove_body(Result, Terms, Next, St);
+        error -> quod_predicates:fail_reason(scope_identity_unavailable, St)
+    end.
+
+route_term(#{node_key := Key, endpoint := {Host, Port}, epoch := Epoch, sequence := Sequence}) ->
+    {route, Key, route_host(Host), Port, Epoch, Sequence}.
+
+route_host(Host) when is_binary(Host) -> Host;
+route_host(Host) when is_list(Host) -> list_to_binary(Host);
+route_host(Host) when is_tuple(Host) -> list_to_binary(inet:ntoa(Host)).
+
+%% Terminal and expiry evidence is tracked before unification, so alternatives,
 %% negation and cuts cannot erase a read that influenced the selected answer.
-committed_operation_outcome({committed_operation_outcome, B0, S0, Status}, Next,
+committed_operation_outcome({committed_operation_outcome, B0, Status}, Next,
                             St = #est{bs = Bs}) ->
     Context = quod_predicates:context(St),
     case quod_predicates:ctx_kind(Context) of
@@ -83,19 +114,16 @@ committed_operation_outcome({committed_operation_outcome, B0, S0, Status}, Next,
         Other -> throw({erlog_error,
                        {context_violation, committed_operation_outcome, query, Other}})
     end,
-    [Bytes, Signature] = erlog_int:dderef([B0, S0], Bs),
-    case {scope_identity(St), quod_client_goal:verify(Bytes, Signature)} of
-        {{ok, {Ns, Anchor}},
-         {ok, #{operation_ref := {operation, Ns, Anchor, Agent, Id},
-                request_digest := Digest}}} ->
+    Bytes = erlog_int:dderef(B0, Bs),
+    case {scope_identity(St), outcome_request(Bytes)} of
+        {{ok, {Ns, Anchor}}, {ok, Ns, Anchor, Digest}} ->
             Remaining = case quod_scope_session:remaining_ms() of
                             {ok, R} -> R;
                             error -> quod_proof_context:remaining_ms()
                         end,
-            Key = {1, Agent, Id},
             case quod_prolog:operation_dependency(
-                   Ns, Key, quod_predicates:ctx_height(Context), Remaining) of
-                {ok, {StoredDigest, _, _, Code, _, _} = Token} ->
+                   Ns, Bytes, quod_predicates:ctx_height(Context), Remaining) of
+                {ok, {1, _, _} = Key, {StoredDigest, _, _, Code, _, _} = Token} ->
                     ok = quod_erlog_db_local_prove:absorb_read_set(St, #{Key => Token}),
                     case StoredDigest =:= Digest of
                         true ->
@@ -103,15 +131,28 @@ committed_operation_outcome({committed_operation_outcome, B0, S0, Status}, Next,
                             erlog_int:unify_prove_body(Status, Value, Next, St);
                         false -> erlog_int:fail(St)
                     end;
+                {ok, {2, _, _} = Key, Token} ->
+                    ok = quod_erlog_db_local_prove:absorb_read_set(St, #{Key => Token}),
+                    erlog_int:unify_prove_body(Status, expired, Next, St);
                 Unavailable ->
                     %% A caught error can return an answer, but cannot authorize
                     %% a diff. Reuse the monotonic live-bridge sealing veto.
                     ok = quod_erlog_db_local_prove:record_live_bridge(
-                           St, {committed_operation_outcome, 3}),
+                           St, {committed_operation_outcome, 2}),
                     throw({erlog_error, {operation_outcome_unavailable, Unavailable}})
             end;
         {error,_} -> quod_predicates:fail_reason(scope_identity_unavailable,St);
         _ -> erlog_int:fail(St)
+    end.
+
+%% Request bytes select exact committed evidence; they confer no authority.
+%% Identity parsing stays atom-safe and the goal is never parsed or executed.
+outcome_request(Bytes) ->
+    case quod_client_goal:request_identity(Bytes) of
+        {ok, #{request := #{mode := execute},
+               operation_ref := {operation, Ns, Anchor, _, _},
+               request_digest := Digest}} -> {ok, Ns, Anchor, Digest};
+        _ -> error
     end.
 
 -doc "Bind verified request metadata; no live clock observation enters the proof.".
@@ -131,6 +172,41 @@ current_request_expiry({current_request_expiry, Expiry}, Next, St) ->
     case Bound of
         {ok, Value} -> erlog_int:unify_prove_body(Expiry, Value, Next, St);
         none -> erlog_int:fail(St)
+    end.
+
+-doc "Bind the original signed operation, including when proving in a foreign scope.".
+current_request_operation({current_request_operation, Operation}, Next, St) ->
+    case quod_predicates:ctx_kind(quod_predicates:context(St)) of
+        proof ->
+            Bound = case quod_scope_session:request_operation() of
+                error -> quod_proof_context:request_operation();
+                ScopeOperation -> ScopeOperation
+            end,
+            case Bound of
+                {ok, Value} -> erlog_int:unify_prove_body(Operation, Value, Next, St);
+                none -> erlog_int:fail(St)
+            end;
+        Kind -> erlog_int:erlog_error(
+            {context_violation, current_request_operation, query, Kind}, St)
+    end.
+
+-doc "Match retained bytes against this proof's already verified signed-request binding.".
+current_signed_request({current_signed_request, Bytes0}, Next, St = #est{bs = Bs}) ->
+    case quod_predicates:ctx_kind(quod_predicates:context(St)) of
+        proof ->
+            Binding = case quod_scope_session:request_binding() of
+                {ok, Value} -> Value;
+                error ->
+                    try quod_proof_context:request_binding()
+                    catch error:no_proof_context -> none end
+            end,
+            case quod_client_goal:request_identity(erlog_int:dderef(Bytes0, Bs)) of
+                {ok, #{request_digest := Digest}} when Binding =:= {agent_goal_v1, Digest} ->
+                    erlog_int:prove_body(Next, St);
+                _ -> erlog_int:fail(St)
+            end;
+        Kind -> erlog_int:erlog_error(
+            {context_violation, current_signed_request, query, Kind}, St)
     end.
 
 -doc "Constrain this match's request expiry within its owner-authenticated upper bound.".
@@ -194,6 +270,22 @@ prepare_signed_request({prepare_signed_request, Bytes, Signature, Template}, Nex
         _ -> erlog_int:fail(St)
     end.
 
+%% Select already retained bytes in this live reaction only. The metadata is
+%% ordinary backtrackable bindings, not a durable dispatch latch or replay right.
+use_agent_request({use_agent_request, Bytes0}, Next, St = #est{bs = Bs}) ->
+    Bytes = erlog_int:dderef(Bytes0, Bs),
+    case reaction_metadata(St) of
+        {ok, #{mode := execute, preparation_variable := PreparationVar} = Metadata}
+          when not is_map_key(physics, Metadata), not is_map_key(recovery, Metadata) ->
+            case quod_client_goal:request_identity(Bytes) of
+                {ok, #{request := #{mode := execute}}} ->
+                    erlog_int:unify_prove_body(
+                        PreparationVar, {retained, Bytes}, Next, St);
+                _ -> erlog_int:domain_error(agent_request, Bytes, St)
+            end;
+        _ -> erlog_int:fail(St)
+    end.
+
 -doc "Convert canonical applied operations to ordered reaction events.".
 -spec diff_to_events([op()]) -> [term()].
 diff_to_events(AppliedOps) when is_list(AppliedOps) ->
@@ -238,7 +330,8 @@ run_reaction(Ns, Height, Binding = #{request_timeout_ms := Timeout},
             {RequestMode,Work} = case Preparation of
                 none -> {Mode,BoundGoal};
                 {custody, Ref, Epoch, Variable} -> {Mode,{custody,Ref,Epoch,Variable,BoundGoal}};
-                {signed_store,B,S,T} -> {{custodied,B,S,T},BoundGoal}
+                {signed_store,B,S,T} -> {{custodied,B,S,T},BoundGoal};
+                {retained, Bytes} -> {{retained, Bytes}, BoundGoal}
             end,
             {OwnedMode,BoundMetadata} = case maps:find(physics, Metadata) of
                 {ok, Physics} -> {{owned_physics,Physics,RequestMode},Physics};
@@ -284,6 +377,14 @@ reaction_result_2({'$quod_reaction_result', Goal, Result}, Next, St = #est{bs = 
     Expiry = metadata_value(erlog_int:deref(ExpiryVar, Bs), Upper),
     Preparation = metadata_value(erlog_int:deref(PreparationVar, Bs), none),
     case Preparation of
+        {retained, Bytes} ->
+            {actor, Actor, _} = quod_predicates:ctx_executor(quod_predicates:context(St)),
+            case quod_agent:retained_request(Actor, Bytes, erlog_int:dderef(Goal, Bs)) of
+                {ok, #{not_after_ms := RequestExpiry}} ->
+                    erlog_int:unify_prove_body(Result,
+                        {request, Goal, min(Expiry, RequestExpiry), Preparation}, Next, St);
+                error -> erlog_int:domain_error(retained_request, Bytes, St)
+            end;
         {custody, _, _, Variable} ->
             case quod_agent:valid_preparation_goal(
                    erlog_int:deref(Variable, Bs), erlog_int:dderef(Goal, Bs)) of

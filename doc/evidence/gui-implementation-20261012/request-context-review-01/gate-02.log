@@ -1,0 +1,91 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.04s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::00:10:19.874993 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<21,218,
+                                                                                   234,58,
+                                                                                   197,176,
+                                                                                   71,168,
+                                                                                   125,81,
+                                                                                   78,44,
+                                                                                   71,179,
+                                                                                   223,238>>,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>},
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                deadline_ms =>
+                                                                                 -576460744939,
+                                                                                read_set =>
+                                                                                 true,
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<15,87,
+                                                                                    13,78,
+                                                                                    124,103,
+                                                                                    185,127,
+                                                                                    137,196,
+                                                                                    69,17,
+                                                                                    244,112,
+                                                                                    7,238,
+                                                                                    12,70,
+                                                                                    117,51,
+                                                                                    158,230,
+                                                                                    205,81,
+                                                                                    20,174,
+                                                                                    227,67,
+                                                                                    113,139,
+                                                                                    151,108>>,
+                                                                                  <0.626.0>,
+                                                                                  #Ref<0.871825807.772276225.236195>,
+                                                                                  <<21,218,
+                                                                                    234,58,
+                                                                                    197,176,
+                                                                                    71,168,
+                                                                                    125,81,
+                                                                                    78,44,
+                                                                                    71,179,
+                                                                                    223,238>>}}],
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               99}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1276}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1250}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 30.887 seconds
+[0;32m54 tests, 0 failures
+[0m

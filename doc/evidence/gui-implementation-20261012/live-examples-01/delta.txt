@@ -1,0 +1,349 @@
+--- before/doc/gui-examples.md
++++ doc/gui-examples.md
+@@ -1,10 +1,10 @@
+ # Application forms
+ 
+ These examples use the shared GUI schema, field binding and question completion
+-rules. Their production-seam test covers accepted questions through submission,
+-application and cleanup. Native `gui_open/2` admission is still unfinished; the
+-test supplies accepted rows explicitly and does not establish live-opening or
+-headset acceptance.
++rules. Their production-seam test opens forms through `gui_open/2`, submits
++answers and lets the real hosted agent apply the bound continuation. The test
++client acknowledges native presentation through the authenticated socket;
++headset ergonomics still require hardware validation.
+ 
+ ## Lobby atmosphere
+ 
+@@ -73,6 +73,28 @@
+ assertion reaction correlates accepted fields to the retained completion request;
+ neither example declares `react_on` or sends a client-provided executable goal.
+ 
++Open either form from its application ontology:
++
++```prolog
++gui_open(atmosphere(personal_sky), Question).
++gui_open(instrument_settings(analyzer_a), Question).
++```
++
++Each call returns an anchored `question_ref(ResponderNamespace, ResponderAnchor,
++question(Id))`. It identifies that opening; it is not the eventual answer. The
++human can leave it in the HUD and answer later. Accepted values reach the
++authored continuation's variables in a later signed proof.
++
++The responder authorizes the exact application form and human with
++`gui_responder_policy(Instance, form_ref(SourceNamespace, SourceAnchor, Form), Human)`.
++It supplies `gui_pending_allowance(Instance, Count)` and
++`gui_completion_allowance(Instance, Milliseconds)`. The human supplies its own
++pending allowance and selects its authenticated receiving connection. Agent-led
++opening also requires the human's `gui_receiver_policy(HumanInstance, Actor)`.
++The ordinary hosted actor must have the shared completion handler installed.
++The `quod:gui` scope uses the governed `quod_gui_predicates` module through normal
++ontology founding; source composition does not install runtime capabilities.
++
+ The source application receives all accepted fields together in a fresh signed
+ proof. Its consequences, question consumption and HUD removal share the existing
+ atomic transaction. A failed continuation preserves the submitted question.
+--- before/doc/gui-implementation-plan.md
++++ doc/gui-implementation-plan.md
+@@ -17,11 +17,10 @@
+ and spatial adapters use the same live question controller, signed views and
+ saved-operation recovery.
+ 
+-The production-seam examples currently seed accepted opening rows. Live client
+-acceptance and its original atomic opening, automatic hosted-agent recovery
+-observation, application founding and actual headset acceptance remain unfinished.
+-Section 5 defines the native integration boundary; component and transition
+-verification do not establish opening or headset acceptance.
++The production-seam examples exercise public opening, native client acceptance,
++submission and automatic hosted completion. Remote end-to-end presentation,
++automatic recovery observation and actual headset acceptance remain unfinished.
++Section 5 defines the implemented native boundary and its verification limits.
+ 
+ ## 1. Scope and existing owners
+ 
+@@ -317,41 +316,40 @@
+ actual feasibility before sealing. This does not authorize relabeling an
+ arbitrary live query as a staging operation.
+ 
+-**Internal implementation gate:** the existing owners need specific extensions,
+-not another GUI execution service. The closed effect catalogue and journal
+-codec/executor need a presentation case; the declared-action handle mechanism
+-must dispatch that case through the same candidate/rollback machinery. The
+-native preparer needs a host-runtime feasibility read and must consume its
+-answer inside preparation, without a second actor activation or queue.
+-
+-Ordinary `::` chooses and reuses a validator; it does not select a particular
+-native host. Pinning it to the receiver node does not solve presentation routing:
+-`join_ontology` belongs to the `quod:node` class namespace, and a node's own
+-ontology can be founded elsewhere or hosted locally only as an observer. Neither
+-grants validator authority to its client-connection host. The earlier
+-`at(NodeKey, Namespace)::Goal` candidate is therefore insufficient and is not an
+-implementation contract. Preparation and release must reach the authenticated
+-receiver and actor through the existing transport/resource owners without
+-assuming those hosts validate the effect-bearing ontology. An unreachable host
+-is an infrastructure condition, not proof that the human or agent is absent.
+-
+-Before dependent runtime changes, complete the exact authenticated
+-request-to-connection binding, provisional-view acknowledgement/expiry protocol,
+-private preparation payload and safe nested-call continuation. The original
+-request's custodian must retain exact outcome evidence before dispatch, including
+-hosted-agent callers. No new child operation, hidden custody-store transition or
+-fresh-ID retry is permitted. The source review and independent disposition are
+-retained in [the opening review](evidence/gui-implementation-20261012/component-review-01/assessment.md).
+-
+-Receiver scope is explicit and anchored. For human-originated presentation,
+-use the originating authenticated connection. For an agent-originated question,
+-authorized human/application state selects a receiver scope; route through
+-existing authority/routing machinery. A local registry miss establishes absence
+-only for the selected authoritative scope. Current control ingress does not
+-forward to another node; remote receiver routing is a concrete integration gap,
+-not an absence result. Unsupported/unreachable routing remains distinguishable.
+-Multiple tabs have distinct incarnations and drafts;
+-the policy chooses a receiving scope, never an arbitrary registry entry.
++The existing closed effect catalogue now includes `present` with the private
++`gui_presentation` codec. `gui_prepare_question(Opening)` allocates the existing
++opaque action handle; its declared action checks source, responder and human
++policy. `gui_prepared(Opening)` reads that proof's staged desired state, so an
++ordinary ontology fact cannot fabricate native acceptance. The responder's
++`gui_accept_question/1` then creates both shared rows in the same transaction.
++
++`quod_ask:native_read/5` uses the original signed authentication in a separate
++read-only scope selected at an exact physical node and ontology anchor. It uses
++the existing scope transport and may run on an observer. Ordinary `::` selection
++is unchanged. Nested reads preserve the original principal and deadline;
++preparation cannot turn their live observations into ordinary material reads.
++The selected host must already serve the anchored capability through normal
++ontology hosting; requests never repair or join missing capabilities.
++
++The native actor check compares the actual installed actor/key/epoch and complete
++shared reaction against the existing runtime catalogue. Receiver preparation uses
++the signed HUD socket registered for the exact authenticated human and connection
++token. That socket validates the descriptor acknowledgement before issuing a
++private receipt. Prepared payloads retain the original request authentication,
++receiver identity and absolute expiry. Journal release activates only that
++receipt; missing or expired receipts discharge presentation without deciding
++material outcomes. Lost activation acknowledgement waits only for that original
++receipt expiry and never resubmits the material request.
++
++The original source's existing custody precedes effect binding and Vote dispatch,
++including for hosted-agent callers. No child operation or fresh-ID retry exists.
++The human owns the signed receiver selection in its ontology; agent-originated
++opening additionally requires the human's receiver policy. Multiple tabs have
++distinct connection incarnations and drafts. A registry miss establishes absence
++only on that selected authenticated scope; an unreachable host is infrastructure
++uncertainty. Local opening and actual journal release are tested together; remote
++observer transport is tested separately, with remote end-to-end GUI integration
++still required.
+ 
+ Opening acceptance is instantaneous evidence, not a promise of continued
+ connection. After acceptance, losing the human or agent does not cancel a
+@@ -663,7 +661,7 @@
+ 
+ Executable grouped versions of the lobby and nonphysical instrument forms are
+ documented in [Application forms](gui-examples.md). Their signed-owner tests cover
+-accepted questions through completion; native opening remains unfinished.
++public opening through automatic completion and cleanup.
+ 
+ These are proposed application examples to make the API executable during
+ implementation, not claims that the named domain actions already exist. The
+--- before/test/quod_gui_examples_tests.erl
++++ test/quod_gui_examples_tests.erl
+@@ -1,8 +1,8 @@
+ -module(quod_gui_examples_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ 
+-%% Accepted rows are fixture inputs until native gui_open acceptance is wired.
+-%% Everything after that boundary uses real signed multi-ontology transactions.
++%% Public opening, submission and automatic hosted completion use the real
++%% signed owners. Only the browser native acknowledgement is a fixture.
+ lobby_and_nonphysical_component_forms_test_() ->
+     {timeout, 120, fun examples/0}.
+ 
+@@ -19,15 +19,9 @@
+     {HumanNs, HumanAnchor} = maps:get(agent, Ctx),
+     HumanInstance = {human_user, test_agent},
+     Human = {agent_instance_ref, HumanNs, HumanAnchor, HumanInstance},
+-    {Key, _} = maps:get(key_pair, Ctx),
+     Admin = {can_invoke, {'_'}, Human, {'_'}, {'_'}},
+-    ResponderNs = <<"gui:examples-responder">>,
+-    {Responder, _} = quod_lobby_tests:start_namespace(ResponderNs, Base#{
+-        data_dir => filename:join(Dir, "responder"),
+-        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++
+-            source("gui_question.pl") ++ [Admin, {agent_key, responder, Key, active},
+-                {gui_completion_allowance, responder, 30000}])}),
+-    Actor = {agent_instance_ref, ResponderNs, quod_simplex:genesis_hash(ResponderNs), responder},
++    try with_responder(Ctx,Base,Human,fun(Actor) ->
++    {agent_instance_ref,ResponderNs,_,responder} = Actor,
+     InstrumentNs = <<"gui:examples-instrument">>,
+     Instrument = analyzer_a,
+     Original = {instrument_configuration, Instrument, <<"Baseline">>, hold, 20, 0, false, [left], <<>>},
+@@ -61,8 +55,13 @@
+             end, Cases)
+         end),
+         commit(Ctx, scope(HumanNs, assertions(source("gui_hud.pl") ++
+-            [{instance_of, human_user, HumanInstance}]))),
++            [{instance_of, human_user, HumanInstance},{gui_pending_allowance,HumanInstance,4}]))),
+         commit(Ctx, scope(Lobby, {assertz, {gui_question_policy, {atmosphere, personal_sky}, Human, Actor}})),
++        lists:foreach(fun({Ns,Form,_,_}) ->
++            commit(Ctx,scope(ResponderNs,{assertz,{gui_responder_policy,responder,
++                {form_ref,Ns,quod_simplex:genesis_hash(Ns),Form},Human}}))
++        end,Cases),
++        quod_gui_question_tests:with_receiver(Ctx,HumanNs,fun(Open) ->
+         lists:foreach(fun({Ns, Form, Control, Fields}) ->
+             {ok, [#{<<"V0">> := Revision, <<"V1">> := Tree}], _} =
+                 read(Ctx, Ns, {gui_schema, Form, {0}, {1}}),
+@@ -73,12 +72,9 @@
+             %% Two distinct questions replace one domain state, never an
+             %% accumulating answer log. Completion signs only retained bytes.
+             lists:foreach(fun(Round) ->
+-                Q = {example, Ns, Round}, Ref = {question_ref, ResponderNs, element(3, Actor), Q},
++                {question_ref,ResponderNs,_,Q} = Open(Ns,Form),
+                 Row = {gui_question, Q, {form_ref, Ns, quod_simplex:genesis_hash(Ns), Form},
+                        Human, responder, Revision, awaiting},
+-                commit(Ctx, {transaction, conjunction([
+-                    scope(ResponderNs, {assertz, Row}),
+-                    scope(HumanNs, {assertz, {gui_pending, HumanInstance, Ref}})])}),
+                 Submit = scope(ResponderNs, {gui_submit, Q, Revision, Control, Fields}),
+                 case {Ns, Round} of
+                     {Lobby, 1} ->
+@@ -91,13 +87,14 @@
+                     _ -> ok
+                 end,
+                 commit(Ctx, Submit),
+-                {ok, [#{<<"V0">> := Bytes}], _} = read(Ctx, ResponderNs,
+-                    {',', {'=', {0}, {'Bytes'}},
+-                     {gui_question, Q, {'_'}, Human, responder, Revision,
+-                        {submitted, {'_'}, Control, Fields, {'Bytes'}}}}),
+-                Signature = quod_identity:sign(Bytes, quod_identity:key_term(maps:get(key_pair, Ctx))),
+-                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+-                    quod_client_goal_ingress:submit(Bytes, Signature)),
++                receive
++                    {agent_request_finished,_,_,#{reference := Actor},_,Completion} ->
++                        {ok,#{request_bytes := CompletionBytes},{normalized,{committed,_,_}}} = Completion,
++                        {ok,#{goal_text := CompletionText}} = quod_client_goal:decode(CompletionBytes),
++                        {ok,ExpectedText} = quod_client_goal_parser:format({gui_complete,Q}),
++                        ?assertEqual(quod_client_goal_parser:parse(ExpectedText,3),
++                                     quod_client_goal_parser:parse(CompletionText,3))
++                after 10000 -> error(example_completion_missing) end,
+                 ?assertMatch({fail, _}, read(Ctx, ResponderNs,
+                     {gui_question, Q, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
+                 ?assertMatch({ok, [#{<<"V0">> := []}], _},
+@@ -105,7 +102,7 @@
+                 ?assertMatch({ok, [#{<<"V1">> := Fields}], _},
+                     read(Ctx, Ns, {gui_values, Form, {0}, {1}}))
+             end, [1, 2])
+-        end, Cases),
++        end, Cases) end),
+         ?assertMatch({ok, [_], _}, read(Ctx, InstrumentNs, InstrumentState)),
+         ?assertMatch({ok, [_], _}, read(Ctx, InstrumentNs,
+             setelement(1, InstrumentState, current_instrument_configuration))),
+@@ -114,15 +111,60 @@
+         ?assertMatch({fail, _}, read(Ctx, InstrumentNs, {instance_of, space, {'_'}})),
+         ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, InstrumentNs}), physics_worlds))
+     after
+-        quod_lobby_tests:stop_process(Application), quod_lobby_tests:stop_process(Responder),
+-        quod_lobby_tests:stop(Ctx), file:del_dir_r(Dir)
++        quod_lobby_tests:stop_process(Application)
++    end
++    end)
++    catch Class:Reason:Stack ->
++        io:format("Failed live GUI examples retained at ~s~n",[Dir]),
++        erlang:raise(Class,Reason,Stack)
++    after quod_lobby_tests:stop(Ctx) end,
++    ok = file:del_dir_r(Dir).
++
++with_responder(Ctx,Base,Human,Fun) ->
++    Dir = maps:get(directory,Ctx), Pub = maps:get(node_id,Base),
++    Saved = application:get_env(quod,node_actor_principal),
++    Unlock = filename:join(Dir,"unlock"),
++    ok = quod_file:write_atomic(Unlock,crypto:strong_rand_bytes(32),8#600),
++    {ok,Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir,"keys"),unlock_file => Unlock}),
++    NodeNs = <<"gui:examples-node">>,
++    {NodeOwner,_} = quod_lobby_tests:start_namespace(NodeNs,Base#{
++        data_dir => filename:join(Dir,"node"),
++        genesis_diff => quod_prolog:terms_to_diff(source("node_execution.pl") ++
++            [{node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,Pub,active}])}),
++    Node = {agent_instance_ref,NodeNs,quod_simplex:genesis_hash(NodeNs),physical_node},
++    {ok,NodeBlob} = quod_wire_term:encode_canonical(Node),
++    application:set_env(quod,node_actor_principal,{agent,NodeBlob}),
++    Ns = <<"gui:examples-responder">>,
++    true = quod_reg:subscribe({agent_hosting,Ns}),
++    {Responder,_} = quod_lobby_tests:start_namespace(Ns,Base#{
++        data_dir => filename:join(Dir,"responder"),
++        external_predicate_modules => [quod_agent_predicates,quod_agent_work_predicates],
++        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++ source("gui_question.pl") ++
++            [{can_invoke,{'_'},Human,{'_'},Ns},
++             {can_assign_agent_host,Human,responder,none,0,Node,{'_'}},
++             {gui_pending_allowance,responder,4},{gui_completion_allowance,responder,30000}])}),
++    Actor = {agent_instance_ref,Ns,quod_simplex:genesis_hash(Ns),responder},
++    true = quod_reg:subscribe({agent,Actor}),
++    try
++        {ok,ActorBlob} = quod_wire_term:encode_canonical(Actor),
++        {ok,Key} = quod_agent_vault:prepare(ActorBlob,0),
++        commit(Ctx,scope(Ns,{goal,{agent_hosted,responder,Node,1,Key}})),
++        receive {agent_installed,_,_,#{reference := Actor},_} -> ok
++        after 10000 -> error(example_responder_not_installed) end,
++        Fun(Actor)
++    after
++        quod_reg:unsubscribe({agent,Actor}), quod_reg:unsubscribe({agent_hosting,Ns}),
++        quod_lobby_tests:stop_process(Responder), quod_lobby_tests:stop_process(NodeOwner),
++        gen_server:stop(Vault),
++        case Saved of undefined -> application:unset_env(quod,node_actor_principal);
++            {ok,Value} -> application:set_env(quod,node_actor_principal,Value) end
+     end.
+ 
+ source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name)).
+ scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
+ read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
+ commit(Ctx, Goal) ->
+-    ?assertMatch({ok, _, {normalized, {committed, _, _}}}, quod_lobby_tests:submit(Ctx, execute, Goal)).
++    quod_gui_question_tests:commit(Ctx,Goal).
+ assertions(Terms) ->
+     {Goals, _} = lists:mapfoldl(fun(Term, N) ->
+         {Fresh, _, Next} = erlog_int:term_instance(Term, N), {{assertz, Fresh}, Next}
+--- before/test/quod_gui_question_tests.erl
++++ test/quod_gui_question_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_gui_question_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-export([with_receiver/3,commit/2]).
+ 
+ %% Focused transition fixtures seed accepted rows. The live-opening fixture
+ %% exercises native acceptance and the original atomic transaction together.
+@@ -319,6 +320,35 @@
+         {gui_view,Hud,#{<<"type">> := <<"refresh">>}} -> gui_projection(Hud);
+         {gui_view,Hud,Other} -> error({unexpected_gui_projection,Other})
+     after 10000 -> error(gui_projection_missing) end.
++
++%% Shared production socket fixture for application examples. Only the native
++%% browser acknowledgement is automatic; opening uses the signed public API.
++with_receiver(Ctx,HumanNs,Fun) ->
++    Session = gui_session(Ctx), Parent = self(),
++    {Hud,M} = spawn_monitor(fun() -> gui_socket(Parent,#{peer => {127,0,0,1}},true) end),
++    Renew = fun() ->
++        Hud ! {client,gui_open_message(Ctx,Session,gui_hud,HumanNs,none,0)},
++        gui_projection(Hud)
++    end,
++    try
++        _ = Renew(),
++        {client_view,{gui_hud,HumanBytes,Connection}} = maps:get(receiver_key,gui_socket_state(Hud)),
++        {ok,{agent_instance_ref,HumanNs,_,Instance}} = quod_agent_ref:materialize(HumanBytes),
++        {ok,Node} = application:get_env(quod,node_pubkey),
++        commit(Ctx,scope(HumanNs,{gui_select_receiver,Instance,Node,Connection})),
++        Open = fun(Ns,Form) ->
++            _ = Renew(),
++            Caller = gui_async(fun() -> quod_lobby_tests:submit(Ctx,execute,
++                scope(Ns,{gui_open,Form,{0}})) end),
++            _ = gui_open_result(Caller,Hud,none,[]),
++            {ok,[#{<<"V0">> := [Reference]}],_} = read(Ctx,HumanNs,{gui_pending_questions,{0}}),
++            Reference
++        end,
++        Fun(Open)
++    after
++        Hud ! stop,
++        receive {'DOWN',M,process,Hud,normal} -> ok after 5000 -> error(hud_not_stopped) end
++    end.
+ 
+ gui_open_result({Ref,Pid,M} = Caller,Hud,Result,Frames) ->
+     case Result =/= none andalso lists:member(<<"gui_activate">>,Frames) of

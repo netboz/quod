@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Extension Tool Timeout\n  Tool: browser_evaluate\n  Timeout: 30s\n\nThe tool did not respond in time. This could mean:\n1. The tool is performing a long-running operation\n2. The tool is stuck in an infinite loop\n3. There was a silent error in the tool handler\n\nCheck the extension logs for more details."
+    }
+  ],
+  "isError": true
+}

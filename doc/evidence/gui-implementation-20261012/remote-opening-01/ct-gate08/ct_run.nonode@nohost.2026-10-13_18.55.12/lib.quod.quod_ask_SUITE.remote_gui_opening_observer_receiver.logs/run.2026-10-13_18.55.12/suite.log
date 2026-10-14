@@ -1,0 +1,61 @@
+=== Suite started at 2026-10-13 18:55:12
+=== Starting test, 1 test cases
+=cases         1
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-10-13 18:55:12
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-10-13 18:55:13
+=ended         2026-10-13 18:55:21
+=result        ok
+=elapsed       8.750349s
+=case          quod_ask_SUITE:remote_gui_opening_observer_receiver
+=logfile       quod_ask_suite.remote_gui_opening_observer_receiver.html
+=started       2026-10-13 18:55:21
+=ended         2026-10-13 18:55:25
+=result        failed: {{remote_gui_open_failed,
+                            {normalized,{error,proof_unavailable}}},
+                        [{quod_ask_SUITE,
+                             remote_gui_opening_observer_receiver,1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                              {line,841}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_gui_opening_observer_receiver,
+                                                                          841},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       3.427183s
+=== *** FAILED test case 1 of 1 ***
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-10-13 18:55:25
+=ended         2026-10-13 18:55:25
+=result        ok
+=elapsed       0.010893s
+=group_time    12.287s
+=== TEST COMPLETE, 0 ok, 1 failed of 1 test cases
+
+=finished      2026-10-13 18:55:25
+=failed        1
+=successful    0
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  12585505

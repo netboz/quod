@@ -1,0 +1,26 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6139f7780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6139f7780) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/LocalStorage-wal", F_OK) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/ActorSafetyLists", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/ActorSafetyLists", 0x7fe6139f54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=400, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/ActorSafetyLists", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/ActorSafetyLists", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 676
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/ActorSafetyLists", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 676
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/CertificateRevocation", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/CertificateRevocation", 0x7fe6139f54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=500, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/CertificateRevocation", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/CertificateRevocation", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/CertificateRevocation", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 674
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/hyphen-data", F_OK) = 0
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/hyphen-data/manifest.json", F_OK) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/hyphen-data/manifest.json", O_RDONLY|O_CLOEXEC) = 681
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/hyphen-data", 0x7fe6139f54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=740, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/hyphen-data", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/hyphen-data", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 688
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/hyphen-data", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", F_OK) = -1 ENOENT (No such file or directory)
++++ exited with 0 +++

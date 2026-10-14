@@ -1,0 +1,147 @@
+[00:25:54.260][Info   ] Press any key to shutdown...
+[00:25:54.261][Verbose] Available Extensions: (54)
+[00:25:54.261][Verbose]   Name=XR_KHR_binding_modification SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_KHR_composition_layer_color_scale_bias SpecVersion=5
+[00:25:54.261][Verbose]   Name=XR_KHR_composition_layer_cylinder SpecVersion=4
+[00:25:54.261][Verbose]   Name=XR_KHR_composition_layer_depth SpecVersion=6
+[00:25:54.261][Verbose]   Name=XR_KHR_composition_layer_equirect2 SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_KHR_convert_timespec_time SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_KHR_extended_struct_name_lengths SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_KHR_locate_spaces SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_KHR_maintenance1 SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_KHR_opengl_enable SpecVersion=12
+[00:25:54.261][Verbose]   Name=XR_KHR_opengl_es_enable SpecVersion=10
+[00:25:54.261][Verbose]   Name=XR_KHR_swapchain_usage_input_attachment_bit SpecVersion=3
+[00:25:54.261][Verbose]   Name=XR_KHR_visibility_mask SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_KHR_vulkan_enable SpecVersion=10
+[00:25:54.261][Verbose]   Name=XR_KHR_vulkan_enable2 SpecVersion=4
+[00:25:54.261][Verbose]   Name=XR_KHR_vulkan_swapchain_format_list SpecVersion=5
+[00:25:54.261][Verbose]   Name=XR_EXT_active_action_set_priority SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_dpad_binding SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_eye_gaze_interaction SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_EXT_future SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_EXT_hand_interaction SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_EXT_hand_tracking SpecVersion=4
+[00:25:54.261][Verbose]   Name=XR_EXT_hand_tracking_data_source SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_hp_mixed_reality_controller SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_local_floor SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_samsung_odyssey_controller SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_user_presence SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_ANDROID_face_tracking SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_BD_controller_interaction SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_FB_display_refresh_rate SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_FB_face_tracking2 SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_FB_touch_controller_pro SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_FB_touch_controller_proximity SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_HTC_facial_tracking SpecVersion=3
+[00:25:54.261][Verbose]   Name=XR_HTC_vive_cosmos_controller_interaction SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_HTC_vive_focus3_controller_interaction SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_META_touch_controller_plus SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_ML_ml2_controller_interaction SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MND_headless SpecVersion=3
+[00:25:54.261][Verbose]   Name=XR_MND_swapchain_usage_input_attachment_bit SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_MSFT_unbounded_reference_space SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_OPPO_controller_interaction SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXTX_overlay SpecVersion=5
+[00:25:54.261][Verbose]   Name=XR_MNDX_ball_on_a_stick_controller SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_blubur_s1 SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_egl_enable SpecVersion=2
+[00:25:54.261][Verbose]   Name=XR_MNDX_flipvr SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_force_feedback_curl SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_hydra SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_oculus_remote SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_psvr2_interaction SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_system_buttons SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_MNDX_xdev_space SpecVersion=1
+[00:25:54.261][Verbose]   Name=XR_EXT_debug_utils SpecVersion=5
+[00:25:54.262][Info   ] Available Layers: (3)
+[00:25:54.262][Verbose]   Name=XR_APILAYER_LUNARG_coLOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: HelloXR
+	createInfo->applicationInfo.applicationVersion: 0
+	createInfo->applicationInfo.engineName: 
+	createInfo->applicationInfo.engineVersion: 0
+	createInfo->applicationInfo.apiVersion: 1.0.60
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_SUCCESS
+	vulkanInstance: 0x559e5d658160
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+LOG in xrGetVulkanGraphicsDeviceKHR: Creation of VkDevice:
+	result: VK_SUCCESS
+	vulkanDevice: 0x559e5d6e00d0
+	vulkanInstance: 0x559e5d658160
+	external_fence_fd: true
+	external_semaphore_fd: true
+	timelineSemaphore: true
+	extensions:
+		VK_KHR_dedicated_allocation
+		VK_KHR_external_fence
+		VK_KHR_external_memory
+		VK_KHR_external_semaphore
+		VK_KHR_get_memory_requirements2
+		VK_KHR_external_memory_fd
+		VK_KHR_external_semaphore_fd
+		VK_KHR_external_fence_fd
+		VK_KHR_image_format_list
+		VK_KHR_timeline_semaphore
+re_validation SpecVersion=1.1.0 LayerVersion=1 Description=API Layer to perform validation of api calls and parameters as they occur
+[00:25:54.262][Verbose]     Available Extensions: (0)
+[00:25:54.262][Verbose]   Name=XR_APILAYER_LUNARG_api_dump SpecVersion=1.1.0 LayerVersion=1 Description=API Layer to record api calls as they occur
+[00:25:54.262][Verbose]     Available Extensions: (0)
+[00:25:54.262][Verbose]   Name=XR_APILAYER_KHRONOS_best_practices_validation SpecVersion=1.1.0 LayerVersion=1 Description=API Layer to modify runtime behavior in conformant but perhaps unexpected ways
+[00:25:54.262][Verbose]     Available Extensions: (0)
+[00:25:54.262][Info   ] Depth submission supported (XR_KHR_composition_layer_depth)
+[00:25:54.284][Info   ] Instance RuntimeName=Monado(XRT) by Collabora et al 'HEAD-HASH-NOTFOUND' RuntimeVersion=25.1.0
+[00:25:54.285][Verbose] Using system 1 for form factor XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY
+[00:25:54.285][Info   ] Available View Configuration Types: (1)
+[00:25:54.285][Verbose]   View Configuration Type: XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO (Selected)
+[00:25:54.285][Verbose]   View configuration FovMutable=True
+[00:25:54.285][Verbose]     View [0]: Recommended Width=320 Height=360 SampleCount=1
+[00:25:54.285][Verbose]     View [0]:     Maximum Width=1280 Height=1440 SampleCount=1
+[00:25:54.285][Verbose]     View [1]: Recommended Width=320 Height=360 SampleCount=1
+[00:25:54.285][Verbose]     View [1]:     Maximum Width=1280 Height=1440 SampleCount=1
+[00:25:54.285][Info   ]   Available Environment Blend Mode count : (1)
+[00:25:54.285][Info   ]     Environment Blend Mode (XR_ENVIRONMENT_BLEND_MODE_OPAQUE) : (Selected)
+[00:25:54.519][Verbose] Creating session...
+[00:25:54.522][Info   ] Available reference spaces: 3
+[00:25:54.522][Verbose]   Name: XR_REFERENCE_SPACE_TYPE_VIEW
+[00:25:54.522][Verbose]   Name: XR_REFERENCE_SPACE_TYPE_LOCAL
+[00:25:54.522][Verbose]   Name: XR_REFERENCE_SPACE_TYPE_STAGE
+[00:25:54.522][Info   ] System Properties: Name=Monado: Simulated HMD VendorId=42
+[00:25:54.522][Info   ] System Graphics Properties: MaxWidth=16384 MaxHeight=16384 MaxLayers=128
+[00:25:54.522][Info   ] System Tracking Properties: OrientationTracking=True PositionTracking=True
+[00:25:54.522][Verbose] Swapchain Formats:  91 97 [43] 50 37 44 4 100 [126] 124 125 129 130
+[00:25:54.522][Info   ] Creating color and depth swapchain for view 0 with dimensions Width=320 Height=360 SampleCount=1
+[00:25:54.544][Info   ] Creating color and depth swapchain for view 1 with dimensions Width=320 Height=360 SampleCount=1
+[00:25:54.547][Info   ] XrEventDataSessionStateChanged: state XR_SESSION_STATE_UNKNOWN->XR_SESSION_STATE_IDLE session=94138660471952 time=2829746076570
+[00:25:54.547][Info   ] XrEventDataSessionStateChanged: state XR_SESSION_STATE_IDLE->XR_SESSION_STATE_READY session=94138660471952 time=2829746076570
+[00:25:54.562][Info   ] XrEventDataSessionStateChanged: state XR_SESSION_STATE_READY->XR_SESSION_STATE_SYNCHRONIZED session=94138660471952 time=2829786175168
+[00:25:54.562][Info   ] XrEventDataSessionStateChanged: state XR_SESSION_STATE_SYNCHRONIZED->XR_SESSION_STATE_VISIBLE session=94138660471952 time=2829786194961
+[00:25:54.562][Info   ] XrEventDataSessionStateChanged: state XR_SESSION_STATE_VISIBLE->XR_SESSION_STATE_FOCUSED session=94138660471952 time=2829786194961
+[00:25:54.579][Info   ] Grab action is bound to 'Left Khronos Simple Controller Select' and 'Right Khronos Simple Controller Select'
+[00:25:54.579][Info   ] Quit action is bound to 'Left Khronos Simple Controller Menu' and 'Right Khronos Simple Controller Menu'
+[00:25:54.579][Info   ] Pose action is bound to 'Left Khronos Simple Controller Grip' and 'Right Khronos Simple Controller Grip'
+[00:25:54.579][Info   ] Vibrate action is bound to 'Left Khronos Simple Controller Haptic' and 'Right Khronos Simple Controller Haptic'

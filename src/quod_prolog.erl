@@ -229,6 +229,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           request_binding = none :: quod_client_goal:request_binding(),
           request_expiry = none :: none | pos_integer(),
           request_auth = none :: none | quod_client_goal:request_auth(),
+          request_operation = none :: none | tuple(),
           trace_ctx = undefined :: undefined | quod_trace:context(),
           peer_key     :: <<_:256>>,
           request_link :: pid(),
@@ -713,11 +714,11 @@ outcome_snapshot(Ns, Ref, TimeoutMs)
 outcome_snapshot(_Ns, _Ref, _TimeoutMs) ->
     {error, bad_outcome_ref}.
 
-%% The proof passes its pinned height; the index owner freezes positive
-%% terminal evidence under the same publication floor as committed state.
-operation_dependency(Ns, Key, Height, TimeoutMs) when TimeoutMs > 0 ->
+%% The proof passes exact request bytes and its pinned height. Both terminal
+%% claims and expiry evidence use the committed publication floor.
+operation_dependency(Ns, Bytes, Height, TimeoutMs) when TimeoutMs > 0 ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}),
-                        {operation_dependency, Key, Height}, TimeoutMs)
+                        {operation_dependency, Bytes, Height}, TimeoutMs)
     catch
         exit:{timeout, _} -> {unavailable, timeout};
         exit:_ -> {unavailable, ontology_unavailable}
@@ -1201,8 +1202,12 @@ handle_call({outcome, Ref}, _From, S = #s{outcomes = Outcomes0}) ->
     end;
 handle_call({operation_dependency, _, _}, _From, S = #s{ready = false}) ->
     {reply, {unavailable, ontology_rebuilding}, S};
-handle_call({operation_dependency, Key, Height}, _From, S = #s{outcomes = I0}) ->
-    {Reply, I1} = quod_outcome:operation_dependency(I0, Key, Height),
+handle_call({operation_dependency, Bytes, Height}, _From, S = #s{ns = Ns, outcomes = I0}) ->
+    Network = case quod_ontology:network_identity(true, {Ns, target_anchor(Ns)}) of
+                  {ok, Captured} -> Captured;
+                  {error, _} -> none
+              end,
+    {Reply, I1} = quod_outcome:request_dependency(I0, Bytes, Height, Network),
     {reply, Reply, S#s{outcomes = I1}};
 handle_call({outcome_snapshot, _Ref}, _From,
             S = #s{ready = false, ns = Ns}) ->
@@ -1250,7 +1255,7 @@ handle_call({validate_read_plan, Plan}, _From,
         case quod_simplex:genesis_hash(Ns) of
             <<_:256>> = Anchor ->
                 Context = quod_commit_validation:new(
-                            {Ns, Anchor}, Applied, Est, Outcomes, Signer),
+                            {Ns, Anchor}, Applied, Est, Outcomes, Signer, none),
                 case quod_commit_validation:read_only_plan(Plan, Context) of
                     ok -> {ok, Applied};
                     {outcome_error, Reason} -> {error, {outcome_index_unavailable, Reason}};
@@ -1952,7 +1957,9 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                      #{read_only => ReadOnly,
                                        principal => Principal,
                                        request_binding => RequestBinding,
+                                       request_auth => maps:get(request_auth, RequestContext),
                                        request_expiry => maps:get(request_expiry, RequestContext, none),
+                                       request_operation => maps:get(request_operation, RequestContext, none),
                                        signed_request => maps:get(request_auth, RequestContext) =/= none,
                                        transient_allowed => maps:get(transient_allowed, RequestContext, false),
                                        trace_ctx => maps:get(
@@ -2265,6 +2272,7 @@ verify_scope_authentication(
                             {ok, #{request_binding =>
                                        quod_client_goal:request_binding(Evidence),
                                    request_expiry => maps:get(not_after_ms, maps:get(request, Evidence)),
+                                   request_operation => maps:get(operation_ref, Evidence),
                                    transient_allowed => is_control_request(Evidence),
                                    request_auth =>
                                        quod_client_goal:request_auth(Evidence)}};
@@ -2397,6 +2405,7 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
     Scope = #remote_scope{
                binding = Binding, request_binding = RequestBinding,
                request_auth = RequestAuth,
+               request_operation = maps:get(request_operation, RequestContext, none),
                request_expiry = maps:get(request_expiry, RequestContext, none),
                trace_ctx = maps:get(trace_ctx, RequestContext, otel_ctx:new()),
                peer_key = PeerKey,
@@ -2987,7 +2996,9 @@ start_admitted_remote_scope_session(
                              #{read_only => ReadOnly,
                                principal => Principal,
                                request_binding => RequestBinding,
+                               request_auth => Scope#remote_scope.request_auth,
                                request_expiry => Scope#remote_scope.request_expiry,
+                               request_operation => Scope#remote_scope.request_operation,
                                signed_request => Scope#remote_scope.request_auth =/= none,
                                trace_ctx => Scope#remote_scope.trace_ctx,
                                signer => S#s.signer,
@@ -7443,7 +7454,7 @@ commit_validation_context(
   #s{ns = Ns, applied = Applied, est = Est,
      outcomes = Outcomes, signer = Signer}) ->
     quod_commit_validation:new(
-      {Ns, target_anchor(Ns)}, Applied, Est, Outcomes, Signer).
+      {Ns, target_anchor(Ns)}, Applied, Est, Outcomes, Signer, none).
 
 commit_validation_result({ok, Verdict, Context}, S) ->
     {Verdict,

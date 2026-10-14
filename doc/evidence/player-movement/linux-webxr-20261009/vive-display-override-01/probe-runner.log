@@ -1,0 +1,325 @@
+{"simulated": false, "runtime_exit": -11, "probe_exit": 1, "runtime_sha256": "1c7f7b3578ac5a1adcd2a4b7e0d0393281bd684b9b5d2b390cf349f9c29323c5", "display_backend": "wayland-direct", "runtime_pid": 2110238}
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod physical Vive prerequisite
+	createInfo->applicationInfo.applicationVersion: 0
+	createInfo->applicationInfo.engineName: 
+	createInfo->applicationInfo.engineVersion: 0
+	createInfo->applicationInfo.apiVersion: 1.0.0
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+xrCreateInstance=0
+ERROR [ipc_receive] recvmsg(3) failed: wrong size '0', expected '5'!
+ERROR [ipc_client_instance_is_system_available] ipc_call_instance_is_system_available failed: XRT_ERROR_IPC_FAILURE [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/client/ipc_client_instance.c:139]
+XR_ERROR_INSTANCE_LOST in xrGetSystem: Call to xrt_instance_is_system_available failed: XRT_ERROR_IPC_FAILURE
+xrGetSystem=-13 system=0
+xrDestroyInstance=0
+
+[GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-D006848D
+ INFO [TrackedDeviceAdded] Found lighthouse HMD: LHR-D006848D
+DEBUG [handle_property_write] Unhandled property: 1037
+DEBUG [handle_property_write] Unhandled property: 2069
+DEBUG [handle_property_write] Unhandled property: 2091
+DEBUG [handle_property_write] Unhandled property: 2100
+DEBUG [handle_property_write] Unhandled property: 2101
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2011)
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2015)
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2006)
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2029)
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2030)
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2031)
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2032)
+DEBUG [GetGenericInterface] Requested interface IVRDriverInput_005
+ WARN [get_input_from_name] requested unknown input name /input/system/click for device LHR-D006848D
+ WARN [get_input_from_name] requested unknown input name /proximity for device LHR-D006848D
+DEBUG [handle_property_write] Unhandled property: 2081
+DEBUG [handle_property_write] Unhandled property: 1030
+DEBUG [handle_property_write] Unhandled property: 1055
+DEBUG [handle_property_write] Unhandled property: 1039
+DEBUG [handle_property_write] Unhandled property: 1058
+DEBUG [handle_property_write] Unhandled property: 2008
+DEBUG [handle_property_write] Unhandled property: 2009
+DEBUG [handle_property_write] Unhandled property: 2010
+DEBUG [handle_property_write] Unhandled property: 2012
+DEBUG [handle_property_write] Unhandled property: 2013
+DEBUG [handle_property_write] Unhandled property: 2110
+DEBUG [handle_property_write] Unhandled property: 2111
+DEBUG [handle_property_write] Unhandled property: 2112
+DEBUG [handle_property_write] Unhandled property: 2075
+DEBUG [handle_property_write] Unhandled property: 2014
+DEBUG [handle_property_write] Unhandled property: 2017
+DEBUG [handle_property_write] Unhandled property: 2018
+DEBUG [handle_property_write] Unhandled property: 2019
+DEBUG [handle_property_write] Unhandled property: 2020
+DEBUG [handle_property_write] Unhandled property: 2021
+DEBUG [handle_property_write] Unhandled property: 1040
+DEBUG [handle_property_write] Unhandled property: 2050
+DEBUG [handle_property_write] Unhandled property: 2049
+DEBUG [handle_property_write] Unhandled property: 2034
+DEBUG [handle_property_write] Unhandled property: 2035
+DEBUG [handle_property_write] Unhandled property: 2026
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2003)
+DEBUG [handle_property_write] Unhandled property: 2022
+DEBUG [handle_property_write] Unhandled property: 2023
+DEBUG [handle_property_write] Unhandled property: 2024
+DEBUG [handle_property_write] Unhandled property: 2025
+DEBUG [handle_property_write] Unhandled property: 2037
+DEBUG [handle_property_write] Unhandled property: 2070
+DEBUG [handle_property_write] Unhandled property: 2016
+DEBUG [handle_property_write] Unhandled property: 2055
+DEBUG [handle_property_write] Unhandled property: 2072
+DEBUG [handle_property_write] Unhandled property: 2073
+DEBUG [handle_property_write] Unhandled property: 2074
+DEBUG [handle_property_write] Unhandled property: 2300
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2300)
+DEBUG [handle_property_write] Unhandled property: 2301
+DEBUG [handle_generic_property_write] Property write type SetError not supported! (property 2301)
+DEBUG [handle_property_write] Unhandled property: 5100
+DEBUG [handle_property_write] Unhandled property: 5102
+DEBUG [handle_property_write] Unhandled property: 5104
+DEBUG [handle_property_write] Unhandled property: 5101
+DEBUG [handle_property_write] Unhandled property: 5103
+DEBUG [handle_property_write] Unhandled property: 5105
+DEBUG [handle_property_write] Unhandled property: 2011
+DEBUG [handle_property_write] Unhandled property: 2015
+DEBUG [handle_property_write] Unhandled property: 2006
+DEBUG [handle_property_write] Unhandled property: 2029
+DEBUG [handle_property_write] Unhandled property: 2030
+DEBUG [handle_property_write] Unhandled property: 2031
+DEBUG [handle_property_write] Unhandled property: 2032
+DEBUG [handle_property_write] Unhandled property: 1025
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 10024
+DEBUG [handle_property_write] Unhandled property: 10025
+DEBUG [handle_property_write] Unhandled property: 10026
+DEBUG [handle_property_write] Unhandled property: 10027
+DEBUG [handle_property_write] Unhandled property: 10028
+DEBUG [handle_property_write] Unhandled property: 10029
+DEBUG [handle_property_write] Unhandled property: 10030
+DEBUG [handle_property_write] Unhandled property: 10031
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+ INFO [steamvr_lh_create_devices] Lighthouse initialization complete, giving time to setup connected devices...
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 1023
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FFE4BFC4
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FFE4BFC4
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/grip/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trigger/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trigger/value for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x7f7a48074650
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x7f7a48074650
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x7f7a48074650
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x7f7a48074650
+DEBUG [set_haptic_handle] setting haptic handle for 12
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Unhandled property: 1008
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [GetGenericInterface] Requested interface IVRIOBuffer_002
+ INFO [TrackedDeviceAdded] New device added: LHR-FDA99BC1
+ INFO [TrackedDeviceAdded] Found lighthouse controller: LHR-FDA99BC1
+DEBUG [handle_property_write] Unhandled property: 1036
+DEBUG [create_component_common] creating component /input/system/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/grip/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/application_menu/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trigger/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trigger/value for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trackpad/click for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /input/trackpad/touch for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /skeleton/hand/right for 0x7f7a48148d30
+DEBUG [create_component_common] creating component /skeleton/hand/left for 0x7f7a48148d30
+DEBUG [set_haptic_handle] setting haptic handle for 24
+DEBUG [handle_property_write] Unhandled property: 1017
+DEBUG [handle_property_write] Unhandled property: 1033
+DEBUG [handle_property_write] Unhandled property: 1015
+DEBUG [handle_property_write] Unhandled property: 1016
+DEBUG [handle_property_write] Unhandled property: 1018
+DEBUG [handle_property_write] Unhandled property: 1019
+DEBUG [handle_property_write] Unhandled property: 1020
+DEBUG [handle_property_write] Unhandled property: 1021
+DEBUG [handle_property_write] Unhandled property: 1022
+DEBUG [handle_property_write] Unhandled property: 1027
+DEBUG [handle_property_write] Unhandled property: 1043
+DEBUG [handle_property_write] Unhandled property: 1009
+DEBUG [handle_property_write] Unhandled property: 2084
+DEBUG [handle_property_write] Unhandled property: 2085
+DEBUG [handle_property_write] Unhandled property: 2086
+DEBUG [handle_property_write] Unhandled property: 2087
+DEBUG [handle_property_write] Unhandled property: 1014
+DEBUG [handle_property_write] Unhandled property: 1032
+DEBUG [handle_property_write] Unhandled property: 1047
+DEBUG [handle_property_write] Unhandled property: 1004
+DEBUG [handle_property_write] Unhandled property: 2000
+DEBUG [handle_property_write] Unhandled property: 1010
+DEBUG [handle_property_write] Unhandled property: 1003
+DEBUG [handle_property_write] Unhandled property: 1013
+DEBUG [handle_property_write] Unhandled property: 1006
+DEBUG [handle_property_write] Unhandled property: 1007
+DEBUG [handle_property_write] Unhandled property: 1028
+DEBUG [handle_property_write] Unhandled property: 1035
+DEBUG [handle_property_write] Unhandled property: 10000
+DEBUG [handle_property_write] Unhandled property: 10001
+DEBUG [handle_property_write] Unhandled property: 10002
+DEBUG [handle_property_write] Unhandled property: 10003
+DEBUG [handle_property_write] Unhandled property: 10004
+DEBUG [handle_property_write] Unhandled property: 10005
+DEBUG [handle_property_write] Unhandled property: 10006
+DEBUG [handle_property_write] Unhandled property: 10007
+DEBUG [handle_property_write] Unhandled property: 10008
+DEBUG [handle_property_write] Unhandled property: 10009
+DEBUG [handle_property_write] Unhandled property: 10010
+DEBUG [handle_property_write] Unhandled property: 10011
+DEBUG [handle_property_write] Unhandled property: 10012
+DEBUG [handle_property_write] Unhandled property: 10013
+DEBUG [handle_property_write] Unhandled property: 10014
+DEBUG [handle_property_write] Unhandled property: 10015
+DEBUG [handle_property_write] Unhandled property: 10016
+DEBUG [handle_property_write] Unhandled property: 10017
+DEBUG [handle_property_write] Unhandled property: 10018
+DEBUG [handle_property_write] Unhandled property: 10019
+DEBUG [handle_property_write] Unhandled property: 10020
+DEBUG [handle_property_write] Unhandled property: 10021
+DEBUG [handle_property_write] Unhandled property: 10022
+DEBUG [handle_property_write] Unhandled property: 10023
+DEBUG [handle_property_write] Unhandled property: 2063
+DEBUG [handle_property_write] Unhandled property: 2064
+DEBUG [handle_property_write] Unhandled property: 2065
+DEBUG [handle_property_write] Unhandled property: 2066
+DEBUG [handle_property_write] Unhandled property: 2067
+DEBUG [handle_property_write] Unhandled property: 2079
+DEBUG [handle_property_write] Unhandled property: 1059
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.400000
+DEBUG [handle_property_write] Charging: Unknown: false
+DEBUG [handle_property_write] Has battery status: Unknown: true
+DEBUG [handle_property_write] Battery: Unknown: 0.340000
+ INFO [steamvr_lh_create_devices] Device search time complete.
+

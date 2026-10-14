@@ -1,0 +1,11 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "client/native/tools/connection_check.py",
+    "--evidence",
+    "/home/yan/src/quod/client/_build/godot-native/evidence/scene-navigation-01/final-client-01/tls-fixture"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.9787784590153024
+}

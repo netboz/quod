@@ -1,0 +1,32 @@
+Initialize godot-rust (API v4.5.stable.official, runtime v4.7.2.stable.official, safeguards balanced)
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+SCRIPT ERROR: Parse Error: Cannot infer the type of "code" variable because the value doesn't have a set type.
+          at: GDScript::reload (res://desktop_camera.gd:34)
+SCRIPT ERROR: Compile Error: Failed to compile depended scripts.
+          at: GDScript::reload (res://tests/navigation.gd:0)
+ERROR: Failed to load script "res://tests/navigation.gd" with error "Compilation failed".
+   at: load (modules/gdscript/gdscript_resource_format.cpp:46)
+SCRIPT ERROR: Invalid call. Nonexistent function 'new' in base 'GDScript'.
+          at: @implicit_new (res://main.gd:25)
+          GDScript backtrace (most recent call first):
+              [0] @implicit_new (res://main.gd:25)
+              [1] run (res://tests/navigation.gd:21)
+SCRIPT ERROR: Invalid access to property or key 'selected' on a base object of type 'Nil'.
+          at: _ready (res://main.gd:56)
+          GDScript backtrace (most recent call first):
+              [0] _ready (res://main.gd:56)
+              [1] run (res://tests/navigation.gd:23)
+SCRIPT ERROR: Cannot call method 'set_process' on a null value.
+          at: run (res://tests/navigation.gd:25)
+          GDScript backtrace (most recent call first):
+              [0] run (res://tests/navigation.gd:25)
+ERROR: Navigation deadline
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] <anonymous lambda> (res://tests/navigation.gd:17)
+WARNING: 11 RIDs of type "CanvasItem" were leaked.
+   at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2735)
+WARNING: 34 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 6 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.

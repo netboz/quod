@@ -1,0 +1,13 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "src/quod_agent.erl": "2921833174868f1185edea638949aacd9d1992349964b7ae905e2bb199b07e69",
+  "src/predicates/quod_runtime_predicates.erl": "b5934fa26e6298fe6099592bce51937ba7c542fcb43a714814ac2ee1660a6750",
+  "test/quod_agent_hosting_tests.erl": "2c77b39b330678f0cd30b3328f1b8ea552e338f213ef6311f2579cb7e6fd32cd",
+  "test/quod_reaction_metadata_tests.erl": "bc64d04d9851fddbf7abda6435ae58d8062148bfcc57decdcb9f98f848192fbe",
+  "doc/runtime-and-agents.md": "cc26b1111058ae5f3a302a8a84a8c4674627e5659cefff0200c560b38c66ecb0",
+  "test/quod_agent_vault_tests.erl": "65f917401ff12439ba84e914518d25a1c121cb64a7d49bf07c59e26e2ec06e04",
+  "priv/ontologies/quod_hinged.pl": "5a1b432da48b0439655994be2f6a8aa613db2cb18c4c1dc965d8b31a0c2078b2",
+  "src/predicates/quod_physics_predicates.erl": "555510448adbfe45b5f6ecaec37278c908834019bac58ef011b101f7fb8971c5",
+  "priv/ontologies/quod_physics.pl": "fd2dd1bf220bd87a69fb063aaa06114ef66f234abc6ee5e40571319bcb86a026",
+  "doc/proofs.md": "2ad6eab1b36de6577e90ce8099275fc0d95a0068895a557a0a6fe60ced7f3bfb"
+}

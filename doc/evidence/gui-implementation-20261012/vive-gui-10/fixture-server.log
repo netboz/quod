@@ -1,0 +1,7 @@
+11:27:03 AM [vite] (client) Re-optimizing dependencies because vite config has changed
+
+  VITE v8.1.5  ready in 732 ms
+
+  ➜  Local:   http://127.0.0.1:5178/
+11:27:07 AM [vite] (client) dependency optimized: @babylonjs/core/Engines/engineStore.js
+11:27:07 AM [vite] (client) optimized dependencies changed. reloading

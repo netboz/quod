@@ -1,0 +1,15 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "doc/runtime-and-agents.md": "f6a57e4f4e4b0bf18a815bff9f33e0e56741d5dce4630a5e9d5bbd36fc3a5b1f",
+  "doc/proofs.md": "48362d7b3da50793a14fa476822fdcaf5ba7225f082bd15caea7360a2c2eefce",
+  "doc/multiwrite-architecture.md": "50aac7669fa4d92c87fa4cddabe344f59ca370732c7175bf048828837766ca2f",
+  "src/quod_runtime.erl": "13dc6b7c6a63e9bbf08dec9745258b0fb9fb20c921345360225da300ff2131a0",
+  "src/quod_agent.erl": "a88aabb4b4acefb934856cf44ea0659a8d4079386fd6af62f15e85b545e3d32d",
+  "src/predicates/quod_runtime_predicates.erl": "8d39cdc089731e1d19a8dc96909dfd3fffc46ff81598cd9ef619bd4f784fe6d9",
+  "src/quod_foreign_projection.erl": "985fe4b4ab1d81b69a0672f0cf1e90f715bb861e4fa4a9caf1292cb37086f5b7",
+  "src/quod_foreign_log.erl": "cc34ff174b5a44ab413fb85daf98c7e635f8de98b1c34e1d0955835c47ea7ee6",
+  "src/quod_committed_projection.erl": "20d9e862a5a5eab1e8f25ba398d1403a6bcb0214b1e82040e712d9a1c3311fad",
+  "src/quod_prolog.erl": "407d821315f3a3712b05639da60a197a6eec4aa1a1a3b44dabbd4060320c6162",
+  "priv/ontologies/gui_question.pl": "f15dfa4ee6cf547c72ca25ddd90598a51762b10a8491f199a938f83450dc8d53",
+  "test/quod_reaction_metadata_tests.erl": "c416b0ef7dc21d84e68fba471e37742ebda04d106459b66c52487704132b8fd2"
+}

@@ -1,0 +1,40 @@
+{
+  "usb-tree": {
+    "command": [
+      "lsusb",
+      "-t"
+    ],
+    "exit": 0
+  },
+  "vive-descriptors": {
+    "command": [
+      "lsusb",
+      "-v",
+      "-d",
+      "0bb4:2210"
+    ],
+    "exit": 0
+  },
+  "usb-kernel": {
+    "command": [
+      "journalctl",
+      "-k",
+      "-b",
+      "--no-pager",
+      "--grep=usb 1-3|hub 1-3",
+      "-n",
+      "50"
+    ],
+    "exit": 0
+  },
+  "driver-dependencies": {
+    "command": [
+      "ldd",
+      "/home/yan/.local/share/Steam/steamapps/common/SteamVR/drivers/lighthouse/bin/linux64/driver_lighthouse.so"
+    ],
+    "exit": 0
+  },
+  "timestamp": "2026-10-09T09:49:48.748937+00:00",
+  "driver_sha256": "8825963b008f1ebbb0099352a8dfbf7dc8edf2ea5b734b5f167ad37fadeef8b1",
+  "physical_runtime_started": false
+}

@@ -1,0 +1,4 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f8737bfd8f0) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f8737bfd8f0) = -1 ENOENT (No such file or directory)
+socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 7
++++ killed by SIGTERM +++

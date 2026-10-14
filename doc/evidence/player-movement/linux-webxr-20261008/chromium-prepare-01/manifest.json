@@ -1,0 +1,13 @@
+{
+  "files": {
+    "client/test/linux-webxr-run.py": "79cf37ce250aaa469b5816d53ef84ad39f99bbbe527660719d8fd918e539cf04",
+    "client/test/linux-webxr-preflight.py": "f645a2abcf178c426c6c06a8f33f63c0802318f21249eea0478830e50df44fae",
+    "client/test/linux-webxr.fixture.html": "2cfdad3876b1af00087bcde32c5c98452ac9cc3add9c0a401d8684d954ff77c5",
+    "doc/evidence/player-movement/linux-webxr-20261008/chromium-nvidia-xr-01.patch": "67793514c7af36d03db23fcb65a50cf06d21aa3e5b5429331e8d7f61d49d691b",
+    "doc/evidence/player-movement/linux-webxr-20261008/chromium-prepare-01/prewarm-vulkan.c": "2e63c58aa119253e1a9b4d819a50b613d92ca46be20454a990f00467044aab90"
+  },
+  "chromium_tag": "157.0.8091.0",
+  "chromium_commit": "6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42",
+  "depot_tools_commit": "071d5b9d91e06cb2a9c9ce926d6ee666df185b49",
+  "browser_patch_runtime_tested": false
+}

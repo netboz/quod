@@ -1,7 +1,7 @@
 // The prove console keeps the exact proof alive between solutions. Writes remain
 // staged until the displayed solution is explicitly accepted.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   acceptProofSolution,
   nextProofSolution,
@@ -46,13 +46,15 @@ function ScopedConsole({ ns, anchor, view = DEFAULT_VIEW, surface }: ConsoleProp
   const result = replyText(reply, solutionNumber)
   const locked = busy || cursor !== null || pendingOperation !== null
   const scene = surface?.scene
+  const panelView = useMemo(() => ({ title: view.title,
+    fields: Object.entries(view).filter(([role]) => role !== 'title').map(([role, label]) =>
+      ({ role, label, kind: role === 'goal' ? 'editor' : role === 'results' ? 'bindings' : 'button' })) }), [view])
   useEffect(() => () => { scene?.setWorkspace(null) }, [scene])
   // Both renderers share the proof owner below; changing the view never opens
   // another cursor or replaces the draft.
   useEffect(() => {
     scene?.setWorkspace(surface?.visible ? {
-      view: { title: view.title, fields: Object.entries(view).filter(([role]) => role !== 'title').map(([role, label]) =>
-        ({ role, label, kind: role === 'goal' ? 'editor' : role === 'results' ? 'bindings' : 'button' })) },
+      view: panelView,
       scope: ns, values: { goal, results: result }, locked,
       enabled: { run: !locked && !!goal.trim(),
         next: !busy && !!cursor, accept: !busy && !!cursor, stop: !busy && !!cursor, resolve: !busy && !!pendingOperation },

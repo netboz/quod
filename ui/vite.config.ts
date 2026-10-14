@@ -13,6 +13,7 @@ export default defineConfig({
     rolldownOptions: { input: { explorer: 'index.html', world: 'world.html' } },
   },
   server: {
+    fs: { allow: ['.', '../client'] },
     proxy: {
       '/api/auth': { target: 'https://127.0.0.1:14570', secure: false },
       '/api/goals': { target: 'https://127.0.0.1:14570', secure: false },

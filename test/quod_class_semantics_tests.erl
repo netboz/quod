@@ -3,6 +3,17 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
+ontology_self_membership_does_not_run_a_bridge_during_user_admission_test() ->
+    Terms = quod_committed_projection:read_terms(filename:join(
+        code:priv_dir(quod), "ontologies/human_user_instance.pl")),
+    with_classes(Terms ++ [{instance_of, human_user, me}], fun(St) ->
+        Ns = <<"private:user">>,
+        Verdict = quod_predicates:set_context(St,
+            quod_predicates:policy_verdict_context(Ns, 1)),
+        holds({can_invoke, arbitrary, {agent_instance_ref, Ns, <<1:256>>, me}, [], Ns}, Verdict),
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(Verdict)))
+    end).
+
 transitive_isa_is_shared_ontology_semantics_test() ->
     with_classes(
       [

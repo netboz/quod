@@ -1,8 +1,9 @@
 # Governed spaces
 
 A **space** organizes instances or information. A **physical_space** is a
-space with explicitly governed physical participation. Neither is an ontology:
-an ontology owns code, committed facts, authorization and history. An ontology
+space with explicitly governed physical participation. Space membership is
+independent of ontology membership: an ontology owns code, committed facts,
+authorization and history. An ontology
 can be depicted or edited in 3D without acquiring space semantics. An instance
 can carry both roles only through explicit authored membership and policy.
 

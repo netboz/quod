@@ -1,0 +1,5 @@
+{
+  "client/test/linux-webxr-run.py": "53bffb95402a29e88efef03b337400e5a4ef8360b4a40cd4d4901184e1a050e1",
+  "client/test/linux-webxr-preflight.py": "cd4caa28b85927feb29eef5f1e4151edbfd39a4e60da4e9137f2cf7d86ec594a",
+  "client/test/linux-webxr.fixture.html": "1af204393a2604346d3e129fe987be7e58f01630ce1f1fe61f3e3faae13223dd"
+}

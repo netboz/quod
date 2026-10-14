@@ -1,18 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SessionControls } from './Session'
 import { fromB64url, b64url } from '../../client/src/key-provider.js'
 import { accountReference } from '../../client/src/accounts.js'
 import { useSignedSession } from './session-context'
 import { ConsoleWorkspace } from './Console'
 import { PrologEditor } from './PrologEditor'
+import { OntologyInspection } from './OntologyInspection'
 import { atom, compound, renderTerm, variable } from '../../client/src/prolog-term.js'
 import { signedGoal, readSystemOntologies } from '../../client/src/signed-client.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
 import { readLensView } from '../../client/src/lens.js'
 import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm, codeForm,
-  readEntityEidolons, readEidolonWorkspace, singleBinding, GoalFailure } from '../../client/src/world.js'
-import type { EidolonChoice, EidolonWorkspace, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
+  readEntityEidolons, readEidolon, ontologySubject, singleBinding, GoalFailure } from '../../client/src/world.js'
+import type { EidolonChoice, EidolonWorkspace, EidolonRepresentation, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
+import { GuiQuestion, GuiQuestionList } from './GuiQuestion'
+import { connectGuiHud } from '../../client/src/gui-view.js'
+import { questionController, questionKey } from '../../client/src/question-controller.js'
+import type { QuestionController } from '../../client/src/question-controller.js'
+import type { GuiQuestionReference } from '../../client/src/world.js'
 import { connectWorldView } from '../../client/src/simulation.js'
 
 export default function World() {
@@ -40,8 +46,59 @@ export default function World() {
   const [menu, setMenu] = useState<{ subject: Subject; entries: MenuEntry[]; error?: string } | null>(null)
   const [eidolons, setEidolons] = useState<{ subject: Subject; choices: EidolonChoice[]; error?: string; accessDenied?: boolean } | null>(null)
   const [workspace, setWorkspace] = useState<
-    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace } | null>(null)
+    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace } |
+    { kind: 'inspection'; key: string; representation: Extract<EidolonRepresentation, { kind: 'lens' }>; title: string } |
+    { kind: 'question'; key: string; reference: GuiQuestionReference; controller: QuestionController } | { kind: 'questions'; key: string } | null>(null)
   const [focused, setFocused] = useState(false)
+  const [questions, setQuestions] = useState<GuiQuestionReference[]>([])
+  const [questionError, setQuestionError] = useState<string | null>(null)
+  const [hudRevision, setHudRevision] = useState(0)
+  // These are local presentation handles, not a copy of pending question state.
+  // Panel unmount/VR focus changes do not discard their shared drafts.
+  const questionPresentations = useMemo(() => new Map<string, { controller: QuestionController; discovered: boolean }>(), [identity, agent])
+  useEffect(() => () => {
+    for (const { controller } of questionPresentations.values()) controller.close()
+    questionPresentations.clear()
+  }, [questionPresentations])
+  useEffect(() => {
+    setQuestions([])
+    setQuestionError(null)
+    if (!identity || !agent) return
+    const hud = connectGuiHud(identity, agent, {
+      projection(references) {
+        const current = new Set(references.map(questionKey))
+        for (const [key, presentation] of questionPresentations) {
+          if (current.has(key)) presentation.discovered = true
+          else if (presentation.discovered) { presentation.controller.close(); questionPresentations.delete(key) }
+        }
+        setQuestions(references); setQuestionError(null)
+      },
+      prepare(reference) {
+        const key = questionKey(reference)
+        let presentation = questionPresentations.get(key)
+        if (!presentation) {
+          presentation = { controller: questionController(identity, agent, reference, { deferOpen: true }), discovered: false }
+          questionPresentations.set(key, presentation)
+        }
+        const retained = presentation
+        return {
+          activate() {
+            if (questionPresentations.get(key) !== retained) return false
+            if (!retained.controller.started) retained.controller.refresh()
+            return true
+          },
+          dispose() {
+            if (!retained.discovered && questionPresentations.get(key) === retained) {
+              retained.controller.close(); questionPresentations.delete(key)
+            }
+          },
+        }
+      },
+      discard() { setQuestions([]) },
+      unavailable: setQuestionError,
+    })
+    return () => hud.close()
+  }, [identity, agent, hudRevision, questionPresentations])
   const pick = useRef(setSelected)
   pick.current = setSelected
   // Async view reads are invalidated when the acting identity or target changes.
@@ -190,7 +247,7 @@ export default function World() {
     setEidolons(null)
     if (identity && agent && selected) {
       const subject = selected
-      if (subject.kind === 'ontology') setMenu({ subject, entries: [] })
+      if (view !== 'lobby' || !marks.some(mark => mark.depicts === subject)) setMenu({ subject, entries: [] })
       else void readDeviceMenu(identity, agent, subject).then(entries => {
         if (active) setMenu({ subject, entries })
       }).catch(error => { if (active) { setMenu({ subject, entries: [], error: String(error) }) } })
@@ -216,7 +273,7 @@ export default function World() {
         .find(candidate => candidate.view === 'proof_console')
       if (!currentRequest(request)) return
       if (!action) throw new Error('This object does not offer a Prolog console.')
-      const key = `${subject.ontology}:${[...subject.anchor]}:${renderTerm(subject.entity)}:${action.view}`
+      const key = JSON.stringify([subject.ontology, [...subject.anchor], renderTerm(subject.entity), action.view])
       if (workspace?.key === key) { setFocused(true); return }
       const goal = anchoredGoal({ namespace: subject.ontology, anchor: subject.anchor },
         compound('lobby_workspace', [subject.entity, atom(action.view), variable('View')]))
@@ -235,18 +292,21 @@ export default function World() {
   const openEidolon = async (choice: EidolonChoice) => {
     if (!identity || !agent || !selected?.anchor || openingTool) return
     const request = context.current
-    const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}:${choice.recipe.name}`
+    const key = JSON.stringify([selected.ontology, [...selected.anchor], renderTerm(selected.entity),
+      choice.recipe.namespace, [...choice.recipe.anchor], choice.recipe.name])
     if (workspace?.key === key) { setFocused(true); return }
     setOpeningTool(true)
     setToolError(null)
     try {
-      const code = await readEidolonWorkspace(identity, agent, selected, choice)
-      codeForm(code.view)
+      const representation = await readEidolon(identity, agent, selected, choice)
+      if (representation.kind === 'workspace') codeForm(representation.workspace.view)
       if (!currentRequest(request)) return
-      setWorkspace({ kind: 'code', key, code })
+      setWorkspace(representation.kind === 'workspace'
+        ? { kind: 'code', key, code: representation.workspace }
+        : { kind: 'inspection', key, representation, title: inspectionLabel(choice) })
       setFocused(true)
     } catch (error) {
-      if (currentRequest(request)) setToolError(`Could not open the source view: ${String(error)}`)
+      if (currentRequest(request)) setToolError(`Could not open the representation: ${String(error)}`)
     } finally {
       if (currentRequest(request)) setOpeningTool(false)
     }
@@ -254,19 +314,42 @@ export default function World() {
 
   const selectedMenu = menu?.subject === selected ? menu.entries : null
   const activate = useRef<(entry: MenuEntry) => void>(() => {})
-  activate.current = entry => { void openWorkspace(entry) }
+  const openQuestion = (reference: GuiQuestionReference) => {
+    if (!identity || !agent) return
+    const key = questionKey(reference)
+    let presentation = questionPresentations.get(key)
+    if (!presentation) {
+      presentation = { controller: questionController(identity, agent, reference), discovered: true }
+      questionPresentations.set(key, presentation)
+    }
+    presentation.discovered = true
+    if (!presentation.controller.started) presentation.controller.refresh()
+    setWorkspace({ kind: 'question', key, reference, controller: presentation.controller })
+    setFocused(true)
+  }
+  activate.current = entry => {
+    if (entry.id === '@gui/questions') {
+      setWorkspace({ kind: 'questions', key: '@gui/questions' }); setFocused(true)
+    } else void openWorkspace(entry)
+  }
   useEffect(() => {
-    scene?.setActionMenu(selectedMenu ?? [], entry => activate.current(entry))
+    const entries = [...(selectedMenu ?? []), ...(identity && agent ? [{
+      id: '@gui/questions', label: `Questions (${questions.length})`, view: 'gui_questions',
+    }] : [])]
+    scene?.setActionMenu(entries, entry => activate.current(entry))
     return () => scene?.setActionMenu([], entry => activate.current(entry))
-  }, [scene, selected, selectedMenu])
+  }, [scene, selected, selectedMenu, identity, agent, questions.length])
 
   const account = identity ? accountReference(identity) : null
   const selectedAccount = account && account.namespace === agent?.namespace &&
     account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
   const devices = marks.filter(mark => mark.depicts?.anchor)
   const consoleSubject = devices.find(mark => mark.id === 'console')?.depicts
+  const inspectionLabel = (choice: EidolonChoice) => choice.purpose === 'prolog' ? 'View Prolog source'
+    : ({ policy: 'View ACL rules', interfaces: 'View declared interfaces', routes: 'View live routes' } as Record<string, string>)[choice.style] ?? choice.style
   const sourceChoices = eidolons?.subject === selected
-    ? eidolons.choices.filter(choice => choice.purpose === 'prolog' && choice.style === 'source') : []
+    ? eidolons.choices.filter(choice => (choice.purpose === 'prolog' && choice.style === 'source') ||
+        (choice.purpose === 'inspection' && ['policy', 'interfaces', 'routes'].includes(choice.style))) : []
   const ontologies = new Map(catalogue.map(ref => [ref.namespace + ':' + ref.anchor, ref]))
   if (agent) {
     const ref = { namespace: agent.namespace, anchor: typeof agent.anchor === 'string' ? agent.anchor : b64url(agent.anchor) }
@@ -316,7 +399,7 @@ export default function World() {
       <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.' : vr.reason}</p>
       {view === 'lobby' && !consoleSubject && <p>The console is unavailable until its lobby view loads.</p>}
       {toolError && <p role="alert">{toolError}</p>}
-      {selected && selected.kind !== 'ontology' && (selectedMenu === null || menu?.error || Boolean(selectedMenu.length)) &&
+      {selected && (selectedMenu === null || menu?.error || Boolean(selectedMenu.length)) &&
         <div className="world-menu" aria-label="Selected object actions">
           <p>{renderTerm(selected.entity)}</p>
           {menu?.subject === selected && menu.error ? <p role="alert">Actions could not be loaded: {menu.error}</p>
@@ -324,6 +407,12 @@ export default function World() {
               <button key={entry.id} disabled={openingTool} onClick={() => void openWorkspace(entry)}>{entry.label}</button>)}
           <button onClick={() => setSelected(null)}>Dismiss selection</button>
         </div>}
+      {identity && agent && <section aria-label="Pending questions">
+        {questions.length > 0 && <h2>Questions awaiting your attention</h2>}
+        {questions.map((reference, index) => <button key={questionKey(reference)} onClick={() => openQuestion(reference)}>Question {index + 1} · {reference.namespace}</button>)}
+        {questionError && <p role="status">Questions unavailable: {questionError}</p>}
+        <button onClick={() => setHudRevision(value => value + 1)}>Reload questions</button>
+      </section>}
       <details className="world-advanced">
         <summary>Advanced</summary>
         <div className="world-controls">
@@ -341,13 +430,13 @@ export default function World() {
         <p className="world-help">Structure changes the visual representation; it does not enable world editing.</p>
         {licenceUnavailable && <p>Software licences: {licenceUnavailable}</p>}
         <h2>Inspect objects and Prolog knowledge</h2>
-        <p>Choose a target to see its offered source tools. Access depends on your permissions.</p>
+        <p>Choose a target to see its offered representations. Access depends on your permissions.</p>
         <label>Inspect <select aria-label="Inspect" value="" onChange={event => {
           const value = event.target.value
           if (value.startsWith('object:')) setSelected(devices[Number(value.slice(7))]?.depicts ?? null)
           else {
             const ref = ontologies.get(value)
-            if (ref) setSelected({ kind: 'ontology', ontology: ref.namespace, anchor: fromB64url(ref.anchor), entity: atom('ontology') })
+            if (ref) setSelected(ontologySubject({ namespace: ref.namespace, anchor: fromB64url(ref.anchor) }))
           }
         }}>
           <option value="" disabled>Choose an object or knowledge base</option>
@@ -360,23 +449,32 @@ export default function World() {
         </select></label>
         {selected && <div className="world-inspector" aria-label="Inspection tools">
           <p className="world-target">{selected.ontology} · {renderTerm(selected.entity)}</p>
-          {eidolons?.subject !== selected ? <p>Loading source tools…</p>
-            : eidolons.accessDenied ? <p>Source inspection is restricted for this target. Your current account does not have access.</p>
+          {eidolons?.subject !== selected ? <p>Loading representations…</p>
+            : eidolons.accessDenied ? <p>Inspection is restricted for this target. Your current account does not have access.</p>
             : eidolons.error ? <>
-              <p role="alert">Source tools could not be loaded: {eidolons.error}</p>
+              <p role="alert">Representations could not be loaded: {eidolons.error}</p>
               <button onClick={() => setInspectionRevision(value => value + 1)}>Retry inspection</button>
-            </> : sourceChoices.length === 0 ? <p>No supported source tool is offered for this target.</p>
+            </> : sourceChoices.length === 0 ? <p>No supported representation is offered for this target.</p>
               : sourceChoices.map((choice, index) => <button key={index} disabled={openingTool}
                   onClick={() => void openEidolon(choice)}>
-                  View Prolog source{sourceChoices.length > 1 ? ` (${choice.recipe.namespace})` : ''}
+                  {inspectionLabel(choice)}
                 </button>)}
           <button onClick={() => setSelected(null)}>Clear inspection</button>
         </div>}
       </details>
     </section>
     {workspace && <section className="world-workspace" hidden={!focused || immersive} aria-label="Focused console">
-      {workspace.kind === 'proof'
+      {workspace.kind === 'questions'
+        ? <GuiQuestionList references={questions} status={questionError} scene={scene} visible={focused}
+            select={openQuestion} reload={() => setHudRevision(value => value + 1)} onClose={() => setFocused(false)} />
+        : workspace.kind === 'question'
+        ? <GuiQuestion key={workspace.key} reference={workspace.reference} controller={workspace.controller}
+            scene={scene} visible={focused}
+            onClose={() => setFocused(false)} />
+        : workspace.kind === 'proof'
         ? <ConsoleWorkspace view={workspace.view} onClose={() => setFocused(false)} scene={scene} visible={focused} />
+        : workspace.kind === 'inspection'
+        ? <OntologyInspection representation={workspace.representation} title={workspace.title} onClose={() => setFocused(false)} />
         : <PrologEditor workspace={workspace.code} onClose={() => setFocused(false)} scene={scene} visible={focused} />}
     </section>}
   </div>

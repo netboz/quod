@@ -1,0 +1,17 @@
+{
+  "command": [
+    "nice",
+    "-n",
+    "10",
+    "cmake",
+    "--build",
+    "client/_build/webxr-linux/monado-build",
+    "--target",
+    "monado-service",
+    "openxr_monado",
+    "--parallel",
+    "2"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 223.37239408493042
+}

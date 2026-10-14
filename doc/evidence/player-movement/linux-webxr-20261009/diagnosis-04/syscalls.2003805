@@ -1,0 +1,28 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f5c4f5fa8f0) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f5c4f5fa8f0) = -1 ENOENT (No such file or directory)
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 7
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 8
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 10
+connect(10, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 10
+connect(10, {sa_family=AF_INET6, sin6_port=htons(37171), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "::1", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 10
+connect(10, {sa_family=AF_INET, sin_port=htons(37171), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+openat(AT_FDCWD, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC) = 13
+newfstatat(AT_FDCWD, "/etc/nsswitch.conf", {st_mode=S_IFREG|0644, st_size=322, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/", {st_mode=S_IFDIR|0555, st_size=4096, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/nsswitch.conf", O_RDONLY|O_CLOEXEC) = 11
+newfstatat(AT_FDCWD, "/etc/resolv.conf", {st_mode=S_IFREG|0644, st_size=55, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/host.conf", O_RDONLY|O_CLOEXEC) = 11
+openat(AT_FDCWD, "/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 11
+openat(AT_FDCWD, "/etc/hosts", O_RDONLY|O_CLOEXEC) = 11
+openat(AT_FDCWD, "/etc/gai.conf", O_RDONLY|O_CLOEXEC) = 11
+socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 11
+socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, IPPROTO_IP) = 11
+connect(11, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr("127.0.0.1")}, 16) = 0
+socket(AF_INET6, SOCK_DGRAM|SOCK_CLOEXEC, IPPROTO_IP) = 11
+connect(11, {sa_family=AF_INET6, sin6_port=htons(0), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 11
+connect(11, {sa_family=AF_INET, sin_port=htons(37171), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+--- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=2003798, si_uid=1000} ---
++++ killed by SIGTERM +++

@@ -1,0 +1,59 @@
+{
+  "status": "interrupted; child exit code unavailable",
+  "observed_at_utc": "2026-10-08T13:19:22.991266+00:00",
+  "last_ninja_progress": {
+    "completed": 13208,
+    "total": 49330
+  },
+  "ninja_stage_exit_recorded": false,
+  "prior_completed_stages": [
+    {
+      "stage": "gn",
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--unshare-pid",
+        "--unshare-net",
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--ro-bind",
+        "/etc",
+        "/etc",
+        "--symlink",
+        "/usr/bin",
+        "/bin",
+        "--symlink",
+        "/usr/bin",
+        "/sbin",
+        "--symlink",
+        "/usr/lib",
+        "/lib",
+        "--symlink",
+        "/usr/lib",
+        "/lib64",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/sys",
+        "/sys",
+        "--tmpfs",
+        "/tmp",
+        "--bind",
+        "/home/yan/src/quod/client/_build/webxr-linux",
+        "/home/yan/src/quod/client/_build/webxr-linux",
+        "--chdir",
+        "/home/yan/src/quod/client/_build/webxr-linux/chromium/src",
+        "--",
+        "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/buildtools/linux64/gn",
+        "gen",
+        "out/QuodWebXR",
+        "--args=is_debug=false is_component_build=true symbol_level=0 blink_symbol_level=0 v8_symbol_level=0 use_remoteexec=false use_siso=false"
+      ],
+      "exit_code": 0,
+      "seconds": 4.623
+    }
+  ]
+}

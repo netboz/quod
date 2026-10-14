@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Extension Tool Error\n  Extension: com.nimbalyst.browser\n  Tool: browser.evaluate\n\nError: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error."
+    }
+  ],
+  "isError": true
+}

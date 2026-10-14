@@ -1,0 +1,25 @@
+From 4156456d9741b0b177242d3e08cc7ac08bceb849 Mon Sep 17 00:00:00 2001
+From: Reyka Matthies <openglfreak@googlemail.com>
+Date: Tue, 7 Apr 2026 19:47:50 +0200
+Subject: [PATCH] d/steamvr_lh: Update for SteamVR 2.16.1.
+
+Part-of: <https://gitlab.freedesktop.org/monado/monado/-/merge_requests/2818>
+---
+ src/xrt/drivers/steamvr_lh/interfaces/server.hpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/xrt/drivers/steamvr_lh/interfaces/server.hpp b/src/xrt/drivers/steamvr_lh/interfaces/server.hpp
+index 7e1bbc28ac..062b27dfb3 100644
+--- a/src/xrt/drivers/steamvr_lh/interfaces/server.hpp
++++ b/src/xrt/drivers/steamvr_lh/interfaces/server.hpp
+@@ -115,4 +115,7 @@ class Server
+ 	virtual void
+ 	UnknownFunc034()
+ 	{}
++	virtual void
++	UnknownFunc035()
++	{}
+ };
+-- 
+GitLab
+

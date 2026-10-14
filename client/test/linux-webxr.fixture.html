@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Quod Linux WebXR preflight</title>
+<style>body { font: 18px system-ui; background: #17202a; color: white; padding: 2rem } canvas { width: 640px; height: 360px } pre { white-space: pre-wrap }</style>
+<h1>Linux WebXR preflight</h1>
+<p>This checks the browser and OpenXR runtime. A simulated device does not validate the Vive.</p>
+<button id="enter">Test immersive VR</button>
+<pre id="status">Checking browser…</pre><canvas id="canvas"></canvas>
+<script>
+const status = document.querySelector('#status')
+window.preflightReports = []
+const report = value => {
+  status.textContent = JSON.stringify(value, null, 2)
+  window.preflightReports.push(value)
+  window.dispatchEvent(new CustomEvent('preflight-report', { detail: value }))
+  window.webkit?.messageHandlers?.preflight?.postMessage(JSON.stringify(value))
+}
+const fail = error => report({ event: 'failed', name: error.name, message: error.message })
+window.addEventListener('error', e => fail(e.error ?? new Error(e.message)))
+window.addEventListener('unhandledrejection', e => fail(e.reason))
+let session = null
+window.runPreflight = async () => {
+  try {
+    const frameTarget = Number(new URLSearchParams(location.search).get('frames') ?? 120)
+    if (!Number.isSafeInteger(frameTarget) || frameTarget < 1) throw new Error('Invalid frame count')
+    session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'] })
+    const canvas = document.querySelector('#canvas')
+    const gl = canvas.getContext('webgl2', { xrCompatible: true })
+    if (!gl) throw new Error('WebGL2 unavailable')
+    await gl.makeXRCompatible()
+    const layer = new XRWebGLLayer(session, gl)
+    session.updateRenderState({ baseLayer: layer })
+    const space = await session.requestReferenceSpace('local-floor')
+    let frames = 0, firstPose, lastPose, inputSources = [], eyes = []
+    await new Promise((resolve, reject) => {
+      const draw = (time, frame) => {
+        try {
+          const pose = frame.getViewerPose(space)
+          if (!pose) throw new Error('Native runtime supplied no viewer pose')
+          eyes = pose.views.map(view => view.eye)
+          if (!eyes.includes('left') || !eyes.includes('right')) throw new Error('Missing stereo views')
+          gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer)
+          gl.enable(gl.SCISSOR_TEST)
+          for (const view of pose.views) {
+            const vp = layer.getViewport(view)
+            if (!vp || vp.width <= 0 || vp.height <= 0) throw new Error('Invalid eye viewport')
+            gl.viewport(vp.x, vp.y, vp.width, vp.height)
+            gl.scissor(vp.x, vp.y, vp.width, vp.height)
+            gl.clearColor(view.eye === 'left' ? 0.3 : 0.1, 0.15, 0.4 + 0.2 * Math.sin(time / 400), 1)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+          }
+          gl.disable(gl.SCISSOR_TEST)
+          const glError = gl.getError()
+          if (glError !== gl.NO_ERROR) throw new Error(`WebGL error ${glError}`)
+          lastPose = Array.from(pose.transform.matrix)
+          firstPose ??= lastPose
+          inputSources = Array.from(session.inputSources, input => ({ handedness: input.handedness, profiles: input.profiles }))
+          if (++frames >= frameTarget) resolve()
+          else session.requestAnimationFrame(draw)
+        } catch (error) { reject(error) }
+      }
+      session.requestAnimationFrame(draw)
+    })
+    const poseChanged = firstPose.some((value, i) => Math.abs(value - lastPose[i]) > 1e-6)
+    if (!poseChanged) throw new Error('Tracked pose did not change')
+    if (!['left', 'right'].every(hand => inputSources.some(input => input.handedness === hand))) {
+      throw new Error('Both controllers must be exposed')
+    }
+    await session.end(); session = null
+    report({ event: 'session-complete', frames, eyes, inputSources,
+      poseChanged,
+      renderer: gl.getParameter(gl.RENDERER), referenceSpace: 'local-floor' })
+  } catch (error) {
+    if (session) { await session.end().catch(() => {}); session = null }
+    fail(error)
+  }
+}
+document.querySelector('#enter').onclick = window.runPreflight
+window.preflightReady = (async () => {
+  const supported = Boolean(navigator.xr) && await navigator.xr.isSessionSupported('immersive-vr')
+  const result = { event: 'ready', secureContext: isSecureContext, webxr: Boolean(navigator.xr), immersiveVR: supported }
+  report(result)
+  return result
+})().catch(fail)
+</script>

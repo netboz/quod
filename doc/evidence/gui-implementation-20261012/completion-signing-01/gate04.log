@@ -1,0 +1,51 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.13s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::17:18:19.747301 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:18:20.739002 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:18:21.415410 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 13-Oct-2026::17:18:22.599832 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::17:18:29.764324 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 11
+[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_question_tests:-committed_answer_automatically_completes_test_/0-fun-26-/0
+[0;31m     Failure/Error: {error,invalid_retained_work_not_finished,
+                        [{quod_gui_question_tests,
+                             '-committed_answer_automatically_completes_test_/0-fun-17-',
+                             10,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,539}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {quod_gui_question_tests,
+                             '-committed_answer_automatically_completes_test_/0-fun-25-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_question_tests.erl"},
+                              {line,525}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_agent_hosting_tests.erl"},
+                              {line,1632}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_3870C5A48E7186A4
+[0m
+
+Finished in 26.959 seconds
+[0;31m5 tests, 1 failures
+[0m===> Error running tests

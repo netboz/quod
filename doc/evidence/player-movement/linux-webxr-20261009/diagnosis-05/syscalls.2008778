@@ -1,0 +1,21 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f2000df7780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f2000df7780) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/OriginTrials", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/OriginTrials", 0x7f2000df54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=540, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/OriginTrials", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/OriginTrials", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 687
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/OriginTrials", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/DictationConnector", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/DictationConnector", 0x7f2000df54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=660, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/DictationConnector", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/DictationConnector", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/AmountExtractionHeuristicRegexes", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/AmountExtractionHeuristicRegexes", 0x7f2000df54e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=720, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/AmountExtractionHeuristicRegexes", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/AmountExtractionHeuristicRegexes", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 683
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/AmountExtractionHeuristicRegexes", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
++++ exited with 0 +++

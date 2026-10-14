@@ -1,0 +1,12 @@
+{
+  "src/quod_commit_validation.erl": "b4a98d21f4c88d2db1ca105597e89c22768a6849130c773e1001a5fc5273f1d1",
+  "src/quod_committed_projection.erl": "6c029139d4da9390a352867b98bce09ef1b49ca873e36ff5ba5cce5ef4a36c4e",
+  "src/quod_prolog.erl": "407d821315f3a3712b05639da60a197a6eec4aa1a1a3b44dabbd4060320c6162",
+  "test/quod_commit_validation_tests.erl": "fb4213b182ee69c425d3278ed4a3d4f54b8fc9ec8924f5890446989ce468d145",
+  "test/quod_committed_projection_tests.erl": "9d1e08894fd2372d6a5135d9d2f76b015949836abaa1bb8b903cee783357bdc7",
+  "test/quod_atomic_projection_tests.erl": "82417ab2a344c08bfe7399cfdb305f0c7d9750bbd8877031c828c4ded02109a9",
+  "test/quod_operation_claim_tests.erl": "0cdd03c965ca2413f0d215855110f749d500ad11b30d6eb15874e7f495ba785f",
+  "test/quod_authenticated_flow_tests.erl": "25ebb3cf227bfd43ce5ad803a146be034a8d537b22dee24c503e10df1230e682",
+  "test/quod_atomic_origin_tests.erl": "1fcfd7f4aab1f9d817b6470dcb666dd8e4db02d72114d11636b48e5d210019f9",
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87"
+}

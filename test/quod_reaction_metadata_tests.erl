@@ -7,6 +7,8 @@ node_manifest_gets_metadata_without_agent_bridges_test() ->
     with_node(fun(Est) ->
         ?assertEqual({query, proof_bound, quod_runtime_predicates, current_request_expiry},
                      quod_predicates:descriptor(Est, {current_request_expiry, 1})),
+        ?assertEqual({query, proof_bound, quod_runtime_predicates, current_request_operation},
+                     quod_predicates:descriptor(Est, {current_request_operation, 1})),
         lists:foreach(fun({Name, Arity}) ->
             ?assertEqual({reaction, none, quod_runtime_predicates, Name},
                          quod_predicates:descriptor(Est, {Name, Arity}))
@@ -98,6 +100,8 @@ proof_expiry_remains_authenticated_without_agent_module_test() ->
         Ctx = quod_predicates:proof_context(element(1, Target), 1, undefined, [Target]),
         St = quod_predicates:set_context(Est, Ctx),
         ?assertMatch({fail, _}, run({current_request_expiry, {'Expiry'}}, St)),
+        ?assertMatch({fail, _}, run({current_request_operation, {'Operation'}}, St)),
+        ?assertMatch({fail, _}, run({current_signed_request, <<>>}, St)),
         #{principal := Principal, evidence := Evidence} = quod_ct:signed_goal_fixture(
             #{target => Target, deadline => 123456}),
         _ = quod_proof_context:start(<<4:256>>, false, Target,
@@ -105,6 +109,17 @@ proof_expiry_remains_authenticated_without_agent_module_test() ->
         try
             ?assertMatch({ok, #{'Expiry' := 123456}, [], _},
                          run({current_request_expiry, {'Expiry'}}, St)),
+            Operation = maps:get(operation_ref, Evidence),
+            Bytes = maps:get(request_bytes, Evidence),
+            ?assertMatch({ok, #{}, [], _}, run({current_signed_request, Bytes}, St)),
+            {ok, Different} = quod_client_goal:encode(
+                (maps:get(request, Evidence))#{not_after_ms => 123457}),
+            ?assertMatch({fail, _}, run({current_signed_request, Different}, St)),
+            ?assertMatch({fail, _}, run({current_signed_request, <<Bytes/binary, 0>>}, St)),
+            ?assertMatch({ok, #{'Operation' := Operation}, [], _},
+                         run({current_request_operation, {'Operation'}}, St)),
+            ?assertMatch({fail, _}, run({current_request_operation,
+                                       setelement(5, Operation, <<0:256>>)}, St)),
             lists:foreach(fun(Goal) ->
                 ?assertMatch({error, {erlog, {context_violation, _, reaction, proof}}}, run(Goal, St))
             end, [{limit_reaction_expiry, 1000},
@@ -132,6 +147,67 @@ matching_copies_only_recovery_metadata_from_binding_test() ->
                 ?assertEqual({Ns, Anchor}, maps:get(source, Seen))
         after 0 -> error(metadata_probe_not_executed)
         end
+    end).
+
+reaction_match_cannot_invent_request_operation_test() ->
+    with_node(fun(Est) ->
+        ?assertMatch({error, {erlog, {context_violation, current_request_operation, query, reaction}}},
+            match(Est, metadata(), {current_request_operation, {'Operation'}},
+                  {record, {'Operation'}}))
+    end).
+
+signed_request_operation_modes_and_verdict_contexts_test() ->
+    with_node(fun(Est) ->
+        Target = {<<"node">>, <<1:256>>},
+        lists:foreach(fun(Mode) ->
+            #{principal := Principal, evidence := Evidence} =
+                quod_ct:signed_goal_fixture(#{target => Target, mode => Mode}),
+            Operation = maps:get(operation_ref, Evidence),
+            _ = quod_proof_context:start(<<4:256>>, false, Target,
+                quod_time:mono_ms() + 5000, Principal, Evidence),
+            try
+                Proof = quod_predicates:proof_context(element(1, Target), 1, undefined, [Target]),
+                ?assertMatch({ok, #{'Operation' := Operation}, [], _},
+                    run({current_request_operation, {'Operation'}}, quod_predicates:set_context(Est, Proof))),
+                Verdict = quod_predicates:verdict_context(element(1, Target), 1),
+                ?assertMatch({error, {erlog, {context_violation, current_request_operation, query, verdict}}},
+                    run({current_request_operation, {'Operation'}}, quod_predicates:set_context(Est, Verdict))),
+                Policy = quod_predicates:policy_verdict_context(element(1, Target), 1),
+                ?assertMatch({error, {erlog, {context_violation, {current_request_operation, 1}, query, policy_verdict}}},
+                    run({current_request_operation, {'Operation'}}, quod_predicates:set_context(Est, Policy)))
+            after quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end) end
+        end, [read, execute, cursor, control])
+    end).
+
+retained_request_selection_keeps_exact_goal_and_backtracking_test() ->
+    with_node(fun(Est) ->
+        Ref = node_ref(), Meta = (maps:remove(recovery, metadata()))#{mode => execute},
+        Request = #{network_identity => <<42:256>>, signing_public_key => <<5:256>>,
+            operation_id => <<8:256>>, agent_namespace => element(2, Ref),
+            agent_genesis_anchor => element(3, Ref), agent_instance_text => <<"node.">>,
+            mode => execute, parser_version => 3, not_after_ms => 1500,
+            goal_text => <<"record(ok).">>},
+        {ok, Bytes} = quod_client_goal:encode(Request),
+        Goal = {record, ok}, Guard = {use_agent_request, Bytes},
+        ?assertMatch({ok, #{'Request' := {request, Goal, 1500, {retained, Bytes}}}, [], _},
+                     match(Est, Meta, Guard, Goal)),
+        ?assertMatch({ok, #{'Request' := {request, Goal, 1000, {retained, Bytes}}}, [], _},
+                     match(Est, Meta, {',', {limit_reaction_expiry, 1000}, Guard}, Goal)),
+        ?assertMatch({ok, #{'Request' := {request, true, 2000, none}}, [], _},
+                     match(Est, Meta, {';', {',', Guard, fail}, true}, true)),
+        ?assertMatch({error, {erlog, {domain_error, retained_request, _}}},
+                     match(Est, Meta, Guard, {record, different})),
+        {ok, Foreign} = quod_client_goal:encode(Request#{agent_namespace => <<"elsewhere">>}),
+        ?assertMatch({error, {erlog, {domain_error, retained_request, _}}},
+                     match(Est, Meta, {use_agent_request, Foreign}, Goal)),
+        ?assertMatch({fail, _}, match(Est, metadata(), Guard, Goal)),
+        ?assertMatch({fail, _}, match(Est, Meta#{physics => #{}}, Guard, Goal)),
+        ?assertMatch({fail, _}, match(Est, Meta#{recovery => #{}}, Guard, Goal)),
+        ?assertMatch({error, {erlog, {domain_error, agent_request, _}}},
+                     match(Est, Meta, {use_agent_request, <<Bytes/binary, 0>>}, Goal)),
+        Proof = quod_predicates:proof_context(element(2, Ref), 1, undefined, []),
+        ?assertMatch({error, {erlog, {context_violation, {use_agent_request, 1}, reaction, proof}}},
+                     run(Guard, quod_predicates:set_context(Est, Proof)))
     end).
 
 inspect_metadata(inspect_metadata, _Next, St) ->

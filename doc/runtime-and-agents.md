@@ -16,6 +16,23 @@ the ordinary signed-goal path. A match or queue admission is not a committed
 acknowledgement. The reaction's consequence becomes durable only when its
 own transaction commits.
 
+`use_agent_request(Bytes)` in an ordinary hosted actor's reaction guard selects
+an already retained canonical execute request. Its actor and ground goal must
+match that reaction's selected actor and goal. The guard's metadata follows normal
+backtracking; it neither signs nor submits while matching. The existing actor
+queue, governed signer and ingress handle it. A changed key refuses the request;
+the actor never regenerates its operation id, key, goal or signed expiry. Local
+queue and guard deadlines may be shorter, but cannot extend the stored deadline.
+A worker timeout reports the retained operation reference.
+
+This selection is unavailable in proof, resource-recovery and private physics
+observation contexts. It grants no retry permission: domain rules must select it
+only from a live occurrence that permits dispatch, and recovery must observe the
+retained operation rather than replay that occurrence. Restoring facts does not
+rerun their assertion reactions. The signature-free outcome query in the
+[multiwrite contract](multiwrite-architecture.md) provides certified terminal or
+expiry dependencies for subsequent ordinary ontology transitions.
+
 `quod_runtime` owns the installed reaction catalogue, subscriptions and
 desired local resources for one ontology. Resource selectors read its
 retained committed snapshot. Recovery reconciles current state without
@@ -23,6 +40,12 @@ replaying historical occurrences. Installed-state notifications are scoped
 to the affected identity and owner incarnation; consumers subscribe before
 reading a snapshot and retain the original caller deadline. Stale or
 duplicate notices confer no authority.
+
+For subscribed sources, the retained verified height also bounds live event
+delivery. Duplicate or overlapping notices contribute only occurrences above
+that height. A same-height readiness refresh may restore a usable source view,
+but does not replay its old reactions, including after an occurrence was dropped
+by backpressure.
 
 Governed external predicates are classified as query, staging or reaction
 operations. Their execution context distinguishes normal proofs, validator

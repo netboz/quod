@@ -1,0 +1,5 @@
+[1/5] Building CXX object src/xrt/drivers/CMakeFiles/drv_steamvr_lh.dir/steamvr_lh/interfaces/settings.cpp.o
+[2/5] Building CXX object src/xrt/drivers/CMakeFiles/drv_steamvr_lh.dir/steamvr_lh/device.cpp.o
+[3/5] Building CXX object src/xrt/drivers/CMakeFiles/drv_steamvr_lh.dir/steamvr_lh/steamvr_lh.cpp.o
+[4/5] Linking CXX static library src/xrt/drivers/libdrv_steamvr_lh.a
+[5/5] Linking CXX executable src/xrt/targets/service/monado-service

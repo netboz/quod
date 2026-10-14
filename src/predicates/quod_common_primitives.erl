@@ -20,15 +20,20 @@ that used them stays sealable.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
+- `binary(?Value)` — type test, like `integer/1`; never binds its argument.
+- `agent_request_bytes(+Intent, ?Bytes)` — encode an exact `agent_goal_v1`
+  intent with the signed-request codec. No key access, signature, clock,
+  submission or authority check; the bytes are inert data.
 - `'$quod_predicate_source'(+Name/Arity, ?Source)` — canonical source of the
   ordered authored clauses in the current staged view, excluding generated
   following clauses. Facts print as `Head :- true`; a bound source compares
   exactly. Erlog's own `clause/2` decodes the compiled bodies, without exposing
   inspection variables in the caller's answer.
-- `'$quod_source_chunk'(+Bytes, ?Chunk)` — every stored interpreted clause in
+- `'$quod_source_chunk'(+Selection, +Bytes, ?Chunk)` — stored interpreted clauses in
   the same staged snapshot, in canonical predicate order. Backtracking yields
   bounded binary chunks, including the final empty chunk for an empty state.
-  The caller's ontology supplies the transport allowance; no content is pruned.
+  Selection is `all`, `predicates(Indicators)` or `terms(SelectedData)`.
+  The caller's ontology supplies the selection and transport allowance.
   An unbound, non-integer or nonpositive allowance raises an argument error;
   an unequal bound chunk remains ordinary failure.
 - `'$quod_retract_exact'(+Clause)` — remove the first authored clause whose
@@ -43,8 +48,9 @@ that used them stays sealable.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3,
-         predicate_source_2/3, source_chunk_2/3, retract_exact_1/3, program_source_2/3,
+-export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
+         ontology_name_2/3, binary_1/3, agent_request_bytes_2/3,
+         predicate_source_2/3, source_chunk_3/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2]).
 
 -define(DRAW, '$quod_draw').
@@ -61,11 +67,58 @@ load(#est{db = Db0} = Est) ->
     Db4 = erlog_int:add_compiled_proc(
             {'$quod_retract_exact', 1}, ?MODULE, retract_exact_1, Db3),
     Db5 = erlog_int:add_compiled_proc(
-            {'$quod_source_chunk', 2}, ?MODULE, source_chunk_2, Db4),
+            {'$quod_source_chunk', 3}, ?MODULE, source_chunk_3, Db4),
     Db6 = erlog_int:add_compiled_proc(
             {'$quod_program_source', 2}, ?MODULE, program_source_2, Db5),
+    Db7 = erlog_int:add_compiled_proc(
+            {term_digest, 2}, ?MODULE, term_digest_2, Db6),
+    Db8 = erlog_int:add_compiled_proc(
+            {ontology_name, 2}, ?MODULE, ontology_name_2, Db7),
+    Db9 = erlog_int:add_compiled_proc(
+            {variant_digest, 2}, ?MODULE, variant_digest_2, Db8),
+    Db10 = erlog_int:add_compiled_proc({binary, 1}, ?MODULE, binary_1, Db9),
     Est#est{db = erlog_int:add_compiled_proc(
-                   {term_digest, 2}, ?MODULE, term_digest_2, Db6)}.
+        {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db10)}.
+
+agent_request_bytes_2({agent_request_bytes, Intent0, Bytes}, Next, #est{bs = Bs} = St) ->
+    Intent = erlog_int:dderef(Intent0, Bs),
+    case quod_wire_term:is_ground(Intent) of
+        false -> erlog_int:instantiation_error(St);
+        true -> case quod_client_goal:encode_typed(Intent) of
+            {ok, _, Encoded} -> erlog_int:unify_prove_body(Bytes, Encoded, Next, St);
+            {error, _} -> erlog_int:domain_error(agent_request, Intent, St)
+        end
+    end.
+
+binary_1({binary, Value}, Next, #est{bs = Bs} = St) ->
+    case erlog_int:deref(Value, Bs) of
+        B when is_binary(B) -> erlog_int:prove_body(Next, St);
+        _ -> erlog_int:fail(St)
+    end.
+
+%% Hash a variable-bearing declaration modulo variable names, retaining the
+%% canonical wire distinction between variables and authored '$VAR'/1 terms.
+%% This does not bind the declaration or expose proof-local variable numbers.
+variant_digest_2({variant_digest, Term0, Digest}, Next, #est{bs = Bs} = St) ->
+    Term = erlog_int:dderef(Term0, Bs),
+    {Canonical, _, _} = erlog_int:term_instance(Term, 0),
+    case quod_wire_term:encode_canonical(Canonical) of
+        {ok, Bytes} -> erlog_int:unify_prove_body(
+            Digest, crypto:hash(sha256, Bytes), Next, St);
+        {error, bad_term} -> erlog_int:domain_error(canonical_term, Term, St)
+    end.
+
+%% Pure name conversion shares the selector's grammar. Comparing configured
+%% identities must not require opening a scope, or creating atoms from names.
+ontology_name_2({ontology_name, Name0, Canonical}, Next, #est{bs = Bs} = St) ->
+    Name = erlog_int:dderef(Name0, Bs),
+    case quod_wire_term:is_ground(Name) of
+        false -> erlog_int:instantiation_error(St);
+        true -> case quod_ontology_name:flatten(Name) of
+            error -> erlog_int:domain_error(ontology_name, Name, St);
+            Binary -> erlog_int:unify_prove_body(Canonical, Binary, Next, St)
+        end
+    end.
 
 %% Canonical symbols make the digest independent of local atom materialization.
 term_digest_2({term_digest, Term0, Digest}, Next, #est{bs = Bs} = St) ->
@@ -79,21 +132,37 @@ term_digest_2({term_digest, Term0, Digest}, Next, #est{bs = Bs} = St) ->
         end
     end.
 
-source_chunk_2({'$quod_source_chunk', Bytes0, Chunk}, Next,
+source_chunk_3({'$quod_source_chunk', Selection0, Bytes0, Chunk}, Next,
                #est{bs = Bs} = St) ->
     case erlog_int:deref(Bytes0, Bs) of
         Bytes when is_integer(Bytes), Bytes > 0 ->
-            #est{db = #db{mod = Module, ref = Ref}} =
-                quod_erlog_db_local_prove:authored_state(St),
-            Functors = lists:sort(Module:get_interpreted_functors(Ref)),
-            Text = iolist_to_binary([
-                [format_clause(C, St) || C <- element(2, authored_clauses(F, St))]
-                || F <- Functors]),
+            Selection = erlog_int:dderef(Selection0, Bs),
+            Clauses = selected_source(Selection, St),
+            Text = iolist_to_binary([format_clause(C, St) || C <- Clauses]),
             erlog_int:prove_body([{member, Chunk, source_chunks(Text, Bytes)} | Next], St);
         {_} -> erlog_int:instantiation_error(St);
         Bytes when not is_integer(Bytes) -> erlog_int:type_error(integer, Bytes, St);
         Bytes -> erlog_int:domain_error(source_chunk_bytes, Bytes, St)
     end.
+
+selected_source(all, St) ->
+    #est{db = #db{mod = Module, ref = Ref}} =
+        quod_erlog_db_local_prove:authored_state(St),
+    lists:append([element(2, authored_clauses(F, St))
+                  || F <- lists:sort(Module:get_interpreted_functors(Ref))]);
+selected_source({predicates, Indicators}, St) when is_list(Indicators) ->
+    lists:append([indicator_source(existing_symbols(I), St) || I <- Indicators]);
+selected_source({terms, Terms}, _St) when is_list(Terms) -> Terms;
+selected_source(Selection, St) ->
+    erlog_int:domain_error(source_selection, Selection, St).
+
+indicator_source({'/', Name, Arity}, St)
+  when is_atom(Name), is_integer(Arity), Arity >= 0 ->
+    element(2, authored_clauses({Name, Arity}, St));
+indicator_source({'/', {'$quod_symbol', Name}, Arity}, _St)
+  when is_binary(Name), is_integer(Arity), Arity >= 0 -> [];
+indicator_source(Indicator, St) ->
+    erlog_int:domain_error(predicate_indicator, Indicator, St).
 
 source_chunks(Text, Bytes) when byte_size(Text) =< Bytes -> [{source_chunk, done, Text}];
 source_chunks(Text, Bytes) ->

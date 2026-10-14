@@ -1,0 +1,3 @@
+chroot("/proc/self/fdinfo/")            = 0
+chdir("/")                              = 0
++++ exited with 0 +++

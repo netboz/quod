@@ -1,0 +1,43 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7fe6109f1780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7fe6109f1780) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/LocalStorage-journal", {st_mode=S_IFREG|0600, st_size=512, ...}, AT_SYMLINK_NOFOLLOW) = 0
+unlinkat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/LocalStorage-journal", 0) = 0
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB", 0x7fe6109ef270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform", 0x7fe6109ef270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=680, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform", 0700) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB", 0700) = 0
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 684
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB/LOCK", O_RDWR|O_CREAT, 0600) = 685
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SegmentInfoDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB", 0x7fe6109ef270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB", 0700) = 0
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 675
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB/LOCK", O_RDWR|O_CREAT, 0600) = 683
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB", 0x7fe6109ef270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform", {st_mode=S_IFDIR|0700, st_size=80, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB", 0700) = 0
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 675
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB/LOCK", O_RDWR|O_CREAT, 0600) = 683
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Segmentation Platform/SignalStorageConfigDB__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
++++ exited with 0 +++

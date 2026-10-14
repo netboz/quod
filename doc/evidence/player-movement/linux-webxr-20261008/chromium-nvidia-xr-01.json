@@ -1,0 +1,8 @@
+{
+  "base_tag": "157.0.8091.0",
+  "source": "content/services/isolated_xr_device/xr_sandbox_hook_linux.cc",
+  "source_sha256": "14a2856d0398d7583f114e1dba70cecfe6af81ad5d868ecec12c02abcbcf9dd7",
+  "patched_sha256": "dfb80e69473f7618e55abba8b598df74e2a3e7ff7348f7e538f3fbffb9fec701",
+  "patch_sha256": "67793514c7af36d03db23fcb65a50cf06d21aa3e5b5429331e8d7f61d49d691b",
+  "status": "prepared; not compiled or runtime validated"
+}

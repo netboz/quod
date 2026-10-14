@@ -1,0 +1,26 @@
+[
+  {
+    "level": "WARNING",
+    "message": "http://localhost:5178/@vite/client 524:3 \"BJS - [21:20:21]: glTF / glb loader was not registered, using generic controller instead\"",
+    "source": "console-api",
+    "timestamp": 1791919241137
+  },
+  {
+    "level": "WARNING",
+    "message": "http://localhost:5178/@vite/client 524:3 \"BJS - [21:20:21]: Falling back to generic models\"",
+    "source": "console-api",
+    "timestamp": 1791919241138
+  },
+  {
+    "level": "WARNING",
+    "message": "http://localhost:5178/@vite/client 524:3 \"BJS - [21:20:21]: glTF / glb loader was not registered, using generic controller instead\"",
+    "source": "console-api",
+    "timestamp": 1791919241138
+  },
+  {
+    "level": "WARNING",
+    "message": "http://localhost:5178/@vite/client 524:3 \"BJS - [21:20:21]: Falling back to generic models\"",
+    "source": "console-api",
+    "timestamp": 1791919241138
+  }
+]

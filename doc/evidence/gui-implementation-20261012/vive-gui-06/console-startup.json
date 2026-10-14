@@ -1,0 +1,46 @@
+{
+  "value": [
+    {
+      "level": "DEBUG",
+      "message": "http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"",
+      "source": "console-api",
+      "timestamp": 1791919340492
+    },
+    {
+      "level": "DEBUG",
+      "message": "http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"",
+      "source": "console-api",
+      "timestamp": 1791919340537
+    },
+    {
+      "level": "INFO",
+      "message": "http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=0e8dcadc 39:23 \"BJS - [21:22:21]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation\"",
+      "source": "console-api",
+      "timestamp": 1791919341959
+    },
+    {
+      "level": "SEVERE",
+      "message": "http://localhost:5178/favicon.ico - Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "timestamp": 1791919342180
+    },
+    {
+      "level": "WARNING",
+      "message": "http://localhost:5178/@vite/client 524:3 \"BJS - [21:22:24]: Feature xr-hand-tracking failed to attach\"",
+      "source": "console-api",
+      "timestamp": 1791919359011
+    },
+    {
+      "level": "SEVERE",
+      "message": "http://localhost:5178/node_modules/.vite/deps/nodeMaterial.pure-Bk9pvXk0.js?v=0e8dcadc 7118:12 Uncaught TypeError: Cannot read properties of undefined (reading 'target')",
+      "source": "javascript",
+      "timestamp": 1791919359011
+    },
+    {
+      "level": "SEVERE",
+      "message": "http://localhost:5178/node_modules/.vite/deps/nodeMaterial.pure-Bk9pvXk0.js?v=0e8dcadc 7118:12 Uncaught TypeError: Cannot read properties of undefined (reading 'target')",
+      "source": "javascript",
+      "timestamp": 1791919359011
+    }
+  ]
+}

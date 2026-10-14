@@ -1,0 +1,8 @@
+import{w as e}from"./sceneLoaderFlags-CW-1rcYh.js";var t=`meshUboDeclaration`,n=`#ifdef WEBGL2
+uniform mat4 world;uniform float visibility;
+#else
+layout(std140,column_major) uniform;uniform Mesh
+{mat4 world;float visibility;};
+#endif
+#define WORLD_UBO
+`;e.IncludesShadersStore[t]||(e.IncludesShadersStore[t]=n);var r={name:t,shader:n};export{r as t};

@@ -1,0 +1,29 @@
+[
+  {
+    "name": "client",
+    "command": [
+      "node",
+      "--test",
+      "client/test/world.test.js",
+      "client/test/prolog-edit.test.js",
+      "client/test/marks.test.js"
+    ],
+    "started": "2026-10-14T10:13:42.070373+00:00",
+    "finished": "2026-10-14T10:13:42.631133+00:00",
+    "exit": 0
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit",
+      "--test=quod_common_primitives_tests:filtered_source_uses_the_same_chunker_and_records_absence_test",
+      "--generator=quod_lobby_tests:scoped_routes_reuse_the_directory_and_preserve_private_admission_test_"
+    ],
+    "started": "2026-10-14T10:13:42.631607+00:00",
+    "finished": "2026-10-14T10:13:44.734986+00:00",
+    "exit": 0
+  }
+]

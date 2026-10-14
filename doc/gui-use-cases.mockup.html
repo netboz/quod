@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quod · GUI use cases</title>
+<style>
+  :root { color-scheme:dark; --ink:#f5f1eb; --gold:#f9c80e; --well:#0f1b20; --alpha:.78; --edge:#8ea5ad80; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#0c202b; color:var(--ink); font:16px/1.5 system-ui,sans-serif; }
+  button,input,select,textarea { font:inherit; color:inherit; }
+  button,input:not([type=checkbox]):not([type=range]),select,textarea { min-height:48px; padding:10px 14px; border:1px solid var(--edge); border-radius:10px; background:var(--well); }
+  button,select,input[type=range],input[type=checkbox] { cursor:pointer; }
+  button:hover:not(:disabled) { background:#34515b; }
+  button:disabled { color:#c7d0d3; border-style:dashed; cursor:default; }
+  :focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
+  input[type=range] { accent-color:var(--gold); width:100%; min-height:48px; }
+  input[type=checkbox] { accent-color:var(--gold); width:22px; height:22px; flex:none; }
+  input[type=number] { width:100px; }
+  input[type=text],textarea,.field>select { width:100%; }
+  textarea { resize:vertical; min-height:100px; }
+  [hidden] { display:none!important; }
+  .lab { padding:20px 28px; background:#0d2029; border-bottom:1px solid var(--edge); }
+  .lab-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+  .lab-heading strong { font-size:20px; }
+  .badge { font-size:13px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; border:1px solid var(--edge); border-radius:6px; }
+  .lab-controls { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; }
+  .lab-controls label { display:flex; align-items:center; gap:10px; }
+  .lab-controls input[type=range] { width:100px; }
+  .lab-controls select { padding:8px; }
+  .lab small { display:block; margin-top:12px; color:#c9d6dc; }
+  .scene { position:relative; isolation:isolate; min-height:850px; padding:32px 28px 110px; overflow:hidden;
+    background:radial-gradient(ellipse at 84% 0%,#466674,transparent 58%),linear-gradient(130deg,#0a2433,#12252c); }
+  .scene.bright { background:radial-gradient(ellipse at 80% 5%,#fff2bd,transparent 60%),linear-gradient(135deg,#a8cfd2,#7199a2); }
+  .grid { position:absolute; z-index:-1; inset:48% -50% -40%; transform:perspective(600px) rotateX(56deg); background-image:linear-gradient(#bed7d426 1px,transparent 1px),linear-gradient(90deg,#bed7d426 1px,transparent 1px); background-size:100px 100px; }
+  .world-ring { position:absolute; z-index:-1; top:50px; right:2%; height:440px; width:440px; border:28px solid #c9c48e50; border-radius:50%; transform:rotateY(40deg) rotateZ(25deg); }
+  .workspace { max-width:1180px; margin:auto; display:grid; grid-template-columns:240px minmax(0,1fr); gap:24px; align-items:start; }
+  .glass { background:rgb(25 43 50 / var(--alpha)); border:1px solid var(--edge); border-radius:18px; box-shadow:0 20px 55px #0004; }
+  .rail { padding:20px 14px; }
+  .rail h2 { font-size:20px; margin:0 8px 8px; }
+  .rail>p { margin:0 8px 20px; }
+  .request { display:block; width:100%; text-align:left; margin:12px 0; padding:16px; }
+  .request span { display:block; margin-top:5px; font-size:14px; }
+  .request[aria-pressed=true] { border:2px solid var(--gold); padding:15px; }
+  .request .tag { color:#f6d978; }
+  .panel { overflow:hidden; }
+  .panel header { padding:24px 28px 16px; display:flex; gap:16px; align-items:start; }
+  .panel header>div { flex:1; }
+  .eyebrow { margin:0 0 6px; font-size:1em; letter-spacing:.04em; text-transform:uppercase; }
+  h1 { font-size:28px; line-height:1.25; margin:0; }
+  .subtitle { margin:12px 0 0; }
+  .body { max-height:520px; overflow:auto; padding:0 28px 24px; scrollbar-gutter:stable; }
+  fieldset { border:0; margin:0; padding:0; min-width:0; }
+  legend,h3 { font-size:18px; font-weight:650; margin:18px 0 12px; }
+  .field { display:block; margin:16px 0 24px; }
+  .field>span,.field>label { display:block; margin-bottom:8px; font-weight:600; }
+  .help { margin:8px 0; }
+  .row { display:flex; align-items:center; gap:12px; }
+  .row input[type=range] { flex:1; min-width:70px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .check { display:flex; align-items:center; gap:12px; min-height:48px; }
+  .dial-row { flex-wrap:wrap; }
+  .dial { width:90px; height:90px; flex:none; border:3px solid #91a9b0; border-radius:50%; background:#213942; position:relative; }
+  .dial:after { content:''; position:absolute; left:40px; top:8px; width:4px; height:27px; background:var(--gold); transform-origin:2px 34px; transform:rotate(var(--angle,45deg)); }
+  .tabs { display:flex; gap:10px; margin:8px 0 20px; }
+  .tabs button[aria-selected=true] { border-color:var(--gold); box-shadow:inset 0 -3px var(--gold); }
+  table { width:100%; border-collapse:collapse; background:var(--well); }
+  caption { text-align:left; margin-bottom:12px; }
+  th,td { padding:12px; text-align:left; border-bottom:1px solid var(--edge); }
+  .summary { border:1px solid var(--edge); border-radius:10px; padding:16px; background:var(--well); }
+  .summary p { margin:4px 0 12px; }
+  .status { padding:16px 28px; margin:0; border-top:1px solid var(--edge); background:var(--well); }
+  .status.error { color:#ffb8bd; }
+  .status.done { color:#c5e7a0; }
+  footer { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:18px 28px 24px; }
+  .primary { background:var(--gold); border-color:var(--gold); color:#10232a; font-weight:650; margin-left:auto; }
+  .primary:hover:not(:disabled) { background:#ffe079; }
+  .primary:disabled { background:#354342; }
+  .danger { color:#ffb8bd; margin-right:48px; }
+  .field-error { color:#ffb8bd; margin:8px 0; }
+  [aria-invalid=true] { border-color:#ffb8bd!important; }
+  .placement { display:flex; gap:8px; justify-content:flex-end; padding:10px 24px; background:#112730; border-top:1px solid var(--edge); }
+  .keyboard { grid-column:2; padding:18px; background:var(--well); border:1px solid var(--edge); border-radius:16px; }
+  .keyboard p { margin:0 0 10px; }
+  .keyboard-keys { display:flex; flex-wrap:wrap; gap:6px; }
+  .keyboard-keys button { min-width:44px; padding:8px; }
+  .launcher { position:absolute; bottom:28px; left:50%; transform:translateX(-50%); border-radius:30px; padding:12px 24px; box-shadow:0 6px 20px #0004; }
+  .launcher b { margin-left:14px; color:var(--gold); }
+  .note { padding:20px 28px; max-width:1240px; margin:auto; color:#d1dce0; }
+  .note p { margin:0 0 12px; }
+  .scene.vr .workspace { grid-template-columns:minmax(0,760px); justify-content:center; }
+  .scene.vr .rail { display:none; }
+  .scene.vr .keyboard { grid-column:1; }
+  .scene.vr.show-attention .rail { display:block; }
+  .scene.large { font-size:20px; }
+  .scene.large .split { grid-template-columns:1fr; }
+  .scene.large .eyebrow,.scene.large .request span { font-size:18px; }
+  .scene.large h1 { font-size:32px; }
+  .scene.large button,.scene.large input,.scene.large select { min-height:56px; }
+  @media(max-width:850px) { .workspace { grid-template-columns:1fr; } .rail { display:flex; flex-wrap:wrap; gap:8px; } .rail h2 { width:100%; } .rail>p { display:none; } .request { flex:1; min-width:160px; margin:0; } .keyboard { grid-column:1; } }
+  @media(max-width:600px) { .scene { padding:20px 12px 110px; } .split { grid-template-columns:1fr; } .panel header,.body,footer,.status { padding-left:18px; padding-right:18px; } .lab { padding:16px; } .danger { margin-right:0; } .primary { width:100%; } }
+</style>
+</head>
+<body>
+<div class="lab">
+  <div class="lab-heading"><strong>Quod / Forms in context</strong><span class="badge">Interactive design study · local only</span></div>
+  <div class="lab-controls">
+    <label>Layout <select id="layout"><option value="desktop">Desktop workspace</option><option value="vr">VR panel study</option></select></label>
+    <label>World <select id="world"><option value="dark">Dark</option><option value="bright">Bright</option></select></label>
+    <label>Panel opacity <input id="opacity" type="range" min="70" max="100" value="78"><output id="opacityValue">78%</output></label>
+    <label><input id="opaque" type="checkbox"> Opaque panels</label>
+    <label><input id="large" type="checkbox"> Larger text</label>
+    <label>State <select id="state"><option value="draft">Draft</option><option value="invalid">Invalid input</option><option value="submitted">Submitted</option><option value="applied">Applied</option><option value="attention">Needs attention</option><option value="unknown">Outcome unknown</option><option value="stale">Stale form</option><option value="disconnected">Disconnected</option><option value="cancelled">Cancelled</option></select></label>
+  </div>
+  <small>The VR option studies layout and keyboard placement on a flat screen. Headset scale, depth, reach and comfort remain to be measured.</small>
+</div>
+<main class="scene" id="scene">
+  <div class="grid" aria-hidden="true"></div><div class="world-ring" aria-hidden="true"></div>
+  <div class="workspace">
+    <aside class="rail glass" aria-label="Your attention">
+      <h2>Your attention</h2><p>Open when you are ready.</p>
+      <button class="request" data-case="atmosphere" aria-pressed="true"><b>Atmosphere</b><span>Lobby · Personal sky</span><span class="tag">Editing locally</span></button>
+      <button class="request" data-case="instrument" aria-pressed="false"><b>Instrument settings</b><span>Analyzer · Configuration</span><span class="tag">Independent application</span></button>
+      <button class="request" data-case="review" aria-pressed="false"><b>Review a result</b><span>Research · Review assistant</span><span class="tag">Answer when ready</span></button>
+    </aside>
+    <section class="panel glass" id="panel" aria-labelledby="title">
+      <header><div><p class="eyebrow" id="source">Lobby / Personal sky</p><h1 id="title">Adjust the atmosphere</h1><p class="subtitle" id="subtitle">Give this sky a look of its own.</p></div><button id="hide">Hide</button></header>
+      <form id="form" novalidate>
+        <div class="body">
+          <fieldset id="fields" aria-describedby="status">
+            <div data-content="atmosphere">
+              <fieldset><legend>Preset</legend>
+                <label class="field"><span>Preset name</span><input id="preset" type="text" value="Evening" required maxlength="80"></label>
+                <label class="field"><span>Panorama</span><select id="panorama"><option value="dusk">Dusk over the water</option><option value="clouds">Open clouds</option><option value="night">Clear night</option></select></label>
+              </fieldset>
+              <fieldset><legend>Light and orientation</legend>
+                <div class="field"><label for="brightness">Brightness</label><div class="row"><input id="brightness" type="range" min="0" max="100" value="65" data-pair="brightnessValue"><input id="brightnessValue" type="number" min="0" max="100" value="65" aria-label="Brightness percent"><span>%</span></div></div>
+                <div class="field"><label for="rotation">Sky rotation</label><div class="row dial-row"><div class="dial" id="rotationDial" aria-hidden="true"></div><input id="rotation" type="range" min="0" max="359" value="45" data-pair="rotationValue" data-dial="rotationDial"><input id="rotationValue" type="number" min="0" max="359" value="45" aria-label="Sky rotation degrees"><span>°</span></div><p class="help">Adjust the slider or enter an exact angle. The dial is a visual indicator in this study.</p></div>
+              </fieldset>
+            </div>
+            <div data-content="instrument" hidden>
+              <div class="tabs" role="tablist" aria-label="Instrument settings"><button type="button" role="tab" aria-selected="true" aria-controls="general" id="generalTab" data-tab="general">General</button><button type="button" role="tab" aria-selected="false" aria-controls="channels" id="channelsTab" data-tab="channels" tabindex="-1">Channels</button></div>
+              <div id="general" role="tabpanel" aria-labelledby="generalTab">
+                <label class="field"><span>Run name</span><input id="runName" type="text" value="Sweep A" required></label>
+                <label class="field"><span>Operating mode</span><select id="mode"><option value="sweep">Sweep</option><option value="fixed">Fixed</option><option value="compare">Compare</option></select></label>
+                <div class="split">
+                  <div class="field"><label for="gain">Gain</label><input id="gain" type="range" min="0" max="100" value="40" data-pair="gainValue"><div class="row"><input id="gainValue" type="number" min="0" max="100" value="40" aria-label="Gain percent"><span>%</span></div></div>
+                  <div class="field"><label for="phase">Phase</label><div class="row"><div class="dial" id="phaseDial" aria-hidden="true" style="--angle:90deg"></div><input id="phaseValue" type="number" min="0" max="359" value="90" aria-label="Phase degrees"><span>°</span></div><input id="phase" type="range" min="0" max="359" value="90" data-pair="phaseValue" data-dial="phaseDial"></div>
+                </div>
+                <label class="check"><input id="enabled" type="checkbox" checked> Enable this configuration</label>
+                <label class="field"><span>Notes</span><textarea id="notes">Compare with baseline</textarea></label>
+              </div>
+              <div id="channels" role="tabpanel" aria-labelledby="channelsTab" hidden>
+                <table><caption>Select channels for this configuration.</caption><thead><tr><th scope="col">Use</th><th scope="col">Channel</th><th scope="col">Role</th></tr></thead><tbody>
+                  <tr><td><label class="check"><input type="checkbox" checked aria-label="Use left channel"></label></td><th scope="row">Left</th><td>Signal A</td></tr>
+                  <tr><td><label class="check"><input type="checkbox" checked aria-label="Use right channel"></label></td><th scope="row">Right</th><td>Signal B</td></tr>
+                  <tr><td><label class="check"><input type="checkbox" aria-label="Use reference channel"></label></td><th scope="row">Reference</th><td>Baseline</td></tr>
+                </tbody></table><p class="help">General and Channels are parts of one form. Submit applies them together.</p>
+              </div>
+            </div>
+            <div data-content="review" hidden>
+              <h3>Review request</h3><div class="summary"><b>Sweep A · Comparison report</b><p>The analysis is ready for your review. Choose what the assistant should do next.</p><span>Requested by Review assistant</span></div>
+              <label class="field"><span>Your decision</span><select id="decision"><option value="approve">Approve the result</option><option value="request_changes">Request a revision</option><option value="decline">Decline</option></select></label>
+              <label class="field"><span>Comment</span><textarea id="comment" placeholder="Add context for the assistant"></textarea></label>
+              <p class="help">You can choose Later and return to this question. The assistant does not need to stay on hold while you edit.</p>
+            </div>
+          </fieldset>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite" tabindex="0">Draft · Changes stay here until you submit.</p>
+        <footer><button type="button" class="danger" id="cancel" aria-describedby="status">Cancel request</button><button type="button" id="later">Later</button><button type="button" id="inspect" hidden>View request details</button><button type="submit" class="primary" id="submit" aria-describedby="status">Submit settings</button></footer>
+      </form>
+      <div class="placement" id="placement" hidden><button id="recenter">Recenter preview</button><button id="attention">Show attention</button></div>
+    </section>
+    <section class="keyboard" id="keyboard" aria-label="Text entry preview" hidden><p><b id="keyboardLabel">Text entry</b> · Placement study; hardware keyboard also works.</p><div class="keyboard-keys" id="keys"></div></section>
+  </div>
+  <button class="launcher" id="launcher" aria-controls="panel" aria-expanded="true">Your attention <b>3</b></button>
+</main>
+<div class="note"><p><b>One component model, three contexts.</b> The lobby edits existing sky settings; the instrument form belongs to an independent nonphysical application; the review question can wait in the HUD. Form declarations bind submitted fields to an authorized continuation in the originating ontology.</p><p>Only panel backgrounds change opacity. Controls, text, status and keyboard remain opaque. This is a visual prototype: it does not authenticate, commit a diff, execute an agent, or validate headset ergonomics. Knob dragging, spatial Move and input-device behavior require the production adapter and hardware checks.</p></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const cases = {
+    atmosphere: { source:'Lobby / Personal sky', title:'Adjust the atmosphere', subtitle:'Give this sky a look of its own.', submit:'Submit settings' },
+    instrument: { source:'Analyzer / Independent application', title:'Configure the instrument', subtitle:'One configuration, all its channels. No physical space required.', submit:'Submit configuration' },
+    review: { source:'Research / Review assistant', title:'Review the result', subtitle:'A question you can answer in your own time.', submit:'Send decision' }
+  };
+  const messages = {
+    draft:'Draft · Changes stay here until you submit.',
+    invalid:'Check your input · A required name is missing or a number is outside its range.',
+    submitted:'Submitted · Your answer was accepted. Waiting for the responsible agent.',
+    applied:'Applied · The application result has been verified.',
+    attention:'Needs attention · The application could not complete this request. Your accepted answer is retained.',
+    unknown:'Outcome unknown · Check the original operation before taking another action.',
+    stale:'Form changed · Your draft is preserved. Review the current form before submitting.',
+    disconnected:'Disconnected · Your draft and last known state remain here.',
+    cancelled:'Cancelled · This question no longer accepts an answer.'
+  };
+  const states = { atmosphere:'draft', instrument:'draft', review:'draft' };
+  let active = 'atmosphere';
+  let textTarget = null;
+  const setState = (state, invalidField = null) => {
+    states[active] = state;
+    $('state').value = state;
+    $('status').textContent = messages[state];
+    $('status').className = 'status' + (['invalid','attention','unknown','stale'].includes(state) ? ' error' : state === 'applied' ? ' done' : '');
+    const editable = ['draft','invalid'].includes(state);
+    $('fields').disabled = !editable;
+    $('submit').disabled = !editable;
+    $('cancel').disabled = !editable;
+    $('inspect').hidden = !['attention','unknown'].includes(state);
+    $('inspect').textContent = state === 'unknown' ? 'Check submission' : 'View request details';
+    $('fieldError')?.remove();
+    document.querySelectorAll('[aria-invalid]').forEach(field => { field.removeAttribute('aria-invalid'); field.removeAttribute('aria-describedby'); });
+    if (state === 'invalid') {
+      const field = invalidField || document.querySelector(`[data-content="${active}"] input, [data-content="${active}"] select`);
+      const error = document.createElement('p'); error.id = 'fieldError'; error.className = 'field-error';
+      error.textContent = invalidField?.validationMessage || 'Check this value · Example validation feedback.';
+      field.setAttribute('aria-invalid', 'true'); field.setAttribute('aria-describedby', 'fieldError');
+      (field.closest('.field') || field.parentElement).append(error);
+      if (active === 'review') $('status').textContent = 'Check your decision · Review the highlighted field before submitting.';
+    }
+    if (!editable) { $('keyboard').hidden = true; textTarget = null; }
+  };
+  const showPanel = show => {
+    $('panel').hidden = !show;
+    $('launcher').setAttribute('aria-expanded', String(show));
+    if (!show) { $('keyboard').hidden = true; textTarget = null; $('launcher').focus(); }
+  };
+  document.querySelectorAll('[data-case]').forEach(button => button.addEventListener('click', () => {
+    active = button.dataset.case;
+    document.querySelectorAll('[data-case]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    document.querySelectorAll('[data-content]').forEach(section => section.hidden = section.dataset.content !== active);
+    Object.entries(cases[active]).forEach(([id,value]) => $(id).textContent = value);
+    $('keyboard').hidden = true; textTarget = null;
+    showPanel(true); setState(states[active]);
+  }));
+  $('state').addEventListener('change', e => setState(e.target.value));
+  $('world').addEventListener('change', e => $('scene').classList.toggle('bright', e.target.value === 'bright'));
+  $('opacity').addEventListener('input', e => { document.documentElement.style.setProperty('--alpha', e.target.value / 100); $('opacityValue').value = e.target.value + '%'; });
+  $('opaque').addEventListener('change', e => {
+    $('opacity').disabled = e.target.checked;
+    document.documentElement.style.setProperty('--alpha', e.target.checked ? 1 : $('opacity').value / 100);
+    $('opacityValue').value = e.target.checked ? '100%' : $('opacity').value + '%';
+  });
+  $('large').addEventListener('change', e => $('scene').classList.toggle('large', e.target.checked));
+  $('layout').addEventListener('change', e => {
+    const vr = e.target.value === 'vr';
+    $('scene').classList.toggle('vr', vr); $('placement').hidden = !vr;
+    $('keyboard').hidden = true; textTarget = null;
+  });
+  $('attention').addEventListener('click', () => {
+    const visible = $('scene').classList.toggle('show-attention');
+    $('attention').textContent = visible ? 'Hide attention' : 'Show attention';
+  });
+  $('recenter').addEventListener('click', () => $('panel').scrollIntoView({block:'center', behavior:'instant'}));
+  $('hide').addEventListener('click', () => showPanel(false));
+  $('later').addEventListener('click', () => showPanel(false));
+  $('launcher').addEventListener('click', () => { showPanel($('panel').hidden); if (!$('panel').hidden) $('hide').focus(); });
+  $('cancel').addEventListener('click', () => setState('cancelled'));
+  $('inspect').addEventListener('click', () => {
+    $('status').textContent = states[active] === 'unknown'
+      ? 'Preview only · The production action checks the original signed operation; it does not submit again.'
+      : 'Preview only · The production view shows the known reason and any recovery action allowed by the application.';
+    $('status').focus();
+  });
+  $('form').addEventListener('submit', event => {
+    event.preventDefault();
+    const visibleFields = [...document.querySelector(`[data-content="${active}"]`).querySelectorAll('input,select,textarea')];
+    const invalid = visibleFields.find(field => !field.checkValidity());
+    if (invalid) {
+      if (active === 'instrument' && invalid.closest('#general')) chooseTab($('generalTab'));
+      setState('invalid', invalid); invalid.reportValidity(); return;
+    }
+    setState('submitted');
+  });
+  document.querySelectorAll('input[data-pair]').forEach(range => {
+    const number = $(range.dataset.pair);
+    const updateDial = () => { if (range.dataset.dial) $(range.dataset.dial).style.setProperty('--angle', range.value + 'deg'); };
+    range.addEventListener('input', () => { number.value = range.value; updateDial(); });
+    number.addEventListener('input', () => { if (number.value !== '' && number.checkValidity()) { range.value = number.value; updateDial(); } });
+  });
+  const chooseTab = button => document.querySelectorAll('[data-tab]').forEach(tab => {
+    const selected = tab === button;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+    $(tab.dataset.tab).hidden = !selected;
+  });
+  document.querySelectorAll('[data-tab]').forEach(button => {
+    button.addEventListener('click', () => chooseTab(button));
+    button.addEventListener('keydown', event => {
+      if (['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === 'Home' ? $('generalTab') : event.key === 'End' ? $('channelsTab') : button === $('generalTab') ? $('channelsTab') : $('generalTab');
+        chooseTab(next); next.focus();
+      }
+    });
+  });
+  document.querySelectorAll('#fields input[type=text],#fields textarea,#fields input[type=number]').forEach(field => field.addEventListener('focus', () => {
+    if ($('layout').value !== 'vr') return;
+    textTarget = field;
+    $('keyboardLabel').textContent = field.closest('label')?.querySelector('span')?.textContent || field.getAttribute('aria-label') || 'Text entry';
+    $('keyboard').hidden = false;
+  }));
+  for (const key of [...'QWERTYUIOPASDFGHJKLZXCVBNM0123456789', 'Space', '⌫', 'Done']) {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = key;
+    button.addEventListener('click', () => {
+      if (!textTarget) return;
+      if (key === 'Done') { $('keyboard').hidden = true; textTarget = null; return; }
+      if (textTarget.type === 'number') {
+        if (/^\d$/.test(key)) textTarget.value += key;
+        else if (key === '⌫') textTarget.value = textTarget.value.slice(0,-1);
+      } else {
+        const start = textTarget.selectionStart ?? textTarget.value.length;
+        const end = textTarget.selectionEnd ?? start;
+        textTarget.setRangeText(key === '⌫' ? '' : key === 'Space' ? ' ' : key, key === '⌫' && start === end ? Math.max(0,start - 1) : start, end, 'end');
+      }
+      textTarget.dispatchEvent(new Event('input', {bubbles:true}));
+    });
+    $('keys').append(button);
+  }
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') showPanel(false); });
+</script>
+</body>
+</html>

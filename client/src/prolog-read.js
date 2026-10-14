@@ -35,7 +35,7 @@ export function readList(text) {
   return term.items
 }
 
-function requireProjection(term) {
+export function requireProjection(term) {
   if (term.type === 'variable') throw new Error('a projection must be ground')
   if (term.type === 'list') {
     if (term.tail !== null) throw new Error('a partial list is not a projection')

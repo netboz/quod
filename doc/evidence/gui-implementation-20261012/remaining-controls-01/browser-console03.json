@@ -1,0 +1,68 @@
+[
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"",
+    "source": "console-api",
+    "timestamp": 1791934046962
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"",
+    "source": "console-api",
+    "timestamp": 1791934047021
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/sceneLoaderFlags-BhHHlgZW.js?v=4ef7a055 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791934047239
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/shaderMaterial.pure-BAxlWAs2.js?v=4ef7a055 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791934047248
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/light-CV135QnI.js?v=4ef7a055 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791934047249
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/freeCamera.pure-8y7a82Mi.js?v=4ef7a055 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791934047249
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/node_modules/.vite/deps/pbrMaterial.pure-YFgq7Gzb.js?v=4ef7a055 - Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)",
+    "source": "network",
+    "timestamp": 1791934047250
+  },
+  {
+    "level": "SEVERE",
+    "message": "http://localhost:5178/favicon.ico - Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "source": "network",
+    "timestamp": 1791934047258
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 850:8 \"[vite] connecting...\"",
+    "source": "console-api",
+    "timestamp": 1791934047484
+  },
+  {
+    "level": "DEBUG",
+    "message": "http://localhost:5178/@vite/client 954:11 \"[vite] connected.\"",
+    "source": "console-api",
+    "timestamp": 1791934047506
+  },
+  {
+    "level": "INFO",
+    "message": "http://localhost:5178/node_modules/.vite/deps/guid-mXH-56Sa.js?v=f7e8e68f 39:23 \"BJS - [01:27:28]: Babylon.js v9.18.1 - WebGL2\"",
+    "source": "console-api",
+    "timestamp": 1791934048335
+  }
+]

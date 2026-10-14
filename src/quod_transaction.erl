@@ -745,8 +745,9 @@ receipt_evidence_references(_, _) -> error.
 -spec requires_network_identity(term()) -> boolean().
 requires_network_identity([]) -> false;
 requires_network_identity(
-  [#transaction{request_auth = none, auth_transcript = none} | Rest]) ->
-    requires_network_identity(Rest);
+  [#transaction{request_auth = none, auth_transcript = none,
+                read_check = Reads} | Rest]) ->
+    quod_read_set:requires_network_identity(Reads) orelse requires_network_identity(Rest);
 requires_network_identity([#transaction{} | _Rest]) -> true;
 requires_network_identity([_Malformed | _Rest]) -> true;
 requires_network_identity(_ImproperOrMalformed) -> true.

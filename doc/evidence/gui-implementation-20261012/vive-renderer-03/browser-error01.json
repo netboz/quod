@@ -1,0 +1,1 @@
+{"content":[{"type":"text","text":"Extension Tool Error\n  Extension: com.nimbalyst.browser\n  Tool: browser.evaluate\n\nError: ColorCurves needs to be imported before as it contains a side-effect required by your code."}],"isError":true}

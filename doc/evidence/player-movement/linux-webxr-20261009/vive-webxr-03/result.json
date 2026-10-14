@@ -1,0 +1,7 @@
+{
+  "override_exit": 0,
+  "steamvr_path": "/home/yan/.local/share/Steam/steamapps/common/SteamVR",
+  "preflight_exit": 1,
+  "restore_exit": 0,
+  "desktop_monitor_geometry_preserved": true
+}

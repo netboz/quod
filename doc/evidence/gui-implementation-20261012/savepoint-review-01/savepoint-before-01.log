@@ -1,0 +1,71 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::03:31:47.682969 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.689.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_B479C49C556BBA13",
+                                       seed_peers => [],
+                                       genesis_file =>
+                                           "/tmp/quod_ask_B479C49C556BBA13/slow.pl",
+                                       external_predicate_modules => [],
+                                       node_id =>
+                                           <<88,9,170,254,116,27,56,195,240,
+                                             117,176,145,251,250,166,174,182,
+                                             187,61,56,62,212,203,38,202,228,
+                                             80,96,31,144,236,70>>,
+                                       max_proof_workers => 64,
+                                       max_scope_workers => 64,
+                                       proof_timeout_ms => 60000,
+                                       transaction_ttl_ms => 30000,
+                                       batch_window_ms => 25,
+                                       scope_timeout_ms => 60000,
+                                       scope_step_timeout_ms => 30000,
+                                       detailed_consensus_metrics => false}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_ask_tests:-ask_test_/0-fun-21-/0:320
+[0;31m     Failure/Error: {error,function_clause,
+                        [{quod_ask_tests,assert_foreign_transaction,
+                             [{error,{savepoint_limit_exceeded,1024}},
+                              <<"chain_c">>],
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_ask_tests.erl"},
+                              {line,1384}]},
+                         {quod_ask_tests,
+                             t_local_choicepoints_preserve_foreign_rollback,1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_ask_tests.erl"},
+                              {line,955}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 5.290 seconds
+[0;31m64 tests, 1 failures
+[0m===> Error running tests

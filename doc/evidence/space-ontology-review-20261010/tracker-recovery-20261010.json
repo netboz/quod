@@ -1,0 +1,918 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Recovery snapshot of the twelve ontology/space tracker items after reported collaborative-body storage failures. Captured via tracker_get before repair; not a live tracker replica.",
+  "workspace": "/home/yan/src/quod",
+  "capturedAt": "2026-10-10 12:37:24 UTC",
+  "items": [
+    {
+      "id": "task_1791119703504_7774jx",
+      "localKey": "QUD.3",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Add shared-world physics simulation and authenticated consequences",
+      "status": "in-progress",
+      "priority": "medium",
+      "tags": [
+        "physics",
+        "world",
+        "native-runtime"
+      ],
+      "archived": false,
+      "customFields": {
+        "dependsOn": [
+          {
+            "itemId": "task_1791120386769_szlx2z"
+          },
+          {
+            "itemId": "task_1791120391540_6kaeiw"
+          },
+          {
+            "itemId": "task_1791120397842_qm278c"
+          },
+          {
+            "itemId": "task_1791120418100_u4q7in"
+          },
+          {
+            "itemId": "task_1791120421186_fwnpq2"
+          },
+          {
+            "itemId": "task_1791120424245_8lovyc"
+          },
+          {
+            "itemId": "task_1791120427626_ubxoow"
+          },
+          {
+            "itemId": "task_1791195816420_hwsgxm"
+          },
+          {
+            "itemId": "task_1791195847958_y74fzs"
+          },
+          {
+            "itemId": "task_1791574097686_paoo8v"
+          },
+          {
+            "itemId": "task_1791385146437_lavbmu"
+          },
+          {
+            "itemId": "task_1791635398662_3io1m7"
+          }
+        ]
+      },
+      "description": "## Goal\nAdd authoritative, recoverable physics simulation for a shared world while keeping domain state, policy, actions, authorization and meaningful consequences in Prolog. Treat native physics as transient world state, not a second domain engine.\n\n## Delivery\n1. Define world-local physical bodies, colliders, joints/attachments, authority, epoch, incarnation and structural revision in ontology-owned state. Visual Eidolons and physical shapes are separate; a GLB's triangles or declared visual bounds do not silently become collision authority.\n2. Install one retained simulation owner for each active simulated world through the existing runtime/resource lifecycle. It consumes committed desired state, steps Rapier through audited Rustler NIF calls, and publishes current epoch/tick body poses. Physics is optional and enabled by committed Prolog policy, not inferred from whether a scene looks static; a nonphysical world starts no simulator. Respect bounded native work, BEAM scheduler safety, reader/writer locking and native failure retirement; reuse existing owners and notifications.\n3. Compose parent/local scene transforms with body motion under a single pose source per occurrence. Bind frames to stable entity/body identity plus authority epoch, simulation incarnation, structural revision and tick. Reconnect and sequence gaps rebuild from current state; stale frames and deleted/recreated entities cannot resurrect or move an object.\n4. Filter motion frames and perception candidates through each agent's current authorized view. Keep visual/perception bounds separate from collision bounds. Measure whether existing Rapier/Parry queries suffice before adding another spatial index; any index is a derived projection of the world owner, never a second knowledge base.\n5. Admit bounded, quantized contact/obstruction observations from an authenticated physics producer through the existing reaction/action/atomic transaction path. Prolog decides their meaning and durable effects. Current sealing rejects a write proof that reads a live native query; do not add a functor exemption or classify live physics as proof-bound. Bind observations to world/authority incarnation, entity/body revision and tick, reject stale/duplicate reports, and preserve owner recovery without replaying old reactions.\n\n## Acceptance\n- A chair can be pushed without a label/material refresh snapping it back; a structural edit or authority restart invalidates old frames.\n- A hinged door can be obstructed: physics reports the observation, Prolog decides and atomically commits the domain consequence. An in-proof live physics query is rejected.\n- A held object follows its holder and survives attach/drop, deletion, reconnect and current-authority recovery according to an explicit checkpoint policy.\n- Unauthorized viewers receive neither hidden scene objects nor their motion frames. Collider-less or visually larger objects are not lost from perception selection.\n- Native stepping and queries do not block an ontology state owner or ordinary BEAM schedulers; failures retire the affected world visibly. Repeated unchanged checks do not rebuild Prolog/history state or cause disk writes; real updates still apply.\n\nThis is separate from static GLB mesh rendering, which can be delivered first without a physics NIF. Direction and caveats: [world overview](/home/yan/src/quod/doc/world.md), [archived client/world direction](/home/yan/src/quod/doc/outdated/client-world-direction.md), [archived consequence direction](/home/yan/src/quod/doc/outdated/world-consequence-direction.md), and [current multiwrite map](/home/yan/src/quod/doc/multiwrite-architecture.md). The archived consequence draft's in-proof `physics_contact/2` path conflicts with current sealing and is not an implementation recipe.\n\n## Delivery boundaries after the ontology/space review\nCompleted foundations remain [QUD.4](nimbalyst://QUD.4)–[QUD.8](nimbalyst://QUD.8). Remaining normal-world integration is [QUD.27](nimbalyst://QUD.27), with governed space vocabulary in [QUD.33](nimbalyst://QUD.33); actual-lobby player/Vive acceptance is [QUD.26](nimbalyst://QUD.26) and deferred real-lobby blocked/closed door acceptance is [QUD.36](nimbalyst://QUD.36). Keep this umbrella open alongside the existing held-object, authorized query, distinct-impact and multi-viewer tasks.\n\nOntology and space are independent classes. Reuse the existing subscribed committed-diff path for live collider definitions; do not impose recipe re-adoption or duplicate synchronization on every live edit. No backward-compatibility requirement or parallel old/new engine is introduced. Same lobby identity/history preservation and applicable validator/deployment authority still apply. Text/3D ontology editing is separate work, not a blanket prerequisite for this physics umbrella."
+    },
+    {
+      "id": "task_1791223571562_whmgcx",
+      "localKey": "QUD.19",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Deliver the accepted visual personal lobby and client tuning",
+      "status": "done",
+      "priority": "high",
+      "tags": [
+        "lobby",
+        "physics",
+        "client",
+        "prolog"
+      ],
+      "archived": false,
+      "comments": [
+        {
+          "id": "comment_1791224473940_f0ik2p",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Reference pictures supplied by Yan in this session: [Anima 00019](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224260212_Anima_00019_.png), [Anima 00020](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224264576_Anima_00020_.png), [Anima 00024](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224267991_Anima_00024_.png).\n\nVisual direction: open airy curved canopy, pale sculpted floor, warm sunlight, blue sky and broad outlook. Central circular landscape feature is reference context, not added functional scope. Yan will build the roof mesh using ComfyUI when dimensions/placement are ready; ground may also be a mesh. Visible meshes remain distinct from authorized physical colliders. Preserve console and existing subject/recipe identities.\n\nChecked work radar and clean current tree. Pose-streaming prerequisite is to-do and unclaimed; included in this session per the updated instruction. Establishing disposable real signed-endpoint browser preview first.",
+          "createdAt": 1791224473940,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791224539836_9et6bu",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Visual references supplied by Yan: [Anima 00019](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224260212_Anima_00019_.png), [Anima 00020](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224264576_Anima_00020_.png), [Anima 00024](/tmp/nimbalyst-attachments/-home-yan-src-quod/saved/508cacc5-0228-456d-bf65-48203842324d/1791224267991_Anima_00024_.png).\n\nDirection: open airy curved canopy, pale sculpted floor, warm daylight and broad sky outlook. Yan will build the roof mesh in ComfyUI when an asset brief is ready; the ground may also be a mesh. Preserve console and subject/recipe identities. Ground visual geometry remains separate from authorized collision geometry.\n\nUpdated constraint: use the currently available framework; no large engine development. Check the minimum pose-streaming gap before expanding scope. Existing fixture preview attempt 01 failed on sandbox loopback binding (eperm), retained at /tmp/quod-lobby-preview-20261005-01/server.log; separately labeled attempt 02 uses approved local network access.",
+          "createdAt": 1791224539836,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791224877892_pz4ifj",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Visible checkpoint: disposable real signed-endpoint fixture runs at https://127.0.0.1:41965; local development sign-in link http://127.0.0.1:5173/__lobby-preview opens the existing lobby with its disposable identity. MCP browser verified console → Prove a goal → lobby_reference(Lobby). → Run, returning the exact anchored lobby reference at height 2. No production source changes yet. Logs/config/screenshots retained in /tmp/quod-lobby-preview-20261005-02. The fixture catalogue contains non-system test namespaces, so system catalogue discovery reports unavailable; licence lens is outside this slice.\n\nSource inspection confirms the QUD.7 gap: retained server snapshot API exists, but no authorized browser pose subscription/delivery or body-driven renderer binding exists. A scope choice is pending to reconcile the newly stated 'no big engine development' constraint with that prerequisite; simulation, transactions and outcome machinery will remain with existing owners.",
+          "createdAt": 1791224877892,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791225209664_wlomhz",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Additional baseline browser check: switching to edition succeeds with sky and console subjects preserved. Repository tree remains unchanged. Work on motion is paused for the open scope choice prompted by the new engine-development constraint. Desktop stop notification attempt failed (exit 127): notify-send cannot resolve notify_notification_get_activation_app_launch_context. No notification delivery is claimed.",
+          "createdAt": 1791225209664,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791225294322_hbn8rx",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan selected existing_only in the scope widget: continue lobby layout, meshes and existing interactions; defer live door motion and leave that acceptance explicitly incomplete. Do not implement QUD.7 or expand the engine in this slice. Existing preview and console are verified. Roof/ground assets remain user-supplied work, to request with a concrete mesh brief.",
+          "createdAt": 1791225294322,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791225407251_nz5i8z",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan confirmed supplying separate roof and ground meshes and accepted this asset brief:\n\n- Existing lobby platform: 10 m diameter.\n- Roof: approximately 10–12 m across, 5–6 m maximum height, broad airy arches with at least 3 m clear headroom. Pale ivory surfaces, warm peach/gold undersides, open skyline as in the attached references.\n- Ground: approximately 10 m across, walkable top at Y=0, pale sculpted surface. Central miniature-world/pit is not required in this slice. Reserve room for the preserved console and later 2 m wide door/obstacle demonstration.\n- Separate self-contained static GLBs, metres, Y up, origin at platform centre on ground plane. Core glTF PBR, embedded PNG/JPEG textures, no animation/skins/morphs/compression extensions/external resources. Target <=50k triangles per asset and 2K textures. Original scale information is acceptable if normalization is needed.\n\nAsset files have not arrived yet. Remaining visual integration is waiting for that handoff. The existing local preview is available at http://127.0.0.1:5173/__lobby-preview (disposable fixture identity); console signed query and edition switching were browser verified. Production source delta: 0 lines. Door motion acceptance is explicitly deferred, not passed. QUD.7 returned to to-do. This item remains in-progress, not done.",
+          "createdAt": 1791225407251,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791226262007_omsy3p",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan approved the roof-reference-v3 image. Approved reference: [roof-reference-v3.png](/home/yan/src/quod/assets/lobby/roof-reference-v3.png). Generation/edit prompts: [roof-reference-v3.prompt.txt](/home/yan/src/quod/assets/lobby/roof-reference-v3.prompt.txt).\n\nSelected design: one raised continuous roof shell with four broad open arches and a centred skylight, pale blue-grey exterior and warm champagne underside; no floor or platform. Colours are flexible per Yan. Earlier three-petal v1 is not the selected design.\n\nNext handoff is the image-to-3D roof GLB from Yan's existing ComfyUI pipeline. Validate the resulting mesh's symmetry, shell thickness, scale and clearance during import. Ground remains a separate asset. This is visual design approval, not completion of the lobby or deferred physical-door acceptance.",
+          "createdAt": 1791226262007,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791227865233_m1wmx0",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan approved the procedural six-foot roof, replacing the pending ComfyUI handoff. Roof mesh is assets/lobby/roof-six-feet.glb (approved geometry retained byte-for-byte). Yan now explicitly requires a separate round sculpted ground with a central opening and rounded borders. Implemented assets/lobby/ground.glb: 12.6 m diameter, 4.4 m opening, rolled inner coping and rounded outer edge, level annular walkway. Console keeps its identity and recipes and moves to Z=3.85 m, clear of the opening. Both meshes use existing Eidolon/GLB rendering and ordinary lobby founding terms. No new physics or frame transport. Live door motion remains deferred under the previously selected existing_only scope; full item acceptance remains incomplete. Current ground preview: [ground-preview.png](/home/yan/src/quod/assets/lobby/ground-preview.png). Browser verification of the revised assembled lobby is underway.",
+          "createdAt": 1791227865233,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791228205355_051trd",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan approved the annular ground shape after requesting an approximately 1 m outer border. Final geometry: 12.6 m outer diameter, 4.4 m central opening, rounded outer parapet at Y=1 m, low rounded inner coping at Y=0.2 m. Ground remains separate from the approved roof. Yan rejected the beige colouring; updated ground to cool porcelain white with blue-grey inner wall. Current asset: assets/lobby/ground.glb, SHA-256 edfce925091b3960f14ff10a82d0cc32b3bdb3cb55db3ecb7bb36857f9d2c38e. Geometry is unchanged by the colour adjustment. This material selection has not yet been approved by Yan.",
+          "createdAt": 1791228205355,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791228471554_ftcmpt",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Final visual integration checkpoint: local signed lobby at http://127.0.0.1:5177/__lobby-preview (automatically signs in with a disposable fixture identity); asset inspection at http://127.0.0.1:5173/tools/roof-preview.html. Browser verified current roof/ground/console GLBs, console → Prove a goal → lobby_reference(Lobby). → Run (anchored result at height 2), edition/playing switches and full reload. An unchanged Refresh view retained the identical node and mesh objects and fetched zero additional GLBs. Mesh floor selection supplies its two loaded surfaces to the existing VR path; no VR hardware acceptance claimed.\n\nFinal focused lobby EUnit: 9 passed; lifecycle suite: 48 passed; client suite: 12 test files passed; UI production bundle passed. Full logs, earlier failures and final browser captures retained in /tmp/quod-lobby-preview-20261005-06/evidence/verification.txt and adjacent files. Ground build attempt 01 failed welded seam validation because of signed-zero key formatting; canonicalization corrected without weakening the assertion. Later shape/material revisions have distinct logs. Production source delta: +30/-6 (net +24) across lobby ontology and mesh-floor VR selection, plus two GLBs and rebuilt UI output. Tests: +25/-4. Offline authoring/inspection tools: 360 lines. No native/server-runtime additions.\n\nQUD.19 remains in-progress: live physical door/obstacle/outcome acceptance and QUD.7 are explicitly deferred, not passed. Known baseline fixture licence-catalogue warning remains visible. Appearance meshes do not add collision or physical walking constraints. No deployment or existing-state migration. Latest colour revision is cool porcelain/blue-grey; shape is approved, colour is pending user feedback.",
+          "createdAt": 1791228471554,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791228721686_c9d67g",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan requested more blue / the same colour as the roof. Ground baseColorFactor now exactly matches roof exterior [0.48, 0.65, 0.73, 1]; inner wall stays darker blue-grey. Verified GLB binary geometry is byte-for-byte unchanged and only glTF materials differ. Updated GLB digest fe72c2ebe0699e40c772fbcd732fc058190359c36e3264d2c3b19f5edde4909a and exact resource allowance (1,660,524 file bytes), both packaged copies and recipe/test references. Authoring/admission checks passed (log /tmp/quod-ground-build-06.log). Browser verified current GLB loads in a fresh signed lobby with no draw errors. Latest lobby sign-in URL http://127.0.0.1:5178/__lobby-preview; asset preview remains http://127.0.0.1:5173/tools/roof-preview.html. No engine or shape changes in this colour revision. Correction to earlier tool line count: authoring/inspection tools total 362 lines.",
+          "createdAt": 1791228721686,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791229080584_q872x5",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan requested the roof feet meet the border and a larger overall diameter while preserving the central opening. Widened the ground to 18 m (roof about 17.75 m); central hole remains 4.4 m. All six roof tips now seat at radius 8.75 m, Y=1 m on the actual coping crown vertices. Roof overall height remains 5.25 m; shell normals transformed consistently. Shared offline seating datum in client/tools/lobby-layout.mjs prevents the separately exported assets drifting apart. Maximum measured foot-to-ground vertex error is below 1e-6 m; closed manifold, symmetry and profile admission checks pass. Updated exact digests, bounds and allowances in lobby recipes/tests and packaged GLBs. 9 focused lobby EUnit tests pass (full log /tmp/quod-lobby-mesh-eunit-05.log); build logs /tmp/quod-roof-build-04.log and /tmp/quod-ground-build-08.log. Latest assembly image: assets/lobby/assembly-preview.png. New disposable sign-in URL: http://127.0.0.1:5179/__lobby-preview. No engine or physical simulation changes; original door acceptance remains deferred.",
+          "createdAt": 1791229080584,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791229382673_hglwrc",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan requested the upper ground face match the roof underside. Assigned the walkway and upper inner coping the exact roof underside base colour [0.68, 0.46, 0.25, 1]; outer border and recessed inner wall retain their blue-grey materials. Verified identical triangle positions and normals before/after material reassignment. All mesh/contact/admission checks passed; log /tmp/quod-ground-build-09.log. Updated recipe/test digest and resource allowance to current 3-material GLB (170be9802c55e1071f667baaaa66f28eaa819396f95762c6b9b3524ac5b5f76b), with development/packaged copies updated. Actual signed browser lobby loads the new 1,661,128-byte ground without draw errors at http://127.0.0.1:5180/__lobby-preview. Asset preview restarted at http://127.0.0.1:5173/tools/roof-preview.html after the previous local server stopped. Geometry, 18 m diameter, 4.4 m opening and roof-to-border contacts are unchanged. Door acceptance remains deferred.",
+          "createdAt": 1791229382673,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791229700970_aef4jd",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Corrected the material interpretation following Yan's feedback: the entire inner border, including its rounded lip, recessed wall and lower return, now shares the champagne floor material. Removed the obsolete blue inner-wall material. Outer border remains blue-grey. Ground GLB now afc308d436ff74b5bb2221beedc4ead935696dd5ca137a91adabf5cb8f704dd4, 1,660,472 bytes, 2 materials; exact descriptors and packaged files updated. Mesh/contact/admission checks passed (/tmp/quod-ground-build-11.log), asset browser loaded the exact new digest and visual inspection confirms no blue inner rim. Latest disposable lobby sign-in is http://127.0.0.1:5181/__lobby-preview; asset preview remains port 5173. Geometry and scope unchanged.",
+          "createdAt": 1791229700970,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791229941394_snim9d",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Corrected the actual requested surface: Yan meant the inward-facing side of the OUTER perimeter border, not just the central opening rim. The entire interior (floor, central rim and inside of perimeter wall up to its crown) is now champagne; the exterior remains blue-grey. Verified 8,640 inward-facing perimeter vertices use the roof underside base colour and directly inspected the rendered image. Mesh/contact/profile checks passed; /tmp/quod-ground-build-12.log. Updated ground digest 6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f and exact 1,660,388-byte allowance in recipes/tests and packaged assets. Current preview image assets/lobby/ground-preview.png; disposable signed lobby URL http://127.0.0.1:5182/__lobby-preview. No geometry change.",
+          "createdAt": 1791229941394,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791230002047_t2l03l",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan approved the corrected ground finish: champagne floor, central opening rim and inward-facing perimeter border; blue-grey exterior. Approved ground asset digest: 6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f. Current dimensions remain 18 m overall diameter, 4.4 m central opening, 1 m perimeter border, with six roof feet seated on its crown. This confirms the visual finish; deferred physical-door acceptance remains incomplete and the item stays in-progress.",
+          "createdAt": 1791230002047,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791234254510_f2o5hr",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan now explicitly requests deployment of the approved lobby to the real cluster, and authorizes ledger cleanup if necessary. Read-only inspection found the ten-node `quod` fleet uses consensus domain v2; the existing eight-node `quod-finality-candidate-v6-20260926` fleet uses current v3 and holds the recent lobby/catalogue. Preparing a data-preserving cold upgrade of that eight-node fleet using existing deployment and source-update tools; no fleet changes yet. Frozen source and sequential release gates: `/tmp/quod-lobby-release-20261005-01`. Client, UI, native tests and Clippy passed; server gates ongoing. QUD.19 remains in progress and QUD.7 remains deferred under the prior existing-framework-only scope choice.",
+          "createdAt": 1791234254510,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791236965626_2xmxti",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "The agreed visual lobby slice is deployed and browser-verified: account creation, approved roof and ground, signed Prolog console, playing/edition selection, refresh and reload. Applicable release checks passed. Existing instance facts were preserved. Work remains in progress because the original physical door and pose-streaming acceptance is deferred under the selected existing-framework scope. Source changes remain uncommitted.",
+          "createdAt": 1791236965626,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791238019195_upb4po",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Client entry tuning implemented and deployed. The lobby is not mounted while restoring a local identity or before registration. New visitors see only the identity entry screen; returning users enter their lobby automatically. Unlock/import remain on the identity screen. Restoration failures offer retry without replacing the key. Browser verification on the deployed client passed registration, delayed restoration with no lobby/registration flash, same-account automatic return, failed-connection recovery, signed console use and signout. Reload/retry issued no new domain writes. Client tests and UI build passed; lint has only the two existing Console fast-refresh warnings. Delta: four UI source files, +57/-10 lines, plus generated assets. Server binaries and ontology files are byte-identical to the preceding release. Changes remain uncommitted; original deferred door scope is unchanged.",
+          "createdAt": 1791238019195,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791238136391_r4lz9c",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Formalized the application startup contract in the existing world documentation and linked it from the architecture documentation index. It includes the lifecycle diagram, visible states, exact lobby mounting condition, key/account ownership, registration and interrupted-operation recovery rules, storage limitations, and browser acceptance obligations. Documentation links and diff whitespace checks passed; this change is documentation only.",
+          "createdAt": 1791238136391,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791238807585_wqrj9l",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Removed the redundant Explore in 3D button and its unused public capture handlers (four source lines removed). Clicking the scene remains the desktop navigation entry. Client tests and UI build passed. Deployed browser verification passed button absence, actual scene-click pointer capture and explicit pointer release with the retained account. A synthetic Escape event in headless Chromium did not release pointer lock; that failed check is retained and native Escape is not claimed as verified. Server code and ontology state were unchanged by this client update.",
+          "createdAt": 1791238807585,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791239748413_l1yatp",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Rationalized the entire bottom-left lobby panel and deployed the client update. Main controls are direct Open console and capability-checked VR, with an explicit unavailable reason. Raw sky/console/roof buttons are removed. Advanced contains clearly named scene/appearance controls, reload, and object/knowledge inspection with View Prolog source. Failed inspection is now distinguished from no offered tools and supports explicit retry. Async workspace results are fenced against identity, agent, selection, view, mode and refresh changes. Narrow-layout overlap was corrected.\n\nActual deployed-browser checks passed: direct authorized console and signed proof, normal/structure recipes, software licences and return, owned-lobby source reads, injected inspection failure and retry, reload, collapsed Advanced default and narrow layout. Client tests and UI build passed; lint retains only the existing Console warnings. No headset hardware acceptance is claimed. Production delta versus the previous client: 153 added / 75 removed lines across two UI source files (+78), covering capability/error states and the organized controls; server binaries and ontology files remained unchanged. Changes remain uncommitted.",
+          "createdAt": 1791239748413,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791240414939_gy5gjf",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Corrected misleading source-inspection errors during the authorized client-tuning work. The real signed response explicitly denies shared-ontology inspection to the account; the UI now explains restricted access and removes the ineffective retry/source action. Other failures remain distinguishable and retryable. No policy permissions were broadened. Client checks, lint/build, and browser verification before and after the cluster update passed, including shared-target denials, owned-lobby source inspection, the preserved console proof flow, appearance/reload and transient-error recovery. This completes the reported UI correction; the deferred physical-door and pose-streaming acceptance remain outstanding.",
+          "createdAt": 1791240414939,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791240736086_euqgvj",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan requests that this lobby work be closed and the system-ontology ACL work be handled separately. Follow-up: [QUD.20](nimbalyst://QUD.20), Review system ontology ACLs for public inspection and protected mutation (task_1791240698839_ywd2cg).\n\nAccepted scope is the existing-framework visual lobby and client tuning: approved roof/ground, real cluster entry and identity startup, preserved signed Prolog console, playing/edition recipes, rationalized controls and truthful source-access errors. These have been deployed and browser-verified as recorded above. The ACL follow-up must provide permitted public inspection/use while preserving privileged mutation controls; it has not been implemented here.\n\nThe original physical-door/obstacle motion and committed blocked/closed acceptance was explicitly deferred under Yan's existing_only decision and is NOT passed. The existing pose-streaming prerequisite remains deferred; closing this visual slice must not be interpreted as completing either obligation.\n\nSource changes remain uncommitted. Per the tracker's commit-before-done rule, this item moves to in-review pending commit; user-requested closure is recorded here.",
+          "createdAt": 1791240736086,
+          "updatedAt": null,
+          "deleted": false
+        }
+      ],
+      "customFields": {
+        "linkedCommits": [
+          {
+            "sha": "d7c4dd32d23970ec90352357f64b7319d6475159",
+            "message": "feat: deliver the personal lobby and clear account startup",
+            "sessionId": "508cacc5-0228-456d-bf65-48203842324d",
+            "timestamp": "2026-10-05T22:54:37.170Z"
+          }
+        ],
+        "dependsOn": [
+          {
+            "itemId": "task_1791120397842_qm278c"
+          },
+          {
+            "itemId": "task_1791120418100_u4q7in"
+          }
+        ]
+      },
+      "description": "## Accepted and completed scope\nThis item records the existing-framework visual personal lobby and client tuning accepted by Yan under the existing_only decision. The historical title/body promised a physical-door demonstration, but that scope was explicitly deferred before closure; it was not passed.\n\nDelivered scope: approved roof/ground and appearance, real cluster entry and identity startup, preserved signed Prolog console, playing/edition recipes, rationalized controls and truthful source-access errors. The recorded deployment/browser evidence and commit d7c4dd32d23970ec90352357f64b7319d6475159 belong to that accepted scope. Preserve the historical comments and receipts; this audit does not rewrite their outcome.\n\n## Deferred work remains open\n- [QUD.36](nimbalyst://QUD.36) now explicitly tracks the original real-lobby physical-door/obstacle motion, authoritative blocked/closed outcome, checkpoint and recovery acceptance.\n- [QUD.27](nimbalyst://QUD.27) supplies governed optional physics in the existing lobby and normal views.\n- [QUD.26](nimbalyst://QUD.26) retains player movement and physical Vive/WebXR acceptance.\n- [QUD.20](nimbalyst://QUD.20) delivered the separately requested system ontology ACL work; [QUD.24](nimbalyst://QUD.24) delivered complete source inspection.\n\nThe authority-host door foundation and pose transport do not prove physical integration in this lobby. Keep this visual slice done, without treating its closure as that proof. No new implementation, deployment or acceptance is claimed by this scope correction."
+    },
+    {
+      "id": "task_1791327838133_pf7yyr",
+      "localKey": "QUD.23",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Expose live routes as Prolog facts beyond root and move host selection policy into Prolog",
+      "status": "to-do",
+      "priority": "medium",
+      "tags": [
+        "directory",
+        "prolog-predicates",
+        "routing",
+        "policy",
+        "quod_ask",
+        "quod_foreign_log"
+      ],
+      "archived": false,
+      "description": "# Goal\n\nMake the live route directory fact \"key K currently answers for ontology Y at address A, until lease expiry\" available to Prolog policy in every hosted ontology's read-only proofs, then move host selection rules out of Erlang into Prolog and delete the Erlang ordering they replace.\n\nOrigin: Yan, 2026-10-07, during the node-enrollment routing review (frozen scope tree-02, session \"Directory deployment fix review\"). Separate scope from tree-02; do not fold into it.\n\n# What exists today\n\n- `src/predicates/quod_directory_predicates.erl` already defines `directory_host(+Ontology, ?GenesisAnchor, ?NodeKey, ?Host, ?Port)` over the ETS route index (`quod_directory:directory_hosts/1`) and `directory_control_peer(?NodeKey)` over root's committed `peer_admitted/4`. Both are registered as `query` class and are available **only while executing `quod:root`** (the `ctx_ns` check in `directory_host_5/3` and `directory_control_peer_1/3`).\n- `quod_directory:directory_hosts/1` returns active public system routes only: rows with status `confirmed`, `Expiry > now`, deterministic key order; private contacts excluded. Rows carry `{Ns, system, RouteKey, NodeKey, {Host,Port}, confirmed, GenesisAnchor, Role, Expiry, Epoch, Sequence}`. The predicate currently drops `Role` and `Expiry`.\n- Routes are deliberately soft state: signed, leased node-actor generations installed by `quod_directory`, rebuilt after restart, never written to consensus (module doc of `quod_directory`, `doc/lifecycle-and-routing.md` \"Routes and local notifications\"). Authority to advertise comes from committed facts (`hosts_ontology/4` discoverable in the node identity, `system_ontology/2` catalogue for system entries); receivers verify those before installing a route. The predicate must stay a projection of that verified index, not a second authority.\n- Predicate module loading: `src/quod_app.erl` line 476 lists `[quod_directory_predicates, quod_ontology_predicates]` for root.\n- Existing tests for the predicate and its live-bridge handling: `test/quod_committed_projection_tests.erl` (lines ~255, 262, 305) and `test/quod_dtx_tests.erl` (lines ~640-660, 916: sealing a plan that depended on `directory_host/5` must fail with `non_transactional_dependency`).\n\n# Erlang selection code that would become Prolog policy\n\n- `src/predicates/quod_ask.erl`: `open_directory_scope/1`, `choose_directory_scope/2`, `open_anchored_routes/2`, `eligible_routes/1`, `verified_plain_read_routes/3` (which confirmed validator routes an ask uses, anchor-conflict handling, local-vs-remote preference).\n- `src/quod_foreign_log.erl`: `current_route_candidates/2`, `current_peer_endpoints/7`, `history_source_candidates/1`, `directory_route_hints/2` (endpoint preference order: request contact, live, certified historical, third-party supplied; capped at two per peer).\n- Candidate future users: enrollment custodian choice in `priv/ontologies/quod_node.pl`, availability rules (how many confirmed hosts make an ontology available), discovery ACL (who may be told about a route).\n\n# Hard constraints (from AGENTS.md and quod_predicates)\n\n1. **Determinism.** A live ETS fact differs between nodes. It may be read in read-only and local proofs only. `quod_predicates` already records `live_observation` bridge use at dispatch and `quod_dtx` refuses to seal a plan that depended on one (`record_bridge_use/4`, `allowed/2`: \"query reads everywhere except a deterministic policy verdict\"). Keep the `query` class and the live-observation dependency marker when widening; add tests that a committed diff or atomic plan depending on the widened predicate still fails to seal.\n2. **No second domain engine.** The predicate stays a read-only bridge over the directory's existing index. No copying of routes into any ontology, no new process, no cache.\n3. **Replace, do not duplicate.** When a selection rule moves to Prolog, delete the Erlang ordering it replaces in the same scope and report the line delta. No parallel old/new path.\n4. **Not transport.** Dissemination of routes (who pushes signed pages to whom) stays in `quod_directory_control`; this ticket does not touch it.\n5. **Private contacts stay excluded** from the public fact; a private-route predicate, if ever needed, is a separate decision with its own ACL.\n6. No format, wire or ledger change. No deployment authority implied.\n\n# Proposed shape\n\n- Widen `directory_host/5` to any hosted ontology's read-only proof context (drop the `quod:root` gate, keep `query` class). Decide whether to extend arity to expose `Role` (`validator`/`observer`) and lease `Expiry`, since host selection needs role and liveness. Suggest `directory_host/7` or a second predicate `directory_route(Ontology, Anchor, NodeKey, Host, Port, Role, ExpiresAt)`; pick one, do not keep both.\n- Keep `directory_control_peer/1` root-only (it projects root membership).\n- Resolve governed bridge availability before widening the context gate. Trace retained founding manifests, ordinary lifecycle/composition and compatible validator deployment; changing quod_app.erl's package module list cannot grant an existing ontology a new external-predicate capability. Do not load a bridge globally as an implicit authorization bypass. Demonstrate non-root use in a scope actually authorized to use that bridge; a demonstrated missing capability must pass the applicable architecture gate, not be hidden behind a module-file edit.\n- Write the first consumer: host selection for asks in Prolog (which confirmed validator to prefer, local-first rule, anchor-conflict refusal), called from `quod_ask` through the existing predicate seam; then remove the Erlang ordering above.\n- Second consumer, optional: foreign-log endpoint preference order.\n\n# Acceptance\n\n- `directory_host` (or its successor) proves in a read-only proof of a non-root ontology and returns exactly the active, confirmed, public rows for that namespace in deterministic order; expired and private rows absent.\n- Sealing any nonempty diff or atomic plan that read the predicate fails with the existing `non_transactional_dependency` error (extend `quod_dtx_tests`).\n- Ask host selection behaviour unchanged for existing CT (`quod_ask_SUITE`), with the Erlang selection code deleted and the delta reported.\n- Docs: update `quod_directory_predicates` moduledoc, `doc/lifecycle-and-routing.md` \"Routes and local notifications\", and `doc/runtime-and-agents.md` if predicate classes are listed there.\n- Standing gates (clean sequential, true exits, frozen tree) before commit; separate label bump.\n\n# Out of scope\n\n- Self-network-pull transport cause (documented separately in the enrollment routing evidence).\n- Directory dissemination topology (fixed in tree-02).\n- Making routes consensus facts: rejected, addresses churn on every reschedule and leases expire without a transaction.\n\n## Cross-check with governed-world work\n[QUD.27](nimbalyst://QUD.27) must resolve the same immutable founding-capability invariant; neither ticket approves the removed mutable-module experiment. Sharing that architectural constraint is not a reason to merge routing policy with physics or block either on an unrelated client feature. There is no backward-compatibility requirement: replace the old predicate/selection path, while preserving proofs, current identity/history and the applicable release authority. If the selected implementation cannot satisfy the no-format-change boundary above, stop at that concrete architecture decision rather than silently expanding scope."
+    },
+    {
+      "id": "task_1791384819463_f2idgr",
+      "localKey": "QUD.25",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Build the general Quod GUI framework for VR and desktop",
+      "status": "to-do",
+      "priority": "medium",
+      "tags": [
+        "gui",
+        "vr",
+        "prolog",
+        "ontology"
+      ],
+      "archived": false,
+      "description": "Implement the general ontology-based GUI framework described in the [GUI plan](/home/yan/src/quod/doc/gui-plan.md). The plan is the design source of truth; proposed APIs still need implementation-level specification.\n\nReferences:\n- [Interactive visual concept](/home/yan/src/quod/doc/gui-concept.mockup.html)\n- [Claude Fable review](/home/yan/src/quod/doc/evidence/gui-plan-review-3/fable-review.md)\n- [Independent assessment and disposition](/home/yan/src/quod/doc/evidence/gui-plan-review-3/assessment.md)\n\nAgreed requirements:\n- Reusable GUI component classes instantiated through existing ontology semantics, usable by arbitrary components and applications, including non-lobby examples.\n- Common controls in the first milestone: text inputs, buttons, selections, sliders, rotary knobs and composed forms.\n- Convenient Prolog authoring and submitted field bindings. Domain actions follow ontology events and authorized react_on handlers; shared GUI behavior supplies registration and correlation without manual per-widget reactions.\n- Resolve the intended human through authenticated context or authorized question state. Opening fails in Prolog when there is no connected human receiver or no authorized responsible agent able to handle the interaction. This requirement is settled.\n- Accepted questions may remain in the HUD until the human chooses to answer. No proof remains suspended during editing, and opening does not guarantee continued connection until an answer.\n- Shared ontology state owns question identity, status, cancellation and accepted answers; drafts stay local. Preserve existing transaction, authority, recovery and exact-outcome guarantees.\n- Reuse Eidolons, marks, existing client controllers, actions, reactions and agent-work owners. No parallel GUI domain engine or shadow queue.\n- VR-first ergonomics, moderate adjustable panel translucency with opaque readable controls/text, accessible input alternatives and desktop operation.\n\nDelivery checklist:\n- [ ] Specify the executable form/component API and trace human/agent binding and presentation through existing owners. Resolve the live-observation/material-write integration internally without reopening the settled failure behavior or hiding partial writes.\n- [ ] Implement shared GUI ontology classes, composition, field/event binding and automatic authorized reaction behavior.\n- [ ] Implement authenticated presentation, HUD discovery and shared question lifecycle, including concurrent openings, stale revisions, duplicate responses, cancellation, disconnects and uncertain operation outcomes.\n- [ ] Extend the existing representation/controller path and deliver the common control suite with the agreed visual treatment.\n- [ ] Demonstrate an elaborate form both in the lobby and on an independent application component.\n- [ ] Verify behavior through production seams, including absence/refusal, event authority, agent loss, atomic question transitions and unchanged repeated-operation cost.\n- [ ] Validate VR legibility, reach, target selection, keyboard entry, transparency and comfort on intended hardware; desktop mockup checks do not establish headset ergonomics.\n\nRead AGENTS.md and the relevant architecture/proof/multiwrite specifications before implementation. Review advice is consultative: use the independent assessment, including its rejected recommendations.\n\n## Relationship to ontology editing and optional physics\nThe GUI plan governs this common component/question-lifecycle scope. The later ontology/space decisions refine representation integration: [QUD.32](nimbalyst://QUD.32) unifies ordinary ontology-instance Eidolons and ACL reflection, [QUD.34](nimbalyst://QUD.34) supplies the dedicated highlighted text editor, and [QUD.35](nimbalyst://QUD.35) supplies the 3D ontology-editing application. Reuse controls and existing lenses/encodings/marks across these consumers; do not build duplicate editors or presentation engines.\n\nAn ontology can have several views of one authoritative content/history without becoming a space; containment/optional physical-space semantics are [QUD.33](nimbalyst://QUD.33). General GUI work must function in nonphysical contexts. These application tickets need not wait for this entire broad GUI milestone if existing controls suffice. No backward-compatibility shims; replace superseded dispatch paths. Keep the settled absent-human/agent failure behavior and all original lifecycle/hardware acceptance above."
+    },
+    {
+      "id": "task_1791385146437_lavbmu",
+      "localKey": "QUD.26",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Add collision-aware player movement for desktop and VR",
+      "status": "in-progress",
+      "priority": "high",
+      "tags": [
+        "physics",
+        "navigation",
+        "vr",
+        "client"
+      ],
+      "archived": false,
+      "comments": [
+        {
+          "id": "comment_1791386726565_eh4jvj",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Planning artifact: [Collision aware player movement plan](doc/player-movement-plan.md). Traced the camera/XR path, signed simulation view, Prolog selection, retained physics owner and pinned Rapier controller. The plan covers capsule movement, moving-door contact, spawn/teleport validation, control authorization, shared query mechanics for prediction, fencing/recovery, future non-cubic terrain and production-owner cost checks.\n\nYan selected teleportation, snap turning and smooth controller travel. Primary hardware target: original HTC Vive; retain portable Babylon/WebXR input discovery and configurable touchpad/thumbstick bindings. Actual host OS/runtime/browser qualification and physical hardware tests remain required.\n\nStatus remains in-progress. Planning only: one documentation file added, no production implementation or runtime tests performed. Local documentation links and whitespace checked. The requested Conceptual Thinking server is unavailable in this session; available Sequential Thinking was used.",
+          "createdAt": 1791386726565,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791387096207_xzqp3l",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Corrected the planning basis following Yan's objection: the human-user instance can bind to different agents with arbitrary physical forms. The original universal capsule/upright walking/head-to-body assumptions were wrong and have been removed from doc/player-movement-plan.md.\n\nTraced the shared human/agent vocabularies, signup and human instance template, signed principal admission, client agent selection, world/Eidolon identity model and physical body/group revisions. Archived client-world-direction §4.3 explicitly separates acting identity, controlled character and appearance. Current shipped code supplies generic signed agent selection, but the inspected templates/client paths do not implement a general played-agent physical control binding; local selection must not be mistaken for authorization or impersonation.\n\nThe revised plan starts with that domain relation and representative differently shaped agents before choosing native operations. It requires rotation/compound clearance and embodiment-specific VR mappings. Browser WASM prediction is no longer a settled architecture choice. No production code changed. Planning remains in progress; no implementation-ready or completion claim.",
+          "createdAt": 1791387096207,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791403888545_wh3iwt",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Implementation is in the working tree, following Quod's Prolog → governed Erlang external predicate → retained physics owner interface. BBSvx's predicate/effect pattern was inspected. Human principal, controlled agent, physical body and authored camera position/orientation are distinct; there is no universal capsule. Added explicit hull/compound bodies and fixed triangle surfaces for non-cubic terrain, swept movement/rotation, supported teleport, occupancy-tested live reposition, registration/revision fencing and desktop/XR adapters.\n\nYan's requested Claude consultation used Fable. Findings and independently verified resolutions: [review](doc/evidence/player-movement/review-04-implementation.md), [evidence and hardware checklist](doc/evidence/player-movement/README.md). Final targeted owner suite: 119 passed; proof/lifecycle regression: 308 passed; native geometry/motion: 16 passed. Client tests, TypeScript, isolated bundle and WebGL rendering smoke passed. Tests include door obstruction and escape query, occupied landing, mid-air world revision, wedge settlement, moved/deleted support, authorization/reconnect/deadlines and unchanged-operation cost.\n\nStatus remains in-progress: original HTC Vive hardware acceptance is NOT performed. The available browser reports immersive-vr unsupported. Hardware checklist is recorded; no desktop or simulated-camera result is being represented as Vive validation. Changes are uncommitted, and no deployment or ontology-history migration was performed.",
+          "createdAt": 1791403888545,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791454286344_0h7wbq",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Official Chrome for Testing 157.0.8091.0 software preflight executed on Linux/RTX 4090, sandbox enabled, private Monado simulated HMD. Headset discovery and immersive support succeed; session creation fails before rendering. Native tracing identifies NVIDIA ICD load denied by Chromium's XR sandbox, then VK_ERROR_INCOMPATIBLE_DRIVER. Two process-local preload diagnostics also failed; no security flags were disabled. All test runtimes exited cleanly. Evidence: doc/evidence/player-movement/linux-webxr-20261008/README.md and chrome-preflight-01..05. SteamVR is not installed and was not exercised. Physical Vive acceptance remains outstanding; task stays in progress.",
+          "createdAt": 1791454286344,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791536054808_c7p7c6",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Linux native WebXR software preflight now passes on RTX 4090 using the private Chromium 157.0.8091.0 build, with its browser/XR sandbox enabled. Investigation identified NVIDIA lazy EGL/backend/compiler loads missing from the existing XR prewarm closure, plus GLVND manifest directory enumeration. A local 28-line upstream XR-hook patch resolves it; the final incremental build took 6.923 seconds. Both traced and untraced preflights passed two immersive sessions with 120 stereo frames each, local-floor, changing native tracked poses and both simulated controllers; browser/runtime exits were 0. The fixture and its assertions were unchanged.\n\nExact patch, hashes, retained failures and successful evidence: [October 9 investigation](doc/evidence/player-movement/linux-webxr-20261009/README.md). No Quod production source, global OpenXR setting, ordinary browser profile or system package changed. This is a simulated native browser/runtime/GPU result; original Vive display/tracking/controller mappings and Quod collision locomotion on physical hardware remain untested. Status stays in-progress; this is not hardware acceptance or ticket completion.",
+          "createdAt": 1791536054808,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791539415146_3b68sq",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Vive hardware prerequisite check: SteamVR is installed and its Lighthouse driver has no unresolved linked libraries. HDMI EDID identifies the HTC Vive, but Linux rejected its USB hub (0bb4:2210, path 1-3) with error -28 / “Not enough bandwidth”, leaving it unconfigured with no tracking/receiver devices. No physical XR runtime was started. Waiting for a different direct PC USB port to check enumeration. Evidence retained in doc/evidence/player-movement/linux-webxr-20261009/vive-usb-01; Quod production sources unchanged. Hardware acceptance remains open.",
+          "createdAt": 1791539415146,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791541069249_j6nbvt",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Physical Vive/WebXR prerequisite now demonstrated. USB port change restored all headset/receiver devices. Two exact upstream Monado SteamVR compatibility fixes (4156456d, cfa6078b) and a temporary Vive-only Hyprland monitor exception enabled Wayland display leasing. No Quod production source or persistent desktop configuration changes. `vive-webxr-02` passes two real immersive sessions with 120 stereo frames each, changing head poses, local-floor and both htc-vive controller profiles; browser/runtime exit 0, sandbox enabled. Yan confirmed visible colored output in a longer repeat. That repeat's first session completes 1,800 frames, but cycle 2 fails on missing viewer pose; Yan reports removing the headset during the test. The longer run remains recorded as failed, not a two-session pass. Original simulated regression after runtime corrections also passes. Evidence: doc/evidence/player-movement/linux-webxr-20261009/vive-hardware.md. Quod movement/controller/haptics and full Vive hardware acceptance remain open; item stays in progress.",
+          "createdAt": 1791541069249,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791559590859_spmge9",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Yan requires acceptance in the actual current lobby/runtime, without a substitute test world. The unused disposable launcher was deleted without compilation or execution. The existing account is now restored through ordinary encrypted-key export/import in the Vive-capable browser. Signed read-only inspection of the current lobby (height 4) shows no physics_space/3, physics_agent/5 or physics_control/4 definitions; its committed external-predicate manifest contains only quod_agent_predicates. This exposes a production integration gap, beyond hardware acceptance: the normal lobby still uses observer movement. Commit validation deliberately rejects changes to the founding manifest, so enabling physics in this existing ontology cannot be a routine configuration edit. Integration choices and evidence are recorded in doc/evidence/player-movement/live-lobby-20261009/README.md. No domain writes or new accounts/ontologies were created. Ticket remains in progress.",
+          "createdAt": 1791559590859,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791574385597_2llej5",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "2026-10-09 consolidation: keep this ticket open. The core collision/control foundation is committed with hot controls, but actual existing-lobby normal-view integration and physical Vive/WebXR movement acceptance are NOT complete. The undeployed external-predicate-selection experiment was surgically removed and archived; no lobby facts were changed. General existing-world integration is now tracked in [QUD.27](nimbalyst://QUD.27); optional native-client XR work is parked in [QUD.28](nimbalyst://QUD.28). One consolidation writer now owns integration; other sessions remain paused. No new server feature changes or deployment in consolidation. Evidence and full follow-up bodies: doc/evidence/workspace-consolidation-20261009/.",
+          "createdAt": 1791574385597,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791583069112_lnpa9f",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Step 1 (two-scope commit consolidation) is complete: inspection 465ad808a1165607be76145868a3e1528fc5c1a9, then failure handling + qualified browser assets a510f504bab1837f77dcfb27651891bc17e13521. All reconciled source/assets match the qualified bytes in both Git and the live checkout. Paused movement/WebXR evidence and other client work are preserved unchanged. No deployment or real-lobby/hardware acceptance was performed. This movement ticket remains open; general existing-world integration is tracked in QUD.27.",
+          "createdAt": 1791583069112,
+          "updatedAt": null,
+          "deleted": false
+        },
+        {
+          "id": "comment_1791586756815_9mwj7b",
+          "authorIdentity": {
+            "email": "yan.guiborat@gmail.com",
+            "displayName": "yan.guiborat",
+            "gitName": "Yan Guiborat",
+            "gitEmail": "yan.guiborat@gmail.com"
+          },
+          "body": "Deployment/refound boundary, 2026-10-10: the committed collision/control and failure-handling foundations are deployed in candidate release 0.7.256. Yan explicitly authorized a destructive ledger refound. The old eight candidate ledger volumes were deleted after a fresh founder started; the new root is `3F88D70B7714366EE11D38764231DD2F6EE8AAFC58EB8C0559146543E5280F26`, and the new lobby is `7B0DA9C7D3385065AD99A51B9987118FFA4C6DB837DA7211A924995206AD565A`. All 18 system ontologies were founded through existing governed actions and are ready on 8/8 healthy nodes. Evidence commit: `4ba646223870c4706f3c2ca0de4b84c76e4d2a92`; `doc/evidence/hot-controls/deployment-256-refound/`. This does not complete this item: the fresh lobby still needs the general governed physical-world/control integration tracked by QUD.27, followed by desktop and physical Vive collision-locomotion acceptance in that actual lobby. Status remains in-progress.",
+          "createdAt": 1791586756815,
+          "updatedAt": null,
+          "deleted": false
+        }
+      ],
+      "customFields": {
+        "linkedCommits": [
+          {
+            "sha": "465ad808a1165607be76145868a3e1528fc5c1a9",
+            "message": "feat: show complete authorized ontology source",
+            "sessionId": "58fae0ee-a4fe-403a-a9e9-152ded57c07f",
+            "timestamp": "2026-10-09T21:55:49.237Z"
+          },
+          {
+            "sha": "a510f504bab1837f77dcfb27651891bc17e13521",
+            "message": "fix: preserve control sessions after definite action refusals",
+            "sessionId": "58fae0ee-a4fe-403a-a9e9-152ded57c07f",
+            "timestamp": "2026-10-09T21:57:15.062Z"
+          },
+          {
+            "sha": "ad46c75aa5f56650d2a6c68086867cadd2d9667f",
+            "message": "chore: prepare 0.7.256 release",
+            "sessionId": "58fae0ee-a4fe-403a-a9e9-152ded57c07f",
+            "timestamp": "2026-10-09T22:46:18.125Z"
+          },
+          {
+            "sha": "4ba646223870c4706f3c2ca0de4b84c76e4d2a92",
+            "message": "docs: record 0.7.256 refound deployment",
+            "sessionId": "58fae0ee-a4fe-403a-a9e9-152ded57c07f",
+            "timestamp": "2026-10-09T22:58:50.844Z"
+          }
+        ],
+        "dependsOn": [
+          {
+            "itemId": "task_1791574097686_paoo8v"
+          }
+        ],
+        "blocks": [
+          {
+            "direction": "out",
+            "relationshipTypeKey": "blocks",
+            "itemId": "task_1791119703504_7774jx",
+            "title": "Add shared-world physics simulation and authenticated consequences",
+            "trackerType": "task"
+          }
+        ]
+      },
+      "description": "## Goal and current state\nDeliver collision-aware player movement for desktop and VR, movement before expanding the interaction repertoire. Existing retained simulation, signed pose/control and checkpoint foundations have been implemented/committed; [QUD.8](nimbalyst://QUD.8) is done, not a future prerequisite. They do not establish movement acceptance in Yan's normal lobby or on a physical headset.\n\n[QUD.27](nimbalyst://QUD.27) owns the missing generic optional-physics integration and real signed normal-lobby desktop collision acceptance. This ticket remains in progress until its movement and physical Vive/WebXR acceptance below is demonstrated. Existing hardware startup/preflight or a separate physics view is not that acceptance.\n\n## Scope and acceptance\n- Define and verify explicit agent/body and camera local position/orientation; distinguish observer travel, commanded body travel and tracked head motion. Use existing Prolog policy, physics authority and signed controls, not a client collision authority or second engine.\n- Desktop commanded movement cannot cross declared solid floors, walls or obstacles; movement alongside them remains usable.\n- Physical Vive/WebXR: validate landing, teleport destination/path behavior for supported modes, contact feedback, tracked-head handling, correction and comfort on intended hardware. Record actual landing/contact/tracking/comfort evidence, not desktop or synthetic XR substitutes.\n- Test occupied spawn/reposition/teleport, moving doors and idle-body contact, rotated/non-box supported geometry, collider edits/deletion, stale physical revisions, disabled/nonphysical/denied/unavailable states, revocation, reconnect and authority changes.\n- Reuse explicit ontology collision definitions. GLBs, Eidolon/picking bounds and rendered shape are not collision authority. Local responsiveness must preserve authoritative controls and truthful correction/disconnect states.\n- Live collider changes propagate by existing committed-diff subscriptions, not new synchronization or manual re-adoption. No backward-compatibility branches; no automatic observer fallback.\n- Measure unchanged repeated-operation cost and real update invalidation through production owners; preserve original-operation resolution for uncertain writes.\n- Keep the actual current lobby's identity/history and established openings/roof/console. October 9 identity evidence is historical after the separately authorized October 10 refound; establish a fresh signed personal-lobby baseline.\n\n## Ownership of related work\n[QUD.3](nimbalyst://QUD.3) is the physics umbrella; [QUD.27](nimbalyst://QUD.27) supplies normal-world integration, [QUD.36](nimbalyst://QUD.36) the deferred durable door blocked/closed interaction, [QUD.9](nimbalyst://QUD.9) held objects, and [QUD.25](nimbalyst://QUD.25) the general GUI. Do not reopen completed hot-control/source-inspection foundations or infer that their commits pass this ticket.\n\nRead AGENTS.md, doc/world.md, doc/multiwrite-architecture.md and existing movement evidence/plan before work. Coordinate one server writer; no deployment, refounding, data deletion or expanded runtime scope is authorized merely by client/headset testing. Applicable standing gates and real signed/hardware evidence are required for completion."
+    },
+    {
+      "id": "task_1791574097686_paoo8v",
+      "localKey": "QUD.27",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Enable governed physics in existing ontology worlds and normal client views",
+      "status": "to-do",
+      "priority": "high",
+      "tags": [
+        "physics",
+        "ontology",
+        "architecture",
+        "client"
+      ],
+      "archived": false,
+      "customFields": {
+        "blocks": [
+          {
+            "itemId": "task_1791635398662_3io1m7",
+            "title": "Complete real-lobby obstructed-door interaction and recovery acceptance",
+            "trackerType": "task",
+            "relationshipTypeKey": "blocks",
+            "direction": "out"
+          },
+          {
+            "itemId": "task_1791385146437_lavbmu",
+            "title": "Add collision-aware player movement for desktop and VR",
+            "trackerType": "task",
+            "relationshipTypeKey": "blocks",
+            "direction": "out"
+          },
+          {
+            "direction": "out",
+            "relationshipTypeKey": "blocks",
+            "itemId": "task_1791119703504_7774jx",
+            "title": "Add shared-world physics simulation and authenticated consequences",
+            "trackerType": "task"
+          }
+        ],
+        "dependsOn": [
+          {
+            "itemId": "task_1791635391283_wv7rwn"
+          }
+        ]
+      },
+      "description": "## Goal and agreed architecture\nEnable optional governed physics in existing ontology worlds and ordinary signed client views. The first acceptance target is Yan's actual current personal lobby, preserving its exact identity and history. This is a generic capability, not a lobby special case, and remains a prerequisite of [QUD.26](nimbalyst://QUD.26).\n\n- Prolog decides whether a world is physical and whether simulation is enabled. [QUD.33](nimbalyst://QUD.33) supplies space and physical_space semantics; class membership alone does not load native predicates, allocate resources or authorize control. Ontology and space are independent classes. Text/3D ontology representation work in [QUD.32](nimbalyst://QUD.32)–[QUD.35](nimbalyst://QUD.35) is not a prerequisite for the entire physics slice.\n- There is no backward-compatibility requirement: replace superseded paths, remove old/new branches and do not introduce a separate physics ontology merely to accommodate old code. Preserving this lobby's identity/history is a distinct requirement; no automatic refound, data wipe or history rewrite.\n- Domain policy, actions, authorization and resource budgets stay in Prolog; external Erlang predicates are governed interfaces. One physics authority and one mutable owner for each truth; no second domain engine, private knowledge base or hidden fallback.\n\n## Architecture gate\nRead AGENTS.md, doc/world.md, doc/multiwrite-architecture.md and existing ontology lifecycle/action/recovery owners. Trace existing composition and ordinary founding/bridge deployment before selecting the smallest missing capability. A linked normally founded physics scope is a candidate, not an accepted default; any boundary must be justified by governance/lifecycle, not backward compatibility. Do not silently resurrect the removed external_predicate_selection/reconcile_modules experiment.\n\nSpecify exact world/instance/body/agent references, capability authorization, compatible participating validators, concurrent-proof conflicts, rollback, recovery and withdrawal. Validator compatibility for the chosen deployment is not permission for permanent backward-compatibility code. Neither changing a package file nor declaring a class changes a retained founding manifest. If the selected design needs a new capability-evolution contract, bring that concrete gap to the applicable architecture/deployment gate rather than bypassing immutable provenance.\n\n## Existing subscriptions, not another propagation path\nA live collider defined in ontology A and consumed by subscribed physics authority P follows A's committed diffs through the existing subscription/verified-projection owners. An authorized edit must update the effective collider automatically; no manual re-adoption per edit, mirrored mutable collider store, polling loop, new diff broker or second synchronization protocol. Deliberately pinned reusable shape recipes are different from live referenced instances and must be explicit, never the default imposed to solve linkage.\n\nTrace quod_runtime subscription handling and quod_foreign_log retained projections through the current local physics resource selector. Demonstrate any missing dependency-to-install wiring, extend that existing owner, and preserve subscribe-before-snapshot, exact source/body/structure revision fencing and installation notices. Recovery restores current verified state; correctness cannot depend on replaying or receiving every best-effort reaction. Related durable changes/receiver consequences form one existing atomic transaction; no post-commit repair workflow to reconnect artificially split writes.\n\n## Physical definitions and normal views\n- Author explicit physical geometry, agent/body binding and camera local position/orientation in Prolog. Support the native adapter's supported shapes through shared validation, not only a hardcoded box. Visual GLBs, picking bounds and Eidolon geometry are not collision authority. Preserve real openings, roof and console geometry.\n- Future noncubic voxel/chunk geometry uses the same explicit geometry, resource-policy and revision contract; missing collision coverage is unknown, not empty. Terrain streaming is not part of this slice.\n- Reuse the existing signed projection/control protocol in the ordinary view. Track visible-world, acting-agent, physics and actual authorization/geometry dependencies, including a disabled selection that later becomes enabled; current source/simulation-only subscriptions are not automatically sufficient.\n- Preserve anchored instance/body identity, decorative marks, authored parents/attachment frames and camera transforms under one pose writer. Discovering physics only from a lobby rule is insufficient if the current lookup is in the acting agent's ontology.\n- Distinguish observer travel, commanded body travel and tracked head movement. Unavailable physics must not silently switch a controlled body into observer travel.\n- Distinguish nonphysical, disabled, denied, recovering and unavailable. Handle occupied spawn/reposition/teleport, collider edits/deletion, moving doors, revocation, reconnect and authority changes. Commit, installed state and mechanically fulfilled placement are separate; durable occupancy conclusions use existing authenticated observations, not live-query proof exemptions.\n- Admission/withdrawal and any exclusive body assignment use the designated owners and existing atomic transitions. Resolve uncertain operations by original identity, never new submission. No generic inter-simulation handoff is assumed.\n\n## Evidence and acceptance\nOctober 9 signed lobby evidence and the removed experiment are historical: doc/evidence/player-movement/live-lobby-20261009/README.md and cleanup-20261009/README.md. A separately authorized October 10 refound is recorded under doc/evidence/hot-controls/deployment-256-refound/. Therefore establish the fresh signed personal-lobby identity/history baseline before acceptance; neither the old anchor nor the system lobby-vocabulary anchor identifies it automatically.\n\n1. Generic production-owner tests across at least two world identities, including a non-lobby and a nonphysical case. Cover concurrent admission/edit/withdrawal, authorization, rollback, recovery and stale fences.\n2. A real committed remote collider change reaches the subscribed installed physics owner through the existing path. Measure exact affected invalidation and unchanged repeat work: no history replay, projection/native geometry rebuild or storage write/sync caused by unchanged checks. Distinguish legitimate simulation stepping and real durable updates. Preserve current conservative world fencing/per-predicate OCC; do not claim row-level precision.\n3. Real signed desktop collision acceptance in the normal view of the same existing lobby, preserving identity/history, console and openings. A fixture/simulated test world is not a substitute.\n4. Physical Vive/WebXR landing, contact, tracking and comfort remain required separately by [QUD.26](nimbalyst://QUD.26). Durable real-lobby blocked/closed door acceptance is [QUD.36](nimbalyst://QUD.36); do not confuse moving-door collision coverage with that consequence acceptance.\n5. Coordinate a single server writer and existing release authority. Client testing does not authorize broader runtime mutation or deployment.\n\nThe reviewed design is not implementation evidence. Keep this item open until all its own acceptance is verified."
+    },
+    {
+      "id": "task_1791635384521_o1x2i3",
+      "localKey": "QUD.31",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Document Quod terminology for ontologies, instances, spaces and representations",
+      "status": "to-do",
+      "priority": "medium",
+      "tags": [
+        "architecture",
+        "ontology",
+        "documentation"
+      ],
+      "archived": false,
+      "description": "## Goal\nCreate a concise, source-checked terminology reference for this plan. Explain existing words rather than introducing another ontology taxonomy.\n\n## Scope\n- Define ontology (authoritative Prolog code/state, ACL and history boundary, also an instance of the ontology class), class, instance, space, physical space, agent, lens, encoding, Eidolon, mark, anchored reference, route/contact, body and physics authority.\n- Distinguish subclass from instance membership; code/state ownership from spatial containment; ontology contents from a presentation of them; marks from body identity; source/interface inspection from permission to invoke or edit.\n- Record Yan's choice: ontology and space are independent classes. Every accessible ontology may have 3D/text/policy representations; representation does not entail space membership. A space may be nonphysical; physical_space is a subtype of space. Physics enablement remains governed Prolog policy.\n- Do not introduce “subject” as a new user-facing domain category. Existing source terms such as subject(Target, Entity) may be explained as current API syntax, not another kind of object.\n- Link the reference from relevant architecture/GUI/physics documentation and reconcile contradictory terminology in the touched scope. Clearly distinguish implemented behavior from proposed refinements; do not rename APIs merely to satisfy the glossary.\n\n## Acceptance\nDefinitions and examples map to actual class/instance/lens/Eidolon and owner code; one ontology shown in multiple views remains one authority/history. No new registry, universal metaclass system, runtime process or production semantics is introduced. Preserve frozen historical review evidence.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\nRelated implementation: [QUD.32](nimbalyst://QUD.32) (ontology instances/ACLs), [QUD.33](nimbalyst://QUD.33) (spaces), [QUD.34](nimbalyst://QUD.34) (text), [QUD.35](nimbalyst://QUD.35) (3D workbench), [QUD.27](nimbalyst://QUD.27) (physics). This glossary is not a blanket blocker for those implementations."
+    },
+    {
+      "id": "task_1791635388737_i1zw6h",
+      "localKey": "QUD.32",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Represent ontology instances and their ACLs through existing Eidolons",
+      "status": "to-do",
+      "priority": "high",
+      "tags": [
+        "ontology",
+        "eidolon",
+        "authorization"
+      ],
+      "archived": false,
+      "customFields": {
+        "dependsOn": [
+          {
+            "itemId": "task_1791240698839_ywd2cg"
+          },
+          {
+            "itemId": "task_1791378216960_tga2md"
+          }
+        ],
+        "blocks": [
+          {
+            "itemId": "task_1791635393660_vmn3s5",
+            "title": "Add a syntax-highlighted ontology text-editing Eidolon",
+            "trackerType": "task",
+            "relationshipTypeKey": "blocks",
+            "direction": "out"
+          },
+          {
+            "direction": "out",
+            "relationshipTypeKey": "blocks",
+            "itemId": "task_1791635396029_xqsm4f",
+            "title": "Inspect and edit ontology contents in 3D through existing lenses and Eidolons",
+            "trackerType": "task"
+          }
+        ]
+      },
+      "description": "## Goal\nMake each exact ontology available as an ordinary instance of the ontology class, reusing class/instance selection, lenses, encodings, Eidolons and marks. This refines the existing model, not a second ontology-object system.\n\n## Scope\n- Derive identity from existing namespace/genesis-anchor and lifecycle owners; expose authorized current source, explicitly declared interfaces, contacts/routes and ACLs through their real owners. A contact address is a route, not identity or a copied mutable directory field.\n- Replace the ontology-specific selection/dispatch fork with the ordinary applicable-Eidolon path. Preserve exact target anchors through class diagrams, text/policy panels and 3D marks; a mark occurrence is not a new ontology. Do not assume every Eidolon is a code workspace.\n- Preserve existing private ontology discovery boundaries; root's system catalogue is not a global list of personal ontologies.\n- Expose ACL rules under the target's read policy, distinguishing source read, policy read, invocation, content edit and policy edit. Where effective permissions are displayed, make them bounded, context-relative advisory results; actual actions reauthorize against current state. Do not execute mutations as permission probes, invent a privileged arbitrary-goal oracle, or treat *_query/1 helpers as a universal public API catalogue.\n- Location and state ownership remain independent under ACLs. Ontology and space are independent classes (Yan's explicit choice): a 3D representation does not imply isa(ontology, space), transfer ownership or enable physics.\n\n## Acceptance\nSystem and owned non-system ontologies use the same representation selection, with correct read-only/editable/denied behavior. Wrong anchors, private targets, stale permissions and unauthorized policy edits fail at the real owner. Authorized edits use existing transactions and exact-outcome handling. Multiple views stay on the same committed contents/history; unchanged inspection does no replay/rebuild/write/sync. Remove superseded ontology special dispatch, not retain an old/new compatibility path.\n\n## Existing foundations\n[QUD.20](nimbalyst://QUD.20) delivered system ACL enforcement and [QUD.24](nimbalyst://QUD.24) delivered complete-current-state inspection; keep them closed. Trace common_predicates.pl, quod_prolog_eidolons.pl, quod_prolog.pl, quod_lens.pl, client/src/world.js and ui/src/World.tsx. Syntax-highlighted text editing and a 3D editing workbench are separate consumers, not prerequisites for physics integration.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\nConsumers: [QUD.34](nimbalyst://QUD.34) and [QUD.35](nimbalyst://QUD.35). Coordinate vocabulary with [QUD.31](nimbalyst://QUD.31); space containment is [QUD.33](nimbalyst://QUD.33)."
+    },
+    {
+      "id": "task_1791635391283_wv7rwn",
+      "localKey": "QUD.33",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Define governed space and optional physical-space class semantics",
+      "status": "to-do",
+      "priority": "high",
+      "tags": [
+        "ontology",
+        "architecture",
+        "physics"
+      ],
+      "archived": false,
+      "customFields": {
+        "blocks": [
+          {
+            "direction": "out",
+            "relationshipTypeKey": "blocks",
+            "itemId": "task_1791574097686_paoo8v",
+            "title": "Enable governed physics in existing ontology worlds and normal client views",
+            "trackerType": "task"
+          }
+        ]
+      },
+      "description": "## Goal\nRefine existing class vocabulary with space and its physical_space subtype. Spaces organize instances/information and may contain or depict classes and other spaces; they are not necessarily physical and are not synonymous with ontology code/state ownership.\n\n## Agreed model\n- Ontology and space are independent classes (Yan's explicit choice). An ontology can be represented/explored/edited in 3D without becoming a space. An instance may carry both roles only when explicitly authored with corresponding semantics.\n- Trace isa/2, class-first instance_of/2 and actual inheritance/dispatch behavior before choosing predicate placement. Reuse existing ontology vocabulary/composition; do not introduce a generic container hierarchy or shadow object registry.\n- Specify what containment asserts, which ontology owns each relation, and when it is purely organizational versus physical placement. A visual arrangement/lens layout does not change domain location unless an authorized action explicitly does so. Moving into a space does not move an instance's code, ACLs, identity or history.\n- Class membership does not install native bridges, start actors, allocate resources or confer permissions. Prolog separately governs enablement, body admission, observation/control rights and resource policy. Several rooms may share one simulation authority; neither one ontology nor one simulator per room is a universal rule.\n\n## Governed transitions\nAdmission checks both the instance owner's delegation and the space owner's policy. If exclusive physical placement is required, concurrent destinations must serialize the assignment at one designated owner, atomically with admission through existing multi-ontology transactions; unchanged read-only consent is insufficient. Specify authorized containment/physical edits, removal, withdrawal and revocation, including constraint/checkpoint cleanup, recovery and original-operation resolution. Do not implement a parallel ownership/handoff service or require transactions for purely local view layout and transient controls. Commit, runtime installation and physically fulfilled placement are distinct.\n\n## Acceptance\nDemonstrate a nonphysical information space and a physical space with non-lobby identities, authorized/denied containment, nested membership, competing exclusive admissions and withdrawal/recovery through production owners. Preserve one owner per mutable fact and existing identity/history. Prove class declaration alone allocates no simulation; automatic live collider updates remain the existing subscription mechanism, not containment-driven copying.\n\n[QUD.27](nimbalyst://QUD.27) owns physics integration and real-lobby acceptance. General transfer between independent simulations is outside the first slice; do not claim it works from atomic delete/add alone.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\n[QUD.31](nimbalyst://QUD.31) owns terminology; [QUD.32](nimbalyst://QUD.32) owns ontology-instance reflection. This task is a prerequisite of [QUD.27](nimbalyst://QUD.27), not a dependency on the full text/3D workbench."
+    },
+    {
+      "id": "task_1791635393660_vmn3s5",
+      "localKey": "QUD.34",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Add a syntax-highlighted ontology text-editing Eidolon",
+      "status": "to-do",
+      "priority": "high",
+      "tags": [
+        "ontology",
+        "eidolon",
+        "editor"
+      ],
+      "archived": false,
+      "customFields": {
+        "dependsOn": [
+          {
+            "itemId": "task_1791635388737_i1zw6h"
+          }
+        ]
+      },
+      "description": "## Goal\nProvide a dedicated ontology text-editing Eidolon with syntax highlighting for Quod Prolog, using the existing prolog_editor and authorized source/edit paths. This is an editable representation of the ontology, not a separate authoritative source document.\n\n## Scope\n- Present complete coherent current source by default, with optional selection delegated to existing lenses. Highlight facts, rules, variables, literals, comments and Quod-qualified calls correctly; support convenient indentation, search and readable editing/diagnostics within existing client controls.\n- Keep local drafts and explicit change preview separate from committed state. Reuse existing signed submission, proof/accept cursor, conflict and unresolved-operation UI. A refresh or reconnect must not silently discard a draft, overwrite an intervening edit or resubmit an uncertain write.\n- Extend the current predicate-scoped compiler only as needed for editing the displayed ontology text; multi-predicate changes that form one edit commit atomically against a coherent expected baseline. Preserve unselected/runtime-owned contents. Parser/resource rejection is explicit; do not split the edit to evade policy limits.\n- Respect source-read/content-edit/policy-edit distinctions, private target ACLs and exact anchored identity. A reader gets a highlighted read-only view; selecting this Eidolon grants no new authority. Formatting/source-fidelity limitations of the current stored representation must be visible, not promised away.\n- Reuse the ordinary ontology-instance Eidolon dispatch and existing controllers; do not build a second source engine, shadow KB or independent save protocol. No backward-compatibility shim.\n\n## Acceptance\nEdit facts and rules across multiple predicates on an authorized non-lobby ontology; verify the exact committed result through its owner and another representation. Cover parse error, stale concurrent edit, read-only user, wrong anchor, revocation, disconnect and lost reply with no uncertain resubmission. Verify complete-source reads and unchanged repeated operations reuse retained state. Desktop interaction is required; do not claim physical VR keyboard/comfort acceptance from a mockup.\n\n[QUD.24](nimbalyst://QUD.24) is complete-current-state inspection, not completion of this editor. [QUD.20](nimbalyst://QUD.20) supplies ACL foundations; [QUD.25](nimbalyst://QUD.25) may supply shared controls without requiring its whole GUI milestone first.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\nOrdinary ontology-instance dispatch/ACL reflection: [QUD.32](nimbalyst://QUD.32). 3D representation consumer: [QUD.35](nimbalyst://QUD.35)."
+    },
+    {
+      "id": "task_1791635396029_xqsm4f",
+      "localKey": "QUD.35",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Inspect and edit ontology contents in 3D through existing lenses and Eidolons",
+      "status": "to-do",
+      "priority": "medium",
+      "tags": [
+        "ontology",
+        "eidolon",
+        "world",
+        "editor"
+      ],
+      "archived": false,
+      "customFields": {
+        "dependsOn": [
+          {
+            "itemId": "task_1791635388737_i1zw6h"
+          }
+        ]
+      },
+      "description": "## Goal\nLet an authorized user see, interact with, edit and build ontology contents in 3D using existing lenses, encodings, Eidolons, marks and owner-authorized actions. Quod is not limited to walking through physical rooms.\n\n## Scope\n- Supply a bounded first 3D workbench for ontology contents: show classes, instances and selected relations; select exact anchored targets; inspect them and perform authorized creation/edit/deletion through existing action/editing owners. Define the first supported operations explicitly rather than promising a universal graphical Prolog editor.\n- A class-diagram view, 3D workbench, text editor and ACL view are presentations of the same ontology. Switching or opening multiple representations does not clone its ontology, source or history. Ontologies themselves are ordinary class instances with Eidolons and marks.\n- Reuse lens selection versus encoding/representation separation; do not impose an independent client filter or new presentation engine. Generalize the existing dispatcher as needed rather than treating all Eidolons as code forms.\n- Distinguish presentation layout from actual domain edits. Moving a mark for readability does not move ownership or a physical body. Explicit domain edits use the target ACLs and expected state; correlated durable edits use existing atomic transactions.\n- No automatic space/physical_space membership, simulation allocation or collision geometry from representation. Nonphysical ontologies must remain usable with no physics service.\n\n## Acceptance\nOn a system read-only ontology and an owned non-lobby ontology, visualize coherent current content, inspect class/instance identity, create/edit/delete within granted policy and see the same committed result in the text view. Test denial, wrong anchor, concurrent edit, deleted targets, revocation and reconnect/uncertain outcomes. Local layout cannot mutate domain location. Repeated unchanged views do not replay history or rebuild retained state.\n\nReuse [QUD.25](nimbalyst://QUD.25)'s common GUI infrastructure where available; this ticket owns the ontology-editing application, not the general form/question lifecycle. The dedicated text Eidolon is a sibling consumer, not a second source of truth. Hardware VR interaction validation must be recorded separately from desktop/rendering checks.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\nOrdinary ontology-instance dispatch/ACL reflection: [QUD.32](nimbalyst://QUD.32). Highlighted text editing: [QUD.34](nimbalyst://QUD.34). Any actual space containment action uses [QUD.33](nimbalyst://QUD.33) rather than inferring location from mark layout."
+    },
+    {
+      "id": "task_1791635398662_3io1m7",
+      "localKey": "QUD.36",
+      "issueKeyStatus": "local",
+      "issueKeyMessage": "This workspace has no team, so no shared issue key can be issued — publishing will not produce one. This number is private to this project on this machine. It is not a shared key — do not use it in commit messages or anywhere another person will read it.",
+      "type": "task",
+      "typeTags": [
+        "task"
+      ],
+      "title": "Complete real-lobby obstructed-door interaction and recovery acceptance",
+      "status": "to-do",
+      "priority": "high",
+      "tags": [
+        "lobby",
+        "physics",
+        "acceptance"
+      ],
+      "archived": false,
+      "customFields": {
+        "dependsOn": [
+          {
+            "itemId": "task_1791574097686_paoo8v"
+          },
+          {
+            "itemId": "task_1791120397842_qm278c"
+          },
+          {
+            "itemId": "task_1791120418100_u4q7in"
+          }
+        ],
+        "blocks": [
+          {
+            "direction": "out",
+            "relationshipTypeKey": "blocks",
+            "itemId": "task_1791119703504_7774jx",
+            "title": "Add shared-world physics simulation and authenticated consequences",
+            "trackerType": "task"
+          }
+        ]
+      },
+      "description": "## Origin and goal\nPreserve the physical-door acceptance explicitly deferred when Yan accepted [QUD.19](nimbalyst://QUD.19)'s visual-only lobby scope. The native/Prolog door foundation ([QUD.6](nimbalyst://QUD.6)) and pose transport ([QUD.7](nimbalyst://QUD.7)) are completed foundations, not proof of this actual-lobby interaction. [QUD.27](nimbalyst://QUD.27) first enables governed physics and the signed ordinary world view.\n\n## Scope\nIn Yan's freshly identified current personal lobby, bind an explicit physical door/frame/hinge and obstacle to the existing authorized Eidolons/marks, preserving openings, roof, console and the lobby's exact identity/history. Expose close and the minimum authorized obstacle-edit/reset actions through existing GUI/action paths. Do not recreate the lobby or use a separate demonstration world as acceptance.\n\n## Required acceptance\n- Authorized close visibly moves the real door in the normal client. An obstacle stops it; the displayed stopped geometry agrees with the atomically committed blocked outcome/checkpoint. Clearing the obstacle then closing commits and displays closed, not merely an animation or native stop.\n- Race obstacle edits, cancellation/replacement, duplicate/delayed samples, collider deletion/recreation and stale frames. No old sample completes a new request or resurrects a removed body.\n- Resolve lost replies by the original operation. Reconnect, simulator restart and authority recovery restore committed stopped geometry/checkpoints without replaying completion reactions or silently substituting another world.\n- Preserve the signed console, existing appearance/edition views and one pose source per body-bound occurrence. Unchanged reconciliation does no history replay, geometry rebuild or write/sync; measure real production-owner work.\n- Record signed/browser evidence and applicable clean sequential gates with true exits. Coordinate a single server writer; deployment or broader runtime changes require the existing authority. Physical Vive contact/tracking/comfort acceptance remains [QUD.26](nimbalyst://QUD.26).\n\n## Boundaries\nThis is level-based blocked/closed outcome integration, not [QUD.18](nimbalyst://QUD.18)'s general distinct-impact consequences, [QUD.9](nimbalyst://QUD.9)'s held objects or [QUD.10](nimbalyst://QUD.10)'s remote multi-viewer expansion. No scripted obstruction substitute, new transport/engine, live-query sealing exemption or hidden fallback.\n\nRead AGENTS.md, doc/world.md and doc/multiwrite-architecture.md before implementation. Reuse existing Prolog policy/actions, lifecycle, recovery and authorized owner paths. No parallel domain engine, hidden fallback or backward-compatibility branch. Clean replacement does not authorize deployment, refounding or history deletion.\n\nPrerequisite integration: [QUD.27](nimbalyst://QUD.27); player/Vive acceptance: [QUD.26](nimbalyst://QUD.26); shared-physics umbrella: [QUD.3](nimbalyst://QUD.3)."
+    }
+  ]
+}

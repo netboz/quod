@@ -1,0 +1,45 @@
+newfstatat(AT_FDCWD, "/etc/resolv.conf", {st_mode=S_IFREG|0644, st_size=55, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/host.conf", O_RDONLY|O_CLOEXEC) = 599
+openat(AT_FDCWD, "/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 599
+openat(AT_FDCWD, "/etc/nsswitch.conf", O_RDONLY|O_CLOEXEC) = 599
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary", F_OK) = 0
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47760, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=820, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=880, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", 0x7fa4ed7aee70) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 599
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(599, F2FS_IOC_GET_FEATURES, 0x7fa4ed7b0fa4) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", 0x7fa4ed7b0e70) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0e40) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", 0x7fa4ed7b0b10) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0ae0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 603
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary", O_RDONLY|O_CLOEXEC) = 602
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0b80) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0ac0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0d80) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0d80) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b0d50) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=12288, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=12288, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 602
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary", O_RDONLY|O_CLOEXEC) = 603
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-journal", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Shared Dictionary/db-wal", 0x7fa4ed7b11f0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cache/Cache_Data/sqldb2", {st_mode=S_IFREG|0600, st_size=344064, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cache/Cache_Data/sqldb2", {st_mode=S_IFREG|0600, st_size=344064, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cookies", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Cookies", {st_mode=S_IFREG|0600, st_size=20480, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/.org.chromium.Chromium.Network Persistent State.D8MDNt", O_RDWR|O_CREAT|O_EXCL, 0600) = 600
+rename("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/.org.chromium.Chromium.Network Persistent State.D8MDNt", "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Network Persistent State") = 0
++++ exited with 0 +++

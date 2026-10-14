@@ -1,0 +1,4 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff10bdef780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff10bdef780) = -1 ENOENT (No such file or directory)
+ioctl(608, FIONREAD, [16])              = 0
++++ exited with 0 +++

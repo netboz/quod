@@ -1,0 +1,7 @@
+{
+  "exit_code": 127,
+  "elapsed_seconds": 0.007627248764038086,
+  "device": "simulated",
+  "compositor": "xcb",
+  "isolated_runtime": "/tmp/quod-webxr-preflight-20261008/runtime"
+}

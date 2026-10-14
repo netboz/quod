@@ -1,0 +1,69 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_gui_components_tests:-forms_use_the_same_signed_ontology_path_test_/0-fun-2-/0: module 'quod_gui_components_tests'
+[0;31m     Failure/Error: ?assertMatch({ component , << "settings" >> , << "form" >> , _ , [ _ , _ , _ , _ ] }, Tree)
+       expected: = { component , << "settings" >> , << "form" >> , _ , [ _ , _ , _ , _ ] }
+            got: {component,settings,form,
+                     [{property,label,<<"Instrument settings">>},
+                      {property,help,<<>>},
+                      {property,enabled,true},
+                      {property,layout,column}],
+                     [{component,name,text_box,
+                          [{property,label,<<"Name">>},
+                           {property,help,<<>>},
+                           {property,enabled,true},
+                           {property,required,true},
+                           {property,readonly,false},
+                           {property,max_length,4096}],
+                          []},
+                      {component,mode,selection,
+                          [{property,label,<<"Mode">>},
+                           {property,help,<<>>},
+                           {property,enabled,true},
+                           {property,required,false},
+                           {property,readonly,false},
+                           {property,options,
+                               [{option,sine,<<"Sine">>},
+                                {option,square,<<"Square">>}]}],
+                          []},
+                      {component,tuning,container,
+                          [{property,label,<<"Tuning">>},
+                           {property,help,<<>>},
+                           {property,enabled,true},
+                           {property,layout,column}],
+                          [{component,level,slider,
+                               [{property,label,<<"Level">>},
+                                {property,help,<<>>},
+                                {property,enabled,true},
+                                {property,required,false},
+                                {property,readonly,false},
+                                {property,range,{range,0,100,5}},
+                                {property,unit,<<>>}],
+                               []},
+                           {component,angle,rotary_knob,
+                               [{property,label,<<"Phase">>},
+                                {property,help,<<>>},
+                                {property,enabled,true},
+                                {property,required,false},
+                                {property,readonly,false},
+                                {property,range,{range,0,359,1}},
+                                {property,unit,degrees}],
+                               []}]},
+                      {component,apply,button,
+                          [{property,label,<<"Apply">>},
+                           {property,help,<<>>},
+                           {property,enabled,true}],
+                          []}]}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 0.946 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

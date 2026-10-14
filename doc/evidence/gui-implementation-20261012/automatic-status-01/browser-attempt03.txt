@@ -1,0 +1,1 @@
+Promise-based evaluation did not return. Session closed and cell terminated; tool reported automatic permission review deadline exceeded. No browser pass claimed.

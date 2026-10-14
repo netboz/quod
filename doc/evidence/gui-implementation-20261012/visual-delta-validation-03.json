@@ -1,0 +1,15 @@
+{
+  "scope": "Local mockup changes after frozen plan-review-02 snapshot; no production change",
+  "changes": ["16px supporting text on translucent header", "review option ID matches plan example", "opaque-panel toggle", "48px tall channel selection labels"],
+  "node_check_exit": 0,
+  "browser_observations": {
+    "opaque_background": "rgb(25, 43, 50)",
+    "restored_background": "rgba(25, 43, 50, 0.78)",
+    "channel_label_width": 165.3125,
+    "channel_label_height": 48,
+    "header_supporting_text": "16px",
+    "decision_values": ["approve", "request_changes", "decline"],
+    "horizontal_overflow": false
+  },
+  "limitations": ["No headset validation", "Earlier headless focus-delivery limitation remains; see draft-validation-02.json"]
+}

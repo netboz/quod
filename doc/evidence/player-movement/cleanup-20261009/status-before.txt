@@ -1,0 +1,97 @@
+ M client/src/prolog-edit.d.ts
+ M client/src/prolog-edit.js
+ M client/src/simulation.d.ts
+ M client/src/simulation.js
+ M client/test/prolog-edit.test.js
+ M client/test/simulation.test.js
+ M doc/README.md
+ M doc/physics-native.md
+ M doc/proofs.md
+ M doc/system-ontology-acls.md
+ D priv/explorer/assets/Session-QuOU6Eab.js
+ D priv/explorer/assets/World-DUgw6_Af.js
+ D priv/explorer/assets/glTFLoader-BT6V-z4E.js
+ D priv/explorer/assets/main-CdrzgOPt.js
+ D priv/explorer/assets/pbrMaterial.pure-BoZSyCgF.js
+ D priv/explorer/assets/sceneLoader-Cj0Etpzs.js
+ D priv/explorer/assets/webXRDefaultExperience-DHqWmnlU.js
+ D priv/explorer/assets/world-scene-DwLxFNy-.js
+ M priv/explorer/index.html
+ M priv/explorer/world.html
+ M priv/ontologies/common_predicates.pl
+ M priv/ontologies/quod_agent.pl
+ M priv/ontologies/quod_environment.pl
+ M priv/ontologies/quod_environment_eidolons.pl
+ M priv/ontologies/quod_gui.pl
+ M priv/ontologies/quod_human_user.pl
+ M priv/ontologies/quod_lens.pl
+ M priv/ontologies/quod_licence.pl
+ M priv/ontologies/quod_lobby.pl
+ M priv/ontologies/quod_material.pl
+ M priv/ontologies/quod_material_eidolons.pl
+ M priv/ontologies/quod_measure.pl
+ M priv/ontologies/quod_modelling.pl
+ M priv/ontologies/quod_names.pl
+ M priv/ontologies/quod_node.pl
+ M priv/ontologies/quod_physics.pl
+ M priv/ontologies/quod_prolog.pl
+ M priv/ontologies/quod_prolog_eidolons.pl
+ M priv/ontologies/quod_rendering.pl
+ M priv/ontologies/quod_root.pl
+ M src/predicates/quod_agent_predicates.erl
+ M src/predicates/quod_agent_work_predicates.erl
+ M src/predicates/quod_ask.erl
+ M src/predicates/quod_committee_predicates.erl
+ M src/predicates/quod_common_primitives.erl
+ M src/predicates/quod_directory_predicates.erl
+ M src/predicates/quod_ontology_predicates.erl
+ M src/predicates/quod_physics_predicates.erl
+ M src/predicates/quod_runtime_predicates.erl
+ M src/predicates/quod_transaction_predicates.erl
+ M src/quod_commit_validation.erl
+ M src/quod_committed_projection.erl
+ M src/quod_diff.erl
+ M src/quod_effect.erl
+ M src/quod_erlog_db_local_prove.erl
+ M src/quod_erlog_db_mvcc.erl
+ M src/quod_physics.erl
+ M src/quod_predicates.erl
+ M src/quod_prolog.erl
+ M test/quod_common_primitives_tests.erl
+ M test/quod_directory_predicates_tests.erl
+ M test/quod_erlog_db_mvcc_tests.erl
+ M test/quod_lens_tests.erl
+ M test/quod_lifecycle_single_path_tests.erl
+ M test/quod_lobby_tests.erl
+ M test/quod_physics_tests.erl
+ M ui/src/PrologEditor.tsx
+ M ui/src/World.tsx
+ M ui/test/prolog-editor.browser.mjs
+ M ui/test/prolog-editor.fixture.tsx
+?? client/native/
+?? client/test/fixtures/native-contract/
+?? client/test/linux-webxr-preflight.py
+?? client/test/linux-webxr-run.py
+?? client/test/linux-webxr.fixture.html
+?? doc/evidence/gui-plan-review-2/
+?? doc/evidence/gui-plan-review-3/
+?? doc/evidence/gui-plan-review/
+?? doc/evidence/hot-controls/failure-reasons-audit.md
+?? doc/evidence/hot-controls/failure-reasons-design.md
+?? doc/evidence/native-godot/
+?? doc/evidence/ontology-source/
+?? doc/evidence/player-movement/
+?? doc/gui-concept.mockup.html
+?? doc/gui-plan.md
+?? doc/native-godot-client-plan.md
+?? doc/player-movement-plan.md
+?? priv/explorer/assets/Session-CVQRonAa.js
+?? priv/explorer/assets/World-B7gQRAI6.js
+?? priv/explorer/assets/glTFLoader-B-53rMBf.js
+?? priv/explorer/assets/main-ZoA4CJkU.js
+?? priv/explorer/assets/pbrMaterial.pure-DHgxhDDf.js
+?? priv/explorer/assets/sceneLoader-CtfiMkAq.js
+?? priv/explorer/assets/webXRDefaultExperience-B6hfKL3L.js
+?? priv/explorer/assets/world-scene-f_Wl8iOZ.js
+?? test/quod_external_predicate_selection_tests.erl
+?? test/quod_predicate_failure_tests.erl

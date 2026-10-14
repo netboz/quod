@@ -82,6 +82,9 @@ signed_scope_authentication_is_verified_and_bound_test() ->
           ?assertEqual(
              maps:get(not_after_ms, maps:get(request, Fixture)),
              maps:get(request_expiry, Authorization)),
+          ?assertEqual(
+             maps:get(operation_ref, maps:get(evidence, Fixture)),
+             maps:get(request_operation, Authorization)),
           lists:foreach(
             fun({Auth, Identity, TestPrincipal, Digest}) ->
                 ?assertEqual(

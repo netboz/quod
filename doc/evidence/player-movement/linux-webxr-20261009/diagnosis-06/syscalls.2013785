@@ -1,0 +1,610 @@
+access("/tmp/quod-webxr-fpcrwlq9/config/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/tmp/quod-webxr-fpcrwlq9/data/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/xdg/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/home/yan/.local/share/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/var/lib/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/local/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+readlink("/proc/self/exe", "\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252"..., 1024) = 89
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07911b3b, si_syscall=__NR_readlink, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/glvnd/egl_vendor.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d/10_nvidia.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/egl/egl_external_platform.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/egl/egl_external_platform.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFLNK|S_ISUID|S_ISVTX|025252400252, st_size=12297829382473034410, ...}, 0) = 262
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f56e, si_syscall=__NR_newfstatat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "egl/libnvidia-eglcore.so.615.71.09_tegra", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d/50_mesa.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libEGL_mesa.so.0", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libEGL_mesa.so.0", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFLNK|S_ISUID|S_ISVTX|025252400252, st_size=12297829382473034410, ...}, 0) = 262
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f56e, si_syscall=__NR_newfstatat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libEGL_mesa.so.0", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libEGL_mesa.so.0", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/sys/module/nvidia/initstate", R_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=012, st_size=41764262439232, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidiactl", {st_mode=035717576440, st_size=582, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidiactl", {st_mode=S_IFSOCK|S_ISVTX|0777, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:255")             = -1 EPERM (Operation not permitted)
+symlink("../nvidiactl", "/dev/char/195:255") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:255", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=0377, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidiactl", {st_mode=035717576540, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidiactl", O_RDWR) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xd2, 0x48), 0x7f7aef3efe50) = 0
+openat(AT_FDCWD, "/sys/devices/system/memory/block_size_bytes", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xd6, 0x8), 0x7f7aef3eff50) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xc8, 0x900), 0x7f7afd8d3320) = 0
+stat("/proc/driver/nvidia/gpus/0000:01:00.0/numa_status", {st_mode=S_IFCHR|S_ISUID|S_ISVTX|053600440, st_rdev=makedev(0x7388, 0xf7af39a0), ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3effe0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6b0) = 0
+openat(AT_FDCWD, "/home/yan/.nv/nvidia-application-profile-globals-rc", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.nv/nvidia-application-profiles-rc", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.nv/nvidia-application-profiles-rc.d", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/nvidia/nvidia-application-profiles-rc", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/nvidia/nvidia-application-profiles-rc.d/", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/nvidia/nvidia-application-profiles-615.71.09-rc", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/nvidia/nvidia-application-profiles-rc", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3f01e0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee430) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x29, 0x10), 0x7f7aef3f02c0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6a0) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717572060, st_size=206158430240, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=S_IFSOCK|S_ISVTX|0400, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:0")               = -1 EPERM (Operation not permitted)
+symlink("../nvidia0", "/dev/char/195:0") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:0", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=000, st_size=140165976618672, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717572160, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6a0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef4c0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef4c0) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717577040, st_size=206158430240, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=S_IFSOCK|S_ISVTX|0400, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:0")               = -1 EPERM (Operation not permitted)
+symlink("../nvidia0", "/dev/char/195:0") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:0", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=000, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717577140, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(607, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xc9, 0x4), 0x7f7aef3effd0) = 0
+ioctl(607, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xd7, 0x230), 0x7f7aef3efd60) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef540) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3f0080) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef5c0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef4c0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef4c0) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717577040, st_size=206158430240, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=S_IFSOCK|S_ISVTX|0400, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:0")               = -1 EPERM (Operation not permitted)
+symlink("../nvidia0", "/dev/char/195:0") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:0", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=000, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717577140, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(608, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xc9, 0x4), 0x7f7aef3effd0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3f0080) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3effe0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef670) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef640) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x4a, 0xb8), 0x7f7aef3f01d0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee9b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee9b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee9b0) = 0
+openat(AT_FDCWD, "/dev/nvidiactl", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(609, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xd4, 0x80), 0x7f7aef3ef480) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef6a0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x29, 0x10), 0x7f7aef3f00b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ef830) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libnvtegrahv.so", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnvtegrahv.so", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=037541711431, st_size=18446744073709551615, ...}, 0) = 262
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f56e, si_syscall=__NR_newfstatat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libnvtegrahv.so", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3f0310) = 0
+openat(AT_FDCWD, "/dev/dri", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/dri/renderD128", {st_mode=S_IFSOCK|S_ISUID|S_ISGID|S_ISVTX|037777600260, st_size=140166903196352, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/dri/renderD128", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(611, DRM_IOCTL_VERSION, 0x25fc00ac30c0) = 0
+ioctl(611, DRM_IOCTL_VERSION, 0x25fc00ac30c0) = 0
+ioctl(611, _IOC(_IOC_READ|_IOC_WRITE, 0x64, 0x43, 0x24), 0x7f7aef3f01f0) = 0
+ioctl(611, _IOC(_IOC_READ|_IOC_WRITE, 0x64, 0x43, 0x24), 0x7f7aef3f0390) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3ef200) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee350) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee350) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717566260, st_size=206158430240, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=S_IFSOCK|S_ISVTX|0400, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:0")               = -1 EPERM (Operation not permitted)
+symlink("../nvidia0", "/dev/char/195:0") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:0", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=000, st_size=12297829382473034410, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717566360, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(610, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xc9, 0x4), 0x7f7aef3eee60) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3eef10) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee530) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee450) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee350) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee350) = 0
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717566260, st_size=206158430240, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=S_IFSOCK|S_ISVTX|0400, st_size=0, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+unlink("/dev/char/195:0")               = -1 EPERM (Operation not permitted)
+symlink("../nvidia0", "/dev/char/195:0") = -1 EPERM (Operation not permitted)
+stat("/dev/char/195:0", {st_mode=S_ISUID|S_ISGID|0742200373, st_size=140166384125920, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/usr/bin/nvidia-modprobe", {st_mode=000, st_size=12297829382473034410, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/proc/driver/nvidia/params", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+stat("/dev/nvidia0", {st_mode=035717566360, st_size=294328996, ...}) = 4
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b079217f6, si_syscall=__NR_stat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/dev/nvidia0", O_RDWR|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(612, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0xc9, 0x4), 0x7f7aef3eee60) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3eef10) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee530) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee530) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee530) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee530) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3eef10) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x34, 0x1c), 0x7f7aef3eef70) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2b, 0x30), 0x7f7aef3eef10) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee600) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee600) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee570) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee570) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee570) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee570) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee800) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee550) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee860) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee9b0) = 0
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x2a, 0x20), 0x7f7aef3ee9b0) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=0201, st_size=217948115443840, ...}, 0) = 262
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f56e, si_syscall=__NR_newfstatat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/lib/libnvidia-eglcore.so.615.71.09", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "egl/libnvidia-eglcore.so.615.71.09_tegra", O_RDONLY|O_CLOEXEC) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b2677f7f5, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+ioctl(605, _IOC(_IOC_READ|_IOC_WRITE, 0x46, 0x29, 0x10), 0x7f7aef3f0430) = 0
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+readlink("/proc/self/exe", "\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252"..., 1024) = 89
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07911b3b, si_syscall=__NR_readlink, si_arch=AUDIT_ARCH_X86_64} ---
+access("/tmp/quod-webxr-fpcrwlq9/config/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/tmp/quod-webxr-fpcrwlq9/data/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/xdg/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/home/yan/.local/share/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/var/lib/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/local/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+readlink("/proc/self/exe", "\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252"..., 1024) = 89
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07911b3b, si_syscall=__NR_readlink, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+readlink("/proc/self/exe", "\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252"..., 1024) = 89
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07911b3b, si_syscall=__NR_readlink, si_arch=AUDIT_ARCH_X86_64} ---
+access("/tmp/quod-webxr-fpcrwlq9/config/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/tmp/quod-webxr-fpcrwlq9/data/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/xdg/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/etc/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/home/yan/.local/share/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/var/lib/flatpak/exports/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/local/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access(":/usr/share/vulkan//loader_settings.d/vk_loader_settings.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/implicit_layer.d/nvidia_layers.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+readlink("/proc/self/exe", "\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252\252"..., 1024) = 89
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07911b3b, si_syscall=__NR_readlink, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/explicit_layer.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/config/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/xdg/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/etc/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/tmp/quod-webxr-fpcrwlq9/data/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/home/yan/.local/share/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/var/lib/flatpak/exports/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/local/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b07912a46, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/.", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/..", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+access("/usr/share/vulkan/icd.d/nvidia_icd.json", F_OK) = 21
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b0790aa9b, si_syscall=__NR_access, si_arch=AUDIT_ARCH_X86_64} ---
+openat(AT_FDCWD, "/usr/share/vulkan/icd.d/nvidia_icd.json", O_RDONLY) = 257
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_openat, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0) = 604
+connect(604, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X1"}, 20) = 42
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENOENT, si_call_addr=0x7f7b078a08f2, si_syscall=__NR_connect, si_arch=AUDIT_ARCH_X86_64} ---
++++ exited with 0 +++

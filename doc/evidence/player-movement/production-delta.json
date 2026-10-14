@@ -1,0 +1,172 @@
+{
+  "scope": "Session-owned production files; excludes shared ui/src/World.tsx and all tests/docs/evidence",
+  "added": 2036,
+  "deleted": 215,
+  "files": [
+    {
+      "path": "src/quod_physics.erl",
+      "added": 314,
+      "deleted": 35
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "added": 3,
+      "deleted": 0
+    },
+    {
+      "path": "src/predicates/quod_physics_predicates.erl",
+      "added": 120,
+      "deleted": 2
+    },
+    {
+      "path": "src/quod_client_goal.erl",
+      "added": 5,
+      "deleted": 2
+    },
+    {
+      "path": "src/quod_client_goal_ingress.erl",
+      "added": 7,
+      "deleted": 4
+    },
+    {
+      "path": "src/quod_client_goal_target.erl",
+      "added": 3,
+      "deleted": 2
+    },
+    {
+      "path": "src/quod_client.erl",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "src/quod_client_http.erl",
+      "added": 4,
+      "deleted": 1
+    },
+    {
+      "path": "src/quod_node_actor.erl",
+      "added": 4,
+      "deleted": 4
+    },
+    {
+      "path": "src/quod_prolog.erl",
+      "added": 24,
+      "deleted": 3
+    },
+    {
+      "path": "src/quod_effect.erl",
+      "added": 15,
+      "deleted": 0
+    },
+    {
+      "path": "src/quod_erlog_db_local_prove.erl",
+      "added": 33,
+      "deleted": 3
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "added": 6,
+      "deleted": 1
+    },
+    {
+      "path": "src/quod_scope_session.erl",
+      "added": 24,
+      "deleted": 0
+    },
+    {
+      "path": "src/quod_proof_context.erl",
+      "added": 12,
+      "deleted": 0
+    },
+    {
+      "path": "src/quod_proof_savepoint.erl",
+      "added": 14,
+      "deleted": 2
+    },
+    {
+      "path": "src/quod_proof_scope.erl",
+      "added": 6,
+      "deleted": 1
+    },
+    {
+      "path": "src/quod_predicates.erl",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "src/quod_client_simulation.erl",
+      "added": 73,
+      "deleted": 28
+    },
+    {
+      "path": "src/quod_runtime.erl",
+      "added": 44,
+      "deleted": 7
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "added": 180,
+      "deleted": 9
+    },
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "added": 85,
+      "deleted": 88
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "added": 197,
+      "deleted": 0
+    },
+    {
+      "path": "native/quod_physics/src/motion.rs",
+      "added": 395,
+      "deleted": 0
+    },
+    {
+      "path": "client/src/signed-client.js",
+      "added": 3,
+      "deleted": 1
+    },
+    {
+      "path": "client/src/signed-client.d.ts",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "client/src/simulation.js",
+      "added": 85,
+      "deleted": 11
+    },
+    {
+      "path": "client/src/simulation.d.ts",
+      "added": 16,
+      "deleted": 2
+    },
+    {
+      "path": "client/src/locomotion.js",
+      "added": 92,
+      "deleted": 0
+    },
+    {
+      "path": "client/src/locomotion.d.ts",
+      "added": 21,
+      "deleted": 0
+    },
+    {
+      "path": "client/src/controlled-navigation.js",
+      "added": 191,
+      "deleted": 0
+    },
+    {
+      "path": "client/src/world-scene.js",
+      "added": 56,
+      "deleted": 6
+    },
+    {
+      "path": "client/src/world-scene.d.ts",
+      "added": 1,
+      "deleted": 1
+    }
+  ]
+}

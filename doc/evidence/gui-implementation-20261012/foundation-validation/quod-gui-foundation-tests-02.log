@@ -1,0 +1,73 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 12-Oct-2026::22:35:23.943910 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.1288.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_CCC2A8D4470C7452",
+                                       seed_peers => [],
+                                       node_id =>
+                                           <<67,183,199,24,179,100,246,3,241,
+                                             91,18,128,186,64,26,249,193,51,
+                                             179,98,230,159,11,194,242,182,198,
+                                             159,41,213,180,121>>,
+                                       max_proof_workers => 64,
+                                       max_scope_workers => 64,
+                                       transaction_ttl_ms => 30000,
+                                       proof_timeout_ms => 60000,
+                                       scope_timeout_ms => 60000,
+                                       scope_step_timeout_ms => 30000,
+                                       external_predicate_modules => [],
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false,
+                                       genesis_file =>
+                                           "/tmp/quod_ask_CCC2A8D4470C7452/slow.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_components_tests:-forms_use_the_same_signed_ontology_path_test_/0-fun-2-/0: module 'quod_gui_components_tests'
+[0;31m     Failure/Error: {error,badarg,
+                        [{lists,member,
+                             [{field,name,<<>>},
+                              <<114,224,178,64,85,22,112,76,54,231,93,90,127,
+                                9,203,200,254,58,74,216,57,4,11,124,39,154,71,
+                                104,163,98,6,113>>],
+                             [{error_info,#{module => erl_stdlib_errors}}]},
+                         {quod_gui_components_tests,exercise,2,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_components_tests.erl"},
+                              {line,72}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {quod_gui_components_tests,
+                             '-forms_use_the_same_signed_ontology_path_test_/0-fun-2-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_gui_components_tests.erl"},
+                              {line,24}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 12.256 seconds
+[0;31m97 tests, 1 failures
+[0m===> Error running tests

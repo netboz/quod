@@ -1,0 +1,55 @@
+[
+  {
+    "stage": "patch-check",
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/home/yan/src/quod/doc/evidence/player-movement/linux-webxr-20261008/chromium-nvidia-xr-01.patch"
+    ],
+    "exit_code": 0,
+    "seconds": 0.002
+  },
+  {
+    "stage": "patch-apply",
+    "command": [
+      "git",
+      "apply",
+      "/home/yan/src/quod/doc/evidence/player-movement/linux-webxr-20261008/chromium-nvidia-xr-01.patch"
+    ],
+    "exit_code": 0,
+    "seconds": 0.001
+  },
+  {
+    "stage": "runhooks",
+    "command": [
+      "/home/yan/src/quod/client/_build/webxr-linux/depot_tools/gclient",
+      "runhooks"
+    ],
+    "exit_code": 0,
+    "seconds": 51.021
+  },
+  {
+    "stage": "gn",
+    "command": [
+      "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/buildtools/linux64/gn",
+      "gen",
+      "out/QuodWebXR",
+      "--args=is_debug=false is_component_build=true symbol_level=0 blink_symbol_level=0 v8_symbol_level=0 use_remoteexec=false use_siso=false"
+    ],
+    "exit_code": 0,
+    "seconds": 5.668
+  },
+  {
+    "stage": "ninja",
+    "command": [
+      "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/third_party/ninja/ninja",
+      "-C",
+      "out/QuodWebXR",
+      "-j4",
+      "chrome"
+    ],
+    "exit_code": 1,
+    "seconds": 1696.104
+  }
+]

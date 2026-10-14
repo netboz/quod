@@ -1,0 +1,7 @@
+access("/proc/self/setgroups", F_OK)    = 0
+openat(AT_FDCWD, "/proc/self/setgroups", O_WRONLY) = 591
+openat(AT_FDCWD, "/proc/self/gid_map", O_WRONLY) = 591
+openat(AT_FDCWD, "/proc/self/uid_map", O_WRONLY) = 591
+openat(AT_FDCWD, "/proc/", O_RDONLY|O_CLOEXEC|O_DIRECTORY) = 591
+newfstatat(591, "self/task/", {st_mode=S_IFDIR|0555, st_size=0, ...}, 0) = 0
++++ exited with 0 +++

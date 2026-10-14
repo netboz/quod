@@ -1,0 +1,52 @@
+{
+  "src/quod_commit_validation.erl": {
+    "before_sha256": "2df77e72b88015bec4ed39d11703601f79eff25597313da7f76a6648ae2735d9",
+    "after_sha256": "b4a98d21f4c88d2db1ca105597e89c22768a6849130c773e1001a5fc5273f1d1",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_committed_projection.erl": {
+    "before_sha256": "136d324a2d02ef5c90a1b6b3c80c5a08a6fffdcbafd6dfeed60aecdc68770adf",
+    "after_sha256": "20d9e862a5a5eab1e8f25ba398d1403a6bcb0214b1e82040e712d9a1c3311fad",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_diff.erl": {
+    "before_sha256": "7a7193895aa9e5ef4282072e06df2d3c0a0711f6dddb876900f334edf47b9aa2",
+    "after_sha256": "2030c41065b439ef705b0cc74e3c231bc3d165b290fd155cc2f3af7d7ce4073d",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_erlog_db_mvcc.erl": {
+    "before_sha256": "e9226927be46e4f00ff23d54fb311ac4ee20c1a10faa1f54fad2c0060c49e824",
+    "after_sha256": "a746644188250d169b373ce61e71261df1032c58b46857adc79f521384671542",
+    "action": "remove_owned_hunks"
+  },
+  "test/quod_erlog_db_mvcc_tests.erl": {
+    "before_sha256": "9c9c3a3a53d6620d993f621cc85d247b6a24d391d03bc3516347b8fb7d2d7c7c",
+    "after_sha256": "c9eddabc9881058e65508f8ffc76725160a85cb4dbeddf9d074c1757ff21b5d9",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_predicates.erl": {
+    "before_sha256": "26819fd01fdca5cd7556ed265a16670e19f31ff6fc60b78a0dc85cd3239b7ea8",
+    "after_sha256": "f9d12c07aa7689a2f4758fea50d101126a9b3c14c2d22547f003f2347a9144c8",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_prolog.erl": {
+    "before_sha256": "a70f694ab6acf4895cde1c7d7d029c9874bfb852eb36e5cda3b8ee0cd7e7a2c9",
+    "after_sha256": "d0244b78289997d3d6b71223674c3717c863f5d6bfbc032c342ab10c06fb18d7",
+    "action": "remove_owned_hunks"
+  },
+  "src/quod_erlog_db_local_prove.erl": {
+    "before_sha256": "13e9721b0c644403e9566218710cc4a88fd35c0bc50fbae0941f9fc30658d6ea",
+    "after_sha256": "63011937e61f2a3eab8035d99c4d20d1f018a20903b2b9bc63619c45aa55717e",
+    "action": "remove_owned_hunks"
+  },
+  "priv/ontologies/common_predicates.pl": {
+    "before_sha256": "f1ee49e63fd25d04d839e7e7fb73c7fc89b5c70b4af187a2d45238bf7a3ac6c6",
+    "after_sha256": "00ea98ed3f580955b8ab0144d91b7e350715a7998a1335890cd7983dbb18e683",
+    "action": "remove_owned_hunks"
+  },
+  "test/quod_external_predicate_selection_tests.erl": {
+    "before_sha256": "cd6b300db9f3dc24c694f78b746423eff5669380f1ec23e89a5258a972ebae84",
+    "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "action": "remove_file"
+  }
+}

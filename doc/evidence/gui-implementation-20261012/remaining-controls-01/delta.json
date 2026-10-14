@@ -1,0 +1,85 @@
+{
+  "files": [
+    {
+      "file": "priv/ontologies/quod_gui.pl",
+      "added": 42,
+      "deleted": 2,
+      "net": 40
+    },
+    {
+      "file": "priv/ontologies/instrument_configuration.pl",
+      "added": 12,
+      "deleted": 7,
+      "net": 5
+    },
+    {
+      "file": "client/src/gui-values.js",
+      "added": 3,
+      "deleted": 3,
+      "net": 0
+    },
+    {
+      "file": "client/src/gui-values.d.ts",
+      "added": 0,
+      "deleted": 0,
+      "net": 0
+    },
+    {
+      "file": "client/src/world.js",
+      "added": 16,
+      "deleted": 2,
+      "net": 14
+    },
+    {
+      "file": "client/src/world.d.ts",
+      "added": 2,
+      "deleted": 1,
+      "net": 1
+    },
+    {
+      "file": "client/src/marks.js",
+      "added": 9,
+      "deleted": 4,
+      "net": 5
+    },
+    {
+      "file": "client/src/render-resources.js",
+      "added": 34,
+      "deleted": 0,
+      "net": 34
+    },
+    {
+      "file": "client/src/workspace-panel.js",
+      "added": 96,
+      "deleted": 8,
+      "net": 88
+    },
+    {
+      "file": "client/src/world-scene.js",
+      "added": 1,
+      "deleted": 1,
+      "net": 0
+    },
+    {
+      "file": "ui/src/GuiForm.tsx",
+      "added": 66,
+      "deleted": 8,
+      "net": 58
+    },
+    {
+      "file": "ui/src/gui-form.css",
+      "added": 15,
+      "deleted": 0,
+      "net": 15
+    },
+    {
+      "file": "client/src/render-resources.d.ts",
+      "added": 16,
+      "deleted": 0,
+      "net": 16
+    }
+  ],
+  "added": 312,
+  "deleted": 36,
+  "net": 276
+}

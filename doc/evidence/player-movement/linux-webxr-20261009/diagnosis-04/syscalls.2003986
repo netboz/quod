@@ -1,0 +1,7 @@
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/TransportSecurity", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Logical_Invalidation/invalidation_filters", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Logical_Invalidation/invalidation_filters", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/SCT Auditing Pending Reports", O_RDONLY|O_CLOEXEC) = 603
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/sqldb0", {st_mode=S_IFREG|0600, st_size=507904, ...}) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/sqldb0", {st_mode=S_IFREG|0600, st_size=507904, ...}) = 0
++++ exited with 0 +++

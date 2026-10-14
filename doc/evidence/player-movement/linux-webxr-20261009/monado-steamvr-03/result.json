@@ -1,0 +1,20 @@
+{
+  "upstream_commit": "4156456d9741b0b177242d3e08cc7ac08bceb849",
+  "patch_sha256": "2fa4b4d663d0505f58a36ac097b846eed3af3600e4a0a5da69ef5271eda2abea",
+  "source_before": "746b761729654039b8e0cd4cd115c1aefd8b2a4718b7228825696feef6501c97",
+  "patch-check": 0,
+  "patch-apply": 0,
+  "source_after": "763d338f8c172f5cade34f07ba9c6536be0ac7b511fc860f2c9ed59b7556856f",
+  "build_command": [
+    "cmake",
+    "--build",
+    "/home/yan/src/quod/client/_build/webxr-linux/monado-build",
+    "--target",
+    "monado-service",
+    "-j",
+    "4"
+  ],
+  "build_exit": 0,
+  "build_seconds": 5.752795898995828,
+  "runtime_sha256": "8925c73a18622fc690e8a58953cbc3c6d78e348e48a02a7b9a9375661840c09f"
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "nice",
+    "-n",
+    "10",
+    "cmake",
+    "--build",
+    "client/_build/webxr-linux/build",
+    "--target",
+    "MiniBrowser",
+    "WebKitWebDriver",
+    "--parallel",
+    "3"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 0.37246227264404297
+}

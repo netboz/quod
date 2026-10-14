@@ -99,8 +99,12 @@ validate(ReadCheck, Ref, OutcomeContext) ->
                           _ -> {conflict, F}
                       end;
                   operation_outcome when OutcomeContext =/= none ->
-                      {Index, Parent} = OutcomeContext,
+                      {Index, Parent, _Target, _Network} = OutcomeContext,
                       quod_outcome:validate_dependency(Index, F, Exp, Parent);
+                  operation_expiry when OutcomeContext =/= none ->
+                      {Index, Parent, Target, Network} = OutcomeContext,
+                      quod_outcome:validate_expiry_dependency(Index, F, Exp,
+                                                               {Parent, Target, Network});
                   _ -> {conflict, F}
               end
       end, ok, ReadCheck).

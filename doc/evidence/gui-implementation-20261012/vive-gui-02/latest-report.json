@@ -1,0 +1,9 @@
+{
+  "edits": [],
+  "entries": 0,
+  "errors": [
+    "TypeError: Cannot read properties of undefined (reading 'baseExperience')"
+  ],
+  "immersive": false,
+  "submissions": []
+}

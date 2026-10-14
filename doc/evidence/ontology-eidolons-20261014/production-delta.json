@@ -1,0 +1,98 @@
+{
+  "production": [
+    {
+      "file": "priv/ontologies/common_predicates.pl",
+      "added": 38,
+      "removed": 9,
+      "net": 29,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog_eidolons.pl",
+      "added": 18,
+      "removed": 10,
+      "net": 8,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "priv/ontologies/quod_prolog.pl",
+      "added": 8,
+      "removed": 0,
+      "net": 8,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "priv/ontologies/quod_lens.pl",
+      "added": 17,
+      "removed": 0,
+      "net": 17,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "priv/ontologies/lobby_instance.pl",
+      "added": 2,
+      "removed": 0,
+      "net": 2,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "priv/ontologies/human_user_instance.pl",
+      "added": 2,
+      "removed": 0,
+      "net": 2,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "src/predicates/quod_runtime_predicates.erl",
+      "added": 26,
+      "removed": 2,
+      "net": 24,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "src/predicates/quod_common_primitives.erl",
+      "added": 28,
+      "removed": 11,
+      "net": 17,
+      "baseline": "start block reconstructed from recorded initial read; untouched user blocks retained"
+    },
+    {
+      "file": "client/src/world.js",
+      "added": 52,
+      "removed": 9,
+      "net": 43,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "client/src/world.d.ts",
+      "added": 9,
+      "removed": 2,
+      "net": 7,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "client/src/prolog-edit.js",
+      "added": 7,
+      "removed": 27,
+      "net": -20,
+      "baseline": "unchanged at session start; HEAD baseline"
+    },
+    {
+      "file": "ui/src/World.tsx",
+      "added": 28,
+      "removed": 18,
+      "net": 10,
+      "baseline": "frozen start snapshot"
+    },
+    {
+      "file": "ui/src/OntologyInspection.tsx",
+      "added": 44,
+      "removed": 0,
+      "net": 44,
+      "baseline": "new file"
+    }
+  ],
+  "added": 279,
+  "removed": 88,
+  "net": 191
+}

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-concurrency=1",
+    "client/test/accounts.test.js",
+    "client/test/key-provider.test.js",
+    "client/test/signed-client.test.js",
+    "client/test/prolog-term.test.js",
+    "client/test/marks.test.js",
+    "client/test/glb-profile.test.js",
+    "client/test/world.test.js",
+    "client/test/scene.test.js",
+    "client/test/render-resources.test.js"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 3.661470465012826
+}

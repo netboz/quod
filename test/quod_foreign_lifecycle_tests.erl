@@ -873,7 +873,7 @@ cancelled_view_foreign_registration(Completion) ->
             Timer = make_ref(),
             State = #{peer => {127,0,0,1},timer => Timer,follow_requests => Requests},
             {reply,{text,Expired},Cancelled} =
-                quod_client_simulation:websocket_info({timeout,Timer,expired},State),
+                quod_client_view:websocket_info({timeout,Timer,expired},State),
             ?assertEqual(<<"expired">>,maps:get(<<"reason">>,json:decode(Expired))),
             %% A second open cannot accumulate another pending registration.
             %% No proof is admitted until the old owner has released custody.
@@ -885,10 +885,10 @@ cancelled_view_foreign_registration(Completion) ->
                 signing_public_key => <<0:256>>,operation_id => crypto:strong_rand_bytes(32),
                 not_after_ms => quod_time:now_ms()+10000,mode => read,parser_version => 3,goal_text => Goal}),
             Enc = fun(B) -> base64:encode(B,#{mode => urlsafe,padding => false}) end,
-            Open = json:encode(#{type => open,session_id => Enc(<<0:256>>),
+            Open = json:encode(#{type => open, view_kind => world,session_id => Enc(<<0:256>>),
                 request => Enc(Bytes),signature => Enc(<<0:512>>),
-                world_namespace => Ns,world_anchor => Enc(Anchor)}),
-            {reply,{text,Recovering},Next} = quod_client_simulation:websocket_handle(
+                view_namespace => Ns,view_anchor => Enc(Anchor)}),
+            {reply,{text,Recovering},Next} = quod_client_view:websocket_handle(
                 {text,iolist_to_binary(Open)},Cancelled),
             ?assertEqual(<<"dependency_recovering">>,maps:get(<<"reason">>,json:decode(Recovering))),
             ?assertEqual(1,gen_server:reqids_size(maps:get(follow_requests,Next))),
@@ -902,7 +902,7 @@ cancelled_view_foreign_registration(Completion) ->
         end,
         Receive = fun Await(S) ->
             receive Message ->
-                case quod_client_simulation:websocket_info(Message,S) of
+                case quod_client_view:websocket_info(Message,S) of
                     {ok,ReceivedState} -> Await(ReceivedState);
                     Result -> Result
                 end
@@ -918,7 +918,7 @@ cancelled_view_foreign_registration(Completion) ->
                 ?assertEqual(0,maps:get(follow_consumers,quod_foreign_log:stats())),
                 receive
                     {quod_foreign_follow,_,_,{Ns,Anchor},_} = Stale ->
-                        ?assertEqual({ok,Clean},quod_client_simulation:websocket_info(Stale,Clean))
+                        ?assertEqual({ok,Clean},quod_client_view:websocket_info(Stale,Clean))
                 after 1000 -> error(missing_retired_follow_notice) end;
             stop -> ok
         end

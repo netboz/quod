@@ -1,0 +1,31 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.13s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::18:32:02.543151 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::18:32:03.971645 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::18:32:04.675758 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 13-Oct-2026::18:32:05.484477 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::18:32:13.023383 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 11
+[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_examples_tests:examples/0: module 'quod_gui_examples_tests'
+[0;31m     Failure/Error: ?assertEqual({ok,<<39,92,120,54,55,92,92,120,55,53,92,92,120,54,57,92,92,120,53,70,92,92,120,54,51,92,92,120,54,70,92,92,120,54,68,92,92,120,55,48,92,92,120,54,67,92,92,120,54,53,92,92,120,55,52,92,92,120,54,53,92,39,40,39,92,120,55,49,92,92,120,55,53,92,92,120,54,53,92,92,120,55,51,92,92,120,55,52,92,92,120,54,57,92,92,120,54,70,92,92,120,54,69,92,39,40,60,60,34,92,120,49,50,92,92,120,66,48,92,92,120,51,55,92,92,120,49,50,92,92,120,51,67,92,92,120,52,52,92,92,120,49,68,92,92,120,54,51,92,92,120,51,55,92,92,120,69,66,92,92,120,66,50,92,92,120,55,65,92,92,120,52,67,92,92,120,56,50,92,92,120,67,54,92,92,120,54,70,92,92,120,49,52,92,92,120,70,67,92,92,120,68,55,92,92,120,53,70,92,92,120,57,69,92,92,120,55,69,92,92,120,70,49,92,92,120,68,67,92,92,120,70,68,92,92,120,67,55,92,92,120,51,68,92,92,120,50,66,92,92,120,66,56,92,92,120,49,68,92,92,120,70,92,92,120,67,65,92,34,62,62,41,41,46>>}, { ok , CompletionText })
+       expected: {ok,<<"'\\x67\\\\x75\\\\x69\\\\x5F\\\\x63\\\\x6F\\\\x6D\\\\x70\\\\x6C\\\\x65\\\\x74\\\\x65\\'('\\x71\\\\x75\\\\x65\\\\x73\\\\x74\\\\x69\\\\x6F\\\\x6E\\'(<<\"\\x12\\\\xB0\\\\x37\\\\x12\\\\x3C\\\\x44\\\\x1D\\\\x63\\\\x37\\\\xEB\\\\xB2\\\\x7A\\\\x4C\\\\x82\\\\xC6\\\\x6F\\\\x14\\\\xFC\\\\xD7\\\\x5F\\\\x9E\\\\x7E\\\\xF1\\\\xDC\\\\xFD\\\\xC7\\\\x3D\\\\x2B\\\\xB8\\\\x1D\\\\xF\\\\xCA\\\">>)).">>}
+            got: {ok,<<"gui_complete(question(<<\"\\x12\\\\xB0\\7\\x12\\<D\\x1D\\c7\\xEB\\\\xB2\\zL\\x82\\\\xC6\\o\\x14\\\\xFC\\\\xD7\\_\\x9E\\~\\xF1\\\\xDC\\\\xFD\\\\xC7\\=+\\xB8\\\\x1D\\\\xF\\\\xCA\\\">>)).\n">>}[0m
+[0;36m     %% eunit_proc.erl:554:in `eunit_proc:run_test/1`[0m
+[0;36m     Output: Failed live GUI examples retained at /tmp/quod-gui-examples-4D5922A7E471D859AFA20866
+[0m
+[0;36m     Output: Failed live GUI examples retained at /tmp/quod-gui-examples-4D5922A7E471D859AFA20866
+[0m
+
+Finished in 68.843 seconds
+[0;31m9 tests, 1 failures
+[0m===> Error running tests

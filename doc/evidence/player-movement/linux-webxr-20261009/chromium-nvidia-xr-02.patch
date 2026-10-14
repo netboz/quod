@@ -1,0 +1,53 @@
+diff --git a/content/services/isolated_xr_device/xr_sandbox_hook_linux.cc b/content/services/isolated_xr_device/xr_sandbox_hook_linux.cc
+index 5adcd2e8ca..663943a79e 100644
+--- a/content/services/isolated_xr_device/xr_sandbox_hook_linux.cc
++++ b/content/services/isolated_xr_device/xr_sandbox_hook_linux.cc
+@@ -48,6 +48,17 @@ constexpr const char* kRuntimeLoadedSonames[] = {
+     "libvulkan_radeon.so",
+     "libvulkan_intel.so",
+     "libvulkan_freedreno.so",
++    // NVIDIA's Vulkan ICD and libraries it opens lazily, matching the GPU
++    // pre-sandbox hook. Their closure must be resident before confinement.
++    "libGLX_nvidia.so.0",
++    "libEGL.so.1",
++    "libEGL_nvidia.so.0",
++    "libnvidia-eglcore.so",
++    "libnvidia-glvkspirv.so",
++    "libxcb-dri3.so.0",
++    "libxcb-glx.so.0",
++    "libxcb-present.so.0",
++    "libxcb-sync.so.1",
+     "libvulkan_lvp.so",
+     // Mesa implicit layers the Vulkan loader activates by default.
+     "libVkLayer_MESA_device_select.so",
+@@ -371,6 +382,12 @@ std::vector<BrokerFilePermission> GetOpenXrFilePermissions(
+   // Vulkan ICD and implicit-layer manifests describing the installed driver.
+   add_dir("/usr/share/vulkan");
+   add_dir("/etc/vulkan");
++  // NVIDIA's Vulkan ICD discovers its headless EGL backend through GLVND.
++  // Driver libraries remain pre-warmed and individually allow-listed above.
++  add_dir("/usr/share/glvnd/egl_vendor.d");
++  add_file("/usr/share/glvnd/egl_vendor.d");
++  add_dir("/etc/glvnd/egl_vendor.d");
++  add_file("/etc/glvnd/egl_vendor.d");
+ #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
+   if (access(kFlatpakGlExtensionDir, R_OK) == 0) {
+     add_dir(kFlatpakGlExtensionDir);
+@@ -388,6 +405,17 @@ std::vector<BrokerFilePermission> GetOpenXrFilePermissions(
+     permissions.push_back(BrokerFilePermission::ReadWrite(
+         base::StringPrintf("/dev/dri/card%d", i)));
+   }
++  // NVIDIA uses its own character devices in addition to DRM. Match the
++  // regular GPU sandbox's named grants; do not expose the whole /dev tree.
++  permissions.push_back(BrokerFilePermission::ReadWrite("/dev/nvidiactl"));
++  for (int i = 0; i < 10; ++i) {
++    permissions.push_back(BrokerFilePermission::ReadWrite(
++        base::StringPrintf("/dev/nvidia%d", i)));
++  }
++  permissions.push_back(BrokerFilePermission::ReadWrite("/dev/nvidia-modeset"));
++  permissions.push_back(
++      BrokerFilePermission::ReadOnly("/proc/driver/nvidia/params"));
++
+   add_dir("/sys/dev/char");
+   add_dir("/sys/class/drm");
+   add_dir("/sys/devices");

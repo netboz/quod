@@ -1,0 +1,59 @@
+{
+  "scope": "Distributed savepoint reuse in the existing proof context; no GUI opening or automatic continuation claim",
+  "review": "../savepoint-review-01/implementation-01/implementation-review.md",
+  "checks": [
+    {
+      "label": "savepoint-after-02",
+      "command": "ERL_FLAGS='+S 4:4 +SDcpu 2 +SDio 2' rebar3 eunit --module=quod_proof_session_savepoint_tests,quod_ask_tests,quod_gui_components_tests,quod_action_savepoint_tests,quod_transaction_predicates_tests,quod_proof_context_tests,quod_scope_session_tests",
+      "tests": 152,
+      "failures": 0,
+      "exitCode": 0,
+      "seconds": 39.13,
+      "log": "../savepoint-review-01/savepoint-after-02.log"
+    },
+    {
+      "label": "savepoint-remote-01",
+      "tests": 4,
+      "passed": 3,
+      "failed": 1,
+      "exitCode": 1,
+      "log": "../savepoint-review-01/savepoint-remote-01.log",
+      "failure": "Expanded remote fixture missing a closing parenthesis; invalid_goal before proof. Three independent action rollback/error/prepared-effect cases passed."
+    },
+    {
+      "label": "savepoint-remote-02",
+      "command": "ERL_FLAGS='+S 4:4 +SDcpu 2 +SDio 2' rebar3 ct --suite=test/quod_ask_SUITE.erl --case=remote_signed_transaction_savepoints",
+      "tests": 1,
+      "failures": 0,
+      "exitCode": 0,
+      "log": "../savepoint-review-01/savepoint-remote-02.log",
+      "networkPermission": true
+    }
+  ],
+  "failedReproductions": [
+    "../savepoint-review-01/savepoint-before-01.log",
+    "../savepoint-review-01/savepoint-before-02.log"
+  ],
+  "files": [
+    {
+      "path": "src/quod_proof_context.erl",
+      "sha256": "8c6ab4a984e14dbd500ce323da54f35ebf0e99edd96246650814b34dcbd54be9"
+    },
+    {
+      "path": "test/quod_proof_session_savepoint_tests.erl",
+      "sha256": "b785ce893de8fa65215cb14021a102ffa33fa4b1dfe1c37664d53b6a37f508ad"
+    },
+    {
+      "path": "test/quod_ask_tests.erl",
+      "sha256": "b41927aa805e03e55a45d72f3dde19edab74210af585602d0765b118e67ab2ee"
+    },
+    {
+      "path": "test/quod_ask_SUITE.erl",
+      "sha256": "2ee5440911373ab944dea4217a590747ef75b57a01e868f52ae196d8462d22fc"
+    },
+    {
+      "path": "test/quod_gui_components_tests.erl",
+      "sha256": "b635d549b0ac7fc7c584cb993be93c4f74bdf25d5916eac015bc2c9c6eaa3912"
+    }
+  ]
+}

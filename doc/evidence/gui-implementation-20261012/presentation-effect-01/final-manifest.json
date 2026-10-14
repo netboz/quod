@@ -1,0 +1,48 @@
+[
+  {
+    "path": "priv/ontologies/gui_hud.pl",
+    "sha256": "54aa04bb0efea635c33f58eb50cc54a21c825c10c44b84216be05ae088eb9292",
+    "before_sha256": "9f92a1c1d9ed8b64fed4455d00a7fe61e0ab0346b2e4a16508a25f595a09e21f",
+    "tree": "tree"
+  },
+  {
+    "path": "priv/ontologies/quod_gui.pl",
+    "sha256": "39d7aff155b6b3345264e7672528a9d15fed999cfe40edd04212286f96ec7ebd",
+    "before_sha256": "cc4111c9322028e41f8edfb508709579ee41a8bf91b74ffee9848dd84797cae1",
+    "tree": "tree"
+  },
+  {
+    "path": "src/predicates/quod_gui_predicates.erl",
+    "sha256": "a8c87cd6f268909c126da5da128135e9ac002e06c16b5877eee52dac055bf1b2",
+    "tree": "tree"
+  },
+  {
+    "path": "src/quod_effect.erl",
+    "sha256": "09cbbe7763e183859cd07d059ef0f7bc7406b271891807d62d586954d3060fdd",
+    "before_sha256": "696c995856f802ac791bc1a9e4733f7d5ced52df5e99bfcbfad3c1e737e03dae",
+    "tree": "tree"
+  },
+  {
+    "path": "src/quod_effect_journal.erl",
+    "sha256": "2b18c43682c5421002d63a8dcb343ae19d5b06fae34fdbcb589812b0abf3e0d9",
+    "before_sha256": "3ba4e4196292872401341fcc977cda9340c087660023acf9fb2ef820115f3955",
+    "tree": "tree"
+  },
+  {
+    "path": "src/quod_gui_presentation.erl",
+    "sha256": "d73ba88c629ea5eb56b916db6053294a25e2a9b7b09f22cbae0e9d3fa9a5e2ab",
+    "tree": "tree"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "sha256": "b1e19d465e21759f09474261e563076c3c95a7c008caead8ca3869fc068df7d9",
+    "before_sha256": "3b5c5ef2a3c6511566d35725d0bcbd80f970f3e4c95e407760c3e56aa0b00ff4",
+    "tree": "followup01"
+  },
+  {
+    "path": "test/quod_lobby_tests.erl",
+    "sha256": "83edc69a792c92077b126cc3720260cd009b8edf10390f5fa742f4012bbb532e",
+    "before_sha256": "1d9ad2a64fe6364fc6731b0f2dbe43cbd4440d3a704f5ba0e8ad7fb7d97a03c2",
+    "tree": "tree"
+  }
+]

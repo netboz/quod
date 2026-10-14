@@ -3,6 +3,8 @@
 %% Found with quod_agent_predicates for proof-bound identity checks.
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
 
+ontology_source_mode(editable) :- current_principal(Principal), lobby_owner(Principal).
+
 lobby_space(Space, Modes) :-
     findall(S, instance_of(lobby, S), [Space]), findall(M, lobby_modes(M), [Modes]).
 
@@ -55,8 +57,11 @@ device_classes(Device, Classes) :-
                     vocabulary_class(Parent, Namespace, Class)), Raw),
     sort(Raw, Classes), Classes = [_ | _].
 
-vocabulary_class(Namespace:Class, Namespace, Class).
-vocabulary_class(Class, Namespace, Class) :- Class \= (Namespace:_).
+no_follow(vocabulary_class/3).
+vocabulary_class(Reference, Namespace, Class) :-
+    nonvar(Reference), Reference = _:_, !,
+    '$quod_owner_name'(Reference, Owner, Class), ontology_name(Owner, Namespace).
+vocabulary_class(Class, _, Class).
 
 lobby_eidolons(Device, Mode, Style, Recipes) :-
     device_classes(Device, Classes),

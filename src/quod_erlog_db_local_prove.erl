@@ -848,8 +848,8 @@ raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS},
     end.
 
 %% A virtual follower is a LAST clause for every argument position. Its head only
-%% matches a structured foreign name (Owner:Name), and its body strips that
-%% prefix before asking the owner. The clauses never enter local, so they cannot
+%% matches a structured foreign name, and its body resolves all owner segments
+%% before asking the owner. The clauses never enter local, so they cannot
 %% be committed or affect a captured read-set token.
 add_followers(_St, {no_follow, 1}, Base) -> Base;
 add_followers(_St, _F, Base) when Base =:= built_in -> Base;
@@ -889,17 +889,20 @@ follower_clauses(Functor, Arity, _Pos) ->
 
 follower_clause(Functor, Arity, Pos) ->
     Ns = {'$quod_follow_ns'},
+    Prefix = {'$quod_follow_prefix'},
+    Tail = {'$quod_follow_tail'},
     %% Erlog variables are one-tuples. Keep the index inside the variable name
     %% rather than creating an atom for every generated clause.
     Args = [{{'$quod_follow_arg', I}} || I <- lists:seq(1, Arity)],
-    Name = {':', Ns, lists:nth(Pos, Args)},
+    Name = {':', Prefix, Tail},
     Head = list_to_tuple([Functor | replace_nth(Pos, Name, Args)]),
     Inner = list_to_tuple([Functor | Args]),
     %% A variable argument must remain a variable. Without this guard a normal
     %% call such as diet(dog, D) would bind D to a synthetic foreign term and
     %% then attempt to ask an unbound namespace.
-    Body = {',', {nonvar, Ns},
-            {',', {'::', Ns, Inner}, {'$quod_follow_unique', Head}}},
+    Body = {',', {nonvar, Prefix},
+            {',', {'$quod_owner_name', Name, Ns, lists:nth(Pos, Args)},
+             {',', {'::', Ns, Inner}, {'$quod_follow_unique', Head}}}},
     {{'$quod_follower', Pos}, Head, erlog_int:well_form_body(Body, false, sture)}.
 
 %% Keep one terminal clause so every real follower runs with the relation's

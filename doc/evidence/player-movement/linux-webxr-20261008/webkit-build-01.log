@@ -1,0 +1,24 @@
+[1/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_combined_implementation.py
+[2/8884] Generating ../../JavaScriptCore/Scripts/generate-js-builtins.py
+[3/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_combined_header.py
+[4/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_internals_wrapper_implementation.py
+[5/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_separate_header.py
+[6/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_internals_wrapper_header.py
+[7/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_separate_implementation.py
+[8/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_wrapper_header.py
+[9/8884] Generating ../../JavaScriptCore/Scripts/builtins_generate_wrapper_implementation.py
+[10/8884] Generating ../../JavaScriptCore/Scripts/builtins_templates.py
+[11/8884] Generating ../../JavaScriptCore/Scripts/builtins_model.py
+[12/8884] Generating ../../JavaScriptCore/Scripts/builtins_generator.py
+[13/8884] Generating ../../../WTF/Scripts/GeneratePreferences.rb
+[14/8884] Generating ../../JavaScriptCore/Scripts/lazywriter.py
+[15/8884] Generating ../../JavaScriptCore/Scripts/wkbuiltins.py
+[16/8884] Generating ../../../WTF/Scripts/Preferences/UnifiedWebPreferences.yaml
+[17/8884] Generating ../../JavaScriptCore/DerivedSources/JSCWebPreferenceOptions.h
+FAILED: [code=1] JavaScriptCore/DerivedSources/JSCWebPreferenceOptions.h /home/yan/src/quod/client/_build/webxr-linux/build/JavaScriptCore/DerivedSources/JSCWebPreferenceOptions.h 
+cd /home/yan/src/quod/client/_build/webxr-linux/build/Source/JavaScriptCore && /home/yan/src/quod/client/_build/webxr-linux/tools/usr/bin/ruby /home/yan/src/quod/client/_build/webxr-linux/build/WTF/Scripts/GeneratePreferences.rb --frontend JavaScriptCore --outputDir /home/yan/src/quod/client/_build/webxr-linux/build/JavaScriptCore/DerivedSources --template /home/yan/src/quod/client/_build/webxr-linux/webkitgtk-2.54.1/Source/JavaScriptCore/Scripts/PreferencesTemplates/JSCWebPreferenceOptions.h.erb /home/yan/src/quod/client/_build/webxr-linux/build/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml
+/home/yan/src/quod/client/_build/webxr-linux/build/WTF/Scripts/GeneratePreferences.rb:27:in 'Kernel#require': cannot load such file -- erb (LoadError)
+	from /home/yan/src/quod/client/_build/webxr-linux/build/WTF/Scripts/GeneratePreferences.rb:27:in '<main>'
+[18/8884] Generating ../../JavaScriptCore/DerivedSources/Bytecodes.h, ../../JavaScriptCore/DerivedSources/InitBytecodes.asm, ../../JavaScriptCore/DerivedSources/BytecodeStructs.h, ../../JavaScriptCore/DerivedSources/BytecodeIndices.h, ../../JavaScriptCore/DerivedSources/BytecodeDumperGenerated.cpp
+[19/8884] Generating ../../JavaScriptCore/DerivedSources/JSCBuiltins.cpp, ../../JavaScriptCore/DerivedSources/JSCBuiltins.h
+ninja: build stopped: subcommand failed.

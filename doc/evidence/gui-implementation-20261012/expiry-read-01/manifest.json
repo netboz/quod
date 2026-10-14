@@ -1,0 +1,18 @@
+{
+  "src/quod_read_set.erl": "c71450a6248ef6c61bda6016b902a388d17e99488ad8b513a62caa2599a55449",
+  "src/quod_outcome.erl": "0b571ca0499a9237f3ee9a63b2af9886ff45960b506b6b9102d5f497597b1e3b",
+  "src/quod_diff.erl": "8d4442157af3f191ead3e7a7e2522a63e8914d88bdbf5440dc857f43978dad26",
+  "src/quod_dtx.erl": "986d0c331660de16c040263975e33f4cb514114d2495c93f15f61fced7036c9a",
+  "src/quod_transaction.erl": "eae76d9827346a704a1131f3213c8579a9bab716e4b9b632c6d329d28df0bae0",
+  "src/quod_commit_validation.erl": "8a1e8fe61918a0b07a0c306b483ef2ddb05523fb6e0ef1e6f2e78e49feeb9e28",
+  "src/quod_committed_projection.erl": "acaeecee6f1dbaa4cc7c0cd53ce0891ff9b47fbaf511acc59b45cb99133cae8c",
+  "src/quod_prolog.erl": "266149c49e2e24b66ca21934a63f26057d36a1c3dd935644ff19d12b87acf175",
+  "src/predicates/quod_runtime_predicates.erl": "230be992c07ab9b597e3797120cbfda76177f993d8c1e87afaad204210f98c03",
+  "test/quod_outcome_tests.erl": "a1a365feadfd68db0739eb5bd0ef9a50b01dbeb7a841e759ff123f81edd866fe",
+  "test/quod_commit_validation_tests.erl": "4a6b9a0d25656049e9bacd1b1d82bd8b2a8b04dc803b12ecacbbc066b2fed7cb",
+  "test/quod_committed_projection_tests.erl": "4a2632c37ae2ff36e230de5b3dfa662d9df22506832e4f95f9b81d4e9c83ab83",
+  "test/quod_physics_tests.erl": "7789faa45de523cabf848084b2102bf8add34c6d643ec2b9a3c4fa6d90228ea2",
+  "doc/multiwrite-architecture.md": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2",
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "test/quod_simplex_tests.erl": "9c0f03c88950fe73fff36d58b8b6fa3cc45ee4ea3e58d7bede475e0b034e2a31"
+}

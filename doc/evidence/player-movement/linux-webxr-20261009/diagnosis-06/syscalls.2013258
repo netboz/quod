@@ -1,0 +1,65 @@
+execve("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome_crashpad_handler", ["/home/yan/src/quod/client/_build"..., "--no-periodic-tasks", "--monitor-self-annotation=ptype="..., "--database=/tmp/quod-webxr-fpcrw"..., "--annotation=lsb-release=Arch Li"..., "--annotation=plat=Linux", "--annotation=prod=Chrome_Linux", "--annotation=ver=157.0.8091.0", "--initial-client-fd=4", "--shared-client-connection"], 0x7ffccfdacd88 /* 96 vars */) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+readlinkat(AT_FDCWD, "/proc/self/exe", "/home/yan/src/quod/client/_build"..., 4096) = 95
+access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/glibc-hwcaps/x86-64-v3/libbase.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/glibc-hwcaps/x86-64-v3/", 0x7ffc16142e00, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/glibc-hwcaps/x86-64-v2/libbase.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/glibc-hwcaps/x86-64-v2/", 0x7ffc16142e00, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libbase.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libbase_allocator_partition_allocator_src_partition_alloc_raw_ptr.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libbase_allocator_partition_allocator_src_partition_alloc_allocator_base.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libbase_allocator_partition_allocator_src_partition_alloc_allocator_core.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libbase_allocator_partition_allocator_src_partition_alloc_allocator_shim.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libthird_party_abseil-cpp_absl.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libchrome_zlib.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libthird_party_protobuf_protobuf_full_and_lite_library.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libc++.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v3/", 0x7ffc16142ce0, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/glibc-hwcaps/x86-64-v2/", 0x7ffc16142ce0, 0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libdl.so.2", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/", {st_mode=S_IFDIR|0755, st_size=0, ...}, 0) = 0
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libdl.so.2", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libpthread.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libpthread.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libpthread.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libthird_party_boringssl.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libthird_party_boringssl.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libthird_party_perfetto_libperfetto.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libthird_party_perfetto_libperfetto.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libthird_party_icu_icui18n.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libthird_party_icu_icui18n.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libicuuc.so", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libicuuc.so", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libglib-2.0.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libglib-2.0.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libglib-2.0.so.0", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = 3
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/.mount_NimbalVgnwSN/usr/lib/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=268387, ...}, 0) = 0
+openat(AT_FDCWD, "/usr/lib/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = 3
+stat("/tmp/quod-webxr-fpcrwlq9/config/chromium/Crash Reports", {st_mode=S_IFDIR|0700, st_size=40, ...}) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/config/chromium/Crash Reports/new", 0700) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/config/chromium/Crash Reports/pending", 0700) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/config/chromium/Crash Reports/completed", 0700) = 0
+mkdir("/tmp/quod-webxr-fpcrwlq9/config/chromium/Crash Reports/attachments", 0700) = 0
++++ exited with 0 +++

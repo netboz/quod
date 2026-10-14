@@ -1,0 +1,12 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "--check",
+    "--reverse",
+    "/home/yan/src/quod/doc/evidence/player-movement/linux-webxr-20261009/chromium-nvidia-xr-02.patch"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": ""
+}

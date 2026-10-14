@@ -1,0 +1,7 @@
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/index", 0x7f2f827ed770) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data", 0x7f2f827ed7b0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data", 0x7f2f827ed750) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/index", O_WRONLY|O_CREAT|O_EXCL, 0600) = 603
++++ exited with 0 +++

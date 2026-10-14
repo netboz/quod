@@ -1,0 +1,88 @@
+Initialize godot-rust (API v4.5.stable.official, runtime v4.7.2.stable.official, safeguards balanced)
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod Native
+	createInfo->applicationInfo.applicationVersion: 1
+	createInfo->applicationInfo.engineName: Godot Engine
+	createInfo->applicationInfo.engineVersion: 40702
+	createInfo->applicationInfo.apiVersion: 1.1.54
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+OpenXR: Created instance for OpenXR 1.1.54
+OpenXR: Running on OpenXR runtime:  Monado(XRT) by Collabora et al 'HEAD-HASH-NOTFOUND'   25.1.0
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+OpenXR: XrGraphicsRequirementsVulkan2KHR:
+ - minApiVersionSupported:  1.0.0
+ - maxApiVersionSupported:  1023.1023.1023
+LOG in xrCreateVulkanInstanceKHR: Creation of VkInstance:
+	result: VK_SUCCESS
+	vulkanInstance: 0x1e8041c0
+	extensions:
+		VK_KHR_external_fence_capabilities
+		VK_KHR_external_memory_capabilities
+		VK_KHR_external_semaphore_capabilities
+		VK_KHR_get_physical_device_properties2
+		VK_EXT_debug_utils
+		VK_KHR_surface
+		VK_KHR_xlib_surface
+		VK_EXT_swapchain_colorspace
+LOG in xrGetVulkanGraphicsDeviceKHR: Creation of VkDevice:
+	result: VK_SUCCESS
+	vulkanDevice: 0x1e90a680
+	vulkanInstance: 0x1e8041c0
+	external_fence_fd: true
+	external_semaphore_fd: true
+	timelineSemaphore: true
+	extensions:
+		VK_KHR_dedicated_allocation
+		VK_KHR_external_fence
+		VK_KHR_external_memory
+		VK_KHR_external_semaphore
+		VK_KHR_get_memory_requirements2
+		VK_KHR_external_memory_fd
+		VK_KHR_16bit_storage
+		VK_KHR_acceleration_structure
+		VK_KHR_buffer_device_address
+		VK_KHR_create_renderpass2
+		VK_KHR_deferred_host_operations
+		VK_KHR_depth_stencil_resolve
+		VK_KHR_driver_properties
+		VK_KHR_fragment_shading_rate
+		VK_KHR_image_format_list
+		VK_KHR_maintenance2
+		VK_KHR_multiview
+		VK_KHR_ray_tracing_pipeline
+		VK_KHR_shader_float16_int8
+		VK_KHR_storage_buffer_storage_class
+		VK_KHR_swapchain
+		VK_KHR_synchronization2
+		VK_KHR_vulkan_memory_model
+		VK_EXT_device_fault
+		VK_EXT_pipeline_creation_cache_control
+		VK_EXT_subgroup_size_control
+		VK_KHR_external_semaphore_fd
+		VK_KHR_external_fence_fd
+		VK_KHR_timeline_semaphore
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+NATIVE_XR_RESULT {"controller_buttons_exercised":false,"eye_separation":0.063000001013279,"floor_mode":4,"frame_intervals_us":[16390,22421,13654,20379,18184,18327,17578,17060,17278,17557,16949,16990,17440,16153,17410,16407,16697,16652,16773,16629,17141,16437,16618,17332,16324,16404,16652,16764,17188,18336,13938,16860,20484,12384,16884,18121,15811,16487,17657,15217,16937,17272,15739,19119,15018,15905,16874,17182,16669,19770,12553,16938,17142,16353,16703,16748,16847,17799,15526,17300,16183,16727,17010,16026,16980,16619,16995,19599,12854,16894,16936,16698,16539,16847,16829,15913,17512,16340,16500,16506,17393,17139,15559,17457,16177,16397,16612,17136,16348,16828,16877,18632,17207,14011,16445,16471,16713,16961,16911,16496,17899,15167,17798,15244,16717,16817,19687,14624,16119,16007,16824,18315,15478,17677,15262,16586,16621,16497,17437,19251],"moving_head_pose":true,"pass":true,"physical_headset":false,"rendered_frames":120,"tracked_controllers":2,"view_count":2}
+XR_ERROR_SESSION_NOT_STOPPING in xrEndSession: Session is not stopping
+ERROR: Attempt to disconnect a nonexistent connection from '<OpenXRSpatialEntityExtension#4194304215>'. Signal: 'spatial_discovery_recommended', callable: 'OpenXRSpatialMarkerTrackingCapability::_on_spatial_discovery_recommended'.
+   at: _disconnect (core/object/object.cpp:1640)
+ERROR: 2 RID allocations of type 'N9OpenXRAPI18InteractionProfileE' were leaked at exit.

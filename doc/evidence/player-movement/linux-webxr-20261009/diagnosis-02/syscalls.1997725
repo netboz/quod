@@ -1,0 +1,15 @@
+stat("/sys/fs/cgroup/cpuset/chrome/urgent", 0x7ff10d5f2780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome/urgent", 0x7ff10d5f2780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/proc/self/fd/710", O_RDONLY|O_CLOEXEC) = 712
+openat(AT_FDCWD, "/proc/self/fd/710", O_RDONLY|O_CLOEXEC) = 712
+openat(AT_FDCWD, "/proc/self/fd/716", O_RDONLY|O_CLOEXEC) = 717
+openat(AT_FDCWD, "/proc/self/fd/718", O_RDONLY|O_CLOEXEC) = 720
+openat(AT_FDCWD, "/proc/self/fd/758", O_RDONLY|O_CLOEXEC) = 759
+openat(AT_FDCWD, "/proc/self/fd/753", O_RDONLY|O_CLOEXEC) = 756
+openat(AT_FDCWD, "/proc/self/fd/756", O_RDONLY|O_CLOEXEC) = 757
+openat(AT_FDCWD, "/proc/self/fd/762", O_RDONLY|O_CLOEXEC) = 764
+openat(AT_FDCWD, "/proc/self/fd/757", O_RDONLY|O_CLOEXEC) = 773
+openat(AT_FDCWD, "/proc/self/fd/786", O_RDONLY|O_CLOEXEC) = 784
+openat(AT_FDCWD, "/proc/self/fd/791", O_RDONLY|O_CLOEXEC) = 785
+openat(AT_FDCWD, "/proc/self/fd/725", O_RDONLY|O_CLOEXEC) = 749
++++ exited with 0 +++

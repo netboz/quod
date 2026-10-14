@@ -1,0 +1,1 @@
+MCP browser.evaluate returned Script failed to execute; no result returned. Preserve attempt; inspect fixture failure before rerun.

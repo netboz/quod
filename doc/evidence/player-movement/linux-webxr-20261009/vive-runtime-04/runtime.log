@@ -1,0 +1,223 @@
+ INFO [ipc_server_main_common] Monado(XRT) by Collabora et al 'HEAD-HASH-NOTFOUND' starting up...
+ INFO [print_linux_end_user_started_information] 
+################################################################################
+#                                                                              #
+#                        The Monado service has started.                       #
+#                                                                              #
+################################################################################
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [steamvr_lh_create_devices] Found SteamVR install: /home/yan/.local/share/Steam/steamapps/common/SteamVR
+DEBUG [GetGenericInterface] Requested interface IVRServerDriverHost_006
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverLog_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+ INFO [steamvr_lh_create_devices] Lighthouse initialization complete, giving time to setup connected devices...
+ INFO [steamvr_lh_create_devices] Device search time complete.
+ERROR [steamvr_open_system] Unable to find HMD
+ INFO [p_create_system] Creating system:
+	Builders:
+		qwerty: Qwerty devices builder
+		remote: Remote simulation devices builder
+		simulated: Simulated devices builder
+		rift: Oculus Rift
+		rift_s: Oculus Rift S
+		psvr2: PlayStation VR 2
+		rgb_tracking: RGB tracking based devices (PSVR, PSMV, ...)
+		steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+		lighthouse: Lighthouse-tracked FLOSS (Vive, Index, Tundra trackers, etc.) devices builder
+		north_star: North Star headset
+		wmr: Windows Mixed Reality
+		xreal_air: Xreal Air
+		legacy: Legacy probing system
+	No builder selected in config (or wasn't compiled in)
+	Selected steamvr because it was certain it could create a head
+	Using builder steamvr: SteamVR proprietary wrapper (Vive, Index, Tundra trackers, etc.) devices builder
+	Result: XRT_ERROR_DEVICE_CREATION_FAILED
+ERROR [ipc_server_init_system_if_available_locked] xrt_instance_create_system failed: XRT_ERROR_DEVICE_CREATION_FAILED [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:699]
+ERROR [ipc_server_main_common] ipc_server_init_system_if_available_locked failed: XRT_ERROR_DEVICE_CREATION_FAILED [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/server/ipc_server_process.c:974]
+ INFO [client_connected] Client 1 connected
+ INFO [ipc_handle_instance_describe_client] Client info:
+	id: 1
+	application_name: 'Quod physical Vive prerequisite'
+	pid: 2102001
+	extensions:
+		ext_hand_tracking_enabled: false
+		ext_hand_tracking_data_source_enabled: false
+		ext_eye_gaze_interaction_enabled: false
+		ext_future_enabled: false
+		ext_hand_interaction_enabled: false
+		htc_facial_tracking_enabled: false
+		fb_body_tracking_enabled: false
+		meta_body_tracking_full_body_enabled: false
+		meta_body_tracking_calibration_enabled: false
+		fb_face_tracking2_enabled: false
+		android_face_tracking_enabled: false
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [steamvr_lh_create_devices] Found SteamVR install: /home/yan/.local/share/Steam/steamapps/common/SteamVR
+DEBUG [GetGenericInterface] Requested interface IVRServerDriverHost_006
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverLog_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRRenderModels_006
+DEBUG [GetGenericInterface] Requested interface IVRRenderModelsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRResources_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverManager_001
+DEBUG [GetGenericInterface] Requested interface IVRSettings_003
+DEBUG [GetGenericInterface] Requested interface IVRSettingsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+DEBUG [GetGenericInterface] Requested interface IVRPathsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRProperties_001
+DEBUG [GetGenericInterface] Requested interface IVRPropertiesInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRServerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRDriverInputInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRSystemLayerInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRClientInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInputFocusInternal_XXX
+DEBUG [GetGenericInterface] Requested interface LocalizationManager
+DEBUG [GetGenericInterface] Requested interface IVRCompositorSystemInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRInput_012
+DEBUG [GetGenericInterface] Requested interface IVRInputInternal_002
+DEBUG [GetGenericInterface] Requested interface IVRChaperone_004
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneSetup_007
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRChaperoneServerDriver_XXX
+DEBUG [GetGenericInterface] Requested interface IVRApplications_008
+DEBUG [GetGenericInterface] Requested interface IVRSystem_026
+DEBUG [GetGenericInterface] Requested interface IVRMailbox_002
+DEBUG [GetGenericInterface] Requested interface IVRDebug_001
+DEBUG [GetGenericInterface] Requested interface IVRBlockQueue_005
+DEBUG [GetGenericInterface] Requested interface IVRControlPanel_006
+DEBUG [GetGenericInterface] Requested interface IVRApplicationsInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRNotificationsInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRRuntimeInformation_001
+DEBUG [GetGenericInterface] Requested interface IVROverlay_029
+DEBUG [GetGenericInterface] Requested interface IVROverlayInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRExtendedDisplay_001
+DEBUG [GetGenericInterface] Requested interface IVRTrackedCameraInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRCameraPassthroughInternal_001
+DEBUG [GetGenericInterface] Requested interface IVRDriverDirectInternal_XXX
+DEBUG [GetGenericInterface] Requested interface IVRPaths_002
+ INFO [steamvr_lh_create_devices] Lighthouse initialization complete, giving time to setup connected devices...

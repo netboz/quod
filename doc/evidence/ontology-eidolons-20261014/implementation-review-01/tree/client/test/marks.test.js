@@ -1,0 +1,205 @@
+import { strict as assert } from 'node:assert'
+import { test } from 'node:test'
+
+import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
+import { readTerm, readList } from '../src/prolog-read.js'
+import { readMarks } from '../src/marks.js'
+
+test('multiple ontology mark occurrences retain one exact instance and no body identity', () => {
+  const anchor = '\\x7\\'.repeat(32)
+  const target = `ontology_ref(<<"private:ontology">>,<<"${anchor}">>)`
+  const mark = id => `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,10),f(<<"height">>,10),f(<<"depth">>,10)],` +
+    `transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,900,0,[]),unlabelled,depicts(<<"private:ontology">>,<<"${anchor}">>,${target}))`
+  const [first, second] = readMarks(`[${mark('first')},${mark('second')}]`)
+  assert.notEqual(first.id, second.id)
+  assert.deepEqual(first.depicts, second.depicts)
+  assert.deepEqual(first.depicts.anchor, new Uint8Array(32).fill(7))
+  assert.equal(first.depicts.entity.functor, 'ontology_ref')
+  assert.equal(first.body, undefined)
+})
+import { diagnosisGoal, viewGoal } from '../src/lens.js'
+
+// Exactly what a signed read of quod:lens returns for the authored lens: one
+// verdict mark and the components behind it, as quod_explorer_http renders a
+// binding. Keeping the fixture in the renderer's own spelling is the point —
+// the reader has to cope with what the node actually sends.
+const REPLY =
+  '[mark(<<"m0">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 1500), ' +
+  'f(<<"depth">>, 400)], transform(0, 750, 0, 0, 0, 0), ' +
+  'surface(<<"#F9C80E">>, 0, 900, 0, []), label(<<"NOASSERTION">>, <<"above">>), ' +
+  'depicts(<<"quod:licence">>, ships(<<"quod">>, <<"NOASSERTION">>))), ' +
+  'mark(<<"m1">>, <<"box">>, [f(<<"width">>, 400), f(<<"height">>, 300), ' +
+  'f(<<"depth">>, 400)], transform(600, 150, -900, 0, 0, 0), ' +
+  'surface(<<"#698F3F">>, 0, 900, 0, []), label(<<"cowboy">>, <<"above">>), ' +
+  'depicts(<<"quod:licence">>, component(<<"quod">>, <<"cowboy">>)))]'
+
+test('a reply becomes drawable marks', () => {
+  const marks = readMarks(REPLY)
+  assert.equal(marks.length, 2)
+  const [verdict, part] = marks
+  assert.equal(verdict.id, 'm0')
+  assert.equal(verdict.kind, 'box')
+  assert.deepEqual(verdict.size, { width: 400, height: 1500, depth: 400 })
+  assert.deepEqual(verdict.transform, { x: 0, y: 750, z: 0, rx: 0, ry: 0, rz: 0 })
+  assert.deepEqual(verdict.material, { colour: '#F9C80E', metallic: 0, roughness: 0.9, emission: 0, textures: [] })
+  assert.deepEqual(verdict.label, { text: 'NOASSERTION', placement: 'above' })
+  assert.equal(verdict.depicts.ontology, 'quod:licence')
+  // the subject stays a term: selection resolves through it, not a mesh name
+  assert.equal(verdict.depicts.entity.functor, 'ships')
+  assert.equal(part.depicts.entity.functor, 'component')
+  assert.deepEqual(part.depicts.entity.args[1].value, new TextEncoder().encode('cowboy'))
+})
+
+test('a mark may show nothing and carry no label', () => {
+  const [mark] = readMarks(
+    '[mark(<<"m0">>, <<"sphere">>, [f(<<"diameter">>, 900)], ' +
+    'transform(0, 0, 0, 0, 0, 0), surface(<<"#C14953">>, 0, 900, 650, []), ' +
+    'unlabelled, depicts_nothing)]')
+  assert.equal(mark.label, null)
+  assert.equal(mark.depicts, null)
+  assert.deepEqual(mark.size, { diameter: 900 })
+})
+
+test('several marks may depict one entity', () => {
+  const twice = REPLY.replace('<<"m1">>', '<<"m2">>')
+    .replace('ships(<<"quod">>, <<"NOASSERTION">>)',
+             'component(<<"quod">>, <<"cowboy">>)')
+  const marks = readMarks(twice)
+  const subjects = marks.map(mark => new TextDecoder().decode(mark.depicts.entity.args[1].value))
+  assert.deepEqual(subjects, ['cowboy', 'cowboy'])
+  assert.deepEqual(marks.map(mark => mark.id), ['m0', 'm2'])
+})
+
+test('an unreadable descriptor fails closed', () => {
+  const cases = {
+    'unknown kind': REPLY.replace('<<"box">>', '<<"cone">>'),
+    'unknown field': REPLY.replace('<<"width">>', '<<"girth">>'),
+    'reordered fields': REPLY.replace(
+      '[f(<<"width">>, 400), f(<<"height">>, 1500), f(<<"depth">>, 400)]',
+      '[f(<<"height">>, 1500), f(<<"width">>, 400), f(<<"depth">>, 400)]'),
+    'a colour that is not one': REPLY.replace('<<"#F9C80E">>', '<<"gold">>'),
+    'an invalid factor': REPLY.replace('0, 900, 0, []', '0, 1001, 0, []'),
+    'an unknown placement': REPLY.replace('<<"above">>', '<<"left">>'),
+    'a fractional dimension': REPLY.replace('400)', '400.5)'),
+    'a repeated mark identity': REPLY.replace('<<"m1">>', '<<"m0">>'),
+    'a mark with a part missing':
+      REPLY.replace(', label(<<"NOASSERTION">>, <<"above">>)', ''),
+  }
+  for (const [what, text] of Object.entries(cases)) {
+    assert.throws(() => readMarks(text), undefined, `${what} was accepted`)
+  }
+})
+
+test('capsules and tori keep their neutral dimensions', () => {
+  const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+  const [capsule, torus] = readMarks(
+    `[mark(<<"support">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,850)],` +
+    `transform(0,425,0,0,0,0),${surface},unlabelled,depicts_nothing),` +
+    `mark(<<"ring">>,<<"torus">>,[f(<<"diameter">>,110),f(<<"thickness">>,18)],` +
+    `transform(0,0,0,90,0,0),${surface},unlabelled,depicts_nothing)]`)
+  assert.deepEqual(capsule.size, { diameter: 460, height: 850 })
+  assert.deepEqual(torus.size, { diameter: 110, thickness: 18 })
+  assert.throws(() => readMarks(
+    `[mark(<<"bad">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,459)],` +
+    `transform(0,0,0,0,0,0),${surface},unlabelled,depicts_nothing)]`))
+  assert.throws(() => readMarks(
+    `[mark(<<"bad">>,<<"torus">>,[f(<<"diameter">>,110),f(<<"thickness">>,110)],` +
+    `transform(0,0,0,0,0,0),${surface},unlabelled,depicts_nothing)]`))
+})
+
+test('a sky sphere keeps its renderer-neutral diameter', () => {
+  const [sky] = readMarks(
+    '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+    'unlabelled,depicts_nothing)]')
+  assert.equal(sky.kind, 'sky_sphere')
+  assert.deepEqual(sky.size, { diameter: 80000 })
+})
+
+// Display-only Explorer abbreviations must never be mistaken for signed result data.
+test('a binary that did not survive the reply is refused', () => {
+  assert.throws(() => readMarks(REPLY.replace('<<"cowboy">>', 'kp_545337d5')))
+  assert.throws(() => readMarks(REPLY.replace('<<"cowboy">>', '<<0x0badc0de…>>')))
+})
+
+test('the reader accepts what the renderer writes and nothing more', () => {
+  assert.deepEqual(readTerm('[]'), { type: 'list', items: [], tail: null })
+  assert.equal(readTerm('-1800').value, -1800)
+  assert.equal(readTerm('unlabelled').value, 'unlabelled')
+  assert.equal(readTerm("'quod:licence'").value, 'quod:licence')
+  assert.deepEqual(readTerm('<<"a \\"quoted\\" name">>').value, new TextEncoder().encode('a "quoted" name'))
+  assert.equal(readList('[a, b, c]').length, 3)
+  for (const bad of ['[a, b', 'f(a', 'f(a,)', '<<"open', 'a b', '', '??']) {
+    assert.throws(() => readTerm(bad), undefined, `${bad} was accepted`)
+  }
+  for (const bad of ['[a|b]', '[f([a|Tail])]', '[V0]']) {
+    assert.throws(() => readList(bad), undefined, `${bad} was accepted as a projection`)
+  }
+})
+
+test('the reader enforces the shared structural-depth boundary', () => {
+  const outside = PROLOG_TERM_LIMITS.depth + 1
+  assert.throws(() => readTerm('f('.repeat(outside) + 'a' + ')'.repeat(outside)), /deeply nested/)
+})
+
+test('the lens is asked by its flat binary name, with the dot the grammar needs',
+     () => {
+       assert.equal(viewGoal('work_licences', ['quod']),
+                    '<<"quod:lens">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).')
+       assert.equal(diagnosisGoal('work_licences', ['quod']),
+                    '<<"quod:lens">> :: (diagnosis(<<"work_licences">>,[<<"quod">>],Unmet)).')
+     })
+
+test('binary identities and UTF-8 text survive lossless signed bindings', () => {
+  const bytes = Uint8Array.from({ length: 256 }, (_, i) => i)
+  const text = '<<"' + [...bytes].map(b => `\\x${b.toString(16)}\\`).join('') + '">>'
+  assert.deepEqual(readTerm(text).value, bytes)
+  assert.deepEqual(readTerm('<<"' + 'x'.repeat(32) + '">>').value,
+                   new TextEncoder().encode('x'.repeat(32)))
+  assert.deepEqual(readTerm('[65,66,67]').items.map(t => t.value), [65, 66, 67])
+  assert.equal(readTerm("'\\x3bb\\'(a)").functor, 'λ')
+  for (const bad of ['<<"\\x100\\">>', '<<"\\xgg\\">>', '<<"\\x0">>']) {
+    assert.throws(() => readTerm(bad))
+  }
+})
+
+
+test('texture slots carry digest identity and explicit sampling; invalid bindings fail', () => {
+  const hash = 'a'.repeat(64)
+  const texture = `texture(<<"base_colour">>,asset(<<"${hash}">>,<<"image/jpeg">>),repeat(1000,2500))`
+  const textured = REPLY.replace('0, 900, 0, []', `0, 900, 0, [${texture}]`)
+  assert.deepEqual(readMarks(textured)[0].material.textures,
+    [{ slot: 'base_colour', digest: hash, repeat: [1, 2.5] }])
+  for (const invalid of [
+    textured.replace(hash, 'bad'),
+    textured.replace('base_colour', 'arbitrary_shader'),
+    textured.replace('repeat(1000,2500)', 'repeat(0,2500)'),
+    textured.replace('image/jpeg', 'image/svg+xml'),
+    textured.replace(`[${texture}]`, `[${texture},${texture}]`),
+  ]) assert.throws(() => readMarks(invalid))
+})
+
+test('mesh marks carry typed digest, local frame, scale and asset surfaces', () => {
+  const digest = 'ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064'
+  const size = `mesh_asset(asset(<<"${digest}">>,<<"model/gltf-binary">>),` +
+    '<<"gltf2-static-v1">>,scale(1250),' +
+    'frame(aabb(-400,-100,-800,1300,1800,500),pivot(200,0,-100),front(<<"+x">>)),' +
+    'resources(8000000,16000000,250000,250000,1024,256,16000000))'
+  const mark = `mark(<<"imported">>,<<"mesh">>,${size},` +
+    'transform(10,20,30,0,90,0),asset_surfaces,' +
+    'label(<<"artifact">>,<<"above">>),depicts_nothing)'
+  const [parsed] = readMarks(`[${mark}]`)
+  assert.deepEqual(parsed.size, { digest, profile: 'gltf2-static-v1', scale: 1.25,
+    bounds: [-400, -100, -800, 1300, 1800, 500], pivot: [200, 0, -100],
+    front: '+x', allowed: [8000000, 16000000, 250000, 250000, 1024, 256, 16000000] })
+  assert.equal(parsed.material, null)
+  for (const invalid of [
+    mark.replace(digest, 'bad'),
+    mark.replace('gltf2-static-v1', 'animated-v1'),
+    mark.replace('scale(1250)', 'scale(0)'),
+    mark.replace('aabb(-400,-100,-800,1300,1800,500)',
+      'aabb(1300,-100,-800,-400,1800,500)'),
+    mark.replace('asset_surfaces', 'no_surface'),
+    mark.replace('resources(8000000', 'resources(0'),
+  ]) assert.throws(() => readMarks(`[${invalid}]`))
+})

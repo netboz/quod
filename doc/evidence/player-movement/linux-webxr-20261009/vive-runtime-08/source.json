@@ -1,0 +1,12 @@
+{
+  "base_commit": "f4dc0ec36e1109a997c8b388fb30de3cf1dc01b0",
+  "upstream_fixes": [
+    "4156456d9741b0b177242d3e08cc7ac08bceb849",
+    "cfa6078b8d7f368fa5296f540a436d59833e496c"
+  ],
+  "source_sha256": {
+    "src/xrt/drivers/steamvr_lh/interfaces/server.hpp": "763d338f8c172f5cade34f07ba9c6536be0ac7b511fc860f2c9ed59b7556856f",
+    "src/xrt/drivers/steamvr_lh/steamvr_lh.cpp": "0c59d20d9f43f4d14d99c86f407ce0114dcefb56c565f40a8fa313eb659dcb11"
+  },
+  "runtime_sha256": "1c7f7b3578ac5a1adcd2a4b7e0d0393281bd684b9b5d2b390cf349f9c29323c5"
+}

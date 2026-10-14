@@ -1,0 +1,78 @@
+[Vulkan Loader] INFO:           Vulkan Loader Version 1.4.363
+[Vulkan Loader] INFO:           vkCreateInstance: applicationName: "quod-prewarm-check", applicationVersion: 0, engineName: "", engineVersion: 0, apiVersion: 1.0.0
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 0 instance layer(s):
+[Vulkan Loader] INFO:           vkCreateInstance: Requested 0 instance extension(s):
+[Vulkan Loader] INFO:           No valid vk_loader_settings.json file found, no loader settings will be active
+[Vulkan Loader] LAYER:          Searching for implicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /home/yan/.config/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d
+[Vulkan Loader] LAYER:             Found the following files:
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json
+[Vulkan Loader] LAYER:                /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[Vulkan Loader] INFO:           Found manifest file /home/yan/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /home/yan/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /home/yan/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /home/yan/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_FROG_gamescope_wsi.x86_64.json (file version 1.0.0)
+[Vulkan Loader] INFO:           Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[Vulkan Loader] LAYER:          Searching for explicit layer manifest files
+[Vulkan Loader] LAYER:             In following locations:
+[Vulkan Loader] LAYER:                /home/yan/.config/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/xdg/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /etc/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /home/yan/.local/share/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /var/lib/flatpak/exports/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/local/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:                /usr/share/vulkan/explicit_layer.d
+[Vulkan Loader] LAYER:             Found no files
+[Vulkan Loader] DRIVER:         Searching for driver manifest files
+[Vulkan Loader] DRIVER:            In following locations:
+[Vulkan Loader] DRIVER:               /home/yan/.config/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/xdg/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /etc/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /home/yan/.local/share/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /var/lib/flatpak/exports/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/local/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d
+[Vulkan Loader] DRIVER:            Found the following files:
+[Vulkan Loader] DRIVER:               /usr/share/vulkan/icd.d/nvidia_icd.json
+[Vulkan Loader] DRIVER:         Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[Vulkan Loader] DEBUG | DRIVER: Searching for ICD drivers named libGLX_nvidia.so.0
+[Vulkan Loader] LAYER:          vkCreateInstance layer callstack setup to:
+[Vulkan Loader] LAYER:             <Application>
+[Vulkan Loader] LAYER:               ||
+[Vulkan Loader] LAYER:             <Loader>
+[Vulkan Loader] LAYER:               ||
+[Vulkan Loader] LAYER:             <Drivers>
+[Vulkan Loader] INFO | DRIVER:  linux_read_sorted_physical_devices:
+[Vulkan Loader] INFO | DRIVER:       Original order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090
+[Vulkan Loader] INFO | DRIVER:       Sorted order:
+[Vulkan Loader] INFO | DRIVER:             [0] NVIDIA GeForce RTX 4090  
+prewarm libvulkan.so.1: loaded
+prewarm libvulkan_radeon.so: libvulkan_radeon.so: cannot open shared object file: No such file or directory
+prewarm libvulkan_intel.so: libvulkan_intel.so: cannot open shared object file: No such file or directory
+prewarm libvulkan_freedreno.so: libvulkan_freedreno.so: cannot open shared object file: No such file or directory
+prewarm libGLX_nvidia.so.0: loaded
+prewarm libxcb-dri3.so.0: loaded
+prewarm libxcb-glx.so.0: loaded
+prewarm libxcb-present.so.0: loaded
+prewarm libxcb-sync.so.1: loaded
+prewarm libvulkan_lvp.so: libvulkan_lvp.so: cannot open shared object file: No such file or directory
+prewarm libVkLayer_MESA_device_select.so: libVkLayer_MESA_device_select.so: cannot open shared object file: No such file or directory
+prewarm libVkLayer_MESA_anti_lag.so: libVkLayer_MESA_anti_lag.so: cannot open shared object file: No such file or directory
+vkCreateInstance: 0
+physical device: NVIDIA GeForce RTX 4090 vendor=10de

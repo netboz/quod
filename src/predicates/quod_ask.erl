@@ -27,7 +27,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -export([load/1, ask_2/3, follow_unique_2/3,
          authorize_scope/6, open_authorized_scope/8, authenticate_agent/5,
          validate_authorization_transcript/6, validate_agent_key/5,
-         close_stream/1, authorization_result/2]).
+         close_stream/1, authorization_result/2, native_read/5]).
 -ifdef(TEST).
 -export([checked_completion/1]).
 -export([test_serve_nested/1, test_await_scope_reply/2,
@@ -213,6 +213,90 @@ ask_error(Reason) -> throw({quod_ask_error, Reason}).
 %%%===================================================================
 %%% ask selection — reusable co-hosted scopes and bounded transport invocations
 %%%===================================================================
+
+%% Internal native preparation/reconciliation, not a Prolog selector. The
+%% selected physical host is authoritative for its native resource only; this
+%% must never supply an ordinary material proof's ontology read dependencies.
+%% A separate read-only context cannot move or weaken an existing writer scope.
+native_read(Node, {Ns, <<_:256>>} = Identity, Goal,
+            {agent_goal_v1, Digest, Bytes, Signature}, Deadline)
+  when is_binary(Node), byte_size(Node) =:= 32, is_binary(Ns),
+       is_binary(Bytes), is_integer(Deadline) ->
+    case {crypto:hash(sha256,Bytes), quod_client_goal:verify(Bytes,Signature)} of
+        {Digest,{ok,Evidence = #{request := #{mode := execute,not_after_ms := Expiry}}}} ->
+            Bound = min(Deadline,quod_time:mono_ms() + max(0,Expiry-quod_time:now_ms())),
+            native_read_worker(Node,Identity,Goal,Evidence,Bound);
+        _ -> {error,invalid_native_request}
+    end;
+native_read(_,_,_,_,_) -> {error,invalid_native_request}.
+
+native_read_worker(Node,Identity,Goal,Evidence,Deadline) ->
+    Caller = self(), Ref = make_ref(), Trace = quod_trace:context(),
+    {Worker,Monitor} = spawn_monitor(fun() ->
+        _ = quod_process:kill_when_owner_dies(Caller,self()),
+        Result = quod_trace:with_context(Trace,fun() ->
+            native_read_context(Node,Identity,Goal,Evidence,Deadline)
+        end),
+        Caller ! {Ref,Result}
+    end),
+    receive
+        {Ref,Result} -> demonitor(Monitor,[flush]), Result;
+        {'DOWN',Monitor,process,Worker,_} -> {error,{ontology_unreachable,element(1,Identity)}}
+    after max(0,Deadline-quod_time:mono_ms()) ->
+        exit(Worker,kill),
+        receive {'DOWN',Monitor,process,Worker,_} -> ok end,
+        receive {Ref,_} -> ok after 0 -> ok end,
+        {error,{proof_limit_exceeded,element(1,Identity)}}
+    end.
+
+native_read_context(Node,{Ns,Anchor} = Identity,Goal,
+                    #{agent_ref_blob := Agent,operation_ref := {operation,OriginNs,OriginAnchor,_,_}} = Evidence,
+                    Deadline) ->
+    Origin = {OriginNs,OriginAnchor},
+    _ = quod_proof_context:start(crypto:strong_rand_bytes(32),true,Origin,Deadline,{agent,Agent},Evidence),
+    try
+        Open = fun(ScopeId) ->
+            case Node =:= required_node_key() of
+                true -> open_local_scope(Ns,Anchor,ScopeId);
+                false ->
+                    Routes = case quod_directory:resolve(Ns) of
+                        {known,Known} -> [R || R = #{node_key := K,genesis_anchor := A,status := confirmed} <- Known,
+                                             K =:= Node, A =:= Anchor];
+                        unknown -> []
+                    end,
+                    open_remote_routes(Ns,Anchor,ScopeId,Routes)
+            end
+        end,
+        Result = case quod_proof_context:get_or_open_scope(Identity,Open) of
+            {ok,_,Scope} -> native_scope_once(Scope,Goal,[Origin]);
+            {error,_} = Error -> Error
+        end,
+        case quod_proof_context:finalize(abort) of
+            ok -> Result;
+            {error,_} = FinalError -> FinalError
+        end
+    after
+        _ = quod_proof_context:finalize(abort),
+        quod_proof_context:stop(fun quod_scope_session:close/1,
+                               fun({_Actor,Stream}) -> close_stream(Stream) end)
+    end.
+
+native_scope_once(Scope,Goal,Chain) ->
+    Selection = quod_transaction_scope:empty_selection(),
+    case open_scope_invocation(Scope,Goal,Chain,Selection) of
+        {ok,Invocation} ->
+            try
+                case advance_scope_invocation(Invocation) of
+                    {ok,{solution,1,Answer,false,false}} -> {ok,Answer};
+                    {ok,{complete,1,Reasons,false}} -> {fail,Reasons};
+                    {ok,{error,Reason,_}} -> {error,Reason};
+                    {ok,{error,Reason}} -> {error,Reason};
+                    {error,_} = Error -> Error;
+                    _ -> {error,{protocol_error,request_binding}}
+                end
+            after close_stream(Invocation) end;
+        {error,_} = Error -> Error
+    end.
 
 %% A shared proof session routes every selection through its one origin-owned
 %% scope map. Raw snapshot adapters have no origin authority and are rejected
@@ -822,24 +906,14 @@ stream_next(Stream, St) ->
 
 origin_advance(Ref, OwnerActor, OwnerSelection, Expected) ->
     Result = case quod_proof_context:proxy(Ref, OwnerActor) of
-        {ok, {scope_invocation, Handle, InvocationId,
-              TargetSelection, Expected}} ->
-            TargetActor = {quod_scope_session:scope_id(Handle), InvocationId},
-            case quod_proof_context:materialize(
-                   TargetSelection, TargetActor) of
-                ok ->
-                    case quod_scope_session:invoke_next(
-                           Handle, InvocationId, Expected) of
-                        {ok, Correlation} ->
-                            scope_advance_reply(
-                              Ref, OwnerActor, Handle, InvocationId,
-                              TargetSelection, Expected,
-                              await_scope_reply(
-                                Handle, Correlation,
-                                {TargetActor, TargetSelection, Expected}));
-                        {error, Reason} -> {error, Reason}
-                    end;
-                {error, Reason} -> {error, Reason}
+        {ok, Invocation = {scope_invocation, Handle, InvocationId,
+                            TargetSelection, Expected}} ->
+            case advance_scope_invocation(Invocation) of
+                {ok, Reply} ->
+                    scope_advance_reply(
+                      Ref, OwnerActor, Handle, InvocationId, TargetSelection,
+                      Expected, Reply);
+                {error, _} = Error -> Error
             end;
         {ok, {local_scope_invocation, ScopeId, Session, InvocationId,
               TargetSelection, Expected}} ->
@@ -861,6 +935,20 @@ origin_advance(Ref, OwnerActor, OwnerSelection, Expected) ->
     case quod_proof_context:materialize(OwnerSelection, OwnerActor) of
         ok -> Result;
         {error, ResumeReason} -> {error, ResumeReason}
+    end.
+
+advance_scope_invocation(
+  {scope_invocation, Handle, InvocationId, Selection, Expected}) ->
+    Actor = {quod_scope_session:scope_id(Handle), InvocationId},
+    case quod_proof_context:materialize(Selection, Actor) of
+        ok ->
+            case quod_scope_session:invoke_next(Handle, InvocationId, Expected) of
+                {ok, Correlation} ->
+                    {ok, await_scope_reply(
+                           Handle, Correlation, {Actor, Selection, Expected})};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
     end.
 
 scope_advance_reply(Ref, Owner, Handle, InvocationId, Selection, Expected,

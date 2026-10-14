@@ -1,0 +1,8 @@
+[
+  {
+    "level": "SEVERE",
+    "message": "http://127.0.0.1:36929/favicon.ico - Failed to load resource: the server responded with a status of 404 (File not found)",
+    "source": "network",
+    "timestamp": 1791535864456
+  }
+]

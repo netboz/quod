@@ -1,0 +1,70 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_physics_control_tests:-signed_binding_switch_and_release_test_/0-fun-12-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,invalid_term}},
+                        [{quod_physics_control_tests,signed,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_control_tests.erl"},
+                              {line,67}]},
+                         {quod_physics_control_tests,
+                             '-signed_binding_switch_and_release_test_/0-fun-11-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_control_tests.erl"},
+                              {line,9}]},
+                         {quod_agent_hosting_tests,with_host,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_agent_hosting_tests.erl"},
+                              {line,1479}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_AA8A803DBADF8BFE
+[0m
+  2) quod_physics_control_tests:-binding_permission_and_geometry_guards_test_/0-fun-8-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,invalid_term}},
+                        [{quod_physics_control_tests,signed,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_control_tests.erl"},
+                              {line,67}]},
+                         {quod_physics_control_tests,
+                             '-binding_permission_and_geometry_guards_test_/0-fun-7-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_physics_control_tests.erl"},
+                              {line,36}]},
+                         {quod_agent_hosting_tests,with_host,3,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_agent_hosting_tests.erl"},
+                              {line,1479}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_EC8610E4A1E3A421
+[0m
+
+Finished in 1.703 seconds
+[0;31m3 tests, 2 failures
+[0m===> Error running tests

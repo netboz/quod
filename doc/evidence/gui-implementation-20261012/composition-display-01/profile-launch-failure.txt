@@ -1,0 +1,1 @@
+Initial diagnostic launch failed in the shell parser (exit2) due to quoting the hyphenated Erlang module atom. No compiler, Erlang VM or diagnostic proof ran. Replaced shell interpolation with a Python structured subprocess argument list.

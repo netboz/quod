@@ -44,7 +44,7 @@ direct_multi_claim_cannot_bypass_slice8_authority_gate_test() ->
     F = fixture(2, true), Claim = claim(F, maps:get(bundles, F)),
     Origin = {Ns, Anchor} = maps:get(origin, F),
     {ok, Index} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
-    Context = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), Index, none),
+    Context = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), Index, none, none),
     try
         quod_ct:with_network_identity(maps:get(network, F), fun() ->
             lists:foreach(fun(Mode) ->
@@ -150,9 +150,9 @@ certified_vector_selects_each_target_and_preserves_ids_test() ->
         {ok, Index} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
         try
             Good = quod_commit_validation:new(Target, 1,
-              quod_ct:committed_kb([Member, Policy]), Index, none),
+              quod_ct:committed_kb([Member, Policy]), Index, none, none),
             BadPolicy = quod_commit_validation:new(Target, 1,
-              quod_ct:committed_kb([Member]), Index, none),
+              quod_ct:committed_kb([Member]), Index, none, none),
             ?assertMatch({apply, _, #{diff := [_ | _]}},
               quod_commit_validation:remote_application(AppA, Good)),
             ?assertEqual({reject, not_authorized},

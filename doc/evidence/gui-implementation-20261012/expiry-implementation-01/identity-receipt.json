@@ -1,0 +1,15 @@
+{
+  "gate01": {
+    "tests": 45,
+    "failures": 0,
+    "exit": 0,
+    "seconds": 1.673
+  },
+  "gate02": {
+    "tests": 47,
+    "failures": 0,
+    "exit": 0,
+    "seconds": 3.466,
+    "scope": "codec, ingress, vault and real outcome proof generator; new selector does not authorize or parse goal"
+  }
+}

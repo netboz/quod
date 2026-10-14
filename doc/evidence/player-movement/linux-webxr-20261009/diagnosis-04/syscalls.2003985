@@ -1,0 +1,31 @@
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cookies", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", F_OK) = 0
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47800, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=820, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=880, ...}) = 0
+lstat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens", 0x7f2f837ed1c0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 601
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(601, F2FS_IOC_GET_FEATURES, 0x7f2f837ef2f4) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens-journal", 0x7f2f837ef1c0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens-wal", 0x7f2f837ef190) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Trust Tokens-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 599
+openat(AT_FDCWD, "/dev/urandom", O_RDONLY|O_CLOEXEC) = 603
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 602
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/.org.chromium.Chromium.SCT Auditing Pending Reports.XxZpd0", O_RDWR|O_CREAT|O_EXCL, 0600) = 603
+rename("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/.org.chromium.Chromium.SCT Auditing Pending Reports.XxZpd0", "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/SCT Auditing Pending Reports") = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir", 0x7f2f837ef690) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir", 0x7f2f837ef640) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+mkdir("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir", 0700) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache", {st_mode=S_IFDIR|0700, st_size=80, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir/temp-index", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 603
+rename("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir/temp-index", "/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/cache/index-dir/the-real-index") = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/sqldb1", {st_mode=S_IFREG|0600, st_size=167936, ...}) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Cache/Cache_Data/sqldb1", {st_mode=S_IFREG|0600, st_size=167936, ...}) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=45056, ...}) = 0
+stat("/tmp/quod-webxr-jceuxspr/data/chrome-profile/Default/Shared Dictionary/db", {st_mode=S_IFREG|0600, st_size=45056, ...}) = 0
++++ exited with 0 +++

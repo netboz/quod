@@ -299,6 +299,7 @@ ask_test_() ->
           ?_test(t_cursor_backtracks_across_ontology(Ctx)),
 	          ?_test(t_default_link_following(Ctx)),
 	          ?_test(t_transitive_isa_crosses_class_link(Ctx)),
+          ?_test(t_qualified_owner_grouping(Ctx)),
 	          ?_test(t_multi_position_follow_dedup(Ctx)),
           ?_test(t_repeated_follow_queries_are_independent(Ctx)),
           ?_test(t_cut_follow_dedup_does_not_cross_invocations(Ctx)),
@@ -316,6 +317,8 @@ ask_test_() ->
           {timeout, 30,
            ?_test(t_selected_scope_transaction_restores_descendant(Ctx))},
           ?_test(t_selected_transaction_survives_reentrant_callback(Ctx)),
+          {timeout, 30, ?_test(t_local_choicepoints_preserve_foreign_rollback(Ctx))},
+          ?_test(t_shared_batch_nested_rollback(Ctx)),
           ?_test(t_failed_transaction_restores_all_selected_scopes(Ctx)),
           ?_test(t_unrelated_reentrant_invocation_has_no_transaction_lineage(Ctx)),
           {timeout, 30, ?_test(t_reentrant_scope_reuse(Ctx))},
@@ -483,7 +486,24 @@ setup_fixture(Pub, Seed, PreviousDesired, Dir) ->
         "tx_reentry_via_c :- transaction(chain_c::tx_back_to_b).\n"
         "tx_reentry_callback :- ((assertz(tx_reentry_hidden), fail) ; "
         "\\+ tx_reentry_hidden).\n"
-        "tx_waits_in_c :- transaction(chain_c::leaf(ok)).\n"),
+        "tx_waits_in_c :- transaction(chain_c::leaf(ok)).\n"
+        "local_choices(0).\n"
+        "local_choices(N) :- N > 0, M is N - 1, "
+        "((assertz(local_scratch(N)), fail) ; \\+ local_scratch(N)), local_choices(M).\n"
+        "tx_many_local :- transaction((chain_c::leaf(ok), local_choices(1200), "
+        "((assertz(many_local_hidden), chain_c::assertz(many_foreign_hidden), fail) ; "
+        "(\\+ many_local_hidden, chain_c::(\\+ many_foreign_hidden))), "
+        "local_choices(1200), chain_c::assertz(many_foreign_kept))).\n"
+        "tx_shared_batch :- transaction((chain_c::true, "
+        "((assertz(batch_outer), "
+        "((assertz(batch_inner), chain_c::assertz(batch_foreign), fail); "
+        "(batch_outer, \\+ batch_inner, chain_c::(\\+ batch_foreign), fail))); "
+        "(\\+ batch_outer, \\+ batch_inner, chain_c::(\\+ batch_foreign))), "
+        "transaction(((assertz(batch_child), chain_c::assertz(batch_child), fail); "
+        "(\\+ batch_child, chain_c::(\\+ batch_child)))), "
+        "once((true;true)), chain_c::assertz(batch_cut_kept), "
+        "((chain_c::assertz(batch_cut_removed), fail); "
+        "chain_c::(batch_cut_kept, \\+ batch_cut_removed)))).\n"),
     ChainCFile = write_ontology(Dir, "chain_c.pl",
         "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
@@ -498,13 +518,15 @@ setup_fixture(Pub, Seed, PreviousDesired, Dir) ->
         start_ns(<<"private">>, list_to_binary(PrivateFile), Dir),
         start_ns(<<"slow">>, list_to_binary(SlowFile), Dir),
         start_ns(<<"chain_b">>, list_to_binary(ChainBFile), Dir),
-        start_ns(<<"chain_c">>, list_to_binary(ChainCFile), Dir)
+        start_ns(<<"chain_c">>, list_to_binary(ChainCFile), Dir),
+        start_ns(<<"taxonomy:animals">>, <<"ontologies/animals.pl">>, Dir)
     ],
-    [A, P, Private, Slow, ChainB, ChainC] = Namespaces,
+    [A, P, Private, Slow, ChainB, ChainC, Nested] = Namespaces,
     _ = prove_ready(A, {isa, dog, mammal}),
     _ = prove_ready(P, {instance_of, pet, my_dog}),
     _ = prove_ready(Private, {secret, 42}),
     _ = prove_ready(Slow, {ping, ok}),
+    _ = prove_ready(Nested, {isa, dog, mammal}),
     #{dir => Dir, router => Router, foreign_log => ForeignLog,
       previous_desired => PreviousDesired,
       namespaces => Namespaces, animals => A, pets => P,
@@ -525,7 +547,7 @@ cleanup_failed_setup(PreviousDesired, Dir) ->
     lists:foreach(
       fun stop_ns/1,
       [<<"animals">>, <<"pets">>, <<"private">>, <<"slow">>,
-       <<"chain_b">>, <<"chain_c">>]),
+       <<"chain_b">>, <<"chain_c">>, <<"taxonomy:animals">>]),
     stop_registered({foreign_log, node}),
     stop_registered({ask_router, node}),
     application:unset_env(quod, node_pubkey),
@@ -752,6 +774,26 @@ t_transitive_isa_crosses_class_link(#{pets := P}) ->
        {ok, [#{}], _},
        prove(P, {isa, my_dog, {':', animals, animal}})).
 
+t_qualified_owner_grouping(#{pets := P}) ->
+    Right = {':', taxonomy, {':', animals, dog}},
+    Left = {':', {':', taxonomy, animals}, dog},
+    %% Use the same scoped proof and ACL path as every other foreign relation.
+    %% There is deliberately no ontology named taxonomy to route through.
+    lists:foreach(fun(Name) ->
+        ?assertMatch({ok, [#{'D' := kibble}], _},
+                     prove(P, {diet, Name, {'D'}})),
+        ?assertMatch({ok, [#{'L' := [kibble, meat]}], _},
+                     prove(P, {findall, {'D'}, {diet, Name, {'D'}}, {'L'}}))
+    end, [Right, Left]),
+    lists:foreach(fun({Name, Local}) ->
+        ?assertMatch({ok, [_], _},
+                     quod_prolog:execute(P, {assertz, {isa, Local, Name}})),
+        lists:foreach(fun(Ancestor) ->
+            ?assertMatch({ok, [#{}], _}, prove(P, {isa, Local, Ancestor}))
+        end, [Right, Left, {':', taxonomy, {':', animals, animal}},
+              {':', {':', taxonomy, animals}, animal}])
+    end, [{Right, right_grouped_dog}, {Left, left_grouped_dog}]).
+
 t_multi_position_follow_dedup(#{animals := A, pets := P}) ->
     Goal = {isa, {':', animals, dog}, {':', animals, mammal}},
     ?assertMatch({ok, [#{'L' := [ok]}], _},
@@ -915,6 +957,27 @@ t_selected_transaction_survives_reentrant_callback(
        {ok, [#{}], _},
        prove(P, {'::', chain_b, tx_reentry_via_c})),
     ?assertMatch({fail, _}, prove(B, tx_reentry_hidden)).
+
+%% Local alternatives after a foreign call do not represent distinct foreign
+%% states. Their local writes must still roll back independently, and a later
+%% foreign write must retain its own rollback boundary.
+t_local_choicepoints_preserve_foreign_rollback(
+  #{pets := P, chain_b := B, chain_c := C}) ->
+    assert_foreign_transaction(
+      prove(P, {'::', chain_b, tx_many_local}), <<"chain_c">>),
+    ?assertMatch({fail, _}, prove(B, {local_scratch, {'_'}})),
+    ?assertMatch({fail, _}, prove(B, many_local_hidden)),
+    ?assertMatch({fail, _}, prove(C, many_foreign_hidden)),
+    ?assertMatch({ok, [#{}], _}, prove(C, many_foreign_kept)).
+
+t_shared_batch_nested_rollback(#{pets := P, chain_b := B, chain_c := C}) ->
+    assert_foreign_transaction(
+      prove(P, {'::', chain_b, tx_shared_batch}), <<"chain_c">>),
+    lists:foreach(fun(Fact) ->
+        ?assertMatch({fail, _}, prove(B, Fact)),
+        ?assertMatch({fail, _}, prove(C, Fact))
+    end, [batch_outer, batch_inner, batch_foreign, batch_child, batch_cut_removed]),
+    ?assertMatch({ok, [#{}], _}, prove(C, batch_cut_kept)).
 
 %% Total transaction failure rolls back every selected ontology. The ordinary
 %% outer alternative succeeds, proving no stale dirty bit survived the restore.

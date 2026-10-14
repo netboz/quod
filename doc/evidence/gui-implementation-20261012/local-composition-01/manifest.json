@@ -1,0 +1,32 @@
+[
+  {
+    "path": "client/src/gui-view.js",
+    "sha256": "78bd7afeb5c4cbdfaabbbe59c9dfdcbc4a493f2cb8c87fefdb41f7d907fdd19a",
+    "before_sha256": "bb17e119e64f1946a25b1a8e22b5870e089d1acf4ab0b30c344ee2e9fb58a24a"
+  },
+  {
+    "path": "client/test/gui-view.test.js",
+    "sha256": "6dea0587d946c23cdc81ad5881d4bef16546aac33ced81c3d937b1ccc40fcd5c",
+    "before_sha256": "a348d0832d1df85514b538ebfd1e51ba18509d0fbb7bb2ccb53f458326b04ab2"
+  },
+  {
+    "path": "priv/ontologies/gui_question.pl",
+    "sha256": "d1abd3a7cf4ccdb51436bd74c78b00e1f7ba5a8042fda99c3fa46fa324d8b76b",
+    "before_sha256": "d1abd3a7cf4ccdb51436bd74c78b00e1f7ba5a8042fda99c3fa46fa324d8b76b"
+  },
+  {
+    "path": "src/quod_client_view.erl",
+    "sha256": "56b131997855468013729afc6f1257907a47e05034628029bc13cf1dd4ba9515",
+    "before_sha256": "cfea79d3fe61f14a575792750de7f0512b551f3dad6bf98b3980e36402d2da21"
+  },
+  {
+    "path": "test/quod_gui_examples_tests.erl",
+    "sha256": "dba0c8ace0b7cd507bb09aaa32e9932fb549ebc9fbc95fbb0bcb6c3ee464234a",
+    "before_sha256": "587eaa1689ed9434fa2acb84bab7bedae280ac3c3a3f3b91f24efb065bb0b694"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "sha256": "a03092feb45d67fd9bafdf41c4aa49def50f48b7789f7df667d2cc505cb5ecef",
+    "before_sha256": "3cae2e277d527d3433070d1d1b03dd6678ecab2b4076b6384528a13510f51e63"
+  }
+]

@@ -1,0 +1,13 @@
+error:{badmatch,
+          {error,
+              {scan_failed,error,
+                  {log_corruption,{bad_proof_block,bad_block},2142}}}}
+[{'stopped-ledger-profile','-run/0-fun-2-',1,
+                           [{file,"doc/evidence/gui-implementation-20261012/composition-display-01/stopped-ledger-profile.erl"},
+                            {line,11}]},
+ {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+ {erl_eval,do_apply,7,[{file,"erl_eval.erl"},{line,920}]},
+ {erl_eval,try_clauses,10,[{file,"erl_eval.erl"},{line,1530}]},
+ {init,start_it,1,[]},
+ {init,start_em,1,[]},
+ {init,do_boot,3,[]}]

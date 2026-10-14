@@ -1,0 +1,26 @@
+[
+  {
+    "path": "client/src/question-controller.js",
+    "sha256": "2f958e20236a78b3694917a09c38de747a72063d51b5bc13ffa775f2a32b9cfc"
+  },
+  {
+    "path": "client/src/question-controller.d.ts",
+    "sha256": "d151791acea77172a200fa27d7d807634808395422e28489e76ef0daf24d6a61"
+  },
+  {
+    "path": "client/test/question-controller.test.js",
+    "sha256": "671c6e634ccffca2f3109bf1aba4f8c7d7bc15c8c39587ccc55766371eba29dc"
+  },
+  {
+    "path": "ui/src/GuiQuestion.tsx",
+    "sha256": "4400e7ed90e951efa6f62f9823f02c561498208adc676e2175971f323c5c110f"
+  },
+  {
+    "path": "ui/src/World.tsx",
+    "sha256": "0b77ba40946e7f7f8b7859f29cdc4696c0614f12df94ea28073b758a7ccdecc2"
+  },
+  {
+    "path": "ui/test/gui-question.fixture.tsx",
+    "sha256": "e362e8f791b38c22bf1507a7c3084474561f0600d3322093700cd902a7c3b116"
+  }
+]

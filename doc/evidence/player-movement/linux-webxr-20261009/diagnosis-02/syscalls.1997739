@@ -1,0 +1,142 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff1023f0780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff1023f0780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 626
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47760, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=80, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data", 0x7ff1023ebff0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data", 0x7ff1023edaf0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 652
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(652, F2FS_IOC_GET_FEATURES, 0x7ff1023ee124) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data-journal", 0x7ff1023edff0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data-wal", 0x7ff1023edfc0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Web Data-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 655
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 654
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47760, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=500, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data", 0x7ff1023ebff0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data", 0x7ff1023edaf0) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 668
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(668, F2FS_IOC_GET_FEATURES, 0x7ff1023ee124) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data-journal", 0x7ff1023edff0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data-wal", 0x7ff1023edfc0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Account Web Data-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 669
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 673
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials", 0x7ff1023ee270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=660, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials", 0700) = 0
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 673
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials/LOCK", O_RDWR|O_CREAT, 0600) = 674
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/PersistentOriginTrials__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/OptimizationHints", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/OptimizationHints", 0x7ff1023ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=360, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/OptimizationHints", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/OptimizationHints", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/OptimizationHints", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 688
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/CertificateRevocation", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/CertificateRevocation", 0x7ff1023ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=520, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/CertificateRevocation", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/CertificateRevocation", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 689
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/CertificateRevocation", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 688
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/Crowd Deny", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Crowd Deny", 0x7ff1023ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=620, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Crowd Deny", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Crowd Deny", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db", 0x7ff1023ee270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=940, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db", 0700) = 0
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 713
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db/LOCK", O_RDWR|O_CREAT, 0600) = 719
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/commerce_subscription_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 727
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", {st_mode=S_IFDIR|0700, st_size=80, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", O_RDWR|O_CREAT, 0600) = 728
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 729
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", O_RDONLY) = 730
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000001.dbtmp", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 729
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000001.dbtmp", F_OK) = 0
+rename("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000001.dbtmp", "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT") = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", O_RDONLY) = 729
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", O_RDONLY) = 729
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", {st_mode=S_IFREG|0600, st_size=41, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", O_WRONLY|O_APPEND) = 729
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 730
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", {st_mode=S_IFREG|0600, st_size=16, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", {st_mode=S_IFREG|0600, st_size=41, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", {st_mode=S_IFREG|0600, st_size=267, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/metadata", {st_mode=S_IFDIR|0700, st_size=140, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 730
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", {st_mode=S_IFREG|0600, st_size=16, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", {st_mode=S_IFREG|0600, st_size=41, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", {st_mode=S_IFREG|0600, st_size=267, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/metadata", {st_mode=S_IFDIR|0700, st_size=140, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000003.log", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 730
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 731
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000003.log", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", {st_mode=S_IFREG|0600, st_size=16, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", {st_mode=S_IFREG|0600, st_size=41, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", {st_mode=S_IFREG|0600, st_size=267, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/metadata", {st_mode=S_IFDIR|0700, st_size=140, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 731
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/000003.log", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/CURRENT", {st_mode=S_IFREG|0600, st_size=16, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/MANIFEST-000001", {st_mode=S_IFREG|0600, st_size=41, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOCK", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/LOG", {st_mode=S_IFREG|0600, st_size=267, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db/metadata", {st_mode=S_IFDIR|0700, st_size=140, ...}) = 0
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/shared_proto_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Platform Notifications", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/org.chromium.Chromium.chromium_chrome_url_fetcher_.BTuGJ7/929be2bea7b0acf7a94cb4149dc09ff3e49534b9c8cddd083cd6f7bcd6770df1", O_RDONLY|O_NOFOLLOW) = 781
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase", 0x7ff1023ee270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=1600, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase", 0700) = 0
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 781
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase/LOCK", O_RDWR|O_CREAT, 0600) = 782
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/BudgetDatabase__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Sessions/Tabs_13436008885034144", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 645
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Sessions_Encrypted/Tabs_13436008885034929", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 681
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/segmentation_platform/ukm_db", {st_mode=S_IFREG|0600, st_size=4096, ...}) = 0
+unlink("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/segmentation_platform/ukm_db-wal") = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/segmentation_platform/ukm_db", {st_mode=S_IFREG|0600, st_size=49152, ...}) = 0
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/SessionStorage-wal", {st_mode=S_IFREG|0600, st_size=20632, ...}, AT_SYMLINK_NOFOLLOW) = 0
+unlinkat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/SessionStorage-wal", 0) = 0
++++ exited with 0 +++

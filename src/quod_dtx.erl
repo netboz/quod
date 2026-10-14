@@ -248,7 +248,8 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
 
 seal_bound_reads(Diff, ReadCheck, BaseHeight, Effects, Bridges) ->
     Membership = quod_committee_predicates:membership_diff(Diff),
-    HasOutcome = lists:any(fun(K) -> quod_read_set:kind(K) =:= operation_outcome end,
+    HasOutcome = lists:any(fun(K) -> lists:member(quod_read_set:kind(K),
+                                      [operation_outcome, operation_expiry]) end,
                            maps:keys(ReadCheck)),
     case quod_read_set:at_height(ReadCheck, BaseHeight) andalso
          not (Membership andalso HasOutcome) of

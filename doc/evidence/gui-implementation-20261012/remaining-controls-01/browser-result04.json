@@ -1,0 +1,196 @@
+{
+  "value": {
+    "actionBounds": [
+      {
+        "bottom": 1130,
+        "left": 710.5,
+        "right": 875.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1130,
+        "left": 875.5,
+        "right": 1040.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1130,
+        "left": 1040.5,
+        "right": 1205.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1200,
+        "left": 380.5,
+        "right": 545.5,
+        "top": 1142
+      },
+      {
+        "bottom": 1200,
+        "left": 545.5,
+        "right": 710.5,
+        "top": 1142
+      },
+      {
+        "bottom": 1130,
+        "left": 50.5,
+        "right": 215.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1130,
+        "left": 215.5,
+        "right": 380.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1130,
+        "left": 380.5,
+        "right": 545.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1130,
+        "left": 545.5,
+        "right": 710.5,
+        "top": 1072
+      },
+      {
+        "bottom": 1200,
+        "left": 710.5,
+        "right": 875.5,
+        "top": 1142
+      }
+    ],
+    "actionsScrollable": true,
+    "activations": 1,
+    "boundedPicker": true,
+    "browserErrors": [],
+    "byteFeedback": true,
+    "calls": [
+      "run",
+      "next",
+      "accept",
+      "stop",
+      "close",
+      "create",
+      "resolve",
+      "apply"
+    ],
+    "cancelled": true,
+    "cardsScrollable": true,
+    "choiceLabel": "rule / 2",
+    "choices": [
+      "rule/2",
+      "sample/1",
+      "rule/2"
+    ],
+    "clampedGain": "11",
+    "closedDuringTrackingWait": true,
+    "commonText": "Spectrum 2",
+    "controllerLoader": true,
+    "dialogDraftAndFocus": true,
+    "directChoice": true,
+    "directNumber": true,
+    "farther": true,
+    "frontFacing": true,
+    "frozenNumeric": true,
+    "gltfControllerLoader": true,
+    "gridReflows": true,
+    "hidden": true,
+    "hiddenFocusNotRestored": true,
+    "initialBackground": "rgba(25,43,50,0.78)",
+    "invalidDraftRetained": true,
+    "keyboardInsideTexture": true,
+    "largerTextReflows": true,
+    "lastActionReachable": true,
+    "lastOptionReachable": true,
+    "locked": true,
+    "lockedChoice": true,
+    "lockedNumeric": true,
+    "lockedVariants": true,
+    "menuEscape": true,
+    "missingNumeric": true,
+    "modes": [
+      true,
+      false
+    ],
+    "movementStopsOnHide": true,
+    "multilineDraft": true,
+    "multilineSource": "p(a).\nq(b).",
+    "nestedScrollBounded": true,
+    "newPredicate": "fresh/2",
+    "nodeMaterialRoundtrip": true,
+    "numericBounds": [
+      {
+        "bottom": 970,
+        "left": 84,
+        "right": 572,
+        "top": 900
+      },
+      {
+        "bottom": 1013,
+        "left": 709,
+        "right": 1147,
+        "top": 857
+      },
+      {
+        "bottom": 962,
+        "left": 402,
+        "right": 572,
+        "top": 908
+      },
+      {
+        "bottom": 962,
+        "left": 977,
+        "right": 1147,
+        "top": 908
+      }
+    ],
+    "numericEntry": "3",
+    "oldControlsRetired": true,
+    "opaqueBackground": "rgba(25,43,50,1)",
+    "opaqueControls": true,
+    "outsideMesh": true,
+    "placedAfterPose": true,
+    "placedStaysStill": true,
+    "progressDisplayed": true,
+    "recentered": true,
+    "releasedOutside": true,
+    "requiredFeedback": true,
+    "resultText": "Binding0 = value(0)\nBinding1 = value(1)\nBinding2 = value(2)\nBinding3 = value(3)\nBinding4 = value(4)\nBinding5 = value(5)\nBinding6 = value(6)\nBinding7 = value(7)\nBinding8 = value(8)\nBinding9 = value(9)\nBinding10 = value(10)\nBinding11 = value(11)\nBinding12 = value(12)\nBinding13 = value(13)\nBinding14 = value(14)\nBinding15 = value(15)\nBinding16 = value(16)\nBinding17 = value(17)\nBinding18 = value(18)\nBinding19 = value(19)\nBinding20 = value(20)\nBinding21 = value(21)\nBinding22 = value(22)\nBinding23 = value(23)\nBinding24 = value(24)\nBinding25 = value(25)\nBinding26 = value(26)\nBinding27 = value(27)\nBinding28 = value(28)\nBinding29 = value(29)\nBinding30 = value(30)\nBinding31 = value(31)\nBinding32 = value(32)\nBinding33 = value(33)\nBinding34 = value(34)\nBinding35 = value(35)\nBinding36 = value(36)\nBinding37 = value(37)\nBinding38 = value(38)\nBinding39 = value(39)\nBinding40 = value(40)\nBinding41 = value(41)\nBinding42 = value(42)\nBinding43 = value(43)\nBinding44 = value(44)\nBinding45 = value(45)\nBinding46 = value(46)\nBinding47 = value(47)\nBinding48 = value(48)\nBinding49 = value(49)\nBinding50 = value(50)\nBinding51 = value(51)\nBinding52 = value(52)\nBinding53 = value(53)\nBinding54 = value(54)\nBinding55 = value(55)\nBinding56 = value(56)\nBinding57 = value(57)\nBinding58 = value(58)\nBinding59 = value(59)",
+    "retired": true,
+    "rightHandedMenu": true,
+    "rightHandedPanel": true,
+    "rotatedAngle": "20",
+    "sameMesh": true,
+    "scaleSurvivesReopen": true,
+    "scrollable": true,
+    "semanticSelection": "mode(run)",
+    "smallerTextRestoresRows": true,
+    "sourceRetired": true,
+    "spatialClosed": true,
+    "spatialOpen": true,
+    "steppedAngle": "15",
+    "steppedGain": "7",
+    "steppedOpacity": 0.95,
+    "tabDraftRetained": true,
+    "tabFocusCleared": true,
+    "tabSurvivesReflow": true,
+    "tableBounded": true,
+    "tableLocked": true,
+    "tableSelection": true,
+    "textualDisplays": true,
+    "transientAction": true,
+    "transientInitiallyClosed": true,
+    "translucentBackground": "rgba(25,43,50,0.6)",
+    "typed": "a(X).",
+    "typedVariantDrafts": true,
+    "unchangedImagesReused": true,
+    "unchangedPicker": true,
+    "verifiedImagesShared": true,
+    "waitsForTracking": true,
+    "worldStable": true,
+    "xrFeatures": true
+  }
+}

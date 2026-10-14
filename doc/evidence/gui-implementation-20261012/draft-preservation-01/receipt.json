@@ -1,0 +1,31 @@
+{
+  "gates": [
+    {
+      "file": "gate01.log",
+      "tests": 9,
+      "failures": 0,
+      "exit": 0
+    },
+    {
+      "file": "gate02.log",
+      "test_files": 17,
+      "failures": 0,
+      "exit": 0
+    },
+    {
+      "file": "gate03.log",
+      "build": "TypeScript/Vite",
+      "exit": 0
+    }
+  ],
+  "production_delta": {
+    "added": 28,
+    "removed": 12,
+    "net": 16
+  },
+  "browser": "browser-result02.json",
+  "browser_first_attempt": "browser-transport-error01.json",
+  "server_exit": 130,
+  "server_exit_reason": "intentional Ctrl-C after browser close",
+  "review": "self"
+}

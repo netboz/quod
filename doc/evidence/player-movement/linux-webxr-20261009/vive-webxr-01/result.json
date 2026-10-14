@@ -1,0 +1,6 @@
+{
+  "override_exit": 0,
+  "preflight_exit": 1,
+  "restore_exit": 0,
+  "desktop_monitor_geometry_preserved": true
+}

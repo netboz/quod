@@ -607,7 +607,7 @@ outcome_bridge_refuses_in_owner_contexts_before_reading_test() ->
     Est = quod_ct:committed_kb([]),
     [?assertThrow({erlog_error,{context_violation,committed_operation_outcome,query,Kind}},
         quod_runtime_predicates:committed_operation_outcome(
-            {committed_operation_outcome,invalid,invalid,{'S'}},[],
+            {committed_operation_outcome,invalid,{'S'}},[],
             quod_predicates:set_context(Est,Ctx))) ||
         {Kind,Ctx} <- [{verdict,quod_predicates:verdict_context(?NS,1)},
                       {reaction,quod_predicates:reaction_context(?NS,1)}]].

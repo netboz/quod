@@ -1,0 +1,6 @@
+ERROR [ipc_receive_fds] recvmsg(3) failed: 'Connection reset by peer'!
+ERROR [ipc_client_setup_shm] Failed to retrieve shm fd!
+XR_ERROR_RUNTIME_UNAVAILABLE in xrCreateInstance: Failed to create instance '-1'
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : LoaderInstance::CreateInstance chained CreateInstance call failed
+Error [GENERAL | xrCreateInstance | OpenXR-Loader] : xrCreateInstance failed
+xrCreateInstance=-51

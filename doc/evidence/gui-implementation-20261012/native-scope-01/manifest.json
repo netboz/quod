@@ -1,0 +1,26 @@
+[
+  {
+    "path": "src/predicates/quod_ask.erl",
+    "sha256": "01511e954ef020e66595e35cfb872ddd394d9b83a1ce682743d0ea1f5238ae22"
+  },
+  {
+    "path": "src/quod_scope_session.erl",
+    "sha256": "a84c1344dd6022cc040aea914805eb769d735e8edc1285aa3b8af8e32ee79afc"
+  },
+  {
+    "path": "src/quod_prolog.erl",
+    "sha256": "09077dec203d512a50970bf146adadf88535753e09bd2883ac5b3d41244f34df"
+  },
+  {
+    "path": "test/quod_scope_session_tests.erl",
+    "sha256": "22a16f993e8306c556cba7996c9632d6130a74ef0efa49dd259bbcdbab8e66d1"
+  },
+  {
+    "path": "test/quod_gui_question_tests.erl",
+    "sha256": "b364aff693a87c7730af3cc325f3a4a2a4c25dba7f0f580ad21d65cf197586fb"
+  },
+  {
+    "path": "test/quod_ask_SUITE.erl",
+    "sha256": "12fd1f1d9a873860f5c09ab1ae78a821f205b74cd80a7e54d743b1e7e98b97f1"
+  }
+]

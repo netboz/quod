@@ -21,6 +21,20 @@ shape_validation_test() ->
        {'$quod_action_shape', move, [allowed | improper], ready},
        {'$quod_action_shape', [move | improper], [], ready}]).
 
+declared_transition_uses_common_candidate_rollback_test() ->
+    St = overlay(
+      <<"bad_step :- assertz(leak), fail.\n"
+        "good_step :- assertz(done).\n"
+        "action(bad_step, [], done).\n"
+        "action(good_step, [allowed], done).\n"
+        "allowed.\n">>),
+    {succeed, Final} = erlog_int:prove_goal({run_declared_action, {'Transition'}}, St),
+    ?assertEqual(good_step, erlog_int:dderef({'Transition'}, Final#est.bs)),
+    ?assert(asserted(done, Final)),
+    ?assertNot(asserted(leak, Final)),
+    {fail, Refused} = erlog_int:prove_goal({run_declared_action, bad_step}, St),
+    ?assertNot(asserted(leak, Refused)).
+
 state_check_preserves_alternatives_and_restores_write_mode_test() ->
     St = overlay(<<"choice(first). choice(second).">>),
     Goal =

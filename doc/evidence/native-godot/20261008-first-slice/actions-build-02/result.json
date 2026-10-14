@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/run.py",
+    "--headless",
+    "--script",
+    "res://tests/build_actions.gd"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.4880709759891033
+}

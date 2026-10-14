@@ -10,7 +10,8 @@ There is no automatic resubmission; domain recovery belongs to ontology rules.
 """.
 -behaviour(gen_server).
 
--export([start/3, valid_preparation_goal/2, valid_signed_preparation/3]).
+-export([start/3, valid_preparation_goal/2, valid_signed_preparation/3,
+         retained_request/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(s, {owner, owner_monitor, slot, binding, released = 0,
@@ -95,7 +96,11 @@ complete(Ref, Result, Binding, S = #s{owner = Owner, slot = Slot}) ->
 start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
               S = #s{slot = Slot, binding = Binding}) ->
     Parent = self(),
-    Operation = crypto:strong_rand_bytes(32),
+    Operation = case Mode of
+        {retained, Bytes} ->
+            {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes), Id;
+        _ -> crypto:strong_rand_bytes(32)
+    end,
     {Worker, Monitor} = spawn_opt(fun() ->
         %% Queue time includes projection release and earlier requests. A killed
         %% worker may never export this span; absence is not a completed request.
@@ -131,6 +136,7 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
                    report_binding => ReportBinding}}.
 
 request_mode({custodied, _, _, _}) -> execute;
+request_mode({retained, _}) -> execute;
 request_mode(resolve) -> read;
 request_mode({node, _, Mode}) -> Mode;
 request_mode(Mode) -> Mode.
@@ -159,6 +165,26 @@ valid_signed_preparation({B}, {S}, Template) when B =/= S ->
     {_Canonical, Variables, _} = erlog_int:term_instance(Template, 0),
     lists:sort([Name || {Name,_} <- Variables]) =:= lists:sort([B,S]);
 valid_signed_preparation(_,_,_) -> false.
+
+%% Pure selection only. The selected authored goal must be exactly the goal in
+%% the retained bytes; signature release and ingress still perform authorization.
+retained_request(Actor, Bytes, Goal) ->
+    case {quod_client_goal:request_identity(Bytes),
+          quod_wire_term:encode_canonical(Actor), quod_durable_term:encode_goal(Goal)} of
+        {{ok, #{agent_ref_blob := Blob,
+                request := #{mode := execute, goal_text := Text,
+                             parser_version := Parser} = Request}},
+         {ok, Blob}, {ok, GoalBlob}} ->
+            case quod_client_goal_parser:parse(Text, Parser) of
+                {ok, #{goal := Parsed, variables := []}} ->
+                    case quod_durable_term:encode_goal(Parsed) of
+                        {ok, GoalBlob} -> {ok, Request};
+                        _ -> error
+                    end;
+                _ -> error
+            end;
+        _ -> error
+    end.
 
 
 prepare_goal_result(Ns, AgentRef, Epoch, NodeRef, Key, Variable, Template, Deadline) ->
@@ -230,8 +256,15 @@ sign_request(node, #{reference := NodeRef, public_key := Key},
     %% The goal was chosen in the node's own behavior scope. Its handler uses
     %% node_authorized_goal/3 for permitted foreign work within the same proof.
     quod_node_actor:signed_goal(Mode, Goal, Operation, Expires, {NodeRef, Key});
-sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instance} = Agent,
-         epoch := Epoch, public_key := Key}, {Mode, Goal, Expires}, Operation) ->
+sign_request({agent, _}, #{reference := Agent, public_key := Key} = Binding,
+             {{retained, Bytes}, Goal, Expires}, _Operation) ->
+    case retained_request(Agent, Bytes, Goal) of
+        {ok, #{signing_public_key := Key} = Request} ->
+            sign_agent_request(Binding, Request, Expires);
+        _ -> {error, retained_request_mismatch}
+    end;
+sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instance},
+         public_key := Key} = Binding, {Mode, Goal, Expires}, Operation) ->
     {ok, Network} = quod_ontology:network_identity(),
     {ok, InstanceText} = quod_client_goal_parser:format(Instance),
     {CanonicalGoal, _Variables, _NextVn} = erlog_int:term_instance(Goal, 0),
@@ -240,8 +273,16 @@ sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instanc
       agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
       signing_public_key => Key, operation_id => Operation,
       not_after_ms => Expires, mode => Mode, parser_version => 3, goal_text => GoalText},
+    sign_agent_request(Binding, Request, Expires).
+
+sign_agent_request(#{reference := {agent_instance_ref, Ns, _, Instance} = Agent,
+                     epoch := Epoch, public_key := Key},
+                   #{network_identity := Network, agent_instance_text := InstanceText,
+                     operation_id := Operation, not_after_ms := RequestExpiry,
+                     mode := Mode, parser_version := Parser, goal_text := GoalText} = Request,
+                   Expires) ->
     Typed = {agent_goal_v1, Network, Agent, InstanceText, Key,
-             maps:get(operation_id, Request), Expires, Mode, 3, GoalText},
+             Operation, RequestExpiry, Mode, Parser, GoalText},
     {ok, NodePrincipal} = quod_node_actor:principal(),
     {ok, NodeRef} =
         quod_agent_ref:materialize_principal(NodePrincipal),

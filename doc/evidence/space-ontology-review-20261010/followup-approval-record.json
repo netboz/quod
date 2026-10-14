@@ -1,0 +1,8 @@
+{
+  "authorize_followup_fable": true,
+  "respondedBy": "desktop",
+  "respondedAt": 1791633773021,
+  "destination": "Configured external Claude Fable service",
+  "payload": "followup-request.md and the 35 source/review files enumerated in run-review.mjs",
+  "constraints": "Read-only architecture review; no credentials, keys, live account data, unrelated files, production edits or deployment"
+}

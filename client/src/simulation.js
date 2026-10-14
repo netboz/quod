@@ -1,6 +1,7 @@
 import { readMarks } from './marks.js'
-import { goalRequestBytes, signedGoal } from './signed-client.js'
-import { b64url, fromB64url } from './key-provider.js'
+import { connectSignedView, readViewIdentity } from './signed-view.js'
+import { signedGoal } from './signed-client.js'
+import { fromB64url } from './key-provider.js'
 import { anchoredGoal, viewDependencies } from './world.js'
 import { atom, compound, variable } from './prolog-term.js'
 import { readControl, movementGoal } from './locomotion.js'
@@ -35,13 +36,7 @@ function readFrame(frame) {
 
 export function worldProjection(message) {
   const marks = readMarks(message.marks)
-  if (typeof message.view !== 'string' || !integer(message.height) || !integer(message.expires_ms)) {
-    throw new Error('invalid world projection')
-  }
-  if (!Number.isSafeInteger(Number(message.expires_ms)) || Number(message.expires_ms) <= Date.now()) {
-    throw new Error('World authorization expired.')
-  }
-  const ordinary = { marks, view: message.view, selection: message.selection, expires: Number(message.expires_ms) }
+  const ordinary = { marks, ...readViewIdentity(message), selection: message.selection }
   if (message.selection !== 'active') {
     if (!['nonphysical', 'disabled', 'denied', 'recovering', 'unavailable'].includes(message.selection) ||
         message.frame !== undefined || message.control !== undefined) throw new Error('invalid world selection')
@@ -75,48 +70,38 @@ export function advanceSimulation(current, message) {
   return { ...current, ...next }
 }
 
-// Each open signs a fresh read. Disconnect and durable gaps discard all motion
-// acceptance state. Reconnect is explicit (or follows a browser online event),
-// never a readiness polling timer. Renew an unchanged view before its signed
-// expiry; the old authorization remains bounded while the new read is proved.
 export function connectWorldView(identity, agent, { projection, frame, unavailable, refused = () => {}, refreshing = () => {} }, options) {
   const world = { ...options.world }
   if (typeof world.anchor === 'string') world.anchor = fromB64url(world.anchor)
   if (!world.instance) throw new Error('an exact space instance is required')
   const goal = anchoredGoal(world, compound('client_world_view', [world.instance, atom(options.mode),
     viewDependencies(options.dependencies), variable('View')]))
-  const Socket = options.WebSocket ?? WebSocket
-  const url = options.url ?? new URL('/api/simulation', globalThis.location.href)
-  if (url instanceof URL) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  const socket = new Socket(String(url))
-  let active = true, opening = 0, expected = null, current = null
   let sequence = -1n, sending = false, commandEpoch = 0, discreteSequence = null
-  let expiryTimer = null, renewalTimer = null
-  const clearExpiry = () => {
-    clearTimeout(expiryTimer); clearTimeout(renewalTimer)
-    expiryTimer = null; renewalTimer = null
-  }
-  const discard = () => {
-    clearExpiry(); opening++; expected = null; current = null; commandEpoch++; discreteSequence = null
-  }
-  const send = message => socket.send(JSON.stringify(message))
-  async function open() {
-    const version = ++opening
-    if (current && Date.now() >= current.expires) { failed(new Error('Simulation authorization expired.')); return }
-    try {
-      const request = goalRequestBytes(identity, { mode: 'read', agent, goal })
-      const signature = new Uint8Array(await identity.provider.sign(request))
-      const view = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', request)))
-      if (!active || version !== opening) return
-      expected = view
-      send({ type: 'open', session_id: identity.session.session_id, request: b64url(request), signature: b64url(signature),
-        world_namespace: world.namespace, world_anchor: b64url(world.anchor) })
-    } catch (error) { if (active && version === opening) failed(error) }
-  }
-  const failed = error => { discard(); unavailable(error.message ?? String(error)) }
+  const stream = connectSignedView(identity, agent, world, 'world', goal, {
+    decode: worldProjection, frameType: 'simulation_frame', advance: advanceSimulation,
+    credit: current => current.selection === 'active'
+      ? { type: 'ack', view: current.view, tick: String(current.tick) } : null,
+  }, {
+    projection(current) {
+      const observed = current.feedback ? BigInt(current.feedback.sequence) : -1n
+      sequence = sequence > observed ? sequence : observed
+      current.command = command
+      projection(current)
+    },
+    frame, unavailable,
+    discard() { commandEpoch++; discreteSequence = null },
+    refreshing(reason) {
+      if (refreshing(reason) === false) return false
+      if (reason === 'navigation_changed') {
+        stream.fail(new Error('The selected space changed. Reload the view.'))
+        return false
+      }
+    },
+  }, options)
   async function command(input) {
-    if (!active || !current?.control || sending) return false
-    if (Date.now() >= current.expires) { failed(new Error('Simulation authorization expired.')); return false }
+    const current = stream.current
+    if (!stream.active || !current?.control || sending) return false
+    if (Date.now() >= current.expires) { stream.fail(new Error('Simulation authorization expired.')); return false }
     const observed = BigInt(current.feedback.sequence)
     if (discreteSequence !== null) {
       if (observed < discreteSequence || current.feedback.pending) return false
@@ -129,59 +114,19 @@ export function connectWorldView(identity, agent, { projection, frame, unavailab
     sending = true
     try {
       const reply = await signedGoal(identity, { mode: 'control', agent, goal }, options)
-      if (active && epoch === commandEpoch && reply.result !== 'ok') {
+      if (stream.active && epoch === commandEpoch && reply.result !== 'ok') {
         if (reply.result === 'fail') {
           discreteSequence = null
           refused('Movement was refused.', reply.reasons ?? [])
-        } else failed(new Error('Movement outcome unavailable. Refresh the simulation to reconnect.'))
+        } else stream.fail(new Error('Movement outcome unavailable. Refresh the simulation to reconnect.'))
       }
       return reply.result === 'ok'
     } catch (error) {
       // Do not retry an uncertain command or continue with fresh commands after
       // losing its acknowledgement. A fresh view recovers the owner's sequence.
-      if (active && epoch === commandEpoch) failed(error)
+      if (stream.active && epoch === commandEpoch) stream.fail(error)
       return false
     } finally { sending = false }
   }
-  socket.onopen = open
-  socket.onmessage = event => {
-    if (!active) return
-    try {
-      const message = JSON.parse(event.data)
-      if (message.type === 'refresh') {
-        discard()
-        if (refreshing(message.reason) !== false) {
-          if (message.reason === 'navigation_changed') failed(new Error('The selected space changed. Reload the view.'))
-          else void open()
-        }
-      } else if (message.type === 'unavailable') {
-        failed(new Error(message.reason))
-      } else if (message.type === 'projection' && message.view === expected) {
-        const next = worldProjection(message)
-        if (current && next.expires <= current.expires) throw new Error('World authorization did not advance.')
-        current = next
-        expected = null
-        clearExpiry()
-        const remaining = current.expires - Date.now()
-        expiryTimer = setTimeout(() => failed(new Error('Simulation authorization expired.')), Math.max(0, remaining))
-        // Once the read is limited by sign-in expiry, another identical read
-        // cannot extend it. Keep the hard stop instead of shorter renewals.
-        if (current.expires < identity.session.expires_ms) {
-          renewalTimer = setTimeout(() => { renewalTimer = null; void open() }, Math.max(0, remaining / 2))
-        }
-        const observed = current.feedback ? BigInt(current.feedback.sequence) : -1n
-        sequence = sequence > observed ? sequence : observed
-        current.command = command
-        projection(current)
-        if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
-      } else if (message.type === 'simulation_frame' && current && message.view === current.view) {
-        const next = advanceSimulation(current, message)
-        if (next !== current) { current = next; frame(current) }
-        if (current.selection === 'active') send({ type: 'ack', view: current.view, tick: String(current.tick) })
-      }
-    } catch (error) { failed(error); socket.close() }
-  }
-  socket.onclose = () => { if (active) failed(new Error('Simulation disconnected. Refresh to reconnect.')) }
-  socket.onerror = () => { if (active) failed(new Error('Simulation connection unavailable.')) }
-  return { command, close() { active = false; discard(); socket.close() } }
+  return { command, close: stream.close }
 }

@@ -14,6 +14,7 @@ the scope wire as Erlang references.
 
 -export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
          request_evidence/0, request_auth/0, request_binding/0, request_expiry/0,
+         request_operation/0,
          ensure_scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
@@ -78,6 +79,7 @@ the scope wire as Erlang references.
               txs = #{} :: #{opaque_id() => #tx{}},
               lineages = #{} :: #{opaque_id() => #lineage{}},
               batches = #{} :: #{opaque_id() => #batch{}},
+              last_batch = none :: none | {actor(), opaque_id(), opaque_id()},
               seal_result = open ::
                   (open | {ok, map()} | {error, term()})}).
 
@@ -158,6 +160,14 @@ request_evidence() -> (context())#ctx.request_evidence.
 request_expiry() ->
     case get(?KEY) of
         #ctx{request_evidence = #{request := #{not_after_ms := Expiry}}} -> {ok, Expiry};
+        _ -> none
+    end.
+
+-doc "The exact original operation already admitted with this signed proof.".
+-spec request_operation() -> {ok, tuple()} | none.
+request_operation() ->
+    case get(?KEY) of
+        #ctx{request_evidence = #{operation_ref := Operation}} -> {ok, Operation};
         _ -> none
     end.
 
@@ -920,7 +930,7 @@ activate_transactions_validated(Actor, ParentLineage, FrameIds, Count, Ctx0) ->
             {_, _, FinalLineage, _} = lists:last(Responses),
             Batch = #batch{owners = Owners,
                            local_owner = element(1, Actor)},
-            put_context(Ctx1#ctx{batches =
+            put_context(Ctx1#ctx{last_batch = none, batches =
                                    (Ctx1#ctx.batches)#{BaselineId => Batch}}),
             {ok, FinalLineage, Responses};
         {error, _} = Error -> Error
@@ -940,13 +950,33 @@ valid_activation(Actor, ParentLineage, Count, Ctx) ->
     end.
 
 allocate_batch(Actor, Lineage, Ctx0) ->
+    case {Lineage =/= none, invocation_authorized(Actor, Lineage, Ctx0)} of
+        {false, _} -> {error, bad_request};
+        {_, false} -> {error, not_allowed};
+        {true, true} ->
+            case reusable_batch(Actor, Lineage, Ctx0) of
+                {ok, _} = Reused -> Reused;
+                none -> allocate_new_batch(Actor, Lineage, Ctx0)
+            end
+    end.
+
+%% Every live holder is selected before foreign work runs. Until the batch
+%% materializes, those holders need the same foreign snapshot; each still owns
+%% its independent local overlay. A cut-away holder imposes no older baseline.
+reusable_batch(Actor, Lineage,
+               #ctx{last_batch = {Actor, Lineage, Id}, batches = Batches}) ->
+    case maps:find(Id, Batches) of
+        {ok, #batch{materialized = Materialized}} when map_size(Materialized) =:= 0 ->
+            {ok, Id};
+        _ -> none
+    end;
+reusable_batch(_, _, _) -> none.
+
+allocate_new_batch(Actor, Lineage, Ctx0) ->
     Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case {Lineage =/= none, invocation_authorized(Actor, Lineage, Ctx0),
-          map_size(Ctx0#ctx.batches) + 1 =< Limit} of
-        {false, _, _} -> {error, bad_request};
-        {_, false, _} -> {error, not_allowed};
-        {_, _, false} -> {error, {savepoint_limit_exceeded, Limit}};
-        {true, true, true} ->
+    case map_size(Ctx0#ctx.batches) + 1 =< Limit of
+        false -> {error, {savepoint_limit_exceeded, Limit}};
+        true ->
             BatchId = new_id(Ctx0),
             TxIds = lineage_tx_ids(Lineage, Ctx0),
             Owners = maps:from_keys(TxIds, true),
@@ -958,7 +988,7 @@ allocate_batch(Actor, Lineage, Ctx0) ->
                          Acc#{TxId => Tx#tx{
                            batches = (Tx#tx.batches)#{BatchId => true}}}
                      end, Ctx0#ctx.txs, TxIds),
-            put_context(Ctx0#ctx{txs = Txs1,
+            put_context(Ctx0#ctx{txs = Txs1, last_batch = {Actor, Lineage, BatchId},
                                  batches = (Ctx0#ctx.batches)#{BatchId => Batch}}),
             {ok, BatchId}
     end.
@@ -1025,6 +1055,7 @@ finish_transaction(Actor, Lineage, TxId, Ctx0) ->
                                      maps:is_key(Owner, Invocations1)
                                  end, Ctx1#ctx.proxies),
                     put_context(Ctx1#ctx{
+                                  last_batch = none,
                                   invocations = Invocations1,
                                   proxies = Proxies1,
                                   txs = maps:remove(TxId, Ctx1#ctx.txs),

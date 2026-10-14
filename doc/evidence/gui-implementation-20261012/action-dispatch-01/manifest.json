@@ -1,0 +1,14 @@
+[
+  {
+    "path": "priv/ontologies/common_predicates.pl",
+    "sha256": "8621a5f18c3c5b63dde99511c47ae2e5441ca9c78cfe2bcc91cca4259a5847d0"
+  },
+  {
+    "path": "src/predicates/quod_ontology_predicates.erl",
+    "sha256": "53581a88b283a18784b45942b6c2902cc598d23d2f04a7fd6fe639171eeb35b8"
+  },
+  {
+    "path": "test/quod_action_predicates_tests.erl",
+    "sha256": "d5ce42a90df262667047f0e9e8ea6ba1ebf9f53ce970f0b927c205dcabf342e1"
+  }
+]

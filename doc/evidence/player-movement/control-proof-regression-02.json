@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_transaction_predicates_tests,quod_transaction_tests,quod_proof_session_savepoint_tests,quod_scope_session_tests,quod_proof_session_tests,quod_proof_context_tests,quod_prolog_tests,quod_prolog_scope_target_tests,quod_client_goal_ingress_tests,quod_client_goal_endpoint_tests,quod_client_goal_target_tests,quod_client_goal_router_tests,quod_effect_journal_tests,quod_runtime_tests"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 15.95090389251709,
+  "manifest": "source-manifest-before-final-01.json"
+}

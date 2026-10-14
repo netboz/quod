@@ -1,0 +1,213 @@
+Starting ChromeDriver 157.0.8091.0 (6532fdea9c01b64cea9c3d3d9f10c241bc3dfb42-refs/branch-heads/8091@{#1}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 46193.
+[427080:427080:1008/120811.430068:WARNING:ui/ozone/platform/wayland/common/drm_render_node_path_finder.cc:178] Preferred drm_render_node not found, picking nvidia-drm
+[427080:427080:1008/120811.501743:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wl_shm version 1 but version 2 is available.
+[427080:427080:1008/120811.501798:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_cursor_shape_manager_v1 version 1 but version 2 is available.
+[427080:427080:1008/120811.501838:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_pointer_gestures_v1 version 1 but version 3 is available.
+[427080:427080:1008/120811.501897:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to ext_idle_notifier_v1 version 1 but version 2 is available.
+[427080:427080:1008/120811.501996:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to wp_color_manager_v1 version 1 but version 3 is available.
+[427080:427080:1008/120811.502068:WARNING:ui/ozone/platform/wayland/common/wayland_object.cc:120] Binding to zwp_linux_dmabuf_v1 version 4 but version 5 is available.
+[427135:427135:1008/120811.666220:WARNING:media/gpu/vaapi/vaapi_wrapper.cc:130] Should skip nVidia device named: nvidia-drm
+[427135:427135:1008/120811.668175:ERROR:ui/ozone/platform/wayland/gpu/wayland_surface_factory.cc:248] '--ozone-platform=wayland' is not compatible with Vulkan. Consider switching to '--ozone-platform=x11' or disabling Vulkan
+[Vulkan Loader] ERROR:          vkGetInstanceProcAddr: Invalid instance [VUID-vkGetInstanceProcAddr-instance-parameter]
+
+DevTools listening on ws://127.0.0.1:36851/devtools/browser/84af2367-f6e3-4414-a0aa-5cd5061e83d1
+Received signal 6
+#0 0x555eb36c72b3 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x67182b2)
+#1 0x555eb9044114 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0xc095113)
+#2 0x7fe2d9a3e6f0 (/usr/lib/libc.so.6+0x3e6ef)
+#3 0x7fe2d9a3e5d0 (/usr/lib/libc.so.6+0x3e5cf)
+#4 0x7fe2d9a25685 (/usr/lib/libc.so.6+0x25684)
+#5 0x7fe2b2ea27dd <unknown>
+#6 0x555eb4b59009 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x7baa008)
+#7 0x555eb9b37af2 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0xcb88af1)
+#8 0x555eb4df23c1 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x7e433c0)
+#9 0x555ebbb358bc (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0xeb868bb)
+#10 0x555eb2e1b1d0 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x5e6c1cf)
+#11 0x555eb31237d3 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x61747d2)
+#12 0x555eb377ec1c (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x67cfc1b)
+#13 0x555eb377e378 (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x67cf377)
+#14 0x555eb377cbae (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x67cdbad)
+#15 0x555eb377bf7f (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x67ccf7e)
+#16 0x7fe2d9a27781 (/usr/lib/libc.so.6+0x27780)
+#17 0x7fe2d9a278b9 (/usr/lib/libc.so.6+0x278b8)
+#18 0x555eb41372ea (/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chrome-linux64/chrome+0x71882e9)
+  r8: 0000000000000000  r9: 0000000000000000 r10: 00007fe2cf302340 r11: 0000000000000246
+ r12: 00007ffc4364a2c0 r13: 0000555eaf714153 r14: 0000000000000006 r15: 00000fcc000d7050
+  di: 000000000006847f  si: 000000000006847f  bp: 00007ffc4364a130  bx: 000000000006847f
+  dx: 0000000000000006  ax: 0000000000000000  cx: 00007fe2d9a9a11c  sp: 00007ffc4364a100
+  ip: 00007fe2d9a9a11c efl: 0000000000000246 cgf: 002b000000000033 erf: 0000000000000000
+ trp: 0000000000000000 msk: 0000000000000000 cr2: 0000000000000000
+[end of stack trace]
+[427080:427080:1008/120811.738024:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:170] Server doesn't support zcr_alpha_compositing_v1.
+[427080:427080:1008/120811.738033:WARNING:ui/ozone/platform/wayland/host/wayland_surface.cc:185] Server doesn't support overlay_prioritizer.
+[427181:1:1008/120811.762495:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[427080:427080:1008/120811.799975:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[427080:427080:1008/120811.800249:WARNING:ui/aura/window.cc:1501] StackChildLayerRelativeTo called with unmanaged layer(s). child=WebContentsViewAura child_managed=0 target=WebContentsViewAura target_managed=0
+[427197:1:1008/120811.804340:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[427196:1:1008/120811.807162:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[427080:427080:1008/120811.901265:WARNING:components/dbus/xdg/portal.cc:161] Failed to register with org.freedesktop.host.portal.Registry
+[427080:427080:1008/120811.968257:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.
+[427242:1:1008/120812.118705:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+[427251:1:1008/120812.128484:WARNING:content/child/runtime_features.cc:483] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrEnumerateInstanceExtensionProperties
+xrEnumerateInstanceExtensionProperties
+xrGetInstanceProcAddr
+xrCreateInstance
+[427080:427080:1008/120812.199335:ERROR:content/browser/gpu/gpu_process_host.cc:1042] GPU process exited unexpectedly: exit_code=134
+[427080:427080:1008/120812.199352:WARNING:content/browser/gpu/gpu_process_host.cc:1501] The GPU process has crashed 1 time(s)
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Google Chrome for Testing 157
+	createInfo->applicationInfo.applicationVersion: 8091
+	createInfo->applicationInfo.engineName: Chromium
+	createInfo->applicationInfo.engineVersion: 8091
+	createInfo->applicationInfo.apiVersion: 1.0.53
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetInstanceProcAddr
+xrGetSystem
+LOG in xrGetSystem: Selected devices
+	Head: 'Simulated HMD'
+	Eyes: '<none>'
+	Left: 'Simple Controller (Simulated)'
+	Right: 'Simple Controller (Simulated)'
+	Gamepad: '<none>'
+	Hand-Tracking Left (unobstructed): '<none>'
+	Hand-Tracking Right (unobstructed): '<none>'
+	Hand-Tracking Left (conforming): '<none>'
+	Hand-Tracking Right (conforming): '<none>'
+xrGetSystem
+xrGetSystem
+xrEnumerateEnvironmentBlendModes
+xrEnumerateEnvironmentBlendModes
+xrGetInstanceProcAddr
+xrDestroyInstance

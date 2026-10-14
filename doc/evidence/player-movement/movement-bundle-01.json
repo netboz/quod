@@ -1,0 +1,11 @@
+{
+  "command": [
+    "ui/node_modules/.bin/vite",
+    "build",
+    "ui",
+    "--outDir",
+    "/tmp/quod-player-movement-ui-01"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.7599582672119141
+}

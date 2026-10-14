@@ -1,0 +1,8 @@
+{
+  "desktop_checks": 18,
+  "passed": true,
+  "unchanged": true,
+  "boolean_checks": 46,
+  "chromedriver_exit": -15,
+  "fixture-server_exit": 143
+}

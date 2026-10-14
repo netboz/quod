@@ -1,0 +1,12 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "client/native/tools/connection_check.py",
+    "--onboarding",
+    "--evidence",
+    "/home/yan/src/quod/client/_build/godot-native/evidence/staged-entry-final-02/onboarding-fixture"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 5.250325097003952
+}

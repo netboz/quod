@@ -1,0 +1,6 @@
+{
+  "client/src/world.js": "85fe669ea0e5090d82ca7bc870934bf1448e60d585262d61bdea007c785885b8",
+  "client/src/world.d.ts": "463d6a34a9c37dde8bae86670407b5bc2bedc7eb3ed41fd5b6b4458b1004b563",
+  "client/test/world.test.js": "b52a51c0bee4e253bf1f26dc554ec8f393e78dac810001fbbaf015f76484226f",
+  "doc/gui-implementation-plan.md": "3c3a6b301fc73bcb08174e960d4be23a5b531345ec1eeccf14b1fc9e523f1047"
+}

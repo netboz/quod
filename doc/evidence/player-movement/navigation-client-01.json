@@ -1,0 +1,11 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "client/test/controlled-navigation.test.js",
+    "client/test/simulation.test.js",
+    "client/test/signed-client.test.js"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.3949406147003174
+}

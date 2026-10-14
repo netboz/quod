@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--locked",
+    "--manifest-path",
+    "client/native/Cargo.toml",
+    "-p",
+    "quod-client-core"
+  ],
+  "exit": 101,
+  "elapsed_seconds": 36.11387129902141
+}

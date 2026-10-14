@@ -1,0 +1,78 @@
+{
+  "scope": "GUI component foundation and common spatial controls; no opening/question/HUD lifecycle or headset acceptance",
+  "runs": [
+    {
+      "log": "quod-gui-descriptor-backend-04.log",
+      "command": "ERL_FLAGS='+S 4:4 +SDcpu 2 +SDio 2' rebar3 eunit --module=quod_gui_components_tests,quod_lobby_tests",
+      "exit": 0,
+      "tests": 17,
+      "failures": 0,
+      "seconds": 199.793
+    },
+    {
+      "log": "quod-gui-client-tests-06.log",
+      "command": "npm --prefix client test",
+      "exit": 0,
+      "tests": 15,
+      "failures": 0
+    },
+    {
+      "log": "quod-gui-ui-build-06.log",
+      "command": "env -u LD_LIBRARY_PATH -u LD_PRELOAD npm --prefix ui run build -- --outDir /tmp/quod-gui-ui-build-06",
+      "exit": 0
+    },
+    {
+      "log": "quod-gui-spatial-final-03.log",
+      "driver": "nimbalyst browser MCP, shared checkWorkspacePanelResult assertions",
+      "exit": 0,
+      "result": "spatial-final-result-03.json",
+      "browser_errors": []
+    }
+  ],
+  "review": "../renderer-review-01/assessment.md",
+  "files": {
+    "priv/ontologies/common_predicates.pl": "70f8d4f3fcc33cefe46d4ae8f3cba218ef741d08db0ca170931897bf2a2c654a",
+    "priv/ontologies/gui_instance.pl": "939c22e5ada1a11a4bd69493dce244eab4a3447e2718f7c4f27e816715e41a1d",
+    "priv/ontologies/quod_gui.pl": "9138754728bfcf5567c3934a326858e3a93ce9340f56cfd6f163b26485db7dea",
+    "priv/ontologies/lobby_instance.pl": "f788b1e5d6169c811c18934d1a98460c2e04e05b0dcc5e9f40d2af2e5252e87c",
+    "src/predicates/quod_common_primitives.erl": "ab51cdbd4f46faa69dd24e096721391aac7e8c68676045ef12c14b69d5e52e35",
+    "src/quod_erlog_db_local_prove.erl": "5e6a5a849753c97c86156efeb8774f9a43e5efc6814d0e55ff87ece709d9a657",
+    "client/src/prolog-read.js": "060aa24ad49f93029d47b8ef68b31cb962650bf0ace0ec9070ef6eb0f313fae8",
+    "client/src/prolog-read.d.ts": "0697c138bf951d52636640341612b51df933795c56146498e77379a317fe6bff",
+    "client/src/world.js": "6d98724c25a1709df42fa7b7345eff90145d22837042b5a8a8b3f4da723ebe7c",
+    "client/src/world.d.ts": "6484138c59bef66c207045cf192c22fd675a2e27e71ab978ddbf139ba09dea90",
+    "client/src/workspace-panel.js": "589e04558cca14841e31c108ddc3e4415b86b1a835ac5bb0a6e6d18f25537491",
+    "client/src/numeric-control.js": "b96cedaa1ddfce28cdcab721773c1ff6a96dc515b4e3c747eed05fce1a2679d0",
+    "client/package.json": "9db741e5ae40814f951390ee389096f26154159b79e5ce31c47ff9ab2c01e148",
+    "ui/src/Console.tsx": "70ab13b2e4736a2feb011a1ccf0b41c2e0860251d3ca2deae1f6d24a5292f2b8",
+    "ui/src/PrologEditor.tsx": "bd1f1ebc1fb4d4300e3dd76013f4ed4bf2f18620a4c5c549fed04f85a9807aba",
+    "ui/test/workspace-panel.fixture.html": "369395aee85059ee958be213fa7b3fe7ebb5954ca2915bd2a2b69b86432209be",
+    "client/test/world.test.js": "8758cdf8463ded1f7b122169e059d8204e15aa091bf3796b847f8840cce8e1f9",
+    "client/test/workspace-panel.fixture.js": "6013a0add48efea9669dfcac812a3c880d0d9a316a5a068ea2653deb13424fcb",
+    "client/test/workspace-panel.browser.mjs": "740f9854d223dd1aaa79d3530abc6917ead5c48d79d9c0b7e187e515af7f900b",
+    "test/quod_gui_components_tests.erl": "ebc90e316726c3fdf2c99b7abe785e328b7b92e5b0a5eb9ec91d6016827a6a6a",
+    "test/quod_lobby_tests.erl": "1d9ad2a64fe6364fc6731b0f2dbe43cbd4440d3a704f5ba0e8ad7fb7d97a03c2",
+    "test/fixtures/gui-components.pl": "c8e958aaa82c0b36842eea185fa1912923278d990f8d90c26908bfd75c6ecbc8"
+  },
+  "production_delta": {
+    "added": 850,
+    "removed": 91,
+    "net": 759,
+    "includes_untracked": [
+      "priv/ontologies/gui_instance.pl",
+      "client/src/numeric-control.js"
+    ],
+    "explanation": "New common schemas/binding and controls; replaced flat descriptor parsing/dispatch. User-owned documentation and unrelated files excluded."
+  },
+  "hardware_acceptance": false,
+  "full_release_gates": false,
+  "committed": false,
+  "correction": {
+    "previous_receipt": "renderer-receipt-01.json",
+    "finding": "DOM event error during schema replacement was not captured by previous assertions; explicit error audit failed, exit1",
+    "failed_log": "quod-gui-spatial-error-audit-01.log",
+    "fix": "Blur focused input before keyboard disconnection/control disposal; check browserErrors and source focus retirement",
+    "backend_reused": "Backend04 unchanged by client-only focus fix; exact hashes retained"
+  },
+  "focus_followup": "Focused inputs also blur when disabled and on disposal. Keyboard remains focus-driven; fixture checks locked text and hidden keyboard on source retirement."
+}

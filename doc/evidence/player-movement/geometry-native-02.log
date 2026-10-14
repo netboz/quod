@@ -1,0 +1,25 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+warning: unused import: `V3`
+ --> src/lib.rs:4:43
+  |
+4 | use geometry::{Geometry, Kind, Transform, V3};
+  |                                           ^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `quod_physics` (lib) generated 1 warning (run `cargo fix --lib -p quod_physics` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.93s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 5 tests
+
+thread 'geometry::tests::malformed_geometry_and_resource_exhaustion_fail' (347) panicked at /home/yan/src/quod/native/quod_physics/target/debug/build/rustler-243558e49743790e/out/nif_api.snippet.rs:611:39:
+unsafe precondition(s) violated: hint::unreachable_unchecked must never be reached
+
+This indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+thread caused non-unwinding panic. aborting.
+error: test failed, to rerun pass `--lib`
+
+Caused by:
+  process didn't exit successfully: `/home/yan/src/quod/native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e` (signal: 6, SIGABRT: process abort signal)

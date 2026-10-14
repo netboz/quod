@@ -703,7 +703,7 @@ provides a remotely authorized contact-proof interface.
 
 ## One client view
 
-The ordinary browser view opens `/api/simulation` with an exact visible
+The ordinary browser view opens `/api/views` with an exact visible
 space reference, representation mode and the dependencies of its signed
 navigation read. Physics is selected at that space's owner. The acting agent
 retains its identity and ordinary local or remote signed ingress route. Only an

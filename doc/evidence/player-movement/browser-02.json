@@ -1,0 +1,19 @@
+{
+  "result": "passed",
+  "renderer": "WebGL2 - Parallel shader compilation",
+  "errors": [],
+  "commands": 1,
+  "immersiveVR": false,
+  "browser": "Nimbalyst Electron 43.2.0 / Chrome 150.0.7871.129, Linux x86_64",
+  "fixture": "client/test/movement.fixture.html",
+  "rendering": "explicit public Scene.render in offscreen session",
+  "checks": [
+    "authored camera mount",
+    "accepted pose correction",
+    "disabled direct translation",
+    "unavailable world freezes travel",
+    "observer restoration",
+    "scene disposal"
+  ],
+  "hardware_validation": "not performed; isSessionSupported(immersive-vr) returned false"
+}

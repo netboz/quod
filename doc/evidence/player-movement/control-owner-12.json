@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_client_goal_tests,quod_physics_control_tests,quod_physics_tests"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 47.40191411972046
+}

@@ -214,7 +214,7 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
     projection: current => projections.push(current), frame: current => frames.push(current),
     unavailable: reason => statuses.push(reason),
     refreshing: () => refreshes.push(true),
-  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation',
+  }, { WebSocket: Socket, url: 'ws://localhost/api/views',
     world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [] })
   const viewId = async request => Buffer.from(await crypto.subtle.digest('SHA-256',
     Buffer.from(request.request, 'base64url'))).toString('base64url')
@@ -281,7 +281,7 @@ function renewalFixture(t, selection = 'active') {
   const stream = connectWorldView(identity, { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }, {
     projection: value => projections.push(value), frame: value => frames.push(value),
     unavailable: value => statuses.push(value), refreshing: value => refreshes.push(value),
-  }, { WebSocket: Socket, url: 'ws://localhost/api/simulation',
+  }, { WebSocket: Socket, url: 'ws://localhost/api/views',
     world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [],
     post: (url, body) => new Promise((resolve, reject) => {
       const post = { url, body, resolve, reject }; posts.push(post); nextPost?.(post); nextPost = null
@@ -441,7 +441,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
   }
   const connect = () => connectWorldView(identity, agent, { projection() {}, frame() {},
     unavailable: s => statuses.push(s), refused: (s, reasons) => refusals.push([s, reasons]) }, {
-    WebSocket: Socket, url: 'ws://localhost/api/simulation', world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [],
+    WebSocket: Socket, url: 'ws://localhost/api/views', world: { namespace: 'room', anchor: new Uint8Array(32), instance: atom('room') }, mode: 'playing', dependencies: [],
     post: (url, body) => { posts.push({ url, body }); return new Promise((resolve, reject) => { settle = { resolve, reject } }) },
   })
   const stream = connect()
@@ -449,7 +449,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
   try {
     await socket.onopen()
     const open = socket.sent[0]
-    assert.equal(open.world_namespace, 'room')
+    assert.equal(open.view_namespace, 'room')
     const view = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(open.request, 'base64url'))).toString('base64url')
     const frame = sample({ world: `world_ref(<<"room">>,<<"${anchor}">>,room)`,
       authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,

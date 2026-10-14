@@ -1,0 +1,43 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_runtime_tests:-subscribed_reaction_routes_live_certified_advance_once_test_/0-fun-16-/0
+[0;31m     Failure/Error: {error,
+                        {duplicate_routed_event,
+                            {from,<<"rtterms:738">>,
+                                <<176,155,42,246,207,120,122,8,46,217,199,24,
+                                  54,139,83,254,249,252,229,179,157,91,243,1,
+                                  51,170,172,51,81,252,210,221>>,
+                                {assert,{remote_ping,fresh}}}},
+                        [{quod_runtime_tests,assert_no_route,1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_runtime_tests.erl"},
+                              {line,1470}]},
+                         {quod_runtime_tests,
+                             '-subscribed_reaction_routes_live_certified_advance_once_test_/0-fun-16-',
+                             0,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_runtime_tests.erl"},
+                              {line,628}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 0.352 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

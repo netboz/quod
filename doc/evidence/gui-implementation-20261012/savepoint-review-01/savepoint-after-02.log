@@ -1,0 +1,124 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=SUPERVISOR REPORT==== 13-Oct-2026::03:37:01.590663 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.760.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,role => member,
+                                       data_dir =>
+                                           "/tmp/quod_ask_1131F2DBAD3284A1",
+                                       seed_peers => [],
+                                       genesis_file =>
+                                           "/tmp/quod_ask_1131F2DBAD3284A1/slow.pl",
+                                       external_predicate_modules => [],
+                                       node_id =>
+                                           <<57,166,51,101,169,19,60,98,210,38,
+                                             107,252,128,12,213,227,77,70,15,
+                                             190,76,147,16,177,57,21,115,53,
+                                             245,238,92,223>>,
+                                       max_proof_workers => 64,
+                                       max_scope_workers => 64,
+                                       proof_timeout_ms => 60000,
+                                       transaction_ttl_ms => 30000,
+                                       batch_window_ms => 25,
+                                       scope_timeout_ms => 60000,
+                                       scope_step_timeout_ms => 30000,
+                                       detailed_consensus_metrics => false}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::03:37:39.130610 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<14,230,
+                                                                                   13,2,
+                                                                                   116,44,
+                                                                                   35,55,
+                                                                                   246,67,
+                                                                                   235,239,
+                                                                                   179,233,
+                                                                                   117,226>>,
+                                                                                read_set =>
+                                                                                 true,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>},
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<17,178,
+                                                                                    172,19,
+                                                                                    200,160,
+                                                                                    20,164,
+                                                                                    99,152,
+                                                                                    147,228,
+                                                                                    201,82,
+                                                                                    170,117,
+                                                                                    102,79,
+                                                                                    22,74,
+                                                                                    50,47,
+                                                                                    115,164,
+                                                                                    158,241,
+                                                                                    14,202,
+                                                                                    22,233,
+                                                                                    249,39>>,
+                                                                                  <0.643.0>,
+                                                                                  #Ref<0.1650347476.804519938.201462>,
+                                                                                  <<14,230,
+                                                                                    13,2,
+                                                                                    116,44,
+                                                                                    35,55,
+                                                                                    246,67,
+                                                                                    235,239,
+                                                                                    179,233,
+                                                                                    117,226>>},
+                                                                                deadline_ms =>
+                                                                                 -576460705777,
+                                                                                request_binding =>
+                                                                                 none}],
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               99}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1276}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1250}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/home/yan/src/quod/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 39.130 seconds
+[0;32m152 tests, 0 failures
+[0m

@@ -1,0 +1,21 @@
+LOG in xrCreateInstance: Instance created
+	createInfo->applicationInfo.applicationName: Quod physical Vive prerequisite
+	createInfo->applicationInfo.applicationVersion: 0
+	createInfo->applicationInfo.engineName: 
+	createInfo->applicationInfo.engineVersion: 0
+	createInfo->applicationInfo.apiVersion: 1.0.0
+	appinfo.detected.engine.name: (null)
+	appinfo.detected.engine.version: 0.0.0
+	quirks.disable_vulkan_format_depth: false
+	quirks.disable_vulkan_format_depth_stencil: false
+	quirks.no_validation_error_in_create_ref_space: true
+	quirks.skip_end_session: false
+	quirks.parallel_views: false
+	quirks.no_texture_source_alpha: false
+
+xrCreateInstance=0
+ERROR [ipc_receive] recvmsg(3) failed: wrong size '0', expected '5'!
+ERROR [ipc_client_instance_is_system_available] ipc_call_instance_is_system_available failed: XRT_ERROR_IPC_FAILURE [/home/yan/src/quod/client/_build/webxr-linux/monado-src/src/xrt/ipc/client/ipc_client_instance.c:139]
+XR_ERROR_INSTANCE_LOST in xrGetSystem: Call to xrt_instance_is_system_available failed: XRT_ERROR_IPC_FAILURE
+xrGetSystem=-13 system=0
+xrDestroyInstance=0

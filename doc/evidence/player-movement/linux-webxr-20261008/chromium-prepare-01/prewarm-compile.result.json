@@ -1,0 +1,14 @@
+{
+  "command": [
+    "clang",
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "/home/yan/src/quod/client/_build/webxr-linux/prewarm-vulkan.c",
+    "-o",
+    "/home/yan/src/quod/client/_build/webxr-linux/prewarm-vulkan",
+    "-ldl"
+  ],
+  "exit_code": 0,
+  "source_sha256": "2e63c58aa119253e1a9b4d819a50b613d92ca46be20454a990f00467044aab90"
+}

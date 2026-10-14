@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"data\": {\n    \"result\": {\n      \"hiddenPreparation\": true,\n      \"singleAllocation\": true,\n      \"oneActivationRead\": true,\n      \"discoveredSurvivesExpiry\": true,\n      \"sharedDraft\": true,\n      \"remountPreserved\": true,\n      \"defaultsPreserved\": true,\n      \"defaultsChosen\": true,\n      \"stalePreserved\": true,\n      \"lockedAfterLoss\": true,\n      \"lockedAfterReopen\": true,\n      \"lockedAfterResolution\": true,\n      \"executeCount\": 1,\n      \"outcomeCount\": 1,\n      \"exactRequest\": true,\n      \"retained\": 0,\n      \"errors\": [],\n      \"browserErrors\": []\n    }\n  }\n}"
+    }
+  ],
+  "isError": false
+}

@@ -1,0 +1,2 @@
+ioctl(2, TCGETS2, 0x7f57ffffbd80)       = -1 ENOTTY (Inappropriate ioctl for device)
++++ exited with 0 +++

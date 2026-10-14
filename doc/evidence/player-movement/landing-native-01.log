@@ -1,0 +1,27 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.65s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-de00efb46f33918e)
+
+running 13 tests
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+test tests::falling_and_retained_installation ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+   Doc-tests quod_physics
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

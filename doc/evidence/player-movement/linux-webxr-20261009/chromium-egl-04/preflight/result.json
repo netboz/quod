@@ -1,0 +1,7 @@
+{
+  "browser_exit": 0,
+  "runtime_exit": 0,
+  "simulated": true,
+  "browser": "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/chrome",
+  "driver": "/home/yan/src/quod/client/_build/webxr-linux/chrome-testing/chromedriver-linux64/chromedriver"
+}

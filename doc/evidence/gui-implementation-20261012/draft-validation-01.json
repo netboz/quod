@@ -1,0 +1,20 @@
+{
+  "at": "2026-10-12T19:16:54.144450+00:00",
+  "plan_sha256": "097b6be01168b6d5e03ed28dbf23cf3af668d7471129c57946ec99b5425cf9e9",
+  "local_links": "all resolved",
+  "parser": "quod_client_goal_parser:parse_program/2 version 3, existing default-build BEAM",
+  "examples": [
+    {
+      "example": 1,
+      "result": "ok",
+      "clauses": 19
+    },
+    {
+      "example": 2,
+      "result": "ok",
+      "clauses": 1
+    }
+  ],
+  "parser_process_exit": 0,
+  "limitation": "Syntax check only. No GUI API implementation, production build, runtime GUI test or hardware test."
+}

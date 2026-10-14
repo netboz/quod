@@ -1,0 +1,11 @@
+{
+  "device": "physical Vive",
+  "simulation": false,
+  "headset_only": false,
+  "error": "WebXR preparation failed: {'error': 'TypeError: Failed to fetch dynamically imported module: http://localhost:5178/test/gui-hardware.fixture.js'}",
+  "chromedriver_exit": -15,
+  "runtime_exit": 0,
+  "fixture-server_exit": 143,
+  "restore_exit": 0,
+  "desktop_geometry_preserved": true
+}

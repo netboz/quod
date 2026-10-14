@@ -1,0 +1,7 @@
+npm notice run ui@0.0.0 dev
+npm notice run vite --host 127.0.0.1 --port 5193 --strictPort
+
+  VITE v8.1.5  ready in 611 ms
+
+  ➜  Local:   http://127.0.0.1:5193/
+3:13:47 PM [vite] (client) page reload test/gui-question.fixture.tsx

@@ -2,6 +2,42 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
+committed_assertions_use_existing_event_admission_and_composition_test_() ->
+    {timeout, 60, fun() ->
+        Guard = {me, {agent_instance_ref, {'Ns'}, {'Anchor'}, actor}},
+        Reaction = {':-', {react_on, {assert, {accepted_input, {'Value'}}},
+                           {record_ping, {'Value'}}}, Guard},
+        quod_agent_hosting_tests:with_host(fun(#{namespace := Ns, reference := Ref,
+                                                node := Node, key := Key}) ->
+            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            receive {agent_installed, _, _, #{reference := Ref}, _} -> ok
+            after 10000 -> error(assertion_test_agent_not_installed) end,
+            Before = maps:get(reactions_executed, quod_runtime:stats(Ns)),
+            commit(Ns, {assertz, {accepted_input, original}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, finished(Ref)),
+            ?assertEqual([original], pings(Ns)),
+            %% Neither explicit events nor repeated identical composition can
+            %% manufacture another committed assertion occurrence.
+            lists:foreach(fun(Event) ->
+                ?assertNot(quod_diff:valid_ops([{event, Event}])),
+                ?assertEqual({error, {erlog, {domain_error, event, Event}}},
+                             quod_ct:rp(Ns, {trigger_event, Event}))
+            end, [{assert, {accepted_input, forged}},
+                  {retract, {accepted_input, original}},
+                  {from, Ns, <<1:256>>, {assert, {accepted_input, forged}}}]),
+            commit(Ns, {assertz, {accepted_input, original}}),
+            commit(Ns, {asserta, {accepted_input, next}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, finished(Ref)),
+            %% An ordinary later event provides processing evidence for the
+            %% preceding notices; resulting fact dedup alone is insufficient.
+            commit(Ns, {trigger_event, {do_work, barrier}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, finished(Ref)),
+            ?assertEqual([original, next, barrier], pings(Ns)),
+            ?assertEqual(Before + 3,
+                         maps:get(reactions_executed, quod_runtime:stats(Ns)))
+        end, [Reaction, Reaction])
+    end}.
+
 ordinary_owned_reactions_use_signed_goal_admission_test_() ->
     {timeout, 60, fun() ->
         Ns = <<"host-test-agent">>,

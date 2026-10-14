@@ -1,0 +1,14 @@
+[
+  {
+    "file": "client/test/linux-webxr-run.py",
+    "ast": "passed",
+    "help": "passed",
+    "missing_browser_rejected": true
+  },
+  {
+    "file": "client/test/linux-webxr-preflight.py",
+    "ast": "passed",
+    "help": "passed",
+    "missing_browser_rejected": true
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "client/native/tools/run.py",
+    "--silent",
+    "--script",
+    "res://tests/lobby_render.gd"
+  ],
+  "exit": 1,
+  "diagnostic_failure": true,
+  "elapsed_seconds": 2.4061870670411736
+}

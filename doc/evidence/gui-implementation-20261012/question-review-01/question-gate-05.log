@@ -1,0 +1,15 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+=WARNING REPORT==== 13-Oct-2026::03:41:23.463168 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 3
+=WARNING REPORT==== 13-Oct-2026::03:41:23.920564 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 4
+=WARNING REPORT==== 13-Oct-2026::03:41:25.960304 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 7
+[0;32m.[0m
+Finished in 4.256 seconds
+[0;32m1 tests, 0 failures
+[0m

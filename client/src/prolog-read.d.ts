@@ -3,3 +3,4 @@ import type { PrologTerm } from './prolog-term.js'
 export function readTerm(text: string): PrologTerm
 /** Read a ground projection list, rejecting partial tails at every depth. */
 export function readList(text: string): PrologTerm[]
+export function requireProjection(term: import('./prolog-term.js').PrologTerm): void

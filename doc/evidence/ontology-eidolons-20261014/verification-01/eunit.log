@@ -1,0 +1,27 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_common_primitives_tests:filtered_source_uses_the_same_chunker_and_records_absence_test/0
+[0;31m     Failure/Error: ?assertEqual({source_chunk,done,<<114,111,117,116,101,95,115,116,97,116,117,115,40,108,105,118,101,44,32,117,110,97,118,97,105,108,97,98,108,101,41,32,58,45,32,116,114,117,101,46,10>>}, value ( { 'Chunk' } , { '$quod_source_chunk' , { terms , [ { route_status , live , unavailable } ] } , 4096 , { 'Chunk' } } , St ))
+       expected: {source_chunk,done,
+                               <<"route_status(live, unavailable) :- true.\n">>}
+            got: {source_chunk,done,<<"route_status(live, unavailable).\n">>}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+  2) quod_lobby_tests:-scoped_routes_reuse_the_directory_and_preserve_private_admission_test_/0-fun-13-/0
+[0;31m     Failure/Error: ?assertEqual(<<114,111,117,116,101,95,115,116,97,116,117,115,40,108,105,118,101,44,32,117,110,97,118,97,105,108,97,98,108,101,41,32,58,45,32,116,114,117,101,46,10>>, complete_inspection ( Ctx , Target , Lens ))
+       expected: <<"route_status(live, unavailable) :- true.\n">>
+            got: <<"route_status(live, unavailable).\n">>[0m
+[0;36m     %% eunit_proc.erl:593:in `eunit_proc:run_group/2`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 225.836 seconds
+[0;31m88 tests, 2 failures
+[0m===> Error running tests

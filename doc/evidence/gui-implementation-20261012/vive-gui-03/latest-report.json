@@ -1,0 +1,9 @@
+{
+  "edits": [],
+  "entries": 0,
+  "errors": [
+    "Error: WebXR can only be served over HTTPS"
+  ],
+  "immersive": false,
+  "submissions": []
+}

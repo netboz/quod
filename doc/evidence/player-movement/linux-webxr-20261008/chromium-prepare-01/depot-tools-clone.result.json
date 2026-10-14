@@ -1,0 +1,11 @@
+{
+  "command": [
+    "git",
+    "clone",
+    "--depth=1",
+    "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "/home/yan/src/quod/client/_build/webxr-linux/depot_tools"
+  ],
+  "exit_code": 0,
+  "seconds": 5.575
+}

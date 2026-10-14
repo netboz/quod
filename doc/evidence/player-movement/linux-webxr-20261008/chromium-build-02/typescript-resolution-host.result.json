@@ -1,0 +1,11 @@
+{
+  "command": [
+    "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/third_party/node/linux/node-linux-x64/bin/node",
+    "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/third_party/node/node_modules/typescript/bin/tsc",
+    "--project",
+    "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/gen/ui/webui/resources/tools/eslint/tsconfig_build_ts.json",
+    "--traceResolution",
+    "--listFilesOnly"
+  ],
+  "exit_code": 0
+}

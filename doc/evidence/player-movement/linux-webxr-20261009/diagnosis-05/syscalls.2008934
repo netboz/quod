@@ -1,0 +1,145 @@
+openat(AT_FDCWD, "/proc/self/cmdline", O_RDONLY|O_CLOEXEC) = 596
+openat(AT_FDCWD, "/proc/self/stat", O_RDONLY|O_CLOEXEC) = 601
+openat(AT_FDCWD, "/proc/stat", O_RDONLY|O_CLOEXEC) = 601
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 611
+connect(611, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 611
+connect(611, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 612
+connect(612, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 613
+connect(613, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 611
+connect(611, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:81b::200e", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 611
+connect(611, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("172.217.16.238")}, 16) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 611
+connect(611, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:81b::200e", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 616
+connect(616, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 614
+connect(614, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.173.84")}, 16) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c06::54", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c06::54", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 616
+connect(616, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 617
+connect(617, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4827:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:482d:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 620
+connect(620, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4829:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:482b:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 622
+connect(622, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4828:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 623
+connect(623, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4826:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 624
+connect(624, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:482c:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 625
+connect(625, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:482a:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 616
+connect(616, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.151.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.157.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.155.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 620
+connect(620, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.156.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.150.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 622
+connect(622, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.153.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 623
+connect(623, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.152.119")}, 16) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 624
+connect(624, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("142.251.154.119")}, 16) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 616
+connect(616, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4827:7700::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4827:7700::", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 617
+connect(617, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("142.251.151.119")}, 16) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c06::54", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4827:7700::", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 611
+connect(611, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c06::54", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 614
+connect(614, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4827:7700::", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 617
+connect(617, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:80f::200e", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 615
+connect(615, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("172.217.22.78")}, 16) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 615
+connect(615, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:80f::200e", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 617
+connect(617, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 617
+connect(617, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 620
+connect(620, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c09::8b", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("74.125.206.102")}, 16) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 617
+connect(617, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:400c:c09::8b", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 620
+connect(620, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2600:1900:4110:86f::", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 619
+connect(619, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("34.104.35.123")}, 16) = 0
+socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP) = 619
+connect(619, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2600:1900:4110:86f::", &sin6_addr), sin6_scope_id=0}, 28) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 622
+connect(622, {sa_family=AF_INET6, sin6_port=htons(53), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "fd0f:ee:b0::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 623
+connect(623, {sa_family=AF_INET6, sin6_port=htons(80), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:10::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("173.194.129.1")}, 16) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 621
+connect(621, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2a00:1450:4007:10::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP) = 618
+connect(618, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:4860:4860::8888", &sin6_addr), sin6_scope_id=0}, 28) = 0
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 618
+connect(618, {sa_family=AF_INET, sin_port=htons(43357), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+socket(AF_INET, SOCK_DGRAM, IPPROTO_IP) = 622
+connect(622, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("127.0.0.1")}, 16) = 0
+socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) = 622
+connect(622, {sa_family=AF_INET, sin_port=htons(43357), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+openat(AT_FDCWD, "/proc/self/fd/618", O_RDONLY|O_CLOEXEC) = 623
++++ exited with 0 +++

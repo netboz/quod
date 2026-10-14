@@ -1,0 +1,7 @@
+{
+  "command": [
+    "/home/yan/src/quod/client/_build/webxr-linux/prewarm-vulkan"
+  ],
+  "exit_code": 0,
+  "scope": "unsandboxed native driver-loading order only; no WebXR session"
+}

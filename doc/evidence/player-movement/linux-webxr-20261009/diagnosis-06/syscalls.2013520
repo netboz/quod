@@ -1,0 +1,4 @@
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a4994c0, si_syscall=__NR_sched_getaffinity, si_arch=AUDIT_ARCH_X86_64} ---
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a5032eb, si_syscall=__NR_sched_getparam, si_arch=AUDIT_ARCH_X86_64} ---
+--- SIGSYS {si_signo=SIGSYS, si_code=SYS_SECCOMP, si_errno=ENXIO, si_call_addr=0x7f1f2a50331b, si_syscall=__NR_sched_getscheduler, si_arch=AUDIT_ARCH_X86_64} ---
++++ exited with 0 +++

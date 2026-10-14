@@ -1,0 +1,19 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Running Common Test suites...
+%%% quod_ask_SUITE: 
+%%% quod_ask_SUITE ==> remote_gui_opening_observer_receiver: FAILED
+%%% quod_ask_SUITE ==> {{remote_gui_projection_missing,
+     [{quod_ask_SUITE,gui_receiver_projection,1,
+          [{file,"/home/yan/src/quod/test/quod_ask_SUITE.erl"},{line,891}]},
+      {quod_ask_SUITE,gui_receiver_loop,3,
+          [{file,"/home/yan/src/quod/test/quod_ask_SUITE.erl"},{line,871}]}]},
+ {gen_server,call,[<25995.444.0>,renew,20000]}}
+
+EXPERIMENTAL: Writing retry specification at /home/yan/src/quod/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 1 tests. Passed 0 tests. 
+Results written to "/home/yan/src/quod/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

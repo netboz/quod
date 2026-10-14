@@ -1,0 +1,6 @@
+{
+  "dialogs": [],
+  "focused": "<body><header>\n  <script type=\"module\">import { injectIntoGlobalHook } from \"/@react-refresh\";\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () => {};\nwindow.$RefreshSig$ = () => (type) => type;</script>\n\n  <script type=\"module\" src=\"/@vite/client\"></script>\n\n  <button id=\"enter\">Enter VR</but",
+  "images": [],
+  "stage": null
+}

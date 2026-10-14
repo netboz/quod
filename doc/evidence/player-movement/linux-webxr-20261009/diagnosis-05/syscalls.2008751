@@ -1,0 +1,86 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f20115f0780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f20115f0780) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/.org.chromium.Chromium.Local State.Gxo3Q2", O_RDWR|O_CREAT|O_EXCL, 0600) = 626
+rename("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/.org.chromium.Chromium.Local State.Gxo3Q2", "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Local State") = 0
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47840, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate", 0x7f20115ec360) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate", 0x7f20115ede60) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 645
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(645, F2FS_IOC_GET_FEATURES, 0x7f20115ee494) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate-journal", 0x7f20115ee360) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate-wal", 0x7f20115ee330) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ServerCertificate-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 642
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 646
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Service Worker/Database/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/js", 0x7f20115ee9c0, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/webui_js", 0x7f20115ee9c0, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory)
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Code Cache/wasm", 0x7f20115ee9e0, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates", 0x7f20115ee270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=280, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates", 0700) = 0
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 646
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates/LOCK", O_RDWR|O_CREAT, 0600) = 656
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/ClientCertificates__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Local Storage/leveldb", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/LocalStorage-wal", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/LocalStorage-wal", O_RDWR|O_CREAT, 0600) = 678
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/TrustTokenKeyCommitments", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/TrustTokenKeyCommitments", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=380, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/TrustTokenKeyCommitments", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/TrustTokenKeyCommitments", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 684
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/TrustTokenKeyCommitments", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/indigo", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/indigo", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=480, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/indigo", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/indigo", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 683
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/indigo", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 683
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/PKIMetadata", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PKIMetadata", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=580, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PKIMetadata", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PKIMetadata", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 683
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PKIMetadata", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/WasmTtsEngine", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/WasmTtsEngine", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=740, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/WasmTtsEngine", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/WasmTtsEngine", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/WasmTtsEngine", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/SODALanguagePacks/en-US", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks/en-US", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks", 0x7f20115ee4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=800, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks", 0700) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks/en-US", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks/en-US", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/SODALanguagePacks/en-US", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db", 0x7f20115ee270) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=940, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db", 0700) = 0
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db/LOG", F_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db/LOG", O_WRONLY|O_CREAT|O_TRUNC, 0600) = 713
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db/LOCK", O_RDWR) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db/LOCK", O_RDWR|O_CREAT, 0600) = 716
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db/CURRENT", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/discounts_db__tmp_for_rebuild", F_OK) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Platform Notifications", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=40960, ...}) = 0
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=40960, ...}) = 0
++++ exited with 0 +++

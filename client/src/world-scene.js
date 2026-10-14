@@ -18,7 +18,7 @@ import { paintMarks, clearMarks, paintBodyPoses } from './scene.js'
 import { createRenderResources } from './render-resources.js'
 import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
-import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
+import { WebXRState, WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
 import { createControlledNavigation } from './controlled-navigation.js'
 
 const MENU_RADIUS = 0.36
@@ -58,6 +58,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   let menu = { entries: [], activate: null, root: null, items: [], selected: null }
   let workspace = null
   let panel = null
+  const appearanceSettings = { opacity: 0.78, scale: 1, distance: 1.6 }
   let immersive = false
   const contactMask = new Layer('physical-view-contact', null, scene, false, new Color4(1, 1, 1, 1))
   const contactText = new DynamicTexture('physical-view-contact-text', { width: 2048, height: 1024 }, scene, false)
@@ -120,7 +121,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     const cameraPosition = scene.activeCamera.globalPosition
     const direction = scene.activeCamera.getForwardRay().direction
     root.position.copyFrom(cameraPosition.add(direction.scale(1.15)))
-    root.lookAt(cameraPosition, Math.PI)
+    root.lookAt(cameraPosition)
     const count = menu.entries.length
     const items = menu.entries.map((entry, index) => {
       const angle = index * 2 * Math.PI / count
@@ -200,7 +201,8 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   const resize = () => engine.resize()
   function showWorkspace() {
     if (workspace && immersive) {
-      panel ??= createWorkspacePanel(scene)
+      if (!panel && xr.baseExperience.camera.trackingState !== WebXRTrackingState.TRACKING) return
+      panel ??= createWorkspacePanel(scene, appearanceSettings, resources)
       panel.update(workspace, true)
     } else if (panel) {
       panel.dispose()
@@ -236,8 +238,21 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     async immersive() {
       navigation.release()
       if (!xr) {
-        await import('@babylonjs/core/XR/webXRDefaultExperience.js')
-        xr = await scene.createDefaultXRExperienceAsync({ disableTeleportation: true })
+        await import('@babylonjs/core/Loading/Plugins/babylonFileLoader.js')
+        await import('@babylonjs/loaders/glTF/index.js')
+        await import('@babylonjs/core/Materials/Node/Blocks/index.js')
+        await import('@babylonjs/core/Materials/colorCurves.js')
+        await import('@babylonjs/core/XR/features/WebXRControllerPointerSelection.js')
+        await import('@babylonjs/core/XR/features/WebXRNearInteraction.js')
+        await import('@babylonjs/core/XR/features/WebXRHandTracking.js')
+        const { WebXRDefaultExperience } = await import('@babylonjs/core/XR/webXRDefaultExperience.js')
+        xr = await WebXRDefaultExperience.CreateAsync(scene, { disableTeleportation: true })
+        xr.baseExperience.camera.onTrackingStateChanged.add(state => {
+          if (state === WebXRTrackingState.TRACKING) {
+            // The notice precedes the camera pose update; place after that update.
+            scene.onBeforeRenderObservable.addOnce(showWorkspace)
+          }
+        })
         xr.baseExperience.onStateChangedObservable.add(state => {
           immersive = state === WebXRState.IN_XR
           playerNavigation.xr(immersive ? xr.baseExperience.camera : null)

@@ -96,6 +96,10 @@ exact_selection_materializes_only_live_batches_test() ->
                              ActorB, <<"b">>, retained_for_cleanup),
         {ok, StaleBatch} = quod_proof_context:tx_request(
                              ActorA, {allocate, Lineage}),
+        %% Make two genuinely distinct distributed checkpoints. Purely local
+        %% alternatives can share an as-yet unmaterialized foreign checkpoint.
+        ok = quod_proof_context:materialize(
+               selection(Lineage, [StaleBatch]), ActorB),
         {ok, LiveBatch} = quod_proof_context:tx_request(
                             ActorA, {allocate, Lineage}),
 
@@ -131,6 +135,71 @@ exact_selection_materializes_only_live_batches_test() ->
         quod_proof_session:stop(SessionC),
         PidB ! stop,
         PidC ! stop
+    end.
+
+unmaterialized_batches_reuse_only_exact_actor_and_lineage_test() ->
+    _ = start_context(crypto:strong_rand_bytes(32)),
+    SessionA = quod_proof_session:start(committed([]), #{}),
+    SessionB = quod_proof_session:start(committed([]), #{}),
+    PidB = spawn(fun wait/0),
+    try
+        ScopeA = register_local_scope(<<"a">>, 1, self(), SessionA),
+        ScopeB = register_local_scope(<<"b">>, 2, PidB, SessionB),
+        ActorA = actor(ScopeA),
+        ActorB = actor(ScopeB),
+        ok = quod_proof_context:register_invocation(ActorA, empty_selection()),
+        Frame = opaque_id(),
+        {ok, Lineage, [{Frame, Tx, Lineage, _}]} =
+            quod_proof_context:tx_request(ActorA, {activate, none, [Frame]}),
+        ok = quod_proof_context:register_invocation(ActorB, selection(Lineage, [])),
+        {ok, First} = quod_proof_context:tx_request(ActorA, {allocate, Lineage}),
+        lists:foreach(fun(_) ->
+            ?assertEqual({ok, First},
+                quod_proof_context:tx_request(ActorA, {allocate, Lineage}))
+        end, lists:seq(1, 3 * ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
+        ?assertEqual({error, not_allowed},
+            quod_proof_context:tx_request(actor(ScopeA), {allocate, Lineage})),
+        %% A cut can remove every live holder while the unused batch remains.
+        %% Foreign work with an empty selection must not create its snapshot.
+        ok = quod_proof_context:materialize(selection(Lineage, []), ActorB),
+        prove_write(SessionB, {before_reuse, retained}),
+        ?assertEqual({ok, First},
+            quod_proof_context:tx_request(ActorA, {allocate, Lineage})),
+        ok = quod_proof_context:materialize(selection(Lineage, [First]), ActorB),
+        prove_write(SessionB, {after_reuse, removed}),
+        ok = quod_proof_context:tx_request(ActorA, {restore, Lineage, [First]}),
+        ?assert(has_assert({before_reuse, retained}, quod_proof_session:local_changes(SessionB))),
+        ?assertNot(has_assert({after_reuse, removed}, quod_proof_session:local_changes(SessionB))),
+        prove_write(SessionB, {first, retained}),
+        {ok, Second} = quod_proof_context:tx_request(ActorA, {allocate, Lineage}),
+        ?assertNotEqual(First, Second),
+        ok = quod_proof_context:materialize(selection(Lineage, [Second]), ActorB),
+        prove_write(SessionB, {second, removed}),
+        ok = quod_proof_context:tx_request(ActorA, {restore, Lineage, [Second]}),
+        ?assert(has_assert({first, retained}, quod_proof_session:local_changes(SessionB))),
+        ?assertNot(has_assert({second, removed}, quod_proof_session:local_changes(SessionB))),
+        {ok, Third} = quod_proof_context:tx_request(ActorA, {allocate, Lineage}),
+        ?assertNotEqual(Second, Third),
+        %% A reentrant invocation of the same ontology is a different actor.
+        Reentrant = actor(ScopeA),
+        ok = quod_proof_context:register_invocation(Reentrant, selection(Lineage, [])),
+        {ok, ReentrantBatch} = quod_proof_context:tx_request(Reentrant, {allocate, Lineage}),
+        ?assertNotEqual(Third, ReentrantBatch),
+        quod_proof_context:unregister_invocation(Reentrant),
+        ChildFrame = opaque_id(),
+        {ok, ChildLineage, [{ChildFrame, ChildTx, ChildLineage, _}]} =
+            quod_proof_context:tx_request(ActorA, {activate, Lineage, [ChildFrame]}),
+        {ok, ChildBatch} = quod_proof_context:tx_request(ActorA, {allocate, ChildLineage}),
+        {ok, Lineage} = quod_proof_context:tx_request(ActorA, {finish, ChildLineage, ChildTx}),
+        {ok, ParentBatch} = quod_proof_context:tx_request(ActorA, {allocate, Lineage}),
+        ?assertNotEqual(ChildBatch, ParentBatch),
+        {ok, none} = quod_proof_context:tx_request(ActorA, {finish, Lineage, Tx}),
+        ?assertEqual({error, not_allowed},
+            quod_proof_context:tx_request(ActorA, {allocate, Lineage}))
+    after
+        quod_proof_context:stop(fun quod_scope_session:close/1, fun(_) -> ok end),
+        quod_proof_session:stop(SessionA), quod_proof_session:stop(SessionB),
+        PidB ! stop
     end.
 
 invalid_selection_is_atomic_test() ->
@@ -212,6 +281,8 @@ controller_transaction_and_lineage_caps_share_public_error_test() ->
 controller_batch_cap_uses_same_public_error_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     Session = quod_proof_session:start(committed([]), #{}),
+    Foreign = quod_proof_session:start(committed([]), #{}),
+    Pid = spawn(fun wait/0),
     try
         ScopeId = register_local_scope(<<"a">>, 1, self(), Session),
         Actor = actor(ScopeId),
@@ -220,12 +291,12 @@ controller_batch_cap_uses_same_public_error_test() ->
         Frame = opaque_id(),
         {ok, Lineage, _} = quod_proof_context:tx_request(
                              Actor, {activate, none, [Frame]}),
+        Target = actor(register_local_scope(<<"b">>, 2, Pid, Foreign)),
+        ok = quod_proof_context:register_invocation(Target, selection(Lineage, [])),
         lists:foreach(
           fun(_) ->
-              ?assertMatch(
-                 {ok, <<_:128>>},
-                 quod_proof_context:tx_request(
-                   Actor, {allocate, Lineage}))
+              {ok, Batch} = quod_proof_context:tx_request(Actor, {allocate, Lineage}),
+              ok = quod_proof_context:materialize(selection(Lineage, [Batch]), Target)
           end,
           lists:seq(2, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
         ?assertEqual(
@@ -236,7 +307,8 @@ controller_batch_cap_uses_same_public_error_test() ->
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,
                                 fun(_Proxy) -> ok end),
-        quod_proof_session:stop(Session)
+        quod_proof_session:stop(Session), quod_proof_session:stop(Foreign),
+        Pid ! stop
     end.
 
 malformed_controller_lists_fail_before_mutation_test() ->

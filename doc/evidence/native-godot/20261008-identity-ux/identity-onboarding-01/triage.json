@@ -1,0 +1,7 @@
+{
+  "pass": false,
+  "launcher_timeout_seconds": 45,
+  "engine_error": "GDScript could not infer changed variable type; corrected explicit bool annotation",
+  "superseded_by": "identity-final-01/onboarding-fixture",
+  "notes": "Original log retained. Harness now records exceptions and launcher execs Godot directly so timeout targets the engine process."
+}

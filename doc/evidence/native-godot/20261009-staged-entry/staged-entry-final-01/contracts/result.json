@@ -1,0 +1,9 @@
+{
+  "command": [
+    "node",
+    "client/native/tools/contracts.mjs"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.9098847120185383
+}

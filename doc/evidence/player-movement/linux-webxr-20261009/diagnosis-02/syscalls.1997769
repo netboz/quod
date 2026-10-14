@@ -1,0 +1,36 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7ff0f2bf8780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7ff0f2bf8780) = -1 ENOENT (No such file or directory)
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47760, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=340, ...}) = 0
+lstat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account", 0x7ff0f2bf3c00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account", 0x7ff0f2bf5700) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 660
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(660, F2FS_IOC_GET_FEATURES, 0x7ff0f2bf5d34) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account-journal", 0x7ff0f2bf5c00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account-wal", 0x7ff0f2bf5bd0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data For Account-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 661
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 667
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload", F_OK) = 0
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", F_OK) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", O_RDONLY|O_CLOEXEC) = 689
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/preloaded_data.pb", F_OK) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/MEIPreload", 0x7ff0f2bf64e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=600, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/MEIPreload", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 688
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 690
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", 0x7ff0f2bf6520) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=760, ...}) = 0
+mkdir("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 685
+openat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 684
+newfstatat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", {st_mode=S_IFDIR|0700, st_size=40, ...}, AT_SYMLINK_NOFOLLOW) = 0
+unlinkat(AT_FDCWD, "/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/aim_eligibility_extension", AT_REMOVEDIR) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=40960, ...}) = 0
+stat("/tmp/quod-webxr-jlq3kxwe/data/chrome-profile/Default/Login Data", {st_mode=S_IFREG|0600, st_size=40960, ...}) = 0
++++ exited with 0 +++

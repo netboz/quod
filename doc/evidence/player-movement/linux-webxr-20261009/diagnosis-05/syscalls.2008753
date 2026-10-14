@@ -1,0 +1,39 @@
+stat("/sys/fs/cgroup/cpuset/chrome", 0x7f20105ee780) = -1 ENOENT (No such file or directory)
+stat("/sys/fs/cgroup/schedtune/chrome", 0x7f20105ee780) = -1 ENOENT (No such file or directory)
+lstat("/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=47840, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn", {st_mode=S_IFDIR|0700, st_size=120, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data", {st_mode=S_IFDIR|0700, st_size=60, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=320, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", {st_mode=S_IFDIR|0700, st_size=340, ...}) = 0
+lstat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", 0x7f20105e9c00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", 0x7f20105eb700) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 656
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+ioctl(656, F2FS_IOC_GET_FEATURES, 0x7f20105ebd34) = -1 ENOTTY (Inappropriate ioctl for device)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account-journal", 0x7f20105ebc00) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account-wal", 0x7f20105ebbd0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account", {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/Login Data For Account-journal", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600) = 663
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default", O_RDONLY|O_CLOEXEC) = 668
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/PrivacySandboxAttestationsPreloaded", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PrivacySandboxAttestationsPreloaded", 0x7f20105ec4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=380, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PrivacySandboxAttestationsPreloaded", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PrivacySandboxAttestationsPreloaded", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/PrivacySandboxAttestationsPreloaded", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 682
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload", F_OK) = 0
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", F_OK) = 0
+openat(AT_FDCWD, "/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/manifest.json", O_RDONLY|O_CLOEXEC) = 684
+access("/home/yan/src/quod/client/_build/webxr-linux/chromium/src/out/QuodWebXR/MEIPreload/preloaded_data.pb", F_OK) = 0
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/MEIPreload", 0x7f20105ec4e0) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile", {st_mode=S_IFDIR|0700, st_size=620, ...}) = 0
+mkdir("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/MEIPreload", 0700) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 680
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/MEIPreload", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 686
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/LocalStorage-wal", {st_mode=S_IFREG|0600, st_size=28872, ...}) = 0
+openat(AT_FDCWD, "/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+access("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/Default/BookmarkMergedSurfaceOrdering", F_OK) = -1 ENOENT (No such file or directory)
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/segmentation_platform/ukm_db", {st_mode=S_IFREG|0600, st_size=4096, ...}) = 0
+unlink("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/segmentation_platform/ukm_db-wal") = 0
+stat("/tmp/quod-webxr-h_qczpgn/data/chrome-profile/segmentation_platform/ukm_db", {st_mode=S_IFREG|0600, st_size=49152, ...}) = 0
++++ exited with 0 +++

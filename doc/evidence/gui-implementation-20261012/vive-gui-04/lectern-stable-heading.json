@@ -1,0 +1,14 @@
+{
+  "script": "const done=arguments[arguments.length-1]; import(performance.getEntriesByType('resource').find(r=>r.name.includes('engineStore')).name).then(({EngineStore})=>{const scene=EngineStore.LastCreatedScene,m=scene.getMeshByName('workspace'),height=m.position.y;window.guiPlacementTraceBeforeFix=window.guiPlacementTrace;scene.onAfterRenderObservable.remove(window.guiPlacementObserver);if(window.guiTestFollow)scene.onBeforeRenderObservable.remove(window.guiTestFollow);const trace=window.guiPlacementTrace={frames:0,held:0,events:[],recent:[],maxYawStep:0};let previous=null;window.guiTestFollow=scene.onBeforeRenderObservable.add(()=>{const c=scene.activeCamera;c.getViewMatrix(true);const p=c.globalPosition,q=c.rotationQuaternion;if(c.trackingState!==2||!q||Math.hypot(q.y,q.w)<.001){trace.held++;return;}const yaw=2*Math.atan2(q.y,q.w);m.position.set(p.x-Math.sin(yaw)*1.9,height,p.z-Math.cos(yaw)*1.9);m.rotationQuaternion=null;m.rotation.set(-40*Math.PI/180,yaw,0);});window.guiPlacementObserver=scene.onAfterRenderObservable.add(()=>{const c=scene.activeCamera,d=c.getForwardRay().direction;const row={t:performance.now(),tracking:c.trackingState,p:c.globalPosition.asArray(),q:c.rotationQuaternion?.asArray(),direction:d.asArray(),panel:m.position.asArray(),yaw:m.rotation.y,visible:m.isVisible};trace.frames++;if(previous){row.yawStep=Math.abs(Math.atan2(Math.sin(row.yaw-previous.yaw),Math.cos(row.yaw-previous.yaw)));trace.maxYawStep=Math.max(trace.maxYawStep,row.yawStep);if(row.yawStep>.15||row.tracking!==previous.tracking){trace.events.push({before:previous,after:row});if(trace.events.length>100)trace.events.shift();}}trace.recent.push(row);if(trace.recent.length>900)trace.recent.shift();previous=row;});done({height,slopeDegrees:50,distance:1.9,scale:1.5,heading:'quaternion twist about vertical',trackingRequired:2,parent:scene.activeCamera.parent?.name??null});}).catch(e=>done({error:String(e)}));",
+  "result": {
+    "value": {
+      "distance": 1.9,
+      "heading": "quaternion twist about vertical",
+      "height": 0.2881758093833923,
+      "parent": null,
+      "scale": 1.5,
+      "slopeDegrees": 50,
+      "trackingRequired": 2
+    }
+  }
+}

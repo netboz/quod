@@ -1,0 +1,33 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::17:13:54.287210 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:13:56.167586 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 13-Oct-2026::17:13:57.078134 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 13-Oct-2026::17:13:58.201460 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 13-Oct-2026::17:14:05.435237 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 8
+=WARNING REPORT==== 13-Oct-2026::17:14:05.441280 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 8
+[0;31mF[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_question_tests:-committed_answer_automatically_completes_test_/0-fun-23-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , _ }, quod_ct : rp ( Ns , { assertz , BadRow } ))
+       expected: = { ok , _ , _ }
+            got: {fail,[{not_allowed,<<"host-test-agent">>}]}[0m
+[0;36m     %% eunit_proc.erl:537:in `eunit_proc:handle_test/2`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_9B0D3ECB51F96705
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_9B0D3ECB51F96705
+[0m
+
+Finished in 23.524 seconds
+[0;31m5 tests, 1 failures
+[0m===> Error running tests

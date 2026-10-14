@@ -1,0 +1,2 @@
+ninja: Entering directory `out/QuodWebXR'
+[1/1] ACTION //ui/webui/resources/tools/eslint:build_ts(//build/toolchain/linux:clang_x64)

@@ -1,0 +1,44 @@
+{
+  "completed": "2026-10-14T21:42:10.239148+00:00",
+  "version": "0.7.266",
+  "implementation_commit": "c6894d21598519f47eeb23d534b8178fedbb4b76",
+  "release_commit": "ea03009e0d2fbafb81fd21d9010794a98003bd4b",
+  "image": "192.168.1.11:5000/quod:0.7.266@sha256:330ff596c6b8c3faf1976ef29d3713c69c728ae0519577c165f0dff027b796fc",
+  "origin": "https://192.168.1.10:30519",
+  "candidate": {
+    "version": 78,
+    "modify_index": 859202,
+    "root": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+    "healthy_nodes": 8,
+    "ready_system_ontologies_per_node": 18,
+    "volumes_unchanged": true,
+    "principal_identities_unchanged": true
+  },
+  "checks": {
+    "release_gates": 11,
+    "eunit": 3976,
+    "ct": 148,
+    "client": 180,
+    "native": 35,
+    "browser_assets": 365,
+    "live_assets_match": true,
+    "new_session_ttl_ms": 900000,
+    "source_refresh_live": true,
+    "same_accounts": true,
+    "bob_original_baseline_confirmed": true,
+    "bob_draft_restored": true,
+    "preview_or_save_submitted_in_reopen": false,
+    "main_unchanged": true,
+    "ingress_unchanged": true
+  },
+  "visual_negative_acl_test": "Deferred; prior manual revocation sequence did not complete. Production-owner regression covers revocation.",
+  "production_line_delta": 72,
+  "retained_failed_measurements": [
+    "release-266-gates-01 stopped on unchanged metrics startup timeout; no test timing changes",
+    "Own software-rendering browsers caused measured host load; page freeze did not remove it; process suspension restored20 unchanged tests",
+    "Temporary /tmp copy hit quota before tests; removed only its incomplete generated copy",
+    "Initial image-update plan guard expected8 rather than MaxParallel1; no submission; corrected indexed update submitted once",
+    "Test browsers closed while suspended; original profiles retained and saved draft restored after baseline check",
+    "First reopened refresh verifier read the loading interval; source-delivery synchronization then passed"
+  ]
+}

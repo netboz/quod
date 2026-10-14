@@ -108,6 +108,25 @@ export async function checkPrologEditor(page, origin) {
     assert.equal(snapshot.compilerInputs.at(-1).source, next)
     assert.equal(await save.isDisabled(), true)
 
+    // An expired idle preview uses the ordinary reasoned-failure response.
+    // It keeps the draft editable and does not advance the saved baseline.
+    for (const [accept, reason] of [['expired', 'proof_timeout'], ['missing', 'cursor_not_found']]) {
+      await configure({ conflict: false, accept })
+      const acceptsBefore = (await state()).calls.filter(call => call.path.endsWith('/accept')).length
+      await preview.click()
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save changes' && !button.disabled))
+      await save.click()
+      await ready()
+      assert.ok((await page.getByLabel('Edit result', { exact: true }).textContent()).includes(reason))
+      assert.equal(await source.inputValue(), next)
+      assert.equal(await save.isDisabled(), true)
+      assert.equal(await preview.isDisabled(), false)
+      snapshot = await state()
+      assert.equal(snapshot.rows.length, 0)
+      assert.equal(snapshot.calls.filter(call => call.path.endsWith('/accept')).length, acceptsBefore + 1)
+      assert.equal(snapshot.compilerInputs.at(-1).baseline, draft)
+    }
+
     // A positive pending response follows the same persisted recovery path.
     await configure({ conflict: false, accept: 'pending', terminal: false })
     await preview.click()

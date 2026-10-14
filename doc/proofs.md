@@ -131,6 +131,17 @@ class 1 and for the documented no-managed-context case. Every other bare fail
 is a defect: it hides a reason the caller needed, or hides an error as a
 false goal.
 
+The default signed browser request and whole-proof lifetime are five minutes,
+bounded by the current login session and any shorter configured owner deadline.
+A preview retains its private proof snapshot; Next and Save do not renew its
+absolute deadline or lock the ontology. Expiry before durable write handoff
+returns `fail` with `proof_timeout(Namespace)` through the same reason codec.
+An idle cursor keeps only this terminal reply, bound to its exact owner, for
+at most the configured login-session lifetime; consuming it releases the reply.
+The routed browser owner likewise releases the transport lease on idle expiry.
+An Accept already in flight retains its actual result or `outcome_unknown`;
+expiry never turns an uncertain write into a definite failure or resubmits it.
+
 ### Reason terms
 
 An explicit refusal reason is one ground term with the shape `{What, Detail}` or a bare atom,

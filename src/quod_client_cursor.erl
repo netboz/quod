@@ -63,7 +63,8 @@ call(Request) ->
     end.
 
 init([]) ->
-    {ok, #{cursors => #{}}}.
+    {ok, Ttl} = quod_client_auth:session_lifetime(),
+    {ok, #{cursors => #{}, reply_ttl_ms => Ttl}}.
 
 handle_call({open, Owner, CursorId, Evidence, Goal, Principal}, From,
             State = #{cursors := Cursors}) ->
@@ -93,6 +94,8 @@ handle_call({command, Owner, CursorId, Command}, From,
             State = #{cursors := Cursors}) ->
     Key = {Owner, CursorId},
     case maps:find(Key, Cursors) of
+        {ok, #{terminal := Reply, evidence := Evidence}} ->
+            {reply, {ok, Evidence, Reply}, drop_cursor(Key, State)};
         {ok, #{pending := none, worker := Worker,
                call_ref := CallRef} = Cursor}
           when is_pid(Worker) ->
@@ -163,8 +166,7 @@ handle_info({quod_proof_reply, Engine, CallRef, Reply},
             State = #{cursors := Cursors}) ->
     case find_cursor_by_call(Engine, CallRef, Cursors) of
         {ok, Key, Cursor} ->
-            reply_pending(Cursor, Reply),
-            {noreply, drop_cursor(Key, State)};
+            {noreply, finish_cursor(Key, Cursor, Reply, State)};
         error ->
             {noreply, State}
     end;
@@ -176,8 +178,7 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
                         none -> {error, ontology_unavailable};
                         Ref -> {error, {outcome_unknown, Ref}}
                     end,
-            reply_pending(Cursor, Reply),
-            {noreply, drop_cursor(CursorId, State)};
+            {noreply, finish_cursor(CursorId, Cursor, Reply, State)};
         {owner, CursorId, Cursor} ->
             owner_down(CursorId, Cursor, State);
         {caller, CursorId, Cursor} ->
@@ -193,6 +194,11 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
             end;
         error ->
             {noreply, State}
+    end;
+handle_info({retire_reply, Key, Token}, State = #{cursors := Cursors}) ->
+    case maps:get(Key, Cursors, undefined) of
+        #{reply_token := Token} -> {noreply, drop_cursor(Key, State)};
+        _ -> {noreply, State}
     end;
 handle_info(_Message, State) -> {noreply, State}.
 
@@ -257,6 +263,22 @@ reply_pending(
 reply_pending(_Cursor, _Reply) ->
     ok.
 
+%% An idle proof has no HTTP caller. Release its execution resources now and
+%% keep only its terminal reply for the exact cursor owner to consume later.
+finish_cursor(Key, #{pending := none} = Cursor, Reply,
+              State = #{cursors := Cursors, reply_ttl_ms := Ttl}) ->
+    demonitor_optional(maps:get(engine_mref, Cursor)),
+    Token = make_ref(),
+    Timer = erlang:send_after(Ttl, self(), {retire_reply, Key, Token}),
+    Terminal = Cursor#{engine => undefined, engine_mref => undefined,
+                       call_ref => undefined, worker => undefined,
+                       terminal => Reply, reply_timer => Timer,
+                       reply_token => Token},
+    State#{cursors => Cursors#{Key => Terminal}};
+finish_cursor(Key, Cursor, Reply, State) ->
+    reply_pending(Cursor, Reply),
+    drop_cursor(Key, State).
+
 detach_accept_observer(
   MRef, Cursor = #{pending := {_From, MRef, {_CommandRef, accept}}}) ->
     {ok, Cursor#{pending => detached_accept}};
@@ -269,8 +291,12 @@ stop_cursor_on_terminate(Cursor) -> stop_unknown_cursor(Cursor).
 drop_cursor(Key, State = #{cursors := Cursors}) ->
     case maps:take(Key, Cursors) of
         {Cursor, Cursors1} ->
-            demonitor(maps:get(engine_mref, Cursor), [flush]),
+            demonitor_optional(maps:get(engine_mref, Cursor)),
             demonitor_optional(maps:get(owner_mref, Cursor, undefined)),
+            _ = case maps:get(reply_timer, Cursor, undefined) of
+                undefined -> ok;
+                Timer -> erlang:cancel_timer(Timer)
+            end,
             case maps:get(pending, Cursor) of
                 {_From, CallerMRef, _Command} ->
                     demonitor(CallerMRef, [flush]);
@@ -281,6 +307,7 @@ drop_cursor(Key, State = #{cursors := Cursors}) ->
         error -> State
     end.
 
+stop_unknown_cursor(#{terminal := _}) -> ok;
 stop_unknown_cursor(#{worker := Worker}) when is_pid(Worker) ->
     exit(Worker, kill),
     ok;

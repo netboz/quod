@@ -197,6 +197,7 @@ export function useProofCursor(ns: string, anchor: string, workspaceScope = JSON
           setPendingOperation(e.operationId)
           rememberCursor(null)
         }
+        if (e instanceof Error && e.message === 'cursor_not_found') rememberCursor(null)
         setReply({ error: String(e) })
       }
     } finally {

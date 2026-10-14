@@ -46,10 +46,10 @@ defaults_test() ->
     ?assertEqual(create,          maps:get(mode, B)),
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
     ?assertEqual(64,              maps:get(max_scope_workers, B)),
-    ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
+    ?assertEqual(300000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(transaction_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
-    ?assertEqual(60000,           maps:get(scope_timeout_ms, B)),
+    ?assertEqual(300000,           maps:get(scope_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(scope_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
     ?assertEqual([],              maps:get(seeds, B)).
@@ -326,10 +326,10 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertNot(maps:is_key(genesis_hash, NsCfg)),
     ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
     ?assertEqual(64, maps:get(max_scope_workers, NsCfg)),
-    ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
+    ?assertEqual(300000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(transaction_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(60000, maps:get(scope_timeout_ms, NsCfg)),
+    ?assertEqual(300000, maps:get(scope_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(scope_step_timeout_ms, NsCfg)).
 
 root_recovery_contacts_ignore_invalid_content_seed_test() ->

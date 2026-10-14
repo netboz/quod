@@ -36,7 +36,7 @@ variable "max_scope_workers" {
 
 variable "proof_timeout_ms" {
   type        = number
-  default     = 60000
+  default     = 300000
   description = "Absolute lifetime of a client proof, including cross-ontology waits."
 }
 
@@ -54,7 +54,7 @@ variable "batch_window_ms" {
 
 variable "scope_timeout_ms" {
   type        = number
-  default     = 60000
+  default     = 300000
   description = "Absolute lifetime of one selected proof scope."
 }
 

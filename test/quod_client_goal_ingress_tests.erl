@@ -173,6 +173,7 @@ signed_local_read_test_() ->
           ?_test(anchor_is_checked_at_ingress_and_inside_the_worker(Ctx)),
           ?_test(session_and_signed_deadline_are_both_bound(Ctx)),
           ?_test(cursor_commands_reuse_the_session_signing_key(Ctx)),
+          ?_test(signed_idle_cursor_expiry_reaches_a_late_save(Ctx)),
           ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
           ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
           ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
@@ -352,6 +353,28 @@ session_and_signed_deadline_are_both_bound(
        {error, invalid_session},
        quod_client_goal_ingress:submit(read,
          <<0:256>>, Bytes, Signature, ?PEER)).
+
+signed_idle_cursor_expiry_reaches_a_late_save(
+  #{namespace := Ns, key_pair := KeyPair, session := Session, cursor := Owner}) ->
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>))#{
+        mode => cursor, not_after_ms => quod_time:now_ms() + 300},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
+    SessionId = maps:get(session_id, Session),
+    Trace = trace:session_create(?MODULE, self(), []),
+    1 = trace:process(Trace, Owner, true, ['receive']),
+    try
+        {ok, Evidence, {normalized, {solution, CursorId, _, _}}} =
+            quod_client_goal_ingress:submit(cursor, SessionId, Bytes, Signature, ?PEER),
+        receive
+            {trace, Owner, 'receive', {quod_proof_reply, _, _,
+                                      {fail, [{proof_timeout, Ns}]}}} -> ok
+        after 1500 -> error(signed_cursor_did_not_expire) end,
+        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+        ?assertEqual({ok, Evidence, {normalized, Expected}},
+            quod_client_goal_ingress:cursor_command(SessionId, CursorId, accept, ?PEER)),
+        ?assertEqual(0, maps:get(proof_workers, quod_prolog:stats(Ns)))
+    after trace:session_destroy(Trace) end.
 
 cursor_commands_reuse_the_session_signing_key(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->

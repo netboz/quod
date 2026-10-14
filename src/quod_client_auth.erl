@@ -32,6 +32,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -behaviour(gen_server).
 
 -export([start_link/0, issue_challenge/3, complete_challenge/2,
+         session_lifetime/0,
          admit_goal/2, admit_forwarded_goal/2,
          materialize_request/4,
          challenge_bytes/7, verify_challenge/7]).
@@ -68,6 +69,10 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, #{}, []).
+
+-doc "Configured session lifetime, also bounding delivery of unconsumed cursor replies.".
+-spec session_lifetime() -> {ok, pos_integer()} | {error, client_auth_unavailable}.
+session_lifetime() -> call(session_lifetime).
 
 -ifdef(TEST).
 -spec start_link(map()) -> gen_server:start_ret().
@@ -194,6 +199,8 @@ handle_call({issue, PublicKey, ClientNonce, Peer}, _From, S) ->
     reply(issue(PublicKey, ClientNonce, Peer, S));
 handle_call({take_challenge, ChallengeId}, _From, S) ->
     reply(take_challenge(ChallengeId, S));
+handle_call(session_lifetime, _From, S = #s{session_ttl_ms = Ttl}) ->
+    {reply, {ok, Ttl}, S};
 handle_call({bind_session, Identity}, _From, S) ->
     reply(bind_session(Identity, S));
 handle_call({session, SessionId}, _From, S) ->

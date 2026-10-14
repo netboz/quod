@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   encodeGoalRequest,
+  goalRequestBytes,
   postJson,
   readSystemOntologies,
   resolveSignedOperations,
@@ -10,6 +11,22 @@ import {
 } from '../src/signed-client.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { SIGNED_GOAL_LIMITS } from '../src/protocol-limits.js'
+
+test('signed proofs have five minutes, bounded by the current session', () => {
+  const identity = signedIdentity()
+  const agent = agentReference()
+  const goal = 'true.'
+  const expiry = bytes => Number(new DataView(bytes.buffer, bytes.byteOffset + bytes.length - 4 - goal.length - 8, 8).getBigUint64(0, false))
+  const before = Date.now()
+  identity.session.expires_ms = before + 15 * 60_000
+  for (const mode of ['read', 'execute', 'cursor', 'control']) {
+    const deadline = expiry(goalRequestBytes(identity, { mode, agent, goal }))
+    assert.ok(deadline >= before + 300_000)
+    assert.ok(deadline <= Date.now() + 300_000)
+  }
+  identity.session.expires_ms = before + 10_000
+  assert.equal(expiry(goalRequestBytes(identity, { mode: 'cursor', agent, goal })), identity.session.expires_ms)
+})
 
 test('system discovery rejects unavailable or wrong-network catalogues', async () => {
   const identity = { networkId: u256(1) }

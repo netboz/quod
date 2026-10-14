@@ -37,7 +37,35 @@ cursor_command_busy_and_solution_correlation_test() ->
     {noreply, State3} = quod_client_cursor:handle_info(
                           {quod_proof_reply, Engine, CallRef, cursor_stopped},
                           State2),
-    ?assertEqual(#{}, maps:get(cursors, State3)),
+    {reply, {ok, _, cursor_stopped}, State4} = quod_client_cursor:handle_call(
+        {command, ?OWNER, CursorId, accept}, {self(), make_ref()}, State3),
+    ?assertEqual(#{}, maps:get(cursors, State4)),
+    stop_cursor_fixture(Engine, Worker).
+
+idle_expiry_retains_one_owner_bound_reply_without_execution_test() ->
+    {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
+    Failure = {fail, [{proof_timeout, <<"test">>}]},
+    {noreply, State1} = quod_client_cursor:handle_info(
+        {quod_proof_reply, Engine, CallRef, Failure}, State0),
+    Key = {?OWNER, CursorId},
+    #{Key := #{worker := undefined, engine := undefined,
+               reply_timer := Timer, reply_token := Token}} = maps:get(cursors, State1),
+    ?assertMatch({reply, {error, not_found}, _}, quod_client_cursor:handle_call(
+        {command, {session, <<0:256>>, agent_ref()}, CursorId, accept},
+        {self(), make_ref()}, State1)),
+    {noreply, State1} = quod_client_cursor:handle_info(
+        {retire_reply, Key, make_ref()}, State1),
+    {reply, {ok, _, Failure}, State2} = quod_client_cursor:handle_call(
+        {command, ?OWNER, CursorId, accept}, {self(), make_ref()}, State1),
+    ?assertEqual(false, erlang:read_timer(Timer)),
+    ?assertEqual(#{}, maps:get(cursors, State2)),
+    ?assertMatch({reply, {error, not_found}, _}, quod_client_cursor:handle_call(
+        {command, ?OWNER, CursorId, accept}, {self(), make_ref()}, State2)),
+    receive {worker_message, Worker, _} -> error(expired_proof_was_resubmitted)
+    after 0 -> ok end,
+    %% An unconsumed reply is also retired by its exact timer token.
+    {noreply, Retired} = quod_client_cursor:handle_info({retire_reply, Key, Token}, State1),
+    ?assertEqual(#{}, maps:get(cursors, Retired)),
     stop_cursor_fixture(Engine, Worker).
 
 cursor_stale_solution_kills_exact_worker_test() ->
@@ -292,7 +320,7 @@ cursor_state(Pending, Checkpoint, Owner) ->
                owner => Owner, principal => ?PRINCIPAL,
                evidence => Evidence},
     {CursorId, Engine, Worker, CallRef,
-     #{cursors => #{{Owner, CursorId} => Cursor}}}.
+     #{cursors => #{{Owner, CursorId} => Cursor}, reply_ttl_ms => 1000}}.
 
 cursor_worker_loop(Parent) ->
     receive

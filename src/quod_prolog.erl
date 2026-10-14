@@ -119,8 +119,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
                     validation_ttl_ms => ?QUOD_VALIDATION_TTL_MS, max_proof_workers => 64,
-                    max_scope_workers => 64, proof_timeout_ms => 60000,
-                    scope_timeout_ms => 60000,
+                    max_scope_workers => 64, proof_timeout_ms => 300000,
+                    scope_timeout_ms => 300000,
                     scope_step_timeout_ms => 30000,
                     outcome_backend => disk}).
 -define(ROOT_NS, <<"quod:root">>).
@@ -144,6 +144,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                        timer       :: reference(),
                        token       :: reference(),
                        deadline_ms :: integer(),
+                       timed_out = false :: boolean(),
                        started_native :: integer(),
                        %% A signed operation is guarded by this worker until
                        %% its durable outcome takes over.  This is deliberately
@@ -313,8 +314,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
             max_scope_workers = 64 :: pos_integer(),
-            proof_timeout_ms = 60000 :: pos_integer(),
-            scope_timeout_ms = 60000 :: pos_integer(),
+            proof_timeout_ms = 300000 :: pos_integer(),
+            scope_timeout_ms = 300000 :: pos_integer(),
             scope_step_timeout_ms = 30000 :: pos_integer(),
             applied   = 0  :: log_index(),
             %% the attached quod_runtime: {Pid, Monitor, Floor}. The floor joins oldest_snapshot/2
@@ -868,7 +869,12 @@ proof_request(TraceCtx, Principal, ExpectedAnchor, RequestEvidence) ->
     #proof_request{trace_ctx = TraceCtx,
                    principal = Principal,
                    expected_anchor = ExpectedAnchor,
-                   request_evidence = RequestEvidence}.
+                   request_evidence = RequestEvidence,
+                   deadline_ms = signed_proof_deadline(RequestEvidence)}.
+
+signed_proof_deadline(none) -> infinity;
+signed_proof_deadline(#{request := #{not_after_ms := NotAfter}}) ->
+    quod_time:mono_ms() + max(0, NotAfter - quod_time:now_ms()).
 
 -doc "The committed log index this kb has applied (the freshness height for a read).".
 -spec applied(binary()) -> log_index().
@@ -1620,10 +1626,12 @@ handle_info({proof_kill, Ref, Token}, S) ->
     %% Released workers are only waiting for consensus and no longer consume
     %% a derivation slot. A queued pre-release timer is therefore inert.
     case maps:find(Ref, S#s.workers) of
-        {ok, #proof_worker{pid = Pid, token = Token}} -> kill_worker(Pid);
-        _ -> ok
-    end,
-    {noreply, S};
+        {ok, #proof_worker{pid = Pid, token = Token} = Worker} ->
+            kill_worker(Pid),
+            {noreply, S#s{workers = (S#s.workers)#{Ref =>
+                               Worker#proof_worker{timed_out = true}}}};
+        _ -> {noreply, S}
+    end;
 %% Scope derivation is guarded outside the worker so cancellation and the
 %% target-owned execution budget remain preemptive even while Erlog is inside
 %% an unbounded goal.
@@ -3531,7 +3539,7 @@ test_proof_down_reply(Kind, Reason, Ns) ->
     proof_down_reply(Kind, Reason, Ns).
 
 test_proof_down_reply(Kind, Reason, Ns, Checkpoint) ->
-    proof_down_reply(Kind, Reason, Ns, Checkpoint).
+    proof_down_reply(Kind, Reason, Ns, Checkpoint, false).
 -endif.
 
 target_namespace({scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
@@ -5515,8 +5523,8 @@ cursor_wait(Owner, CallRef, CursorId, InvocationId, Session, Height) ->
          _CommandRef, stop} ->
             cursor_stopped
     after Remaining ->
-        {error, {proof_limit_exceeded,
-                 element(1, quod_proof_context:origin_identity())}}
+        {fail, [{proof_timeout,
+                 element(1, quod_proof_context:origin_identity())}]}
     end.
 
 run_origin_invocation(
@@ -5767,12 +5775,12 @@ handle_group_waiter_down(MRef, S = #s{group_waiters = Waiters}) ->
 
 finish_proof_down(Found, Reason, S) ->
     case Found of
-        {worker, Ref, From, Kind, Checkpoint} ->
+        {worker, Ref, From, Kind, Checkpoint, TimedOut} ->
             S0 = cancel_dtx_handoff(Ref, S),
             case take_proof_worker(Ref, S0) of
                 {{_From, _Height}, S1} ->
                     Reply = proof_down_reply(
-                              Kind, Reason, S#s.ns, Checkpoint),
+                              Kind, Reason, S#s.ns, Checkpoint, TimedOut),
                     reply_client(From, Reply),
                     {noreply, S1};
                 error -> {noreply, S0}
@@ -5792,10 +5800,10 @@ find_proof_monitor(MRef, W) ->
       fun(Ref, #proof_worker{pid = Pid, kind = Kind,
                              worker_mref = WorkerMRef,
                              caller_mref = CallerMRef, from = From,
-                             checkpoint = Checkpoint}, Acc) ->
+                             checkpoint = Checkpoint, timed_out = TimedOut}, Acc) ->
           case Acc of
               false when WorkerMRef =:= MRef ->
-                  {worker, Ref, From, Kind, Checkpoint};
+                  {worker, Ref, From, Kind, Checkpoint, TimedOut};
               false when CallerMRef =:= MRef -> {caller, Ref, Pid};
               _ -> Acc
           end
@@ -5814,10 +5822,12 @@ find_cursor_worker(Owner, CallRef, Workers) ->
          (_Ref, #proof_worker{}, Acc) -> Acc
       end, error, Workers).
 
-proof_down_reply(_Kind, _Reason, _Ns, Checkpoint)
+proof_down_reply(_Kind, _Reason, _Ns, Checkpoint, _TimedOut)
   when Checkpoint =/= none ->
     {error, {outcome_unknown, Checkpoint}};
-proof_down_reply(Kind, Reason, Ns, none) ->
+proof_down_reply(_Kind, killed, Ns, none, true) ->
+    {fail, [{proof_timeout, Ns}]};
+proof_down_reply(Kind, Reason, Ns, none, _TimedOut) ->
     proof_down_reply(Kind, Reason, Ns).
 
 proof_down_reply(_Kind, killed, Ns) ->

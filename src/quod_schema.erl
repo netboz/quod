@@ -135,7 +135,7 @@ fields(content) ->
     , {max_scope_workers,
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
     , {proof_timeout_ms,
-       hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
+       hoconsc:mk(integer(), #{default => 300000, validator => fun(N) -> N > 0 end})}
     , {transaction_ttl_ms,
        hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
       %% Time the proposer keeps a newly-opened block available for more ordinary
@@ -145,7 +145,7 @@ fields(content) ->
                   #{default => 25,
                     validator => fun(N) -> N >= 0 andalso N =< 1000 end})}
     , {scope_timeout_ms,
-       hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
+       hoconsc:mk(integer(), #{default => 300000, validator => fun(N) -> N > 0 end})}
     , {scope_step_timeout_ms,
        hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
       %% Expensive per-event/per-substep Prometheus probes for short diagnostic runs.

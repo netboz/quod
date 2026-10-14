@@ -39,6 +39,7 @@ cursor continuation lives only in `quod_client_cursor`.
     correlations = #{} :: map(),
     inbound = #{} :: map(),
     routes = #{} :: map(),
+    reply_ttl_ms :: pos_integer(),
     owner_peaks = #{} :: #{atom() => non_neg_integer()}
 }).
 
@@ -136,14 +137,15 @@ request_timeout({cursor, _, _, _, TimeoutMs})
 request_timeout(_Request) -> ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS.
 
 init([]) ->
+    {ok, Ttl} = quod_client_auth:session_lifetime(),
     Channel = quod_client_goal_endpoint:channel(),
     true = quod_reg:subscribe({channel, Channel}),
     quod_reg:publish({client_goal_router, node}, {client_goal_router_ready, self()}),
-    {ok, #s{channel = Channel}};
+    {ok, #s{channel = Channel, reply_ttl_ms = Ttl}};
 init({test, OpenFun, ReleaseFun}) ->
     {ok, #s{channel = quod_client_goal_endpoint:channel(),
             subscribed = false, open_fun = OpenFun,
-            release_fun = ReleaseFun}}.
+            release_fun = ReleaseFun, reply_ttl_ms = 1000}}.
 
 handle_call(
   {submit, Route, Owner, Evidence, RequestBytes, Signature, CursorBinding,
@@ -183,6 +185,9 @@ handle_call(
 handle_call({cursor, Owner, CursorId, Command, TimeoutMs}, From, S0) ->
     RouteKey = {Owner, CursorId},
     case validate_cursor_request(RouteKey, Command, TimeoutMs, S0) of
+        {terminal, Evidence, Result} ->
+            {reply, {ok, Evidence, {normalized, Result}},
+             drop_route(RouteKey, completed, S0)};
         {ok, Route, Request, Frame} ->
             RequestId = quod_client_goal_endpoint:request_id(Request),
             PeerKey = maps:get(peer, Route),
@@ -252,8 +257,14 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
     {noreply, down(MRef, Pid, Reason, S0)};
 handle_info({route_expired, RouteKey, Token}, S0) ->
     case maps:get(RouteKey, S0#s.routes, undefined) of
-        #{expiry_token := Token} ->
+        #{expiry_token := Token, state := terminal} ->
             {noreply, drop_route(RouteKey, expired, S0)};
+        #{expiry_token := Token, state := active, busy := none} = Route ->
+            {noreply, expire_route(RouteKey, Route, S0)};
+        #{expiry_token := Token, state := active} ->
+            %% A command already sent may have committed. Its existing worker
+            %% retains the exact response/uncertainty until delivery completes.
+            {noreply, S0};
         _ -> {noreply, S0}
     end;
 handle_info(_Message, S) -> {noreply, S}.
@@ -300,6 +311,8 @@ validate_cursor_request(RouteKey, Command, TimeoutMs, S) ->
     case {valid_timeout(TimeoutMs),
           quod_client_goal_endpoint:encode_request(Request),
           maps:get(RouteKey, S#s.routes, undefined)} of
+        {true, {ok, _}, #{state := terminal, evidence := Evidence,
+                         terminal := Result}} -> {terminal, Evidence, Result};
         {true, {ok, Frame},
          #{state := active, busy := none, link := Link} = Route}
           when is_pid(Link) -> {ok, Route, Request, Frame};
@@ -662,9 +675,11 @@ route_result(Worker, RouteKey, Result, Peer, Link, ExpiresMs, S0) ->
                 {solution, CursorId, _, _}
                   when CursorId =:= element(2, RouteKey) ->
                     Route = maps:get(RouteKey, S0#s.routes),
-                    {ok, S0#s{routes =
-                                   (S0#s.routes)#{RouteKey =>
-                                                       Route#{busy => none}}}};
+                    Idle = Route#{busy => none},
+                    case maps:get(expires_ms, Route) =< quod_time:now_ms() of
+                        true -> {ok, expire_route(RouteKey, Idle, S0)};
+                        false -> {ok, S0#s{routes = (S0#s.routes)#{RouteKey => Idle}}}
+                    end;
                 _ -> {ok, drop_route(RouteKey, completed, S0)}
             end;
         _ -> {{error, unavailable}, S0}
@@ -684,6 +699,22 @@ install_route(RouteKey, Peer, Link, ExpiresMs, S0) ->
               lease => maps:get(lease, Pending),
               started_at => maps:get(started_at, Pending)},
     S0#s{routes = (S0#s.routes)#{RouteKey => Route}}.
+
+%% An expired idle route cannot have an Accept in flight. Keep the definite
+%% pre-commit expiry in the same owner, without retaining its transport lease.
+expire_route(RouteKey, Route, S = #s{reply_ttl_ms = Ttl, routes = Routes}) ->
+    release_lease(Route, S),
+    cancel_route_timer(Route),
+    demonitor_optional(maps:get(link_mref, Route, undefined)),
+    Evidence = maps:get(evidence, Route),
+    #{request := #{agent_namespace := Ns}} = Evidence,
+    Result = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+    Token = make_ref(),
+    Timer = erlang:send_after(Ttl, self(), {route_expired, RouteKey, Token}),
+    Terminal = Route#{state => terminal, terminal => Result, lease => none,
+                      link => undefined, link_mref => undefined,
+                      expiry_timer => Timer, expiry_token => Token},
+    S#s{routes = Routes#{RouteKey => Terminal}}.
 
 drop_route(RouteKey, Result, S0) ->
     case maps:take(RouteKey, S0#s.routes) of

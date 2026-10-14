@@ -143,7 +143,7 @@ owned_async_execute_preserves_absolute_deadline_test_() ->
                      after 5000 -> error(async_proof_not_started) end,
             Monitor = monitor(process, Worker),
             receive {quod_proof_reply, Engine, Call, Reply} ->
-                ?assertMatch({error, {proof_limit_exceeded, Ns}}, Reply)
+                ?assertMatch({fail, [{proof_timeout, Ns}]}, Reply)
             after 5000 -> error(absolute_deadline_not_enforced) end,
             receive {'DOWN', Monitor, process, Worker, _} -> ok
             after 1000 -> error(deadline_left_live_reader) end,
@@ -708,7 +708,7 @@ absolute_proof_timeout_test_() ->
                 Ns, 1,
                 with_host_policy(
                   Ns, batch(change(Ns, diff_for(Rule), #{})))),
-         ?_assertEqual({error, {proof_limit_exceeded, Ns}},
+         ?_assertEqual({fail, [{proof_timeout, Ns}]},
                        quod_prolog:prove(Ns, loop))
      end}.
 
@@ -745,7 +745,7 @@ idle_cursor_uses_the_absolute_proof_deadline_test_() ->
              ?assert(is_process_alive(Worker)),
              receive
                  {quod_proof_reply, Engine, CallRef,
-                  {error, {proof_limit_exceeded, Ns}}} -> ok
+                  {fail, [{proof_timeout, Ns}]}} -> ok
              after 1000 -> error(idle_cursor_deadline_missing)
              end,
              ?assertEqual(ok, wait_proof_workers(Ns, 0, 100))

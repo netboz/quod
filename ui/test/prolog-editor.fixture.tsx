@@ -25,7 +25,7 @@ export async function createEditorFixture() {
   const sources = new Map([['sample / 1', source]])
   let holdCatalogue = false
   const catalogueWaiters: Array<() => void> = []
-  let accept: 'lost' | 'pending' = 'lost'
+  let accept: 'lost' | 'pending' | 'expired' | 'missing' = 'lost'
   let terminal = false
   let conflict = false
   let refreshedReadOnly: boolean | undefined
@@ -124,6 +124,8 @@ export async function createEditorFixture() {
       return response({ result: 'solution', cursor, height: 4, bindings: [] })
     }
     if (/\/api\/goals\/cursors\/edit-\d+\/accept$/.test(path)) {
+      if (accept === 'missing') return new Response(JSON.stringify({ error: 'cursor_not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+      if (accept === 'expired') return response({ result: 'fail', reasons: ['proof_timeout(human:owner)'] })
       if (accept === 'lost') throw new TypeError('fixture interrupted Save reply')
       return response({ result: 'pending', ns: 'human:owner', anchor: '09'.repeat(32),
         coordinator: '12'.repeat(32), coordinator_admission: '34'.repeat(32), group_id: '56'.repeat(32) })
@@ -170,7 +172,7 @@ export async function createEditorFixture() {
   return { mount, renew: (session: string) => renewSession(session), calls, compilerInputs, spatial: () => spatial, rows: () => journal.list(),
     heldCatalogues: () => catalogueWaiters.length,
     releaseCatalogue() { holdCatalogue = false; for (const release of catalogueWaiters.splice(0)) release() },
-    configure(options: { accept?: 'lost' | 'pending'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean;
+    configure(options: { accept?: 'lost' | 'pending' | 'expired' | 'missing'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean;
       readOnly?: boolean; source?: string; refreshError?: string | null }) {
       if (options.accept) accept = options.accept
       if (options.terminal !== undefined) terminal = options.terminal

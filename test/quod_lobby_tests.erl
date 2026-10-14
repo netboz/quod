@@ -1394,7 +1394,6 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_key, maps:get(key, Identity)),
     {ok, Router} = quod_ask_router:start_link(),
-    {ok, Cursors} = quod_client_cursor:start_link(),
     {ok, Effects} = quod_effect_journal:start_link(#{data_dir => filename:join(Dir, "effects")}),
     %% Atomic coordinators follow other identities even when they are co-hosted.
     {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir, "foreign")}),
@@ -1459,6 +1458,7 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
     application:set_env(quod, namespace_desired,
         #{content => #{RootNs => #{genesis_hash => Network}}, brahms => #{}}),
     {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => Pub}),
+    {ok, Cursors} = quod_client_cursor:start_link(),
     ClassNs = <<"lobby-test-classes">>,
     ClassFacts = [{modelling_vocabulary, <<"lobby-test-modelling">>,
                    quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},

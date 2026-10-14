@@ -9,6 +9,7 @@
 
 production_owner_publishes_each_router_incarnation_test() ->
     {ok, _} = application:ensure_all_started(gproc),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => <<1:256>>, node_key => <<2:256>>}),
     true = quod_reg:subscribe({client_goal_router, node}),
     try
         [begin
@@ -20,7 +21,7 @@ production_owner_publishes_each_router_incarnation_test() ->
                 ?assertEqual(Owner, whereis(quod_client_goal_router))
             after gen_server:stop(Owner) end
          end || _ <- [first, replacement]]
-    after quod_reg:unsubscribe({client_goal_router, node}) end.
+    after quod_reg:unsubscribe({client_goal_router, node}), gen_server:stop(Auth) end.
 
 cursor_target_states_are_named_before_the_shared_renderer_test() ->
     ?assertEqual(
@@ -318,6 +319,68 @@ cursor_route_reuses_one_link_and_drops_after_stop_test() ->
               error(cursor_lease_released_twice)
           after 0 -> ok end
       end).
+
+expired_idle_route_returns_reason_once_to_its_owner_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#51:256>>,
+        open_expiring_cursor(Router, Link, Fixture, CursorId),
+        assert_released_lease(Link, Router),
+        ?assertEqual({error, not_found}, quod_client_goal_router:test_cursor(
+            Router, {session, <<0:256>>, <<0:256>>}, CursorId, accept, 1000)),
+        Evidence = maps:get(evidence, Fixture),
+        #{request := #{agent_namespace := Ns}} = Evidence,
+        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+        ?assertEqual({ok, Evidence, {normalized, Expected}},
+            quod_client_goal_router:test_cursor(Router, ?OWNER, CursorId, accept, 1000)),
+        ?assertEqual({error, not_found},
+            quod_client_goal_router:test_cursor(Router, ?OWNER, CursorId, accept, 1000)),
+        ?assertMatch(#{correlations := 0, routes := 0},
+                     quod_client_goal_router:test_stats(Router)),
+        receive {transport_lease_released, Link, _, _, _, _, _} ->
+            error(cursor_lease_released_twice)
+        after 0 -> ok end,
+        receive {link_frame, Link, _} -> error(expired_accept_was_sent)
+        after 0 -> ok end
+    end).
+
+route_expiry_does_not_replace_an_inflight_accept_outcome_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        CursorId = <<16#52:256>>,
+        Trace = trace:session_create(?MODULE, self(), []),
+        1 = trace:process(Trace, Router, true, ['receive']),
+        try
+            open_expiring_cursor(Router, Link, Fixture, CursorId),
+            Caller = cursor_async(Router, CursorId, accept, 1000),
+            {{cursor, RequestId, CursorId, accept}, _} = sent_request(Link),
+            receive {trace, Router, 'receive', {route_expired, {?OWNER, CursorId}, _}} -> ok
+            after 1000 -> error(route_expiry_missing) end,
+            %% This call observes the owner after it processed the expiry.
+            ?assertMatch(#{correlations := 1, routes := 1},
+                         quod_client_goal_router:test_stats(Router)),
+            receive {transport_lease_released, Link, _, _, _, _, _} ->
+                error(inflight_accept_lease_released)
+            after 0 -> ok end,
+            {ok, Blob} = quod_client_result:encode({answers, 8, []}),
+            respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+            receive {Caller, {ok, _, {normalized, {answers, 8, []}}}} -> ok
+            after 1000 -> error(accepted_outcome_lost) end,
+            assert_released_lease(Link, Router)
+        after trace:session_destroy(Trace) end
+    end).
+
+open_expiring_cursor(Router, Link, Fixture, CursorId) ->
+    Parent = self(),
+    Caller = spawn(fun() -> Parent ! {self(), quod_client_goal_router:test_submit(
+        Router, route(), ?OWNER, maps:get(evidence, Fixture),
+        maps:get(request_bytes, Fixture), maps:get(signature, Fixture),
+        CursorId, [], quod_time:now_ms() + 300, 1000)} end),
+    {Request, _} = sent_request(Link),
+    RequestId = quod_client_goal_endpoint:request_id(Request),
+    {ok, Bindings} = quod_durable_term:encode_result(#{}),
+    {ok, Blob} = quod_client_result:encode({solution, CursorId, 7, Bindings}),
+    respond(Router, Link, {cursor_result, RequestId, CursorId, Blob}),
+    receive {Caller, {ok, _, {normalized, {solution, CursorId, 7, _}}}} -> ok
+    after 1000 -> error(cursor_open_missing) end.
 
 cursor_target_link_death_drops_the_exact_route_test() ->
     with_router(

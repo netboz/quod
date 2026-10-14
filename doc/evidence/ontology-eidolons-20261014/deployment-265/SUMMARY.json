@@ -1,0 +1,41 @@
+{
+  "completed": "2026-10-14T12:30:52.443125+00:00",
+  "implementation_commit": "33a5f4119a1d8fee3a1ef57abb230615b543992d",
+  "release_commit": "2b26d83718f32fb4d4c713a570a0c9801099d0c9",
+  "version": "0.7.265",
+  "image": "192.168.1.11:5000/quod:0.7.265@sha256:2ebf5e8b84e5eb7b5bb36ea3f5330017b3db8e4aa7845d0f3020c3dbe2ceffcc",
+  "candidate": {
+    "version": 77,
+    "modify_index": 857357,
+    "root": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+    "healthy_nodes": 8,
+    "ready_system_ontologies_per_node": 18,
+    "intentional_gateway_restarts": 1,
+    "other_restarts": 0
+  },
+  "origin": "https://192.168.1.10:30519",
+  "checks": {
+    "release_gates": 11,
+    "eunit": 3974,
+    "ct": 148,
+    "client": 180,
+    "native": 35,
+    "browser_assets": 365,
+    "public_inspection_targets": 17,
+    "execute_requests_in_inspection": 0,
+    "source_policy_interface_hashes_survive_restart": true,
+    "live_browser_html_assets_match": true,
+    "main_unchanged": true,
+    "ingress_unchanged": true,
+    "old_volumes_retained": 8
+  },
+  "failed_attempts_retained": [
+    "directory-entry commit proposal rejected staging set before commit; exact-file proposal succeeded",
+    "first gate launcher referenced existing evidence path; stopped before tests",
+    "initial operator attestation included ignored fixtures/cache; explicit committed subset then checked",
+    "first live metadata read used wrong DETS table name; read-only corrected lookup",
+    "first join plan asserted replacement1; no POST submitted; cold seal and eight-node join completed",
+    "first post-restart readiness exec preceded Erlang VM; original restart not repeated; later owner-notified read succeeded",
+    "first asset URL concatenation rejected relative ./ path before asset GET; urljoin check succeeded"
+  ]
+}

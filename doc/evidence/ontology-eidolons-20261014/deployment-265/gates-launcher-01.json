@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "stage": "before gates",
+  "reason": "runner initially referenced existing implementation gates directory; FileExistsError; no gate ran and no old evidence changed"
+}

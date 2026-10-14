@@ -1,0 +1,15 @@
+{
+  "job": "quod-finality-candidate-v6-20260926",
+  "candidate_version": 73,
+  "candidate_modify_index": 849782,
+  "main_version": 246,
+  "main_modify_index": 826727,
+  "old_family": "quod-finality-candidate-v6-20260926-refound-20261011-v6",
+  "new_family": "quod-finality-candidate-v6-20260926-refound-20261014-v7",
+  "old_volumes_retained": true,
+  "old_root": "E9A485A929BE605DC01E1BBA7820AD956F84DE6B502C24D1B45A5D4819111096",
+  "new_version": "0.7.265",
+  "origin": "https://192.168.1.10:30519",
+  "procedure": "cold stop all -> new empty volumes -> one founder -> existing create_ontology/catalogue -> anchored eight-node join; no mixed proofs/validators",
+  "new_image": "192.168.1.11:5000/quod:0.7.265@sha256:2ebf5e8b84e5eb7b5bb36ea3f5330017b3db8e4aa7845d0f3020c3dbe2ceffcc"
+}

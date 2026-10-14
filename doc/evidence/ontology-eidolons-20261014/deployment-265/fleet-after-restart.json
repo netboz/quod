@@ -1,0 +1,387 @@
+{
+  "passed": true,
+  "job_version": 77,
+  "job_modify_index": 857357,
+  "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+  "allocations": [
+    {
+      "allocation": "2231df12-6cc3-19b4-664c-b127677f9a23",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 1,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiQTFFMkEyMTRBODBGOEFDMjk1MzY0NTU4NDRCMTE5RUQ1M0VBRTEzNkE0RUExRDRDOUEwQTBBRjI1NDEzNjI5NSIsIm5hbWVzcGFjZSI6Im5vZGU6YmUyNmIzZDM3MmVkNDAxZTkyZTQyZTE5NzllODg1YmIwZjE5NGNhZjc0MmJlMDlmMTEzY2M4ZDJjMjM2NmY0ZiIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyN30sImhvc3RpbmdfcmV2aXNpb24iOjQsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "A1E2A214A80F8AC29536455844B119ED53EAE136A4EA1D4C9A0A0AF254136295",
+          "namespace": "node:be26b3d372ed401e92e42e1979e885bb0f194caf742be09f113cc8d2c2366f4f",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 27
+          },
+          "hosting_revision": 4,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "5b87e343-755a-8f82-23dd-bf5423bfa92d",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiMjZERDhDRUY0Q0Y2NUQ4OTg3RkI3NzQ3MjIzOUIwM0QxM0Y5QzdFRjMzQjFBQzUwQzVCOEQwREM3RkVDMkY3NCIsIm5hbWVzcGFjZSI6Im5vZGU6NzE0N2QyNjY2ZGMzMGE2YWU1NWU1MzJlZTg2YjJjOTI0MDZiZWE2MGIxODFlZjNiZTU4NDgwMDFjMzMxMzlmMCIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjQsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "26DD8CEF4CF65D8987FB77472239B03D13F9C7EF33B1AC50C5B8D0DC7FEC2F74",
+          "namespace": "node:7147d2666dc30a6ae55e532ee86b2c92406bea60b181ef3be5848001c33139f0",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 4,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "403806e5-1d0e-bd49-1ef2-3ee2337858e4",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "node": "caton",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiM0U4QjhCQzUzMjUwMTAwNDc2MzNEOEIxODdDQzM4RDc4NkI4M0U5REFEODUwMUNBQTM3RjJBQjg4NkQ5QTU4RCIsIm5hbWVzcGFjZSI6Im5vZGU6YzE0OTVhN2Q5NmYzYmNiN2I3NDE2ZWU0YWVmMDIzMjQzZmRlZmY5ZmM4M2Q0YTE3ZDgzMTY5ZTliZGNiOTcyNyIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjMsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "3E8B8BC5325010047633D8B187CC38D786B83E9DAD8501CAA37F2AB886D9A58D",
+          "namespace": "node:c1495a7d96f3bcb7b7416ee4aef023243fdeff9fc83d4a17d83169e9bdcb9727",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "943df301-439f-6883-6a83-972203dbc4dc",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiQTZCMTcyNEZFMTY2MkY2QjUxRUEzQTk3NDhGN0VEMkVBMEQwRkJCOENGNDRBOEE0QzBEMjk5RjhBOTkzMTc3NyIsIm5hbWVzcGFjZSI6Im5vZGU6MmY3MDE2YTFjZmVlZjc1NzNlYzE1MjkxZDYzODliODZlMjI4MjQ5N2FmY2RmMGExN2Q1OWU3MWM3MGVhNjBjOCIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjMsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "A6B1724FE1662F6B51EA3A9748F7ED2EA0D0FBB8CF44A8A4C0D299F8A9931777",
+          "namespace": "node:2f7016a1cfeef7573ec15291d6389b86e2282497afcdf0a17d59e71c70ea60c8",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "e8d0ca92-d04f-b4fe-9c51-a8f13e930fb2",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiNTEyOEExNzZDMzAyMjkxQkIyRkI5ODI0ODg4MEY5QTVGRjE5MEMwM0JBMkVDRkM0NENFM0MxMzgzMDMzNTU5QSIsIm5hbWVzcGFjZSI6Im5vZGU6ZTI4Y2ZhM2ExNzI0NTYxODY1NzcyNTI1NGMwODNhODExZTFhZGE4YjRmMTJiOGQxMzQ3MmM5MDcwNWJjNzI3NyIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjMsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "5128A176C302291BB2FB98248880F9A5FF190C03BA2ECFC44CE3C1383033559A",
+          "namespace": "node:e28cfa3a17245618657725254c083a811e1ada8b4f12b8d13472c90705bc7277",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "f484723a-adef-d27e-6400-2e45a8aeb96d",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "node": "caton",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiNjdCNDE5NjY3MzhCRDZDRTY4MkJFREIwRDUwNzk0ODY1RTMyNjJBMUYxMjUzMzZBMzdGQkQ3MUQwNzk4RkM4RiIsIm5hbWVzcGFjZSI6Im5vZGU6YjBkMmFiMjc5MzdkY2Q2MzcxMzBiM2NhMzliYjIyYWRjN2NlNjY1Y2Y5MGMwOTFjZjVjNzEzOGFiMmFkM2RhZCIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjMsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "67B41966738BD6CE682BEDB0D50794865E3262A1F125336A37FBD71D0798FC8F",
+          "namespace": "node:b0d2ab27937dcd637130b3ca39bb22adc7ce665cf90c091cf5c7138ab2ad3dad",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "d9af8f62-d8de-8c23-7df7-90d05b352694",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiQzk2RUM1QTk2NUZERkM1NEM0MTM0NTY2ODNBMkFCQkU3MzYzMTE1NzJGQTM2OTAyMUMzRTgyNzNEMjk3RkY1MyIsIm5hbWVzcGFjZSI6Im5vZGU6NmJlYjliMmY5ZWVkMjE0NmZlYTRjNjc2MjJkYjI4NDZjOWJlMWE4ZmQwZjQ5N2M1YjQzM2MyYmJjMjNmNjAyMSIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjYsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "C96EC5A965FDFC54C413456683A2ABBE736311572FA369021C3E8273D297FF53",
+          "namespace": "node:6beb9b2f9eed2146fea4c67622db2846c9be1a8fd0f497c5b433c2bbc23f6021",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 6,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    },
+    {
+      "allocation": "b13e9d13-179d-de7e-2d2e-95140ef00677",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "stdout": "\"eyJ2ZXJzaW9uIjoiMC43LjI2NSIsIm5vdF9yZWFkeSI6W10sInByaW5jaXBhbCI6eyJzdGF0dXMiOiJhdmFpbGFibGUiLCJwb2ludGVyIjoic3RvcmVkIiwiYW5jaG9yIjoiNDJCRDkxRUQzQTA5MzdFRThGMDQ2NUEyMDQ0MEJDQzZGQzFEOERFN0MyRjM5OTEyNjBFMUYwNDhEQjBFRjE3MSIsIm5hbWVzcGFjZSI6Im5vZGU6MzA5MWI3Y2I4NzRlOGIwMWI3OTU3MTIyMWFjYWZjMDBhMDcyNjMyZDkwNmRiOTZiZWNiOTZjMGMyZmM3MDQ3NCIsInNlbGZfaG9zdGluZyI6ImNvbW1pdHRlZCJ9LCJjdXN0b2R5X2xpbWl0cyI6eyJjb3VudCI6NjQsInByZXBhcmVkX2J5dGVzIjoidW5saW1pdGVkIn0sInJvb3RfYW5jaG9yIjoiRjc0N0FCNUU2QTQzRjYxQzAyMDdDM0Q4QkQ5Rjc1MzdEMTg0MEZCQUZCM0U1MEZBRjIyRTBGNDY4ODA5NjY5OCIsInJvb3Rfc3RhdGUiOiJyZWFkeSIsInJvb3RfY29tbWl0dGVlX3NpemUiOjEsInJvb3RfY29tbWl0dGVkIjo1Nywicm9vdF9hcHBsaWVkIjo1NywiY2F0YWxvZ3VlX2hlaWdodCI6NTcsImNhdGFsb2d1ZV9jb3VudCI6MTgsInJlamVjdGVkX2NvdW50IjowLCJtYW5hZ2VyIjp7ImRlc2lyZWRfaG9zdHMiOnsicHJpdmF0ZSI6MCwiZGlzY292ZXJhYmxlIjoyMH0sImhvc3RpbmdfcmV2aXNpb24iOjMsIm5vZGVfZW5yb2xsbWVudCI6ImNvbXBsZXRlIiwicHJpdmF0ZV9jb250YWN0cyI6MCwicm91dGVfd2FpdHMiOjB9LCJvdXRjb21lX2Zvcm1hdHMiOls5XSwidmF1bHRfcmVhZHkiOnRydWUsInZhdWx0X3Byb3ZpZGVyX2Rpc2FibGVkIjp0cnVlfQ==\"\n",
+      "stderr": "",
+      "probe": {
+        "version": "0.7.265",
+        "not_ready": [],
+        "principal": {
+          "status": "available",
+          "pointer": "stored",
+          "anchor": "42BD91ED3A0937EE8F0465A20440BCC6FC1D8DE7C2F3991260E1F048DB0EF171",
+          "namespace": "node:3091b7cb874e8b01b79571221acafc00a072632d906db96becb96c0c2fc70474",
+          "self_hosting": "committed"
+        },
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "root_anchor": "F747AB5E6A43F61C0207C3D8BD9F7537D1840FBAFB3E50FAF22E0F4688096698",
+        "root_state": "ready",
+        "root_committee_size": 1,
+        "root_committed": 57,
+        "root_applied": 57,
+        "catalogue_height": 57,
+        "catalogue_count": 18,
+        "rejected_count": 0,
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "outcome_formats": [
+          9
+        ],
+        "vault_ready": true,
+        "vault_provider_disabled": true
+      }
+    }
+  ],
+  "old_volumes_retained": 8,
+  "main_unchanged": true,
+  "ingress_unchanged": true
+}

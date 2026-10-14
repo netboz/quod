@@ -68,3 +68,9 @@ new common primitive arity and authored definitions requires the existing
 authorized compatible-artifact/retained-history procedure. Source editing does
 not authorize deployment, refounding or history deletion. Text highlighting and
 the 3D editing workbench remain their separately tracked consumers.
+## Deployment
+
+The authorized combined commit and candidate `0.7.265` deployment are recorded in
+[deployment-265/README.md](deployment-265/README.md). That separately labelled
+campaign preserves the original implementation verification and its
+no-deployment boundary.

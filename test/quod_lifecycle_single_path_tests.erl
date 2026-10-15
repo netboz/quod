@@ -811,10 +811,13 @@ personal_lobbies_use_shared_creation_and_recovery(
         ?assertNotEqual(FirstRef, SecondRef),
         SceneGoal = {'::', FirstLobby,
             {',', {current_ontology_identity, FirstLobby, FirstAnchor},
-                  {lobby_view, playing, {0}}}},
+                  {client_world_view, personal_lobby, playing, [], {0}}}},
         {SceneBytes, SceneSig} = lobby_user_request(First, read, SceneGoal),
-        ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
-                     quod_client_goal_ingress:submit(SceneBytes, SceneSig)),
+        {ok, _, {normalized, {read, _, {answers, _, [SceneBinding]}}}} =
+            quod_client_goal_ingress:submit(SceneBytes, SceneSig),
+        {ok, ScenePairs} = quod_client_result:decode_binding(SceneBinding),
+        ?assertMatch({world_view, {entity_ref, FirstLobby, FirstAnchor, personal_lobby},
+                      [_ | _], nonphysical}, proplists:get_value(<<"V0">>, ScenePairs)),
         {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
         ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                      quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
@@ -1104,12 +1107,15 @@ found_lobby_classes() ->
         [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
     {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
+    {ok, SpaceSource} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/space.pl")),
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
-        [{modelling_vocabulary, ModelNs, ModelAnchor},
+        [{rendering_vocabulary, RenderNs, RenderAnchor},
+         {modelling_vocabulary, ModelNs, ModelAnchor},
          {material_eidolons, EidolonNs, EidolonAnchor},
          {environment_vocabulary, EnvironmentNs, EnvironmentAnchor},
          {environment_eidolons, EnvironmentEidolonNs, EnvironmentEidolonAnchor},
-         {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template}]).
+         {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template},
+         {space_template, SpaceSource}]).
 
 found_lobby_source(Prefix, File, Facts) ->
     Ns = unique_ns(Prefix),

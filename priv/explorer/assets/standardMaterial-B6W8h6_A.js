@@ -1,0 +1,1 @@
+import{i as e,t}from"./standardMaterial.pure-D3PgiBMj.js";e(),t();

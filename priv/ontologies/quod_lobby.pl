@@ -16,6 +16,7 @@ lobby_query(isa(_, _)).
 lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
 lobby_query(lobby_options(_, _)).
+lobby_query(complete_lobby_setup(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 lobby_query(Goal) :- public_source_query(Goal).
 
@@ -34,10 +35,12 @@ ontology_creation_allowed(Owner, Name, Options) :-
 
 %% A template is reviewed founding source stored in this ontology, not a path
 %% read from whichever node happens to receive the creation request.
-%% Founding supplies instance_template/1 and exact modelling/GUI references.
+%% Founding supplies the instance and space sources and exact vocabulary refs.
 lobby_options(Owner,
-    [source(Source),
+    [source(Source), source(SpaceSource),
      terms([lobby_owner(Owner), instance_of(lobby, personal_lobby),
+            instance_of(space, personal_lobby),
+            rendering_vocabulary(RenderingNamespace, RenderingAnchor),
             instance_of(sky_sphere, personal_sky),
             attribute(personal_sky, panorama, belfast_sunset_puresky),
             attribute(personal_sky, diameter, 80000),
@@ -59,9 +62,69 @@ lobby_options(Owner,
     Owner = agent_instance_ref(_, _, _),
     current_ontology_identity(Namespace, Anchor),
     instance_template(Source),
+    findall(S, space_template(S), [SpaceSource]),
+    findall(ontology_ref(R, A), rendering_vocabulary(R, A),
+        [ontology_ref(RenderingNamespace, RenderingAnchor)]),
     modelling_vocabulary(ModellingNamespace, ModellingAnchor),
     environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
     gui_vocabulary(GuiNamespace, GuiAnchor).
+
+%% Explicit completion installs a retained lobby's view contract through the
+%% ordinary source compiler. Creation keeps its direct human-owner action.
+%% The owner principal
+%% must pass both private ontologies' current ACLs; no node grant is added.
+complete_lobby_setup(Owner, Lobby) :-
+    current_principal(Owner),
+    Owner = agent_instance_ref(UserNamespace, UserAnchor, _),
+    UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
+        human_user_owner(Owner), lobby_reference(Lobby)),
+    complete_lobby_view(Owner, Lobby).
+
+complete_lobby_view(Owner, Target) :-
+    Target = ontology_ref(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+        lobby_owner(Owner), lobby_space(Space, _)),
+    (lobby_setup_ready(Target, Space) -> true
+    ; transaction((
+        Namespace::(current_ontology_identity(Namespace, Anchor),
+            ('$quod_predicate_source'(space_instance/2, <<"">>) ->
+                InstallSpace = true ; InstallSpace = false),
+            (instance_of(space, Space) -> SpaceFacts = []
+                ; SpaceFacts = [instance_of(space, Space)]),
+            findall(ontology_ref(R, A), rendering_vocabulary(R, A), Renderers)),
+        (InstallSpace = true -> findall(S, space_template(S), [SpaceSource])
+            ; SpaceSource = <<"">>),
+        (Renderers = [] ->
+            findall(ontology_ref(R, A), rendering_vocabulary(R, A),
+                [ontology_ref(Rendering, RenderingAnchor)]),
+            Facts = [rendering_vocabulary(Rendering, RenderingAnchor) | SpaceFacts]
+        ; Renderers = [_] -> Facts = SpaceFacts
+        ; fail_with_reason(ambiguous_lobby_rendering)),
+        quod:root::system_ontology(<<"quod:prolog">>, ToolsAnchor),
+        findall(Chunk,
+            <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, ToolsAnchor),
+                prolog_source(Target, Chunk)), Chunks),
+        lobby_source_codes(Chunks, BeforeCodes), binary_codes(Before, BeforeCodes),
+        '$quod_program_source'(BeforeProgram, Before),
+        '$quod_program_source'(SpaceProgram, SpaceSource),
+        append(BeforeProgram, SpaceProgram, Combined),
+        append(Combined, Facts, DraftProgram), '$quod_program_source'(DraftProgram, Draft),
+        <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, ToolsAnchor),
+            prolog_edit_goal(Target, all, Before, Draft, Edit)),
+        call(Edit),
+        (lobby_setup_ready(Target, Space) -> true
+            ; fail_with_reason(lobby_setup_incomplete))
+      ))).
+
+no_follow(lobby_source_codes/2).
+lobby_source_codes([source_chunk(done, Source)], Codes) :- binary_codes(Source, Codes).
+lobby_source_codes([source_chunk(more, Source) | Rest], Codes) :-
+    binary_codes(Source, Here), lobby_source_codes(Rest, Tail), append(Here, Tail, Codes).
+
+lobby_setup_ready(ontology_ref(Namespace, Anchor), Space) :-
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+        space_instance(Space, space),
+        findall(ontology_ref(R, A), rendering_vocabulary(R, A), [_])).
 
 isa(lobby, thing).
 isa(device, thing).

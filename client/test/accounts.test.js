@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { accountReference, createAccount, resumeAccounts, finishAccountSetup } from '../src/accounts.js'
-import { createKeyProvider, b64url } from '../src/key-provider.js'
+import { createKeyProvider, b64url, fromB64url } from '../src/key-provider.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { binary, atom, compound, renderTerm } from '../src/prolog-term.js'
 
@@ -130,4 +130,31 @@ test('explicit setup action cannot replace an unknown lobby operation', async ()
   await assert.rejects(finishAccountSetup(f.identity, f.options), /unresolved operation/)
   assert.deepEqual(await f.journal.list(), before)
   assert.equal(submitted, 2)
+})
+
+test('lost explicit completion reply resolves its exact request without another setup', async () => {
+  let submitted = 0
+  const f = await fixture(async () => ++submitted === 1 ? signupReply : lobbyReply)
+  await createAccount(f.identity, f.options)
+  const reference = accountReference(f.identity)
+  await assert.rejects(finishAccountSetup(f.identity, { ...f.options, post: async url => {
+    assert.equal(url, '/api/goals/execute')
+    submitted++
+    throw Object.assign(new Error('completion reply lost'), { outcomeUnknown: true })
+  } }), /completion reply lost/)
+  const [pending] = await f.journal.list()
+  const request = new TextDecoder().decode(fromB64url(pending.request))
+  assert.match(request, /State = pending\(_\)/)
+  assert.match(request, /State = linked\(_\)/)
+  assert.match(request, /complete_lobby_setup\(Owner, Lobby\)/)
+  await assert.rejects(finishAccountSetup(f.identity, f.options), /unresolved operation/)
+  const recovered = await resumeAccounts(f.identity, { ...f.options, post: async (url, body) => {
+    assert.equal(url, '/api/goals/outcomes')
+    assert.equal(body.request, pending.request)
+    assert.equal(body.signature, pending.signature)
+    return terminal(lobbyReply)
+  } })
+  assert.equal(recovered.unresolved, 0)
+  assert.equal(submitted, 3)
+  assert.deepEqual(accountReference(f.identity), reference)
 })

@@ -211,9 +211,11 @@ export default function World() {
               if (!active) return
               scene?.update(current)
               setMarks(current.marks)
+              setMissingLobby(current.selection === 'unavailable' && current.marks.length === 0)
               setStatus({ active: 'Physical space ready.', nonphysical: 'Space ready. Observer travel.',
                 disabled: 'Physics is disabled. Body travel paused.', denied: 'Physics access denied. Body travel paused.',
-                recovering: 'Physics is recovering. Body travel paused.', unavailable: 'Physics unavailable. Body travel paused.'
+                recovering: 'Physics is recovering. Body travel paused.', unavailable: current.marks.length
+                  ? 'Physics unavailable. Body travel paused.' : 'The scene is unavailable. Check its setup and source.'
               }[current.selection])
             },
             frame(current) { if (active) scene?.update(current) },

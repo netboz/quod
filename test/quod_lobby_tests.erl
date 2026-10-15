@@ -1,7 +1,7 @@
 -module(quod_lobby_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([start/1, start/4, stop/1, preview/1, read/2, submit/3,
-         start_namespace/2, stop_process/1, assert_read_has_no_io/1]).
+         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2]).
 
 cohosted_certified_progress_test_() ->
     {timeout, 30, fun() ->
@@ -1460,7 +1460,9 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
     {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => Pub}),
     {ok, Cursors} = quod_client_cursor:start_link(),
     ClassNs = <<"lobby-test-classes">>,
-    ClassFacts = [{modelling_vocabulary, <<"lobby-test-modelling">>,
+    ClassFacts = [{rendering_vocabulary, <<"lobby-test-rendering">>,
+                   quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
+                  {modelling_vocabulary, <<"lobby-test-modelling">>,
                    quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},
                   {material_eidolons, <<"lobby-test-material-eidolons">>,
                    quod_simplex:genesis_hash(<<"lobby-test-material-eidolons">>)},

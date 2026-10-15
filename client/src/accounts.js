@@ -80,18 +80,23 @@ export async function finishAccountSetup(identity, options = {}) {
   }
   const reference = accountReference(identity)
   if (!reference) throw new Error('This identity has no account on this network.')
-  return provisionLobby(identity, reference, { ...options, journal })
+  return provisionLobby(identity, reference, { ...options, journal }, true)
 }
 
-async function provisionLobby(identity, reference, options) {
-  const instance = readTerm(reference.instanceText.replace(/\.\s*$/, ''))
-  const goal = `${renderTerm(compound('provision_lobby', [instance]))}, lobby_reference(Lobby).`
+async function provisionLobby(identity, reference, options, complete = false) {
+  const instance = renderTerm(readTerm(reference.instanceText.replace(/\.\s*$/, '')))
+  const create = `provision_lobby(${instance})`
+  const completion = 'current_principal(Owner), lobby_vocabulary(Namespace, Anchor), '
+    + 'Namespace::(current_ontology_identity(Namespace, Anchor), complete_lobby_setup(Owner, Lobby))'
+  const goal = complete
+    ? `lobby_provisioning(${instance}, State), (State = pending(_) -> ${create}; State = linked(_) -> (${completion})), lobby_reference(Lobby).`
+    : `${create}, lobby_reference(Lobby).`
   const reply = await signedGoal(identity, { mode: 'execute', agent: reference, goal }, {
     ...options, context: { flow: 'account', step: 'lobby' },
     onTerminal: accountResult(identity, options),
   })
   if (!committed(reply) && reply.result !== 'pending') {
-    throw new Error('Your account exists, but the lobby creation was refused.')
+    throw new Error('Your account exists, but lobby setup was refused.')
   }
   return reply
 }

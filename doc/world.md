@@ -102,6 +102,22 @@ continues with the ordinary signed lobby-provisioning action. If a key is
 already authenticated but lacks an account, registration reuses that key.
 There is no automatic replacement identity or second account on failure.
 
+The default lobby recipe explicitly composes its instance source with
+`space.pl`, declares the lobby instance as a space, and pins its rendering
+vocabulary. This supplies a static, nonphysical view without enabling simulation.
+The shared lobby owner stores the reviewed space source as `space_template/1`
+alongside its existing instance template and exact vocabulary references.
+
+**Finish account setup** uses the existing direct human action while creation
+is pending. For a linked lobby, it invokes the shared completion action under
+the same human principal. Completion installs missing space source and view
+metadata through the existing source compiler in one exact-baseline transaction.
+It preserves custom clauses and existing rendering choices, rechecks both
+private owners' ACLs, and performs no write when the contract is already present.
+It does not grant node access or repair state silently during a read/reconnect.
+An empty unavailable projection exposes this explicit setup control to its owner;
+scene and resource failures remain visible through the ordinary signed view.
+
 For an established account, loading the page restores the active key from
 IndexedDB, authenticates it, resolves retained operations and selects the
 account before mounting the lobby. A normal reload of a completed account

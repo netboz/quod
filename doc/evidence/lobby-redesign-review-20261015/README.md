@@ -1,5 +1,9 @@
 # Lobby design and implementation reviews
 
+The [0.7.270 candidate acceptance](deployment/acceptance-270/README.md) records
+the successful frozen gates, eight-node deployment, desktop checks and obsolete
+candidate-volume purge. The main network and browser key stores were preserved.
+
 The [implementation follow-up](implementation-review-02/review.md) closes both
 implementation blockers and reports no new blocker. Its release conditions are
 clean frozen gates and actual candidate image/desktop acceptance. See

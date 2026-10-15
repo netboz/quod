@@ -1,0 +1,50 @@
+[
+  {
+    "index": 0,
+    "id": "cd271abc-1c63-439d-9612-0137a0ca0448",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[0]",
+    "stdout": "Successfully deleted volume \"cd271abc-1c63-439d-9612-0137a0ca0448\"!\n"
+  },
+  {
+    "index": 1,
+    "id": "4d54fb60-ddf5-4ed3-c12f-9088a4d99f31",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[1]",
+    "stdout": "Successfully deleted volume \"4d54fb60-ddf5-4ed3-c12f-9088a4d99f31\"!\n"
+  },
+  {
+    "index": 2,
+    "id": "f5b07830-38cb-7bef-8f40-38c521a0abf1",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[2]",
+    "stdout": "Successfully deleted volume \"f5b07830-38cb-7bef-8f40-38c521a0abf1\"!\n"
+  },
+  {
+    "index": 3,
+    "id": "f93e2fdb-21fd-d601-2d78-933345fab88c",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[3]",
+    "stdout": "Successfully deleted volume \"f93e2fdb-21fd-d601-2d78-933345fab88c\"!\n"
+  },
+  {
+    "index": 4,
+    "id": "05b0953a-b185-e474-7512-00648f0afed7",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[4]",
+    "stdout": "Successfully deleted volume \"05b0953a-b185-e474-7512-00648f0afed7\"!\n"
+  },
+  {
+    "index": 5,
+    "id": "69b6938a-827c-e372-fdae-5721ae6599e9",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[5]",
+    "stdout": "Successfully deleted volume \"69b6938a-827c-e372-fdae-5721ae6599e9\"!\n"
+  },
+  {
+    "index": 6,
+    "id": "b92c4621-1b6b-0f05-ae66-fe6ee0638e68",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[6]",
+    "stdout": "Successfully deleted volume \"b92c4621-1b6b-0f05-ae66-fe6ee0638e68\"!\n"
+  },
+  {
+    "index": 7,
+    "id": "ce4fd6fe-1e5b-6971-f622-27ad84ad7534",
+    "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[7]",
+    "stdout": "Successfully deleted volume \"ce4fd6fe-1e5b-6971-f622-27ad84ad7534\"!\n"
+  }
+]

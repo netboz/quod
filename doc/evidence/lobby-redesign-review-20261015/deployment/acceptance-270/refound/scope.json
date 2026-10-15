@@ -1,0 +1,61 @@
+{
+  "job": "quod-finality-candidate-v6-20260926",
+  "old_family": "quod-finality-candidate-v6-20260926-refound-20261014-v7",
+  "new_family": "quod-finality-candidate-v6-20260926-refound-20261015-v8",
+  "old_image": "192.168.1.11:5000/quod:0.7.269@sha256:8884cfed2d290a0cc34f4c4855a01382ad0e5ef407ae3eb5edcff53e4fe3ec21",
+  "new_image": "192.168.1.11:5000/quod:0.7.270@sha256:b38b552327ec53ea3977167ff387b0cd5377ad86b3dd3d0a04656711bdf1ab16",
+  "candidate_version": 86,
+  "candidate_modify_index": 862748,
+  "main_version": 246,
+  "main_modify_index": 826727,
+  "volumes": [
+    {
+      "id": "cd271abc-1c63-439d-9612-0137a0ca0448",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[0]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "index": 0
+    },
+    {
+      "id": "4d54fb60-ddf5-4ed3-c12f-9088a4d99f31",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[1]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "index": 1
+    },
+    {
+      "id": "f5b07830-38cb-7bef-8f40-38c521a0abf1",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[2]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "index": 2
+    },
+    {
+      "id": "f93e2fdb-21fd-d601-2d78-933345fab88c",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[3]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "index": 3
+    },
+    {
+      "id": "05b0953a-b185-e474-7512-00648f0afed7",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[4]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "index": 4
+    },
+    {
+      "id": "69b6938a-827c-e372-fdae-5721ae6599e9",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[5]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "index": 5
+    },
+    {
+      "id": "b92c4621-1b6b-0f05-ae66-fe6ee0638e68",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[6]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "index": 6
+    },
+    {
+      "id": "ce4fd6fe-1e5b-6971-f622-27ad84ad7534",
+      "name": "quod-finality-candidate-v6-20260926-refound-20261014-v7[7]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "index": 7
+    }
+  ]
+}

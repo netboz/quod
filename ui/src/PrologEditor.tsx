@@ -209,7 +209,11 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
   }
   const cards = draft?.cards ?? []
   const card = cards[cardIndex]
-  const result = [error, replyText(proof.reply, proof.solutionNumber)].filter(Boolean).join('\n')
+  const conflict = proof.reply && 'error' in proof.reply && proof.reply.error.replace(/^Error: /, '') === 'conflict_retry'
+  const proofResult = conflict
+    ? `Couldn't save: the source or permissions changed since your preview. Your draft is safe. ${proof.cursor ? `Choose “${view.stop}”, then refresh` : 'Refresh'} the current state before trying again.`
+    : replyText(proof.reply, proof.solutionNumber)
+  const result = [error, proofResult].filter(Boolean).join('\n')
   const panelView = useMemo(() => ({ ...workspace.view, fields: workspace.view.fields.flatMap(field => field.role !== 'source' ? [field]
         : !editable || !selected ? [{ ...field, kind: 'bindings' }] : [
         { kind: 'catalogue_selection', role: 'layout', label: 'Code layout' },
@@ -289,7 +293,8 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     <p>No changes are saved before {view.accept}. A conflict keeps your draft.</p>
     </>}
     {error && <p role="alert">{error}</p>}
-    {editable && proof.reply && <pre aria-label={view.results} className="whitespace-pre-wrap break-words">{replyText(proof.reply, proof.solutionNumber)}</pre>}
+    {editable && proof.reply && <pre aria-label={view.results} className="whitespace-pre-wrap break-words">{proofResult}</pre>}
+    {editable && conflict && <details><summary>Technical details</summary><pre>{replyText(proof.reply, proof.solutionNumber)}</pre></details>}
     {editable && proof.pendingOperation && <button disabled={proof.busy} onClick={() => void proof.resolve()}>{view.resolve}</button>}
     {editable && goal && <details><summary>Prolog goal being submitted</summary><pre className="whitespace-pre-wrap break-words">{goal}</pre></details>}
   </main>

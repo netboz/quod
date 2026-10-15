@@ -1381,6 +1381,14 @@ handle_call(
     end;
 handle_call({agent_attester_snapshot, _, _, _}, _From, S) ->
     {reply, {error, retry}, S};
+handle_call({agent_attester_unpin, MRef}, {Worker, _},
+            S = #s{agent_attesters = Attesters}) ->
+    case maps:get(MRef, Attesters, none) of
+        Row = #agent_attester{pid = Worker} ->
+            {reply, ok,
+             S#s{agent_attesters = Attesters#{MRef => Row#agent_attester{height = none}}}};
+        _ -> {reply, {error, stale}, S}
+    end;
 handle_call(
   {agent_attester_complete, MRef, Result}, {Worker, _Tag},
   S = #s{agent_attesters = Attesters})
@@ -1818,8 +1826,12 @@ spawn_agent_attester(Request = {agent_identity_request, _, _, _, _, NotAfter}, R
         try
             receive
                 {agent_attester_start, WorkerRef} ->
-                    Result = run_agent_attester(Engine, Ns, Request, Timeout,
-                        Deadline, WorkerRef, #{EngineMonitor => true, CallerMonitor => true}),
+                    Result = try run_agent_attester(Engine, Ns, Request, Timeout,
+                        Deadline, WorkerRef, #{EngineMonitor => true, CallerMonitor => true})
+                    catch
+                        exit:{timeout, _} -> {error, retry};
+                        exit:{noproc, _} -> {error, retry}
+                    end,
                     _ = gen_server:call(Engine, {agent_attester_complete, WorkerRef, Result}, infinity)
             end
         after
@@ -1852,18 +1864,8 @@ run_agent_attester(
                   when ProposedNotAfter > Now,
                        ProposedNotAfter =< RequestNotAfter,
                        ProposedNotAfter =< Now + ProofTimeout ->
-                    case quod_simplex:await_proof_access(Ns, Deadline, CancelMonitors) of
-                        {ok, Access} ->
-                            case gen_server:call(Engine,
-                                   {agent_attester_snapshot, WorkerRef, Access, Deadline},
-                                   max(0, Deadline - quod_time:mono_ms())) of
-                                {ok, Est, Applied} ->
-                                    attest_authenticated_agent(Engine, Ns, Est, Applied, Access,
-                                      Evidence, ProofId, ProposedNotAfter, AgentRef, SigningKey, Deadline);
-                                Error -> Error
-                            end;
-                        Error -> Error
-                    end;
+                    attest_with_access(Engine, Ns, Ns, Evidence, ProofId,
+                        ProposedNotAfter, AgentRef, SigningKey, Deadline, WorkerRef, CancelMonitors);
                 {error, expired} -> {error, retry};
                 _ -> {error, invalid_request}
             end;
@@ -1871,6 +1873,35 @@ run_agent_attester(
     end;
 run_agent_attester(_Engine, _Ns, _Request, _ProofTimeout, _Deadline, _Ref, _Monitors) ->
     {error, invalid_request}.
+
+attest_with_access(Engine, Ns, Binding, Evidence, ProofId, NotAfter,
+                   AgentRef, SigningKey, Deadline, WorkerRef, CancelMonitors) ->
+    case quod_simplex:await_proof_access(Binding, Deadline, CancelMonitors) of
+        {ok, Access} ->
+            Result = case gen_server:call(Engine,
+                            {agent_attester_snapshot, WorkerRef, Access, Deadline},
+                            max(0, Deadline - quod_time:mono_ms())) of
+                {ok, Est, Applied} ->
+                    attest_authenticated_agent(Engine, Ns, Est, Applied, Access,
+                        Evidence, ProofId, NotAfter, AgentRef, SigningKey, Deadline);
+                Error -> Error
+            end,
+            case {Result, quod_simplex:check_proof_access(Access)} of
+                {{error, retry}, {error, {Reason, _}}}
+                  when Reason =:= transaction_pending; Reason =:= ontology_busy ->
+                    %% A new fence can overtake acquisition, key proof or signing.
+                    %% Drop the old snapshot before waiting, then prove the key
+                    %% afresh in the same owner/committee and absolute deadline.
+                    case gen_server:call(Engine, {agent_attester_unpin, WorkerRef},
+                                         max(0, Deadline - quod_time:mono_ms())) of
+                        ok -> attest_with_access(Engine, Ns, Access, Evidence, ProofId, NotAfter,
+                                  AgentRef, SigningKey, Deadline, WorkerRef, CancelMonitors);
+                        UnpinError -> UnpinError
+                    end;
+                _ -> Result
+            end;
+        Error -> Error
+    end.
 
 attest_authenticated_agent(
   Engine, Ns, Est, Applied, Access,
@@ -1890,6 +1921,8 @@ attest_authenticated_agent(
                      catch exit:_ -> {error, retry}
                      end;
                  false -> {error, denied}
+             catch
+                 throw:{quod_ask_error, _Reason} -> {error, retry}
              after
                  quod_proof_session:stop(Session)
              end,

@@ -1,9 +1,10 @@
+import '../src/index.css'
 import { createRoot, type Root } from 'react-dom/client'
 import { PrologEditor } from '../src/PrologEditor'
 import World from '../src/World'
 import { SessionEntry } from '../src/Session'
 import { SessionContext, type SessionState } from '../src/session-context'
-import { createKeyProvider, b64url, fromB64url } from '../../client/src/key-provider.js'
+import { createKeyProvider, storeActiveKeyProvider, loadActiveKeyProvider, b64url, fromB64url } from '../../client/src/key-provider.js'
 import { signedOperationJournal } from '../../client/src/operation-journal.js'
 import { readTerm } from '../../client/src/prolog-read.js'
 import { atom, list, binary, compound, formatTerm, renderTerm } from '../../client/src/prolog-term.js'
@@ -11,7 +12,8 @@ import { atom, list, binary, compound, formatTerm, renderTerm } from '../../clie
 // Browser boundary fixture: real React, signing and IndexedDB, with explicit
 // HTTP responses. Server compilation/authorization are covered by lobby EUnit.
 export async function createEditorFixture() {
-  const owner = await createKeyProvider()
+  const owner = await loadActiveKeyProvider() ?? await createKeyProvider()
+  await storeActiveKeyProvider(owner)
   const other = await createKeyProvider()
   const encoder = new TextEncoder()
   const decoder = new TextDecoder()
@@ -33,6 +35,8 @@ export async function createEditorFixture() {
   let renewSession: (session: string) => void = () => { throw new Error('Editor is not mounted') }
   let cursorNumber = 0
   let lastDraft = source
+  let complete: string | null = null
+  let compileError: string | null = null
   const labels = {
     predicate: ['catalogue_selection', 'Predicate'], new_predicate: ['text_box', 'New predicate'],
     source: ['editor', 'Source code'], results: ['bindings', 'Edit result'],
@@ -103,6 +107,7 @@ export async function createEditorFixture() {
       }
       if (goal.includes('prolog_edit_goal(')) {
         const call = readTerm(goal.slice(goal.indexOf('prolog_edit_goal('), -2)) as any
+        if (compileError) return response({ result: 'fail', reasons: [compileError] })
         const [target, , baseline, draft] = call.args
         lastDraft = decoder.decode(draft.value)
         compilerInputs.push({ baseline: decoder.decode(baseline.value), source: lastDraft })
@@ -115,7 +120,7 @@ export async function createEditorFixture() {
     }
     if (path === '/api/goals/cursors' && String(row.goal).includes('prolog_source(')) {
       return response({ result: 'solution', cursor: 'source-snapshot', bindings: [{ Source:
-        renderTerm(compound('source_chunk', [{ type: 'atom', value: 'done' }, bytes('policy(visible).\n' + [...sources.values()].join(''))])) }] })
+        renderTerm(compound('source_chunk', [{ type: 'atom', value: 'done' }, bytes(complete ?? ('policy(visible).\n' + [...sources.values()].join('')))])) }] })
     }
     if (path === '/api/goals/cursors/source-snapshot' && init?.method === 'DELETE') return response({ result: 'stopped' })
     if (path === '/api/goals/cursors') {
@@ -133,13 +138,17 @@ export async function createEditorFixture() {
     if (path === '/api/goals/outcomes') {
       const saved = (await journal.list()).find(item => item.request === body.request)
       if (!saved || saved.signature !== body.signature) throw new Error('lookup did not retain exact signed request')
-      if (terminal) sources.set(String((saved.context as any).indicator), String((saved.context as any).source))
+      if (terminal) {
+        if ((saved.context as any).indicator === '') complete = String((saved.context as any).source)
+        else sources.set(String((saved.context as any).indicator), String((saved.context as any).source))
+      }
       return response({ result: 'operation_outcome', status: terminal ? 'committed' : 'pending', terminal })
     }
     if (/\/api\/goals\/cursors\/edit-\d+$/.test(path) && init?.method === 'DELETE') return response({ result: 'stopped' })
     throw new Error(`unexpected HTTP endpoint ${path}`)
   }
-  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string; readOnly?: boolean; world?: boolean } = {}) => {
+  const mount = (options: { key?: string; actor?: string; agentAnchor?: number; targetAnchor?: number; session?: string; readOnly?: boolean; world?: boolean; cleanDrafts?: boolean } = {}) => {
+    if (options.cleanDrafts) localStorage.clear()
     root?.unmount()
     root = createRoot(document.getElementById('fixture')!)
     let identity = { provider: options.key === 'other' ? other : owner,
@@ -173,7 +182,8 @@ export async function createEditorFixture() {
     heldCatalogues: () => catalogueWaiters.length,
     releaseCatalogue() { holdCatalogue = false; for (const release of catalogueWaiters.splice(0)) release() },
     configure(options: { accept?: 'lost' | 'pending' | 'expired' | 'missing'; terminal?: boolean; conflict?: boolean; holdCatalogue?: boolean;
-      readOnly?: boolean; source?: string; refreshError?: string | null }) {
+      readOnly?: boolean; source?: string; refreshError?: string | null; compileError?: string | null }) {
+      if (options.compileError !== undefined) compileError = options.compileError
       if (options.accept) accept = options.accept
       if (options.terminal !== undefined) terminal = options.terminal
       if (options.conflict !== undefined) conflict = options.conflict

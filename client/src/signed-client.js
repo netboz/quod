@@ -249,11 +249,14 @@ export function encodeGoalRequest({
   const instanceBytes = encoder.encode(agentInstanceText)
   const goalBytes = encoder.encode(goal)
   const deadline = BigInt(notAfterMs)
+  if (goalBytes.length > SIGNED_GOAL_LIMITS.goalTextBytes) {
+    throw new Error(`signed goal text exceeds byte encoding limit (${goalBytes.length} > ${SIGNED_GOAL_LIMITS.goalTextBytes})`)
+  }
   if (modeTag === undefined || namespaceBytes.length < 1 ||
       namespaceBytes.length > SIGNED_GOAL_LIMITS.namespaceBytes ||
       instanceBytes.length < 1 ||
       instanceBytes.length > SIGNED_GOAL_LIMITS.agentInstanceTextBytes ||
-      goalBytes.length < 1 || goalBytes.length > SIGNED_GOAL_LIMITS.goalTextBytes ||
+      goalBytes.length < 1 ||
       agentAnchor?.length !== 32 ||
       networkIdentity?.length !== 32 || signingPublicKey?.length !== 32 ||
       operationId?.length !== 32 || deadline < 1n || deadline > 0xffffffffffffffffn) {

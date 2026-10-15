@@ -1,0 +1,1 @@
+import{n as e,t}from"./WebXRControllerPointerSelection.pure-DGPqPt-O.js";t();export{t as RegisterWebXRControllerPointerSelection,e as WebXRControllerPointerSelection};

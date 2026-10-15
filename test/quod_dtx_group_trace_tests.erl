@@ -279,8 +279,14 @@ history_only_group_recovery_has_no_ambient_parent_test() ->
             after 2000 -> error(no_recovery_worker)
             end,
             Monitor = monitor(process, Worker),
+            %% A monitor request is asynchronous. A reply from the same worker
+            %% orders its installation before a different process shuts it down;
+            %% otherwise the observer can receive noproc instead of shutdown.
+            ?assertMatch(#{execution_ready := false, wave := none},
+                         quod_dtx_coordinator:test_state(Worker)),
             Owner ! stop,
-            receive {'DOWN', Monitor, process, Worker, shutdown} -> ok
+            receive {'DOWN', Monitor, process, Worker, Reason} ->
+                ?assertEqual(shutdown, Reason)
             after 3000 -> error(recovery_survived_owner)
             end,
             Coordinate = quod_trace_tests:take_span(<<"quod.dtx.coordinate">>),

@@ -23,6 +23,29 @@ ontology_interface(prolog_source/3, <<"explicit predicate source">>).
 ontology_interface(prolog_inspect/3, <<"authorized target inspection">>).
 ontology_interface(prolog_edit_goal/5, <<"compile an exact-baseline content or policy edit">>).
 
+%% The compiler transforms source and goal terms as data. Qualified names in
+%% those terms never authorize implicit argument following by these helpers.
+no_follow(prolog_clauses/2).
+no_follow(prolog_edit_goal/5).
+no_follow(prolog_edit_body/6).
+no_follow(prolog_ordered_clauses/2).
+no_follow(prolog_keyed_entries/2).
+no_follow(prolog_numbered_entries/3).
+no_follow(prolog_grouped_entries/2).
+no_follow(prolog_groups/2).
+no_follow(prolog_group_tail/4).
+no_follow(prolog_predicate_edits/3).
+no_follow(prolog_predicate_edit/5).
+no_follow(prolog_edit_destination/3).
+no_follow(prolog_code/3).
+no_follow(prolog_clause/2).
+no_follow(prolog_unique_clauses/2).
+no_follow(prolog_changed_suffix/4).
+no_follow(prolog_edit_tail/5).
+no_follow(prolog_retract_goals/3).
+no_follow(prolog_assert_goals/3).
+no_follow(prolog_goal_tree/4).
+
 prolog_clauses(Source, Clauses) :-
     '$quod_program_source'(Clauses, Source).
 
@@ -59,23 +82,99 @@ prolog_source(Target, Indicator, Source) :-
 %% Source checks return no scratch bindings: the durable result must not
 %% duplicate the inspected program. The ordinary transaction composes inside
 %% actions and other transactions with their existing savepoint semantics.
-prolog_edit_goal(Target, Indicator, ExpectedSource, DraftSource, Edit) :-
+prolog_edit_goal(Target, Selection, ExpectedSource, DraftSource, Edit) :-
     Target = ontology_ref(Namespace, Anchor),
-    term_variables([Namespace, Anchor, Indicator], []),
+    term_variables([Namespace, Anchor, Selection], []),
     '$quod_program_source'(ExpectedProgram, ExpectedSource),
     '$quod_program_source'(DraftProgram, DraftSource),
     prolog_code(ExpectedProgram, ExpectedClauses, ExpectedEntries),
     prolog_code(DraftProgram, DraftClauses, DraftEntries),
-    prolog_unique_clauses(DraftEntries, Indicator),
-    '$quod_program_source'(ExpectedClauses, CanonicalExpected),
-    '$quod_program_source'(DraftClauses, CanonicalDraft),
-    prolog_changed_suffix(ExpectedEntries, DraftEntries, Remove, Add),
-    prolog_edit_tail(Remove, Add, Indicator, CanonicalDraft, Tail),
-    Body = (('$quod_predicate_source'(Indicator, CanonicalExpected) -> true ; fail_with_reason(edit_conflict(Indicator))),
-            Tail),
+    prolog_unique_clauses(DraftEntries, Selection),
+    prolog_edit_body(Selection, ExpectedClauses, DraftClauses,
+                     ExpectedEntries, DraftEntries, Body),
     TargetEdit = Namespace::(current_ontology_identity(Namespace, Anchor),
                              transaction(Body)),
     prolog_edit_destination(Target, TargetEdit, Edit).
+
+%% Complete text has the same canonical predicate ordering as the source lens.
+%% Each changed predicate keeps its ordered common prefix. Unchanged predicates
+%% (including runtime-owned and shared definitions) generate no mutations.
+%% The guard reads one coherent snapshot. Ordinary predicate version tokens
+%% protect every inspected and newly edited definition through Accept.
+prolog_edit_body(all, _, _, ExpectedEntries, DraftEntries,
+                 (Guard, Changes)) :-
+    !,
+    prolog_ordered_clauses(ExpectedEntries, ExpectedClauses),
+    '$quod_program_source'(ExpectedClauses, CanonicalExpected),
+    term_digest(CanonicalExpected, ExpectedDigest),
+    binary_codes(CanonicalExpected, Bytes), length(Bytes, Length),
+    (Length > 0 -> ChunkBytes = Length ; ChunkBytes = 1),
+    Guard = (findall(Kind-Digest,
+                    ('$quod_source_chunk'(all, ChunkBytes, source_chunk(Kind, Current)),
+                     term_digest(Current, Digest)), [done-ExpectedDigest])
+             -> true ; fail_with_reason(edit_conflict(all))),
+    prolog_grouped_entries(ExpectedEntries, ExpectedGroups),
+    prolog_grouped_entries(DraftEntries, DraftGroups),
+    prolog_predicate_edits(ExpectedGroups, DraftGroups, Goals),
+    (Goals = [] -> Changes = true
+    ; length(Goals, Count), prolog_goal_tree(Count, Goals, [], Changes)).
+prolog_edit_body(Indicator, ExpectedClauses, DraftClauses, ExpectedEntries, DraftEntries,
+                 (Guard, Tail)) :-
+    '$quod_program_source'(ExpectedClauses, CanonicalExpected),
+    '$quod_program_source'(DraftClauses, CanonicalDraft),
+    Guard = ('$quod_predicate_source'(Indicator, CanonicalExpected)
+             -> true ; fail_with_reason(edit_conflict(Indicator))),
+    prolog_changed_suffix(ExpectedEntries, DraftEntries, Remove, Add),
+    prolog_edit_tail(Remove, Add, Indicator, CanonicalDraft, Tail).
+
+%% Across-predicate order is presentation; within-predicate clause order is
+%% semantic. Normalize both opened baselines and subsequent saved drafts alike.
+prolog_ordered_clauses(Entries, Clauses) :-
+    prolog_keyed_entries(Entries, Sorted),
+    findall(Clause, member(_-code(_, _, Clause), Sorted), Clauses).
+
+prolog_keyed_entries(Entries, Sorted) :-
+    prolog_numbered_entries(Entries, 0, Keyed),
+    sort(Keyed, Sorted).
+prolog_numbered_entries([], _, []).
+prolog_numbered_entries([code(Source, Clause) | Entries], Index,
+                       [Indicator-code(Index, Source, Clause) | Keyed]) :-
+    '$quod_source_indicator'(Clause, Indicator),
+    Next is Index + 1,
+    prolog_numbered_entries(Entries, Next, Keyed).
+
+prolog_grouped_entries(Entries, Groups) :-
+    prolog_keyed_entries(Entries, Sorted),
+    prolog_groups(Sorted, Groups).
+prolog_groups([], []).
+prolog_groups([Indicator-code(_, Source, Clause) | Rest], [predicate(Indicator, [code(Source, Clause) | Entries]) | Groups]) :-
+    prolog_group_tail(Rest, Indicator, Entries, Tail),
+    prolog_groups(Tail, Groups).
+prolog_group_tail([Indicator-code(_, Source, Clause) | Rest], Indicator, [code(Source, Clause) | Entries], Tail) :-
+    !, prolog_group_tail(Rest, Indicator, Entries, Tail).
+prolog_group_tail(Tail, _, [], Tail).
+
+prolog_predicate_edits([], [], []).
+prolog_predicate_edits([predicate(I, Before) | Expected], [predicate(I, After) | Draft], Goals) :-
+    !,
+    prolog_predicate_edits(Expected, Draft, Tail),
+    prolog_predicate_edit(I, Before, After, Tail, Goals).
+prolog_predicate_edits([predicate(I, Before) | Expected], Draft, Goals) :-
+    (Draft = [] ; Draft = [predicate(J, _) | _], I @< J),
+    !,
+    prolog_predicate_edits(Expected, Draft, Tail),
+    prolog_predicate_edit(I, Before, [], Tail, Goals).
+prolog_predicate_edits(Expected, [predicate(I, After) | Draft], Goals) :-
+    prolog_predicate_edits(Expected, Draft, Tail),
+    prolog_predicate_edit(I, [], After, Tail, Goals).
+
+prolog_predicate_edit(Indicator, Before, After, Tail, Goals) :-
+    prolog_changed_suffix(Before, After, Remove, Add),
+    (Remove = [], Add = [] -> Goals = Tail
+    ; findall(Clause, member(code(_, Clause), After), Clauses),
+      '$quod_program_source'(Clauses, CanonicalDraft),
+      prolog_edit_tail(Remove, Add, Indicator, CanonicalDraft, Goal),
+      Goals = [Goal | Tail]).
 
 %% Root already authorizes its administrator's exact direct transaction. Keep
 %% that existing path rather than adding a second root self-edit wrapper.

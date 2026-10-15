@@ -172,6 +172,8 @@ try {
   assert.equal((await query(guest, target, compound('acl_test_value', [variable('Value')]))).result, 'fail')
   const initial = await source(guest, 'acl_test_value')
   await unchangedAfter(guest, await edit(guest, 'acl_test_value', initial, 'acl_test_value(read_only_violation).'))
+  await unchangedAfter(guest, await prepareCodeEdit(guest.identity, guest.agent, workspace, null,
+    await full(guest), (await full(guest)).replace('acl_test_value(initial)', 'acl_test_value(forbidden)')))
   reports.push('source and policy reads independent of invocation and content edits')
 
   await grant('edit')
@@ -194,9 +196,37 @@ try {
   assert.equal(await source(owner, 'can_invoke'), policyBefore)
   reports.push('authorized transactional content edit; policy edits and smuggled writes denied')
 
+  const completeBefore = await full(guest)
+  const completeDraft = completeBefore.replace('acl_test_value(guest_committed)', 'acl_test_value(multiple)') +
+    'acl_test_derived(Customer) :- acl_test_value(Customer).\n'
+  const completeGoal = await prepareCodeEdit(guest.identity, guest.agent, workspace, null, completeBefore, completeDraft)
+  const completeHeight = await height()
+  await commit(guest, completeGoal)
+  assert.equal(await height(), completeHeight + 1, 'multiple predicates commit in one target transition')
+  assert.equal(await source(owner, 'acl_test_value'), 'acl_test_value(multiple) :- true.\n')
+  const derived = await readCodeSource(owner.identity, owner.agent, workspace, indicator('acl_test_derived'))
+  assert.match(derived, /acl_test_derived\(V0\) :- acl_test_value\(V0\)/)
+  const reflected = await query(owner, target, compound('acl_test_derived', [variable('Value')]))
+  assert.equal(singleBinding(reflected, 'Value'), 'multiple')
+  const completeAfter = await full(owner)
+  assert(completeAfter.includes(derived.trim()))
+  assert.equal(completeAfter.replace('acl_test_value(multiple) :- true.\n', '').replace(derived, ''),
+    completeBefore.replace('acl_test_value(guest_committed) :- true.\n', ''),
+    'every unedited shared, policy and runtime-owned clause is preserved exactly')
+  assert.equal(await source(owner, 'can_invoke'), policyBefore)
+  await assert.rejects(prepareCodeEdit(owner.identity, owner.agent, workspace, null, completeAfter, 'broken('),
+    error => error instanceof GoalFailure && error.reasons.some(reason => reason.includes('syntax_error')))
+  assert.equal(await height(), completeHeight + 1, 'parse rejection creates no write')
+  const wrongEdit = await prepareCodeEdit(owner.identity, owner.agent, wrong, null, completeAfter, completeDraft)
+  await unchangedAfter(owner, wrongEdit)
+  const forbiddenPolicy = completeAfter + 'can_invoke(_, _, _, _).\n'
+  await unchangedAfter(guest, await prepareCodeEdit(guest.identity, guest.agent, workspace, null, completeAfter, forbiddenPolicy))
+  reports.push('complete text: factual and rule edits atomic; owner query and predicate lens agree; parse, wrong-anchor and policy edits refused')
+
   const before = await full(guest)
   const staleBaseline = await source(guest, 'acl_test_value')
-  const stale = await edit(guest, 'acl_test_value', staleBaseline, 'acl_test_value(stale_overwrite).')
+  const stale = await prepareCodeEdit(guest.identity, guest.agent, workspace, null, before,
+    before.replace('acl_test_value(multiple)', 'acl_test_value(stale_overwrite)'))
   const held = await signedGoal(guest.identity, { mode: 'cursor', agent: guest.agent,
     goal: anchoredGoal(tools, compound('prolog_source', [ontologyTerm(target), variable('Source')])) })
   assert.equal(held.result, 'solution')

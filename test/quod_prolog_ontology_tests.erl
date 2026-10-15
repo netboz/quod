@@ -174,6 +174,108 @@ compiling_new_symbols_allocates_no_atoms_and_returns_explicit_assertions_test() 
         ?assertEqual([], changes(Compiler))
     end).
 
+complete_edit_groups_predicates_and_preserves_unchanged_contents_test() ->
+    with_editor([{choice, before}, {unselected, runtime_value}], fun(Compiler, Target, Committed) ->
+        Expected = complete_source(Target),
+        Draft = <<Expected/binary, "fresh(X) :- choice(X).">>,
+        Draft1 = binary:replace(Draft, <<"choice(before)">>, <<"choice(updated)">>),
+        Goal = edit(Compiler, all, Expected, Draft1),
+        {succeed, Edited} = erlog_int:prove_goal(Goal, Target),
+        Ops = changes(Edited),
+        ?assertEqual(3, length(Ops)),
+        ?assertNot(lists:any(fun({_, {{unselected, _}, _}}) -> true; (_) -> false end, Ops)),
+        {ok, Applied} = quod_diff:apply_ops(Committed, Ops),
+        Current = read_view(quod_ct:commit_kb(Applied, 2, 1)),
+        ?assertEqual([after_value], value({'Values'},
+            {findall, after_value, {fresh, updated}, {'Values'}}, Current)),
+        ?assertEqual(complete_source(Edited), complete_source(Current)),
+        %% A saved draft need not have canonical across-predicate order.
+        Same = edit(Compiler, all, Draft1, Draft1),
+        {succeed, Unchanged} = erlog_int:prove_goal(Same, Current),
+        ?assertEqual([], changes(Unchanged)),
+        ?assert(maps:is_key({fresh, 1},
+            quod_erlog_db_local_prove:get_read_set(db_ref(Edited))))
+    end).
+
+complete_edit_detects_changed_baseline_and_accept_time_phantoms_test() ->
+    with_editor([{choice, before}], fun(Compiler, Target, Committed) ->
+        Expected = complete_source(Target),
+        Goal = edit(Compiler, all, Expected, <<Expected/binary, "fresh(ok).">>),
+        {succeed, Preview} = erlog_int:prove_goal(Goal, Target),
+        Reads = quod_erlog_db_local_prove:get_read_set(db_ref(Preview)),
+        {ok, Added} = quod_diff:apply_ops(Committed, quod_ct:diff_for({fresh, intervening})),
+        Published = quod_ct:commit_kb(Added, 2, 1),
+        Current = wrap(Published),
+        try
+            ?assertMatch({conflict, {fresh, 1}}, quod_diff:validate(Reads, db_ref(Published))),
+            {fail, Refused} = erlog_int:prove_goal(Goal, Current),
+            ?assert(lists:member({edit_conflict, all}, Refused#est.fail_reasons)),
+            ?assertEqual([], changes(Refused))
+        after quod_erlog_db_local_prove:cleanup_read_set(Current) end
+    end).
+
+complete_edit_rejects_a_matching_final_chunk_of_stale_source_test() ->
+    with_editor([{choice, before}], fun(Compiler, Target, Committed) ->
+        Expected = complete_source(Target),
+        Goal = edit(Compiler, all, Expected, <<Expected/binary, "fresh(ok).">>),
+        {ok, EmptyPrefix} = quod_client_goal_parser:format_clause(
+            {':-', {'$0', <<>>}, true}),
+        Padding = byte_size(Expected) - byte_size(EmptyPrefix) - 1,
+        ?assert(Padding >= 0),
+        Prefix = {'$0', binary:copy(<<"x">>, Padding)},
+        {ok, Changed} = quod_diff:apply_ops(Committed, quod_ct:diff_for(Prefix)),
+        Current = wrap(quod_ct:commit_kb(Changed, 2, 1)),
+        try
+            CurrentText = complete_source(Current),
+            Size = byte_size(Expected),
+            ?assertMatch(<<_:Size/binary, Expected/binary>>, CurrentText),
+            ?assertEqual(2 * Size, byte_size(CurrentText)),
+            {fail, Refused} = erlog_int:prove_goal(Goal, Current),
+            ?assert(lists:member({edit_conflict, all}, Refused#est.fail_reasons)),
+            ?assertEqual([], changes(Refused)),
+            ?assertEqual(CurrentText, complete_source(Refused))
+        after quod_erlog_db_local_prove:cleanup_read_set(Current) end
+    end).
+
+complete_edit_removes_predicates_and_renaming_variables_is_unchanged_test() ->
+    with_editor([{':-', {choice, {'Customer'}}, {related, {'Customer'}}}, {removed, value}],
+      fun(Compiler, Target, Committed) ->
+        Expected = complete_source(Target),
+        Draft0 = binary:replace(Expected, <<"removed(value) :- true.\n">>, <<>>),
+        Draft = binary:replace(Draft0, <<"choice(V0) :- related(V0)">>, <<"choice(Person) :- related(Person)">>),
+        Goal = edit(Compiler, all, Expected, Draft),
+        {succeed, Edited} = erlog_int:prove_goal(Goal, Target),
+        ?assertEqual(1, length(changes(Edited))),
+        {ok, Applied} = quod_diff:apply_ops(Committed, changes(Edited)),
+        ?assertEqual(<<>>, source(read_view(Applied), {'/', removed, 1}))
+      end).
+
+complete_edit_compiles_new_zero_arity_symbols_without_atom_allocation_test() ->
+    Name = <<"editor_zero_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    with_editor([], fun(Compiler, Target, _Committed) ->
+        Expected = complete_source(Target),
+        Goal0 = edit(Compiler, all, Expected, <<Expected/binary, Name/binary, ".">>),
+        {Goal, _, _} = erlog_int:term_instance(Goal0, 0),
+        {ok, Text} = quod_client_goal_parser:format(Goal),
+        ?assertMatch({ok, _}, quod_client_goal_parser:parse(Text, 3)),
+        ?assertError(badarg, binary_to_existing_atom(Name, utf8))
+    end).
+
+compiler_data_helpers_have_no_implicit_following_test() ->
+    with_editor([], fun(Compiler, _Target, _Committed) ->
+        lists:foreach(fun(Functor) ->
+            {clauses, Clauses} = quod_erlog_db_local_prove:get_procedure(db_ref(Compiler), Functor),
+            ?assertNot(lists:any(fun({{'$quod_follower', _}, _, _}) -> true;
+                                   (_) -> false end, Clauses))
+        end, [{prolog_code, 3}, {prolog_clause, 2}, {prolog_numbered_entries, 3},
+              {prolog_group_tail, 4}, {prolog_predicate_edit, 5}])
+    end).
+
+complete_source(St) ->
+    {source_chunk, done, Text} = value({'Chunk'},
+        {'$quod_source_chunk', all, 1000000, {'Chunk'}}, St),
+    Text.
+
 edit(Compiler, Indicator, Expected, Draft) ->
     Returned = value({'Goal'},
       {prolog_edit_goal, ?TARGET, Indicator, Expected, Draft, {'Goal'}}, Compiler),

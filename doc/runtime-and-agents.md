@@ -68,6 +68,14 @@ belongs to `quod_agent_vault`, not to the actor process. Host recovery and
 pending work converge from committed ontology facts and exact operation
 references; neither needs a private Prolog KB or a message ledger.
 
+Identity attestation waits on the exact Simplex apply fence under the caller's
+original deadline. If another fence overtakes access acquisition, key evaluation
+or signing, the worker releases its invalidated snapshot and waits through the
+same owner and committee before proving the key again. A revoked key cannot
+sign after that wait. This read-only continuation never replays a native effect
+or resubmits the signed domain operation.
+Continuous apply fences can exhaust that deadline; they never extend it.
+
 `prepare_agent_key_custody(AgentRef, OldHost, OldEpoch, Destination, Key)`
 prepares a public key through an ordinary signed read in the agent's exact
 containing ontology. The destination must be the executing node's anchored

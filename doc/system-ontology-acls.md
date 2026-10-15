@@ -52,8 +52,34 @@ unchanged reads require no state rebuild, history scan or file writes.
 The existing lens `view/3`, `rows/3` selection and `laid_out/4` encoding path also
 continues to serve graphical lenses. Clients render their answers; they do not
 own a visibility allowlist. The default editor selection is complete state, with
-the target's genesis anchor displayed. Editing uses an explicit predicate lens
-and retains the existing signed preview, Accept, recovery and conflict workflow.
+the target's genesis anchor displayed. Authorized users can edit that complete
+text as one transaction; predicate lenses remain optional. The existing compiler
+accepts `all` or a predicate indicator, groups text by predicate while preserving
+clause order, and emits changes only for differing suffixes. A canonical complete
+baseline digest is checked against one target snapshot before staging. Ordinary
+read dependencies protect inspected and newly edited definitions at Accept;
+unrelated newly introduced predicates are preserved. An explicit lens changes
+only its selected predicate. The target's normal content/policy ACL remains the
+write authority, including for multi-predicate edits.
+
+The desktop source control highlights Quod syntax, supports search and inherited
+indentation, and displays the opened baseline beside the local draft for review.
+Local drafts retain their original baseline across refresh, reconnect and reload,
+scoped to the exact network, signing key, actor identity and anchors, target and
+tools. Signed preview, Accept, conflict handling and unresolved-operation recovery
+remain owned by the existing controllers and operation journal. No refresh or
+missing reply resubmits a write. Draft storage failures are shown explicitly.
+After a conflict, users can copy/reconcile their text or explicitly discard the
+draft and reload its current source; a failed reload preserves the draft.
+
+Stored clauses reconstruct facts as `Head :- true`, canonical variable names and
+predicate ordering. Original comments, spacing and authored variable spellings
+are absent from the semantic representation; the local draft preserves them until
+it is replaced by a fresh read. Durable authored names would require clause-linked
+presentation metadata committed with the clause through the same authorized
+transaction; they cannot be inferred from existing numbered variables. Parser and
+encoding rejections are explicit and never cause the client to split an edit.
+Physical VR keyboard and comfort acceptance remains separate from desktop checks.
 
 ## Ontology instances and inspection representations
 

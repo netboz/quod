@@ -30,7 +30,7 @@ export async function checkPrologEditor(page, origin) {
     const selection = page.getByRole('combobox').first()
     if (await selection.inputValue() === '') {
       assert.ok((await source.inputValue()).includes('policy(visible).'))
-      assert.equal(await source.getAttribute('readonly'), '')
+      assert.equal(await source.getAttribute('readonly'), null)
       await selection.selectOption('sample / 1')
       await page.waitForFunction(() => {
         const field = document.querySelector('textarea[aria-label="Source code"]')
@@ -202,6 +202,9 @@ export async function checkPrologEditor(page, origin) {
     assert.equal(snapshot.compilerInputs.at(-1).source, 'fresh(next).\n')
     const recoveredPredicate = await page.getByRole('combobox').first().inputValue()
     await mount({ readOnly: true })
+    await value('fresh(next).\n')
+    assert.equal(await source.getAttribute('readonly'), '', 'read-only refresh preserves the existing local draft')
+    await mount({ readOnly: true, cleanDrafts: true })
     await value('policy(visible).\n' + 'sample(next).\nfresh(saved).\n')
     assert.equal(await source.getAttribute('readonly'), '')
     assert.equal(await preview.count(), 0)

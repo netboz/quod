@@ -1,6 +1,6 @@
 // The editing ontology prepares an ordinary goal. Only the existing proof
 // cursor and Accept path execute it; this adapter owns no writes or retries.
-import { binary, compound, variable, formatClause, formatTerm } from './prolog-term.js'
+import { atom, binary, compound, variable, formatClause, formatTerm } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
 import { anchoredGoal, singleBinding, readTextProjection, ontologyTerm } from './world.js'
 import { signedGoal } from './signed-client.js'
@@ -37,7 +37,7 @@ export async function readCodeState(identity, agent, workspace, signal) {
 
 export async function prepareCodeEdit(identity, agent, workspace, indicator, baseline, source) {
   const result = await query(identity, agent, workspace.tools,
-    compound('prolog_edit_goal', [ontologyTerm(workspace.target), indicator,
+    compound('prolog_edit_goal', [ontologyTerm(workspace.target), indicator ?? atom('all'),
       text(baseline), text(source), variable('Edit')]), 'Edit')
   return formatClause(result)
 }

@@ -2991,23 +2991,31 @@ Wait for attestation access in an existing worker under its absolute deadline.
 Subscribe before checking; only the exact cleared fence wakes this acquisition.
 Owner death and the caller-owned cancellation monitors terminate the wait.
 There is no owner queue, polling, snapshot or signature while waiting.
+An invalidated access token retains its original owner/committee binding when
+acquiring a successor generation; it cannot borrow a replacement incarnation.
 """.
--spec await_proof_access(binary(), integer(), #{reference() => true}) ->
+-spec await_proof_access(binary() | quod_erlog_db_local_prove:access_guard(),
+                         integer(), #{reference() => true}) ->
           {ok, quod_erlog_db_local_prove:access_guard()} | {error, term()}.
-await_proof_access(Ns, Deadline, CancelMonitors) ->
+await_proof_access({quod_proof_access, Ns, Owner, _, CommitteeId}, Deadline, CancelMonitors) ->
+    await_bound_proof_access(Ns, Owner, CommitteeId, Deadline, CancelMonitors);
+await_proof_access(Ns, Deadline, CancelMonitors) when is_binary(Ns) ->
     case {identity_view(Ns), proof_gate_row(Ns)} of
         {{ok, #{committee_id := CommitteeId}}, {ok, Owner, _, _, CommitteeId, _}} ->
-            Key = {proof_gate, {Ns, Owner}},
-            true = quod_reg:subscribe(Key),
-            Monitor = monitor(process, Owner),
-            try acquire_attestation_access(Ns, {Owner, CommitteeId}, Deadline,
-                                           CancelMonitors#{Monitor => true})
-            after
-                demonitor(Monitor, [flush]),
-                quod_reg:unsubscribe(Key)
-            end;
+            await_bound_proof_access(Ns, Owner, CommitteeId, Deadline, CancelMonitors);
         {{error, Reason}, _} -> {error, Reason};
         _ -> {error, unavailable}
+    end.
+
+await_bound_proof_access(Ns, Owner, CommitteeId, Deadline, CancelMonitors) ->
+    Key = {proof_gate, {Ns, Owner}},
+    true = quod_reg:subscribe(Key),
+    Monitor = monitor(process, Owner),
+    try acquire_attestation_access(Ns, {Owner, CommitteeId}, Deadline,
+                                   CancelMonitors#{Monitor => true})
+    after
+        demonitor(Monitor, [flush]),
+        quod_reg:unsubscribe(Key)
     end.
 
 acquire_attestation_access(Ns, Binding, Deadline, Monitors) ->

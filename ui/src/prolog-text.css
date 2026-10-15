@@ -1,0 +1,17 @@
+.prolog-text { color: #1e293b; background: #fff; border: 1px solid #848fa580; border-radius: .5rem; overflow: hidden; }
+.prolog-text-tools { display: flex; align-items: center; gap: .75rem; padding: .5rem; flex-wrap: wrap; font-size: .8rem; }
+.prolog-text-tools input { border: 1px solid #848fa5; border-radius: .25rem; padding: .3rem; margin-left: .5rem; }
+.prolog-text-layers { position: relative; }
+.prolog-text-layers pre, .prolog-text-layers textarea { margin: 0; padding: 1rem; border: 0; border-radius: 0; font: 14px/1.6 ui-monospace, monospace; letter-spacing: normal; tab-size: 4; white-space: pre; overflow: auto; width: 100%; height: 29rem; box-sizing: border-box; }
+.prolog-text-layers pre { position: absolute; inset: 0; pointer-events: none; }
+.prolog-text-layers textarea { position: relative; display: block; resize: none; color: transparent; caret-color: #0b3954; background: transparent; -webkit-text-fill-color: transparent; }
+.prolog-text-layers textarea::selection { background: #0b395430; }
+.prolog-text-layers textarea:focus { outline: 2px solid #1a5f7a; outline-offset: -2px; }
+.prolog-comment { color: #63734b; font-style: italic; }
+.prolog-variable { color: #8a3c88; }
+.prolog-literal, .prolog-quoted { color: #9a491a; }
+.prolog-fact { color: #0b6170; font-weight: bold; }
+.prolog-rule { color: #174bb5; font-weight: bold; }
+.prolog-namespace, .prolog-qualified { color: #0e6773; }
+.prolog-operator { color: #ad2f42; }
+@media (forced-colors: active) { .prolog-text-layers pre { visibility: hidden; } .prolog-text-layers textarea { color: CanvasText; -webkit-text-fill-color: CanvasText; } }

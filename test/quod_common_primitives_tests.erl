@@ -365,12 +365,9 @@ program_source_large_draft_still_allocates_no_atoms_test() ->
 
 program_source_reports_syntax_errors_test() ->
     with_authored([], fun(St) ->
-        try erlog_int:prove_goal(
-              {'$quod_program_source', {'Program'}, <<"broken(.">>}, St) of
-            _ -> error(invalid_source_accepted)
-        catch
-            throw:{erlog_error, {syntax_error, invalid_syntax}, _} -> ok
-        end
+        {fail, Refused} = erlog_int:prove_goal(
+            {'$quod_program_source', {'Program'}, <<"broken(.">>}, St),
+        ?assert(lists:member({syntax_error, invalid_syntax}, Refused#est.fail_reasons))
     end).
 
 origin_draw_test() ->

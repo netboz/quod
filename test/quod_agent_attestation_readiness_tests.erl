@@ -92,14 +92,19 @@ owner_loss_never_borrows_replacement_generation_test() ->
     Owner ! finish,
     receive {'DOWN', Ref, process, Owner, normal} -> ok after 1000 -> error(no_down) end,
     Tab = gate_table(Ns, <<51:256>>, <<250:256>>, 7, []),
-    try ?assertMatch({error, _}, quod_simplex:check_proof_access(Access))
+    try
+        ?assertMatch({error, _}, quod_simplex:check_proof_access(Access)),
+        ?assertEqual({error, unavailable}, quod_simplex:await_proof_access(
+            Access, quod_time:mono_ms() + 1000, #{}))
     after ets:delete(Tab) end.
 
 committee_change_invalidates_acquired_access_test() ->
     with_fixture(fun(C = #{tab := Tab}) ->
         Access = open_access(C),
         true = ets:update_element(Tab, proof_gate, {7, <<99:256>>}),
-        ?assertMatch({error, _}, quod_simplex:check_proof_access(Access))
+        ?assertMatch({error, _}, quod_simplex:check_proof_access(Access)),
+        ?assertEqual({error, unavailable}, quod_simplex:await_proof_access(
+            Access, quod_time:mono_ms() + 1000, #{}))
     end).
 
 committee_replacement_cancels_pending_acquisition_test() ->
@@ -151,6 +156,124 @@ identity_collection_waits_through_apply_and_stale_ack_test() ->
         _ = ack(Stale, 8),
         ?assertMatch({ok, _}, result(W))
     end).
+
+fence_overtaking_acquired_access_waits_for_fresh_key_proof_test() ->
+    with_fixture(fun(C = #{ns := Ns, engine := Engine}) ->
+        Closed = close_gate(C),
+        W = collection(C),
+        _ = waiting_collection(C, W),
+        %% Hold the snapshot owner, not a guessed scheduling interval. The
+        %% attester acquires the cleared generation and queues its snapshot.
+        ok = sys:suspend(Engine),
+        try
+            Cleared = ack(Closed, 8),
+            _ = until(fun() ->
+                {messages, Messages} = process_info(Engine, messages),
+                case [Access || {'$gen_call', _,
+                       {agent_attester_snapshot, _, Access, _}} <- Messages] of
+                    [_] -> {ok, queued};
+                    _ -> false
+                end
+            end),
+            Successor = close_gate(C#{state := Cleared}, 9),
+            ok = sys:resume(Engine),
+            _ = waiting_collection(C, W),
+            apply_facts(Ns, 2, quod_ct:diff_for({unrelated, successor})),
+            _ = ack(Successor, 9),
+            ?assertMatch({ok, _}, result(W))
+        after catch sys:resume(Engine) end
+    end).
+
+fence_overtaking_snapshot_rechecks_key_test_() ->
+    [{atom_to_list(Boundary) ++ ":" ++ atom_to_list(Outcome),
+      fun() -> overtaken_snapshot(Boundary, Outcome) end}
+     || {Boundary, Outcomes} <- [{agent_attester_snapshot, [active, revoked, timeout, cancelled]},
+                                 {sign_agent_identity, [active, revoked]}],
+        Outcome <- Outcomes].
+
+overtaken_snapshot(Boundary, Outcome) ->
+    with_fixture(fun(C = #{ns := Ns, engine := Engine}) ->
+        Closed = close_gate(C),
+        W = case Outcome of
+                active -> attestation(C);
+                revoked -> attestation(C);
+                _ -> collection(C)
+            end,
+        _ = waiting_collection(C, W),
+        Parent = self(),
+        %% Suspend the requesting worker before the owner replies. A later
+        %% owner call proves the snapshot reply was processed before fencing.
+        Hook = fun(waiting, {in, {'$gen_call', {Worker, _}, Request}}, _)
+                    when element(1, Request) =:= Boundary ->
+                       case Boundary of
+                           agent_attester_snapshot -> true = erlang:suspend_process(Worker);
+                           sign_agent_identity -> ok
+                       end,
+                       Parent ! {snapshot_worker, Worker},
+                       case Boundary of
+                           sign_agent_identity -> receive continue_signing -> ok
+                                                  after 2000 -> error(no_signing_release) end;
+                           agent_attester_snapshot -> ok
+                       end,
+                       held;
+                  (State, _, _) -> State
+               end,
+        ok = sys:install(Engine, {Hook, waiting}),
+        MFA = {quod_ask, authenticate_agent, 5},
+        erlang:trace_pattern(MFA, true, [call_count]),
+        Cleared = ack(Closed, 8),
+        Worker = receive {snapshot_worker, Pid} -> Pid
+                 after 2000 -> error(no_snapshot_worker) end,
+        try
+            case Boundary of
+                agent_attester_snapshot -> 1 = quod_prolog:applied(Ns);
+                sign_agent_identity -> ok
+            end,
+            Successor = close_gate(C#{state := Cleared}, 9),
+            case Boundary of
+                agent_attester_snapshot ->
+                    _ = sys:replace_state(Engine, fun(State) ->
+                        true = erlang:resume_process(Worker), State
+                    end);
+                sign_agent_identity -> Engine ! continue_signing
+            end,
+            _ = waiting_collection(C, W),
+            ?assertEqual({call_count, 1}, erlang:trace_info(MFA, call_count)),
+            finish_overtaken_collection(Outcome, C, W, Worker, Successor),
+            Expected = case Outcome of active -> 2; revoked -> 2; _ -> 1 end,
+            ?assertEqual({call_count, Expected}, erlang:trace_info(MFA, call_count))
+        after
+            Engine ! continue_signing,
+            catch sys:replace_state(Engine, fun(State) ->
+                catch erlang:resume_process(Worker), State
+            end),
+            sys:remove(Engine, Hook),
+            erlang:trace_pattern(MFA, false, [call_count])
+        end
+    end).
+
+finish_overtaken_collection(timeout, _C, W, _Worker, _Successor) ->
+    ?assertEqual({error, unavailable}, result(W));
+finish_overtaken_collection(cancelled, #{key := Key}, {Caller, Ref}, Worker, _) ->
+    Monitor = monitor(process, Worker),
+    exit(Caller, kill),
+    receive {'DOWN', Ref, process, Caller, killed} -> ok
+    after 2000 -> error(caller_did_not_exit) end,
+    receive {'DOWN', Monitor, process, Worker, _} -> ok
+    after 2000 -> error(attester_did_not_exit) end,
+    ?assertEqual([], gproc:lookup_pids({p, l, Key}));
+finish_overtaken_collection(Outcome, #{ns := Ns, fact := Fact}, W, _, Successor) ->
+    case Outcome of
+        active -> apply_facts(Ns, 2, quod_ct:diff_for({unrelated, applied}));
+        revoked ->
+            [{assert, Clause}] = quod_ct:diff_for(Fact),
+            apply_facts(Ns, 2, [{retract, Clause}])
+    end,
+    _ = ack(Successor, 9),
+    case Outcome of
+        active -> ?assertMatch({ok, _, _, _}, result(W));
+        revoked -> ?assertEqual({error, denied}, result(W))
+    end.
 
 revocation_applied_while_waiting_is_not_signed_test() ->
     with_fixture(fun(C = #{ns := Ns, fact := Fact}) ->
@@ -321,11 +444,13 @@ gate_table(Ns, Anchor, Pub, Generation, Fences) ->
 
 fence() -> {<<53:256>>, 2, 8}.
 
-close_gate(#{state := S0}) ->
+close_gate(C) -> close_gate(C, 8).
+
+close_gate(#{state := S0}, Generation) ->
     P = quod_simplex:test_state_projection(S0),
     D = maps:get(dtx, P),
-    quod_simplex:test_install_projection(P#{dtx := D#{generation := 8,
-        apply_fences := #{<<53:256>> => #{slot => 2, generation => 8, blocking => true}}}}, S0).
+    quod_simplex:test_install_projection(P#{dtx := D#{generation := Generation,
+        apply_fences := #{<<53:256>> => #{slot => 2, generation => Generation, blocking => true}}}}, S0).
 
 ack(S, Generation) ->
     element(2, quod_simplex:running(cast, {resolve_applied, <<53:256>>, 2, Generation}, S)).
@@ -358,6 +483,17 @@ open_access(#{ns := Ns}) ->
     Access.
 
 collection(C) -> collection(C, 2000).
+
+attestation(#{ns := Ns, evidence := Evidence}) ->
+    launch(fun() ->
+        Tag = make_ref(),
+        Request = {agent_identity_request, <<93:128>>, <<93:256>>,
+                   maps:get(request_bytes, Evidence), maps:get(signature, Evidence),
+                   quod_time:now_ms() + 2000},
+        ok = quod_prolog:request_agent_attestation(Ns, Request, self(), Tag),
+        receive {quod_agent_attestation, Tag, Reply} -> Reply
+        after 3000 -> error(no_attestation_reply) end
+    end).
 
 collection(#{evidence := Evidence}, RemainingMs) ->
     launch(fun() ->

@@ -182,6 +182,15 @@ test('request encoding and journaling share the full protocol bounds', async () 
   )
 })
 
+test('oversized goal reports the actual byte encoding resource', () => {
+  assert.throws(() => encodeGoalRequest({
+    networkIdentity: u256(0x10), signingPublicKey: u256(0x11), operationId: u256(0x12),
+    agentNamespace: 'human:owner', agentAnchor: u256(0x13), agentInstanceText: 'owner.',
+    mode: 'execute', notAfterMs: 1_800_000_000_000,
+    goal: 'x'.repeat(SIGNED_GOAL_LIMITS.goalTextBytes + 1),
+  }), /signed goal text exceeds byte encoding limit/)
+})
+
 test('a lost signed-goal response is marked outcome-unknown', async () => {
   const previousFetch = globalThis.fetch
   const journal = memoryOperationJournal()

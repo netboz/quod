@@ -7,11 +7,17 @@ import type { EidolonWorkspace } from '../../client/src/world.js'
 import { formatTerm } from '../../client/src/prolog-term.js'
 import type { PrologTerm } from '../../client/src/prolog-term.js'
 import { readCodePredicates, readCodeSource, readCodeState, prepareCodeEdit, predicateIndicator, readCodeClauses, clausesSource } from '../../client/src/prolog-edit.js'
+import { PrologText } from './PrologText'
 import { b64url } from '../../client/src/key-provider.js'
 
 import type { ClauseCard } from '../../client/src/prolog-edit.js'
 
 type Draft = { baseline: string; source: string; cards?: ClauseCard[] }
+
+function editError(reason: unknown) {
+  const reasons = reason && typeof reason === 'object' && 'reasons' in reason && Array.isArray(reason.reasons) ? reason.reasons : []
+  return [String(reason), ...reasons].join('\n')
+}
 
 // Catalogue reads and local drafts meet in one choice list. A late initial
 // read must not erase a predicate restored from an unresolved signed edit.
@@ -26,22 +32,33 @@ type EditorProps = { workspace: EidolonWorkspace; onClose: () => void; onRefresh
 export function PrologEditor(props: EditorProps) {
   const { identity, agent } = useSignedSession()
   const scope = JSON.stringify([identity && b64url(identity.networkId), identity && b64url(identity.provider.publicKey),
-    agent?.id, props.workspace.target, props.workspace.tools])
-  return <ScopedEditor key={scope} {...props} />
+    agent?.namespace, String(agent?.anchor ?? ''), agent?.instanceText, props.workspace.target, props.workspace.tools])
+  return <ScopedEditor key={scope} storageKey={`quod.prolog-draft.v1:${scope}`} {...props} />
 }
 
-function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorProps) {
+function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKey }: EditorProps & { storageKey: string }) {
+  const [savedLocal] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return { selected: '', drafts: {} as Record<string, Draft>, error: null }
+      const saved = JSON.parse(raw)
+      if (typeof saved.selected !== 'string' || !saved.drafts || Object.values(saved.drafts).some((draft: unknown) =>
+        !draft || typeof (draft as Draft).baseline !== 'string' || typeof (draft as Draft).source !== 'string')) throw new Error('Invalid saved draft')
+      return { selected: saved.selected as string, drafts: saved.drafts as Record<string, Draft>, error: null }
+    } catch (reason) { return { selected: '', drafts: {} as Record<string, Draft>, error: String(reason) } }
+  })
+  const [storageError, setStorageError] = useState<string | null>(savedLocal.error)
   const { identity, agent } = useSignedSession()
   const view = codeForm(workspace.view)
   const [refreshFailed, setRefreshFailed] = useState(false)
   const editable = view.editable && !refreshFailed
   const proof = useProofCursor(agent?.namespace ?? '', String(agent?.anchor ?? ''), JSON.stringify(['prolog', workspace.target]))
   const [predicates, setPredicates] = useState<PrologTerm[]>([])
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = useState(savedLocal.selected)
   const [newPredicate, setNewPredicate] = useState('')
   const [layout, setLayout] = useState<'text' | 'cards'>('text')
   const [cardIndex, setCardIndex] = useState(0)
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  const [drafts, setDrafts] = useState<Record<string, Draft>>(savedLocal.drafts)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [goal, setGoal] = useState('')
@@ -52,7 +69,24 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
   const submitted = useRef<{ indicator: string; source: string } | null>(null)
   const indicator = predicates.find(predicate => formatTerm(predicate) === selected)
   const draft = drafts[selected]
+  const selection = selected ? indicator : null
   const locked = loading || refreshing || proof.busy || proof.cursor !== null || proof.pendingOperation !== null
+
+  useEffect(() => {
+    // Keep only local changes, scoped to exact network, signer, actor and
+    // anchored target. The operation journal remains the sole write custody.
+    if (savedLocal.error) return
+    try {
+      const dirty = Object.fromEntries(Object.entries(drafts).filter(([, draft]) => draft.source !== draft.baseline))
+      if (Object.keys(dirty).length) localStorage.setItem(storageKey, JSON.stringify({ selected, drafts: dirty }))
+      else localStorage.removeItem(storageKey)
+      setStorageError(null)
+    } catch (reason) { setStorageError(String(reason)) }
+  }, [drafts, selected, storageKey, savedLocal.error])
+
+  useEffect(() => {
+    setPredicates(previous => mergePredicates(previous, Object.keys(savedLocal.drafts).filter(Boolean).map(predicateIndicator)))
+  }, [savedLocal])
 
   const refreshSavedDrafts = useEffectEvent(() => {
     // A newly authorized representation refreshes saved contents. Local edits
@@ -72,7 +106,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     if (identity && agent) {
       void readCodePredicates(identity, agent, workspace).then(items => {
         if (current) setPredicates(previous => mergePredicates(items, previous))
-      }).catch(reason => { if (current) setError(String(reason)) })
+      }).catch(reason => { if (current) setError(editError(reason)) })
     }
     return () => { current = false; live.current = false }
   }, [identity, agent, workspace])
@@ -85,7 +119,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
         : readCodeState(identity, agent, workspace, controller.signal)
       void read.then(source => {
         if (!controller.signal.aborted) setDrafts(previous => ({ ...previous, [selected]: { source, baseline: source } }))
-      }).catch(reason => { if (!controller.signal.aborted) setError(String(reason)) })
+      }).catch(reason => { if (!controller.signal.aborted) setError(editError(reason)) })
         .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     }
     return () => controller.abort()
@@ -99,11 +133,26 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     try {
       await onRefresh()
     } catch (reason) {
-      if (live.current) { setRefreshFailed(true); setError(String(reason)) }
+      if (live.current) { setRefreshFailed(true); setError(editError(reason)) }
     } finally {
       refreshingNow.current = false
       if (live.current) setRefreshing(false)
     }
+  }
+
+  const discardDraft = async () => {
+    if (!identity || !agent || locked || pending.current || !proof.canEdit()) return
+    pending.current = true
+    setLoading(true)
+    try {
+      const source = indicator ? await readCodeSource(identity, agent, workspace, indicator)
+        : await readCodeState(identity, agent, workspace)
+      if (!live.current) return
+      setDrafts(previous => ({ ...previous, [selected]: { source, baseline: source } }))
+      setLayout('text')
+      setError(null)
+    } catch (reason) { if (live.current) setError(editError(reason)) }
+    finally { pending.current = false; if (live.current) setLoading(false) }
   }
 
   useEffect(() => {
@@ -113,7 +162,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       const source = saved.source
       const baseline = saved.baseline
       setSelected(indicator)
-      setPredicates(previous => mergePredicates(previous, [predicateIndicator(indicator)]))
+      if (indicator) setPredicates(previous => mergePredicates(previous, [predicateIndicator(indicator)]))
       setDrafts(previous => ({ ...previous, [indicator]: { source, baseline } }))
       submitted.current = { indicator, source }
     }
@@ -125,26 +174,26 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     const saved = submitted.current
     if (saved && proof.reply && 'result' in proof.reply && (proof.reply.result === 'ok' || (proof.reply.result === 'recovered' && proof.reply.status === 'committed'))) {
       setDrafts(previous => {
-        const next = { ...previous, [saved.indicator]: { ...previous[saved.indicator], baseline: saved.source, source: saved.source } }
-        delete next['']
-        return next
+        const dirty = Object.fromEntries(Object.entries(previous)
+          .filter(([key, draft]) => key !== saved.indicator && draft.source !== draft.baseline))
+        return { ...dirty, [saved.indicator]: { baseline: saved.source, source: saved.source } }
       })
       submitted.current = null
     }
   }, [proof.reply])
 
   const preview = async () => {
-    if (!editable || !identity || !agent || !indicator || !draft || pending.current || !proof.canEdit()) return
+    if (!editable || !identity || !agent || (selected && !indicator) || !draft || pending.current || !proof.canEdit()) return
     pending.current = true
     setLoading(true)
     setError(null)
     try {
-      const edit = await prepareCodeEdit(identity, agent, workspace, indicator, draft.baseline, draft.source)
+      const edit = await prepareCodeEdit(identity, agent, workspace, selection ?? null, draft.baseline, draft.source)
       if (!live.current) return
       setGoal(edit)
       submitted.current = { indicator: selected, source: draft.source }
       await proof.run(edit, { indicator: selected, baseline: draft.baseline, source: draft.source })
-    } catch (reason) { if (live.current) setError(String(reason)) }
+    } catch (reason) { if (live.current) setError(editError(reason)) }
     finally { pending.current = false; if (live.current) setLoading(false) }
   }
 
@@ -161,7 +210,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       setCardIndex(0)
       setLayout('cards')
       setError(null)
-    } catch (reason) { if (live.current) setError(String(reason)) }
+    } catch (reason) { if (live.current) setError(editError(reason)) }
     finally { pending.current = false; if (live.current) setLoading(false) }
   }
   const changeCards = (action: string, value = '') => {
@@ -195,7 +244,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       setError(null)
       // Read the actual current baseline even for a newly typed name; another
       // author may already have created it since the predicate list was read.
-    } catch (reason) { setError(String(reason)) }
+    } catch (reason) { setError(editError(reason)) }
   }
   const edit = (role: string, value: string) => {
     if (pending.current || !proof.canEdit() || loading) return
@@ -205,7 +254,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     if (role === 'clause') setCardIndex(Number(value))
     if (role === 'head' || role === 'body') changeCards(role, value)
     if (role === 'new_predicate') setNewPredicate(value)
-    if (role === 'source' && selected && draft) setDrafts(previous => ({ ...previous, [selected]: { baseline: draft.baseline, source: value } }))
+    if (role === 'source' && draft) setDrafts(previous => ({ ...previous, [selected]: { baseline: draft.baseline, source: value } }))
   }
   const cards = draft?.cards ?? []
   const card = cards[cardIndex]
@@ -215,8 +264,8 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
     : replyText(proof.reply, proof.solutionNumber)
   const result = [error, proofResult].filter(Boolean).join('\n')
   const panelView = useMemo(() => ({ ...workspace.view, fields: workspace.view.fields.flatMap(field => field.role !== 'source' ? [field]
-        : !editable || !selected ? [{ ...field, kind: 'bindings' }] : [
-        { kind: 'catalogue_selection', role: 'layout', label: 'Code layout' },
+        : !editable ? [{ ...field, kind: 'bindings' }] : [
+        ...(selected ? [{ kind: 'catalogue_selection', role: 'layout', label: 'Code layout' }] : []),
         ...(layout === 'text' ? [field] : [
           { kind: 'catalogue_selection', role: 'clause', label: 'Clause order' },
           { kind: 'text_box', role: 'head', label: 'Head' },
@@ -234,7 +283,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       choices: { layout: [{ value: 'text', label: 'Text' }, { value: 'cards', label: 'Clause cards' }],
         clause: cards.map((card, index) => ({ value: String(index), label: `${index + 1}. ${card.head}` })), predicate: [{ value: '', label: 'Complete current state' }, ...predicates.map(predicate => { const value = formatTerm(predicate); return { value, label: value } })] },
       locked,
-      enabled: { run: editable && !!selected && !locked && !!draft, accept: editable && !proof.busy && !!proof.cursor,
+      enabled: { run: editable && !locked && !!draft, accept: editable && !proof.busy && !!proof.cursor,
         stop: editable && !proof.busy && !!proof.cursor,
         create: editable && !locked && !!newPredicate.trim(), resolve: editable && !proof.busy && !!proof.pendingOperation,
         add_clause: editable && !locked, remove_clause: editable && !locked && !!card,
@@ -253,9 +302,12 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
         <p className="break-all font-mono text-sm">{workspace.target.namespace}<br />Genesis: {b64url(workspace.target.anchor)}</p></div>
       <button className="rounded-lg border px-4 py-2" onClick={onClose}>Return to lobby</button>
     </header>
-    <p>The complete current state includes stored facts, rules and shared policy. Select a predicate lens to inspect a definition{editable ? ' or edit it' : ''}.</p>
+    <p>The complete current state includes stored facts, rules and shared policy. {editable ? 'Edit this text as one atomic change, or select a predicate lens.' : 'This is a read-only representation.'}</p>
+    <p className="text-sm">Stored clauses are reconstructed in predicate order. Original comments, spacing and variable names are not retained; drafts keep your text. Compiled engine procedures and generated following clauses are omitted. Editing this view grants no additional content or policy permission.</p>
+    {storageError && <p role="alert">Local draft storage failed: {storageError}. Keep a copy before closing or reloading.</p>}
     <button disabled={locked} onClick={() => void refresh()}>{refreshing ? 'Refreshing…' : 'Refresh current state'}</button>
     <p className="text-sm">Refresh reloads saved contents and access. Unsaved edits keep their original baseline.</p>
+    {draft && draft.source !== draft.baseline && <button disabled={locked} onClick={() => void discardDraft()}>Discard draft and reload</button>}
     <label>{view.predicate} <select value={selected} disabled={locked} onChange={event => edit('predicate', event.target.value)}>
       <option value="">Complete current state</option>
       {predicates.map(predicate => { const name = formatTerm(predicate); return <option key={name} value={name}>{name}</option> })}
@@ -265,11 +317,8 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       <button disabled={locked || !newPredicate.trim()} onClick={createPredicate}>{view.create}</button></label>
     <label>Code layout <select aria-label="Code layout" value={layout} disabled={locked || !draft || !selected}
       onChange={event => void changeLayout(event.target.value)}><option value="text">Text</option><option value="cards">Clause cards</option></select></label></>}
-    {layout === 'text' ? <label className="flex flex-1 flex-col gap-2">{view.source}
-      <textarea aria-label={view.source} value={draft?.source ?? ''} rows={18} spellCheck={false}
-        className="min-h-80 w-full rounded-lg border bg-white p-4 font-mono text-sm"
-        readOnly={!editable || !selected} disabled={locked || !draft} onChange={event => edit('source', event.target.value)} />
-    </label> : <section aria-label="Clause cards" className="flex flex-col gap-3 rounded-xl border p-4">
+    {layout === 'text' ? <PrologText label={view.source} value={draft?.source ?? ''}
+      readOnly={!editable} disabled={locked || !draft} onChange={value => edit('source', value)} /> : <section aria-label="Clause cards" className="flex flex-col gap-3 rounded-xl border p-4">
       <label>Clause order <select aria-label="Clause order" value={cardIndex} disabled={locked || !cards.length}
         onChange={event => setCardIndex(Number(event.target.value))}>
         {cards.map((card, index) => <option key={index} value={index}>{index + 1}. {card.head}</option>)}
@@ -286,10 +335,14 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible }: EditorP
       </div>
     </section>}
     {editable && <><div className="flex gap-3">
-      <button disabled={locked || !draft || !selected} onClick={() => void preview()}>{view.run}</button>
+      <button disabled={locked || !draft} onClick={() => void preview()}>{view.run}</button>
       <button disabled={proof.busy || !proof.cursor} onClick={() => void proof.command('accept')}>{view.accept}</button>
       <button disabled={proof.busy || !proof.cursor} onClick={() => void proof.command('stop')}>{view.stop}</button>
     </div>
+    {draft && draft.source !== draft.baseline && <details><summary>Review local changes against opened baseline</summary>
+      <div className="grid gap-4 md:grid-cols-2"><section><h2>Opened baseline</h2><pre className="whitespace-pre-wrap break-words">{draft.baseline}</pre></section>
+        <section><h2>Local draft</h2><pre className="whitespace-pre-wrap break-words">{draft.source}</pre></section></div>
+    </details>}
     <p>No changes are saved before {view.accept}. A conflict keeps your draft.</p>
     </>}
     {error && <p role="alert">{error}</p>}

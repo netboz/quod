@@ -29,6 +29,8 @@ that used them stays sealable.
   following clauses. Facts print as `Head :- true`; a bound source compares
   exactly. Erlog's own `clause/2` decodes the compiled bodies, without exposing
   inspection variables in the caller's answer.
+- `'$quod_source_indicator'(+Clause, ?Name/Arity)` — the callable head's
+  indicator, including atom-safe names not yet materialized by admission.
 - `'$quod_source_chunk'(+Selection, +Bytes, ?Chunk)` — stored interpreted clauses in
   the same staged snapshot, in canonical predicate order. Backtracking yields
   bounded binary chunks, including the final empty chunk for an empty state.
@@ -43,14 +45,15 @@ that used them stays sealable.
 - `'$quod_program_source'(?Clauses, ?Source)` — parse a binary program or
   format an ordered clause list. Variable scope restarts per clause. Parsing
   never creates atoms: new symbols remain data until the client submits its
-  actual editing goal through ordinary signed admission.
+  actual editing goal through ordinary signed admission. Invalid source fails
+  with a bounded syntax/parser-resource reason through the ordinary diagnostics.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3,
-         predicate_source_2/3, source_chunk_3/3, retract_exact_1/3, program_source_2/3,
+         predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2]).
 
 -define(DRAW, '$quod_draw').
@@ -77,8 +80,10 @@ load(#est{db = Db0} = Est) ->
     Db9 = erlog_int:add_compiled_proc(
             {variant_digest, 2}, ?MODULE, variant_digest_2, Db8),
     Db10 = erlog_int:add_compiled_proc({binary, 1}, ?MODULE, binary_1, Db9),
+    Db11 = erlog_int:add_compiled_proc(
+        {'$quod_source_indicator', 2}, ?MODULE, source_indicator_2, Db10),
     Est#est{db = erlog_int:add_compiled_proc(
-        {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db10)}.
+        {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db11)}.
 
 agent_request_bytes_2({agent_request_bytes, Intent0, Bytes}, Next, #est{bs = Bs} = St) ->
     Intent = erlog_int:dderef(Intent0, Bs),
@@ -132,6 +137,16 @@ term_digest_2({term_digest, Term0, Digest}, Next, #est{bs = Bs} = St) ->
         end
     end.
 
+%% Atom-safe clause grouping shares signed admission's callable alphabet.
+source_indicator_2({'$quod_source_indicator', Clause0, Indicator}, Next,
+                   #est{bs = Bs} = St) ->
+    {':-', Head, _} = source_clause(erlog_int:dderef(Clause0, Bs)),
+    case quod_wire_term:callable_functor(Head) of
+        {ok, {Name, Arity}} -> erlog_int:unify_prove_body(
+            Indicator, {'/', Name, Arity}, Next, St);
+        error -> erlog_int:type_error(callable, Head, St)
+    end.
+
 source_chunk_3({'$quod_source_chunk', Selection0, Bytes0, Chunk}, Next,
                #est{bs = Bs} = St) ->
     case erlog_int:deref(Bytes0, Bs) of
@@ -179,9 +194,11 @@ program_source_2({'$quod_program_source', Clauses, Source0}, Next,
                     erlog_int:unify_prove_body(
                       Clauses, Fresh, Next, St#est{vn = NextVn});
                 {error, invalid_syntax} ->
-                    erlog_int:erlog_error({syntax_error, invalid_syntax}, St);
+                    erlog_int:fail(erlog_int:add_failure_reason(
+                        {syntax_error, invalid_syntax}, St));
                 {error, Reason} ->
-                    erlog_int:erlog_error({program_source_error, Reason}, St)
+                    erlog_int:fail(erlog_int:add_failure_reason(
+                        {program_source_error, Reason}, St))
             end;
         {_} ->
             case erlog_int:dderef(Clauses, Bs) of

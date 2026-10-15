@@ -49,9 +49,10 @@ target(Ctx, Dir) ->
     Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
     TargetNs = <<"acl-test-owned-ontology">>,
     Terms = quod_prolog:read_terms("test/fixtures/ontology-acl-acceptance.pl"),
-    %% Ensure several UTF-8 chunks so a held snapshot crosses an actual commit.
+    %% Shared definitions plus these UTF-8 rows cross source chunks. Keep the
+    %% complete baseline/draft request inside its existing wire encoding bound.
     Padding = [{acl_test_padding, I, binary:copy(<<"héllo 🌍"/utf8>>, 20)}
-               || I <- lists:seq(1, 100)],
+               || I <- lists:seq(1, 8)],
     {Sup, _} = quod_lobby_tests:start_namespace(TargetNs, Base#{
         data_dir => filename:join(Dir, "target"),
         genesis_diff => quod_prolog:terms_to_diff([{acl_test_owner, Owner} | Terms ++ Padding])}),

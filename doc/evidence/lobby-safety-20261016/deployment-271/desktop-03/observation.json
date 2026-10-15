@@ -1,0 +1,515 @@
+{
+  "desktop": true,
+  "headless": true,
+  "physicalVR": false,
+  "requests": [
+    "/api/auth/challenge",
+    "/api/auth/complete",
+    "/api/ontologies/system",
+    "/api/goals/read",
+    "/api/goals/read",
+    "/api/goals/control",
+    "/api/auth/challenge",
+    "/api/auth/complete",
+    "/api/auth/challenge",
+    "/api/auth/complete",
+    "/api/goals/read",
+    "/api/goals/read",
+    "/api/goals/read",
+    "/api/goals/read",
+    "/api/goals/control",
+    "/api/goals/control",
+    "/api/goals/control",
+    "/api/goals/control"
+  ],
+  "projections": [
+    {
+      "selection": "active",
+      "marks": "[mark(<<\"console\">>,<<\"group\">>,[],body_pose(0,2),no_surface,unlabelled,depicts(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,console)),mark(<<\"console/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-921,-929,-898,881,904,894),pivot(0,-929,0),front(<<\"-z\">>)),resources(5357484,1227580,31379,50000,1,1,4194304)),relative(<<\"console\">>,transform(0,0,0,0,0,0)),asset_surfaces,label(<<\"PROLOG CONSOLE\">>,<<\"above\">>),depicts_nothing),mark(<<\"floor\">>,<<\"group\">>,[],body_pose(1,3),no_surface,unlabelled,depicts(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,floor)),mark(<<\"floor/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-9000,-570,-9000,9000,1000,9000),pivot(0,0,0),front(<<\"-z\">>)),resources(2103472,2101296,55298,64512,1,3,1)),relative(<<\"floor\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"roof\">>,<<\"group\">>,[],body_pose(2,4),no_surface,unlabelled,depicts(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_roof)),mark(<<\"roof/model\">>,<<\"mesh\">>,mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>,<<\"model/gltf-binary\">>),<<\"gltf2-static-v1\">>,scale(1000),frame(aabb(-8875,1000,-8852,8875,5250,8852),pivot(0,0,0),front(<<\"-z\">>)),resources(942164,940032,20160,38016,1,2,1)),relative(<<\"roof\">>,transform(0,0,0,0,0,0)),asset_surfaces,unlabelled,depicts_nothing),mark(<<\"sky\">>,<<\"group\">>,[],transform(0,0,0,0,0,0),no_surface,unlabelled,depicts(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_sky)),mark(<<\"sky/sky\">>,<<\"sky_sphere\">>,[f(<<\"diameter\">>,80000)],relative(<<\"sky\">>,transform(0,0,0,0,75,0)),surface(<<\"#FFFFFF\">>,0,1000,120,[texture(<<\"base_colour\">>,asset(<<\"d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4\">>,<<\"image/jpeg\">>),repeat(1000,1000))]),unlabelled,depicts(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_sky))]",
+      "control": "control(agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\">>,<<\"\\x1\\\\x5\\\\xE4\\H\\x10\\\\x15\\\\x1E\\v\\xA6\\x\\x8\\\\xA3\\\\x2\\\\x6\\\\xB2\\E,n(%\\xB5\\c@\\xA9\\~J\\xA6\\CzF\\xDF\\\\xB\\\">>,me),1,controlled_agent(pilot,1,3,5,motion(grounded(900),2500,1600,500,query_limits(2,0,8,128),[jump(3000)]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500))))",
+      "frame": {
+        "tick": "126",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.00007172276291074866,
+              0.49781415131113943,
+              -1.6597157620705334
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "yCMce9D0TwZ57OL204UTifeXuOf61KyEBJa6C7S_7wQ",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "disconnected",
+          "sequence": "8"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  ],
+  "samples": [
+    {
+      "name": "glass-support",
+      "position": [
+        0.00007294043636471994,
+        0.4973439114896929,
+        -1.6581855505931888
+      ],
+      "frame": {
+        "tick": "128",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.00007294043636471994,
+              0.4973439114896929,
+              -1.6581855505931888
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "yCMce9D0TwZ57OL204UTifeXuOf61KyEBJa6C7S_7wQ",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(7.294043636471994e-5,0.4973439114896929,-1.6581855505931888),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.038686234408202326,0.9551760992542324,0.2934995650436003)),contact(1,normal(0.03927016961526108,0.9551543251522732,0.293492877121906))],10)",
+          "sequence": "10"
+        },
+        "units": "metres_seconds"
+      }
+    }
+  ],
+  "errors": [],
+  "resumedFrom": "desktop-01",
+  "controlReplies": [
+    {
+      "bindings": [
+        {
+          "Result": "queued(9)"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "rEzC4qkRk_dnUsDQQGekHDbQflrze-ECrceZL5Pu34w",
+      "request_digest": "gG8msuhV1U0-hZx-0qWFmRkVSIhK_9kujh0NcQBHzd0",
+      "height": 6
+    },
+    {
+      "bindings": [
+        {
+          "Result": "queued(10)"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "uAPIb_QB0VqkLdKfPOU7wEtbh3xPU_mJNuFzj2XMtJU",
+      "request_digest": "BYOVbj2p3YoKYtqnf_Ww5iPUuORCzIquOifGBw86HvA",
+      "height": 6
+    },
+    {
+      "bindings": [
+        {
+          "Result": "queued(11)"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "UbeUoPaq7HQDS067ll5dATLnnB5ZSHFQFdgyvrXC_v8",
+      "request_digest": "ZfhL0baJYUTeNPsDz3TkNYe4Gx7nkxn6r3OJkB1B6bQ",
+      "height": 6
+    },
+    {
+      "bindings": [
+        {
+          "Result": "queued(12)"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "ZCQC0xXrzBaJ6ZyBefL2oLctDPrS54X_m58YtFKT1HY",
+      "request_digest": "Gd6TwuleL4YUKRA5PVQ2EuGlcMpFs9D_FwAaD8YT6B8",
+      "height": 6
+    },
+    {
+      "bindings": [
+        {
+          "Result": "queued(13)"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "Fy2_2-vZz-uv8m5cDDFF72j2vxRrylDLXgw2xDnR6cI",
+      "request_digest": "uv85bSka-q8D8NcZKkTeotRBAwx1EbSW067aNL8tVJg",
+      "height": 6
+    }
+  ],
+  "journal": 0,
+  "owner": {
+    "account": {
+      "id": "jjMUJk-EdIf-_bBKNPfit0vLscpBNXpzr90_bQyL2dg\u0000human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\u0000AQXkSBAVHnameAijAgayRSxuKCW1Y0CpfkqmQ3pG3ws\u0000me.",
+      "network": "jjMUJk-EdIf-_bBKNPfit0vLscpBNXpzr90_bQyL2dg",
+      "namespace": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ",
+      "anchor": "AQXkSBAVHnameAijAgayRSxuKCW1Y0CpfkqmQ3pG3ws",
+      "instanceText": "me."
+    },
+    "lobby": {
+      "namespace": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby",
+      "anchor": {
+        "0": 23,
+        "1": 28,
+        "2": 33,
+        "3": 51,
+        "4": 19,
+        "5": 146,
+        "6": 23,
+        "7": 105,
+        "8": 139,
+        "9": 57,
+        "10": 204,
+        "11": 143,
+        "12": 67,
+        "13": 25,
+        "14": 236,
+        "15": 47,
+        "16": 169,
+        "17": 55,
+        "18": 120,
+        "19": 22,
+        "20": 117,
+        "21": 0,
+        "22": 208,
+        "23": 240,
+        "24": 52,
+        "25": 64,
+        "26": 2,
+        "27": 156,
+        "28": 112,
+        "29": 141,
+        "30": 124,
+        "31": 198
+      },
+      "instance": {
+        "type": "atom",
+        "value": "personal_lobby"
+      }
+    },
+    "reply": {
+      "bindings": [
+        {
+          "Binding": "controlled(pilot,eye)",
+          "D": "V10",
+          "Definitions": "[definition(floor,1,geometry(surface([vector(0,-550,0),vector(1100,-438,0),vector(1062,-438,284),vector(952,-438,550),vector(777,-438,777),vector(550,-438,952),vector(284,-438,1062),vector(0,-438,1100),vector(-284,-438,1062),vector(-550,-438,952),vector(-777,-438,777),vector(-952,-438,550),vector(-1062,-438,284),vector(-1100,-438,0),vector(-1062,-438,-284),vector(-952,-438,-550),vector(-777,-438,-777),vector(-550,-438,-952),vector(-284,-438,-1062),vector(0,-438,-1100),vector(284,-438,-1062),vector(550,-438,-952),vector(777,-438,-777),vector(952,-438,-550),vector(1062,-438,-284),vector(2200,-100,0),vector(2125,-100,569),vector(1905,-100,1100),vector(1555,-100,1555),vector(1100,-100,1905),vector(569,-100,2125),vector(0,-100,2200),vector(-569,-100,2125),vector(-1100,-100,1905),vector(-1555,-100,1555),vector(-1905,-100,1100),vector(-2125,-100,569),vector(-2200,-100,0),vector(-2125,-100,-569),vector(-1905,-100,-1100),vector(-1555,-100,-1555),vector(-1100,-100,-1905),vector(-569,-100,-2125),vector(0,-100,-2200),vector(569,-100,-2125),vector(1100,-100,-1905),vector(1555,-100,-1555),vector(1905,-100,-1100),vector(2125,-100,-569),vector(2450,200,0),vector(2366,200,634),vector(2121,200,1225),vector(1732,200,1732),vector(1225,200,2121),vector(634,200,2366),vector(0,200,2450),vector(-634,200,2366),vector(-1225,200,2121),vector(-1732,200,1732),vector(-2121,200,1225),vector(-2366,200,634),vector(-2450,200,0),vector(-2366,200,-634),vector(-2121,200,-1225),vector(-1732,200,-1732),vector(-1225,200,-2121),vector(-634,200,-2366),vector(0,200,-2450),vector(634,200,-2366),vector(1225,200,-2121),vector(1732,200,-1732),vector(2121,200,-1225),vector(2366,200,-634),vector(3000,0,0),vector(2897,0,776),vector(2598,0,1500),vector(2121,0,2121),vector(1500,0,2598),vector(776,0,2897),vector(0,0,3000),vector(-776,0,2897),vector(-1500,0,2598),vector(-2121,0,2121),vector(-2598,0,1500),vector(-2897,0,776),vector(-3000,0,0),vector(-2897,0,-776),vector(-2598,0,-1500),vector(-2121,0,-2121),vector(-1500,0,-2598),vector(-776,0,-2897),vector(0,0,-3000),vector(776,0,-2897),vector(1500,0,-2598),vector(2121,0,-2121),vector(2598,0,-1500),vector(2897,0,-776),vector(8560,0,0),vector(8268,0,2215),vector(7413,0,4280),vector(6052,0,6052),vector(4280,0,7413),vector(2215,0,8268),vector(0,0,8560),vector(-2215,0,8268),vector(-4280,0,7413),vector(-6052,0,6052),vector(-7413,0,4280),vector(-8268,0,2215),vector(-8560,0,0),vector(-8268,0,-2215),vector(-7413,0,-4280),vector(-6052,0,-6052),vector(-4280,0,-7413),vector(-2215,0,-8268),vector(0,0,-8560),vector(2215,0,-8268),vector(4280,0,-7413),vector(6052,0,-6052),vector(7413,0,-4280),vector(8268,0,-2215),vector(8560,780,0),vector(8268,780,2215),vector(7413,780,4280),vector(6052,780,6052),vector(4280,780,7413),vector(2215,780,8268),vector(0,780,8560),vector(-2215,780,8268),vector(-4280,780,7413),vector(-6052,780,6052),vector(-7413,780,4280),vector(-8268,780,2215),vector(-8560,780,0),vector(-8268,780,-2215),vector(-7413,780,-4280),vector(-6052,780,-6052),vector(-4280,780,-7413),vector(-2215,780,-8268),vector(0,780,-8560),vector(2215,780,-8268),vector(4280,780,-7413),vector(6052,780,-6052),vector(7413,780,-4280),vector(8268,780,-2215),vector(8750,1000,0),vector(8451,1000,2264),vector(7577,1000,4375),vector(6187,1000,6187),vector(4375,1000,7577),vector(2264,1000,8451),vector(0,1000,8750),vector(-2264,1000,8451),vector(-4375,1000,7577),vector(-6187,1000,6187),vector(-7577,1000,4375),vector(-8451,1000,2264),vector(-8750,1000,0),vector(-8451,1000,-2264),vector(-7577,1000,-4375),vector(-6187,1000,-6187),vector(-4375,1000,-7577),vector(-2264,1000,-8451),vector(0,1000,-8750),vector(2264,1000,-8451),vector(4375,1000,-7577),vector(6187,1000,-6187),vector(7577,1000,-4375),vector(8451,1000,-2264),vector(9000,780,0),vector(8693,780,2329),vector(7794,780,4500),vector(6363,780,6363),vector(4500,780,7794),vector(2329,780,8693),vector(0,780,9000),vector(-2329,780,8693),vector(-4500,780,7794),vector(-6363,780,6363),vector(-7794,780,4500),vector(-8693,780,2329),vector(-9000,780,0),vector(-8693,780,-2329),vector(-7794,780,-4500),vector(-6363,780,-6363),vector(-4500,780,-7794),vector(-2329,780,-8693),vector(0,780,-9000),vector(2329,780,-8693),vector(4500,780,-7794),vector(6363,780,-6363),vector(7794,780,-4500),vector(8693,780,-2329)],[triangle(0,2,1),triangle(0,3,2),triangle(0,4,3),triangle(0,5,4),triangle(0,6,5),triangle(0,7,6),triangle(0,8,7),triangle(0,9,8),triangle(0,10,9),triangle(0,11,10),triangle(0,12,11),triangle(0,13,12),triangle(0,14,13),triangle(0,15,14),triangle(0,16,15),triangle(0,17,16),triangle(0,18,17),triangle(0,19,18),triangle(0,20,19),triangle(0,21,20),triangle(0,22,21),triangle(0,23,22),triangle(0,24,23),triangle(0,1,24),triangle(1,26,25),triangle(1,2,26),triangle(2,27,26),triangle(2,3,27),triangle(3,28,27),triangle(3,4,28),triangle(4,29,28),triangle(4,5,29),triangle(5,30,29),triangle(5,6,30),triangle(6,31,30),triangle(6,7,31),triangle(7,32,31),triangle(7,8,32),triangle(8,33,32),triangle(8,9,33),triangle(9,34,33),triangle(9,10,34),triangle(10,35,34),triangle(10,11,35),triangle(11,36,35),triangle(11,12,36),triangle(12,37,36),triangle(12,13,37),triangle(13,38,37),triangle(13,14,38),triangle(14,39,38),triangle(14,15,39),triangle(15,40,39),triangle(15,16,40),triangle(16,41,40),triangle(16,17,41),triangle(17,42,41),triangle(17,18,42),triangle(18,43,42),triangle(18,19,43),triangle(19,44,43),triangle(19,20,44),triangle(20,45,44),triangle(20,21,45),triangle(21,46,45),triangle(21,22,46),triangle(22,47,46),triangle(22,23,47),triangle(23,48,47),triangle(23,24,48),triangle(24,25,48),triangle(24,1,25),triangle(25,50,49),triangle(25,26,50),triangle(26,51,50),triangle(26,27,51),triangle(27,52,51),triangle(27,28,52),triangle(28,53,52),triangle(28,29,53),triangle(29,54,53),triangle(29,30,54),triangle(30,55,54),triangle(30,31,55),triangle(31,56,55),triangle(31,32,56),triangle(32,57,56),triangle(32,33,57),triangle(33,58,57),triangle(33,34,58),triangle(34,59,58),triangle(34,35,59),triangle(35,60,59),triangle(35,36,60),triangle(36,61,60),triangle(36,37,61),triangle(37,62,61),triangle(37,38,62),triangle(38,63,62),triangle(38,39,63),triangle(39,64,63),triangle(39,40,64),triangle(40,65,64),triangle(40,41,65),triangle(41,66,65),triangle(41,42,66),triangle(42,67,66),triangle(42,43,67),triangle(43,68,67),triangle(43,44,68),triangle(44,69,68),triangle(44,45,69),triangle(45,70,69),triangle(45,46,70),triangle(46,71,70),triangle(46,47,71),triangle(47,72,71),triangle(47,48,72),triangle(48,49,72),triangle(48,25,49),triangle(49,74,73),triangle(49,50,74),triangle(50,75,74),triangle(50,51,75),triangle(51,76,75),triangle(51,52,76),triangle(52,77,76),triangle(52,53,77),triangle(53,78,77),triangle(53,54,78),triangle(54,79,78),triangle(54,55,79),triangle(55,80,79),triangle(55,56,80),triangle(56,81,80),triangle(56,57,81),triangle(57,82,81),triangle(57,58,82),triangle(58,83,82),triangle(58,59,83),triangle(59,84,83),triangle(59,60,84),triangle(60,85,84),triangle(60,61,85),triangle(61,86,85),triangle(61,62,86),triangle(62,87,86),triangle(62,63,87),triangle(63,88,87),triangle(63,64,88),triangle(64,89,88),triangle(64,65,89),triangle(65,90,89),triangle(65,66,90),triangle(66,91,90),triangle(66,67,91),triangle(67,92,91),triangle(67,68,92),triangle(68,93,92),triangle(68,69,93),triangle(69,94,93),triangle(69,70,94),triangle(70,95,94),triangle(70,71,95),triangle(71,96,95),triangle(71,72,96),triangle(72,73,96),triangle(72,49,73),triangle(73,98,97),triangle(73,74,98),triangle(74,99,98),triangle(74,75,99),triangle(75,100,99),triangle(75,76,100),triangle(76,101,100),triangle(76,77,101),triangle(77,102,101),triangle(77,78,102),triangle(78,103,102),triangle(78,79,103),triangle(79,104,103),triangle(79,80,104),triangle(80,105,104),triangle(80,81,105),triangle(81,106,105),triangle(81,82,106),triangle(82,107,106),triangle(82,83,107),triangle(83,108,107),triangle(83,84,108),triangle(84,109,108),triangle(84,85,109),triangle(85,110,109),triangle(85,86,110),triangle(86,111,110),triangle(86,87,111),triangle(87,112,111),triangle(87,88,112),triangle(88,113,112),triangle(88,89,113),triangle(89,114,113),triangle(89,90,114),triangle(90,115,114),triangle(90,91,115),triangle(91,116,115),triangle(91,92,116),triangle(92,117,116),triangle(92,93,117),triangle(93,118,117),triangle(93,94,118),triangle(94,119,118),triangle(94,95,119),triangle(95,120,119),triangle(95,96,120),triangle(96,97,120),triangle(96,73,97),triangle(97,122,121),triangle(97,98,122),triangle(98,123,122),triangle(98,99,123),triangle(99,124,123),triangle(99,100,124),triangle(100,125,124),triangle(100,101,125),triangle(101,126,125),triangle(101,102,126),triangle(102,127,126),triangle(102,103,127),triangle(103,128,127),triangle(103,104,128),triangle(104,129,128),triangle(104,105,129),triangle(105,130,129),triangle(105,106,130),triangle(106,131,130),triangle(106,107,131),triangle(107,132,131),triangle(107,108,132),triangle(108,133,132),triangle(108,109,133),triangle(109,134,133),triangle(109,110,134),triangle(110,135,134),triangle(110,111,135),triangle(111,136,135),triangle(111,112,136),triangle(112,137,136),triangle(112,113,137),triangle(113,138,137),triangle(113,114,138),triangle(114,139,138),triangle(114,115,139),triangle(115,140,139),triangle(115,116,140),triangle(116,141,140),triangle(116,117,141),triangle(117,142,141),triangle(117,118,142),triangle(118,143,142),triangle(118,119,143),triangle(119,144,143),triangle(119,120,144),triangle(120,121,144),triangle(120,97,121),triangle(121,146,145),triangle(121,122,146),triangle(122,147,146),triangle(122,123,147),triangle(123,148,147),triangle(123,124,148),triangle(124,149,148),triangle(124,125,149),triangle(125,150,149),triangle(125,126,150),triangle(126,151,150),triangle(126,127,151),triangle(127,152,151),triangle(127,128,152),triangle(128,153,152),triangle(128,129,153),triangle(129,154,153),triangle(129,130,154),triangle(130,155,154),triangle(130,131,155),triangle(131,156,155),triangle(131,132,156),triangle(132,157,156),triangle(132,133,157),triangle(133,158,157),triangle(133,134,158),triangle(134,159,158),triangle(134,135,159),triangle(135,160,159),triangle(135,136,160),triangle(136,161,160),triangle(136,137,161),triangle(137,162,161),triangle(137,138,162),triangle(138,163,162),triangle(138,139,163),triangle(139,164,163),triangle(139,140,164),triangle(140,165,164),triangle(140,141,165),triangle(141,166,165),triangle(141,142,166),triangle(142,167,166),triangle(142,143,167),triangle(143,168,167),triangle(143,144,168),triangle(144,145,168),triangle(144,121,145),triangle(145,170,169),triangle(145,146,170),triangle(146,171,170),triangle(146,147,171),triangle(147,172,171),triangle(147,148,172),triangle(148,173,172),triangle(148,149,173),triangle(149,174,173),triangle(149,150,174),triangle(150,175,174),triangle(150,151,175),triangle(151,176,175),triangle(151,152,176),triangle(152,177,176),triangle(152,153,177),triangle(153,178,177),triangle(153,154,178),triangle(154,179,178),triangle(154,155,179),triangle(155,180,179),triangle(155,156,180),triangle(156,181,180),triangle(156,157,181),triangle(157,182,181),triangle(157,158,182),triangle(158,183,182),triangle(158,159,183),triangle(159,184,183),triangle(159,160,184),triangle(160,185,184),triangle(160,161,185),triangle(161,186,185),triangle(161,162,186),triangle(162,187,186),triangle(162,163,187),triangle(163,188,187),triangle(163,164,188),triangle(164,189,188),triangle(164,165,189),triangle(165,190,189),triangle(165,166,190),triangle(166,191,190),triangle(166,167,191),triangle(167,192,191),triangle(167,168,192),triangle(168,169,192),triangle(168,145,169)]),1)),definition(pilot,1,geometry(capsule(500,250),1)),definition(personal_roof,1,geometry(surface([vector(2250,4650,0),vector(2173,4650,582),vector(1948,4650,1125),vector(1590,4650,1590),vector(1125,4650,1948),vector(582,4650,2173),vector(0,4650,2250),vector(-582,4650,2173),vector(-1125,4650,1948),vector(-1590,4650,1590),vector(-1948,4650,1125),vector(-2173,4650,582),vector(-2250,4650,0),vector(-2173,4650,-582),vector(-1948,4650,-1125),vector(-1590,4650,-1590),vector(-1125,4650,-1948),vector(-582,4650,-2173),vector(0,4650,-2250),vector(582,4650,-2173),vector(1125,4650,-1948),vector(1590,4650,-1590),vector(1948,4650,-1125),vector(2173,4650,-582),vector(5500,4144,0),vector(5312,4261,1423),vector(4763,4325,2750),vector(3889,4261,3889),vector(2750,4144,4763),vector(1423,4261,5312),vector(0,4325,5500),vector(-1423,4261,5312),vector(-2750,4144,4763),vector(-3889,4261,3889),vector(-4763,4325,2750),vector(-5312,4261,1423),vector(-5500,4144,0),vector(-5312,4261,-1423),vector(-4763,4325,-2750),vector(-3889,4261,-3889),vector(-2750,4144,-4763),vector(-1423,4261,-5312),vector(0,4325,-5500),vector(1423,4261,-5312),vector(2750,4144,-4763),vector(3889,4261,-3889),vector(4763,4325,-2750),vector(5312,4261,-1423),vector(8950,450,0),vector(8645,2324,2316),vector(7750,3350,4475),vector(6328,2324,6328),vector(4475,450,7750),vector(2316,2324,8645),vector(0,3350,8950),vector(-2316,2324,8645),vector(-4475,450,7750),vector(-6328,2324,6328),vector(-7750,3350,4475),vector(-8645,2324,2316),vector(-8950,450,0),vector(-8645,2324,-2316),vector(-7750,3350,-4475),vector(-6328,2324,-6328),vector(-4475,450,-7750),vector(-2316,2324,-8645),vector(0,3350,-8950),vector(2316,2324,-8645),vector(4475,450,-7750),vector(6328,2324,-6328),vector(7750,3350,-4475),vector(8645,2324,-2316)],[triangle(0,25,24),triangle(0,1,25),triangle(1,26,25),triangle(1,2,26),triangle(2,27,26),triangle(2,3,27),triangle(3,28,27),triangle(3,4,28),triangle(4,29,28),triangle(4,5,29),triangle(5,30,29),triangle(5,6,30),triangle(6,31,30),triangle(6,7,31),triangle(7,32,31),triangle(7,8,32),triangle(8,33,32),triangle(8,9,33),triangle(9,34,33),triangle(9,10,34),triangle(10,35,34),triangle(10,11,35),triangle(11,36,35),triangle(11,12,36),triangle(12,37,36),triangle(12,13,37),triangle(13,38,37),triangle(13,14,38),triangle(14,39,38),triangle(14,15,39),triangle(15,40,39),triangle(15,16,40),triangle(16,41,40),triangle(16,17,41),triangle(17,42,41),triangle(17,18,42),triangle(18,43,42),triangle(18,19,43),triangle(19,44,43),triangle(19,20,44),triangle(20,45,44),triangle(20,21,45),triangle(21,46,45),triangle(21,22,46),triangle(22,47,46),triangle(22,23,47),triangle(23,24,47),triangle(23,0,24),triangle(24,49,48),triangle(24,25,49),triangle(25,50,49),triangle(25,26,50),triangle(26,51,50),triangle(26,27,51),triangle(27,52,51),triangle(27,28,52),triangle(28,53,52),triangle(28,29,53),triangle(29,54,53),triangle(29,30,54),triangle(30,55,54),triangle(30,31,55),triangle(31,56,55),triangle(31,32,56),triangle(32,57,56),triangle(32,33,57),triangle(33,58,57),triangle(33,34,58),triangle(34,59,58),triangle(34,35,59),triangle(35,60,59),triangle(35,36,60),triangle(36,61,60),triangle(36,37,61),triangle(37,62,61),triangle(37,38,62),triangle(38,63,62),triangle(38,39,63),triangle(39,64,63),triangle(39,40,64),triangle(40,65,64),triangle(40,41,65),triangle(41,66,65),triangle(41,42,66),triangle(42,67,66),triangle(42,43,67),triangle(43,68,67),triangle(43,44,68),triangle(44,69,68),triangle(44,45,69),triangle(45,70,69),triangle(45,46,70),triangle(46,71,70),triangle(46,47,71),triangle(47,48,71),triangle(47,24,48)]),1)),definition(console,1,geometry(parts([part(vector(0,70,120),box(1000,70,500)),part(vector(0,175,80),box(920,35,420)),part(vector(0,590,120),box(380,410,240)),part(vector(0,1450,0),box(950,550,210))]),1))]",
+          "E": "V8",
+          "Epoch": "1",
+          "Owner": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\">>,<<\"\\x1\\\\x5\\\\xE4\\H\\x10\\\\x15\\\\x1E\\v\\xA6\\x\\x8\\\\xA3\\\\x2\\\\x6\\\\xB2\\E,n(%\\xB5\\c@\\xA9\\~J\\xA6\\CzF\\xDF\\\\xB\\\">>,me)",
+          "R": "V9"
+        }
+      ],
+      "result": "ok",
+      "operation_id": "-kpbt96bpnSaTWnqBlYI8VLT4CLSQqrfX9vQWYSW28s",
+      "request_digest": "cdccj8N7h5UbQqC44eL0JhdqLHAgjkFhE4IZmw1u5pU",
+      "height": 6,
+      "dependencies": [
+        {
+          "ns": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ",
+          "genesis_anchor": "AQXkSBAVHnameAijAgayRSxuKCW1Y0CpfkqmQ3pG3ws",
+          "height": "6"
+        },
+        {
+          "ns": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby",
+          "genesis_anchor": "FxwhMxOSF2mLOcyPQxnsL6k3eBZ1ANDwNEACnHCNfMY",
+          "height": "4"
+        }
+      ]
+    }
+  },
+  "asset": {
+    "digest": "766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee",
+    "bytes": 2103472
+  },
+  "oldAssetStatus": 200,
+  "phase": "jump",
+  "latest": {
+    "tick": "165",
+    "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+    "space": "world",
+    "epoch": "1",
+    "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+    "generation": "1",
+    "schema": 1,
+    "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+    "structure": "5",
+    "poses": [
+      {
+        "position": [
+          0,
+          0,
+          3.85
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "body": "0",
+        "revision": "2"
+      },
+      {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "body": "1",
+        "revision": "3"
+      },
+      {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "body": "2",
+        "revision": "4"
+      },
+      {
+        "position": [
+          0.0005289422614429933,
+          0.4958413487447607,
+          -1.6532356509189183
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "body": "3",
+        "revision": "5"
+      }
+    ],
+    "registration": "yCMce9D0TwZ57OL204UTifeXuOf61KyEBJa6C7S_7wQ",
+    "view_clearance": 0.498,
+    "control_state": {
+      "pending": false,
+      "result": "clipped(pose(vector(5.289422614429933e-4,0.4958413487447607,-1.6532356509189183),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.038686234408201965,0.9551760992542307,0.29349956504360575))],8)",
+      "sequence": "13"
+    },
+    "units": "metres_seconds"
+  },
+  "jumpFrames": [
+    {
+      "tick": "129",
+      "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+      "space": "world",
+      "epoch": "1",
+      "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+      "generation": "1",
+      "schema": 1,
+      "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+      "structure": "5",
+      "poses": [
+        {
+          "position": [
+            0,
+            0,
+            3.85
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "body": "0",
+          "revision": "2"
+        },
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "body": "1",
+          "revision": "3"
+        },
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "body": "2",
+          "revision": "4"
+        },
+        {
+          "position": [
+            0.00007294043636471994,
+            0.544619802488603,
+            -1.6581855505931888
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "body": "3",
+          "revision": "5"
+        }
+      ],
+      "registration": "yCMce9D0TwZ57OL204UTifeXuOf61KyEBJa6C7S_7wQ",
+      "view_clearance": 0.498,
+      "control_state": {
+        "pending": false,
+        "result": "jumped",
+        "sequence": "11"
+      },
+      "units": "metres_seconds"
+    }
+  ],
+  "failure": "Error: Expected physical frame not received",
+  "body": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced"
+}

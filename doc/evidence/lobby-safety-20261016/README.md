@@ -1,5 +1,8 @@
 # Lobby safety and jump verification
 
+Delivered as0.7.271; see [deployment and desktop results](deployment-271/README.md).
+The records below retain the pre-delivery verification campaigns and failures.
+
 The deployed 0.7.270 fall was reproduced using the retained isolated acceptance
 account. Physics and its signed projection remained active, with no browser
 error. At Y below -45m the camera was outside the fixed 40m sky radius; the

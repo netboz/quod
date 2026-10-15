@@ -1,0 +1,32 @@
+{
+  "CreateIndex": 864394,
+  "CreateTime": 1792108006536932073,
+  "EvalPriority": 50,
+  "ID": "2d8ddf2c-a188-ce98-bbea-75fc1f2a31fd",
+  "IsMultiregion": false,
+  "JobCreateIndex": 780429,
+  "JobID": "quod-finality-candidate-v6-20260926",
+  "JobModifyIndex": 864393,
+  "JobSpecModifyIndex": 864393,
+  "JobVersion": 90,
+  "ModifyIndex": 864427,
+  "ModifyTime": 0,
+  "Namespace": "default",
+  "Status": "successful",
+  "StatusDescription": "Deployment completed successfully",
+  "TaskGroups": {
+    "quod-node": {
+      "AutoPromote": false,
+      "AutoRevert": false,
+      "DesiredCanaries": 0,
+      "DesiredTotal": 8,
+      "HealthyAllocs": 8,
+      "PlacedAllocs": 8,
+      "PlacedCanaries": null,
+      "ProgressDeadline": 1200000000000,
+      "Promoted": false,
+      "RequireProgressBy": "2026-10-16T02:07:37.244777138+02:00",
+      "UnhealthyAllocs": 0
+    }
+  }
+}

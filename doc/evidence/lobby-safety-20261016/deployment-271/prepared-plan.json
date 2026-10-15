@@ -1,0 +1,24 @@
+{
+  "release": "0.7.271",
+  "job": "quod-finality-candidate-v6-20260926",
+  "expected_before": {
+    "version": 88,
+    "job_modify_index": 863647,
+    "root_anchor": "CC6CD171CC07D771F5F44A8B6DD4FB04B16B104C456E09EE1B81C1D775C77F05",
+    "image": "192.168.1.11:5000/quod:0.7.270@sha256:b38b552327ec53ea3977167ff387b0cd5377ad86b3dd3d0a04656711bdf1ab16"
+  },
+  "old_volume_family": "quod-finality-candidate-v6-20260926-refound-20261015-v8",
+  "new_volume_family": "quod-finality-candidate-v6-20260926-refound-20261016-v9",
+  "scope_authority": "Yan explicitly reaffirmed deployment and ledger purge if needed while going to sleep2026-10-16. Candidate only; main network and browser key files excluded.",
+  "gates": "release-gates-05",
+  "label_commit": "Separate from implementation",
+  "purge_order": "Only eight exact old-volume IDs after fleet plus desktop acceptance",
+  "unknown_operation": "Stop and resolve original request; no resubmission",
+  "reviews": [
+    "review-04 core approved",
+    "review-05 keyboard approved"
+  ],
+  "default_walk_mps": 2.5,
+  "default_jump_mps": 3,
+  "measured_jump_rise_m": 0.434
+}

@@ -13,7 +13,7 @@ physics_structure(personal_lobby, 1).
 physics_next_body(personal_lobby, 0).
 physics_initial_control(personal_lobby, pilot, eye).
 physics_allowances(personal_lobby,
-    limits(16,16,128,1000000,geometry(32,256,256)),16667,Gravity,10000) :-
+    limits(16,16,128,1000000,geometry(32,384,512)),16667,Gravity,10000) :-
     Gravity is -9810.
 
 physics_admission(personal_lobby,entity_ref(Ns,A,floor),fixed,vector(0,0,0)) :-
@@ -22,12 +22,12 @@ physics_admission(personal_lobby,entity_ref(Ns,A,personal_roof),fixed,vector(0,0
     current_ontology_identity(Ns,A).
 physics_admission(personal_lobby,entity_ref(Ns,A,console),fixed,vector(0,0,3850)) :-
     current_ontology_identity(Ns,A).
-physics_admission(personal_lobby,entity_ref(Ns,A,pilot),controlled,vector(0,760,2800)) :-
+physics_admission(personal_lobby,entity_ref(Ns,A,pilot),controlled,vector(0,1000,2800)) :-
     current_ontology_identity(Ns,A).
 physics_definition_allowance(Entity,1000000) :- physics_definition(Entity,_,_).
 
 physics_agent(personal_lobby,pilot,1,Body,
-    motion(grounded(900),2000,1600,500,query_limits(2,0,8,128),[])) :-
+    motion(grounded(900),2500,1600,500,query_limits(2,0,8,128),[jump(3000)])) :-
     physical_assignment(pilot,Assignment,entity_ref(Ns,A,personal_lobby)),
     physics_definition_delegate(pilot,world_ref(Ns,A,personal_lobby),
                                 agent_instance_ref(Ns,A,physics_authority),Assignment),

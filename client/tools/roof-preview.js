@@ -67,6 +67,6 @@ window.roofReady = (async () => {
   await Promise.all([...painted.values()].map(entry => entry.model.ready))
   await scene.whenReadyAsync()
   scene.render()
-  status.textContent = '6 feet seated on border · 18 m ground · 4.4 m opening · 1 m outer border · separate meshes'
+  status.textContent = '6 feet seated on border · 18 m ground · 4.4 m curved glass · 1 m outer border · separate meshes'
   return reports.map(report => ({...report.output,checks:report.checks}))
 })().catch(error => { status.textContent = `Could not load roof: ${error.message}`; throw error })

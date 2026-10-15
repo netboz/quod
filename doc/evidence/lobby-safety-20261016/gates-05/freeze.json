@@ -1,0 +1,12 @@
+{
+  "base_commit": "42c6a2fc4c7d5090cd687f5ced7f1055815a8291",
+  "version": "0.7.270",
+  "label_bump": "separate after implementation gates",
+  "input_count": 13878,
+  "project_beams_removed": true,
+  "scope": "Glass porthole and rim collision, governed grounded jump, 2.5m/s walk; implementation label unchanged",
+  "fixtures": [
+    "priv/certs/cert.pem",
+    "priv/certs/key.pem"
+  ]
+}

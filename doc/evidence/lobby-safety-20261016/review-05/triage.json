@@ -1,0 +1,8 @@
+{
+  "verdict": "Approve; no GUI blockers",
+  "disposition": {
+    "repeat_test": "Existing assertion verifies no repeated discrete jump; optional no-continuous-latch-reset assertion not added to avoid unrelated test churn.",
+    "pre_fix_label": "jump-drive02 is pre-fix reproduction;03 is post-fix26/0. README explicitly labels both.",
+    "ordering": "Prompt resume remains bounded by actual discrete feedback, existing sending/sequence guards unchanged; no uncertain jump resend."
+  }
+}

@@ -27,6 +27,7 @@ export default function World() {
   const [scene, setScene] = useState<WorldScene | null>(null)
   const [immersive, setImmersive] = useState(false)
   const [navigationActive, setNavigationActive] = useState(false)
+  const [movementHint, setMovementHint] = useState('')
   const [vr, setVr] = useState({ available: false, reason: 'Checking VR availability…' })
   const [enteringVR, setEnteringVR] = useState(false)
   const [openingTool, setOpeningTool] = useState(false)
@@ -211,6 +212,8 @@ export default function World() {
               if (!active) return
               scene?.update(current)
               setMarks(current.marks)
+              setMovementHint(current.control?.jump ? ' · Space to jump'
+                : current.selection === 'nonphysical' ? ' · Shift for faster movement' : '')
               setMissingLobby(current.selection === 'unavailable')
               setStatus({ active: 'Physical space ready.', nonphysical: 'Space ready. Observer travel.',
                 disabled: 'Physics is disabled. Body travel paused.', denied: 'Physics access denied. Body travel paused.',
@@ -366,8 +369,7 @@ export default function World() {
     <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" tabIndex={0} />
     {navigationActive && <div className="world-crosshair" aria-hidden="true" />}
     <div className={`world-navigation-hint${navigationActive ? ' active' : ''}`} aria-live="polite">
-      {navigationActive ? 'Mouse to look · ZQSD, WASD or arrows to move · Shift for faster movement · Esc to release'
-        : 'Click the world to explore · ZQSD, WASD or arrows to move · Shift for faster movement'}
+      {`${navigationActive ? 'Mouse to look' : 'Click the world to explore'} · ZQSD, WASD or arrows to move${movementHint}${navigationActive ? ' · Esc to release' : ''}`}
     </div>
     <header className={`world-header${navigationActive ? ' navigation-active' : ''}`}>
       <a href="/" className="world-brand">quod <span>∴</span></a>

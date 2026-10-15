@@ -46,7 +46,7 @@ export function readControl(text) {
   } else if (tracking.type !== 'atom' || tracking.value !== 'view_only') throw new Error('unsupported tracking mapping')
   const [position, rotation] = args(pose, 'pose', 2)
   if (capabilities.type !== 'list' || capabilities.tail !== null) throw new Error('invalid movement capabilities')
-  let teleport = null, snap = null, reposition = false
+  let teleport = null, snap = null, jump = null, reposition = false
   for (const capability of capabilities.items) {
     if (capability.functor === 'teleport' && teleport === null) {
       const [reach, drop, up] = args(capability, 'teleport', 3).map(n => integer(n, 1))
@@ -55,6 +55,8 @@ export function readControl(text) {
     } else if (capability.functor === 'snap' && snap === null) {
       snap = integer(args(capability, 'snap', 1)[0], 1)
       if (snap > 3141) throw new Error('unsupported snap turn')
+    } else if (capability.functor === 'jump' && jump === null) {
+      jump = integer(args(capability, 'jump', 1)[0], 1)
     } else if (capability.type === 'atom' && capability.value === 'reposition' && !reposition) {
       reposition = true
     } else throw new Error('unsupported movement capability')
@@ -62,7 +64,7 @@ export function readControl(text) {
   return { term, agent, revision: identity(revision), epoch: identity(epoch),
     body: identity(body), bodyRevision: identity(bodyRevision),
     grounded, speed: integer(speed, 1) / 1000, turn: integer(turn, 1) / 1000,
-    lease: integer(lease, 1), teleport, snap, reposition,
+    lease: integer(lease, 1), teleport, snap, jump, reposition,
     viewpoint: { name, position: vector(position, 'vector'), rotation: vector(rotation, 'rotation'), trackingRadius } }
 }
 
@@ -89,6 +91,7 @@ export function driveInput(velocity, angular = [0, 0, 0]) {
 }
 
 export const snapInput = angle => compound('snap', [number(angle)])
+export const jumpInput = speed => compound('jump', [number(speed)])
 export const teleportInput = position => {
   if (position.length !== 3 || !position.every(Number.isFinite)) throw new Error('invalid landing')
   return compound('teleport', [compound('vector', position.map(milliUnits))])

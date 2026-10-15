@@ -1,0 +1,23 @@
+{
+  "exit": 0,
+  "seconds": 399.57529723097105,
+  "command": [
+    "claude",
+    "-p",
+    "--model",
+    "claude-fable-5-1",
+    "--effort",
+    "high",
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+    "--system-prompt",
+    "You are an offline read-only architecture reviewer. All context is supplied. Do not request tools. Return your completed review, with concrete blockers and minimal resolutions. No edits, agents or deployments.",
+    "--output-format",
+    "json",
+    "--no-session-persistence"
+  ],
+  "inputs_unchanged": true
+}

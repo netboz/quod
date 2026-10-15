@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import { WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
-import { driveInput, snapInput, teleportInput } from './locomotion.js'
+import { driveInput, snapInput, teleportInput, jumpInput } from './locomotion.js'
 
 export function authoredRotation([x, y, z]) {
   return Quaternion.RotationAxis(Vector3.Forward(), z)
@@ -26,6 +26,14 @@ export function createControlledNavigation(scene, camera, canvas, {
   const owner = canvas.ownerDocument
   const down = event => {
     if (current === undefined || !active() || blocked() || event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.key === ' ' && current?.control?.grounded && current.control.jump && current.command) {
+      event.preventDefault()
+      if (!event.repeat) {
+        lastDrive = ''
+        void current.command(jumpInput(current.control.jump))
+      }
+      return
+    }
     if (['w', 'z', 's', 'a', 'q', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       held.add(event.key); event.preventDefault()
     }

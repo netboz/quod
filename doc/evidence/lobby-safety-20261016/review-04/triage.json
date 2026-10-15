@@ -1,0 +1,10 @@
+{
+  "verdict": "Approve; no core blockers",
+  "disposition": {
+    "3m/s_trade": "Routine authored jump value meets requested hop and containment; Yan informed in commentary. No specific4m/s user requirement. Added coping/speed invariant to design doc.",
+    "browser_speed": "Production jumpInput receives current.control.jump, no literal speed; generic4000 exists only in tests",
+    "optional_peak_assertion": "Existing per-frame containment plus printed actual1.186 apex retained; no optional test churn",
+    "N1": "Conservative wall-skin refusal documented; no hidden fallback",
+    "heap_peak": "Exact peak unmeasured; complete atomic factory admitted within unchanged64MiB cap. No peak claim."
+  }
+}

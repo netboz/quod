@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Offline annular ground asset with smoothly rounded borders.
+// Offline annular ground asset with rounded borders and a curved glass cover.
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { encodeAsset } from './asset-glb.mjs'
@@ -7,12 +7,13 @@ import { roofSeat } from './lobby-layout.mjs'
 
 const shape = { radius: roofSeat.radius+0.25, openingRadius: 2.2, innerBorderHeight: 0.20,
   outerBorderHeight: roofSeat.height, borderCrownRadius: roofSeat.radius,
-  underside: -0.45, segments: 288, curveSegments: 8 }
+  underside: -0.45, segments: 288, curveSegments: 8,
+  glass: { edge: -0.1, depth: 0.45, thickness: 0.02, rings: 16 } }
 const { segments: N, curveSegments: M } = shape
 const R = roofSeat.radius
 const parts = Array.from({length: 2}, (_, material) => ({positions:[], normals:[], indices:[], material}))
 // Closed radial section: inner wall, softly rolled coping, level walkway,
-// rounded outer border and underside. Revolving it leaves a real central hole.
+// rounded outer border and underside. The glass seats in its central opening.
 const curves = [
   [[2.2,-0.30],[2.2,-0.10],[2.2,0.20],[2.45,0.20]],
   [[2.45,0.20],[2.72,0.20],[2.72,0],[3.0,0]],
@@ -50,6 +51,37 @@ for (let i=0; i<profile.length; i++) {
   }
 }
 
+// A closed glass bowl seats inside the existing rolled opening. Core glTF
+// alpha blending keeps it within the ordinary static asset profile.
+const glass = {positions:[],normals:[],indices:[],material:2}
+const {edge,depth,thickness,rings} = shape.glass
+for (const side of [1,-1]) {
+  const centre = glass.positions.length/3
+  glass.positions.push(0,edge-depth-(side<0?thickness:0),0)
+  glass.normals.push(0,side,0)
+  for (let row=1;row<=rings;row++) for (let j=0;j<N;j++) {
+    const r=shape.openingRadius*row/rings,angle=2*Math.PI*j/N,c=Math.cos(angle),s=Math.sin(angle)
+    const gradient=2*depth*r/shape.openingRadius**2,length=Math.hypot(gradient,1)
+    glass.positions.push(r*c,edge-depth*(1-(r/shape.openingRadius)**2)-(side<0?thickness:0),r*s)
+    glass.normals.push(-side*gradient*c/length,side/length,-side*gradient*s/length)
+  }
+  const triangle=(a,b,c)=>glass.indices.push(a,...(side>0?[b,c]:[c,b]))
+  for (let j=0;j<N;j++) {
+    const next=(j+1)%N
+    triangle(centre,centre+1+next,centre+1+j)
+    for (let row=1;row<rings;row++) {
+      const a=centre+1+(row-1)*N+j,b=a+N,c=centre+1+row*N+next,d=c-N
+      triangle(a,c,b);triangle(a,d,c)
+    }
+  }
+}
+const bottom=1+rings*N,outer=1+(rings-1)*N
+for (let j=0;j<N;j++) {
+  const a=outer+j,b=outer+(j+1)%N
+  glass.indices.push(a,b,b+bottom,a,b+bottom,a+bottom)
+}
+parts.push(glass)
+
 // Verify exported positions, winding and all welded edges before admission.
 const edges = new Map()
 let volume = 0, minimumArea = Infinity
@@ -80,11 +112,13 @@ assert(contactError < 1e-6,'roof feet do not meet actual border vertices')
 const { glb, digest, costs, boundsMm } = encodeAsset('lobby-ground',parts,[
   {name:'blue-grey porcelain',pbrMetallicRoughness:{baseColorFactor:[0.48,0.65,0.73,1],metallicFactor:0,roughnessFactor:0.72}},
   {name:'champagne interior',pbrMetallicRoughness:{baseColorFactor:[0.68,0.46,0.25,1],metallicFactor:0,roughnessFactor:0.72}},
+  {name:'curved glass porthole',alphaMode:'BLEND',doubleSided:true,
+    pbrMetallicRoughness:{baseColorFactor:[0.32,0.72,0.82,0.32],metallicFactor:0.12,roughnessFactor:0.08}},
 ])
-const report = {schema:'quod-procedural-ground-v3',units:'metres',up:'Y',shape,
+const report = {schema:'quod-procedural-ground-v4',units:'metres',up:'Y',shape,
   output:{file:'ground.glb',digest,profile:'gltf2-static-v1',costs,boundsMm,pivotMm:[0,0,0],front:'-z'},
   checks:{closedManifold:true,minimumTriangleAreaM2:minimumArea,volumeM3:volume,
-    roofContactErrorM:contactError,walkwayY:0,openingDiameterM:2*shape.openingRadius}}
+    roofContactErrorM:contactError,walkwayY:0,glassDiameterM:2*shape.openingRadius}}
 const out = new URL('../../assets/lobby/',import.meta.url)
 writeFileSync(new URL('ground.glb',out),glb)
 writeFileSync(new URL('ground.json',out),JSON.stringify(report,null,2)+'\n')

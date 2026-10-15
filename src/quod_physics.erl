@@ -471,6 +471,32 @@ input_current(#{control := Control,expected := Expected},S) ->
     current_control(Expected#{control => Control},S#s.spec) andalso current_projection(S#s.frame,Expected).
 
 advance_input(_,_,S = #s{phase = Phase}) when Phase =/= active -> S;
+advance_input(Principal,Row = #{control := {control,_,_,{controlled_agent,_,_,Body,Revision,
+                {motion,{grounded,Up},_,_,_,Limits,_},_}},
+                input := Jump = {{jump,Speed},Limits},expiry := Expiry},S) ->
+    Attempt = case maps:get(pending,Row) of
+        false -> {maps:get(result,Row),Row};
+        true ->
+            case {Expiry > quod_time:now_ms(),maps:get(vertical,Row) =< 0.0,
+                    lists:keyfind(Body,1,maps:get(poses,S#s.frame))} of
+                {false,_,_} -> {expired,Row};
+                {true,false,_} -> {no_support,Row};
+                {true,true,{Body,Revision,world,Position,_,_}} ->
+                    {ok,_,NativeLimits = {Skin,_,_,_}} = query_input(
+                        {travel,{vector,0,0,0},{angular,0,0,0}},Limits),
+                    Query = {land,Position,Skin,2*Skin,Up/1000},
+                    case native(fun() -> quod_physics_native:motion_query(S#s.native,Body,Revision,Query,NativeLimits) end) of
+                        {ok,{clipped,_,_,_}} -> {jumped,Row#{vertical => Speed/1000,falling => true}};
+                        {ok,Answer} -> {Answer,Row};
+                        {error,Reason} -> {error,Reason}
+                    end;
+                _ -> {unavailable,Row}
+            end
+    end,
+    case Attempt of
+        {error,Failure} -> fail(Failure,S);
+        {Result,Ready} -> advance_discrete(Principal,Ready,Jump,Result,Limits,S)
+    end;
 advance_input(Principal,Row = #{control := Control = {control,_,_,{controlled_agent,_,_,_,_,
                 {motion,_,_,_,_,MotionLimits,_},_}},
                 input := Push = {{push,{body,Body,Revision},Impulse},{push_limits,Body,Revision,_,Speed}},
@@ -488,11 +514,7 @@ advance_input(Principal,Row = #{control := Control = {control,_,_,{controlled_ag
             {false,_} -> expired
         end
     end,
-    %% A discrete interaction does not suspend the played body's gravity.
-    Next = advance_input(Principal,Row#{input => {{drive,{vector,0,0,0},{angular,0,0,0}},MotionLimits},
-                                       pending => false},S),
-    After = maps:get(Principal,Next#s.inputs),
-    Next#s{inputs = (Next#s.inputs)#{Principal => After#{input => Push,result => Result}}};
+    advance_discrete(Principal,Row,Push,Result,MotionLimits,S);
 advance_input(Principal,Row = #{control := {control,_,_,{controlled_agent,_,_,Body,Revision,
                 {motion,Mode,_,_,_,Limits,Capabilities},_}},input := {Input,Limits},expiry := Expiry},
               S = #s{spec = Spec,native = Resource,inputs = Inputs}) ->
@@ -508,14 +530,15 @@ advance_input(Principal,Row = #{control := {control,_,_,{controlled_agent,_,_,Bo
     case native(fun() -> quod_physics_native:move_body(Resource,Body,Revision,Query,NativeLimits) end) of
         {ok,Answer} ->
             {Usable,Supported} = motion_progress(Answer,Mode),
-            Settled = Supported orelse descent_stopped(Answer,Current,Vertical,Body,S#s.frame),
+            Stopped = vertical_stopped(Answer,Current,Vertical,Body,S#s.frame),
+            Settled = Supported orelse (Vertical < 0 andalso Stopped),
             Result = case element(1,Input) =/= drive andalso not maps:get(pending,Row) of
                 true -> maps:get(result,Row);
                 false -> Answer
             end,
             RefusedDiscrete = element(1,Current) =/= drive andalso not Usable,
             Updated = Row#{pending => false,result => Result,
-                vertical => case {RefusedDiscrete,Settled orelse not Usable} of
+                vertical => case {RefusedDiscrete,Settled orelse not Usable orelse Stopped} of
                     {true,_} -> maps:get(vertical,Row);
                     {false,true} -> 0.0;
                     _ -> Vertical
@@ -527,16 +550,24 @@ advance_input(Principal,Row = #{control := {control,_,_,{controlled_agent,_,_,Bo
             S#s{inputs = Inputs#{Principal => Updated}};
         {error,Reason} -> fail(Reason,S)
     end.
-%% A clipped descent with no downward progress is mechanically settled even
-%% when the touching faces are too steep to count as a teleport landing.
-%% New travel or physical-world activity rechecks it; no velocity accumulates
-%% while a wedge holds the body still.
-descent_stopped({clipped,{{_,Y,_},_},_,_},{drive,_,_},Vertical,Body,#{poses := Poses}) when Vertical < 0 ->
+
+%% Discrete inputs share the same retained gravity and collision integration.
+advance_discrete(Principal,Row,Input,Result,Limits,S) ->
+    Next = advance_input(Principal,Row#{input => {{drive,{vector,0,0,0},{angular,0,0,0}},Limits},
+                                       pending => false},S),
+    After = maps:get(Principal,Next#s.inputs),
+    Next#s{inputs = (Next#s.inputs)#{Principal => After#{input => Input,result => Result}}}.
+
+%% Vertical progress identifies blocked ascent/descent. Near-horizontal wall
+%% normals can have either sign from floating point and cannot identify a ceiling.
+%% A blocked descent settles even when a wedge is too steep for landing support.
+vertical_stopped({clipped,{{_,Y,_},_},_,_},{drive,_,_},Vertical,Body,#{poses := Poses}) ->
     case lists:keyfind(Body,1,Poses) of
-        {Body,_,world,{_,Before,_},_,_} -> Y >= Before;
+        {Body,_,world,{_,Before,_},_,_} ->
+            (Vertical < 0 andalso Y >= Before) orelse (Vertical > 0 andalso Y =< Before);
         _ -> false
     end;
-descent_stopped(_,_,_,_,_) -> false.
+vertical_stopped(_,_,_,_,_) -> false.
 
 movement_query({drive,{vector,X,Y,Z},{angular,Ax,Ay,Az}},Mode,Vertical,Dt,_) ->
     Vy = case Mode of free -> Y/1000; {grounded,_} -> Vertical end,

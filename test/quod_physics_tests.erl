@@ -851,6 +851,10 @@ numeric_geometry_and_hinge_refusals_test_() ->
             || X <- [-Max-1,Max+1]],
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max})),
         ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max+1})),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+            {physics_motion_capabilities,[{jump,Max}],[]})),
+        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,
+            {physics_motion_capabilities,[{jump,X}],[]})) || X <- [0,Max+1]],
         ?assertEqual(1.7976931348623157e308,float(Max)),
         ?assert(is_float(Max/1000)), ?assert(is_float(-Max/1000000)),
         %% Max+1 still rounds to Max; test actual conversion overflow separately.
@@ -1103,7 +1107,7 @@ hot_control_policy_reasons_test_() ->
             ?assertEqual([],[R || R = {coordinate_allowance,_} <- Decoded])
         end || Input <- [{drive,{vector,2001,0,0},{angular,0,0,0}},
                          {drive,{vector,0,0,0},{angular,0,1601,0}},
-                         {push,{body,3,1},{vector,5001,0,0}}]],
+                         {push,{body,3,1},{vector,5001,0,0}}, {jump,4000}]],
         Checkpoint = {physics_checkpoint_body,room,3,1,0,<<209:256>>},
         assert_reason({control_conflict,1},door_action(Ns,{physics_control_agent,room,0,none,none})),
         Other = {agent_instance_ref,<<"other">>,<<99:256>>,someone},
@@ -1397,6 +1401,151 @@ install_test_control(#{namespace := Ns,node := Human},Pid,World,Motion,Body) ->
                  structure => maps:get(structure,Spec),control => {control,Human,1,Definition}},
     {ok,Ref,Initial} = quod_physics:watch(Pid,Expected,none),
     {Definition,Expected,{control_frame,Frame,maps:get(registration,Initial)},Ref,Initial}.
+
+grounded_jump_and_ceiling_test_() ->
+    [{atom_to_list(Terrain),{timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
+        {Pid,World} = enable(F),
+        Motion = {motion,{grounded,900},2500,1600,500,{query_limits,2,0,8,128},[{jump,4000}]},
+        {_,Expected,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        Command = fun(Seq,Input) -> control_goal({'::',Ns,
+            {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
+        ?assertMatch({ok,_,{normalized,{failed,_}}},Command(0,{jump,4001})),
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1,{jump,4000})),
+        {First,Result} = input_frame(Pid,Ref,Human,1),
+        case Terrain of
+            air -> ?assertEqual(no_support,Result);
+            _ -> ?assertEqual(jumped,Result), ?assert(jump_height(First) > 0.502)
+        end,
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(2,{jump,4000})),
+        {Second,no_support} = input_frame(Pid,Ref,Human,2),
+        assert_reason({stale_sequence,2},Command(2,{jump,4000})),
+        Peak = jump_landing(Pid,Ref,jump_height(Second)),
+        case Terrain of
+            ceiling -> ?assert(Peak =< 1.002);
+            floor -> ?assert(Peak > 1.2 andalso Peak < 1.4);
+            air -> ?assert(Peak =< 1.5)
+        end,
+        %% A definite landing enables a new jump; disconnect clears input but
+        %% preserves the accepted ascent and gravity in the same owner.
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(3,{jump,4000})),
+        {_,jumped} = input_frame(Pid,Ref,Human,3),
+        quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
+        {ok,NewRef,Restored} = quod_physics:watch(Pid,Expected,none),
+        ?assert(jump_height(Restored) > 0.502),
+        quod_physics:ack(Pid,NewRef,maps:get(tick,Restored)),
+        assert_reason(stale_registration,Command(4,{jump,4000})),
+        _ = jump_landing(Pid,NewRef,jump_height(Restored)),
+        quod_physics:unwatch(Pid,NewRef)
+    end,fun(Rules) ->
+        Height = case Terrain of air -> 1500; _ -> 502 end,
+        Base = [case R of
+            {physics_body_definition,room,2,1,_,_,{owned,_,_}} ->
+                {physics_body_definition,room,2,1,controlled,{vector,0,Height,0},{owned,{ball,500},1}};
+            _ -> R end || R <- Rules],
+        case Terrain of
+            ceiling -> Base ++ [{physics_body_definition,room,3,1,fixed,
+                {vector,0,1600,0},{owned,{box,5000,100,5000},1}}];
+            _ -> Base
+        end
+    end) end}} || Terrain <- [floor,ceiling,air]].
+
+jump_height(Frame) ->
+    {2,_,world,{_,Y,_},_,_} = lists:keyfind(2,1,maps:get(poses,Frame)), Y.
+jump_landing(Pid,Ref,Peak) ->
+    receive {physics_frame,Pid,Ref,Frame} ->
+        quod_physics:ack(Pid,Ref,maps:get(tick,Frame)),
+        Y = jump_height(Frame), Maximum = max(Y,Peak),
+        case Y =< 0.505 of true -> Maximum; false -> jump_landing(Pid,Ref,Maximum) end
+    after 5000 -> error(jump_did_not_land) end.
+
+lobby_rim_jump_test_() ->
+    [{lists:concat([Angle,"-",Start]),{timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
+        {Pid,World} = enable(F),
+        [{':-',{physics_agent,personal_lobby,pilot,1,_,Motion},_}] =
+            [T || T={':-',{physics_agent,personal_lobby,pilot,1,_,_},_} <-
+                quod_prolog:read_terms("priv/ontologies/lobby_instance.pl")],
+        {motion,_,_,_,_,_,Capabilities} = Motion,
+        {jump,Launch} = lists:keyfind(jump,1,Capabilities),
+        {_,_,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        Command = fun(Seq,Input) -> control_goal({'::',Ns,
+            {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
+        Direction = {vector,round(2499*math:sin(Angle*math:pi()/180)),0,
+            -round(2499*math:cos(Angle*math:pi()/180))},
+        ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1,{jump,Launch})),
+        {First,JumpResult} = input_frame(Pid,Ref,Human,1),
+        ?assertEqual(jumped,JumpResult),
+        Evidence = lobby_rim_frames(Pid,Ref,Command,Direction,2,120,First,
+            #{first_contact_y => none,contact_rising => false,after_contact_peak => 0.0,
+                previous_y => jump_height(First),peak => 0.0,max_radius => 0.0}),
+        io:format(user,"lobby_rim_case ~p~n",[Evidence#{angle => Angle,start => Start,jump => JumpResult}]),
+        #{first_contact_y := ContactY,after_contact_peak := Peak,contact_rising := Rising} = Evidence,
+        ?assert(is_float(ContactY)),
+        ?assert(Rising),
+        ?assert(ContactY < 1.48),
+        ?assert(Peak > ContactY+0.01),
+        quod_physics:unwatch(Pid,Ref)
+    end,fun(Rules) ->
+        {ok,E} = erlog:new(),
+        Loaded = lists:foldl(fun(T,A) -> {{succeed,_},B}=erlog:prove({assertz,T},A),B end,
+            E,quod_prolog:read_terms("priv/ontologies/quod_lobby.pl")),
+        {{succeed,Bindings},_} = erlog:prove({lobby_definitions,{'Definitions'}},Loaded),
+        {physics_definition,floor,1,{geometry,Floor,1}} =
+            lists:keyfind(floor,2,proplists:get_value('Definitions',Bindings)),
+        Radius = case {Start,Angle} of
+            {touching,7} -> 8230;
+            {touching,_} -> 8300;
+            {approaching,_} -> 8200
+        end,
+        [case R of
+            {physics_body_definition,room,1,1,_,_,_} ->
+                {physics_body_definition,room,1,1,fixed,{vector,0,0,0},{owned,Floor,1}};
+            {physics_body_definition,room,2,1,_,_,_} ->
+                {physics_body_definition,room,2,1,controlled,
+                    {vector,round(Radius*math:sin(Angle*math:pi()/180)),752,
+                        -round(Radius*math:cos(Angle*math:pi()/180))},
+                    {owned,{capsule,500,250},1}};
+            _ -> R
+        end || R <- Rules]
+    end) end}} || Angle <- [0,7,15],Start <- [approaching,touching]].
+
+lobby_rim_frames(_,_,_,_,_,0,_,Evidence) -> Evidence;
+lobby_rim_frames(Pid,Ref,Command,Direction={vector,Dx,0,Dz},Seq,Remaining,Frame,Evidence) ->
+    {2,1,world,{X,Y,Z},_,_} = lists:keyfind(2,1,maps:get(poses,Frame)),
+    ?assertMatch({true,true},{X*X+Z*Z < 8.56*8.56,Y > 0.7}),
+    WallContacts = [Contact || #{result := {clipped,_,Contacts,_}} <- maps:values(maps:get(inputs,Frame)),
+        Contact = {_,{Nx,Ny,Nz}} <- Contacts,Ny < 0.5,Nx*Dx+Nz*Dz < -1250],
+    WallContact = WallContacts =/= [],
+    ContactY = case {maps:get(first_contact_y,Evidence),WallContact} of
+        {none,true} -> Y;
+        {Previous,_} -> Previous
+    end,
+    Rising = case {maps:get(first_contact_y,Evidence),WallContact} of
+        {none,true} -> Y > maps:get(previous_y,Evidence)+0.0001;
+        _ -> maps:get(contact_rising,Evidence)
+    end,
+    AfterPeak = case ContactY of
+        none -> 0.0;
+        _ -> max(Y,maps:get(after_contact_peak,Evidence))
+    end,
+    FirstContacts = case {maps:get(first_contact_y,Evidence),WallContact} of
+        {none,true} -> WallContacts;
+        _ -> maps:get(first_contacts,Evidence,[])
+    end,
+    NextEvidence = Evidence#{first_contact_y => ContactY,peak => max(Y,maps:get(peak,Evidence)),
+        contact_rising => Rising,after_contact_peak => AfterPeak,previous_y => Y,
+        first_contacts => FirstContacts,
+        max_radius => max(math:sqrt(X*X+Z*Z),maps:get(max_radius,Evidence))},
+    case Remaining rem 6 of
+        0 -> ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},
+            Command(Seq,{drive,Direction,{angular,0,0,0}}));
+        _ -> ok
+    end,
+    receive {physics_frame,Pid,Ref,Next} ->
+        quod_physics:ack(Pid,Ref,maps:get(tick,Next)),
+        lobby_rim_frames(Pid,Ref,Command,Direction,Seq+1,Remaining-1,Next,NextEvidence)
+    after 5000 -> error(lobby_rim_frame_missing) end.
 
 grounded_reinstall_and_wedge_settling_test_() ->
     [{atom_to_list(Terrain),{timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->

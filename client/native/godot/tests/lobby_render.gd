@@ -27,7 +27,7 @@ func run() -> void:
 	root.add_child(local)
 	main.resources.transport = local
 	var parts := PackedStringArray()
-	for digest: String in ["6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f", "e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121", "2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04"]:
+	for digest: String in ["766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee", "e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121", "2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04"]:
 		var bytes := FileAccess.get_file_as_bytes("res://../../../priv/explorer/assets/models/" + digest + ".glb")
 		var info: Dictionary = JSON.parse_string(main.bridge.verify_asset(bytes, digest, true))
 		if not info.ok:

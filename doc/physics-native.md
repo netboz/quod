@@ -248,7 +248,8 @@ motion(grounded(MinUpPermille), Speed, Turn, Lease, Limits, Capabilities)
 Grounded means world-Y gravity, horizontal commanded travel and support normals
 meeting the authored upward threshold. It is an explicit mechanical profile,
 not an inference from agent shape. Capabilities are unique entries from
-`snap(AngleMrad)`, `teleport(ReachMm, DropMm, MinUpPermille)` and `reposition`.
+`snap(AngleMrad)`, `teleport(ReachMm, DropMm, MinUpPermille)`,
+`jump(LaunchMmPerSecond)` and `reposition`.
 Unknown modes/capabilities are refused. Policy supplies speeds, lease and query
 allowances; packet frequency does not multiply continuous travel distance.
 
@@ -285,7 +286,7 @@ replaying it. Proof success means queued admission; the view supplies the actual
 mechanical outcome.
 
 Inputs are `drive(vector(Vx,Vy,Vz),angular(Wx,Wy,Wz))`, `snap(AngleMrad)`,
-`teleport(vector(X,Y,Z))`, and explicitly permitted
+`teleport(vector(X,Y,Z))`, `jump(LaunchMmPerSecond)`, and explicitly permitted
 `reposition(pose(Position,Rotation))`. Drive is the latest desired velocity,
 leased and applied at the server timestep. Translation stops/slides; rotational
 sweeps check all parts and stop at contact. Snap may therefore stop short of its
@@ -296,6 +297,18 @@ can travel along a clear floor. Occupied destinations, blocked
 paths, unsupported slopes, missing support and exhausted queries leave the pose
 unchanged. Previews never authorize a later landing. A pending discrete command
 cannot be overwritten before its outcome; there is no command accumulation queue.
+
+Jump requires grounded mode and the exact authored launch speed. The retained
+owner checks current native support with a drop of twice the authored skin
+(plus the cast's skin margin), using the same landing query and upward-normal
+threshold. A wall touching that margin can conservatively refuse support;
+stepping away allows the floor check. An ascending or unsupported
+body cannot jump again. Launch, gravity, landing and head contact use the existing
+travel solver and vertical state. Blocked vertical progress cancels upward
+velocity; tiny negative wall-normal components do not identify a ceiling.
+Disconnect cancels an unapplied jump and preserves an already applied fall or
+ascent. Desktop Space requests one jump per key press; held-key repeats do not
+submit further jumps. No browser prediction or durable jump transaction is added.
 
 An occupied authored spawn or collider edit does not trigger hidden
 unbounded depenetration: travel is refused with `occupied`. Numerical

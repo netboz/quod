@@ -119,6 +119,29 @@ test('unknown capabilities and implicit movement profiles fail closed', () => {
   assert.equal(control().viewpoint.trackingRadius, 0.5)
 })
 
+test('Space jumps once and promptly resumes held travel; unavailable control does not jump', () => fixture(
+  ({ owner, navigation, current, sent }) => {
+    current.control = readControl('control(human,4,controlled_agent(pilot,1,10,3,motion(grounded(900),2500,1600,500,query_limits(2,0,8,128),[jump(4000)]),viewpoint(eye,pose(vector(0,700,0),rotation(0,0,0)),view_only)))')
+    navigation.update(current)
+    const press = repeat => {
+      const event = new Event('keydown', { cancelable: true })
+      Object.defineProperties(event, { key: { value: ' ' }, repeat: { value: repeat } })
+      owner.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    const forward = new Event('keydown'); Object.defineProperty(forward, 'key', { value: 'w' })
+    owner.dispatchEvent(forward); navigation.render(0)
+    assert.equal(press(false), true)
+    assert.equal(formatClause(sent[1]), 'jump(4000).')
+    navigation.render(1)
+    assert.equal(sent.length, 3, 'held travel resumes without waiting for the lease renewal')
+    assert.deepEqual(sent[2], sent[0])
+    press(true)
+    assert.equal(sent.length, 3)
+    navigation.update(null); press(false)
+    assert.equal(sent.length, 3)
+  }))
+
 
 test('XR entry preserves tracked pitch and roll; free agents cannot request landing teleport', () => fixture(
   ({ scene, navigation, current, sent }) => {

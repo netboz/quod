@@ -78,6 +78,7 @@ default_lobby_physics_startup_test_() ->
                 Runtime = quod_reg:via({quod_runtime,Ns}),
                 World = {world_ref,Ns,Anchor,personal_lobby},
                 #{World := #{spec := BeforeSpec}} = gen_server:call(Runtime,physics_worlds),
+                lobby_safety_queries(Pid,BeforeSpec),
                 Before = gen_server:call(Pid,status),
                 Shape = {box,900,900,300},
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},submit_lobby(User,execute,
@@ -98,6 +99,26 @@ default_lobby_physics_startup_test_() ->
             after quod_reg:unsubscribe({physics, Ns}) end
         after stop_process(Auth), cleanup(F), stop_process(Vault) end
     end}.
+
+lobby_safety_queries(Pid,Spec) ->
+    [{Pilot,Revision,controlled,_,_,_}] = [B || B={_,_,controlled,_,_,_} <- maps:get(bodies,Spec)],
+    {Floor,_,fixed,_,{surface,_,_},_} = hd([B || B={_,_,fixed,_,{surface,V,_},_} <- maps:get(bodies,Spec),length(V)>100]),
+    Expected = #{fence => quod_physics:fence(Spec),structure => maps:get(structure,Spec),
+        incarnation => maps:get(run_token,Spec)},
+    Query = fun(Q) -> quod_physics:motion_query(Pid,Expected,{Pilot,Revision},Q,{query_limits,2,0,8,128},1000) end,
+    ?assertMatch({ok,_,{clear,_,_}},Query({place,{pose,{vector,0,1000,2800},{rotation,0,0,0}}})),
+    {ok,_,{clipped,{{X,Y,Z},_},Contacts,_}} = Query({landing,{vector,0,1000,0},4000,2000,900}),
+    ?assert(abs(X)<0.01 andalso abs(Z)<0.01 andalso Y>0.19 andalso Y<0.23),
+    ?assert(lists:keymember(Floor,1,Contacts)),
+    {ok,_,{clipped,{{_,RimY,RimZ},_},RimContacts,_}} = Query({travel,{vector,0,0,-15000},{angular,0,0,0}}),
+    ?assert(RimZ > -8.6 andalso RimZ < -8.0 andalso RimY >= 0.99),
+    ?assert(lists:keymember(Floor,1,RimContacts)),
+    Before = gen_server:call(Pid,status),
+    quod_lobby_tests:assert_read_has_no_io(fun() ->
+        [?assertMatch({ok,_,{clipped,_,_,_}},Query({landing,{vector,0,1000,0},4000,2000,900})) || _ <- lists:seq(1,3)]
+    end),
+    ?assertEqual(maps:with([installs,steps,incarnation],Before),
+        maps:with([installs,steps,incarnation],gen_server:call(Pid,status))).
 
 submit_lobby(User, Mode, Goal) ->
     {Bytes, Signature} = lobby_user_request(User, Mode, Goal),

@@ -69,20 +69,29 @@ lobby_options(Owner, Node, Options) :-
     environment_eidolons(EnvironmentEidolonNs,EnvironmentEidolonAnchor),
     gui_vocabulary(GuiNamespace, GuiAnchor).
 
-%% Coarse authored collision surfaces preserve the floor opening, roof oculus
-%% and six entrances. Appearance meshes remain independent of collision truth.
+%% Authored floor includes the depressed glass porthole and the raised outer
+%% coping. The roof keeps its oculus and six entrances.
 lobby_definitions([
     physics_definition(floor, 1, geometry(Floor, 1)),
     physics_definition(pilot, 1, geometry(capsule(500, 250), 1)),
     physics_definition(personal_roof, 1, geometry(Roof, 1)),
     physics_definition(console, 1, geometry(Console, 1))]) :-
-    lobby_surface([ring(2200, 0, 0), ring(9000, 0, 0)], Floor),
+    lobby_surface([ring(0,-550,0),ring(1100,-438,0),ring(2200,-100,0),
+        ring(2450,200,0),ring(3000,0,0),ring(8560,0,0),ring(8560,780,0),
+        ring(8750,1000,0),ring(9000,780,0)], Floor),
     lobby_surface([ring(2250, 4650, 0), ring(5500, 4325, 181), ring(8950, 3350, 2900)], Roof),
     Console = parts([part(vector(0, 70, 120), box(1000, 70, 500)),
                      part(vector(0, 175, 80), box(920, 35, 420)),
                      part(vector(0, 590, 120), box(380, 410, 240)),
                      part(vector(0, 1450, 0), box(950, 550, 210))]).
 
+lobby_surface([ring(0,H,0)|Rings],surface([vector(0,Y,0)|Vertices],Triangles)) :- !,
+    Y is H,
+    lobby_surface(Rings,surface(Vertices,Rows)),
+    findall(triangle(A1,B1,C1),(member(triangle(A,B,C),Rows),
+        A1 is A+1,B1 is B+1,C1 is C+1),Shifted),
+    findall(triangle(0,C,B),(member(J,[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]),
+        B is J+1,C is (J+1) mod 24+1),Cap), append(Cap,Shifted,Triangles).
 lobby_surface(Rings, surface(Vertices, Triangles)) :-
     Directions = [d(1000000,0,1000),d(965926,258819,354),d(866025,500000,0),
         d(707107,707107,354),d(500000,866025,1000),d(258819,965926,354),
@@ -95,9 +104,8 @@ lobby_surface(Rings, surface(Vertices, Triangles)) :-
     findall(vector(X, Y, Z),
         (member(ring(R, H, Drop), Rings), member(d(C, S, Q), Directions),
          X is R*C//1000000, Z is R*S//1000000, Y is H-Drop*Q//1000), Vertices),
-    length(Rings, Count),
     findall(Triangle,
-        (member(Row, [0, 1]), Row < Count-1,
+        (append(Before,[_,_|_],Rings), length(Before,Row),
          member(J, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]),
          A is Row*24+J, B is (Row+1)*24+J, Cn is (J+1) mod 24,
          C is (Row+1)*24+Cn, D is Row*24+Cn,
@@ -139,12 +147,12 @@ class_device_menu(prolog_console,
 
 eidolon(lobby_floor,device(_),[
     part(<<"model">>,
-                 mesh_asset(asset(<<"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f">>,
+                 mesh_asset(asset(<<"766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee">>,
                                   <<"model/gltf-binary">>),
                             <<"gltf2-static-v1">>, scale(1000),
-                            frame(aabb(-9000, -450, -9000, 9000, 1000, 9000),
+                            frame(aabb(-9000, -570, -9000, 9000, 1000, 9000),
                                   pivot(0, 0, 0), front(<<"-z">>)),
-                            resources(1660388, 1658880, 46080, 46080, 1, 2, 1)),
+                            resources(2103472, 2101296, 55298, 64512, 1, 3, 1)),
                  transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing)]).
 
 material_surface(Material, Surface) :-

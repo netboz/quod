@@ -1,0 +1,1 @@
+import{n as e,t}from"./WebXRControllerPointerSelection.pure-DDRUxJCk.js";t();export{t as RegisterWebXRControllerPointerSelection,e as WebXRControllerPointerSelection};

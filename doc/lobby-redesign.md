@@ -30,11 +30,19 @@ extra authority. An intentionally disabled space stays disabled on view/reload.
 
 Keep the existing sky and appearance assets. Floor, roof, console and pilot
 are ordinary named entities. Each solid has one explicit entity-owned physical
-definition and one admitted live body binding. Reuse the annular floor/opening,
-roof/oculus/entrances, console solids and pilot capsule geometry already built;
+definition and one admitted live body binding. The annular floor contains a
+transparent glass porthole curved downward over its centre. Its collision mesh
+fills the centre and follows the raised outer coping. Reuse the roof, oculus,
+entrances, console solids and pilot capsule geometry already built;
 verify dimensions against the existing visuals. Appearance meshes are not
-colliders. Spawn the pilot supported by the floor, facing the console, using
-the existing grounded controller and eye viewpoint.
+colliders. Spawn the pilot supported by the floor using
+the existing grounded controller and eye viewpoint. Default walking speed is
+2.5 m/s, with an authored 3 m/s grounded jump through the ordinary signed control
+path. The visual glass uses the existing static GLB profile and alpha blending.
+
+The default jump speed keeps the pilot inside the authored coping. Changing
+either the launch speed or coping geometry requires repeating the rising-contact
+rim-containment experiment.
 
 ## Shared connections
 

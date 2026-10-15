@@ -444,6 +444,9 @@ physics_motion_capabilities([teleport(Reach, Drop, Up) | Rest], Seen) :-
 physics_motion_capabilities([snap(Step) | Rest], Seen) :-
     \+ member(snap, Seen), integer(Step), Step > 0, Step =< 3141,
     physics_motion_capabilities(Rest, [snap | Seen]).
+physics_motion_capabilities([jump(Speed) | Rest], Seen) :-
+    \+ member(jump, Seen), physics_positive_scalar(Speed),
+    physics_motion_capabilities(Rest, [jump | Seen]).
 physics_motion_capabilities([reposition | Rest], Seen) :-
     \+ member(reposition, Seen), physics_motion_capabilities(Rest, [reposition | Seen]).
 physics_absolute_input(reposition(Pose), Coordinate) :-
@@ -451,6 +454,7 @@ physics_absolute_input(reposition(Pose), Coordinate) :-
 physics_absolute_input(teleport(Position), Coordinate) :- physics_query_vector(Position, Coordinate).
 physics_absolute_input(drive(_, _), _).
 physics_absolute_input(snap(_), _).
+physics_absolute_input(jump(_), _).
 physics_allowed_input(drive(vector(X,Y,Z), angular(Ax,Ay,Az)), Mode, Speed, Turn, _) :-
     physics_query_vector(vector(X,Y,Z), Speed),
     physics_query_vector(vector(Ax,Ay,Az), Turn),
@@ -462,6 +466,8 @@ physics_allowed_input(teleport(vector(X,Y,Z)), grounded(_), _, _, Capabilities) 
 physics_allowed_input(snap(Angle), _, _, _, Capabilities) :-
     integer(Angle), member(snap(Step), Capabilities),
     integer(Step), Step > 0, Step =< 3141, (Angle = Step ; Angle =:= -Step).
+physics_allowed_input(jump(Speed), grounded(_), _, _, Capabilities) :-
+    integer(Speed), Speed > 0, member(jump(Speed), Capabilities).
 %% Explicit corrective relocation is a separate authored capability. It tests
 %% occupancy but may leave an invalid initial placement without a travel path.
 %% Like locomotion, it changes live pose; it does not rewrite a durable baseline.

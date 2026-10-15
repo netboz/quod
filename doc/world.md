@@ -109,6 +109,12 @@ prepared source-file path. It declares `isa(lobby, physical_space)` and
 physical definitions, admission, allowances, host intent and owner policy.
 Class membership alone still grants no authority or runtime resources.
 
+The default floor includes a transparent downward-curved glass porthole and
+collision coverage for both its centre and raised outer coping. The ordinary
+grounded controller walks at 2.5 m/s and permits a 3 m/s support-checked jump
+with Space. These values and permissions belong to the lobby ontology; the
+existing physics owner applies collision, gravity and landing.
+
 After founding returns the exact anchor, the existing account controller reads
 `physics_preparation/2`. The owner-authorized shared `physics_initialize/3`
 assigns the prepared authority key, admits the initial bodies and selects the

@@ -1,0 +1,23 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "doc/world.md": "87f1390a94edae2417a0d3ce254cf77032154f1a345f3015f9be63a6f73fa7cc",
+  "doc/multiwrite-architecture.md": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2",
+  "doc/physics-native.md": "f4653c74aa97d7447fa5a14601b2c45f6bb91aa40d45108df24f906d535fccda",
+  "doc/lobby-redesign.md": "b3dd6d5dcff723caa2894b56a58e08b924b7abf62fb0a7e866b6452edf8acec6",
+  "priv/ontologies/quod_lobby.pl": "0175fe9e6cdf0cb549ba78d20a29cae4090c064ebc70c5eb4275747be7299474",
+  "priv/ontologies/lobby_instance.pl": "28bc9ed636414646067bd507518d75a98c048a0cb3c2d6db8a4a2f3c40f8ff2d",
+  "priv/ontologies/quod_physics.pl": "c75c4950b4e87489da1b998787ef82a6e6d4ad80618e6048c1007846ff2a3e78",
+  "src/quod_physics.erl": "0489d820a55147cef59772ff4b268c2ce72b6a69d3f57a8628ed647d38de679b",
+  "src/predicates/quod_physics_predicates.erl": "555510448adbfe45b5f6ecaec37278c908834019bac58ef011b101f7fb8971c5",
+  "native/quod_physics/src/motion.rs": "ba784c6a11da83e77e6cd326cc442bd52b9929e608ea8e3586329b86da9b86b0",
+  "client/src/controlled-navigation.js": "a2f849e5bc4462276efdfc8e1f301b02b1ecc2e925ae49bf80164f10ef908ddc",
+  "client/src/locomotion.js": "92b8118d045d1fdff12a2d492a932a420bdddc5751f26039db0ed3174f07d3ff",
+  "client/src/locomotion.d.ts": "64d63c7a39a76051ddf774c375732ab7d6f5fbf4fe1ea7aa062d4358c98a0eaa",
+  "client/src/simulation.js": "ba95231b28500f7ee68a85509700d4ffa4c20cc3b446a3c08d6a780295f7f4b0",
+  "client/tools/build-lobby-ground.mjs": "d548c13a0a7b03b77e6e080d75aee15dfbc97a05a376c818d845226f8b514ab8",
+  "client/tools/asset-glb.mjs": "44bfec937b6057bb9a5c538b2bf7c092244fd28ad011576b99b73a153292ec47",
+  "client/src/glb-profile.js": "32c39657bdeb87f3517aa187572b39aac88278b1c338a7043475d9933e2f14f2",
+  "client/test/controlled-navigation.test.js": "9780b109e596e1e15ce235c9d6ed1d2cff9a89baa3dfaf940ffda7eb9c4f7379",
+  "test/quod_physics_tests.erl": "df84dc54d797ee80c0e8e4504b7ed30ab06dfbbaab35455a42d155178d7bdc9c",
+  "test/quod_lifecycle_single_path_tests.erl": "9970289a3abb84c417f17cf6bdff1554b9b1624b2adcafc8ba210403044847eb"
+}

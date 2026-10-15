@@ -1,0 +1,7 @@
+{
+  "src/quod_physics.erl": "c633e28d29d72cdc49971391c51e260a9fbb77ad60af50a83ff1ef4f5589ad65",
+  "priv/ontologies/quod_physics.pl": "66d90e8fac358e4cf7970d51c8f799e0ec3e84b12c68e177dd53860220d5ca25",
+  "priv/ontologies/quod_lobby.pl": "0175fe9e6cdf0cb549ba78d20a29cae4090c064ebc70c5eb4275747be7299474",
+  "test/quod_physics_tests.erl": "9d2e1653e5b712be9de716b174d95fac170cedb8b714c505d54ddd5b78df7b02",
+  "doc/physics-native.md": "e49582babe691f47ea7082eb8576577aa7a522d45130e80d5209eba9b77c8c16"
+}

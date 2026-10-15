@@ -44,6 +44,87 @@ custody_survives_restart_and_binds_exact_request_test() ->
         ?assertEqual({error, vault_key_unavailable}, sign(Request))
     end).
 
+pending_request_receipt_survives_restart_and_key_deletion_test() ->
+    with_vault(fun(Config, Ref, Request0) ->
+        {ok, Key} = quod_agent_vault:prepare(Ref, 0),
+        {ok, Bytes, Sig} = sign(Request0#{signing_public_key => Key}),
+        {ok, Fence} = quod_durable_term:encode_goal(true),
+        Scope = {maps:get(network_identity, Request0), <<"exact-world/activation">>},
+        Receipt = #{store => {Bytes,Sig}, request => {Bytes,Sig}, fence => Fence,
+                    binding => #{reference => Ref, epoch => 1, public_key => Key}},
+        Deadline = quod_time:mono_ms()+5000,
+        ?assertEqual(none, quod_agent_vault:retained(Scope)),
+        ?assertEqual({ok,retained}, quod_agent_vault:retain(Scope,Receipt,Deadline)),
+        Other = Receipt#{binding => #{reference => Ref, epoch => 2, public_key => Key}},
+        Repeat = fun() ->
+            [?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)) || _ <- lists:seq(1,10)],
+            ?assertEqual({ok,{existing,Receipt}},quod_agent_vault:retain(Scope,Other,Deadline))
+        end,
+        ?assertEqual([],vault_io_calls(Repeat,[{file,read_file,1},{file,list_dir,1}])),
+        ok = gen_server:stop(quod_reg:where({agent_vault,node})),
+        {ok,_} = quod_agent_vault:start_link(Config),
+        ?assertEqual([],vault_io_calls(Repeat,[{file,read_file,1},{file,list_dir,1}])),
+        ok = quod_agent_vault:delete(Ref,Key),
+        ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+        ?assertEqual({error,stale_receipt},quod_agent_vault:retire(Scope,Other)),
+        ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+        ok = quod_agent_vault:retire(Scope,Receipt),
+        ?assertEqual(none,quod_agent_vault:retained(Scope)),
+        ok = gen_server:stop(quod_reg:where({agent_vault,node})),
+        {ok,_} = quod_agent_vault:start_link(Config),
+        ?assertEqual(none,quod_agent_vault:retained(Scope))
+    end).
+
+pending_receipt_storage_failure_never_authorizes_submission_test() ->
+    with_vault(fun(Config, Ref, Request0) ->
+        {Scope,Receipt} = pending_receipt(Ref,Request0),
+        Deadline = quod_time:mono_ms()+5000,
+        ?assertEqual({error,deadline_exceeded},
+            quod_agent_vault:retain(Scope,Receipt,quod_time:mono_ms()-1)),
+        ?assertEqual(none,quod_agent_vault:retained(Scope)),
+        Id = binary:encode_hex(crypto:hash(sha256,term_to_binary(Scope,[deterministic]))),
+        Path = filename:join(maps:get(directory,Config),"request-" ++ binary_to_list(Id)),
+        Tmp = Path ++ ".tmp", ok = file:make_dir(Tmp),
+        ?assertEqual({error,vault_storage_unavailable},
+            quod_agent_vault:retain(Scope,Receipt,Deadline)),
+        ok = file:del_dir(Tmp),
+        %% An uncertain mutation cannot turn a duplicate claim into first send.
+        ?assertEqual({ok,{existing,Receipt}},quod_agent_vault:retain(Scope,Receipt,Deadline)),
+        Calls = vault_storage_calls(fun() ->
+            ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope))
+        end),
+        ?assertEqual([],Calls),
+        ok = quod_agent_vault:retire(Scope,Receipt),
+        ?assertEqual(none,quod_agent_vault:retained(Scope))
+    end).
+
+corrupt_pending_receipt_prevents_vault_start_test() ->
+    with_vault(fun(Config,Ref,Request0) ->
+        {Scope,Receipt} = pending_receipt(Ref,Request0),
+        ?assertEqual({ok,retained},quod_agent_vault:retain(Scope,Receipt,quod_time:mono_ms()+5000)),
+        ok = gen_server:stop(quod_reg:where({agent_vault,node})),
+        [Path] = filelib:wildcard(filename:join(maps:get(directory,Config),"request-*")),
+        ok = file:write_file(Path,<<"corrupt">>),
+        Parent = self(), Tag = make_ref(),
+        {Pid,Monitor} = spawn_monitor(fun() ->
+            process_flag(trap_exit,true),
+            Parent ! {Tag,quod_agent_vault:start_link(Config)}
+        end),
+        receive {Tag,Result} -> ?assertEqual({error,vault_receipts_unavailable},Result)
+        after 5000 -> error(corrupt_vault_start_missing) end,
+        receive {'DOWN',Monitor,process,Pid,normal} -> ok
+        after 5000 -> error(corrupt_vault_start_alive) end,
+        ?assertEqual(undefined,quod_reg:where({agent_vault,node}))
+    end).
+
+pending_receipt(Ref,Request0) ->
+    {ok,Key} = quod_agent_vault:prepare(Ref,0),
+    {ok,Bytes,Sig} = sign(Request0#{signing_public_key => Key}),
+    {ok,Fence} = quod_durable_term:encode_goal(true),
+    {{maps:get(network_identity,Request0),<<"exact-world/activation">>},
+     #{store => {Bytes,Sig},request => {Bytes,Sig},fence => Fence,
+       binding => #{reference => Ref,epoch => 1,public_key => Key}}}.
+
 preparation_is_stable_and_preserves_old_custody_test() ->
     with_vault(fun(Config, Ref, Request0) ->
         {ok, First} = quod_agent_vault:prepare(Ref, 1),
@@ -133,12 +214,14 @@ failed_mutation_requires_successful_directory_sync_test() ->
         ?assertEqual([], Unchanged)
     end).
 
-vault_storage_calls(Fun) ->
+vault_storage_calls(Fun) -> vault_io_calls(Fun, []).
+
+vault_io_calls(Fun, Extra) ->
     %% EUnit may reuse the caller after other trace-based fixtures. A fresh
     %% collector cannot mistake their queued argument traces for vault writes.
     Parent = self(), Tag = make_ref(),
     {Pid, Monitor} = spawn_monitor(fun() ->
-        Result = try {ok, vault_storage_measurement(Fun)}
+        Result = try {ok, vault_storage_measurement(Fun, Extra)}
                  catch Class:Reason:Stack -> {error, Class, Reason, Stack} end,
         Parent ! {Tag, Result}
     end),
@@ -155,13 +238,13 @@ vault_storage_calls(Fun) ->
         after 5000 -> error(vault_measurement_timeout) end
     after exit(Pid, kill), demonitor(Monitor, [flush]) end.
 
-vault_storage_measurement(Fun) ->
+vault_storage_measurement(Fun, Extra) ->
     %% MFA-only traces: encrypted bytes and unlock material never enter logs.
     Trace = trace:session_create(vault_storage, self(), []),
     Watched = [{quod_file, write_atomic, 3}, {quod_file, sync_dir, 1},
                {file, write, 2}, {file, pwrite, 3}, {file, sync, 1},
                {file, datasync, 1}, {prim_file, sync, 1},
-               {file, make_link, 2}, {file, rename, 2}],
+               {file, make_link, 2}, {file, rename, 2}] ++ Extra,
     [trace:function(Trace, MFA, true, [local]) || MFA <- Watched],
     trace:process(Trace, quod_reg:where({agent_vault, node}), true, [call, arity]),
     try

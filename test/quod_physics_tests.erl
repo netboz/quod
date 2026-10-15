@@ -25,13 +25,25 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
     ?assertEqual(#{},worlds(Ns)),
     ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_instance,room,physical_space})),
     ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
-    Rows = first_physics_rows(Node,Gravity),
-    Goal = first_physics_goal(Ns,Anchor,Node,Key,Rows),
-    %% A real incomplete camera definition rolls back the host and all bodies.
-    MissingCamera = [R || R <- Rows, element(1,R) =/= physics_viewpoint],
+    Rows = first_physics_rows(Ns,Anchor,Node,Gravity),
+    %% Authored intent precedes runtime initialization, as in ordinary founding.
+    commit(Ns,list_conjunction([{assertz,R} || R <- Rows])),
+    Goal = first_physics_goal(Ns,Anchor,Node,Key),
+    [Camera] = [R || R = {':-',{physics_viewpoint,_,_,_,_,_,_},_} <- Rows],
+    %% Missing camera rolls back both initialization and the attempted removal.
     ?assertMatch({ok,_,{normalized,{failed,_}}},
-        door_action(Ns,first_physics_goal(Ns,Anchor,Node,Key,MissingCamera))),
+        door_action(Ns,{transaction,{',',{retract,Camera},Goal}})),
     assert_unconfigured(Ns),
+    [Floor] = [R || R = {physics_definition,floor,_,_} <- Rows],
+    [Allowance] = [R || R = {physics_allowances,_,_,_,_,_} <- Rows],
+    Limited = setelement(3,Allowance,setelement(2,element(3,Allowance),3)),
+    lists:foreach(fun({Before,Invalid}) ->
+        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,
+            {transaction,list_conjunction([{retract,Before},{assertz,Invalid},Goal])})),
+        assert_unconfigured(Ns),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Before))
+    end,[{Floor,{physics_definition,floor,1,{geometry,{box,-1,250,8000},1}}},
+         {Allowance,Limited}]),
     true = quod_reg:reg({host_test,local_proof}),
     true = quod_reg:subscribe({physics,Ns}),
     try
@@ -40,7 +52,10 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
         Parent = self(), Tag = make_ref(),
         {Caller,Monitor} = spawn_monitor(fun() -> Parent ! {first_assignment,Tag,
             door_action(Ns,{',',Goal,test_local_wait})} end),
-        Proof = receive {local_proof_waiting,P} -> P after 5000 -> error(initial_proof_missing) end,
+        Proof = receive
+            {local_proof_waiting,P} -> P;
+            {first_assignment,Tag,Early} -> error({initial_proof_failed,brief(Early)})
+        after 5000 -> error(initial_proof_missing) end,
         try
             commit(Ns,{retract,Grant}), Proof ! release,
             receive {first_assignment,Tag,Refused} ->
@@ -53,7 +68,7 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
         assert_unconfigured(Ns), commit(Ns,{assertz,Grant}),
         %% Both candidates prove against the absent assignment. Releasing the
         %% local candidate first makes the competing destination deterministic.
-        Results = live_compete(Ns,[Goal,first_physics_goal(Ns,Anchor,Remote,<<33:256>>,Rows)]),
+        Results = live_compete(Ns,[Goal,first_physics_goal(Ns,Anchor,Remote,<<33:256>>)]),
         ?assertMatch([{1,{ok,_,{normalized,{committed,_,_}}}},
                       {2,{ok,_,{normalized,{error,conflict_retry}}}}],Results),
         {Pid,World = {world_ref,Ns,Anchor,room}} = installed(Ns),
@@ -62,47 +77,63 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_hosted,actor,Node,1,Key})),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
             {physics_control,room,Node,1,{controlled,pilot,eye}})),
-        ?assertMatch({2,1,controlled,_,{solid,{capsule,0.5,0.25}},_},
-            lists:keyfind(2,1,maps:get(bodies,Spec))),
+        {ok,[#{'Body' := PilotBody}],_} = quod_prolog:prove_ro(Ns,
+            {physics_agent,room,pilot,1,{'Body'},{'_'}}),
+        ?assertMatch({PilotBody,_,controlled,_,{solid,{capsule,0.5,0.25}},_},
+            lists:keyfind(PilotBody,1,maps:get(bodies,Spec))),
         ?assertMatch(#{navigation_ready := true},gen_server:call(Pid,status)),
         ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns))
     after gproc:unreg(quod_reg:name({host_test,local_proof})) end.
 
 assert_unconfigured(Ns) ->
     [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)) || Goal <-
-        [{space_instance,room,physical_space},
-         {agent_host,actor,{'_'},{'_'},{'_'}},{agent_key,actor,{'_'},active},
-         {physics_space,room,{'_'},{'_'}},{physics_body_definition,room,{'_'},{'_'},{'_'},{'_'},{'_'}}]],
+        [{agent_host,actor,{'_'},{'_'},{'_'}},{agent_key,actor,{'_'},active},
+         {physical_assignment,{'_'},{'_'},{'_'}},
+         {physics_control,room,{'_'},{'_'},{'_'}},
+         {physics_body_definition,room,{'_'},{'_'},{'_'},{'_'},{'_'}}]],
     reconcile(Ns), ?assertEqual(#{},worlds(Ns)).
 
-first_physics_goal(Ns,Anchor,Host,Key,Rows) ->
-    Checks = [{physics_checked_body,B,K,P,S,D,1000000} ||
-        {physics_body_definition,room,B,_,K,P,{owned,S,D}} <- Rows],
+first_physics_goal(Ns,Anchor,Host,Key) ->
     {transaction,list_conjunction([
         {current_ontology_identity,Ns,Anchor},
-        {'\\+',{physics_space,room,{0},{1}}},
-        {goal,{agent_hosted,actor,Host,1,Key}}] ++ Checks ++
-        [{assertz,R} || R <- Rows] ++
-        [{physics_control_agent,room,0,none,{controlled,pilot,eye}}])}.
+        {physics_initial_host,room,{'PreviousHost'}},
+        {retract,{physics_initial_host,room,{'PreviousHost'}}},
+        {assertz,{physics_initial_host,room,Host}},
+        {physics_initialize,room,Host,Key}])}.
 
-first_physics_rows(Principal,Gravity) ->
-    [{instance_of,physical_space,room},{physics_space,room,enabled,actor},
-     {physics_run,room,0,none},{physics_structure,room,1},{physics_next_body,room,5},
+first_physics_rows(Ns,Anchor,Principal,Gravity) ->
+    Destination = {entity_ref,Ns,Anchor,room}, World = {world_ref,Ns,Anchor,room},
+    Authority = {agent_instance_ref,Ns,Anchor,actor},
+    Definitions = [{floor,fixed,{vector,0,-250,0},{box,8000,250,8000}},
+        {pilot,controlled,{vector,0,1200,3000},{capsule,500,250}},
+        {table,fixed,{vector,-1500,550,0},
+            {parts,[{part,{vector,0,0,0},{box,600,100,300}},
+                    {part,{vector,0,-300,0},{box,150,300,150}}]}},
+        {arch,fixed,{vector,0,0,-4000},
+            {parts,[{part,{vector,-2000,1500,0},{box,250,1500,250}},
+                    {part,{vector,2000,1500,0},{box,250,1500,250}},
+                    {part,{vector,0,3250,0},{box,2250,250,250}}]}}],
+    Bodies = lists:append([[{instance_of,case E of pilot -> agent; _ -> thing end,E},
+        {physics_definition,E,1,{geometry,Shape,1}}, {physics_definition_allowance,E,1000000},
+        {physics_admission,room,{entity_ref,Ns,Anchor,E},Kind,Pose},
+        {can_enter_space,E,Principal,Destination,physical},
+        {can_admit_space_member,room,Principal,{entity_ref,Ns,Anchor,E},physical},
+        {can_delegate_physics_definition,E,Principal,World,Authority}]
+        || {E,Kind,Pose,Shape} <- Definitions]),
+    Bodies ++ [{instance_of,physical_space,room},{physics_space,room,enabled,actor},
+     {physics_run,room,0,none},{physics_structure,room,1},{physics_next_body,room,0},
+     {physics_initial_host,room,Principal},{physics_initial_control,room,pilot,eye},
+     {can_initialize_physics,room,Principal},
+     {':-',{space_physical_change,{'W'},{'Subject'},{'Change'}},
+            {physics_space_change,{'W'},{'Subject'},{'Change'}}},
      {physics_allowances,room,{limits,16,16,128,1000000,{geometry,32,128,128}},16667,Gravity,10000},
-     {physics_body_definition,room,1,1,fixed,{vector,0,-250,0},{owned,{box,8000,250,8000},1}},
-     {physics_body_definition,room,2,1,controlled,{vector,0,1200,3000},{owned,{capsule,500,250},1}},
-     {physics_body_definition,room,3,1,fixed,{vector,-1500,550,0},{owned,
-         {parts,[{part,{vector,0,0,0},{box,600,100,300}},
-                 {part,{vector,0,-300,0},{box,150,300,150}}]},1}},
-     {physics_body_definition,room,4,1,fixed,{vector,0,0,-4000},{owned,
-         {parts,[{part,{vector,-2000,1500,0},{box,250,1500,250}},
-                 {part,{vector,2000,1500,0},{box,250,1500,250}},
-                 {part,{vector,0,3250,0},{box,2250,250,250}}]},1}},
-     {instance_of,agent,pilot},
-     {physics_agent,room,pilot,1,2,
+     {':-',{physics_agent,room,pilot,1,{'Body'},
          {motion,{grounded,900},2000,1600,500,{query_limits,2,0,8,128},[]}},
-     {physics_viewpoint,room,pilot,eye,2,{pose,{vector,0,700,0},{rotation,0,100,0}},
-         {tracking,view_only,500}},
+         {physics_body_definition,room,{'Body'},{'_'},controlled,{'_'},
+            {live,{entity_ref,Ns,Anchor,pilot},{'_'},{'_'},{'_'}}}},
+     {':-',{physics_viewpoint,room,pilot,eye,{'Body'},
+         {pose,{vector,0,700,0},{rotation,0,100,0}},{tracking,view_only,500}},
+         {physics_agent,room,pilot,1,{'Body'},{'_'}}},
      {can_view_physics,room,Principal},{can_control_physics_agent,room,Principal,pilot}].
 
 live_source_control_continuity_test_() ->
@@ -2311,6 +2342,7 @@ world_rules(Ns) ->
         quod_prolog:read_terms("priv/ontologies/space.pl") ++ [{instance_of,physical_space,room}] ++
         [{can_invoke, {physics_store_request, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {can_invoke, {physics_activate, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
+         {can_invoke, {physics_store_retired, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {can_invoke, {physics_cancel_activation, {'_'}, {'_'}, {'_'}}, Actor, {'_'}, Ns},
          {physics_space, room, disabled, actor},
          {physics_run, room, 0, none}, {physics_structure, room, 1}, {physics_next_body,room,4},
@@ -2720,32 +2752,117 @@ activation_timeout_is_unresolved_not_rejection_test_() ->
         after gproc:unreg(quod_reg:name({host_test,barrier})) end
     end}.
 
+retained_activation_before_first_send_is_resolve_only_after_owner_loss_test_() ->
+    {timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Node,key := Key,reference := Actor}) ->
+        Vault = quod_reg:where({agent_vault,node}), Parent = self(), Tag = make_ref(),
+        Observe = fun(fresh,{in,{'$gen_call',{Worker,_},{retain,Scope,Receipt,_}}},_) ->
+                          true = erlang:suspend_process(Worker),
+                          Parent ! {retaining,Tag,Worker,Scope,Receipt}, held;
+                     (State,_,_) -> State end,
+        ok = sys:install(Vault,{Observe,fresh}),
+        true = quod_reg:subscribe({physics,Ns}),
+        try
+            commit(Ns,{goal,{agent_hosted,actor,Node,1,Key}}),
+            commit(Ns,{',',{retract,{physics_space,room,disabled,actor}},
+                           {assertz,{physics_space,room,enabled,actor}}}),
+            {Worker,Scope,Receipt} = receive {retaining,Tag,W,S,SavedReceipt} -> {W,S,SavedReceipt}
+                                    after 5000 -> error(receipt_not_retained) end,
+            %% This owner call follows the retain mutation. The signed worker
+            %% is suspended before it can receive the reply or send C.
+            ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+            [{World,#{pid := Old}}] = maps:to_list(worlds(Ns)),
+            exit(Worker,kill),
+            New = receive {physics_status,_,P,World,_,{unavailable,activation_custody_unresolved}}
+                            when P =/= Old -> P
+                  after 10000 -> error(successor_did_not_resolve_retained_request) end,
+            ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+            #{store := {C,CSig},request := {R,RSig}} = Receipt,
+            ?assertMatch({ok,_,{operation_pending,_}},quod_client_goal_ingress:resolve_operation(C,CSig)),
+            ?assertMatch(#{phase := unresolved,installs := 0},gen_server:call(New,status)),
+            {ok,#{goal_blob := GoalBlob}} = quod_client_goal:verify(R,RSig),
+            {ok,{physics_activate,room,0,Token}} = quod_durable_term:decode_goal(GoalBlob),
+            commit(Ns,{assertz,{can_cancel_physics_activation,room,Actor}}),
+            ?assertMatch({ok,_,{normalized,{committed,_,_}}},submit_fixture(F,
+                {physics_cancel_activation,room,0,{request,Token,0,R,RSig}})),
+            {_,World} = installed(Ns),
+            ?assertEqual(none,quod_agent_vault:retained(Scope)),
+            %% Late delivery cannot resurrect the retired original request.
+            ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(C,CSig))
+        after sys:remove(Vault,Observe) end
+    end) end}.
+
 unobserved_custody_has_explicit_lifecycle_exit_test_() ->
-    {timeout,60,fun() ->
+    [{atom_to_list(Exit),{timeout,60,fun() ->
         {ok,_} = application:ensure_all_started(gproc),
         true = quod_reg:reg({host_test,barrier}),
-        try with_world(fun(#{namespace := Ns,node := Node,key := Key}) ->
+        try with_world(fun(F = #{namespace := Ns,node := Node,key := Key,reference := Actor}) ->
             true = quod_reg:subscribe({physics,Ns}),
             commit(Ns,{goal,{agent_hosted,actor,Node,1,Key}}),
             commit(Ns,{',',{retract,{physics_space,room,disabled,actor}},
                            {assertz,{physics_space,room,enabled,actor}}}),
-            Proof = receive {fipa_completion_prepared,P,_} -> P
+            {Proof,Operation} = receive {fipa_completion_prepared,P,Op} -> {P,Op}
                     after 5000 -> error(custody_store_not_paused) end,
             Old = receive {physics_status,_,P0,_,_,{unavailable,activation_custody_unresolved}} -> P0
                   after 5000 -> error(unobserved_custody_not_reported) end,
             [reconcile(Ns) || _ <- lists:seq(1,3)],
             [{World,#{pid := Old,spec := #{generation := 0,custody := none}}}] = maps:to_list(worlds(Ns)),
+            {ok,Network} = quod_ontology:network_identity(),
+            {ok,ScopeBytes} = quod_wire_term:encode_canonical({World,physics_activation}),
+            Scope = {Network,ScopeBytes},
+            {ok,Receipt = #{store := {StoreBytes,StoreSig},request := {Bytes,Sig}}} =
+                quod_agent_vault:retained(Scope),
+            ?assertMatch({ok,#{operation_ref := Operation}},quod_client_goal:verify(StoreBytes,StoreSig)),
+            {ok,#{goal_blob := GoalBlob}} = quod_client_goal:verify(Bytes,Sig),
+            {ok,{physics_activate,room,0,Token}} = quod_durable_term:decode_goal(GoalBlob),
             M = monitor(process,Old),
             commit(Ns,{',',{retract,physics_store_gate},
                 {',',{retract,{physics_space,room,enabled,actor}},
                      {assertz,{physics_space,room,disabled,actor}}}}),
             receive {'DOWN',M,process,Old,_} -> ok after 5000 -> error(old_owner_not_retired) end,
-            Proof ! release,
             commit(Ns,{',',{retract,{physics_space,room,disabled,actor}},
                            {assertz,{physics_space,room,enabled,actor}}}),
-            {New,World} = installed(Ns),
-            ?assertNotEqual(Old,New),
-            ?assertMatch(#{World := #{spec := #{generation := 1}}},worlds(Ns))
+            New = receive {physics_status,_,P1,World,_,{unavailable,activation_custody_unresolved}}
+                            when P1 =/= Old -> P1
+                  after 5000 -> error(restarted_owner_did_not_resolve_original) end,
+            ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+            ?assertMatch(#{phase := unresolved,installs := 0},gen_server:call(New,status)),
+            case Exit of
+                cancel ->
+                    %% Authority can change and return at the same generation.
+                    %% Neither transition retires the original uncertain store.
+                    Other = setelement(4,Actor,other),
+                    {ok,OtherBytes} = quod_wire_term:encode_canonical(Other),
+                    {ok,OtherKey} = quod_agent_vault:prepare(OtherBytes,0),
+                    commit(Ns,list_conjunction([
+                        {assertz,{can_invoke,{'_'},Other,{'_'},Ns}},
+                        {assertz,{can_edit_physics,room,{node,maps:get(pubkey,maps:get(identity,F))}}},
+                        {goal,{agent_hosted,other,Node,1,OtherKey}},
+                        {physics_assign_authority,room,actor,other}])),
+                    Swapped = receive
+                        {physics_status,_,P2,World,_,{unavailable,activation_custody_unresolved}}
+                          when P2 =/= New -> P2
+                    after 10000 -> error(authority_swap_retired_uncertain_store) end,
+                    ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+                    commit(Ns,{physics_assign_authority,room,other,actor}),
+                    receive
+                        {physics_status,_,P3,World,_,{unavailable,activation_custody_unresolved}}
+                          when P3 =/= Swapped -> ok
+                    after 10000 -> error(returned_authority_lost_uncertain_store) end,
+                    ?assertEqual({ok,Receipt},quod_agent_vault:retained(Scope)),
+                    commit(Ns,{assertz,{can_cancel_physics_activation,room,Actor}}),
+                    ?assertMatch({ok,_,{normalized,{committed,_,_}}},submit_fixture(F,
+                        {physics_cancel_activation,room,0,{request,Token,0,Bytes,Sig}}));
+                revoke ->
+                    {ok,ActorBytes} = quod_wire_term:encode_canonical(Actor),
+                    {ok,NextKey} = quod_agent_vault:prepare(ActorBytes,1),
+                    commit(Ns,{goal,{agent_assignment,actor,Node,1,Node,2,NextKey}}),
+                    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_key,actor,Key,revoked}))
+            end,
+            Proof ! release,
+            {Active,World} = installed(Ns),
+            ?assertNotEqual(Old,Active),
+            ?assertMatch(#{World := #{spec := #{generation := 1}}},worlds(Ns)),
+            ?assertEqual(none,quod_agent_vault:retained(Scope))
         end,fun(Rules) -> [physics_store_gate|[case Rule of
             {':-',Head = {physics_store_request,_,_,_,_,_,_},Body} ->
                 {':-',Head,{',',{';',{'->',physics_store_gate,test_fipa_completion},true},Body}};
@@ -2753,7 +2870,7 @@ unobserved_custody_has_explicit_lifecycle_exit_test_() ->
             _ -> Rule
         end || Rule <- Rules]] end)
         after gproc:unreg(quod_reg:name({host_test,barrier})) end
-    end}.
+    end}} || Exit <- [cancel,revoke]].
 
 native_reports_the_exceeded_output_allowance_test() ->
     {ok,R} = quod_physics_native:new_world({2,0,2,1000.0,256,4096,4096},1/60,-9.81),
@@ -3209,7 +3326,8 @@ with_door(Fun,Obstructed,Transform) ->
     end).
 
 door_action(Ns,Goal) ->
-    {ok,Bytes,Signature} = quod_node_actor:signed_goal(execute,{'::',Ns,Goal},
+    {Scoped,_,_} = erlog_int:term_instance({'::',Ns,Goal},0),
+    {ok,Bytes,Signature} = quod_node_actor:signed_goal(execute,Scoped,
         crypto:strong_rand_bytes(32),quod_time:now_ms()+10000),
     quod_client_goal_ingress:submit(Bytes,Signature).
 
@@ -3732,7 +3850,7 @@ reject_door_resolve(Pid) ->
 with_door_simulator(SavedCustody,Fun) ->
     with_simulator(none,fun(Pid,Spec) ->
         {Activation,Token} = receive
-            {physics_work,Pid,_,A,activate,{{physics_activate,room,0,T},_},_} -> {A,T}
+            {physics_work,Pid,_,A,activate,{{physics_activate,room,0,T},_,_},_} -> {A,T}
         after 5000 -> error(activation_missing) end,
         R = {close,1,<<111:256>>},
         Sample = test_hinge_sample(Spec#{generation => 1,run_token => Token,structure => 1},
@@ -4065,7 +4183,7 @@ chair_unknown_checkpoint_custody_is_not_resubmitted_test_() ->
 expired_rest_observation_resamples_test_() ->
     {timeout,20,fun() -> with_simulator(none,fun(Pid,Spec) ->
         {Activation,Token} = receive
-            {physics_work,Pid,_,A,activate,{{physics_activate,room,0,T},_},_} -> {A,T}
+            {physics_work,Pid,_,A,activate,{{physics_activate,room,0,T},_,_},_} -> {A,T}
         after 5000 -> error(activation_missing) end,
         R = {rest,1,<<204:256>>},
         Current = Spec#{generation => 1,run_token => Token,

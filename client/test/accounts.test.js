@@ -4,6 +4,7 @@ import { accountReference, createAccount, resumeAccounts, finishAccountSetup } f
 import { createKeyProvider, b64url, fromB64url } from '../src/key-provider.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { binary, atom, compound, renderTerm } from '../src/prolog-term.js'
+import { readTerm } from '../src/prolog-read.js'
 
 const bytes = number => new Uint8Array(32).fill(number)
 const text = value => binary(new TextEncoder().encode(value))
@@ -13,6 +14,9 @@ const lobbyValue = renderTerm(compound('ontology_ref', [text('human:example/lobb
 const signupReply = { result: 'ok', bindings: [{ Account: accountValue }] }
 const lobbyReply = { result: 'ok', bindings: [{ Lobby: lobbyValue }] }
 const terminal = reply => ({ ...reply, result: 'operation_outcome', status: 'committed', terminal: true })
+const setup = state => renderTerm(compound('setup', [atom('personal_lobby'), state]))
+const ready = { result: 'ok', bindings: [{ Preparation: setup(atom('ready')) }] }
+const withReadyLobby = post => (url, body) => url === '/api/goals/read' ? ready : post(url, body)
 
 async function fixture(post) {
   const identity = { provider: await createKeyProvider(), networkId: bytes(1),
@@ -20,7 +24,7 @@ async function fixture(post) {
   const saved = []
   const journal = memoryOperationJournal()
   return { identity, journal, saved, options: {
-    journal, post,
+    journal, post: withReadyLobby(post),
     fetch: async url => {
       assert.equal(url, '/api/ontologies/system')
       return { ok: true, json: async () => ({ network_id: b64url(bytes(1)),
@@ -59,12 +63,12 @@ test('lost lobby reply resolves the exact operation without another creation', a
   await assert.rejects(createAccount(f.identity, f.options), /reply lost/)
   const [pending] = await f.journal.list()
   assert.equal(pending.context.step, 'lobby')
-  const result = await resumeAccounts(f.identity, { ...f.options, post: async (url, body) => {
+  const result = await resumeAccounts(f.identity, { ...f.options, post: withReadyLobby(async (url, body) => {
     assert.equal(url, '/api/goals/outcomes')
     assert.equal(body.request, pending.request)
     assert.equal(body.signature, pending.signature)
     return terminal(lobbyReply)
-  } })
+  }) })
   assert.equal(result.unresolved, 0)
   assert.equal(submitted, 2)
 })
@@ -77,10 +81,10 @@ test('failure to save a returned account retains signup recovery evidence', asyn
   const [pending] = await f.journal.list()
   assert.equal(pending.context.step, 'signup')
   const calls = []
-  const result = await resumeAccounts(f.identity, { ...f.options, post: async url => {
+  const result = await resumeAccounts(f.identity, { ...f.options, post: withReadyLobby(async url => {
     calls.push(url)
     return url.endsWith('/outcomes') ? terminal(signupReply) : lobbyReply
-  } })
+  }) })
   assert.equal(result.unresolved, 0)
   assert.deepEqual(calls, ['/api/goals/outcomes', '/api/goals/execute'])
 })
@@ -108,12 +112,12 @@ test('explicitly refused lobby setup can be finished without creating another ac
   assert.deepEqual(await f.journal.list(), [])
   const reference = accountReference(f.identity)
   let stage
-  await finishAccountSetup(f.identity, { ...f.options, post: async url => {
+  await finishAccountSetup(f.identity, { ...f.options, post: withReadyLobby(async url => {
     assert.equal(url, '/api/goals/execute')
     const [operation] = await f.journal.list()
     stage = operation.context.step
     return lobbyReply
-  } })
+  }) })
   assert.equal(stage, 'lobby')
   assert.deepEqual(accountReference(f.identity), reference)
   assert.deepEqual(await f.journal.list(), [])
@@ -132,7 +136,7 @@ test('explicit setup action cannot replace an unknown lobby operation', async ()
   assert.equal(submitted, 2)
 })
 
-test('lost explicit completion reply resolves its exact request without another setup', async () => {
+test('lost explicit setup reply resolves its exact request without another setup', async () => {
   let submitted = 0
   const f = await fixture(async () => ++submitted === 1 ? signupReply : lobbyReply)
   await createAccount(f.identity, f.options)
@@ -146,15 +150,94 @@ test('lost explicit completion reply resolves its exact request without another 
   const request = new TextDecoder().decode(fromB64url(pending.request))
   assert.match(request, /State = pending\(_\)/)
   assert.match(request, /State = linked\(_\)/)
-  assert.match(request, /complete_lobby_setup\(Owner, Lobby\)/)
+  assert.doesNotMatch(request, /complete_lobby_setup/)
   await assert.rejects(finishAccountSetup(f.identity, f.options), /unresolved operation/)
-  const recovered = await resumeAccounts(f.identity, { ...f.options, post: async (url, body) => {
+  const recovered = await resumeAccounts(f.identity, { ...f.options, post: withReadyLobby(async (url, body) => {
     assert.equal(url, '/api/goals/outcomes')
     assert.equal(body.request, pending.request)
     assert.equal(body.signature, pending.signature)
     return terminal(lobbyReply)
-  } })
+  }) })
   assert.equal(recovered.unresolved, 0)
   assert.equal(submitted, 3)
   assert.deepEqual(accountReference(f.identity), reference)
+})
+
+test('fresh lobby prepares custody and journals atomic physics startup after founding', async () => {
+  const f = await fixture(() => { throw new Error('unexpected fixture request') })
+  const stages = []
+  const prepared = renderTerm(compound('prepared', [
+    compound('agent_instance_ref', [text('node:host'), binary(bytes(6)), atom('me')]), binary(bytes(7)),
+  ]))
+  const options = { ...f.options, post: async url => {
+    const [operation] = await f.journal.list()
+    if (url === '/api/goals/read') {
+      assert.equal(operation.context.step, 'lobby', 'founding evidence survives custody preparation')
+      return { result: 'ok', bindings: [{ Preparation: setup(readTerm(prepared)) }] }
+    }
+    assert.equal(url, '/api/goals/execute')
+    stages.push(operation.context.step)
+    if (operation.context.step === 'signup') return signupReply
+    if (operation.context.step === 'lobby') return lobbyReply
+    assert.equal(operation.context.step, 'physical')
+    assert.match(new TextDecoder().decode(fromB64url(operation.request)), /physics_initialize/)
+    throw Object.assign(new Error('startup reply lost'), { outcomeUnknown: true })
+  } }
+  await assert.rejects(createAccount(f.identity, options), /startup reply lost/)
+  assert.deepEqual(stages, ['signup', 'lobby', 'physical'])
+  const [pending] = await f.journal.list()
+  assert.equal(pending.context.step, 'physical')
+  await assert.rejects(finishAccountSetup(f.identity, options), /unresolved operation/)
+  const result = await resumeAccounts(f.identity, { ...f.options, post: async (url, body) => {
+    assert.equal(url, '/api/goals/outcomes', 'no repeated custody read or execute after lost reply')
+    assert.equal(body.request, pending.request)
+    return terminal({ result: 'ok', bindings: [{}] })
+  } })
+  assert.equal(result.unresolved, 0)
+  assert.deepEqual(await f.journal.list(), [])
+  const repeat = await resumeAccounts(f.identity, { ...f.options, post: async () => {
+    assert.fail('unchanged reconnect sends no request')
+  } })
+  assert.equal(repeat.unresolved, 0)
+})
+
+test('disconnect during custody preparation retains the committed founding handoff', async () => {
+  const f = await fixture(() => { throw new Error('unexpected fixture request') })
+  let submits = 0
+  await assert.rejects(createAccount(f.identity, { ...f.options, post: async url => {
+    if (url === '/api/goals/read') throw new Error('connection lost during custody preparation')
+    return ++submits === 1 ? signupReply : lobbyReply
+  } }), /connection lost/)
+  const [pending] = await f.journal.list()
+  assert.equal(pending.context.step, 'lobby')
+  const recovered = await resumeAccounts(f.identity, { ...f.options, post: async (url, body) => {
+    if (url === '/api/goals/outcomes') {
+      assert.equal(body.request, pending.request)
+      return terminal(lobbyReply)
+    }
+    assert.equal(url, '/api/goals/read')
+    return ready
+  } })
+  assert.equal(recovered.unresolved, 0)
+  assert.equal(submits, 2, 'a known ready authority is not assigned again')
+})
+
+
+test('an intentionally disabled space completes setup without a physics write', async () => {
+  const f = await fixture(() => { throw new Error('unexpected fixture request') })
+  const stages = []
+  const result = await createAccount(f.identity, { ...f.options, post: async url => {
+    const [operation] = await f.journal.list()
+    if (url === '/api/goals/read') {
+      assert.equal(operation.context.step, 'lobby')
+      return { result: 'ok', bindings: [{ Preparation: setup(atom('disabled')) }] }
+    }
+    assert.equal(url, '/api/goals/execute')
+    stages.push(operation.context.step)
+    assert.notEqual(operation.context.step, 'physical')
+    return operation.context.step === 'signup' ? signupReply : lobbyReply
+  } })
+  assert.equal(result.unresolved, 0)
+  assert.deepEqual(stages, ['signup', 'lobby'])
+  assert.deepEqual(await f.journal.list(), [])
 })

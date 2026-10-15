@@ -1,0 +1,1 @@
+import{gaussianSplattingVertexDeclarationWGSL as e}from"./Blocks-f571-Npb.js";export{e as gaussianSplattingVertexDeclarationWGSL};

@@ -53,12 +53,26 @@ class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
     Namespace = <<"quod:prolog:eidolons">>,
     quod:root::system_ontology(Namespace, Anchor).
 
-entity_eidolons(Entity, Eidolons) :-
-    findall(Class, (instance_of(Class, Entity); Class = Entity, isa(Class, Class)), Raw),
-    sort(Raw, Classes),
-    findall(eidolon(Purpose, Style, Recipe), (member(Class, Classes),
-            class_eidolon(Class, Purpose, Style, Recipe)), Choices),
+entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).
+entity_eidolons(Entity,Purpose,Style,Eidolons) :-
+    findall(Direct,(instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),Raw),
+    sort(Raw,Classes), class_eidolons(Classes,Purpose,Style,Eidolons).
+
+class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
+class_eidolons(Classes,Purpose,Style,Eidolons) :-
+    findall(candidate(Class,Purpose,Style,Recipe),
+        (member(Direct,Classes), (Class = Direct; isa(Direct,Class)),
+         class_eidolon(Class,Purpose,Style,Recipe)), Candidates),
+    findall(eidolon(Purpose,Style,Recipe),
+        (member(candidate(Class,Purpose,Style,Recipe),Candidates),
+         \+ (member(candidate(Other,Purpose,Style,_),Candidates),
+             isa(Other,Class), \+ isa(Class,Other))), Choices),
     sort(Choices, Eidolons).
+
+entity_classes(Entity, Classes) :-
+    findall(Class, ((instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),
+                   (Class = Direct; isa(Direct,Class))), Raw),
+    sort(Raw,Classes).
 
 %% Discovery grants no invocation or mutation authority.
 %% Ontologies opting into public source discovery also expose their identity;
@@ -66,6 +80,9 @@ entity_eidolons(Entity, Eidolons) :-
 public_source_query(current_ontology_identity(_, _)).
 public_source_query(instance_of(ontology, ontology_ref(_, _))).
 public_source_query(entity_eidolons(_, _)).
+public_source_query(class_eidolons(_, _)).
+public_source_query(class_eidolons(_, _, _, _)).
+public_source_query(entity_eidolons(_, _, _, _)).
 
 %% Targets admit only these exact source/read and administrator-edit shapes.
 %% The root policy describes whole-ontology read access, never API visibility.

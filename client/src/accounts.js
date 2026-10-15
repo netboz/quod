@@ -5,7 +5,7 @@ import { b64url, storeActiveKeyProvider } from './key-provider.js'
 import { saveAgentReference } from './agent-references.js'
 import { binary, compound, renderTerm, variable } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
-import { readAgentReference, readReference, singleBinding } from './world.js'
+import { anchoredGoal, readAgentReference, readReference, singleBinding } from './world.js'
 import { signedGoal, resolveSignedOperations, pendingSignedOperations, readSystemOntologies } from './signed-client.js'
 import { signedOperationJournal } from './operation-journal.js'
 
@@ -62,9 +62,13 @@ function accountResult(identity, options) {
       // remains in the existing operation journal.
       await provisionLobby(identity, reference, { ...options, replaceOperation: operation.id })
     } else if (operation.context.step === 'lobby') {
-      readReference(singleBinding(reply, 'Lobby'))
-      await rememberAccount(identity, { namespace: operation.agent.namespace,
+      const lobby = readReference(singleBinding(reply, 'Lobby'))
+      const reference = await rememberAccount(identity, { namespace: operation.agent.namespace,
         anchor: operation.agent.anchor, instanceText: operation.agent.instance_text }, options)
+      await initializePhysics(identity, reference, lobby,
+        { ...options, replaceOperation: operation.id })
+    } else if (operation.context.step === 'physical') {
+      return
     } else {
       throw new Error('Unknown account operation; its recovery record has been retained.')
     }
@@ -80,17 +84,13 @@ export async function finishAccountSetup(identity, options = {}) {
   }
   const reference = accountReference(identity)
   if (!reference) throw new Error('This identity has no account on this network.')
-  return provisionLobby(identity, reference, { ...options, journal }, true)
+  return provisionLobby(identity, reference, { ...options, journal })
 }
 
-async function provisionLobby(identity, reference, options, complete = false) {
+async function provisionLobby(identity, reference, options) {
   const instance = renderTerm(readTerm(reference.instanceText.replace(/\.\s*$/, '')))
-  const create = `provision_lobby(${instance})`
-  const completion = 'current_principal(Owner), lobby_vocabulary(Namespace, Anchor), '
-    + 'Namespace::(current_ontology_identity(Namespace, Anchor), complete_lobby_setup(Owner, Lobby))'
-  const goal = complete
-    ? `lobby_provisioning(${instance}, State), (State = pending(_) -> ${create}; State = linked(_) -> (${completion})), lobby_reference(Lobby).`
-    : `${create}, lobby_reference(Lobby).`
+  const goal = `lobby_provisioning(${instance}, State), `
+    + `(State = pending(_) -> provision_lobby(${instance}); State = linked(_)), lobby_reference(Lobby).`
   const reply = await signedGoal(identity, { mode: 'execute', agent: reference, goal }, {
     ...options, context: { flow: 'account', step: 'lobby' },
     onTerminal: accountResult(identity, options),
@@ -99,6 +99,32 @@ async function provisionLobby(identity, reference, options, complete = false) {
     throw new Error('Your account exists, but lobby setup was refused.')
   }
   return reply
+}
+
+async function initializePhysics(identity, reference, lobby, options) {
+  const space = variable('Space'), state = variable('State')
+  const goal = compound(',', [compound('lobby_space', [space, variable('_Modes')]),
+    compound(',', [compound('physics_preparation', [space, state]),
+      compound('=', [variable('Preparation'), compound('setup', [space, state])])])])
+  const prepared = readTerm(singleBinding(await signedGoal(identity, {
+    mode: 'read', agent: reference, goal: anchoredGoal(lobby, goal),
+  }, options), 'Preparation'))
+  if (prepared.type !== 'compound' || prepared.functor !== 'setup' || prepared.args.length !== 2) {
+    throw new Error('The space did not supply a valid setup result.')
+  }
+  const [world, preparation] = prepared.args
+  if (preparation.type === 'atom' && ['ready', 'disabled'].includes(preparation.value)) return
+  if (preparation.type !== 'compound' || preparation.functor !== 'prepared' || preparation.args.length !== 2) {
+    throw new Error('The space did not supply a valid authority preparation.')
+  }
+  const reply = await signedGoal(identity, {
+    mode: 'execute', agent: reference,
+    goal: anchoredGoal(lobby, compound('physics_initialize', [world, ...preparation.args])),
+  }, { ...options, context: { flow: 'account', step: 'physical' },
+    onTerminal: accountResult(identity, options) })
+  if (!committed(reply) && reply.result !== 'pending') {
+    throw new Error('Your space exists, but its physical setup was refused.')
+  }
 }
 
 async function rememberAccount(identity, reference, options) {

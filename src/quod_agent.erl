@@ -76,7 +76,7 @@ pump(S = #s{worker = none, pending = Pending, released = Released}) ->
     end;
 pump(S) -> S.
 
-unsent_expiry({custodied, _, _, _}) -> {error, {request_not_submitted, deadline_exceeded}};
+unsent_expiry({custodied, _, _, _, _}) -> {error, {request_not_submitted, deadline_exceeded}};
 unsent_expiry(_) -> {error, deadline_exceeded}.
 
 take_ready([], _, _) -> none;
@@ -135,7 +135,7 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
                    expired => false, timeout_result => TimeoutResult,
                    report_binding => ReportBinding}}.
 
-request_mode({custodied, _, _, _}) -> execute;
+request_mode({custodied, _, _, _, _}) -> execute;
 request_mode({retained, _}) -> execute;
 request_mode(resolve) -> read;
 request_mode({node, _, Mode}) -> Mode;
@@ -227,18 +227,15 @@ current_node(NodeRef, Key) ->
 
 invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
     quod_client_goal_ingress:resolve_operation(Bytes, Signature);
-invoke_live(Slot, Binding, {{custodied, BytesVar, SignatureVar, Template}, Goal, Expires}, Operation) ->
-    case sign_request(Slot, Binding, {execute, Goal, Expires}, Operation) of
-        {ok, Bytes, Signature} ->
-            Bs0 = erlog_int:add_binding(BytesVar, Bytes, erlog_int:new_bindings()),
-            Bs = erlog_int:add_binding(SignatureVar, Signature, Bs0),
-            Custody = erlog_int:dderef(Template, Bs),
-            case invoke_live(Slot, Binding, {execute, Custody, Expires}, crypto:strong_rand_bytes(32)) of
-                {ok, _, {normalized, {committed, _, _}}} ->
-                    quod_client_goal_ingress:submit(Bytes, Signature);
-                {ok, _, {normalized, {failed, _}}} = Failed ->
-                    {error, {request_not_submitted, Failed}};
-                Other -> {error, {custody_unresolved, Other}}
+invoke_live(Slot, Binding, {{custodied, Retention, BytesVar, SignatureVar, Template}, Goal, Expires}, Operation) ->
+    case custody_scope(Retention) of
+        none -> establish_custody(Slot, Binding, none, BytesVar, SignatureVar, Template, Goal, Expires, Operation);
+        {ok, Scope, Fence} ->
+            case quod_agent_vault:retained(Scope) of
+                none -> establish_custody(Slot, Binding, {Scope,Fence}, BytesVar, SignatureVar,
+                                          Template, Goal, Expires, Operation);
+                {ok, Receipt} -> resolve_custody(Slot, Binding, Scope, Receipt, Expires);
+                Error -> {error, {request_not_submitted, Error}}
             end;
         Error -> {error, {request_not_submitted, Error}}
     end;
@@ -249,6 +246,83 @@ invoke_live(Slot, Binding, Request, Operation) ->
             trace_stage(<<"quod.agent.submit">>,
                         fun() -> quod_client_goal_ingress:submit(Bytes, Signature) end);
         {error, _} = Error -> Error
+    end.
+
+custody_scope(none) -> none;
+custody_scope({Scope, Fence}) ->
+    case {quod_ontology:network_identity(), quod_wire_term:encode_canonical(Scope)} of
+        {{ok, Network}, {ok, Bytes}} -> {ok, {Network, Bytes}, Fence};
+        _ -> {error, invalid_custody_scope}
+    end.
+
+establish_custody(Slot, Binding, Retention, BVar, SVar, Template, Goal, Expires, Operation) ->
+    case sign_request(Slot, Binding, {execute, Goal, Expires}, Operation) of
+        {ok, Bytes, Signature} ->
+            Bs0 = erlog_int:add_binding(BVar, Bytes, erlog_int:new_bindings()),
+            Bs = erlog_int:add_binding(SVar, Signature, Bs0),
+            Store = erlog_int:dderef(Template, Bs),
+            case sign_request(Slot, Binding, {execute, Store, Expires}, crypto:strong_rand_bytes(32)) of
+                {ok, CBytes, CSig} ->
+                    submit_custody(Slot, Binding, Retention, Bs,
+                                   {CBytes,CSig}, {Bytes,Signature}, Expires);
+                Error -> {error, {request_not_submitted, Error}}
+            end;
+        Error -> {error, {request_not_submitted, Error}}
+    end.
+
+submit_custody(_Slot, _Binding, none, _Bs, Store, Request, _Expires) ->
+    finish_custody(none, none, submit_signed(Store), Request);
+submit_custody(Slot, Binding, {Scope,Fence}, Bs, Store, Request, Expires) ->
+    {ok, FenceBytes} = quod_durable_term:encode_goal(erlog_int:dderef(Fence, Bs)),
+    {ok, AgentBytes} = quod_wire_term:encode_canonical(maps:get(reference, Binding)),
+    Receipt = #{store => Store, request => Request, fence => FenceBytes,
+                binding => (maps:with([epoch,public_key], Binding))#{reference => AgentBytes}},
+    Deadline = quod_time:mono_ms() + max(0, Expires - quod_time:now_ms()),
+    case quod_agent_vault:retain(Scope, Receipt, Deadline) of
+        {ok, retained} -> finish_custody(Scope, Receipt, submit_signed(Store), Request);
+        {ok, {existing, Existing}} -> resolve_custody(Slot, Binding, Scope, Existing, Expires);
+        Error -> {error, {request_not_submitted, Error}}
+    end.
+
+submit_signed({Bytes,Signature}) -> quod_client_goal_ingress:submit(Bytes,Signature).
+
+finish_custody(Scope, Receipt, {ok, _, {normalized, {committed, _, _}}}, Request) ->
+    case retire_custody(Scope, Receipt) of
+        ok -> submit_signed(Request);
+        Error -> {error, {custody_unresolved, Error}}
+    end;
+finish_custody(Scope, Receipt, {ok, _, {normalized, {failed, _}}} = Failed, _) ->
+    _ = retire_custody(Scope, Receipt),
+    {error, {request_not_submitted, Failed}};
+finish_custody(_, _, Other, _) -> {error, {custody_unresolved, Other}}.
+
+retire_custody(none, none) -> ok;
+retire_custody(Scope, Receipt) -> quod_agent_vault:retire(Scope, Receipt).
+
+%% A recovered receipt can only be resolved or fenced, never submitted again.
+resolve_custody(Slot, Binding, Scope, Receipt = #{store := {Bytes,Signature}, fence := FenceBytes}, Expires) ->
+    Result = quod_client_goal_ingress:resolve_operation(Bytes,Signature),
+    Terminal = case Result of
+        {ok, _, {operation_outcome, _, #{status := Status}}}
+          when Status =:= committed; Status =:= rejected; Status =:= aborted -> true;
+        _ -> false
+    end,
+    Fenced = case Terminal of
+        true -> true;
+        false ->
+            {ok, Fence} = quod_durable_term:decode_goal(FenceBytes),
+            case invoke_live(Slot, Binding, {read, Fence, Expires}, crypto:strong_rand_bytes(32)) of
+                {ok, _, {normalized, {read, _, {answers, _, [_|_]}}}} -> true;
+                _ -> false
+            end
+    end,
+    case Fenced of
+        true ->
+            case retire_custody(Scope, Receipt) of
+                ok -> {error, custody_retired};
+                Error -> {error, {custody_unresolved, Error}}
+            end;
+        false -> {error, {custody_unresolved, Result}}
     end.
 
 sign_request(node, #{reference := NodeRef, public_key := Key},

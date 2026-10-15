@@ -44,7 +44,7 @@ authored_space_composition_preserves_world_test_() ->
         {AgentNs, AgentAnchor} = maps:get(agent, Ctx),
         Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
         {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
-            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
+            editor_scope(LobbyNs, {world_view, personal_lobby, playing, {0}})),
         Other = start_namespace(OtherNs, Base#{
             data_dir => filename:join(Dir, "gallery"),
             genesis_diff => quod_prolog:terms_to_diff([
@@ -72,7 +72,7 @@ authored_space_composition_preserves_world_test_() ->
                 ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Ctx, execute, Edit)),
                 ?assertEqual(Before + 1, quod_prolog:applied(Ns)),
                 ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds))
-            end, [{LobbyNs, personal_lobby}, {OtherNs, gallery}])
+            end, [{OtherNs, gallery}])
         after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -106,7 +106,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
         Owner = {agent_instance_ref, AgentNs, AgentAnchor, {human_user, test_agent}},
         OtherNs = <<"inactive-physics-gallery">>,
         {ok, [#{<<"V0">> := Scene}], _} = read(Ctx,
-            editor_scope(LobbyNs, {lobby_view, playing, {0}})),
+            editor_scope(LobbyNs, {world_view, personal_lobby, playing, {0}})),
         Other = start_namespace(OtherNs, Base#{
             data_dir => filename:join(Dir, "gallery"),
             genesis_diff => quod_prolog:terms_to_diff([
@@ -189,8 +189,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
                         assert_repeat_source_has_no_io(Ctx, Target, Complete)
                     after stop_process(FinalBoot) end
                 after stop_process(Resumed) end
-            end, [{LobbyNs, personal_lobby, maps:get(LobbyNs, maps:get(ontologies, Ctx))},
-                  {OtherNs, gallery, Other}])
+            end, [{OtherNs, gallery, Other}])
         after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -275,16 +274,18 @@ lobby_projection_recovery_test_() ->
             {ok, [#{<<"V0">> := Ref}], _} = read(Ctx, {lobby_reference, {0}}),
             {ontology_ref, Ns, Anchor} = Ref,
             Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
-                                    {lobby_view, playing, {0}}}},
+                                    {world_view, personal_lobby, playing, {0}}}},
             {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Goal),
-            ?assertEqual(6, length(Scene)),
-            ?assertMatch({mark, <<"floor">>, <<"mesh">>,
+            ?assertEqual(8, length(Scene)),
+            ?assertMatch({mark, <<"floor/model">>, <<"mesh">>,
                           {mesh_asset, {asset,
                               <<"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f">>, _}, _,
                            {scale, 1000}, {frame, {aabb, -9000, -450, -9000, 9000, 1000, 9000},
                             {pivot, 0, 0, 0}, _}, _},
-                          {transform, 0, 0, 0, 0, 0, 0}, asset_surfaces, unlabelled, depicts_nothing},
-                         lists:keyfind(<<"floor">>, 2, Scene)),
+                          {relative,<<"floor">>,{transform, 0, 0, 0, 0, 0, 0}}, asset_surfaces, unlabelled, depicts_nothing},
+                         lists:keyfind(<<"floor/model">>, 2, Scene)),
+            ?assertMatch({mark,<<"floor">>,<<"group">>,[],_,_,_,{depicts,Ns,Anchor,floor}},
+                         lists:keyfind(<<"floor">>,2,Scene)),
             ?assertMatch({mark, <<"roof">>, <<"group">>, [], _, _, _,
                           {depicts, Ns, Anchor, personal_roof}}, lists:keyfind(<<"roof">>, 2, Scene)),
             RoofModel = lists:keyfind(<<"roof/model">>, 2, Scene),
@@ -294,13 +295,13 @@ lobby_projection_recovery_test_() ->
                            {scale, 1000}, _, _},
                           {relative, <<"roof">>, _}, asset_surfaces, unlabelled, depicts_nothing}, RoofModel),
             {ok, [#{<<"V0">> := Edition}], _} = read(Ctx,
-                {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, {lobby_view, edition, {0}}}}),
+                {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, {world_view, personal_lobby, edition, {0}}}}),
             ?assertEqual(RoofModel, lists:keyfind(<<"roof/model">>, 2, Edition)),
-            ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>,
+            ?assertMatch({mark, <<"sky/sky">>, <<"sky_sphere">>,
                           [{f, <<"diameter">>, 80000}],
-                          {transform, 0, 0, 0, 0, 75, 0}, _, unlabelled,
+                          {relative,<<"sky">>,{transform, 0, 0, 0, 0, 75, 0}}, _, unlabelled,
                           {depicts, Ns, Anchor, personal_sky}},
-                         lists:keyfind(<<"sky">>, 2, Scene)),
+                         lists:keyfind(<<"sky/sky">>, 2, Scene)),
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
                {transform, 0, 0, 3850, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
@@ -318,7 +319,7 @@ lobby_projection_recovery_test_() ->
             %% Expected identity is proved before any scene content is selected.
             ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
                 {',', {current_ontology_identity, Ns, <<0:256>>},
-                      {lobby_view, playing, {0}}}})),
+                      {world_view, personal_lobby, playing, {0}}}})),
             {ok, [#{<<"V0">> := {component, workspace, form, _, Components}}], _} = read(Ctx,
                 {'::', Ns, {lobby_workspace, console, proof_console, {0}}}),
             ?assertEqual([editor, bindings, button, button, button, button, button],
@@ -338,9 +339,9 @@ lobby_projection_recovery_test_() ->
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, TuneSky)),
             {ok, [#{<<"V0">> := ChangedScene}], _} = read(Ctx, Goal),
-            ?assertMatch({mark, <<"sky">>, <<"sky_sphere">>, _,
-                          {transform, 0, 0, 0, 0, 215, 0}, _, _, _},
-                         lists:keyfind(<<"sky">>, 2, ChangedScene)),
+            ?assertMatch({mark, <<"sky/sky">>, <<"sky_sphere">>, _,
+                          {relative,<<"sky">>,{transform, 0, 0, 0, 0, 215, 0}}, _, _, _},
+                         lists:keyfind(<<"sky/sky">>, 2, ChangedScene)),
             %% The exact same ledger restores the lobby; no creation event or
             %% model facts are replayed into another database.
             {Sup, Config} = maps:get(Ns, maps:get(ontologies, Ctx)),
@@ -375,7 +376,7 @@ local_subclass_inherits_eidolons_controls_and_workspace_test_() ->
                     read(Ctx, Scope({vocabulary_class, Name, <<"quod:lobby">>, {0}})))
             end, [{':', quod, {':', lobby, prolog_console}},
                   {':', {':', quod, lobby}, prolog_console}]),
-            {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Scope({lobby_view, playing, {0}})),
+            {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, Scope({world_view, personal_lobby, playing, {0}})),
             {ok, [#{<<"V0">> := Menu}], _} = read(Ctx, Scope({lobby_menu, console, {0}})),
             {ok, [#{<<"V0">> := View}], _} = read(Ctx, Scope({lobby_workspace, console, proof_console, {0}})),
             Edit = {',', {retract, {instance_of, prolog_console, console}},
@@ -385,13 +386,13 @@ local_subclass_inherits_eidolons_controls_and_workspace_test_() ->
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, Scope(Edit))),
             ?assertMatch({ok, [#{<<"V0">> := Scene}], _},
-                         read(Ctx, Scope({lobby_view, playing, {0}}))),
+                         read(Ctx, Scope({world_view, personal_lobby, playing, {0}}))),
             ?assertMatch({ok, [#{<<"V0">> := Menu}], _},
                          read(Ctx, Scope({lobby_menu, console, {0}}))),
             ?assertMatch({ok, [#{<<"V0">> := View}], _},
                          read(Ctx, Scope({lobby_workspace, console, proof_console, {0}}))),
-            {ok, [#{<<"V0">> := [Recipe]}], _} = read(Ctx,
-                Scope({lobby_eidolons, console, playing, solid, {0}})),
+            {ok, [#{<<"V0">> := [{eidolon,playing,solid,Recipe}]}], _} = read(Ctx,
+                Scope({entity_eidolons, console, playing, solid, {0}})),
             ?assertMatch({recipe, <<"lobby-test-classes">>, _, console_playing}, Recipe),
             %% The normal qualified class reference has the same behavior;
             %% its namespace is resolved only through this pinned vocabulary.
@@ -401,15 +402,15 @@ local_subclass_inherits_eidolons_controls_and_workspace_test_() ->
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, Scope(Qualify))),
             ?assertMatch({ok, [#{<<"V0">> := Scene}], _},
-                         read(Ctx, Scope({lobby_view, playing, {0}}))),
+                         read(Ctx, Scope({world_view, personal_lobby, playing, {0}}))),
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                 submit(Ctx, execute, Scope({assertz, {isa, smart_console, diagnostic_console}}))),
             {ok, [#{<<"V0">> := Choices}], _} = read(Ctx,
-                Scope({lobby_eidolons, console, playing, solid, {0}})),
+                Scope({entity_eidolons, console, playing, solid, {0}})),
             ?assertEqual([console_edition, console_playing],
-                         [Id || {recipe, <<"lobby-test-classes">>, _, Id} <- Choices]),
+                         [Id || {eidolon,playing,solid,{recipe, <<"lobby-test-classes">>, _, Id}} <- Choices]),
             %% An unresolved choice affects this device, not the entire world.
-            {ok, [#{<<"V0">> := Ambiguous}], _} = read(Ctx, Scope({lobby_view, playing, {0}})),
+            {ok, [#{<<"V0">> := Ambiguous}], _} = read(Ctx, Scope({world_view, personal_lobby, playing, {0}})),
             ?assert(lists:keymember(<<"sky">>, 2, Ambiguous)),
             ?assert(lists:keymember(<<"floor">>, 2, Ambiguous)),
             ?assertMatch({mark, _, <<"group">>, _, _, no_surface,
@@ -442,7 +443,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
         Parent = self(),
         Caller = spawn(fun() ->
             Parent ! {first_scene, self(), read(Ctx, {'::', Ns,
-                {',', {current_ontology_identity, Ns, Anchor}, {lobby_view, playing, {0}}}})}
+                {',', {current_ontology_identity, Ns, Anchor}, {world_view, personal_lobby, playing, {0}}}})}
         end),
         try
             receive
@@ -464,7 +465,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
             receive
                 {first_scene, Caller, Result} ->
                     ?assertMatch({ok, [#{<<"V0">> :=
-                        [_,_,_,_,_,_]}], _}, Result)
+                        [_,_,_,_,_,_,_,_]}], _}, Result)
             after 5000 -> error(first_scene_timeout)
             end
         after
@@ -543,8 +544,8 @@ modelling_and_material_libraries_test_() ->
             ?assertEqual(Subject, element(8, hd(MeshScene))),
             ?assertEqual(Mesh, element(4, lists:nth(2, MeshScene))),
             ClassNsMesh = <<"lobby-test-classes">>,
-            ?assertMatch({ok, [#{<<"V0">> := [{recipe, ClassNsMesh, _, imported_artifact_playing}]}], _},
-                Ask(ClassNsMesh, {device_eidolons, [imported_artifact], playing, solid, {0}})),
+            ?assertMatch({ok, [#{<<"V0">> := [{eidolon,playing,solid,{recipe, ClassNsMesh, _, imported_artifact_playing}}]}], _},
+                Ask(ClassNsMesh, {class_eidolons, [imported_artifact], playing, solid, {0}})),
             {ok, [#{<<"V0">> := SampleParts}], _} = Ask(ClassNsMesh,
                 {eidolon, imported_artifact_playing, {device, artifact}, {0}}),
             {ok, [#{<<"V0">> := SamplePlaced}], _} = Ask(ModelNs,
@@ -560,7 +561,7 @@ modelling_and_material_libraries_test_() ->
             ?assertMatch({fail, _}, read(OtherViewer,
                 {'::', MeshLobbyNs,
                  {',', {current_ontology_identity, MeshLobbyNs, MeshLobbyAnchor},
-                  {lobby_view, playing, {0}}}})),
+                  {world_view, personal_lobby, playing, {0}}}})),
             MatNs = <<"lobby-test-material">>,
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, wood})),
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, material})),
@@ -598,8 +599,8 @@ modelling_and_material_libraries_test_() ->
                 <<"lobby-test-classes">>,
                 {panorama_asset, belfast_sunset_puresky, {'_'}, {'_'}})),
             {ontology_ref, LobbyNs, _} = maps:get(lobby, Ctx),
-            {ok, [#{<<"V0">> := Playing}], _} = Ask(LobbyNs, {lobby_view, playing, {0}}),
-            {ok, [#{<<"V0">> := Edition}], _} = Ask(LobbyNs, {lobby_view, edition, {0}}),
+            {ok, [#{<<"V0">> := Playing}], _} = Ask(LobbyNs, {world_view, personal_lobby, playing, {0}}),
+            {ok, [#{<<"V0">> := Edition}], _} = Ask(LobbyNs, {world_view, personal_lobby, edition, {0}}),
             ?assertNotEqual(Playing, Edition),
             ?assertMatch({mark, <<"console/model">>, <<"mesh">>, _, _, _, _, _},
                          lists:keyfind(<<"console/model">>, 2, Playing)),
@@ -932,7 +933,7 @@ public_system_ontology_source_is_readable_but_not_mutable_test_() ->
                        {<<"quod:human_user">>, {'/', isa, 2}},
                        {<<"quod:lens">>, {'/', lens, 2}},
                        {<<"quod:licence">>, {'/', family, 1}},
-                       {<<"quod:lobby">>, {'/', lobby_recipe, 3}},
+                       {<<"quod:lobby">>, {'/', lobby_definitions, 1}},
                        {<<"quod:names">>, {'/', count, 4}},
                        {<<"quod:node">>, {'/', isa, 2}}],
             lists:foreach(fun({Ns, Indicator}) ->
@@ -1258,9 +1259,8 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
             ?assertMatch({ok, _, _}, quod_prolog:execute(ClassNs,
                 {assertz, {can_invoke, {'_'}, Owner, {'_'}, ClassNs}})),
             Added = [{instance_of, prolog_console, console_b},
-                     {lobby_device, personal_lobby, console_b},
-                     {device_placement, console_b, <<"console_b">>,
-                        {transform, 3000, 0, 0, 0, 0, 0}}],
+                     {attribute, console_b, mark_id, <<"console_b">>},
+                     {attribute, console_b, layout, {transform, 3000, 0, 0, 0, 0, 0}}],
             commit_editor_goal(Ctx, editor_scope(Ns, editor_conjunction([{assertz, T} || T <- Added]))),
             ?assertEqual([<<"PROLOG CONSOLE">>, <<"PROLOG CONSOLE">>], shared_editor_titles(Ctx, Ns)),
             edit_shared_source(Ctx, ClassNs, {'/', eidolon, 3}, fun(Source) ->
@@ -1279,11 +1279,11 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
             commit_editor_goal(Ctx, editor_scope(Ns, {',', {retract, {instance_of, prolog_console, console_b}},
                                        {assertz, {instance_of, smart_console, console_b}}})),
             ?assertEqual([<<"SHARED REVISION">>, <<"CONSOLE PARTS">>], shared_editor_titles(Ctx, Ns)),
-            {ok, [#{<<"V0">> := [Chosen]}], _} = read(Ctx,
-                editor_scope(Ns, {lobby_eidolons, console_b, playing, solid, {0}})),
+            {ok, [#{<<"V0">> := [{eidolon,playing,solid,Chosen}]}], _} = read(Ctx,
+                editor_scope(Ns, {entity_eidolons, console_b, playing, solid, {0}})),
             ?assertMatch({recipe, ClassNs, _, console_edition}, Chosen),
-            {ok, [#{<<"V0">> := [Original]}], _} = read(Ctx,
-                editor_scope(Ns, {lobby_eidolons, console, playing, solid, {0}})),
+            {ok, [#{<<"V0">> := [{eidolon,playing,solid,Original}]}], _} = read(Ctx,
+                editor_scope(Ns, {entity_eidolons, console, playing, solid, {0}})),
             ?assertMatch({recipe, ClassNs, _, console_playing}, Original),
             Baseline = editor_source(Ctx, Lobby, {'/', can_invoke, 4}),
             Goal = compile_source_edit(Ctx, Lobby, {'/', can_invoke, 4}, Baseline,
@@ -1300,7 +1300,7 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
 
 shared_editor_titles(Ctx, Ns) ->
     Heights = maps:map(fun(At, _) -> quod_prolog:applied(At) end, maps:get(ontologies, Ctx)),
-    {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, editor_scope(Ns, {lobby_view, playing, {0}})),
+    {ok, [#{<<"V0">> := Scene}], _} = read(Ctx, editor_scope(Ns, {world_view, personal_lobby, playing, {0}})),
     ?assertEqual(Heights, maps:map(fun(At, _) -> quod_prolog:applied(At) end,
                                   maps:get(ontologies, Ctx))),
     [begin
@@ -1489,17 +1489,24 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
        {attribute, personal_sky, brightness, 120},
        {attribute, personal_sky, tint, <<"#FFFFFF">>},
        {instance_of, prolog_console, console},
-       {lobby_device, personal_lobby, console},
-       {device_placement, console, <<"console">>, {transform, 0, 0, 3850, 0, 0, 0}},
+       {instance_of, space, personal_lobby},
+       {instance_of, lobby_floor, floor},
+       {attribute, floor, mark_id, <<"floor">>},
+       {attribute, floor, layout, {transform, 0, 0, 0, 0, 0, 0}},
+       {attribute, console, mark_id, <<"console">>},
+       {attribute, console, layout, {transform, 0, 0, 3850, 0, 0, 0}},
+       {attribute, personal_sky, mark_id, <<"sky">>},
        {instance_of, lobby_roof, personal_roof},
-       {lobby_device, personal_lobby, personal_roof},
-       {device_placement, personal_roof, <<"roof">>, {transform, 0, 0, 0, 0, 0, 0}},
+       {attribute, personal_roof, mark_id, <<"roof">>},
+       {attribute, personal_roof, layout, {transform, 0, 0, 0, 0, 0, 0}},
+       {environment_eidolons, <<"lobby-test-environment-eidolons">>,
+            quod_simplex:genesis_hash(<<"lobby-test-environment-eidolons">>)},
        {modelling_vocabulary, <<"lobby-test-modelling">>, quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},
        {environment_vocabulary, <<"lobby-test-environment">>, quod_simplex:genesis_hash(<<"lobby-test-environment">>)},
        {gui_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)},
        {lobby_vocabulary, <<"lobby-test-classes">>, quod_simplex:genesis_hash(<<"lobby-test-classes">>)}],
-    Lobby = start_namespace(LobbyNs, config(Dir, LobbyNs, Base, "lobby_instance.pl",
-                                           LobbyFacts ++ ExtraLobbyTerms)),
+    Lobby = start_namespace(LobbyNs, config(Dir, LobbyNs, Base, none,
+                       presentation_fixture_terms() ++ LobbyFacts ++ ExtraLobbyTerms)),
     LobbyRef = {ontology_ref, LobbyNs, quod_simplex:genesis_hash(LobbyNs)},
     Ctx = #{ontologies => Ontologies0#{RootNs => Root, ClassNs => Classes, AgentNs => User, LobbyNs => Lobby},
             services => [Foreign, Effects, Cursors, Auth, Router], saved => Saved, directory => Dir,
@@ -1508,6 +1515,32 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
     ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                  submit(Ctx, execute, {assertz, {lobby_reference, LobbyRef}})),
     Ctx.
+
+%% Source/GUI tests use an authored information space with decorative poses.
+%% The complete physical factory and admitted-body/native contract are exercised
+%% by default_lobby_physics_startup_test_, not simulated by this presentation fixture.
+presentation_fixture_terms() ->
+    Shared = lists:append([quod_prolog:read_terms(filename:join(code:priv_dir(quod),
+                        "ontologies/" ++ File)) || File <- ["space.pl","space_view.pl"]]),
+    Appearance = [presentation_layout(T) || T <- quod_prolog:read_terms(
+        filename:join(code:priv_dir(quod),"ontologies/lobby_instance.pl")),
+        presentation_clause(T)],
+    Shared ++ Appearance ++ [
+        {lobby_space,personal_lobby,[edition,playing]},
+        {':-',{space_member,personal_lobby,{entity_ref,{'Ns'},{'A'},{'E'}}},
+              {',',{current_ontology_identity,{'Ns'},{'A'}},{attribute,{'E'},mark_id,{'_'}}}}].
+
+presentation_clause({':-',{can_invoke,_,_,_,_},{lobby_owner,_}}) -> true;
+presentation_clause(T) ->
+    H = case T of {':-',Head,_} -> Head; Head -> Head end,
+    {F,_} = erlog_int:functor(H),
+    lists:member(F,[ontology_source_mode,lobby_modes,lobby_sky,one_attribute,
+                   entity_scene,class_eidolon,no_follow,vocabulary_class,lobby_menu,lobby_workspace]).
+
+presentation_layout({'=',{'Layout'},physical}) -> {one_attribute,{'Entity'},layout,{'Layout'}};
+presentation_layout(T) when is_tuple(T) -> list_to_tuple([presentation_layout(X) || X <- tuple_to_list(T)]);
+presentation_layout([H|T]) -> [presentation_layout(H)|presentation_layout(T)];
+presentation_layout(T) -> T.
 
 config(Dir, Ns, Base, Source, Facts) ->
     Diff = case Source of

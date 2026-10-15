@@ -8,8 +8,9 @@ opaque value re-encodes as the original atom symbol, so a relay can pass a
 target-owned symbol through without allocating an atom. The authenticated
 target explicitly materializes its bounded callable symbols before execution.
 
-Only Prolog's data shapes are accepted. Node, structural-depth, and symbol-size caps
-make the post-ETF validation cost deterministic. A list spine is iterative structure,
+Only Prolog's data shapes are accepted. The containing protocol bounds bytes;
+structural depth and symbol size bound nesting and individual names. Traversal
+is linear in that bounded representation, with no second population quota. A list spine is iterative structure,
 not nesting; its elements and an improper tail still increase structural depth.
 
 Failure-reason stacks add one shared canonical contract on top of that alphabet.
@@ -38,7 +39,6 @@ payload; one aggregate payload gets one bounded allocation budget.
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
--define(MAX_NODES, 20000).
 -define(MAX_SYMBOL_BYTES, 1024).
 
 -type wire() :: term().
@@ -82,15 +82,15 @@ is_ground(_) ->
 
 -spec encode(term()) -> {ok, wire()} | {error, bad_term}.
 encode(Term) ->
-    case encode(Term, 0, 0) of
-        {ok, Wire, _Nodes} -> {ok, Wire};
+    case encode(Term, 0) of
+        {ok, Wire} -> {ok, Wire};
         error -> {error, bad_term}
     end.
 
 -spec decode(wire()) -> {ok, term()} | {error, bad_term}.
 decode(Wire) ->
-    case decode(Wire, 0, 0) of
-        {ok, Term, _Nodes} -> {ok, Term};
+    case decode(Wire, 0) of
+        {ok, Term} -> {ok, Term};
         error -> {error, bad_term}
     end.
 
@@ -682,7 +682,7 @@ validate_failure_reasons(_, _Count) ->
 
 validate_failure_reason(Reason) ->
     %% The bounded structural pass runs first, so the portability walk below
-    %% never traverses an application term beyond the codec's node/depth caps.
+    %% never traverses an application term beyond the codec's depth bound.
     case encode(Reason) of
         {ok, Wire} ->
             case erlog_int:valid_failure_reason(Reason) of
@@ -733,99 +733,99 @@ decode_canonical_failure_reason_wire(Blob, Wire) ->
 canonical(Term) ->
     term_to_binary(Term, [deterministic]).
 
-encode(_Term, Depth, Nodes)
-  when Depth > ?QUOD_MAX_TERM_DEPTH; Nodes >= ?MAX_NODES -> error;
-encode({'$quod_symbol', Binary}, _Depth, Nodes)
+encode(_Term, Depth)
+  when Depth > ?QUOD_MAX_TERM_DEPTH -> error;
+encode({'$quod_symbol', Binary}, _Depth)
   when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
-    {ok, {0, Binary}, Nodes + 1};
-encode(Atom, _Depth, Nodes) when is_atom(Atom) ->
+    {ok, {0, Binary}};
+encode(Atom, _Depth) when is_atom(Atom) ->
     Binary = atom_to_binary(Atom, utf8),
     case byte_size(Binary) =< ?MAX_SYMBOL_BYTES of
-        true -> {ok, {0, Binary}, Nodes + 1};
+        true -> {ok, {0, Binary}};
         false -> error
     end;
-encode(Binary, _Depth, Nodes) when is_binary(Binary) ->
-    {ok, {1, Binary}, Nodes + 1};
-encode(Integer, _Depth, Nodes) when is_integer(Integer) ->
-    {ok, {2, Integer}, Nodes + 1};
-encode(Float, _Depth, Nodes) when is_float(Float) ->
-    {ok, {3, Float}, Nodes + 1};
-encode(Tuple, Depth, Nodes) when is_tuple(Tuple) ->
-    case encode_list(tuple_to_list(Tuple), Depth + 1, Nodes + 1, []) of
-        {ok, Items, Nodes1} -> {ok, {4, Items}, Nodes1};
+encode(Binary, _Depth) when is_binary(Binary) ->
+    {ok, {1, Binary}};
+encode(Integer, _Depth) when is_integer(Integer) ->
+    {ok, {2, Integer}};
+encode(Float, _Depth) when is_float(Float) ->
+    {ok, {3, Float}};
+encode(Tuple, Depth) when is_tuple(Tuple) ->
+    case encode_list(tuple_to_list(Tuple), Depth + 1, []) of
+        {ok, Items} -> {ok, {4, Items}};
         error -> error
     end;
-encode([], _Depth, Nodes) ->
-    {ok, {5}, Nodes + 1};
-encode([Head | Tail], Depth, Nodes) ->
-    case encode(Head, Depth + 1, Nodes + 1) of
-        {ok, Head1, Nodes1} ->
-            case encode_list_tail(Tail, Depth, Nodes1) of
-                {ok, Tail1, Nodes2} -> {ok, {6, Head1, Tail1}, Nodes2};
+encode([], _Depth) ->
+    {ok, {5}};
+encode([Head | Tail], Depth) ->
+    case encode(Head, Depth + 1) of
+        {ok, Head1} ->
+            case encode_list_tail(Tail, Depth) of
+                {ok, Tail1} -> {ok, {6, Head1, Tail1}};
                 error -> error
             end;
         error -> error
     end;
-encode(_, _, _) -> error.
+encode(_, _) -> error.
 
-encode_list_tail([], Depth, Nodes) -> encode([], Depth, Nodes);
-encode_list_tail([_ | _] = Tail, Depth, Nodes) -> encode(Tail, Depth, Nodes);
-encode_list_tail(Tail, Depth, Nodes) -> encode(Tail, Depth + 1, Nodes).
+encode_list_tail([], Depth) -> encode([], Depth);
+encode_list_tail([_ | _] = Tail, Depth) -> encode(Tail, Depth);
+encode_list_tail(Tail, Depth) -> encode(Tail, Depth + 1).
 
-encode_list([], _Depth, Nodes, Acc) -> {ok, lists:reverse(Acc), Nodes};
-encode_list([Head | Tail], Depth, Nodes, Acc) ->
-    case encode(Head, Depth, Nodes) of
-        {ok, Head1, Nodes1} -> encode_list(Tail, Depth, Nodes1, [Head1 | Acc]);
+encode_list([], _Depth, Acc) -> {ok, lists:reverse(Acc)};
+encode_list([Head | Tail], Depth, Acc) ->
+    case encode(Head, Depth) of
+        {ok, Head1} -> encode_list(Tail, Depth, [Head1 | Acc]);
         error -> error
     end.
 
-decode(_Wire, Depth, Nodes)
-  when Depth > ?QUOD_MAX_TERM_DEPTH; Nodes >= ?MAX_NODES -> error;
-decode({0, Binary}, _Depth, Nodes)
+decode(_Wire, Depth)
+  when Depth > ?QUOD_MAX_TERM_DEPTH -> error;
+decode({0, Binary}, _Depth)
   when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
     Term = try binary_to_existing_atom(Binary, utf8)
            catch error:badarg -> {'$quod_symbol', Binary}
            end,
-    {ok, Term, Nodes + 1};
-decode({1, Binary}, _Depth, Nodes) when is_binary(Binary) ->
-    {ok, Binary, Nodes + 1};
-decode({2, Integer}, _Depth, Nodes) when is_integer(Integer) ->
-    {ok, Integer, Nodes + 1};
-decode({3, Float}, _Depth, Nodes) when is_float(Float) ->
-    {ok, Float, Nodes + 1};
-decode({4, Items}, Depth, Nodes) when is_list(Items) ->
-    case decode_list(Items, Depth + 1, Nodes + 1, []) of
+    {ok, Term};
+decode({1, Binary}, _Depth) when is_binary(Binary) ->
+    {ok, Binary};
+decode({2, Integer}, _Depth) when is_integer(Integer) ->
+    {ok, Integer};
+decode({3, Float}, _Depth) when is_float(Float) ->
+    {ok, Float};
+decode({4, Items}, Depth) when is_list(Items) ->
+    case decode_list(Items, Depth + 1, []) of
         %% This tuple is the in-memory representation of an opaque symbol;
         %% its only canonical wire representation is tag 0 above.  Rejecting
         %% the tuple spelling here makes decode_canonical/2 itself enforce the
         %% same decode/encode identity that callers previously recomputed.
-        {ok, ['$quod_symbol', Binary], _Nodes1} when is_binary(Binary) ->
+        {ok, ['$quod_symbol', Binary]} when is_binary(Binary) ->
             error;
-        {ok, Terms, Nodes1} -> {ok, list_to_tuple(Terms), Nodes1};
+        {ok, Terms} -> {ok, list_to_tuple(Terms)};
         error -> error
     end;
-decode({5}, _Depth, Nodes) ->
-    {ok, [], Nodes + 1};
-decode({6, Head, Tail}, Depth, Nodes) ->
-    case decode(Head, Depth + 1, Nodes + 1) of
-        {ok, Head1, Nodes1} ->
-            case decode_list_tail(Tail, Depth, Nodes1) of
-                {ok, Tail1, Nodes2} -> {ok, [Head1 | Tail1], Nodes2};
+decode({5}, _Depth) ->
+    {ok, []};
+decode({6, Head, Tail}, Depth) ->
+    case decode(Head, Depth + 1) of
+        {ok, Head1} ->
+            case decode_list_tail(Tail, Depth) of
+                {ok, Tail1} -> {ok, [Head1 | Tail1]};
                 error -> error
             end;
         error -> error
     end;
-decode(_, _, _) -> error.
+decode(_, _) -> error.
 
-decode_list_tail({5} = Tail, Depth, Nodes) -> decode(Tail, Depth, Nodes);
-decode_list_tail({6, _, _} = Tail, Depth, Nodes) -> decode(Tail, Depth, Nodes);
-decode_list_tail(Tail, Depth, Nodes) -> decode(Tail, Depth + 1, Nodes).
+decode_list_tail({5} = Tail, Depth) -> decode(Tail, Depth);
+decode_list_tail({6, _, _} = Tail, Depth) -> decode(Tail, Depth);
+decode_list_tail(Tail, Depth) -> decode(Tail, Depth + 1).
 
-decode_list([], _Depth, Nodes, Acc) -> {ok, lists:reverse(Acc), Nodes};
-decode_list([Head | Tail], Depth, Nodes, Acc) ->
-    case decode(Head, Depth, Nodes) of
-        {ok, Head1, Nodes1} -> decode_list(Tail, Depth, Nodes1, [Head1 | Acc]);
+decode_list([], _Depth, Acc) -> {ok, lists:reverse(Acc)};
+decode_list([Head | Tail], Depth, Acc) ->
+    case decode(Head, Depth) of
+        {ok, Head1} -> decode_list(Tail, Depth, [Head1 | Acc]);
         error -> error
     end;
-decode_list(_ImproperTail, _Depth, _Nodes, _Acc) ->
+decode_list(_ImproperTail, _Depth, _Acc) ->
     error.

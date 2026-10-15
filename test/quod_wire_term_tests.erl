@@ -198,6 +198,15 @@ flat_list_spine_does_not_consume_depth_test() ->
     {ok, Wire} = quod_wire_term:encode(Flat),
     ?assertEqual({ok, Flat}, quod_wire_term:decode(Wire)).
 
+flat_content_uses_enclosing_byte_bound_test() ->
+    %% Exceeds the retired 20,000-node quota while fitting an ordinary block.
+    Term = lists:duplicate(6000, {item, 1}),
+    {ok, Bytes} = quod_wire_term:encode_canonical(Term),
+    ?assert(byte_size(Bytes) < 256 * 1024),
+    ?assertEqual({ok, Term}, quod_wire_term:decode_canonical(Bytes, byte_size(Bytes))),
+    ?assertEqual({error, too_large},
+                 quod_wire_term:decode_canonical(Bytes, byte_size(Bytes)-1)).
+
 improper_tuple_item_list_is_rejected_test() ->
     ?assertEqual(
        {error, bad_term},

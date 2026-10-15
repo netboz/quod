@@ -38,13 +38,13 @@ provision_lobby(Instance) :-
     transaction((
         lobby_provisioning(Instance, pending(Name)),
         lobby_vocabulary(Namespace, Anchor),
+        hosting_node(Node),
         Namespace::(current_ontology_identity(Namespace, Anchor),
-                    lobby_options(Owner, Options)),
+                    lobby_options(Owner, Node, Options)),
         quod:root::create_ontology(Name, Options, CreatedAnchor),
         retract(lobby_provisioning(Instance, pending(Name))),
         assertz(lobby_provisioning(Instance,
             linked(ontology_ref(Name, CreatedAnchor)))),
-        hosting_node(Node),
         Node = agent_instance_ref(NodeNamespace, _, _),
         NodeNamespace::request_ontology_hosting(Owner, Node, Name, CreatedAnchor, discoverable),
         acknowledge_user_signup(Owner))).

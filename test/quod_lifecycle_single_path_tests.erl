@@ -7,6 +7,124 @@
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).
 
+default_lobby_physics_startup_test_() ->
+    {timeout, 90, fun() ->
+        F = setup(),
+        #{dir := Dir, actor_ns := ActorNs, actor_principal := Principal} = F,
+        {ok, Node} = quod_agent_ref:materialize_principal(Principal),
+        {ok, Network} = quod_ontology:network_identity(),
+        {ok, NodeKey} = application:get_env(quod, node_pubkey),
+        Unlock = filename:join(Dir, "vault-unlock"),
+        ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+        {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "vault"), unlock_file => Unlock}),
+        unlink(Vault),
+        {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+        unlink(Auth),
+        try
+            Classes = found_lobby_classes(),
+            User = found_lobby_user(Classes, Network, Node),
+            #{reference := Owner, lobby_name := Ns} = User,
+            commit_root({assertz, {ontology_creator_agent, Owner}}),
+            {ok, _, _} = quod_prolog:execute(ActorNs,
+                {assertz, {can_host_ontology, Owner, Node, Ns, {'Anchor'}, discoverable}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                submit_lobby(User, execute, {provision_lobby, me})),
+            ok = wait_ready(Ns, 300),
+            {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
+            Scoped = fun(G) -> {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, G}} end,
+            [ok = quod_effect_journal:await(Id,5000)
+             || #{effect_id := Id} <- quod_effect_journal:rows()],
+            Manager = quod_reg:where({namespace_manager,node}),
+            Manager ! reconcile,
+            ok = wait_manager_idle(Manager,500),
+            Prepare = Scoped({physics_preparation, personal_lobby, {0}}),
+            {ok, _, {normalized, {read, _, {answers, _, [Prepared]}}}} = submit_lobby(User, read, Prepare),
+            {ok, [{<<"V0">>, {prepared, Node, Key}}]} = quod_client_result:decode_binding(Prepared),
+            quod_lobby_tests:assert_read_has_no_io(fun() ->
+                ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [Prepared]}}}},
+                    submit_lobby(User, read, Prepare))
+            end),
+            ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, Ns}), physics_worlds)),
+            Other = found_lobby_user(Classes, Network, Node),
+            Start = Scoped({physics_initialize, personal_lobby, Node, Key}),
+            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(Other, execute, Start)),
+            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
+                {'::', Ns, {',', {current_ontology_identity, Ns, <<0:256>>}, {physics_initialize, personal_lobby, Node, Key}}})),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit_lobby(User, execute,
+                Scoped({retract, {physics_initial_host, personal_lobby, Node}}))),
+            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Start)),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit_lobby(User, execute,
+                Scoped({assertz, {physics_initial_host, personal_lobby, Node}}))),
+            true = quod_reg:subscribe({physics, Ns}),
+            try
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit_lobby(User, execute, Start)),
+                Pid = await_lobby_physics(Ns, Anchor, quod_time:mono_ms() + 10000),
+                ?assertMatch(#{phase := active, navigation_ready := true}, gen_server:call(Pid, status)),
+                {ok, _, {normalized, {read, _, {answers, _, [Ready]}}}} = submit_lobby(User, read, Prepare),
+                ?assertEqual({ok, [{<<"V0">>, ready}]}, quod_client_result:decode_binding(Ready)),
+                ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Start)),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+                    {physics_control, personal_lobby, Owner, 1, {controlled, pilot, eye}})),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+                    {agent_hosted, physics_authority, Node, 1, Key})),
+                View = Scoped({client_world_view,personal_lobby,playing,[],{0}}),
+                {ok,_,{normalized,{read,_,{answers,_,[Scene]}}}} = submit_lobby(User,read,View),
+                {ok,[{<<"V0">>,{world_view,_,Marks,_}}]} = quod_client_result:decode_binding(Scene),
+                ?assert(lists:any(fun({mark,_,_,_,{body_pose,_,_},_,_,_}) -> true; (_) -> false end,Marks)),
+                [?assert(lists:keymember(Id,2,Marks)) || Id <-
+                    [<<"floor/model">>,<<"roof/model">>,<<"console/model">>,<<"sky/sky">>]],
+                ?assertEqual([], [Id || {mark,Id,_,_,_,_,{label,Text,_},_} <- Marks,
+                    Text =:= <<"No matching eidolon">> orelse Text =:= <<"Choose an eidolon">>]),
+                Runtime = quod_reg:via({quod_runtime,Ns}),
+                World = {world_ref,Ns,Anchor,personal_lobby},
+                #{World := #{spec := BeforeSpec}} = gen_server:call(Runtime,physics_worlds),
+                Before = gen_server:call(Pid,status),
+                Shape = {box,900,900,300},
+                ?assertMatch({ok,_,{normalized,{committed,_,_}}},submit_lobby(User,execute,
+                    Scoped({physics_edit_definition,console,1,{geometry,Shape,1}}))),
+                Expected = #{fence => quod_physics:fence(BeforeSpec),
+                    structure => maps:get(structure,BeforeSpec)+1,tick => -1},
+                await_lobby_structure(Pid,World,Expected,quod_time:mono_ms()+10000),
+                #{World := #{pid := Pid,spec := EditedSpec}} = gen_server:call(Runtime,physics_worlds),
+                ?assert(lists:any(fun({_,_,fixed,_,{solid,{box,0.9,0.9,0.3}},_}) -> true;
+                                    (_) -> false end,maps:get(bodies,EditedSpec))),
+                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+                    {physics_definition,console,2,{geometry,Shape,1}})),
+                Edited = gen_server:call(Pid,status),
+                ?assertEqual(maps:get(incarnation,Before),maps:get(incarnation,Edited)),
+                ?assertEqual(ok,quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),
+                    physics_worlds,all,quod_time:mono_ms()+10000)),
+                ?assertEqual(maps:get(installs,Edited),maps:get(installs,gen_server:call(Pid,status)))
+            after quod_reg:unsubscribe({physics, Ns}) end
+        after stop_process(Auth), cleanup(F), stop_process(Vault) end
+    end}.
+
+submit_lobby(User, Mode, Goal) ->
+    {Bytes, Signature} = lobby_user_request(User, Mode, Goal),
+    quod_client_goal_ingress:submit(Bytes, Signature).
+
+await_lobby_structure(Pid,World,Expected,Deadline) ->
+    case quod_physics:snapshot(Pid,Expected) of
+        {ok,_,_} -> ok;
+        _ -> receive
+            {physics_status,_,Pid,World,_,installed} ->
+                await_lobby_structure(Pid,World,Expected,Deadline)
+        after max(0,Deadline-quod_time:mono_ms()) -> error(lobby_edit_not_installed) end
+    end.
+
+await_lobby_physics(Ns, Anchor, Deadline) ->
+    receive
+        {physics_status, _, Pid, {world_ref, Ns, Anchor, personal_lobby}, _, installed} ->
+            case gen_server:call(Pid, status) of
+                #{phase := active, navigation_ready := true} -> Pid;
+                _ -> await_lobby_physics(Ns, Anchor, Deadline)
+            end;
+        {physics_status, _, _, {world_ref, Ns, Anchor, personal_lobby}, _, _} ->
+            await_lobby_physics(Ns, Anchor, Deadline)
+    after max(0, Deadline - quod_time:mono_ms()) ->
+        error({lobby_physics_not_ready, quod_runtime:stats(Ns)})
+    end.
+
 lifecycle_single_path_test_() ->
     {setup,
      fun setup/0,
@@ -817,7 +935,7 @@ personal_lobbies_use_shared_creation_and_recovery(
             quod_client_goal_ingress:submit(SceneBytes, SceneSig),
         {ok, ScenePairs} = quod_client_result:decode_binding(SceneBinding),
         ?assertMatch({world_view, {entity_ref, FirstLobby, FirstAnchor, personal_lobby},
-                      [_ | _], nonphysical}, proplists:get_value(<<"V0">>, ScenePairs)),
+                      [_ | _], recovering}, proplists:get_value(<<"V0">>, ScenePairs)),
         {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
         ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
                      quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
@@ -919,25 +1037,24 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                     {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}),
                 ?assertMatch({ok, _, {normalized, {failed, _}}},
                              quod_client_goal_ingress:submit(Escalation, EscalationSig)),
-                {ok, [#{'Options' := LobbyOptions}], _} = quod_prolog:prove_ro(ClassNs,
-                    {lobby_options, Owner, {'Options'}}),
                 ExpectedLobby = <<Name/binary, "/lobby">>,
                 Pending = {lobby_provisioning, me, {pending, ExpectedLobby}},
+                GetOptions = {'::', ClassNs, {lobby_options, Owner, Node, {0}}},
                 CreateLobby = {'::', ?ROOT_NS,
-                    {create_ontology, ExpectedLobby, LobbyOptions, {0}}},
+                    {create_ontology, ExpectedLobby, {0}, {1}}},
                 %% User-owned facts cannot grant arbitrary names. Missing
                 %% requirements and a nonhuman owner cannot use the policy.
                 [begin
-                    {Bad, BadSig} = lobby_user_request(User, execute, BadGoal),
+                    {Bad, BadSig} = lobby_user_request(User, execute, {',', GetOptions, BadGoal}),
                     ?assertMatch({ok, _, {normalized, {failed, _}}},
                         quod_client_goal_ingress:submit(Bad, BadSig)),
                     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Reserved)),
                     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(ExpectedLobby)),
                     ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name, Pending))
                  end || BadGoal <- [
-                    {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}},
+                    {'::', ?ROOT_NS, {create_ontology, Reserved, {0}, {1}}},
                     {transaction, {',', {assertz, {lobby_provisioning, me, {pending, Reserved}}},
-                        {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}}}},
+                        {'::', ?ROOT_NS, {create_ontology, Reserved, {0}, {1}}}}},
                     {transaction, {',', {retract, Pending}, CreateLobby}},
                     {transaction, {',', {retract, {instance_of, human_user, me}}, CreateLobby}}]],
                 {Provision, ProvisionSig} = lobby_user_request(User, execute, {provision_lobby, me}),
@@ -1106,16 +1223,17 @@ found_lobby_classes() ->
         <<"environment-eidolons">>, "quod_environment_eidolons.pl",
         [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
     {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
-    {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
-    {ok, SpaceSource} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/space.pl")),
+    Templates = [{lobby_source_file, list_to_binary(filename:join(
+        code:priv_dir(quod), "ontologies/" ++ File))}
+        || File <- ["lobby_instance.pl", "space.pl", "agent_instance.pl",
+                    "quod_physics.pl", "space_view.pl"]],
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
         [{rendering_vocabulary, RenderNs, RenderAnchor},
          {modelling_vocabulary, ModelNs, ModelAnchor},
          {material_eidolons, EidolonNs, EidolonAnchor},
          {environment_vocabulary, EnvironmentNs, EnvironmentAnchor},
          {environment_eidolons, EnvironmentEidolonNs, EnvironmentEidolonAnchor},
-         {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template},
-         {space_template, SpaceSource}]).
+         {gui_vocabulary, GuiNs, GuiAnchor} | Templates]).
 
 found_lobby_source(Prefix, File, Facts) ->
     Ns = unique_ns(Prefix),
@@ -2474,16 +2592,20 @@ wait_node_actor_principal(Principal, N) ->
             wait_node_actor_principal(Principal, N - 1)
     end.
 
-wait_manager_idle(_Manager, 0) ->
-    error(namespace_manager_idle_timeout);
-wait_manager_idle(_Manager, N) ->
-    %% The call is ordered after the test's reconcile message, so observing the
-    %% manager-owned mutation lane idle proves that cycle completed.
+wait_manager_idle(Manager0, Attempts) ->
+    Manager = case Manager0 of undefined -> quod_reg:where({namespace_manager,node}); _ -> Manager0 end,
+    Parent = self(), Tag = make_ref(),
+    Observe = fun(State, {in,_}, _) -> Parent ! {manager_progress,Tag}, State;
+                 (State, _, _) -> State end,
+    ok = sys:install(Manager,{Observe,none}),
+    try await_manager_idle(Tag,quod_time:mono_ms()+Attempts*10)
+    after sys:remove(Manager,Observe) end.
+
+await_manager_idle(Tag,Deadline) ->
     case quod_namespace_manager:test_mutation_worker() of
         undefined -> ok;
-        _ ->
-            receive after 10 -> ok end,
-            wait_manager_idle(undefined, N - 1)
+        _ -> receive {manager_progress,Tag} -> await_manager_idle(Tag,Deadline)
+             after max(0,Deadline-quod_time:mono_ms()) -> error(namespace_manager_idle_timeout) end
     end.
 
 wait_effect_target_state(_Ns, _Expected, 0) ->

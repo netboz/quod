@@ -1,0 +1,19 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "doc/lobby-redesign.md": "1afac62f30ab5d8329e83bcbc9de13ff6488f739e7161e7687fff764913fe754",
+  "doc/multiwrite-architecture.md": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2",
+  "doc/spaces.md": "8470e5a5f64e96c225c6387214ad601f2951a8ff02380eb28f48d7a744ff36ce",
+  "priv/ontologies/space.pl": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab",
+  "priv/ontologies/node_execution.pl": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40",
+  "priv/ontologies/common_predicates.pl": "6300485a4b29a967d48a68318db57de27a24d04ff9abf4f95968254e3dc772ce",
+  "priv/ontologies/agent_instance.pl": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613",
+  "priv/ontologies/quod_physics.pl": "fd2dd1bf220bd87a69fb063aaa06114ef66f234abc6ee5e40571319bcb86a026",
+  "src/predicates/quod_physics_predicates.erl": "555510448adbfe45b5f6ecaec37278c908834019bac58ef011b101f7fb8971c5",
+  "src/predicates/quod_agent_predicates.erl": "6d1830322a041acec7ac069f233a34cfc2bbd2581696c7e26172443afa2ba991",
+  "src/quod_agent.erl": "2921833174868f1185edea638949aacd9d1992349964b7ae905e2bb199b07e69",
+  "src/quod_physics.erl": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2",
+  "src/quod_runtime.erl": "6ba0dce2177c56e8ac91250e588e240d718ec09fde7311e7fc519593a0748bad",
+  "src/quod_effect_journal.erl": "2b18c43682c5421002d63a8dcb343ae19d5b06fae34fdbcb589812b0abf3e0d9",
+  "doc/outdated/fipa-pending-continuation-plan.md": "ba1662589b5f5bd21e09cda2f7fec37ec81d174d3e4cbd9467ac704ccb66c3d5",
+  "priv/ontologies/lobby_instance.pl": "91cedb9c1ae47e91384b90115433124cd3d9b5a3484280b5eab30e73b24c0b38"
+}

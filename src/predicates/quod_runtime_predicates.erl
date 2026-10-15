@@ -330,7 +330,7 @@ run_reaction(Ns, Height, Binding = #{request_timeout_ms := Timeout},
             {RequestMode,Work} = case Preparation of
                 none -> {Mode,BoundGoal};
                 {custody, Ref, Epoch, Variable} -> {Mode,{custody,Ref,Epoch,Variable,BoundGoal}};
-                {signed_store,B,S,T} -> {{custodied,B,S,T},BoundGoal};
+                {signed_store,B,S,T} -> {{custodied,none,B,S,T},BoundGoal};
                 {retained, Bytes} -> {{retained, Bytes}, BoundGoal}
             end,
             {OwnedMode,BoundMetadata} = case maps:find(physics, Metadata) of

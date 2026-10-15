@@ -8,15 +8,12 @@ can_invoke(Goal, _, _, _) :- system_source_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
-lobby_query(lobby_recipe(_, _, _)).
 lobby_query(lobby_modes(_)).
 lobby_query(device_menu(_, _)).
-lobby_query(device_eidolons(_, _, _, _)).
 lobby_query(isa(_, _)).
 lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
-lobby_query(lobby_options(_, _)).
-lobby_query(complete_lobby_setup(_, _)).
+lobby_query(lobby_options(_, _, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 lobby_query(Goal) :- public_source_query(Goal).
 
@@ -30,16 +27,24 @@ ontology_creation_allowed(Owner, Name, Options) :-
     binary_codes(Name, LobbyBytes),
     UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
                     instance_of(human_user, Instance),
-                    lobby_provisioning(Instance, pending(Name))),
-    lobby_options(Owner, Options).
+                    lobby_provisioning(Instance, pending(Name)), hosting_node(Node)),
+    lobby_options(Owner, Node, Options).
 
-%% A template is reviewed founding source stored in this ontology, not a path
-%% read from whichever node happens to receive the creation request.
-%% Founding supplies the instance and space sources and exact vocabulary refs.
-lobby_options(Owner,
-    [source(Source), source(SpaceSource),
-     terms([lobby_owner(Owner), instance_of(lobby, personal_lobby),
-            instance_of(space, personal_lobby),
+%% Release-owned source paths use the ordinary prepared-creation lifecycle.
+%% It freezes their complete contents into the new genesis before committing;
+%% recovery uses that genesis and never reloads files or repairs source.
+lobby_options(Owner, Node, Options) :-
+    term_variables([Owner, Node], []),
+    Owner = agent_instance_ref(_, _, _), Node = agent_instance_ref(_, _, _),
+    findall(source_file(Path), lobby_source_file(Path), Sources), Sources = [_ | _],
+    append(Sources, [terms([lobby_owner(Owner), instance_of(lobby, personal_lobby),
+            physics_initial_host(personal_lobby, Node),
+            instance_of(lobby_floor, floor),
+            attribute(floor,mark_id,<<"floor">>),
+            attribute(personal_roof,mark_id,<<"roof">>),
+            attribute(console,mark_id,<<"console">>),
+            attribute(personal_sky,mark_id,<<"sky">>),
+            instance_of(agent, pilot),
             rendering_vocabulary(RenderingNamespace, RenderingAnchor),
             instance_of(sky_sphere, personal_sky),
             attribute(personal_sky, panorama, belfast_sunset_puresky),
@@ -48,109 +53,73 @@ lobby_options(Owner,
             attribute(personal_sky, brightness, 120),
             attribute(personal_sky, tint, <<"#FFFFFF">>),
             instance_of(prolog_console, console),
-            lobby_device(personal_lobby, console),
-            device_placement(console, <<"console">>, transform(0, 0, 3850, 0, 0, 0)),
             instance_of(lobby_roof, personal_roof),
-            lobby_device(personal_lobby, personal_roof),
-            device_placement(personal_roof, <<"roof">>, transform(0, 0, 0, 0, 0, 0)),
             lobby_vocabulary(Namespace, Anchor),
             modelling_vocabulary(ModellingNamespace, ModellingAnchor),
             environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
-            gui_vocabulary(GuiNamespace, GuiAnchor)]),
-     external_predicate_modules([quod_agent_predicates])]) :-
-    term_variables(Owner, []),
-    Owner = agent_instance_ref(_, _, _),
+            environment_eidolons(EnvironmentEidolonNs,EnvironmentEidolonAnchor),
+            gui_vocabulary(GuiNamespace, GuiAnchor) | Bodies]),
+        external_predicate_modules([quod_agent_predicates])], Options),
     current_ontology_identity(Namespace, Anchor),
-    instance_template(Source),
-    findall(S, space_template(S), [SpaceSource]),
+    lobby_definitions(Bodies),
     findall(ontology_ref(R, A), rendering_vocabulary(R, A),
         [ontology_ref(RenderingNamespace, RenderingAnchor)]),
     modelling_vocabulary(ModellingNamespace, ModellingAnchor),
     environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
+    environment_eidolons(EnvironmentEidolonNs,EnvironmentEidolonAnchor),
     gui_vocabulary(GuiNamespace, GuiAnchor).
 
-%% Explicit completion installs a retained lobby's view contract through the
-%% ordinary source compiler. Creation keeps its direct human-owner action.
-%% The owner principal
-%% must pass both private ontologies' current ACLs; no node grant is added.
-complete_lobby_setup(Owner, Lobby) :-
-    current_principal(Owner),
-    Owner = agent_instance_ref(UserNamespace, UserAnchor, _),
-    UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
-        human_user_owner(Owner), lobby_reference(Lobby)),
-    complete_lobby_view(Owner, Lobby).
+%% Coarse authored collision surfaces preserve the floor opening, roof oculus
+%% and six entrances. Appearance meshes remain independent of collision truth.
+lobby_definitions([
+    physics_definition(floor, 1, geometry(Floor, 1)),
+    physics_definition(pilot, 1, geometry(capsule(500, 250), 1)),
+    physics_definition(personal_roof, 1, geometry(Roof, 1)),
+    physics_definition(console, 1, geometry(Console, 1))]) :-
+    lobby_surface([ring(2200, 0, 0), ring(9000, 0, 0)], Floor),
+    lobby_surface([ring(2250, 4650, 0), ring(5500, 4325, 181), ring(8950, 3350, 2900)], Roof),
+    Console = parts([part(vector(0, 70, 120), box(1000, 70, 500)),
+                     part(vector(0, 175, 80), box(920, 35, 420)),
+                     part(vector(0, 590, 120), box(380, 410, 240)),
+                     part(vector(0, 1450, 0), box(950, 550, 210))]).
 
-complete_lobby_view(Owner, Target) :-
-    Target = ontology_ref(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-        lobby_owner(Owner), lobby_space(Space, _)),
-    (lobby_setup_ready(Target, Space) -> true
-    ; transaction((
-        Namespace::(current_ontology_identity(Namespace, Anchor),
-            ('$quod_predicate_source'(space_instance/2, <<"">>) ->
-                InstallSpace = true ; InstallSpace = false),
-            (instance_of(space, Space) -> SpaceFacts = []
-                ; SpaceFacts = [instance_of(space, Space)]),
-            findall(ontology_ref(R, A), rendering_vocabulary(R, A), Renderers)),
-        (InstallSpace = true -> findall(S, space_template(S), [SpaceSource])
-            ; SpaceSource = <<"">>),
-        (Renderers = [] ->
-            findall(ontology_ref(R, A), rendering_vocabulary(R, A),
-                [ontology_ref(Rendering, RenderingAnchor)]),
-            Facts = [rendering_vocabulary(Rendering, RenderingAnchor) | SpaceFacts]
-        ; Renderers = [_] -> Facts = SpaceFacts
-        ; fail_with_reason(ambiguous_lobby_rendering)),
-        quod:root::system_ontology(<<"quod:prolog">>, ToolsAnchor),
-        findall(Chunk,
-            <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, ToolsAnchor),
-                prolog_source(Target, Chunk)), Chunks),
-        lobby_source_codes(Chunks, BeforeCodes), binary_codes(Before, BeforeCodes),
-        '$quod_program_source'(BeforeProgram, Before),
-        '$quod_program_source'(SpaceProgram, SpaceSource),
-        append(BeforeProgram, SpaceProgram, Combined),
-        append(Combined, Facts, DraftProgram), '$quod_program_source'(DraftProgram, Draft),
-        <<"quod:prolog">>::(current_ontology_identity(<<"quod:prolog">>, ToolsAnchor),
-            prolog_edit_goal(Target, all, Before, Draft, Edit)),
-        call(Edit),
-        (lobby_setup_ready(Target, Space) -> true
-            ; fail_with_reason(lobby_setup_incomplete))
-      ))).
+lobby_surface(Rings, surface(Vertices, Triangles)) :-
+    Directions = [d(1000000,0,1000),d(965926,258819,354),d(866025,500000,0),
+        d(707107,707107,354),d(500000,866025,1000),d(258819,965926,354),
+        d(0,1000000,0),d(-258819,965926,354),d(-500000,866025,1000),
+        d(-707107,707107,354),d(-866025,500000,0),d(-965926,258819,354),
+        d(-1000000,0,1000),d(-965926,-258819,354),d(-866025,-500000,0),
+        d(-707107,-707107,354),d(-500000,-866025,1000),d(-258819,-965926,354),
+        d(0,-1000000,0),d(258819,-965926,354),d(500000,-866025,1000),
+        d(707107,-707107,354),d(866025,-500000,0),d(965926,-258819,354)],
+    findall(vector(X, Y, Z),
+        (member(ring(R, H, Drop), Rings), member(d(C, S, Q), Directions),
+         X is R*C//1000000, Z is R*S//1000000, Y is H-Drop*Q//1000), Vertices),
+    length(Rings, Count),
+    findall(Triangle,
+        (member(Row, [0, 1]), Row < Count-1,
+         member(J, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]),
+         A is Row*24+J, B is (Row+1)*24+J, Cn is (J+1) mod 24,
+         C is (Row+1)*24+Cn, D is Row*24+Cn,
+         member(Triangle, [triangle(A,C,B), triangle(A,D,C)])), Triangles).
 
-no_follow(lobby_source_codes/2).
-lobby_source_codes([source_chunk(done, Source)], Codes) :- binary_codes(Source, Codes).
-lobby_source_codes([source_chunk(more, Source) | Rest], Codes) :-
-    binary_codes(Source, Here), lobby_source_codes(Rest, Tail), append(Here, Tail, Codes).
-
-lobby_setup_ready(ontology_ref(Namespace, Anchor), Space) :-
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-        space_instance(Space, space),
-        findall(ontology_ref(R, A), rendering_vocabulary(R, A), [_])).
-
-isa(lobby, thing).
+isa(lobby, physical_space).
+isa(physical_space, space).
+isa(space, thing).
+isa(lobby_floor, thing).
 isa(device, thing).
 isa(prolog_console, device).
 isa(imported_artifact, device).
 isa(lobby_roof, thing).
 %% Class associations name ordinary, anchored Prolog recipe entry points.
-class_eidolon(Class, Mode, Style, recipe(Ns, Anchor, Recipe)) :-
-    isa(Class, Class),
-    device_eidolons([Class], Mode, Style, Recipes),
-    member(recipe(Ns, Anchor, Recipe), Recipes).
-
-device_eidolons(Classes, Mode, Style, Recipes) :-
-    findall(purpose(M, S), device_eidolon(_, M, S, _), RawPurposes),
-    sort(RawPurposes, Purposes), member(purpose(Mode, Style), Purposes),
-    findall(candidate(Class, Recipe), device_eidolon(Class, Mode, Style, Recipe), Candidates),
-    findall(Class, member(candidate(Class, _), Candidates), Owners),
-    most_specific_classes(Classes, Owners, Selected),
-    current_ontology_identity(Ns, Anchor),
-    findall(recipe(Ns, Anchor, Recipe),
-            (member(candidate(Class, Recipe), Candidates), member(Class, Selected)), Raw),
-    sort(Raw, Recipes).
+class_eidolon(Class,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
+    device_eidolon(Class,Mode,Style,Recipe), current_ontology_identity(Ns,Anchor).
 
 device_eidolon(prolog_console, playing, solid, console_playing).
 device_eidolon(prolog_console, edition, solid, console_edition).
 device_eidolon(imported_artifact, playing, solid, imported_artifact_playing).
+device_eidolon(lobby_floor, playing, solid, lobby_floor).
+device_eidolon(lobby_floor, edition, solid, lobby_floor).
 device_eidolon(lobby_roof, playing, solid, lobby_roof).
 device_eidolon(lobby_roof, edition, solid, lobby_roof).
 
@@ -168,43 +137,15 @@ device_menu(Classes, Entries) :-
 class_device_menu(prolog_console,
     [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console))]).
 
-%% Every placed device is selected by class; repeated instances share recipes.
-lobby_recipe(Mode, lobby(Ns, Anchor, Sky, Devices), [SkyPart, Floor | Parts]) :-
-    environment_parts(Mode, Sky, Ns, Anchor, [SkyPart]),
-    Floor = part(<<"floor">>,
+eidolon(lobby_floor,device(_),[
+    part(<<"model">>,
                  mesh_asset(asset(<<"6520d8b8c35a72cf99cd061c05f6badda2aa8d357446b9856f247ab06d4eb07f">>,
                                   <<"model/gltf-binary">>),
                             <<"gltf2-static-v1">>, scale(1000),
                             frame(aabb(-9000, -450, -9000, 9000, 1000, 9000),
                                   pivot(0, 0, 0), front(<<"-z">>)),
                             resources(1660388, 1658880, 46080, 46080, 1, 2, 1)),
-                 transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing),
-    device_parts(Devices, Mode, Ns, Anchor, Parts).
-
-environment_parts(Mode, Sky, Ns, Anchor, Parts) :-
-    environment_eidolons(EidolonNs, EidolonAnchor),
-    EidolonNs::(current_ontology_identity(EidolonNs, EidolonAnchor),
-                class_eidolon(sky_sphere, Mode, panoramic,
-                              recipe(RecipeNs, RecipeAnchor, Recipe))),
-    RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
-               eidolon(Recipe, environment(Sky, Ns, Anchor), Parts)).
-device_parts([], _, _, _, []).
-device_parts([device(Classes, Entity, Id, At) | Devices], Mode, Ns, Anchor, Parts) :-
-    device_eidolons(Classes, Mode, solid, Recipes),
-    device_model(Recipes, Entity, Model),
-    modelling_vocabulary(MNs, MA),
-    MNs::(current_ontology_identity(MNs, MA),
-          place_model(Id, At, depicts(Ns, Anchor, Entity), Model, Placed)),
-    device_parts(Devices, Mode, Ns, Anchor, Rest), append(Placed, Rest, Parts).
-
-device_model([recipe(Ns, Anchor, Recipe)], Entity, Model) :-
-    current_ontology_identity(Ns, Anchor), eidolon(Recipe, device(Entity), Model).
-device_model([], _, Parts) :- device_eidolon_status(<<"No matching eidolon">>, Parts).
-device_model([_, _ | _], _, Parts) :-
-    device_eidolon_status(<<"Choose an eidolon">>, Parts).
-device_eidolon_status(Text,
-    [part(<<"eidolon-status">>, group, transform(0, 0, 0, 0, 0, 0),
-          no_surface, label(Text, <<"above">>), depicts_nothing)]).
+                 transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing)]).
 
 material_surface(Material, Surface) :-
     material_eidolons(Ns, Anchor),

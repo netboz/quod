@@ -112,7 +112,7 @@ examples() ->
         ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, InstrumentState)),
         ?assertMatch({ok, [_], _}, read(Ctx, InstrumentNs,
             setelement(1, InstrumentState, current_instrument_configuration))),
-        ?assertMatch({ok, [_], _}, read(Ctx, Lobby, {lobby_sky,
+        ?assertMatch({ok, [_], _}, read(Ctx, Lobby, {lobby_sky, personal_sky,
             {sky, personal_sky, dusk, 80000, 45, 650, <<"#FFFFFF">>}})),
         ?assertMatch({fail, _}, read(Ctx, InstrumentNs, {instance_of, space, {'_'}})),
         ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, InstrumentNs}), physics_worlds))

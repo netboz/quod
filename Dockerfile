@@ -51,6 +51,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/quod
 COPY --from=builder /build/_build/prod/rel/quod ./
 
+# Factories retain source-file references across application upgrades.
+RUN set -- /opt/quod/lib/quod-*/priv \
+    && test "$#" -eq 1 \
+    && test -d "$1" \
+    && ln -s "$1" /opt/quod/priv
+
 # Self-signed cert for the QUIC listener (peers dial with verify=false). Absolute
 # path in the baked config so it is found regardless of the start script's cwd.
 RUN mkdir -p /opt/quod/certs \

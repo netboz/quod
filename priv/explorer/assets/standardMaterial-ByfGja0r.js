@@ -1,0 +1,1 @@
+import{i as e,t}from"./standardMaterial.pure-BhvrIQ7M.js";e(),t();

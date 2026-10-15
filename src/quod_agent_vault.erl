@@ -4,7 +4,9 @@ Node-local encrypted custody for ontology-backed agent keys.
 
 The containing ontology owns assignments and active/revoked key state. This
 service owns only secret files, bound to the network, exact agent reference and
-public key. Its in-VM API backs governed key preparation and signing;
+public key. It also retains a pending custody-establishing signed request
+until the governing caller certifies its handoff or retirement. It never
+submits requests or decides outcomes. Its in-VM API backs governed key preparation and signing;
 it is not a public permission boundary. Requests use the existing signed-goal
 schema and encoder. No arbitrary-byte signing operation exists.
 
@@ -15,12 +17,14 @@ prevents accidental diagnostic disclosure, not inspection by code inside the VM.
 -behaviour(gen_server).
 
 -include_lib("kernel/include/file.hrl").
+-include("quod_client_goal_limits.hrl").
 
--export([start_link/0, start_link/1, prepare/2, prepare/3, sign/2, delete/2]).
+-export([start_link/0, start_link/1, prepare/2, prepare/3, sign/2, delete/2,
+         retained/1, retain/3, retire/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, format_status/1]).
 
 -record(s, {directory :: file:filename(), unlock :: fun(() -> binary()),
-            sync_pending = false :: boolean()}).
+            sync_pending = false :: boolean(), receipts = #{} :: map()}).
 -define(LISTENER, quod_agent_vault_listener).
 -define(DOMAIN, <<"quod.agent.key.v2", 0>>).
 
@@ -40,7 +44,7 @@ One atomic slot per agent retains the same random key across a lost reply or
 vault restart. Advancing the slot preserves previously published custody;
 requests for an older epoch fail. The governing caller must verify the exact
 committed assignment and candidate promise before publishing the public key.
-This is secret custody metadata, not a signed-request or outcome journal.
+Key preparation is separate from pending request receipts and never removes them.
 """.
 -spec prepare(binary(), non_neg_integer()) -> {ok, <<_:256>>} | {error, term()}.
 prepare(AgentRef, Epoch) -> prepare(AgentRef, Epoch, quod_time:mono_ms() + 5000).
@@ -60,6 +64,12 @@ sign(Request, Deadline) when is_integer(Deadline) ->
 -doc "Delete local custody; durable key revocation remains an ordinary ontology action.".
 -spec delete(binary(), <<_:256>>) -> ok | {error, term()}.
 delete(AgentRef, PublicKey) -> call({delete, AgentRef, PublicKey}).
+
+%% Scope is stable across executor/authority epochs; those belong in Receipt.
+%% Only a newly retained receipt permits its caller's first submission.
+retained(Scope) -> call({retained, Scope}).
+retain(Scope, Receipt, Deadline) -> call({retain, Scope, Receipt, Deadline}, Deadline).
+retire(Scope, Receipt) -> call({retire, Scope, Receipt}).
 
 call(Request) -> call(Request, quod_time:mono_ms() + 5000).
 
@@ -87,9 +97,14 @@ init(#{directory := Directory, unlock_file := UnlockFile} = Config)
                   when Mode band 8#077 =:= 0 ->
                     case {file:read_file(UnlockPath), private_directory(Dir)} of
                         {{ok, <<_:256>> = Key}, ok} ->
-                            case start_provider(maps:get(provider, Config, none)) of
-                                ok -> {ok, #s{directory = Dir, unlock = fun() -> Key end}};
-                                {error, _} -> {stop, vault_provider_unavailable}
+                            case load_receipts(Dir) of
+                                {ok, Receipts} ->
+                                    case start_provider(maps:get(provider, Config, none)) of
+                                        ok -> {ok, #s{directory = Dir,
+                                            unlock = fun() -> Key end, receipts = Receipts}};
+                                        {error, _} -> {stop, vault_provider_unavailable}
+                                    end;
+                                {error, _} -> {stop, vault_receipts_unavailable}
                             end;
                         _ -> {stop, vault_storage_unavailable}
                     end;
@@ -149,6 +164,53 @@ handle_call({delete, AgentRef, <<_:256>> = Pub}, _From, S) ->
         {error, _} = Error -> Error
     end end),
     {reply, Result, Next};
+handle_call({retained, Scope}, _From, S) ->
+    {Result, Next} = custody_operation(S, fun() -> receipt_lookup(Scope, S) end),
+    {reply, Result, Next};
+handle_call({retain, _, _, _} = Request, From, S = #s{sync_pending = true}) ->
+    case custody_operation(S, fun() -> ok end) of
+        {ok, Next} -> handle_call(Request, From, Next);
+        {Error, Next} -> {reply, Error, Next}
+    end;
+handle_call({retain, Scope, Receipt, Deadline}, _From, S) ->
+    case {Deadline > quod_time:mono_ms(), receipt_lookup(Scope, S)} of
+        {false, _} -> {reply, {error, deadline_exceeded}, S};
+        {true, {ok, Existing}} -> {reply, {ok, {existing, Existing}}, S};
+        {true, none} ->
+            case receipt_bytes(Scope, Receipt) of
+                {ok, Bytes} ->
+                    {Result, Next} = custody_operation(S, fun() ->
+                        custody_mutation(fun() ->
+                            quod_file:write_atomic(receipt_path(Scope, S#s.directory), Bytes, 8#600)
+                        end)
+                    end),
+                    %% An ambiguous rename must retain the slot in memory too.
+                    %% Its caller receives no permission to send on any error.
+                    Retained = Next#s{receipts = (Next#s.receipts)#{Scope => Receipt}},
+                    Reply = case {Result, Deadline > quod_time:mono_ms()} of
+                        {ok, true} -> {ok, retained};
+                        {ok, false} -> {error, deadline_exceeded};
+                        {Error, _} -> Error
+                    end,
+                    {reply, Reply, Retained};
+                Error -> {reply, Error, S}
+            end;
+        {true, Error} -> {reply, Error, S}
+    end;
+handle_call({retire, Scope, Receipt}, _From, S) ->
+    case receipt_lookup(Scope, S) of
+        {ok, Receipt} ->
+            {Result, Next} = custody_operation(S,
+                fun() -> delete_file(receipt_path(Scope, S#s.directory)) end),
+            Retired = case Result of
+                ok -> Next#s{receipts = maps:remove(Scope, Next#s.receipts)};
+                _ -> Next
+            end,
+            {reply, Result, Retired};
+        none -> {reply, ok, S};
+        {ok, _Other} -> {reply, {error, stale_receipt}, S};
+        Error -> {reply, Error, S}
+    end;
 handle_call(_Request, _From, S) -> {reply, {error, invalid_vault_request}, S}.
 
 handle_cast(_Request, S) -> {noreply, S}.
@@ -341,6 +403,51 @@ delete_file(Path) ->
         {error, enoent} -> quod_file:sync_dir(filename:dirname(Path));
         Error -> Error
     end end).
+
+%% Startup is the only receipt scan. Ordinary lookups reuse this owner's map.
+%% A corrupt retained slot fails closed instead of permitting a fresh request.
+load_receipts(Dir) ->
+    try
+        {ok, Names} = file:list_dir(Dir),
+        Receipts = lists:foldl(fun(Name, Acc) ->
+            case lists:prefix("request-", Name) andalso filename:extension(Name) =/= ".tmp" of
+                false -> Acc;
+                true ->
+                    Path = filename:join(Dir, Name),
+                    {ok, Bytes} = file:read_file(Path),
+                    {ok, {custody_receipt, 1, Scope, Receipt}} =
+                        quod_safe_term:decode(Bytes, receipt_max_bytes()),
+                    {ok, Bytes} = receipt_bytes(Scope, Receipt),
+                    Path = receipt_path(Scope, Dir),
+                    false = maps:is_key(Scope, Acc),
+                    Acc#{Scope => Receipt}
+            end
+        end, #{}, Names),
+        {ok, Receipts}
+    catch _:_ -> {error, vault_storage_unavailable} end.
+
+receipt_lookup(Scope = {<<_:256>>, ScopeBytes}, #s{receipts = Receipts}) when is_binary(ScopeBytes) ->
+    case maps:find(Scope, Receipts) of {ok, R} -> {ok, R}; error -> none end;
+receipt_lookup(_, _) -> {error, invalid_receipt_scope}.
+
+receipt_bytes(Scope = {<<_:256>>, ScopeBytes}, Receipt = #{store := {B, <<_:512>>},
+        request := {R, <<_:512>>}, fence := Fence, binding := Binding})
+  when is_binary(ScopeBytes), is_binary(B), is_binary(R), is_binary(Fence), is_map(Binding) ->
+    case {quod_client_goal:request_identity(B), quod_client_goal:request_identity(R),
+          quod_durable_term:decode_goal(Fence)} of
+        {{ok, _}, {ok, _}, {ok, _}} ->
+            quod_safe_term:encode_canonical({custody_receipt, 1, Scope, Receipt}, receipt_max_bytes());
+        _ -> {error, invalid_custody_receipt}
+    end;
+receipt_bytes(_, _) -> {error, invalid_custody_receipt}.
+
+receipt_max_bytes() ->
+    %% Two signed requests, one bounded retirement goal and two exact identities.
+    2 * ?QUOD_CLIENT_GOAL_REQUEST_BYTES + 3 * ?QUOD_MAX_TOPLEVEL_GOAL_BYTES.
+
+receipt_path(Scope, Dir) ->
+    Id = crypto:hash(sha256, term_to_binary(Scope, [deterministic])),
+    filename:join(Dir, "request-" ++ binary_to_list(binary:encode_hex(Id))).
 
 binding(Network, AgentRef, Pub) ->
     <<?DOMAIN/binary, Network/binary, (crypto:hash(sha256, AgentRef))/binary, Pub/binary>>.

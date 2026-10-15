@@ -12,6 +12,45 @@ physics_enabled(W, I) :-
     findall(space(Mode, Actor), physics_space(W, Mode, Actor), [space(enabled, I)]),
     physics_required_allowances(W, _, _, _, _).
 
+%% First assignment uses the same governed custody and admission actions as
+%% later authoring. The caller retains the ordinary signed execute request;
+%% preparation is a stable read after the world's exact identity exists.
+can_initialize_physics(_, _) :- fail.
+physics_initial_host(_, _) :- fail.
+physics_initial_control(_, _, _) :- fail.
+
+physics_preparation(W, State) :-
+    current_principal(P), can_initialize_physics(W, P),
+    findall(space(M,I), physics_space(W,M,I), [space(Mode,Authority)]),
+    (Mode = disabled -> State = disabled
+    ; physics_enabled(W,Authority),
+      (agent_hosted(Authority,_,_,_) ->
+          physics_client_control(W,_), State = ready
+      ; agent_preparation_assignment(Authority,none,0),
+        findall(N,physics_initial_host(W,N),[Node]),
+        current_ontology_identity(Ns,Anchor),
+        prepare_agent_key_custody(agent_instance_ref(Ns,Anchor,Authority),none,0,Node,Key),
+        State = prepared(Node,Key))).
+
+physics_initialize(W, Node, Key) :-
+    term_variables([W,Node,Key], []),
+    transaction((current_principal(P), can_initialize_physics(W,P),
+        physics_enabled(W,Authority),
+        findall(N,physics_initial_host(W,N),[Node]),
+        agent_preparation_assignment(Authority,none,0),
+        goal(agent_hosted(Authority,Node,1,Key)),
+        current_ontology_identity(Ns,Anchor),
+        findall(E,physics_admission(W,entity_ref(Ns,Anchor,E),_,_),Entities),
+        sort(Entities,Unique), length(Entities,Count), length(Unique,Count), Count > 0,
+        physics_place_all(Unique,entity_ref(Ns,Anchor,W)),
+        findall(control(A,V),physics_initial_control(W,A,V),[control(Agent,Viewpoint)]),
+        physics_control_agent(W,0,none,controlled(Agent,Viewpoint)),
+        physics_client_control(W,_))).
+
+physics_place_all([], _).
+physics_place_all([Entity|Rest], Destination) :-
+    space_place(Entity,0,Destination), physics_place_all(Rest,Destination).
+
 %% One authored body description, either owned geometry or an exact live source.
 %% Body identity, kind and placement belong to the admitting world; source shape
 %% and density never become a second mutable fact at that destination.
@@ -68,8 +107,9 @@ physics_release_definition(Entity, World, Assignment) :-
 %% retain their own space_physical_change/3 policy and allocate no native body.
 physics_space_change(W, Subject, admitted) :-
     physics_enabled(W,_), physics_world_authority(W,World,Authority),
-    Subject = entity_ref(Ns,Anchor,Entity), physics_subscription(Ns,Anchor),
+    Subject = entity_ref(Ns,Anchor,Entity),
     current_ontology_identity(Here,History),
+    (Ns == Here, Anchor == History -> true ; physics_subscription(Ns,Anchor)),
     findall(admission(K,P),physics_admission(W,Subject,K,P),[admission(Kind,Pose)]),
     \+ physics_body_definition(W,_,_,_,_,live(Subject,_,_,_)),
     Ns::(current_ontology_identity(Ns,Anchor),
@@ -496,7 +536,8 @@ physics_projection(Node, Rows) :-
 
 physics_custody(W, Custody) :-
     findall(R, physics_request(W, R), Requests),
-    (Requests = [] -> Custody = none ; Requests = [Custody]).
+    (Requests = [] -> Custody = none ; Requests = [Custody]),
+    \+ physics_cancelled_request(W,Custody).
 
 physics_actor(W) :-
     physics_enabled(W, I), current_ontology_identity(Ns, Anchor),
@@ -534,9 +575,21 @@ physics_cancel_activation(W, Generation, Request) :-
     term_variables([W, Generation, Request], []),
     transaction((current_principal(Principal), can_cancel_physics_activation(W, Principal),
         physics_run(W, Generation, _),
-        Request = request(_, Generation, _, _), physics_custody(W, Request),
-        retract(physics_request(W, Request)),
+        Request = request(Token, Generation, Bytes, Signature),
+        signed_physics_request(physics_activate(W,Generation,Token),Bytes,Signature),
+        \+ physics_cancelled_request(W,Request),
+        (physics_request(W,Request) -> retract(physics_request(W,Request)) ; true),
         assertz(physics_cancelled_request(W, Request)))).
+
+%% The custody owner can retire only an exact request fenced by committed
+%% domain state. Missing custody, elapsed time and disabled intent prove nothing.
+physics_store_retired(W,Generation,Token,Authority,Epoch,Key,Bytes,Signature) :-
+    physics_actor(W), current_ontology_identity(Ns,A),
+    Authority = agent_instance_ref(Ns,A,I),
+    signed_physics_request(physics_activate(W,Generation,Token),Bytes,Signature),
+    (physics_cancelled_request(W,request(Token,Generation,Bytes,Signature))
+    ; physics_run(W,Current,_), Current > Generation
+    ; agent_key(I,Key,revoked), agent_host(I,_,Next,_), Next > Epoch).
 
 %% Durable domain status is derived from the same atomic transition, not a
 %% separately maintained sent flag. Pending includes never-sent and uncertain.

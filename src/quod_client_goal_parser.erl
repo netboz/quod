@@ -265,7 +265,7 @@ parse_chars(Chars, Version) ->
 parsed({ok, Parsed}, #lex{variable_names = NamesRev, numeric_annotations = Annotated}) ->
     Goal = case Annotated of true -> numeric_literals(Parsed); false -> Parsed end,
     %% The lexer emits only the wire alphabet and validates Unicode values.
-    %% A remaining encoder rejection can therefore only be a structural/node
+    %% A remaining encoder rejection can therefore only be a structural depth
     %% bound, for which `too_large` is the accurate public result.
     case {quod_wire_term:encode(Goal),
           quod_wire_term:goal_symbol_names(Goal)} of

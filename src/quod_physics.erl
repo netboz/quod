@@ -11,7 +11,7 @@ fence, rather than flooding its event queue.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([input/7]).
 -record(s, {owner, monitor, spec, token, native = none, phase = activating,
-            pending = none, window = none, resolved = none, uncertain = none, timer = none, tick = 0,
+            pending = none, window = none, resolved = none, timer = none, tick = 0,
             frame = none, revisions = #{}, controls = #{}, driving = #{}, observations = #{},
             installs = 0, steps = 0, queries = 0, viewer = none, agent_controls = [], inputs = #{},
             installed_guard = none, installed_geometry = none, moving = false}).
@@ -170,7 +170,12 @@ handle_info({physics_selected, Owner, Ref, Spec}, S = #s{owner = Owner, spec = O
         _ -> false
     end,
     case same_run(Old, Spec) andalso not ChangedRun andalso not ChangedFailed andalso not Cancelled of
-        true -> {noreply, advance(selection_observations(S#s{spec = Spec}))};
+        true ->
+            Phase = case S#s.phase =:= unresolved andalso Old =/= Spec of
+                true -> activating;
+                false -> S#s.phase
+            end,
+            {noreply, advance(selection_observations(S#s{spec = Spec, phase = Phase}))};
         false -> {stop, normal, S}
     end;
 handle_info(advance, S = #s{phase = unresolved}) -> {noreply, S};
@@ -190,16 +195,12 @@ handle_info({physics_result, Owner, Ref, Result},
         true -> advance(Ready#s{phase = activating});
         false -> outcome(Kind, Result, Ready)
     end,
-    Classified = case {Kind,Next#s.phase} of
-        {activate,unresolved} -> Next#s{uncertain = Issued};
-        _ -> Next
-    end,
-    Recovered = case {Changed, Classified#s.phase} of
-        {true, unresolved} -> advance(Classified);
+    Recovered = case {Changed, Next#s.phase} of
+        {true, unresolved} -> advance(Next#s{phase = activating});
         {true, not_sent} -> advance(Next);
         {false, unresolved} when Kind =:= activate ->
-            notify({unavailable,activation_custody_unresolved},Classified);
-        _ -> Classified
+            notify({unavailable,activation_custody_unresolved},Next);
+        _ -> Next
     end,
     {noreply, Recovered};
 handle_info({physics_outcome_changed, Owner, D, Key, Height}, S = #s{owner = Owner,spec = Spec}) ->
@@ -234,13 +235,9 @@ advance(S) ->
 advance_current(S = #s{phase = {failed, _}}) -> S;
 advance_current(S = #s{pending = P}) when P =/= none -> S;
 advance_current(S = #s{phase = active, spec = Spec}) -> resume_observations(install(Spec, S));
-%% An uncertain custody write must not be replaced by a newly signed request
-%% merely because its selection has not arrived. No timeout implies rejection.
-advance_current(S = #s{uncertain = Issued, spec = Spec}) when Issued =/= none ->
-    case activation_state(Spec) =:= Issued of
-        true -> S;
-        false -> advance_current(S#s{uncertain = none,phase = activating})
-    end;
+%% The vault owns retained outer requests across incarnations. A selection
+%% change can wake resolution; an unchanged unavailable owner does no work.
+advance_current(S = #s{phase = unresolved}) -> S;
 advance_current(S = #s{spec = #{custody := none}}) -> request_activation(S);
 advance_current(S = #s{spec = #{custody := {request, Token, Previous, _, _} = Custody,
                          generation := G, run_token := Installed},
@@ -259,7 +256,10 @@ request_activation(S = #s{spec = Spec, token = Token}) ->
     #{world := {world_ref, _, _, World}, generation := G, custody := Prior} = Spec,
     Activation = {physics_activate, World, G, Token},
     Store = {physics_store_request, World, G, Prior, Token, {'Bytes'}, {'Signature'}},
-    request(activate, {Activation, Store}, S).
+    Fence = {physics_store_retired, World, G, Token, maps:get(authority,Spec),
+             maps:get(epoch,Spec), maps:get(key,Spec), {'Bytes'}, {'Signature'}},
+    Retention = {{maps:get(world, Spec), physics_activation}, Fence},
+    request(activate, {Activation, Store, Retention}, S).
 
 request(Kind, Work, S = #s{owner = Owner, spec = Spec}) ->
     Ref = make_ref(),
@@ -282,6 +282,8 @@ outcome(activate, {ok, _, {normalized, {committed, _, _}}}, S = #s{spec = Spec})
             advance(S#s{resolved = C});
         _ -> S#s{phase = awaiting_selection}
     end;
+outcome(activate, {error, custody_retired}, S) ->
+    advance(S#s{phase = activating});
 outcome(activate, {error, {request_not_submitted, _}}, S) ->
     notify({unavailable, activation_not_sent}, S#s{phase = not_sent});
 outcome(resolve, {ok, _, {operation_outcome, _, #{status := Status}}}, S)

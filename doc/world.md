@@ -102,42 +102,28 @@ continues with the ordinary signed lobby-provisioning action. If a key is
 already authenticated but lacks an account, registration reuses that key.
 There is no automatic replacement identity or second account on failure.
 
-The default lobby recipe explicitly composes its instance source with
-`space.pl`, declares the lobby instance as a space, and pins its rendering
-vocabulary. This supplies a static, nonphysical view without enabling simulation.
-The shared lobby owner stores the reviewed space source as `space_template/1`
-alongside its existing instance template and exact vocabulary references.
+The default factory composes `lobby_instance.pl`, `space.pl`,
+`agent_instance.pl`, `quod_physics.pl` and `space_view.pl` through the existing
+prepared source-file path. It declares `isa(lobby, physical_space)` and
+`instance_of(lobby, personal_lobby)`, pins the rendering vocabulary and authors
+physical definitions, admission, allowances, host intent and owner policy.
+Class membership alone still grants no authority or runtime resources.
 
-**Finish account setup** uses the existing direct human action while creation
-is pending. For a linked lobby, it invokes the shared completion action under
-the same human principal. Completion installs missing space source and view
-metadata through the existing source compiler in one exact-baseline transaction.
-It preserves custom clauses and existing rendering choices, rechecks both
-private owners' ACLs, and performs no write when the contract is already present.
-It does not grant node access or repair state silently during a read/reconnect.
-An empty unavailable projection exposes this explicit setup control to its owner;
-scene and resource failures remain visible through the ordinary signed view.
+After founding returns the exact anchor, the existing account controller reads
+`physics_preparation/2`. The owner-authorized shared `physics_initialize/3`
+assigns the prepared authority key, admits the initial bodies and selects the
+pilot/viewpoint in one transaction. The browser retains this signed child before
+sending it through its existing operation journal. A ready or intentionally
+disabled space needs no initialization write. Unknown writes are resolved from
+the retained request and are never reconstructed or resubmitted.
 
-For an established account, loading the page restores the active key from
-IndexedDB, authenticates it, resolves retained operations and selects the
-account before mounting the lobby. A normal reload of a completed account
-does not submit signup or lobby creation. Resolution of an interrupted signup
-may continue its authorized lobby-creation handoff after the exact parent
-commit is established. The existing operation journal retains that handoff;
-timeouts, missing replies and reconnects never authorize resubmitting an
-unknown original or inventing a rejection.
-
-Automatic return requires the active key to remain usable in the same browser
-profile and origin. A saved encrypted key is a separate recovery mechanism
-and requires its passphrase. Signout clears the active key; it does not delete
-the account, its lobby, or a saved encrypted key. Startup does not poll for
-readiness or bypass identity restoration with a temporary preview identity.
-
-The current key loader returns no active key both when none exists and when
-IndexedDB cannot supply a usable key. The identity entry screen therefore
-means that no usable active key was recovered, not proof that no identity was
-ever stored. Corrupt saved agent references can also fail session initialization;
-the entry card does not yet provide a dedicated repair flow for that case.
+**Finish account setup** continues the ordinary provisioning/initialization
+sequence under the human principal. It preserves an unresolved operation and
+exposes preparation or policy failures through existing controls. It does not
+install or repair source in a linked ontology. Physical scene placement comes
+from admitted body bindings; decorative membership and ordinary Eidolon dispatch
+supply the rest of the shared space view. Movement waits for the existing
+physics owner's actual installed readiness.
 
 ### Implementation and verification boundaries
 

@@ -1,0 +1,1 @@
+All eleven sequential release gates passed on unchanged frozen source. Full logs and true child exits are retained. Version label remains 0.7.269 for implementation gates; the separate 0.7.270 label commit changes only release metadata. Candidate image and desktop acceptance are recorded separately.

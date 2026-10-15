@@ -1,0 +1,9 @@
+{
+  "AGENTS.md": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+  "src/quod_agent_vault.erl": "56178e570601ce672b5e750ffed60a4c18f6fb4dca037799793c7dd2126ab2b1",
+  "src/quod_agent.erl": "2921833174868f1185edea638949aacd9d1992349964b7ae905e2bb199b07e69",
+  "src/quod_physics.erl": "1dbefaf067e2fee540c6d21091fc0a9e727350a8c50d63378603f6ecd8b72cf2",
+  "src/quod_node_actor.erl": "c3e97630898fd487f096fc4903268e994821f5e56a263a02205d5c2ae33b41a1",
+  "src/quod_identity.erl": "880c2789f1a6d8e074cb2861666f39ee44b2931e3da6dd2c239aeeba496b6d8f",
+  "doc/multiwrite-architecture.md": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2"
+}

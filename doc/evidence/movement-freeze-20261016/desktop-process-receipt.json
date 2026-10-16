@@ -1,0 +1,9 @@
+{
+  "command": [
+    "node",
+    "_build/movement-freeze-20261016/desktop-acceptance.mjs",
+    "01"
+  ],
+  "exit": 0,
+  "observed_through": "unified exec session28262"
+}

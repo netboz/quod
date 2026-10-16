@@ -1,0 +1,225 @@
+{
+  "passed": true,
+  "read_only": true,
+  "checks": [
+    {
+      "namespace": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ",
+      "height": 6,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 6
+    },
+    {
+      "namespace": "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby",
+      "height": 4,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 6
+    },
+    {
+      "namespace": "human:zscIiIEuKBbQ0SivvJMSKGQH-iugHqWaYWPyAKApO8s",
+      "height": 6,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 6
+    },
+    {
+      "namespace": "human:zscIiIEuKBbQ0SivvJMSKGQH-iugHqWaYWPyAKApO8s/lobby",
+      "height": 4,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 6
+    },
+    {
+      "namespace": "node:25dfeffe0a031d25017379748c03fab0865967912c18c0a926a5d2a813d77d5a",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:644f60790c14f541e3197a4b53336ce0068803534374b578de5a5870b86bfc87",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:6e26fb605540dc0406c623ccaabf9938f0538144d9fc341c5a22a5f46afc5311",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:81a7b6e8f522306b88135eee5335ed0aca42bf634eb5f0fd6bff50feea0fb8b2",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:a39e000a04ee7cd2f0abe5223409b253653f02b3f2b54773385b1c0dc61fd7ca",
+      "height": 29,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 29
+    },
+    {
+      "namespace": "node:cb73c3932a3b6ac533101ae372439f9fcd62f09af46b4979ddc2ef2c186d683d",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:ef87a3c2c40021c8ad89e74c167e69519cf4d5c40a24f5728a50c41b374a2611",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "node:f0db2948d9236f503888b27fbb5375318ea6906a16808932c31306bdcde1b15c",
+      "height": 2,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 2
+    },
+    {
+      "namespace": "quod:agent",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:environment",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:environment:eidolons",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:gui",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:human_user",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:lens",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:licence",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:lobby",
+      "height": 9,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 9
+    },
+    {
+      "namespace": "quod:material",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:material:eidolons",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:measure",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:modelling",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:names",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:node",
+      "height": 39,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 39
+    },
+    {
+      "namespace": "quod:prolog",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:prolog:eidolons",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:rendering",
+      "height": 1,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 1
+    },
+    {
+      "namespace": "quod:root",
+      "height": 68,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 68
+    },
+    {
+      "namespace": "quod:signup",
+      "height": 11,
+      "same_anchor": true,
+      "same_committed_block": true,
+      "applied": 11
+    }
+  ],
+  "same_certificate": true,
+  "certificate_sha256": "25f50fcaad61ec1e552ef5773cf41e7141645d2873bb6807f5160d0c164d1d9f"
+}

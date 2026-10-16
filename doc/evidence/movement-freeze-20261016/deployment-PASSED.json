@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "image": "192.168.1.11:5000/quod:0.7.272@sha256:44efbe7be43c73d2e80d923cd492771d6793dcc9556281c07e1d249b6f76a4c5",
+  "job_version": 91,
+  "job_modify_index": 866029,
+  "same_eight_volumes": true,
+  "no_refound": true,
+  "main_and_ingress_unchanged": true
+}

@@ -1,0 +1,679 @@
+{
+  "events": [
+    {
+      "reason": "view_not_authorized_or_ready",
+      "type": "unavailable"
+    },
+    {
+      "type": "ws-close",
+      "at": 1792139509759
+    },
+    {
+      "type": "projection",
+      "selection": "active",
+      "expires": "1792139809809",
+      "at": 1792139510150
+    },
+    {
+      "type": "control",
+      "at": 1792139510159
+    },
+    {
+      "type": "control",
+      "at": 1792139511860
+    },
+    {
+      "type": "control",
+      "at": 1792139512433
+    },
+    {
+      "type": "control",
+      "at": 1792139512798
+    },
+    {
+      "type": "control",
+      "at": 1792139513102
+    },
+    {
+      "type": "control",
+      "at": 1792139513380
+    },
+    {
+      "type": "control",
+      "at": 1792139513897
+    },
+    {
+      "type": "control",
+      "at": 1792139514844
+    },
+    {
+      "type": "control",
+      "at": 1792139522807
+    },
+    {
+      "type": "control",
+      "at": 1792139523233
+    },
+    {
+      "type": "control",
+      "at": 1792139523528
+    },
+    {
+      "type": "control",
+      "at": 1792139523856
+    },
+    {
+      "type": "control",
+      "at": 1792139524044
+    },
+    {
+      "type": "control",
+      "at": 1792139524510
+    }
+  ],
+  "states": [
+    {
+      "name": "loaded",
+      "pose": [
+        0.004700436626693348,
+        0.9505991022448163,
+        -2.476145297393019
+      ],
+      "frame": {
+        "tick": "569",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.004700436626693348,
+              0.9505991022448163,
+              -2.476145297393019
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(0.004700436626693348,0.9505991022448163,-2.476145297393019),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(0.013685669533965958,0.9945566884561391,-0.1032942200540054))],8)",
+          "sequence": "51"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 1,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced"
+      }
+    },
+    {
+      "name": "initial movement",
+      "pose": [
+        0.0007216435512721087,
+        0.3037648834092794,
+        0.9863554730291967
+      ],
+      "frame": {
+        "tick": "655",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0007216435512721087,
+              0.3037648834092794,
+              0.9863554730291967
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(7.216435512721087e-4,0.3037648834092794,0.9863554730291967),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.013552241881871421,0.9947651229467753,-0.10128517615456917))],8)",
+          "sequence": "57"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 7,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced"
+      }
+    },
+    {
+      "name": "source open",
+      "pose": [
+        0.0006849055457620612,
+        0.30373642687989555,
+        0.9860809047775321
+      ],
+      "frame": {
+        "tick": "656",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0006849055457620612,
+              0.30373642687989555,
+              0.9860809047775321
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(6.849055457620612e-4,0.30373642687989555,0.9860809047775321),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.013552241881913374,0.9947651229467757,-0.10128517615456023))],8)",
+          "sequence": "58"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nquod:lobby · ontology_ref(<<\"quod:lobby\">>,<<\"jhr\\x96\\?\\xc8\\\\xaf\\\\x9c\\/\\xb0\\\\x91\\\\x0e\\]\\xef\\\\xa4\\\\xbe\\\\x0b\\GN\\x06\\\\xff\\I\\xe2\\\\xea\\\\x87\\\\xbc\\\\x8c\\\\x80\\z3\\xe9\\K\">>)\n\nView declared interfaces\nView ACL rules\nView live routes\nView Prolog source\nClear inspection\nProlog source (read only)\n\nquod:lobby\nGenesis: amhylj_Ir5wvsJEOXe-kvgtHTgb_SeLqh7yMgHoz6Us\n\nReturn to lobby\n\nThe complete current state includes stored facts, rules and shared policy. This is a read-only representation.\n\nStored clauses are reconstructed in predicate order. Original comments, spacing and variable names are not retained; drafts keep your text. Compiled engine procedures and generated following clauses are omitted. Editing this view grants no additional content or policy permission.\n\nRefresh current state\n\nRefresh reloads saved contents and access. Unsaved edits keep their original baseline.\n\nSource lens \nComplete current state\nFind in source \nFind next\n\n\nLine 1, column 1\nEnter keeps indentation. Tab moves focus.",
+        "workspaceHidden": false
+      }
+    },
+    {
+      "name": "closed no canvas click",
+      "pose": [
+        0.0006849055457620612,
+        0.30373642687989555,
+        0.9860809047775321
+      ],
+      "frame": {
+        "tick": "656",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0006849055457620612,
+              0.30373642687989555,
+              0.9860809047775321
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.498,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(6.849055457620612e-4,0.30373642687989555,0.9860809047775321),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-0.013552241881913374,0.9947651229467757,-0.10128517615456023))],8)",
+          "sequence": "58"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nquod:lobby · ontology_ref(<<\"quod:lobby\">>,<<\"jhr\\x96\\?\\xc8\\\\xaf\\\\x9c\\/\\xb0\\\\x91\\\\x0e\\]\\xef\\\\xa4\\\\xbe\\\\x0b\\GN\\x06\\\\xff\\I\\xe2\\\\xea\\\\x87\\\\xbc\\\\x8c\\\\x80\\z3\\xe9\\K\">>)\n\nView declared interfaces\nView ACL rules\nView live routes\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    },
+    {
+      "name": "closed canvas clicked",
+      "pose": [
+        0.0004209933576006469,
+        0.7520000000204896,
+        3.2433152169334876
+      ],
+      "frame": {
+        "tick": "734",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209933576006469,
+              0.7520000000204896,
+              3.2433152169334876
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.39468478306651256,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209933576006469e-4,0.7520000000204896,3.2433152169334876),quaternion(0.0,0.0,0.0,1.0)),[contact(0,normal(0.0,0.4962925276640477,-0.868155358783686)),contact(0,normal(4.084232812903466e-11,0.49630542452900556,-0.8681479859926438)),contact(1,normal(-3.4591715972064006e-10,1.0,0.0))],18)",
+          "sequence": "64"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 14,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby · floor\n\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    },
+    {
+      "name": "final",
+      "pose": [
+        0.0004209933576006469,
+        0.7520000000204896,
+        3.2433152169334876
+      ],
+      "frame": {
+        "tick": "734",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209933576006469,
+              0.7520000000204896,
+              3.2433152169334876
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "erTdTFUcYGOBLKAur-8N-MLQnlKb9K7rZd7RPmls4J0",
+        "view_clearance": 0.39468478306651256,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209933576006469e-4,0.7520000000204896,3.2433152169334876),quaternion(0.0,0.0,0.0,1.0)),[contact(0,normal(0.0,0.4962925276640477,-0.868155358783686)),contact(0,normal(4.084232812903466e-11,0.49630542452900556,-0.8681479859926438)),contact(1,normal(-3.4591715972064006e-10,1.0,0.0))],18)",
+          "sequence": "64"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 14,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby · floor\n\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    }
+  ],
+  "errors": [],
+  "options": [
+    "Choose an object or knowledge base",
+    "console",
+    "floor",
+    "roof",
+    "sky",
+    "sky/sky",
+    "quod:agent",
+    "quod:environment",
+    "quod:environment:eidolons",
+    "quod:gui",
+    "quod:human_user",
+    "quod:lens",
+    "quod:licence",
+    "quod:lobby",
+    "quod:material",
+    "quod:material:eidolons",
+    "quod:measure",
+    "quod:modelling",
+    "quod:names",
+    "quod:node",
+    "quod:prolog",
+    "quod:prolog:eidolons",
+    "quod:rendering",
+    "quod:signup",
+    "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ",
+    "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby"
+  ]
+}

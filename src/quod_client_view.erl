@@ -653,7 +653,16 @@ control_feedback(Frame,Control = {control,Principal,_,_}) ->
 reply(Message, S) ->
     Encoded = iolist_to_binary(json:encode(Message)),
     case byte_size(Encoded) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
-        true -> {reply, {text, Encoded}, S};
+        true ->
+            case Message of
+                %% Quiet views still own a live signed lease. Only an admitted
+                %% projection bounds the transport idle window; the existing
+                %% absolute expiry and revocation paths remain authoritative.
+                #{type := projection,expires_ms := Expiry} ->
+                    {[{set_options,#{idle_timeout => max(0,binary_to_integer(Expiry)-quod_time:now_ms())}},
+                      {text,Encoded}],S};
+                _ -> {reply,{text,Encoded},S}
+            end;
         false -> {reply, {close, 1009, <<"simulation projection exceeds reply encoding limit">>}, release(S)}
     end.
 decimal(N) -> integer_to_binary(N).

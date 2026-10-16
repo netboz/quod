@@ -1,0 +1,13 @@
+{
+  "version": "0.7.271",
+  "projection_at": 1792139580127,
+  "projection_expires": 1792139879636,
+  "disconnect_at": 1792139639436,
+  "seconds_after_projection": 59.309,
+  "seconds_authorized_remaining": 240.2,
+  "control_requests_before": 8,
+  "control_requests_after_canvas_capture": 8,
+  "same_pose_after_close": true,
+  "pointer_captured_after_close": true,
+  "short_open_close_resumes": true
+}

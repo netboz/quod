@@ -1175,6 +1175,9 @@ gui_socket(Parent, S, Automatic) ->
                 _ -> quod_client_view:websocket_info(Message, S)
             end,
             case Result of
+                {[{set_options,#{idle_timeout := Idle}},{text,Json}], Next} when is_integer(Idle), Idle >= 0 ->
+                    Parent ! {gui_view,self(),json:decode(Json)},
+                    gui_socket(Parent, Next, Automatic);
                 {ok, Next} -> gui_socket(Parent, Next, Automatic);
                 {reply, {text, Json}, Next} ->
                     Frame = json:decode(Json),

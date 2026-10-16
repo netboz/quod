@@ -1,0 +1,759 @@
+{
+  "events": [
+    {
+      "reason": "view_not_authorized_or_ready",
+      "type": "unavailable"
+    },
+    {
+      "type": "ws-close",
+      "at": 1792139579595
+    },
+    {
+      "type": "projection",
+      "selection": "active",
+      "expires": "1792139879636",
+      "at": 1792139580127
+    },
+    {
+      "type": "control",
+      "at": 1792139580151
+    },
+    {
+      "type": "control",
+      "at": 1792139581430
+    },
+    {
+      "type": "control",
+      "at": 1792139582175
+    },
+    {
+      "type": "control",
+      "at": 1792139582557
+    },
+    {
+      "type": "control",
+      "at": 1792139582874
+    },
+    {
+      "type": "control",
+      "at": 1792139583163
+    },
+    {
+      "type": "control",
+      "at": 1792139583704
+    },
+    {
+      "type": "control",
+      "at": 1792139584741
+    },
+    {
+      "type": "ws-close",
+      "at": 1792139639436
+    },
+    {
+      "type": "ws-close",
+      "at": 1792139645030
+    }
+  ],
+  "states": [
+    {
+      "name": "loaded",
+      "pose": [
+        0.0004209933575993247,
+        0.7520000000204896,
+        3.2433152169334876
+      ],
+      "frame": {
+        "tick": "735",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209933575993247,
+              0.7520000000204896,
+              3.2433152169334876
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.39468478306651256,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209933575993247e-4,0.7520000000204896,3.2433152169334876),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.851804671306457e-13,1.0,-6.223320405206495e-14))],12)",
+          "sequence": "65"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 1,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced"
+      }
+    },
+    {
+      "name": "initial movement",
+      "pose": [
+        0.00042099278111786453,
+        0.7520000006399512,
+        3.2306123994206013
+      ],
+      "frame": {
+        "tick": "832",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.00042099278111786453,
+              0.7520000006399512,
+              3.2306123994206013
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.4073876005793988,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.2099278111786453e-4,0.7520000006399512,3.2306123994206013),quaternion(0.0,0.0,0.0,1.0)),[contact(0,normal(0.0,0.4631112620823937,-0.8863001517163654)),contact(1,normal(-3.569115246449835e-9,1.0,0.0))],15)",
+          "sequence": "71"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 7,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced"
+      }
+    },
+    {
+      "name": "source open",
+      "pose": [
+        0.0004209927811165256,
+        0.7519999999994244,
+        3.230612399420601
+      ],
+      "frame": {
+        "tick": "833",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209927811165256,
+              0.7519999999994244,
+              3.230612399420601
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.40738760057939927,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209927811165256e-4,0.7519999999994244,3.230612399420601),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.913331622130602e-13,1.0,-8.234512863702085e-14))],12)",
+          "sequence": "72"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: view_not_authorized_or_ready\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nquod:lobby · ontology_ref(<<\"quod:lobby\">>,<<\"jhr\\x96\\?\\xc8\\\\xaf\\\\x9c\\/\\xb0\\\\x91\\\\x0e\\]\\xef\\\\xa4\\\\xbe\\\\x0b\\GN\\x06\\\\xff\\I\\xe2\\\\xea\\\\x87\\\\xbc\\\\x8c\\\\x80\\z3\\xe9\\K\">>)\n\nView declared interfaces\nView ACL rules\nView live routes\nView Prolog source\nClear inspection\nProlog source (read only)\n\nquod:lobby\nGenesis: amhylj_Ir5wvsJEOXe-kvgtHTgb_SeLqh7yMgHoz6Us\n\nReturn to lobby\n\nThe complete current state includes stored facts, rules and shared policy. This is a read-only representation.\n\nStored clauses are reconstructed in predicate order. Original comments, spacing and variable names are not retained; drafts keep your text. Compiled engine procedures and generated following clauses are omitted. Editing this view grants no additional content or policy permission.\n\nRefresh current state\n\nRefresh reloads saved contents and access. Unsaved edits keep their original baseline.\n\nSource lens \nComplete current state\nFind in source \nFind next\n\n\nLine 1, column 1\nEnter keeps indentation. Tab moves focus.",
+        "workspaceHidden": false
+      }
+    },
+    {
+      "name": "idle disconnected",
+      "pose": [
+        0.0004209927811165256,
+        0.7519999999994244,
+        3.230612399420601
+      ],
+      "frame": {
+        "tick": "833",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209927811165256,
+              0.7519999999994244,
+              3.230612399420601
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.40738760057939927,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209927811165256e-4,0.7519999999994244,3.230612399420601),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.913331622130602e-13,1.0,-8.234512863702085e-14))],12)",
+          "sequence": "72"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nView disconnected. Refresh to reconnect.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: View disconnected. Refresh to reconnect.\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nquod:lobby · ontology_ref(<<\"quod:lobby\">>,<<\"jhr\\x96\\?\\xc8\\\\xaf\\\\x9c\\/\\xb0\\\\x91\\\\x0e\\]\\xef\\\\xa4\\\\xbe\\\\x0b\\GN\\x06\\\\xff\\I\\xe2\\\\xea\\\\x87\\\\xbc\\\\x8c\\\\x80\\z3\\xe9\\K\">>)\n\nView declared interfaces\nView ACL rules\nView live routes\nView Prolog source\nClear inspection\nProlog source (read only)\n\nquod:lobby\nGenesis: amhylj_Ir5wvsJEOXe-kvgtHTgb_SeLqh7yMgHoz6Us\n\nReturn to lobby\n\nThe complete current state includes stored facts, rules and shared policy. This is a read-only representation.\n\nStored clauses are reconstructed in predicate order. Original comments, spacing and variable names are not retained; drafts keep your text. Compiled engine procedures and generated following clauses are omitted. Editing this view grants no additional content or policy permission.\n\nRefresh current state\n\nRefresh reloads saved contents and access. Unsaved edits keep their original baseline.\n\nSource lens \nComplete current state\n'$quod_declared_class' / 1\n'$quod_direct_isa' / 2\n'$quod_isa_path' / 3\n'$quod_isa_requires_closure' / 2\n'$quod_isa_semantics' / 1\n'$quod_known_class' / 1\n'$quod_name_join' / 3\n'$quod_name_normalize' / 2\n'$quod_name_tail' / 4\n'$quod_owner_name' / 3\n'$quod_qualified_class' / 3\n'$quod_stricter_class' / 2\n'$quod_transitive_isa' / 2\nacl_sovereign / 1\ncan_invoke / 4\ncan_join / 3\nclass_device_menu / 2\nclass_eidolon / 4\nclass_eidolons / 2\nclass_eidolons / 4\nclient_space_selection / 3\nclient_view_dependencies / 1\nclient_world_view / 4\nconsensus_incarnation / 1\nconsole_layout / 8\nconsole_parts / 1\ndelete / 3\ndevice_eidolon / 4\ndevice_menu / 2\neidolon / 3\nentity_classes / 2\nentity_eidolons / 2\nentity_eidolons / 4\nenvironment_eidolons / 2\nenvironment_vocabulary / 2\nexternal_predicate_modules / 1\ngoal / 1\ngoal / 2\ngui_vocabulary / 2\ninstance_of / 2\nisa / 2\nlast / 2\nlobby_definitions / 1\nlobby_modes / 1\nlobby_options / 3\nlobby_query / 1\nlobby_source_file / 1\nlobby_surface / 2\nmaterial_eidolons / 2\nmaterial_surface / 2\nmember_eq / 2\nmodelling_vocabulary / 2\nmost_specific_classes / 3\nno_follow / 1\nontology_acl_indicator / 1\nontology_creation_allowed / 3\nontology_presentation_mode / 2\npeer_admitted / 4\nperm / 2\nphrase / 2\nprolog_introspection / 2\nproof_draw / 3\npublic_source_query / 1\nrendering_vocabulary / 2\nresolve_goal / 2\nrun_declared_action / 1\nrun_declared_candidate / 3\nrun_transition / 1\nrun_transitions / 1\nsatisfy_prerequisites / 2\nsystem_prolog_edit / 0\nsystem_prolog_introspection / 2\nsystem_source_query / 1\nFind in source \nFind next\n'$quod_declared_class'(V0) :- '$quod_direct_isa'(V0, V1).\n'$quod_declared_class'(V0) :- '$quod_direct_isa'(V1, V0).\n'$quod_direct_isa'(V0, V1) :- clause(isa(V0, V1), V2) , \\+ '$quod_isa_semantics'(V2) , call(V2).\n'$quod_isa_path'(V0, V1, V2) :- nonvar(V0) , nonvar(V1) , V0 \\== V1 , '$quod_name_normalize'(V0, V3) , '$quod_name_normalize'(V1, V3).\n'$quod_isa_path'(V0, V1, V2) :- '$quod_owner_name'(V0, V3, V4) , V3 :: isa(V4, V5) , '$quod_qualified_class'(V3, V5, V6) , \\+ member_eq(V6, V2) , '$quod_name_normalize'(V1, V6).\n'$quod_isa_path'(V0, V1, V2) :- '$quod_direct_isa'(V0, V1) , \\+ member_eq(V1, V2).\n'$quod_isa_path'(V0, V1, V2) :- '$quod_direct_isa'(V0, V3) , \\+ member_eq(V3, V2) , '$quod_isa_path'(V3, V1, [V3 | V2]).\n'$quod_isa_requires_closure'(V0, V1) :- var(V0).\n'$quod_isa_requires_closure'(V0, V1) :- var(V1).\n'$quod_isa_requires_closure'(V0, V1) :- \\+ '$quod_direct_isa'(V0, V1).\n'$quod_isa_semantics'('$quod_transitive_isa'(V0, V1)) :- true.\n'$quod_isa_semantics'('$quod_known_class'(V0)) :- true.\n'$quod_isa_semantics'((nonvar(V0) , V1 , V2 , '$quod_follow_unique'(V3))) :- true.\n'$quod_known_class'(V0) :- nonvar(V0) , ! , ('$quod_direct_isa'(V0, V1) ; '$quod_direct_isa'(V2, V0)) , !.\n'$quod_known_class'(V0) :- findall(V1, '$quod_declared_class'(V1), V2) , sort(V2, V3) , member(V0, V3).\n'$quod_name_join'(V0, V1, V2 : V3) :- nonvar(V0) , V0 = V2 : V4 , ! , '$quod_name_join'(V4, V1, V3).\n'$quod_name_join'(V0, V1, V0 : V1) :- true.\n'$quod_name_normalize'(V0, V1) :- nonvar(V0) , V0 = V2 : V3 , ! , '$quod_name_normalize'(V2, V4) , '$quod_name_normalize'(V3, V5) , '$quod_name_join'(V4, V5, V1).\n'$quod_name_normalize'(V0, V0) :- true.\n'$quod_name_tail'(V0, V1, V2, V3) :- nonvar(V0) , V0 = V4 : V5 , ! , '$quod_name_tail'(V5, V1 : V4, V2, V3).\n'$quod_name_tail'(V0, V1, V1, V0) :- true.\n'$quod_owner_name'(V0 : V1, V2, V3) :- nonvar(V0) , '$quod_name_tail'(V1, V0, V2, V3).\n'$quod_qualified_class'(V0, V1, V2) :- (nonvar(V1) , V1 = V3 : V4 -> V5 = V1 ; V5 = V0 : V1) , '$quod_name_normalize'(V5, V6) , (var(V2) -> V2 = V6 ; '$quod_name_normalize'(V2, V6)).\n'$quod_stricter_class'(V0, V1) :- member(V2, V1) , isa(V2, V0) , \\+ isa(V0, V2).\n'$quod_transitive_isa'(V0, V1) :- '$quod_isa_requires_closure'(V0, V1) , '$quod_direct_isa'(V0, V2) , \\+ member_eq(V2, [V0]) , '$quod_isa_path'(V2, V1, [V2, V0]).\nacl_sovereign(quod : lobby) :- true.\ncan_invoke(V0, V1, [], V2) :- true.\ncan_invoke(V0, V1, V2, V3) :- lobby_query(V0).\ncan_invoke((current_ontology_identity(V0, V1) , V2), V3, V4, V5) :- lobby_query(V2).\ncan_invoke(V0, V1, V2, V3) :- system_source_query(V0).\ncan_invoke(V0, node(V1), V2, V3) :- peer_admitted(V1, V4, V5, V1).\ncan_join(V0, V1, V2) :- peer_ready(V2).\nclass_device_menu(prolog_console, [menu_entry(prove_goal, <<\"Prove a goal\">>, open_view(proof_console))]) :- true.\nclass_eidolon(V0, prolog, source, recipe(V1, V2, prolog_editor)) :- nonvar(V0) , V1 = <<\"quod:prolog:eidolons\">> , quod : root :: system_ontology(V1, V2).\nclass_eidolon(ontology, inspection, V0, recipe(V1, V2, V0)) :- member(V0, [policy, interfaces, routes]) , V1 = <<\"quod:prolog:eidolons\">> , quod : root :: system_ontology(V1, V2).\nclass_eidolon(V0, V1, V2, recipe(V3, V4, V5)) :- device_eidolon(V0, V1, V2, V5) , current_ontology_identity(V3, V4).\nclass_eidolons(V0, V1) :- class_eidolons(V0, V2, V3, V1).\nclass_eidolons(V0, V1, V2, V3) :- findall(candidate(V4, V1, V2, V5), (member(V6, V0) , (V4 = V6 ; isa(V6, V4)) , class_eidolon(V4, V1, V2, V5)), V7) , findall(eidolon(V1, V2, V5), (member(candidate(V4, V1, V2, V5), V7) , \\+ (member(candidate(V8, V1, V2, V9), V7) , isa(V8, V4) , \\+ isa(V4, V8))), V10) , sort(V10, V3).\nclient_space_selection(V0, V1, V2) :- space_instance(V0, physical_space) -> (findall(V3, physics_client_view(V0, V1, V3), [V2]) -> true ; V2 = unavailable) ; current_principal(V4) , findall(V3, physics_control(V0, V4, V5, V3), V6) , (V6 = [] -> V2 = nonphysical ; V6 = [none] -> V2 = nonphysical ; V2 = unavailable).\nclient_view_dependencies([]) :- true.\nclient_view_dependencies([dependency(V0, V1, V2) | V3]) :- V0 :: current_ontology_identity(V0, V1) , client_view_dependencies(V3).\nclient_world_view(V0, V1, V2, world_view(entity_ref(V3, V4, V0), V5, V6)) :- term_variables([V0, V1, V2], []) , atom(V1) , client_view_dependencies(V2) , current_ontology_identity(V3, V4) , (space_instance(V0, space) , findall(V7, world_view(V0, V1, V7), [V5]) , term_variables(V5, []) , findall(ontology_ref(V8, V9), rendering_vocabulary(V8, V9), [ontology_ref(V10, V11)]) , V10 :: (current_ontology_identity(V10, V11) , well_formed_scene(V5)) -> client_space_selection(V0, V5, V6) ; V5 = [] , V6 = unavailable).\nconsensus_incarnation(<<\"\\xD4\\\\x9A\\\\xB1\\\\x17\\\\xD7\\(L\\xD1\\\\x8D\\!\\xA0\\b\\x84\\\\xE4\\0\\xF9\\\\xB0\\Wu\\x90\\\\\\\\x17\\\\xDB\\\\xE7\\\\xB1\\X}\\xE\\\\x93\\\\x1D\\\\xDB\\\\xA2\\\">>) :- true.\nconsole_layout(350, <<\"CONSOLE PARTS\">>, label(<<\"WEIGHTED BASE\">>, <<\"above\">>), label(<<\"CENTRAL SUPPORT\">>, <<\"above\">>), label(<<\"DISPLAY HOUSING\">>, <<\"above\">>), label(<<\"SCREEN\">>, <<\"above\">>), label(<<\"CONTROL SHELF\">>, <<\"above\">>), label(<<\"STATUS CONTROL\">>, <<\"above\">>)) :- true.\nconsole_parts([part(<<\"plinth\">>, box(2000, 140, 1000), transform(0, 70, 120, 0, 0, 0), V0, V1, depicts_nothing), part(<<\"deck\">>, box(1840, 70, 840), transform(0, 175, 80, 0, 0, 0), V2, unlabelled, depicts_nothing), part(<<\"support\">>, box(760, 820, 480), transform(0, 590, 120, 0, 0, 0), V0, V3, depicts_nothing), part(<<\"support-face\">>, box(620, 650, 70), relative(<<\"support\">>, transform(0, 0, - 275, 0, 0, 0)), V4, unlabelled, depicts_nothing), part(<<\"body\">>, box(1900, 1100, 320), transform(0, 1450, 0, 0, 0, 0), V0, V5, depicts_nothing), part(<<\"left-cheek\">>, box(160, 1040, 380), relative(<<\"body\">>, transform(- 870, 0, 0, 0, 0, 0)), V2, unlabelled, depicts_nothing), part(<<\"right-cheek\">>, box(160, 1040, 380), relative(<<\"body\">>, transform(870, 0, 0, 0, 0, 0)), V2, unlabelled, depicts_nothing), part(<<\"bezel\">>, box(1540, 810, 90), relative(<<\"body\">>, transform(0, 40, - 195, 0, 0, 0)), V6, unlabelled, depicts_nothing), part(<<\"screen\">>, plane(1400, 680), relative(<<\"bezel\">>, V7), V8, V9, depicts_nothing), part(<<\"shelf\">>, box(1900, 180, 580), relative(<<\"body\">>, transform(0, - 620, - 180, 350, 0, 0)), V0, V10, depicts_nothing), part(<<\"shelf-trim\">>, box(1800, 50, 540), relative(<<\"shelf\">>, transform(0, 85, 0, 0, 0, 0)), V4, unlabelled, depicts_nothing), part(<<\"status\">>, sphere(55), relative(<<\"shelf\">>, transform(700, 70, - 300, 0, 0, 0)), V11, unlabelled, depicts_nothing), part(<<\"status-ring\">>, torus(110, 18), relative(<<\"shelf\">>, transform(700, 70, - 310, 90, 0, 0)), V4, V12, depicts_nothing), part(<<\"control-knob\">>, cylinder(100, 55), relative(<<\"shelf\">>, transform(520, 70, - 315, 90, 0, 0)), V4, unlabelled, depicts_nothing), part(<<\"top-sign\">>, box(900, 100, 80), relative(<<\"body\">>, transform(0, 650, - 150, 0, 0, 0)), V4, label(V13, <<\"above\">>), depicts_nothing)]) :- material_surface(oak_wood, V2) , material_surface(bronze, V4) , V0 = surface(<<\"#253239\">>, 650, 420, 0, []) , V6 = surface(<<\"#10191E\">>, 250, 300, 40, []) , V8 = surface(<<\"#071419\">>, 0, 350, 120, []) , V11 = surface(<<\"#F4B942\">>, 0, 350, 700, []) , console_layout(V14, V13, V1, V3, V5, V9, V10, V12) , modelling_vocabulary(V15, V16) , V15 :: (current_ontology_identity(V15, V16) , align(plane(1400, 680), centre, box(1540, 810, 90), front, V14, V7)).\ndelete(V0, V1, V2) :- insert(V2, V1, V0).\ndevice_eidolon(prolog_console, playing, solid, console_playing) :- true.\ndevice_eidolon(prolog_console, edition, solid, console_edition) :- true.\ndevice_eidolon(imported_artifact, playing, solid, imported_artifact_playing) :- true.\ndevice_eidolon(lobby_floor, playing, solid, lobby_floor) :- true.\ndevice_eidolon(lobby_floor, edition, solid, lobby_floor) :- true.\ndevice_eidolon(lobby_roof, playing, solid, lobby_roof) :- true.\ndevice_eidolon(lobby_roof, edition, solid, lobby_roof) :- true.\ndevice_menu(V0, V1) :- findall(candidate(V2, V3), class_device_menu(V2, V3), V4) , findall(V2, member(candidate(V2, V5), V4), V6) , most_specific_classes(V0, V6, V7) , findall(V8, (member(candidate(V2, V3), V4) , member(V2, V7) , member(V8, V3)), V9) , sort(V9, V1).\neidolon(lobby_floor, device(V0), [part(<<\"model\">>, mesh_asset(asset(<<\"766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee\">>, <<\"model/gltf-binary\">>), <<\"gltf2-static-v1\">>, scale(1000), frame(aabb(- 9000, - 570, - 9000, 9000, 1000, 9000), pivot(0, 0, 0), front(<<\"-z\">>)), resources(2103472, 2101296, 55298, 64512, 1, 3, 1)), transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing)]) :- true.\neidolon(lobby_roof, device(V0), [part(<<\"model\">>, mesh_asset(asset(<<\"e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121\">>, <<\"model/gltf-binary\">>), <<\"gltf2-static-v1\">>, scale(1000), frame(aabb(- 8875, 1000, - 8852, 8875, 5250, 8852), pivot(0, 0, 0), front(<<\"-z\">>)), resources(942164, 940032, 20160, 38016, 1, 2, 1)), transform(0, 0, 0, 0, 0, 0), asset_surfaces, unlabelled, depicts_nothing)]) :- true.\neidolon(console_playing, device(V0), [part(<<\"model\">>, mesh_asset(asset(<<\"2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04\">>, <<\"model/gltf-binary\">>), <<\"gltf2-static-v1\">>, scale(1000), frame(aabb(- 921, - 929, - 898, 881, 904, 894), pivot(0, - 929, 0), front(<<\"-z\">>)), resources(5357484, 1227580, 31379, 50000, 1, 1, 4194304)), transform(0, 0, 0, 0, 0, 0), asset_surfaces, label(<<\"PROLOG CONSOLE\">>, <<\"above\">>), depicts_nothing)]) :- true.\neidolon(console_edition, device(V0), V1) :- console_parts(V1).\neidolon(imported_artifact_playing, device(V0), [part(<<\"model\">>, mesh_asset(asset(<<\"ad1f1cbe8c100fd774e315b629d0bb1082820c9a7abe2a2a999aef846d675064\">>, <<\"model/gltf-binary\">>), <<\"gltf2-static-v1\">>, scale(1000), frame(aabb(- 300, 0, - 400, 1200, 1400, 300), pivot(200, 0, - 100), front(<<\"+x\">>)), resources(1452, 96, 6, 2, 3, 2, 4)), transform(0, 0, 0, 0, 0, 0), asset_surfaces, label(<<\"Imported model\">>, <<\"above\">>), depicts_nothing)]) :- true.\nentity_classes(V0, V1) :- findall(V2, ((instance_of(V3, V0) ; V3 = V0 , isa(V3, V3)) , (V2 = V3 ; isa(V3, V2))), V4) , sort(V4, V1).\nentity_eidolons(V0, V1) :- entity_eidolons(V0, V2, V3, V1).\nentity_eidolons(V0, V1, V2, V3) :- findall(V4, (instance_of(V4, V0) ; V4 = V0 , isa(V4, V4)), V5) , sort(V5, V6) , class_eidolons(V6, V1, V2, V3).\nenvironment_eidolons(<<\"quod:environment:eidolons\">>, <<\"\\x87\\\\x99\\\\x9A\\\\x9E\\?\\xBF\\A\\x86\\+\\x80\\+\\x84\\\\xFE\\\\xA9\\\\xB0\\\\x13\\1@\\xC1\\\\x94\\\\xE5\\iS\\x11\\\\xAB\\\\x17\\o]\\x9B\\\\xDC\\$\\xC6\\\">>) :- true.\nenvironment_vocabulary(<<\"quod:environment\">>, <<\"\\xAB\\P\\xF2\\\\xA0\\\\xFB\\\\xDA\\U\\x8\\\\x18\\\\xB8\\c\\xC\\\\xB9\\\\xD7\\\\x1E\\\\xE6\\d\\x1C\\\\xC7\\\\xC5\\\\xDB\\\\xC0\\o\\xF6\\\\xD5\\0\\xE2\\[>\\x90\\\\xB1\\\\xB2\\\">>) :- true.\nexternal_predicate_modules([quod_agent_predicates(<<\"k^\\xB0\\~\\xA2\\\\x8F\\\\x7F\\`{\\xEA\\\\xD4\\\\xA0\\\\xE7\\\\xB7\\\\x89\\\\xD6\\\\xC9\\N1\\xBF\\1GG$J\\x96\\!$R\\xCC\\\\xA2\\\\x8B\\\">>)]) :- true.\ngoal(V0) :- goal(V0, []).\ngoal(V0, V1) :- '$quod_callable'(V0) , resolve_goal(V0, V1).\ngui_vocabulary(<<\"quod:gui\">>, <<\"\\x18\\-\\xE4\\\\x9D\\\\xE7\\\\\\^\\xBB\\\\xF4\\\\xE7\\\\xB9\\7\\xA1\\\\xAE\\\\x86\\w\\x8\\\\xB8\\\\xA3\\\\x9C\\\\xC6\\\\xD5\\\\xDE\\\\x0\\\\xF7\\\\xFD\\\\xA4\\\\x10\\v\\xCF\\\\x90\\\\x19\\\">>) :- true.\ninstance_of(ontology, ontology_ref(V0, V1)) :- current_ontology_identity(V0, V1).\nisa(ontology, thing) :- true.\nisa(V0, V0) :- '$quod_known_class'(V0).\nisa(V0, V1) :- '$quod_transitive_isa'(V0, V1).\nisa(lobby, physical_space) :- true.\nisa(physical_space, space) :- true.\nisa(space, thing) :- true.\nisa(lobby_floor, thing) :- true.\nisa(device, thing) :- true.\nisa(prolog_console, device) :- true.\nisa(imported_artifact, device) :- true.\nisa(lobby_roof, thing) :- true.\nlast(V0, V1) :- append(V2, [V1], V0).\nlobby_definitions([physics_definition(floor, 1, geometry(V0, 1)), physics_definition(pilot, 1, geometry(capsule(500, 250), 1)), physics_definition(personal_roof, 1, geometry(V1, 1)), physics_definition(console, 1, geometry(V2, 1))]) :- lobby_surface([ring(0, - 550, 0), ring(1100, - 438, 0), ring(2200, - 100, 0), ring(2450, 200, 0), ring(3000, 0, 0), ring(8560, 0, 0), ring(8560, 780, 0), ring(8750, 1000, 0), ring(9000, 780, 0)], V0) , lobby_surface([ring(2250, 4650, 0), ring(5500, 4325, 181), ring(8950, 3350, 2900)], V1) , V2 = parts([part(vector(0, 70, 120), box(1000, 70, 500)), part(vector(0, 175, 80), box(920, 35, 420)), part(vector(0, 590, 120), box(380, 410, 240)), part(vector(0, 1450, 0), box(950, 550, 210))]).\nlobby_modes(V0) :- findall(V1, device_eidolon(V2, V1, solid, V3), V4) , sort(V4, V0).\nlobby_options(V0, V1, V2) :- term_variables([V0, V1], []) , V0 = agent_instance_ref(V3, V4, V5) , V1 = agent_instance_ref(V6, V7, V8) , findall(source_file(V9), lobby_source_file(V9), V10) , V10 = [V11 | V12] , append(V10, [terms([lobby_owner(V0), instance_of(lobby, personal_lobby), physics_initial_host(personal_lobby, V1), instance_of(lobby_floor, floor), attribute(floor, mark_id, <<\"floor\">>), attribute(personal_roof, mark_id, <<\"roof\">>), attribute(console, mark_id, <<\"console\">>), attribute(personal_sky, mark_id, <<\"sky\">>), instance_of(agent, pilot), rendering_vocabulary(V13, V14), instance_of(sky_sphere, personal_sky), attribute(personal_sky, panorama, belfast_sunset_puresky), attribute(personal_sky, diameter, 80000), attribute(personal_sky, rotation, 75), attribute(personal_sky, brightness, 120), attribute(personal_sky, tint, <<\"#FFFFFF\">>), instance_of(prolog_console, console), instance_of(lobby_roof, personal_roof), lobby_vocabulary(V15, V16), modelling_vocabulary(V17, V18), environment_vocabulary(V19, V20), environment_eidolons(V21, V22), gui_vocabulary(V23, V24) | V25]), external_predicate_modules([quod_agent_predicates])], V2) , current_ontology_identity(V15, V16) , lobby_definitions(V25) , findall(ontology_ref(V26, V27), rendering_vocabulary(V26, V27), [ontology_ref(V13, V14)]) , modelling_vocabulary(V17, V18) , environment_vocabulary(V19, V20) , environment_eidolons(V21, V22) , gui_vocabulary(V23, V24).\nlobby_query(lobby_modes(V0)) :- true.\nlobby_query(device_menu(V0, V1)) :- true.\nlobby_query(isa(V0, V1)) :- true.\nlobby_query(class_eidolon(V0, V1, V2, V3)) :- true.\nlobby_query(eidolon(V0, V1, V2)) :- true.\nlobby_query(lobby_options(V0, V1, V2)) :- true.\nlobby_query(ontology_creation_allowed(V0, V1, V2)) :- true.\nlobby_query(V0) :- public_source_query(V0).\nlobby_source_file(<<\"/opt/quod/priv/ontologies/lobby_instance.pl\">>) :- true.\nlobby_source_file(<<\"/opt/quod/priv/ontologies/space.pl\">>) :- true.\nlobby_source_file(<<\"/opt/quod/priv/ontologies/agent_instance.pl\">>) :- true.\nlobby_source_file(<<\"/opt/quod/priv/ontologies/quod_physics.pl\">>) :- true.\nlobby_source_file(<<\"/opt/quod/priv/ontologies/space_view.pl\">>) :- true.\nlobby_surface([ring(0, V0, 0) | V1], surface([vector(0, V2, 0) | V3], V4)) :- ! , V2 is V0 , lobby_surface(V1, surface(V3, V5)) , findall(triangle(V6, V7, V8), (member(triangle(V9, V10, V11), V5) , V6 is V9 + 1 , V7 is V10 + 1 , V8 is V11 + 1), V12) , findall(triangle(0, V11, V10), (member(V13, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]) , V10 is V13 + 1 , V11 is (V13 + 1) mod 24 + 1), V14) , append(V14, V12, V4).\nlobby_surface(V0, surface(V1, V2)) :- V3 = [d(1000000, 0, 1000), d(965926, 258819, 354), d(866025, 500000, 0), d(707107, 707107, 354), d(500000, 866025, 1000), d(258819, 965926, 354), d(0, 1000000, 0), d(- 258819, 965926, 354), d(- 500000, 866025, 1000), d(- 707107, 707107, 354), d(- 866025, 500000, 0), d(- 965926, 258819, 354), d(- 1000000, 0, 1000), d(- 965926, - 258819, 354), d(- 866025, - 500000, 0), d(- 707107, - 707107, 354), d(- 500000, - 866025, 1000), d(- 258819, - 965926, 354), d(0, - 1000000, 0), d(258819, - 965926, 354), d(500000, - 866025, 1000), d(707107, - 707107, 354), d(866025, - 500000, 0), d(965926, - 258819, 354)] , findall(vector(V4, V5, V6), (member(ring(V7, V8, V9), V0) , member(d(V10, V11, V12), V3) , V4 is V7 * V10 // 1000000 , V6 is V7 * V11 // 1000000 , V5 is V8 - V9 * V12 // 1000), V1) , findall(V13, (append(V14, [V15, V16 | V17], V0) , length(V14, V18) , member(V19, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]) , V20 is V18 * 24 + V19 , V21 is (V18 + 1) * 24 + V19 , V22 is (V19 + 1) mod 24 , V10 is (V18 + 1) * 24 + V22 , V23 is V18 * 24 + V22 , member(V13, [triangle(V20, V10, V21), triangle(V20, V23, V10)])), V2).\nmaterial_eidolons(<<\"quod:material:eidolons\">>, <<\"\\x94\\\\x8B\\\\x96\\\\xF1\\\\xB5\\(\\xC8\\ez\\x84\\l-e\\xA4\\U%|\\xE8\\8?\\x7\\\\x14\\J\\x11\\\\xAF\\E\\x98\\\\xDC\\\\xC5\\c\\xAC\\\\xB3\\\">>) :- true.\nmaterial_surface(V0, V1) :- material_eidolons(V2, V3) , V2 :: (current_ontology_identity(V2, V3) , class_eidolon(V0, playing, solid, recipe(V4, V5, V6))) , V4 :: (current_ontology_identity(V4, V5) , eidolon(V6, material(V0), V1)).\nmember_eq(V0, [V1 | V2]) :- V0 == V1 , !.\nmember_eq(V0, [V1 | V2]) :- member_eq(V0, V2).\nmodelling_vocabulary(<<\"quod:modelling\">>, <<\"\\x5\\#a\\x15\\L\\xAF\\|\\x85\\3'//\\xCA\\\\xAA\\\\xE3\\\\x91\\q;\\xB2\\9~-T\\xF1\\\\x86\\\\xED\\\\xB4\\\\xD2\\\\xD0\\\\xA4\\\\xA9\\\\x4\\\">>) :- true.\nmost_specific_classes(V0, V1, V2) :- term_variables(V0 - V1, []) , sort(V1, V3) , findall(V4, (member(V4, V3) , member(V5, V0) , isa(V5, V4)), V6) , sort(V6, V7) , findall(V4, (member(V4, V7) , \\+ '$quod_stricter_class'(V4, V7)), V2).\nno_follow('$quod_owner_name' / 3) :- true.\nno_follow('$quod_name_tail' / 4) :- true.\nno_follow('$quod_name_normalize' / 2) :- true.\nno_follow('$quod_name_join' / 3) :- true.\nno_follow('$quod_qualified_class' / 3) :- true.\nno_follow('$quod_stricter_class' / 2) :- true.\nno_follow('$quod_known_class' / 1) :- true.\nno_follow('$quod_declared_class' / 1) :- true.\nno_follow('$quod_transitive_isa' / 2) :- true.\nno_follow('$quod_isa_requires_closure' / 2) :- true.\nno_follow('$quod_isa_path' / 3) :- true.\nno_follow('$quod_direct_isa' / 2) :- true.\nno_follow('$quod_isa_semantics' / 1) :- true.\nno_follow(most_specific_classes / 3) :- true.\nno_follow(member_eq / 2) :- true.\nontology_acl_indicator(can_invoke / 4) :- true.\nontology_acl_indicator(can_join / 3) :- true.\nontology_acl_indicator(acl_sovereign / 1) :- true.\nontology_creation_allowed(V0, V1, V2) :- current_principal(V0) , V0 = agent_instance_ref(V3, V4, V5) , binary_codes(V3, V6) , append(V6, [47, 108, 111, 98, 98, 121], V7) , binary_codes(V1, V7) , V3 :: (current_ontology_identity(V3, V4) , instance_of(human_user, V5) , lobby_provisioning(V5, pending(V1)) , hosting_node(V8)) , lobby_options(V0, V8, V2).\nontology_presentation_mode([], read_only) :- true.\nontology_presentation_mode([V0], V0) :- term_variables(V0, []) , member(V0, [read_only, editable]).\npeer_admitted(<<\"\\xA3\\\\x9E\\\\x0\\\\xA\\\\x4\\\\xEE\\|\\xD2\\\\xF0\\\\xAB\\\\xE5\\\\\"4\\x9\\\\xB2\\Se?\\x2\\\\xB3\\\\xF2\\\\xB5\\Gs8[\\x1C\\\\xD\\\\xC6\\\\x1F\\\\xD7\\\\xCA\\\">>, [49, 57, 50, 46, 49, 54, 56, 46, 49, 46, 49, 48], 22773, <<\"\\xA3\\\\x9E\\\\x0\\\\xA\\\\x4\\\\xEE\\|\\xD2\\\\xF0\\\\xAB\\\\xE5\\\\\"4\\x9\\\\xB2\\Se?\\x2\\\\xB3\\\\xF2\\\\xB5\\Gs8[\\x1C\\\\xD\\\\xC6\\\\x1F\\\\xD7\\\\xCA\\\">>) :- true.\nperm([], []) :- true.\nperm([V0 | V1], V2) :- perm(V1, V3) , insert(V3, V0, V2).\nphrase(V0, V1) :- phrase(V0, V1, []).\nprolog_introspection(predicates, V0) :- findall(V1, current_predicate(V1), V2) , sort(V2, V0).\nprolog_introspection(source(V0), V1) :- '$quod_predicate_source'(V0, V1).\nprolog_introspection(chunks(V0), V1) :- '$quod_source_chunk'(all, V0, V1).\nprolog_introspection(identity, ontology_ref(V0, V1)) :- current_ontology_identity(V0, V1).\nprolog_introspection(policy_chunks(V0), V1) :- findall(V2, ontology_acl_indicator(V2), V3) , '$quod_source_chunk'(predicates(V3), V0, V1).\nprolog_introspection(interface_chunks(V0), V1) :- '$quod_source_chunk'(predicates([ontology_interface / 2]), V0, V1).\nprolog_introspection(route_chunks(V0), V1) :- '$quod_ontology_routes'(V2) , '$quod_source_chunk'(terms(V2), V0, V1).\nprolog_introspection(presentation, V0) :- findall(V1, (current_predicate(ontology_source_mode / 1) , ontology_source_mode(V1)), V2) , sort(V2, V3) , ontology_presentation_mode(V3, V0).\nproof_draw(V0, V1, V2) :- '$quod_draw'(V0, V1, V2).\npublic_source_query(current_ontology_identity(V0, V1)) :- true.\npublic_source_query(instance_of(ontology, ontology_ref(V0, V1))) :- true.\npublic_source_query(entity_eidolons(V0, V1)) :- true.\npublic_source_query(class_eidolons(V0, V1)) :- true.\npublic_source_query(class_eidolons(V0, V1, V2, V3)) :- true.\npublic_source_query(entity_eidolons(V0, V1, V2, V3)) :- true.\nrendering_vocabulary(<<\"quod:rendering\">>, <<\"\\xAC\\5\\xCC\\\\x87\\\\xAC\\\\xE7\\\\xA\\\\xB6\\m K\\x15\\\\x9B\\\\x9A\\I1\\x90\\\\x17\\\\x88\\\\x96\\\\xBC\\\\x90\\\\x92\\H\\xF8\\L\\xE9\\\\x1A\\\\x8D\\O*\\xFE\\\">>) :- true.\nresolve_goal(V0, V1) :- '$quod_state_check'(V0) , !.\nresolve_goal(V0, V1) :- \\+ member_eq(V0, V1) , action(V2, V3, V0) , '$quod_action_shape'(V2, V3, V0) , '$quod_action_candidate'(V2, V3, V0, [V0 | V1]) , !.\nrun_declared_action(V0) :- action(V0, V1, V2) , '$quod_action_shape'(V0, V1, V2) , run_declared_candidate(V0, V1, V2).\nrun_declared_candidate(V0, V1, V2) :- '$quod_state_check'(V2) , !.\nrun_declared_candidate(V0, V1, V2) :- '$quod_action_candidate'(V0, V1, V2, [V2]).\nrun_transition([V0 | V1]) :- ! , call(V0) , run_transitions(V1).\nrun_transition(V0) :- call(V0).\nrun_transitions([]) :- true.\nrun_transitions([V0 | V1]) :- call(V0) , run_transitions(V1).\nsatisfy_prerequisites([], V0) :- true.\nsatisfy_prerequisites([goal(V0) | V1], V2) :- ! , goal(V0, V2) , satisfy_prerequisites(V1, V2).\nsatisfy_prerequisites([V0 :: goal(V1) | V2], V3) :- ! , V0 :: goal(V1, V3) , satisfy_prerequisites(V2, V3).\nsatisfy_prerequisites([V0 | V1], V2) :- '$quod_state_check'(V0) , satisfy_prerequisites(V1, V2).\nsystem_prolog_edit :- current_ontology_identity(V0, V1) , quod : root :: (current_ontology_identity(<<\"quod:root\">>, V2) , system_source_access(ontology_ref(V0, V1), editable)).\nsystem_prolog_introspection(V0, V1) :- current_ontology_identity(V2, V3) , quod : root :: (current_ontology_identity(<<\"quod:root\">>, V4) , system_source_access(ontology_ref(V2, V3), V5)) , (V0 == presentation -> V1 = V5 ; prolog_introspection(V0, V1)).\nsystem_source_query((current_ontology_identity(V0, V1) , system_prolog_introspection(V2, V3))) :- true.\nsystem_source_query((current_ontology_identity(V0, V1) , system_prolog_edit , transaction(V2))) :- true.\n\n\nLine 1, column 1\nEnter keeps indentation. Tab moves focus.",
+        "workspaceHidden": false
+      }
+    },
+    {
+      "name": "closed no canvas click",
+      "pose": [
+        0.0004209927811165256,
+        0.7519999999994244,
+        3.230612399420601
+      ],
+      "frame": {
+        "tick": "833",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209927811165256,
+              0.7519999999994244,
+              3.230612399420601
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.40738760057939927,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209927811165256e-4,0.7519999999994244,3.230612399420601),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.913331622130602e-13,1.0,-8.234512863702085e-14))],12)",
+          "sequence": "72"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": false,
+        "active": "BODY",
+        "text": "Click the world to explore · ZQSD, WASD or arrows to move · Space to jump\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nView disconnected. Refresh to reconnect.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: View disconnected. Refresh to reconnect.\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nquod:lobby · ontology_ref(<<\"quod:lobby\">>,<<\"jhr\\x96\\?\\xc8\\\\xaf\\\\x9c\\/\\xb0\\\\x91\\\\x0e\\]\\xef\\\\xa4\\\\xbe\\\\x0b\\GN\\x06\\\\xff\\I\\xe2\\\\xea\\\\x87\\\\xbc\\\\x8c\\\\x80\\z3\\xe9\\K\">>)\n\nView declared interfaces\nView ACL rules\nView live routes\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    },
+    {
+      "name": "closed canvas clicked",
+      "pose": [
+        0.0004209927811165256,
+        0.7519999999994244,
+        3.230612399420601
+      ],
+      "frame": {
+        "tick": "833",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209927811165256,
+              0.7519999999994244,
+              3.230612399420601
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.40738760057939927,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209927811165256e-4,0.7519999999994244,3.230612399420601),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.913331622130602e-13,1.0,-8.234512863702085e-14))],12)",
+          "sequence": "72"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nView disconnected. Refresh to reconnect.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: View disconnected. Refresh to reconnect.\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby · floor\n\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    },
+    {
+      "name": "final",
+      "pose": [
+        0.0004209927811165256,
+        0.7519999999994244,
+        3.230612399420601
+      ],
+      "frame": {
+        "tick": "833",
+        "world": "world_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,personal_lobby)",
+        "space": "world",
+        "epoch": "1",
+        "authority": "agent_instance_ref(<<\"human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\">>,<<\"\\x17\\\\x1C\\!3\\x13\\\\x92\\\\x17\\i\\x8B\\9\\xCC\\\\x8F\\C\\x19\\\\xEC\\/\\xA9\\7x\\x16\\u\\x0\\\\xD0\\\\xF0\\4@\\x2\\\\x9C\\p\\x8D\\|\\xC6\\\">>,physics_authority)",
+        "generation": "1",
+        "schema": 1,
+        "incarnation": "TF3yOak9HDpIwYP_wIbMQKaANuKr6Uxya9Mpln9SxVo",
+        "structure": "5",
+        "poses": [
+          {
+            "position": [
+              0,
+              0,
+              3.85
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "0",
+            "revision": "2"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "1",
+            "revision": "3"
+          },
+          {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "2",
+            "revision": "4"
+          },
+          {
+            "position": [
+              0.0004209927811165256,
+              0.7519999999994244,
+              3.230612399420601
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "body": "3",
+            "revision": "5"
+          }
+        ],
+        "registration": "tGz6fr4Nhg4ecHSlG3phXjZ7jqyJv3yngZqPl_YSWvA",
+        "view_clearance": 0.40738760057939927,
+        "control_state": {
+          "pending": false,
+          "result": "clipped(pose(vector(4.209927811165256e-4,0.7519999999994244,3.230612399420601),quaternion(0.0,0.0,0.0,1.0)),[contact(1,normal(-4.913331622130602e-13,1.0,-8.234512863702085e-14))],12)",
+          "sequence": "72"
+        },
+        "units": "metres_seconds"
+      },
+      "controls": 8,
+      "ui": {
+        "locked": true,
+        "active": "CANVAS",
+        "text": "Mouse to look · ZQSD, WASD or arrows to move · Space to jump · Esc to release\nquod ∴\nkey wilw262y02pM\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ · me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer ↗\n\nYOUR SPACE\n\nPersonal lobby\n\nView disconnected. Refresh to reconnect.\n\nOpen console\nEnter VR\n\nVR is unavailable in this browser or device.\n\nQuestions unavailable: View disconnected. Refresh to reconnect.\n\nReload questions\nAdvanced\nScene\nPersonal lobby\nSoftware licences\nAppearance\nStructure\nNormal\nReload scene\n\nStructure changes the visual representation; it does not enable world editing.\n\nInspect objects and Prolog knowledge\n\nChoose a target to see its offered representations. Access depends on your permissions.\n\nInspect\nChoose an object or knowledge base\nconsole\nfloor\nroof\nsky\nsky/sky\nquod:agent\nquod:environment\nquod:environment:eidolons\nquod:gui\nquod:human_user\nquod:lens\nquod:licence\nquod:lobby\nquod:material\nquod:material:eidolons\nquod:measure\nquod:modelling\nquod:names\nquod:node\nquod:prolog\nquod:prolog:eidolons\nquod:rendering\nquod:signup\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby\n\nhuman:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby · floor\n\nView Prolog source\nClear inspection",
+        "workspaceHidden": true
+      }
+    }
+  ],
+  "errors": [],
+  "options": [
+    "Choose an object or knowledge base",
+    "console",
+    "floor",
+    "roof",
+    "sky",
+    "sky/sky",
+    "quod:agent",
+    "quod:environment",
+    "quod:environment:eidolons",
+    "quod:gui",
+    "quod:human_user",
+    "quod:lens",
+    "quod:licence",
+    "quod:lobby",
+    "quod:material",
+    "quod:material:eidolons",
+    "quod:measure",
+    "quod:modelling",
+    "quod:names",
+    "quod:node",
+    "quod:prolog",
+    "quod:prolog:eidolons",
+    "quod:rendering",
+    "quod:signup",
+    "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ",
+    "human:6gs2ro_8S2EIZNR9u46L-XMEYouet-xGOqjtndWmuLQ/lobby"
+  ]
+}

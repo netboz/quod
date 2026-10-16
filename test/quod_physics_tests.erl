@@ -2079,8 +2079,11 @@ renewal_retains_certified_foreign_dependency_test_() ->
                     Result = {ok,#{request_digest => crypto:strong_rand_bytes(32),request => #{not_after_ms => Expiry}},
                         {normalized,{read,[{Ns,Anchor,2}],{answers,2,[Binding]}}}},
                     {ok,Completed} = quod_client_view:websocket_info({view_opened,Ref,Result},Pending),
-                    {reply,{text,Json},Renewed} = quod_client_view:websocket_info(
+                    Before = quod_time:now_ms(),
+                    {[{set_options,#{idle_timeout := Idle}},{text,Json}],Renewed} = quod_client_view:websocket_info(
                         {'DOWN',M,process,self(),normal},Completed),
+                    ?assert(Idle > 0 andalso Idle =< Expiry-Before),
+                    ?assert(Idle >= Expiry-quod_time:now_ms()),
                     ?assertMatch(#{<<"type">> := <<"projection">>,<<"selection">> := <<"nonphysical">>},json:decode(Json)),
                     ?assertEqual(maps:get(follows,State),maps:get(follows,Renewed)),
                     ?assertEqual(maps:get(dependency_monitors,State),maps:get(dependency_monitors,Renewed)),
@@ -2253,8 +2256,18 @@ signed_client_view_lifecycle_test_() ->
         Socket = spawn_link(fun() -> simulation_socket(Parent, #{peer => {127,0,0,1}}) end),
         try
             Session = simulation_session(Identity),
-            Open = fun() -> Socket ! {client, simulation_open(F, Session)} end,
-            Open(),
+            Open = fun() ->
+                Expiry = quod_time:now_ms()+300000,
+                Before = quod_time:now_ms(),
+                Socket ! {client, simulation_open(F#{expires => Expiry}, Session)},
+                {Before,Expiry}
+            end,
+            {Opened,Expiry} = Open(),
+            receive {simulation_transport_timeout,Socket,Idle} ->
+                ?assert(Idle > 60000),
+                ?assert(Idle =< Expiry-Opened),
+                ?assert(Idle >= Expiry-quod_time:now_ms())
+            after 10000 -> error(missing_transport_deadline) end,
             First = simulation_reply(Socket, <<"projection">>),
             FirstFrame = maps:get(<<"frame">>, First),
             ?assertEqual(1, length(maps:get(<<"poses">>, FirstFrame))),
@@ -2409,8 +2422,8 @@ simulation_session(Identity = #{pubkey := Pub}) ->
     {ok, #{session_id := Session}} = quod_client_auth:complete_challenge(Id, quod_identity:sign(Bytes, Identity)),
     Session.
 
-simulation_open(#{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session) ->
-    simulation_open(#{namespace => Ns,reference => {agent_instance_ref,Ns,Anchor,viewer},identity => Identity},
+simulation_open(F = #{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}}, Session) ->
+    simulation_open(F#{reference := {agent_instance_ref,Ns,Anchor,viewer}},
                     Session,{agent_instance_ref,Ns,Anchor,viewer}).
 simulation_open(F = #{namespace := Ns, reference := {agent_instance_ref,_,Anchor,_}, identity := Identity}, Session,
                 {agent_instance_ref,Source,SourceAnchor,Instance}) ->
@@ -2447,6 +2460,9 @@ simulation_socket(Parent, S) ->
                 _ -> quod_client_view:websocket_info(Message, S)
             end,
             Next = case Result of
+                {[{set_options,#{idle_timeout := Idle}},{text,Json}], State} ->
+                    Parent ! {simulation_transport_timeout,self(),Idle},
+                    Parent ! {simulation,self(),json:decode(Json)}, State;
                 {ok, State} -> State;
                 {reply, {text, Json}, State} -> Parent ! {simulation, self(), json:decode(Json)}, State;
                 {reply,{close,Code,Reason},State} ->

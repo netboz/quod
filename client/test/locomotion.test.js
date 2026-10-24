@@ -25,3 +25,10 @@ test('motion quantization keeps signed truncation and invalid input rejection', 
     assert.throws(() => pushInput('2', '1', [invalid, 0, 0]))
   }
 })
+
+test('landing uses exact canonical millimetres beyond the browser integer range', () => {
+  const origin = 2n ** 100n
+  const term = teleportInput([1.25, -2.5, 0], [origin, -origin, origin])
+  const vector = term.args[0].args
+  assert.deepEqual(vector.map(n => n.value), [origin + 1250n, -origin - 2500n, origin])
+})

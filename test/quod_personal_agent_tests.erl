@@ -266,11 +266,21 @@ authorization_does_not_reparse_retained_history_test_() ->
     {timeout, 60, fun() -> with_personal(fun(Ctx = #{namespace := Ns, agent := Agent,
                                                    human_pair := {UKey, _}}) ->
         Work = {assertz, current_work},
-        {Instruction, _} = instruction(Ctx, Work),
+        {Instruction, Bytes} = instruction(Ctx, Work),
         ?assertMatch({ok, _, {normalized, {committed, _, _}}}, instruct(Ctx, submit, Instruction)),
         Check = fun() -> ?assertMatch({ok, [_], _},
             quod_prolog:prove_ro(Ns, {can_invoke, Work, Agent, [Ns], Ns})) end,
+        %% Other trace sessions can leave messages in EUnit's reused mailbox.
+        Noise = {trace, self(), call, {quod_reg, subscribe, [stale_directory_route]}},
+        self() ! Noise,
         assert_no_authority_decoding(Ns, Check),
+        receive Noise -> ok after 0 -> error(unrelated_trace_consumed) end,
+        %% The measurement must still detect real decoding through the owner.
+        ?assertError({history_decoded, {quod_common_primitives, agent_request_bytes_2, 3}},
+            assert_no_authority_decoding(Ns, fun() ->
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+                    {agent_request_bytes, {'Typed'}, Bytes}))
+            end)),
         [begin
             {Next, _} = instruction(Ctx, {assertz, {historical_work, I}}),
             await_runtime_ready(Ns),
@@ -284,7 +294,9 @@ authorization_does_not_reparse_retained_history_test_() ->
     end) end}.
 
 assert_no_authority_decoding(Ns, Check) ->
-    Trace = trace:session_create(personal_authority, self(), []),
+    Parent = self(), Tag = make_ref(),
+    Collector = spawn_link(fun() -> authority_calls(Parent, Tag, none) end),
+    Trace = trace:session_create(personal_authority, Collector, []),
     Patterns = [{quod_common_primitives, signed_agent_request_3, 3},
                 {quod_common_primitives, agent_request_bytes_2, 3},
                 {quod_common_primitives, program_source_2, 3}],
@@ -295,8 +307,20 @@ assert_no_authority_decoding(Ns, Check) ->
         [Check() || _ <- lists:seq(1, 3)],
         Barrier = trace:delivered(Trace, all),
         receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_not_delivered) end,
-        receive {trace, _, call, MFA} -> error({history_decoded, MFA}) after 0 -> ok end
-    after trace:session_destroy(Trace) end.
+        Collector ! finish,
+        receive
+            {Tag, none} -> ok;
+            {Tag, MFA} -> error({history_decoded, MFA})
+        after 1000 -> error(authority_trace_not_collected) end
+    after trace:session_destroy(Trace), Collector ! stop end.
+
+authority_calls(Parent, Tag, First) ->
+    receive
+        {trace, _, call, MFA} when First =:= none -> authority_calls(Parent, Tag, MFA);
+        {trace, _, call, _} -> authority_calls(Parent, Tag, First);
+        finish -> Parent ! {Tag, First}, authority_calls(Parent, Tag, First);
+        stop -> ok
+    end.
 
 await_runtime_ready(Ns) ->
     Runtime = quod_reg:where({quod_runtime, Ns}), Parent = self(), Tag = make_ref(),

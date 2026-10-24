@@ -14,7 +14,7 @@ export type WorkspacePanelModel = {
   close(): void
 }
 export type WorldScene = {
-  update(view: WorldView | { marks: unknown[]; selection: 'nonphysical' | 'unavailable' } | null): void
+  update(view: WorldView | { marks: unknown[]; selection: 'nonphysical' | 'unavailable' } | null): Promise<void>
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
   setWorkspace(model: WorkspacePanelModel | null): void
   releaseNavigation(): void

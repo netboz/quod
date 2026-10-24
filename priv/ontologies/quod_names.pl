@@ -1,4 +1,4 @@
-%% quod:names — fantasy personal names, generated and recognised from one set
+%% quod:names — personal and world names, generated and recognised from one set
 %% of tables. A system ontology (doc/architecture.md):
 %% founded through the ordinary lifecycle, then listed in root as
 %% system_ontology(quod:names, Anchor) so every node carries it. Agents get
@@ -15,7 +15,7 @@
 %% primitive): same proof, same salt, same name; different agents use
 %% different salts.
 %%
-%% Data: the element tables and listed names below are Open Game Content used
+%% Data: the personal-name element tables and listed names below are Open Game Content used
 %% under the Open Game License v1.0a — see OGL-1.0a.txt beside this file for
 %% the licence and the required Section 15 notice: "The Extraordinary Book of
 %% Names, Copyright 2004, Trigee Enterprises Company, Author Malcolm Bowers."
@@ -25,10 +25,9 @@
 %% to weight dice; here each element counts once, and the few diaereses are
 %% dropped (roel, Kallirrhoe).
 %%
-%% Vocabulary: a genesis may introduce at most 512 new symbols to a node that
-%% never saw this source (quod_vm_limits), so every piece of data — table
-%% names, syllables, names, cultures, kinds, genders — is a binary, never an
-%% atom. Only the predicates and the recipe functors are symbolic.
+%% Table names, syllables, names, cultures, kinds and genders are binary data.
+%% Only predicates and recipe functors use symbols. Growing a name catalogue
+%% therefore does not allocate permanent VM atoms for its entries.
 %%
 %% Model, in the house vocabulary:
 %%   isa(Culture, Wider)                        culture tree, rooted at <<"thing">>
@@ -405,8 +404,19 @@ isa(<<"nymph">>, <<"spirit">>).
 isa(<<"siren">>, <<"spirit">>).
 
 %% --- the pools ----------------------------------------------------------------
-%% pool(Culture, Kind, Gender, Source). Kind is <<"personal">> throughout this
-%% book; epithets, places and taverns are later kinds.
+%% pool(Culture, Kind, Gender, Source). The book's pools name people. The
+%% original landscape vocabulary below uses the same recipe interpreter.
+
+isa(<<"landscape">>, <<"culture">>).
+pool(<<"landscape">>, <<"world">>, <<"neutral">>,
+     recipe(join(<<" ">>,[element(<<"world_quality">>),element(<<"world_place">>)]))).
+%% Original Quod catalogue, independent of the personal-name book tables.
+elements(<<"world_quality">>,[<<"amber">>,<<"silver">>,<<"quiet">>,<<"verdant">>,
+    <<"misty">>,<<"golden">>,<<"distant">>,<<"hidden">>,<<"azure">>,<<"wild">>,
+    <<"luminous">>,<<"ancient">>]).
+elements(<<"world_place">>,[<<"reach">>,<<"vale">>,<<"horizon">>,<<"haven">>,
+    <<"expanse">>,<<"heights">>,<<"wilds">>,<<"realm">>,<<"isles">>,<<"frontier">>,
+    <<"gardens">>,<<"shores">>]).
 
 %% Vile & Crude: two elements of the size table; females add an ending.
 pool(<<"goblin">>, <<"personal">>, <<"male">>,

@@ -91,6 +91,7 @@ mark_kind(<<"torus">>).
 mark_kind(<<"sky_sphere">>).
 mark_kind(<<"group">>).
 mark_kind(<<"mesh">>).
+mark_kind(<<"terrain">>).
 
 geometry_field(<<"box">>, 1, <<"width">>).
 geometry_field(<<"box">>, 2, <<"height">>).
@@ -145,6 +146,7 @@ well_formed_mark(mark(Id, Kind, Size, Transform, Material, Label, Depicts)) :-
     geometry(Kind, Fields, Size),
     geometry_constraint(Kind, Size),
     placed(Transform),
+    geometry_binding(Kind,Transform,Depicts),
     appearance(Kind, Material, Label),
     refers(Depicts).
 
@@ -180,7 +182,29 @@ geometry(<<"mesh">>, [],
     resource(Nodes, <<"mesh_nodes">>),
     resource(Materials, <<"mesh_materials">>),
     resource(Pixels, <<"mesh_pixels">>).
-geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, sized(Fields, Size).
+geometry(<<"terrain">>, [], terrain_geometry(<<"qvt1">>,Palette,
+         view_distance(Distance,Prefetch,Retention),resources(Transfer,Geometry,Vertices,Triangles,Chunks))) :-
+    integer(Distance), Distance > 0, integer(Prefetch), Prefetch > 0,
+    integer(Retention), Retention >= Prefetch,
+    limit(<<"extent">>,Far), Distance+Retention =< Far,
+    Palette = [_|_], length(Palette,Materials), resource(Materials,<<"mesh_materials">>),
+    terrain_palette(Palette,-1),
+    resource(Transfer,<<"mesh_transfer_bytes">>), resource(Geometry,<<"mesh_geometry_bytes">>),
+    resource(Vertices,<<"mesh_vertices">>), resource(Triangles,<<"mesh_triangles">>),
+    resource(Chunks,<<"mesh_nodes">>).
+geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, sized(Fields, Size).
+
+terrain_palette([],_).
+terrain_palette([material(Id,Surface)|Rest],Previous) :-
+    integer(Id), Id > Previous, Id =< 65535, surfaced(Surface), terrain_palette(Rest,Id).
+
+%% Generated resources are scoped to an exact installed physical body and
+%% anchored ontology subject; an arbitrary static transform grants no stream.
+geometry_binding(<<"terrain">>,Transform,depicts(_,Anchor,_)) :-
+    binary_codes(Anchor,Bytes), length(Bytes,32), terrain_pose(Transform).
+geometry_binding(Kind,_,_) :- Kind \== <<"terrain">>.
+terrain_pose(body_pose(_,_)).
+terrain_pose(relative(_,body_pose(_,_))).
 
 resource(Allowed, Name) :-
     integer(Allowed), Allowed > 0, limit(Name, Maximum), Allowed =< Maximum.
@@ -248,8 +272,9 @@ appearance(<<"group">>, no_surface, Label) :- labelled(Label).
 %% Embedded accepted glTF materials are preserved; source material names never
 %% acquire domain identity or permission.
 appearance(<<"mesh">>, asset_surfaces, Label) :- labelled(Label).
+appearance(<<"terrain">>, terrain_surfaces, unlabelled).
 appearance(Kind, Material, Label) :-
-    Kind \== <<"group">>, Kind \== <<"mesh">>, surfaced(Material), labelled(Label).
+    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, surfaced(Material), labelled(Label).
 
 %% A colour is written the way a designer writes it: 35 is "#", and the six
 %% digits are upper-case hex so one colour has one spelling.
@@ -303,7 +328,9 @@ well_formed_scene(Marks) :-
     findall(Id, member(mark(Id, _, _, _, _, _, _), Marks), Ids),
     sort(Ids, Distinct),
     length(Distinct, Count),
-    parent_order(Marks, []).
+    parent_order(Marks, []),
+    findall(View,member(mark(_,<<"terrain">>,terrain_geometry(_,_,View,_),_,_,_,_),Marks),Views),
+    sort(Views,UniqueViews), length(UniqueViews,ViewCount), ViewCount =< 1.
 
 %% Parents precede their children. This also excludes dangling references,
 %% self-parenting and cycles, without a second graph traversal per occurrence.

@@ -20,7 +20,8 @@ at either boundary.
 
 `materialize_symbols/1` is the sole controlled transition from decoded opaque
 symbols to VM atoms.  Callers use it only after authenticating an ontology-owned
-payload; one aggregate payload gets one bounded allocation budget.
+payload. New work is admitted by Prolog policy; historical materialization
+checks the real VM headroom without re-admitting accepted history.
 """.
 
 -include("quod_vm_limits.hrl").
@@ -35,7 +36,6 @@ payload; one aggregate payload gets one bounded allocation budget.
          goal_symbol_names/1, symbol_names/1,
          is_symbol/1, callable_functor/1,
          is_ground/1,
-         release_vocabulary/0, release_modules/0, cold_new_symbols/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
@@ -193,83 +193,18 @@ valid_bindings([{Name, _Value} | Rest], Previous)
     valid_bindings(Rest, Name);
 valid_bindings(_, _) -> false.
 
--doc """
-The vocabulary every node of this release holds: the atom tables of the
-modules of the `quod` and `erlog` applications. The release runs embedded,
-so every one of them is loaded at boot on every node — a receiver that
-decodes an envelope knows exactly these symbols and nothing else. No code
-path is scanned: modules from test or plugin directories never count.
-Cached per VM.
-""".
--spec release_vocabulary() -> #{atom() => true}.
-release_vocabulary() ->
-    case persistent_term:get({?MODULE, vocabulary}, undefined) of
-        #{} = Known -> Known;
-        undefined ->
-            Known = lists:foldl(fun module_atoms/2, #{}, release_modules()),
-            persistent_term:put({?MODULE, vocabulary}, Known),
-            Known
-    end.
-
--doc "The modules of the release's own applications, as their app files list them.".
--spec release_modules() -> [module()].
-release_modules() ->
-    lists:append(
-      [case application:get_key(App, modules) of
-           {ok, Modules} -> Modules;
-           undefined ->
-               _ = application:load(App),
-               case application:get_key(App, modules) of
-                   {ok, Modules} -> Modules;
-                   undefined -> []
-               end
-       end || App <- [quod, erlog]]).
-
-module_atoms(Module, Acc) ->
-    case code:which(Module) of
-        Beam when is_list(Beam) ->
-            case beam_lib:chunks(Beam, [atoms]) of
-                {ok, {_, [{atoms, Atoms}]}} ->
-                    lists:foldl(fun({_, A}, M) -> M#{A => true} end, Acc, Atoms);
-                _ -> Acc
-            end;
-        _ -> Acc
-    end.
-
--doc """
-The distinct symbols of a term a cold node of this release would have to
-allocate to materialize it: its atoms outside the release vocabulary. Erlog
-variables (one-tuples) are not symbols.
-""".
--spec cold_new_symbols(term()) -> [atom()].
-cold_new_symbols(Term) ->
-    Known = release_vocabulary(),
-    lists:usort([A || A <- term_atoms(Term, []), not maps:is_key(A, Known)]).
-
-term_atoms(A, Acc) when is_atom(A) -> [A | Acc];
-term_atoms(T, Acc) when is_tuple(T), tuple_size(T) =:= 1 -> Acc;
-term_atoms(T, Acc) when is_tuple(T) ->
-    lists:foldl(fun term_atoms/2, Acc, tuple_to_list(T));
-term_atoms([H | T], Acc) -> term_atoms(T, term_atoms(H, Acc));
-term_atoms(M, Acc) when is_map(M) ->
-    lists:foldl(fun term_atoms/2, Acc, maps:to_list(M));
-term_atoms(_, Acc) -> Acc.
-
--doc "Materialize all unknown symbols in one authenticated payload under one budget.".
+-doc "Materialize authenticated material after admission, preserving real VM headroom.".
 -spec materialize_symbols(term()) ->
           {ok, term()} |
-          {error, malformed_material | too_many_new_atoms | atom_limit}.
+          {error, malformed_material | atom_limit}.
 materialize_symbols(Term) ->
     case collect_new_symbols(Term, #{}) of
-        {ok, Symbols}
-          when map_size(Symbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
+        {ok, Symbols} ->
             Names = lists:sort(maps:keys(Symbols)),
             case materialize_symbol_names(Names) of
                 ok -> {ok, replace_symbols(Term)};
                 {error, _} = Error -> Error
             end;
-        {ok, _TooMany} ->
-            {error, too_many_new_atoms};
         error ->
             {error, malformed_material}
     end.

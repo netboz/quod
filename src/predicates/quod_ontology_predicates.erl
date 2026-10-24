@@ -124,8 +124,18 @@ lifecycle_continuation_predicate(Goal, _Next, St) ->
     erlog_int:domain_error(ontology_action,Goal,St).
 
 prepare_and_stage_action(Action0, Desired0, RequestAction, Structural, Next, St) ->
-    Principal = authenticated_principal(),
-    case quod_ontology:prepare_action(Structural, Principal) of
+    Committed = quod_erlog_db_local_prove:committed_state(St),
+    Admission = case RequestAction of
+        {create_ontology, _, _} -> quod_material_admission:policy(founding, Committed);
+        {join_ontology, _, _, _} -> {ok, #{}, #{}}
+    end,
+    PreparedResult = case Admission of
+        {ok, Limits, Reads} ->
+            ok = quod_erlog_db_local_prove:absorb_read_set(St, Reads),
+            quod_ontology:prepare_action(Structural, Limits);
+        {error, _} = PolicyError -> PolicyError
+    end,
+    case PreparedResult of
         {ok, Prepared} ->
             bind_prepared_action(
               Action0, Desired0, RequestAction, Prepared, Next, St);
@@ -224,7 +234,8 @@ failure_reason({create_ontology, _, _, _}, Reason) -> {ontology_creation_failed,
 failure_reason({create_ontology, _, _}, Reason) -> {ontology_creation_failed,Reason};
 failure_reason({join_ontology, _, _, _}, Reason) -> {ontology_join_failed,Reason}.
 
-creation_reason(initial_content_too_large) -> initial_content_too_large;
+creation_reason({material_limit, founding, _, _, _} = Reason) -> Reason;
+creation_reason({invalid_material_policy, founding} = Reason) -> Reason;
 creation_reason({source_file_error, Index, _Path, _Reason}) -> {source_file_error,Index};
 creation_reason({already_configured, _Ns}) -> already_hosted;
 creation_reason(_Reason) -> start_failed.

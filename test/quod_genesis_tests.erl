@@ -56,19 +56,16 @@ founding_committee_cap_test() ->
        {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
        quod_simplex:test_valid_config(AboveLimit)).
 
-genesis_initial_diff_boundary_test() ->
+genesis_configuration_does_not_readmit_retained_content_test() ->
     Self = <<0:256>>,
     Base = base_config(Self),
-    AtLimit = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES),
-    AboveLimit = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES + 1),
-    ?assertEqual(
-       ok,
-       quod_simplex:test_valid_genesis_source(
-         Base#{genesis_diff => AtLimit})),
-    ?assertEqual(
-       {error, initial_content_too_large},
-       quod_simplex:test_valid_genesis_source(
-         Base#{genesis_diff => AboveLimit})).
+    %% Configuration is also inspected on resume, where the source is ignored.
+    %% Only a fresh founding's complete encoded envelope determines capacity.
+    AboveEnvelope = sized_diff(?MAX_BLOCK_BYTES + 1),
+    ?assertEqual(ok, quod_simplex:test_valid_genesis_source(
+                       Base#{genesis_diff => AboveEnvelope})),
+    ?assertMatch({error, _}, quod_simplex:prepare_genesis(
+                   Base#{genesis_diff => AboveEnvelope}, <<"genesis:oversized">>, Self)).
 
 generated_genesis_source_equivalence_test() ->
     Self = <<0:256>>,
@@ -132,8 +129,8 @@ complete_genesis_keeps_block_bound_test() ->
     Self = <<0:256>>,
     Ns = <<"genesis:complete-bound">>,
     Incarnation = <<16#6b:256>>,
-    InitialDiff = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES),
-    %% Initial content is independently within its limit. The generated
+    InitialDiff = sized_diff(?MAX_BLOCK_BYTES - 64 * 1024),
+    %% Initial content alone fits the carrier. The generated
     %% committee fact pushes the complete transaction above the block limit.
     OversizedHost = binary:copy(<<"h">>, 70 * 1024),
     Config =

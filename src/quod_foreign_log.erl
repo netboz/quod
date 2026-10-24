@@ -97,7 +97,7 @@ system is introduced.
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
 -define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
--define(MAX_CHANGED_HEADS, ?QUOD_MAX_PLAN_DIFF_OPS).
+-define(MAX_CHANGED_HEADS, ?QUOD_MAX_CHANGED_HEADS).
 -define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
 
 %% One live cache cursor belongs to the existing custodian, never to a route.

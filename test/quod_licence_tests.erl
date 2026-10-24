@@ -162,9 +162,7 @@ policy_test() ->
 %% The founding source must fit the vocabulary a cold node will admit.
 vocabulary_fits_the_genesis_budget_test() ->
     Terms = quod_committed_projection:read_terms(source()),
-    New = quod_wire_term:cold_new_symbols(Terms),
-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10,
-            {New, length(New)}),
+    quod_ct:assert_material_admissible(Terms),
     ?assert(lists:all(fun({licence, Id, Family, Strength}) ->
                               is_binary(Id) andalso is_binary(Family)
                                   andalso is_integer(Strength);

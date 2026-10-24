@@ -149,6 +149,18 @@ surface, independent of rendered meshes, picking bounds and voxel indexing.
 It represents sloped/non-cubic terrain without introducing a grid controller.
 Surface geometry cannot be used as a moving solid body.
 
+The composable [voxel terrain domain](voxel-world.md) binds one fixed terrain
+body to a procedural field and current patches. Its existing resource worker
+retains immutable chunk surfaces and volume classifications; loading chunks
+allocates no durable body IDs. Missing physical coverage pauses relevant work
+until installation, rather than treating unknown terrain as empty.
+Known terrain obstruction and ambiguous geometry are distinct blocked outcomes
+identifying the affected body. They retain the native state and wait for a
+governed correction, without an unsatisfiable coverage request. Authored
+geometry/pose changes receive surface admission checks; ongoing unchanged
+contacts remain under the normal solver. The [terrain contract](voxel-world.md)
+defines these outcomes and prospective viewer-window admission.
+
 Governed body edits share the Prolog `physics_valid_body/6` schema for body
 identity, kind, authored pose, geometry, density and coordinate allowance.
 It accepts every shape above. Hinged moving parts accept the same supported
@@ -165,8 +177,11 @@ shapes. Geometry and body revisions install together. `controlled` selects a
 kinematic body; the governed motion path below applies checked poses without
 movement-induced impulses to dynamic obstacles.
 
-The limits are policy inputs, not Erlang constants. The native numeric envelope
-bounds positions and physical dimensions. Gravity, velocity, density and all
+The limits are policy inputs, not Erlang constants. Authored world positions
+are exact integer millimetres. A coherent integer origin converts them to a
+bounded local frame before native floating-point conversion; shifting that
+frame preserves live bodies, colliders, velocities and run identity. The native
+numeric envelope bounds local positions and physical dimensions. Gravity, velocity, density and all
 other numeric values must be finite and representable as Rapier `f64`; density
 is not compared to a distance allowance. IDs and body revisions use unsigned
 64-bit native fields. Positive mass, dimensions and step are representation
@@ -179,7 +194,9 @@ with the admitted body count. Policy authors must budget aggregate worlds too.
 
 `physics_body_state(World, Body, Result)` requires the ordinary `can_invoke/4`
 grant and `can_read_physics_body(World, Principal, Body)`. It returns
-`body_state(Frame, Tick, body(Id,Revision), metres_seconds, Pose, Velocity)`.
+`body_state(Frame, Tick, body(Id,Revision), local_metres_seconds(OriginMm), Pose, Velocity)`.
+`OriginMm = vector(X,Y,Z)` is the exact integer world origin. Add it to local
+pose millimetres to recover canonical coordinates; velocities are unaffected.
 `Frame` is `physics_frame(WorldRef, Authority, HostEpoch, RunGeneration,
 Incarnation, Structure)`; pose rotations use `quaternion(X,Y,Z,W)`.
 The owner copies its retained sample. A stale installed frame, missing body or
@@ -205,7 +222,7 @@ coordinates. Distances/angles in inputs are millimetres/milliradians. The native
 rotation query accepts at most pi radians per component. This is a single
 bounded rotation sweep, not an unbounded spin command.
 
-The result is `motion_query(Frame, Tick, body(Id,Revision), metres_seconds,
+The result is `motion_query(Frame, Tick, body(Id,Revision), local_metres_seconds(OriginMm),
 Answer)`. `Answer` is `clear(Pose,Checks)`,
 `clipped(Pose,Contacts,Checks)`, `occupied(Body,Checks)`,
 `blocked(Body,Checks)`, `no_support`, `unsupported`,
@@ -708,7 +725,8 @@ step. This profile makes no real-time cadence guarantee.
 
 Frames contain the anchored world/authority/host-epoch/run-generation fence,
 structure revision, incarnation token, completed tick, per-body revisions,
-metre/second units and world coordinate space. The owner snapshot API requires the expected fence/structure. A newer tick
+metre/second units, exact integer origin and origin sequence. Positions are in
+that coherent local frame. The owner snapshot API requires the expected fence/structure. A newer tick
 returns a frame; the same tick returns `unchanged`, including for a sleeping
 world. A stale fence, structure or future tick is unavailable. This snapshot API
 is internal; the client boundary below governs pose delivery. Neither API
@@ -777,20 +795,29 @@ The endpoint checks the complete body set against the current owner. Numeric
 identities, heights and sequences use decimal strings in JSON, preserving uint64
 values beyond JavaScript's safe integer range.
 
-`open` carries `session_id`, signed `request`, `signature`, `world_namespace`
-and base64url `world_anchor`. `projection` returns the signed-request digest as
+`open` carries `session_id`, signed `request`, `signature`, `view_kind: world`,
+`view_namespace` and base64url `view_anchor`. `projection` returns the signed-request digest as
 `view`, `height`, `expires_ms`, marks and an explicit `selection`. An active
-selection additionally carries its Prolog control configuration and current frame. Schema 1 frames carry world/authority/run/structure/tick,
-metre positions, XYZW quaternions, this view's random registration, selected
+selection additionally carries its Prolog control configuration and current frame. Schema 2 frames carry world/authority/run/structure/tick,
+`space: local`, exact decimal-string `origin_mm` and `origin_seq`, local metre
+positions, XYZW quaternions, this view's random registration, selected
 control's last accepted sequence and operation outcome, and optional sensory
 clearance. Other principals' inputs are not exposed.
 
-An `ack` for the exact view and last tick releases one delivery credit. The
+An `ack` for the exact view, last tick and origin sequence releases one delivery credit. The
 owner retains one latest frame, not a motion queue. Unchanged sleeping worlds
 send nothing; repeated acknowledgements neither step nor write. Command outcomes
 advance feedback even when the body does not move. This is transport credit,
 not durable acknowledgement. The original signed expiry is enforced by server
 and browser; a lost connection cannot keep an authorized view indefinitely.
+An origin shift can publish a new coherent frame without advancing the tick;
+an acknowledgement for the old origin cannot release that frame's credit.
+Terrain manifests and chunks share this same credit, with exact watch and
+manifest tokens and exact acknowledged batch endings. Content batches fit the
+existing encoded message limit; aggregate allocation remains Prolog policy.
+Fresh frames alternate with resources on that credit, so a
+long manifest cannot starve motion updates or vice versa. Completion gates
+navigation commands; already verified chunks stay visible while loading.
 
 The browser signs one replacement read halfway through the view's remaining
 lifetime, unless the view already reaches sign-in expiry. An unchanged ready

@@ -21,6 +21,10 @@ that used them stays sealable.
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
 - `binary(?Value)` — type test, like `integer/1`; never binds its argument.
+- `'$quod_voxel'(+Request, +Allowances, ?Result)` — versioned terrain
+  arithmetic over explicit samples, recipes and current patches. No world
+  lookup, policy, mutable cache or I/O; admission remains in the ontology.
+  Invalid numerical inputs and exhausted allowances fail with their reason.
 - `agent_request_bytes(+Intent, ?Bytes)` — encode an exact `agent_goal_v1`
   intent with the signed-request codec. No key access, signature, clock,
   submission or authority check; the bytes are inert data.
@@ -54,7 +58,7 @@ that used them stays sealable.
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
-         authored_clauses/2]).
+         authored_clauses/2, voxel_compute_3/3]).
 
 -define(DRAW, '$quod_draw').
 -define(BINARY_CODES, binary_codes).
@@ -84,9 +88,34 @@ load(#est{db = Db0} = Est) ->
         {'$quod_source_indicator', 2}, ?MODULE, source_indicator_2, Db10),
     Db12 = erlog_int:add_compiled_proc(
         {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db11),
+    Db13 = erlog_int:add_compiled_proc(
+        {signed_agent_request, 3}, ?MODULE, signed_agent_request_3, Db12),
     Est#est{db = erlog_int:add_compiled_proc(
-        {signed_agent_request, 3}, ?MODULE, signed_agent_request_3, Db12)}.
+        {'$quod_voxel', 3}, ?MODULE, voxel_compute_3, Db13)}.
 
+%% Numerical data only: domain selection, permission and allocation remain in
+%% the calling ontology. The same implementation serves retained consumers.
+voxel_compute_3({'$quod_voxel', Request0, Limits0, Result}, Next, #est{bs = Bs} = St) ->
+    Request = erlog_int:dderef(Request0,Bs),
+    Limits = erlog_int:dderef(Limits0,Bs),
+    case quod_wire_term:is_ground({Request,Limits}) of
+        false -> erlog_int:instantiation_error(St);
+        true ->
+            Computed = case Request of
+                {sample,Spec,Origin,Dimensions} -> quod_voxel:sample(Spec,Origin,Dimensions,Limits);
+                {surface,Samples,Dimensions,Spacing} -> quod_voxel:surface(Samples,Dimensions,Spacing,Limits);
+                {edit,Spec,Chunk,Patch,Brush} -> quod_voxel:edit(Spec,Chunk,Patch,Brush,Limits);
+                {brush_chunks,Brush,Spacing} -> quod_voxel:brush_chunks(Brush,Spacing,Limits);
+                {resident_chunks,Initial,Ranges} -> quod_voxel:resident_chunks(Initial,Ranges,Limits);
+                {chunk,Spec,Chunk,Overrides} -> quod_voxel:chunk(Spec,Chunk,Overrides,Limits);
+                {chunk_surface,Samples,Spacing} -> quod_voxel:chunk_surface(Samples,Spacing,Limits);
+                _ -> {error,invalid_voxel_field}
+            end,
+            case Computed of
+                {ok,Value} -> erlog_int:unify_prove_body(Result,Value,Next,St);
+                {error,Reason} -> erlog_int:fail(erlog_int:add_failure_reason(Reason,St))
+            end
+    end.
 
 agent_request_bytes_2({agent_request_bytes, Intent0, Bytes}, Next, #est{bs = Bs} = St) ->
     Intent = erlog_int:dderef(Intent0, Bs),

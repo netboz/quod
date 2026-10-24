@@ -3,12 +3,38 @@
 -include_lib("erlog/src/erlog_int.hrl").
 -export([opaque_native/3]).
 
+voxel_arithmetic_does_not_invalidate_on_unrelated_commits_test() ->
+    Base = quod_committed_projection:new_est(),
+    #est{db = #db{ref = Ref}} = Est = quod_ct:commit_kb(
+        quod_ct:assert_facts([{terrain_height,250}],Base)),
+    try
+        Request = {sample,{field_v1,1,500,[{plane,{'Height'}}],7},
+                   {vector,0,0,0},{dimensions,2,2,2}},
+        Goal = {',',{terrain_height,{'Height'}},
+                {'$quod_voxel',Request,{sampling_limits,8,8,0,24},{'Samples'}}},
+        {{ok,#{'Samples' := {samples_v1,_,_}},[],_},Basis} = select(Goal,Est),
+        ?assertNot(maps:is_key(parent,Basis)),
+        ?assertNot(quod_resource_basis:affected(Basis,#{{fact,{unrelated,1}} => true})),
+        ?assert(quod_resource_basis:affected(Basis,#{{fact,{terrain_height,1}} => true}))
+    after quod_erlog_db_mvcc:delete(Ref) end.
+
 helper_reads_are_selective_test() ->
     with_kb([{':-', enabled, helper}, helper], fun(Est) ->
         {succeed, Basis} = prove(enabled, Est),
         ?assert(quod_resource_basis:affected(Basis, #{{fact, {helper, 0}} => true})),
         ?assertNot(quod_resource_basis:affected(Basis, #{{fact, {unrelated, 1}} => true})),
         ?assertNot(maps:is_key(parent, Basis))
+    end).
+
+terrain_demand_keeps_its_exact_owner_fence_test() ->
+    with_kb([],fun(Est) ->
+        World = {world_ref,<<"terrain">>,<<0:256>>,land},
+        Key = {terrain_demand,World,{self(),<<1:256>>,2,[{7,{0,0,0},{1,1,1}}],#{}}},
+        {ok,Basis} = quod_resource_basis:capture(Est,fun(Observed) ->
+            quod_observation:note(Key,Observed),ok
+        end),
+        ?assertEqual(#{Key => true},Basis),
+        ?assertNot(quod_resource_basis:affected(Basis,#{{fact,{unrelated,1}} => true}))
     end).
 
 failed_negative_and_backtracked_reads_test_() ->

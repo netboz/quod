@@ -49,9 +49,17 @@ test('renewing the same binding preserves held travel and authored camera placem
     owner.dispatchEvent(event)
     navigation.render(0)
     const placement = camera.parent.position.asArray()
-    navigation.update({ ...current, view: 'renewed', expires: Date.now() + 30000,
-      physicalFrame: { registration: 'renewed' } })
+    navigation.update({ ...current, terrainReady: false })
+    navigation.snap(1)
+    navigation.teleport(Vector3.Forward())
+    current.control.jump = 3
+    const jump = new Event('keydown'); Object.defineProperty(jump, 'key', { value: ' ' })
+    owner.dispatchEvent(jump)
     navigation.render(250)
+    assert.equal(sent.length, 1, 'loading terrain pauses commands without clearing held input')
+    navigation.update({ ...current, terrainReady: true, view: 'renewed', expires: Date.now() + 30000,
+      physicalFrame: { registration: 'renewed' } })
+    navigation.render(500)
     assert.equal(sent.length, 2)
     assert.deepEqual(sent[1], sent[0], 'renewal retains the held direction without another keydown')
     assert.deepEqual(camera.parent.position.asArray(), placement)

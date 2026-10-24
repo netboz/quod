@@ -192,10 +192,22 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal,
             {[], 0, [], false} ->
                 not_material;
             _ ->
-                seal_material(
-                  Session, Target, BaseHeight, ProofId, Origin, Principal,
-                  RequestBinding,
-                  Diff, ReadCheck, Effects)
+                case quod_material_admission:policy(
+                       plan, quod_proof_session:committed_state(Session)) of
+                    {ok, Limits, PolicyReads} ->
+                        case quod_material_admission:validate_update(
+                               plan, quod_proof_session:committed_state(Session),
+                               Diff, PolicyReads) of
+                            ok ->
+                                ok = quod_proof_session:absorb_read_set(Session, PolicyReads),
+                                seal_material(
+                                  Session, Target, BaseHeight, ProofId, Origin, Principal,
+                                  RequestBinding, Diff, quod_proof_session:read_set(Session),
+                                  Effects, Limits);
+                            {error, _} = UpdateError -> UpdateError
+                        end;
+                    {error, _} = PolicyError -> PolicyError
+                end
         end,
     %% Extraction and encoding are pure, but the namespace may have committed
     %% Vote/Resolve while they ran. Never expose a plan (or even classify a
@@ -207,7 +219,7 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal,
 
 seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
               RequestBinding,
-              Diff, ReadCheck, Effects) ->
+              Diff, ReadCheck, Effects, Limits) ->
     Bridges = quod_proof_session:live_bridges(Session),
     {Transcript, Generation} = quod_proof_session:transcript(Session),
     case seal_bound_reads(Diff, ReadCheck, BaseHeight, Effects, Bridges) of
@@ -238,7 +250,7 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
                              effects => EffectsBlob,
                              live_bridges => BridgesBlob,
                              transcript => TranscriptBlob},
-                    sign_core(Core, quod_proof_session:signer(Session));
+                    admit_core(Core, quod_proof_session:signer(Session), Limits);
                 {error, _} = Error ->
                     Error
             end;
@@ -280,7 +292,7 @@ encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
 
 %% A material diff must not rest on live-bridge truth (module doc); the plan
 %% itself must fit the network's fixed bounds before any signature is minted.
-seal_admissible(Diff, ReadCheck, Effects, Bridges) ->
+seal_admissible(Diff, _ReadCheck, Effects, Bridges) ->
     EffectiveBridges = admissibility_bridges(Diff, Bridges),
     case {Diff, Effects, EffectiveBridges} of
         {[_ | _], _, [Functor | _]} ->
@@ -288,13 +300,9 @@ seal_admissible(Diff, ReadCheck, Effects, Bridges) ->
         {[_ | _], [_ | _], _} ->
             {error, effect_requires_empty_diff};
         _ ->
-            case {length(Diff) =< ?QUOD_MAX_PLAN_DIFF_OPS,
-                  map_size(ReadCheck) =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
-                  quod_effect:validate_list(Effects)} of
-                {true, true, true} -> ok;
-                {false, _, _} -> {error, {too_large, plan}};
-                {_, false, _} -> {error, {too_large, plan}};
-                {_, _, false} -> {error, invalid_direct_effect}
+            case quod_effect:validate_list(Effects) of
+                true -> ok;
+                false -> {error, invalid_direct_effect}
             end
     end.
 
@@ -304,19 +312,30 @@ admissibility_bridges(Diff, Bridges) ->
         false -> Bridges
     end.
 
-sign_core(Core, Signer) ->
-    Bytes = plan_bytes(Core),
-    Plan =
+admit_core(Core, Signer, Limits) ->
+    Template =
         case Signer of
-            #{pubkey := Pubkey} = Identity ->
-                {quod_plan, Core, Pubkey,
-                 quod_identity:sign(Bytes, Identity)};
-            none ->
-                {quod_plan, Core, none, none}
+            #{pubkey := Pubkey} -> {quod_plan, Core, Pubkey, <<0:512>>};
+            none -> {quod_plan, Core, none, none}
         end,
-    case byte_size(deterministic(Plan)) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES of
-        true -> {ok, Plan};
-        false -> {error, {too_large, plan}}
+    Bytes = byte_size(deterministic(Template)),
+    case {Bytes =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES, decode_material(Core)} of
+        {true, {ok, Decoded}} ->
+            {ok, Names} = quod_wire_term:symbol_names(Decoded),
+            Usage = #{canonical_bytes => Bytes, symbols => length(Names),
+                      operations => maps:get(diff_ops, Core),
+                      reads => maps:get(read_functors, Core)},
+            case quod_material_admission:check(plan, Usage, Limits) of
+                ok ->
+                    Signature = case Signer of
+                        none -> none;
+                        _ -> quod_identity:sign(plan_bytes(Core), Signer)
+                    end,
+                    {ok, setelement(4, Template, Signature)};
+                {error, _} = Error -> Error
+            end;
+        {false, _} -> {error, {too_large, plan}};
+        {_, error} -> {error, {protocol_error, bad_payload}}
     end.
 
 plan_bytes(Core) ->
@@ -386,9 +405,9 @@ valid_core(#{target := Target, base_height := BaseHeight,
              transcript := Transcript} = Core)
   when map_size(Core) =:= 16,
        is_integer(DiffOps), DiffOps >= 0,
-       DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
+       DiffOps =< byte_size(Diff),
        is_integer(ReadFunctors), ReadFunctors >= 0,
-       ReadFunctors =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
+       ReadFunctors =< byte_size(ReadCheck),
        is_integer(EffectsCount), EffectsCount >= 0,
        EffectsCount =< ?QUOD_MAX_DIRECT_EFFECTS ->
     valid_identity(Target) andalso valid_identity(Origin) andalso
@@ -512,7 +531,7 @@ opaque and use only the signed counts and digests.
                  live_bridges := [{atom(), arity()}],
                  transcript := [transcript_entry()]}} |
           {error, {protocol_error, bad_payload} |
-                  too_many_new_atoms | atom_limit}.
+                  atom_limit}.
 material(Plan) ->
     Core = core(Plan),
     case decode_material(Core) of

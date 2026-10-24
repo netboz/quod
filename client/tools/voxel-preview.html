@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quod · Emerald hollow</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #eef3e6; background: #111e22; font: 14px system-ui, sans-serif; }
+    canvas { display: block; width: 100vw; height: 100vh; touch-action: none; outline: none; }
+    header, footer { position: fixed; left: 28px; right: 28px; display: flex; align-items: center; gap: 24px; }
+    header { top: 24px; padding: 18px 22px; background: #17252bdf; border: 1px solid #ffffff20; border-radius: 12px; }
+    h1 { font-size: 22px; font-weight: 550; margin: 3px 0 0; }
+    small { color: #b6c8ac; text-transform: uppercase; letter-spacing: .13em; font-size: 10px; }
+    nav { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    button { font: inherit; color: inherit; border: 1px solid #ffffff35; background: #ffffff08; padding: 9px 14px; border-radius: 7px; cursor: pointer; }
+    button:hover, button[aria-pressed="true"] { color: #13201b; background: #c0d59d; border-color: #c0d59d; }
+    footer { bottom: 24px; justify-content: space-between; color: #dce3d7; text-shadow: 0 1px 4px #000; font-size: 12px; }
+    #status { background: #17252bc9; padding: 10px 14px; border-radius: 7px; }
+  </style>
+</head>
+<body>
+  <canvas id="terrain" aria-label="Smooth generated terrain with caves and an excavation"></canvas>
+  <header>
+    <div><small>Quod / smooth voxel terrain</small><h1>Emerald hollow</h1></div>
+    <nav aria-label="Terrain inspection">
+      <button data-view="overview">Overview</button>
+      <button data-view="cave">Cave entrance</button>
+      <button data-view="dig">Excavation</button>
+      <button id="dig" aria-pressed="false">Show excavation</button>
+      <button id="wireframe" aria-pressed="false">Wireframe</button>
+    </nav>
+  </header>
+  <footer><span id="status">Loading generated terrain…</span><span>Generated geometry preview · drag to orbit · scroll to zoom</span></footer>
+  <script type="module" src="./voxel-preview.js"></script>
+</body>
+</html>

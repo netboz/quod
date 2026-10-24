@@ -65,3 +65,11 @@ texture_asset(floor_tiles_02, <<"orm">>,
 
 textured_surface(Asset, Repeat, surface(<<"#FFFFFF">>, 0, 1000, 0, Textures)) :-
     findall(texture(Slot, Ref, repeat(Repeat, Repeat)), texture_asset(Asset, Slot, Ref, _), Textures).
+
+%% Babylon playground samples, retained byte-for-byte with content identity.
+texture_asset(babylon_grass, <<"base_colour">>,
+    asset(<<"25ebb5a3408f3a17e80ee1d56fc1290c945076ee648aacb8ac5ff6a0725fc46c">>, <<"image/jpeg">>),
+    source(<<"https://raw.githubusercontent.com/BabylonJS/Babylon.js/master/packages/tools/playground/public/textures/grass.jpg">>, <<"Apache-2.0">>)).
+texture_asset(babylon_ground, <<"base_colour">>,
+    asset(<<"e3637cbd17d1f086f32ebdf21c8399b0bac9d6dccecae1bd2207482895e17678">>, <<"image/jpeg">>),
+    source(<<"https://raw.githubusercontent.com/BabylonJS/Babylon.js/master/packages/tools/playground/public/textures/ground.jpg">>, <<"Apache-2.0">>)).

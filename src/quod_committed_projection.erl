@@ -611,10 +611,10 @@ stable_unique([Value | Rest], Seen, Rev) ->
     end.
 
 load_common_predicates(#est{db = Db0} = Est) ->
-    File = filename:join(code:priv_dir(quod),
-                         "ontologies/common_predicates.pl"),
     Terms =
-        try read_terms(File)
+        try lists:append(
+              [read_terms(filename:join([code:priv_dir(quod), "ontologies", File]))
+               || File <- ["common_predicates.pl", "material_policy.pl"]])
         catch
             throw:{genesis_failed, ReadReason} ->
                 throw({common_predicates_failed, ReadReason})

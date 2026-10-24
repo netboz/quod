@@ -319,8 +319,7 @@ ontology_marks_keep_the_exact_owner_and_do_not_become_spaces_test() ->
 
 vocabulary_fits_the_genesis_budget_test() ->
     Terms = terms(lens_source()),
-    New = quod_wire_term:cold_new_symbols(Terms),
-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {New, length(New)}),
+    quod_ct:assert_material_admissible(Terms),
     ?assertNot(lists:any(fun has_float/1, Terms)).
 
 has_float(T) when is_float(T) -> true;

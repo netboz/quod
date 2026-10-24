@@ -6052,9 +6052,9 @@ foreign_projection_large_change_set_becomes_resnapshot_test() ->
             Tx
         end,
     Transactions =
-        [MakeTx(1, 1, ?QUOD_MAX_PLAN_DIFF_OPS),
-         MakeTx(2, ?QUOD_MAX_PLAN_DIFF_OPS + 1,
-                ?QUOD_MAX_PLAN_DIFF_OPS + 1)],
+        [MakeTx(1, 1, ?QUOD_MAX_CHANGED_HEADS),
+         MakeTx(2, ?QUOD_MAX_CHANGED_HEADS + 1,
+                ?QUOD_MAX_CHANGED_HEADS + 1)],
     Entry = content_entry(Ns, Anchor, Pub, Signer, 2, maps:get(protocol_root, maps:get(projection, Base)), Transactions),
     Root = temp_dir("projection-large-change-set"),
     CacheNs = <<"projection-cache:", Ns/binary>>,
@@ -8125,11 +8125,15 @@ largest_payload(Ns) ->
     largest_payload(Ns, 0, ?MAX_BLOCK_BYTES).
 
 largest_payload(Ns, Low, High) when Low + 1 >= High ->
-    payload(Ns, Low);
+    {ok, Payload} = payload(Ns, Low),
+    Payload;
 largest_payload(Ns, Low, High) ->
     Mid = (Low + High) div 2,
-    Candidate = payload(Ns, Mid),
-    case quod_ledger:encoded_payload_size(Candidate) of
+    SizeResult = case payload(Ns, Mid) of
+        {ok, Candidate} -> quod_ledger:encoded_payload_size(Candidate);
+        {error,too_large} = Error -> Error
+    end,
+    case SizeResult of
         {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
             largest_payload(Ns, Mid, High);
         _ ->
@@ -8152,10 +8156,14 @@ payload(Ns, Bytes) ->
                      read_check = #{}, author = Author,
                      author_seq = 1, submitted_at = 1,
                      sig = none},
-    Transaction = quod_transaction:bind_id(Target, Transaction0),
-    {ok, Signed} = quod_transaction:sign(
-                     {Ns, element(2, Target), Author}, Transaction, Signer),
-    {batch, [Signed]}.
+    try quod_transaction:bind_id(Target, Transaction0) of
+        Transaction -> case quod_transaction:sign(
+                     {Ns, element(2, Target), Author}, Transaction, Signer) of
+            {ok, Signed} -> {ok, {batch, [Signed]}};
+            {error,too_large} = Error -> Error
+        end
+    catch error:bad_transaction_material -> {error,too_large}
+    end.
 
 unique_ns() ->
     <<"foreign:test:",

@@ -229,7 +229,7 @@ barrier_future_slot_and_capacity_truth_table_test() ->
          entry, local, Membership, NonEmptyBatch)),
     OversizedChange =
         (tx(<<"oversized">>, B, 0, none))#transaction{
-          goal = binary:copy(<<0>>, 262144)},
+          goal = binary:copy(<<0>>, ?MAX_BLOCK_BYTES)},
     Oversized = quod_ingress_state:request(OversizedChange),
     ?assertEqual(
        {reject, too_large},

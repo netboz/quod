@@ -14,7 +14,21 @@
 
 -define(NS, <<"quod:names">>).
 -define(HALFLING_MALES, 48 * 8).
--define(POOLS, 21).
+-define(POOLS, 22).
+
+world_names_use_the_shared_recipe_and_stay_out_of_personal_draws_test() ->
+    with_committed_names(<<>>,fun(Committed,St) ->
+        ?assertEqual(144,value({'N'},{count,<<"landscape">>,<<"world">>,<<"neutral">>,{'N'}},St)),
+        ?assertEqual(<<"Amber Reach">>,value({'N'},
+            {name_nth,<<"landscape">>,<<"world">>,<<"neutral">>,0,{'N'}},St)),
+        fails({person_kind,<<"world">>},St),
+        with_origin(<<77:256>>,fun() ->
+            Goal = {draw,<<"landscape">>,<<"world">>,<<"neutral">>,{world,1},{'Name'}},
+            {ok,#{'Name' := Name}} = quod_ct:session_prove(Committed,{origin,test},proof_ctx(),Goal),
+            ?assertMatch({ok,#{'Name' := Name}},quod_ct:session_prove(Committed,{origin,test},proof_ctx(),Goal)),
+            ?assertEqual([{<<"landscape">>,<<"world">>,<<"neutral">>}],selections(Name,St))
+        end)
+    end).
 
 generation_matches_count_test() ->
     with_names(fun(St) ->
@@ -294,14 +308,14 @@ saltless_pair(ProofId) ->
     end).
 
 %% The class view is a projection of the pools, not a second copy of them: a
-%% browser that knows only the house vocabulary sees the same 21 pools, the
+%% browser that knows only the house vocabulary sees the same pools, the
 %% same kinds and genders, and the same sizes that count/4 reports.
 class_view_test() ->
     with_names(fun(St) ->
         ?assertMatch({succeed, _}, erlog_int:prove_goal({isa, pool, thing}, St)),
-        ?assertEqual([<<"personal">>],
+        ?assertEqual([<<"personal">>,<<"world">>],
                      solutions({'K'}, {instance_of, kind, {'K'}}, St)),
-        ?assertEqual([<<"female">>, <<"male">>],
+        ?assertEqual([<<"female">>, <<"male">>, <<"neutral">>],
                      solutions({'G'}, {instance_of, gender, {'G'}}, St)),
         Pools = solutions({'P'}, {instance_of, pool, {'P'}}, St),
         ?assertEqual(?POOLS, length(Pools)),
@@ -351,9 +365,7 @@ policy_test() ->
 vocabulary_fits_the_genesis_budget_test() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_names.pl"),
     Terms = quod_committed_projection:read_terms(File),
-    New = quod_wire_term:cold_new_symbols(Terms),
-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10,
-            {new_symbols, length(New), New}),
+    quod_ct:assert_material_admissible(Terms),
     ?assertEqual(?POOLS,
                  length([T || {pool, _, _, _, _} = T <- Terms])),
     ?assert(lists:all(fun({elements, Table, Fragments}) ->

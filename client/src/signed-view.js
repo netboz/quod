@@ -34,6 +34,15 @@ export function connectSignedView(identity, agent, reference, kind, goal, adapte
     const message = adapter.credit?.(current)
     if (message) send(message)
   }
+  const present = callback => {
+    const presented = current
+    const failedPresentation = error => {
+      if (active && current === presented) { adapter.close?.(); failed(error); socket.close() }
+    }
+    Promise.resolve(callback?.(presented)).then(() => {
+      if (active && current === presented) credit()
+    }).catch(failedPresentation)
+  }
   async function open() {
     const version = ++opening
     if (current && Date.now() >= current.expires) { failed(new Error('View authorization expired.')); return }
@@ -70,19 +79,24 @@ export function connectSignedView(identity, agent, reference, kind, goal, adapte
         if (current.expires < identity.session.expires_ms) {
           renewalTimer = setTimeout(() => { renewalTimer = null; void open() }, Math.max(0, remaining / 2))
         }
-        callbacks.projection(current)
-        credit()
-      } else if (adapter.message?.(message, current, send)) {
-        // The adapter owns any connection-local native resources.
+        present(callbacks.projection)
+      } else if (adapter.message?.(message, current, send, error => {
+        if (active) { adapter.close?.(); failed(error); socket.close() }
+      })) {
+        // The adapter owns any connection-local resources and their completion.
       } else if (adapter.frameType && message.type === adapter.frameType && current && message.view === current.view) {
         const next = adapter.advance(current, message)
-        if (next !== current) { current = next; callbacks.frame(current) }
-        credit()
+        if (next !== current) { current = next; present(callbacks.frame) }
+        else credit()
       }
     } catch (error) { adapter.close?.(); failed(error); socket.close() }
   }
   socket.onclose = () => { adapter.close?.(); if (active) failed(new Error('View disconnected. Refresh to reconnect.')) }
   socket.onerror = () => { adapter.close?.(); if (active) failed(new Error('View connection unavailable.')) }
   return { get current() { return current }, get active() { return active }, fail: failed,
+    send(message) {
+      if (!active || !current || message.view !== current.view || Date.now() >= current.expires) return false
+      send(message); return true
+    },
     close() { active = false; adapter.close?.(); discard(); socket.close() } }
 }

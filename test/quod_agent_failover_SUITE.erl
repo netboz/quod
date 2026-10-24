@@ -534,7 +534,7 @@ agent_policy(Old, Observers, Eligible, Administrator) ->
                               {agent_host_rank, actor, maps:get(reference, N), Rank}]
                              || {N, Rank} <- lists:zip(Eligible, [1, 2])]),
     SigningRights = [begin
-        {ok, Text} = quod_client_goal_parser:format({record_recovered_work, V}),
+        {ok, Text} = quod_client_goal_parser:format_clause({record_recovered_work, V}),
         Request = {agent_goal_v1, {'_'}, {agent_instance_ref, ?NS, {'_'}, actor},
                    {'_'}, {'_'}, {'_'}, {'_'}, execute, 3, Text},
         {':-', {can_request_agent_signature, Principal, actor, Request},

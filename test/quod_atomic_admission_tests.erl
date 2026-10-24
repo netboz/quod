@@ -272,7 +272,7 @@ deadline({_, _, #{group := #{vote_deadline_ms := D}}}) -> D.
 installed_dependency_edges_rebase_without_another_validation_test() ->
     M = material(), Id = group(M), P1 = {self(), {1, <<1:256>>}}, P2 = {self(), {2, <<2:256>>}},
     Basis = #{{fact, {policy, 1}} => true, {request, request1} => true,
-              {reservation, {<<"saved">>, 1}} => true},
+              {reservation, write, {<<"saved">>, 1}} => true},
     Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
     {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(P1, 1, Q),
     {selected, _, Ready} = quod_atomic_admission:verdict(Tag, P1, {{vote, M}, Basis}, Checking),

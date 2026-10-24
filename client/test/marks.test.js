@@ -5,6 +5,22 @@ import { PROLOG_TERM_LIMITS } from '../src/protocol-limits.js'
 import { readTerm, readList } from '../src/prolog-read.js'
 import { readMarks } from '../src/marks.js'
 
+test('terrain descriptors bind generated resources to an anchored physical body', () => {
+  const anchor = '\\x7\\'.repeat(32)
+  const descriptor = 'terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,[]))],view_distance(4000,1000,2000),resources(500000,1000000,20000,10000,64))'
+  const mark = `mark(<<"ground">>,<<"terrain">>,${descriptor},body_pose(4,2),terrain_surfaces,unlabelled,` +
+    `depicts(<<"world">>,<<"${anchor}">>,land))`
+  const [terrain] = readMarks(`[${mark}]`)
+  assert.deepEqual(terrain.body, { id: '4', revision: '2' })
+  assert.deepEqual(terrain.size, { profile: 'qvt1', viewDistance: [4000, 1000, 2000], palette: [[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, textures: [] }]],
+    allowed: [500000, 1000000, 20000, 10000], chunks: 64 })
+  assert.throws(() => readMarks(`[${mark.replace('body_pose(4,2)', 'transform(0,0,0,0,0,0)')}]`), /anchored body/)
+  assert.throws(() => readMarks(`[${mark.replace('resources(500000', 'resources(0')}]`), /terrain allowance/)
+  assert.throws(() => readMarks(`[${mark.replace('view_distance(4000,1000,2000)', 'view_distance(4000,2000,1000)')}]`), /view distance/)
+  assert.throws(() => readMarks(`[${mark.replace('material(9,surface(<<"#447722">>,0,900,0,[]))',
+    'material(9,surface(<<"#447722">>,0,900,0,[])),material(9,surface(<<"#FFFFFF">>,0,900,0,[]))')}]`), /material identity/)
+})
+
 test('multiple ontology mark occurrences retain one exact instance and no body identity', () => {
   const anchor = '\\x7\\'.repeat(32)
   const target = `ontology_ref(<<"private:ontology">>,<<"${anchor}">>)`

@@ -199,10 +199,11 @@ signed_origin_scope_seals_operation_claim_without_database_diff_test() ->
         ?assertEqual(Identity, quod_dtx:origin(Plan)),
         ?assertEqual(Binding, quod_dtx:request_binding(Plan)),
         ?assertEqual([], quod_ct:plan_material(diff, Plan)),
-        ?assertEqual(#{}, quod_ct:plan_material(read_check, Plan)),
+        ?assertMatch(#{{material_limit_override, 3} := never_present},
+                     quod_ct:plan_material(read_check, Plan)),
         ?assert(quod_dtx:participates(Plan)),
         ?assertNot(quod_dtx:writes(Plan)),
-        ?assertNot(quod_dtx:reads_only(Plan))
+        ?assert(quod_dtx:reads_only(Plan))
     after
         quod_proof_session:stop(Session)
     end.
@@ -294,7 +295,7 @@ write_lane_routing_is_derived_only_from_sealed_plans_test() ->
          #{Origin => OriginRead, RemoteA => RemoteWriteA,
            RemoteC => RemoteReadC}, Origin, true)),
     ?assertMatch(
-       {remote_claim, [RemoteA], []},
+       {remote_claim, [RemoteA], [{Origin, OriginClaim}]},
        quod_prolog:test_route_plans(
          #{Origin => OriginClaim, RemoteA => RemoteWriteA}, Origin, true)),
     ?assertMatch(
@@ -506,53 +507,23 @@ superseded_keyed_plan_v5_is_rejected_test() ->
           ?assertNot(quod_dtx:verify(Decoded))
       end).
 
-plan_material_has_one_aggregate_release_symbol_budget_test() ->
-    with_identity(
-      fun(_Pub) ->
-          Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
-          Prefix = <<"z", (integer_to_binary(
-                                erlang:unique_integer([positive]), 36))/binary>>,
-          DiffNames = [unique_symbol(Prefix, 1)],
-          ReadNames = [unique_symbol(Prefix, 2)],
-          GoalNames = [unique_symbol(Prefix, N)
-                       || N <- lists:seq(3, Budget + 1)],
-          AllNames = DiffNames ++ ReadNames ++ GoalNames,
-          assert_symbols_absent(AllNames),
-          Diff = [{assert, {{'$quod_symbol', Name}, true}}
-                  || Name <- DiffNames],
-          ReadPairs = [{{{'$quod_symbol', Name}, 0}, never_present}
-                       || Name <- ReadNames],
-
-          %% The over-budget symbol lives only inside RequestedGoalBin. It is
-          %% still charged with diff/read vocabulary, and rejection happens
-          %% before any member of the aggregate is allocated.
-          TooManyTranscript = symbol_transcript(GoalNames),
-          TooMany = signed_material_plan(Diff, ReadPairs, TooManyTranscript),
-          {ok, TooManyBlob} = quod_dtx:encode(TooMany),
-          {ok, TooManyDecoded} = quod_dtx:decode(TooManyBlob),
-          ?assert(quod_dtx:verify(TooManyDecoded)),
-          ?assertEqual({error, too_many_new_atoms},
-                       quod_dtx:material(TooManyDecoded)),
-          assert_symbols_absent(AllNames),
-
-          AtLimitTranscript = symbol_transcript(lists:droplast(GoalNames)),
-          AtLimit = signed_material_plan(Diff, ReadPairs, AtLimitTranscript),
-          {ok, AtLimitBlob} = quod_dtx:encode(AtLimit),
-          {ok, AtLimitDecoded} = quod_dtx:decode(AtLimitBlob),
-          ?assert(quod_dtx:verify(AtLimitDecoded)),
-          {ok, #{diff := MaterialDiff, read_check := MaterialRead,
-                 transcript := MaterialTranscript}} =
-              quod_dtx:material(AtLimitDecoded),
-          ?assertEqual(1, length(MaterialDiff)),
-          ?assertEqual(1, map_size(MaterialRead)),
-          ?assertEqual(length(AtLimitTranscript), length(MaterialTranscript)),
-          ?assertEqual(512, ?QUOD_MAX_NEW_MATERIAL_ATOMS),
-          [?assert(is_atom(binary_to_existing_atom(Name, utf8)))
-           || Name <- lists:droplast(AllNames)],
-          ?assertException(
-             error, badarg,
-             binary_to_existing_atom(lists:last(AllNames), utf8))
-      end).
+plan_material_replays_admitted_vocabulary_on_a_cold_vm_test() ->
+    with_identity(fun(_Pub) ->
+        Prefix = <<"z", (integer_to_binary(erlang:unique_integer([positive]), 36))/binary>>,
+        Names = [unique_symbol(Prefix, N) || N <- lists:seq(1, 600)],
+        assert_symbols_absent(Names),
+        [DiffName, ReadName | GoalNames] = Names,
+        Diff = [{assert, {{'$quod_symbol', DiffName}, true}}],
+        Reads = [{{{'$quod_symbol', ReadName}, 0}, never_present}],
+        Original = signed_material_plan(Diff, Reads, symbol_transcript(GoalNames)),
+        {ok, Blob} = quod_dtx:encode(Original),
+        {ok, Decoded} = quod_dtx:decode(Blob),
+        ?assert(quod_dtx:verify(Decoded)),
+        {ok, Material} = quod_dtx:material(Decoded),
+        ?assertEqual({ok, Material}, quod_dtx:material(Decoded)),
+        ?assertEqual({ok, Blob}, quod_dtx:encode(Decoded)),
+        [?assert(is_atom(binary_to_existing_atom(Name, utf8))) || Name <- Names]
+    end).
 
 plan_material_rejects_invalid_diff_and_duplicate_reads_test() ->
     with_identity(
@@ -622,9 +593,13 @@ outcome_reads_survive_extraction_and_sealing_test() ->
         ok = quod_proof_session:absorb_read_set(Session,#{Key => Token}),
         ?assertEqual(#{Key => Token},quod_proof_session:read_set(Session)),
         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
-        ?assertEqual(1,maps:get(read_functors,quod_dtx:core(Plan))),
-        ?assertEqual(#{Key => Token},quod_ct:plan_material(read_check,Plan)),
-        ?assertEqual(#{reads => [],writes => [],custody => []},
+        SealedReads = quod_ct:plan_material(read_check,Plan),
+        ?assertEqual(Token,maps:get(Key,SealedReads)),
+        ?assertEqual(never_present,maps:get({material_limit_override,3},SealedReads)),
+        ?assertEqual(map_size(SealedReads),maps:get(read_functors,quod_dtx:core(Plan))),
+        ?assertEqual(#{reads => [{<<"material_default_limit">>,3},
+                                {<<"material_limit">>,3},
+                                {<<"material_limit_override">>,3}],writes => [],custody => []},
                      maps:get(conflict_descriptor,quod_dtx:core(Plan))),
         ?assertEqual({error,invalid_read_dependency},
                      quod_dtx:seal_session(Session,(bind())#{base_height => 0}))

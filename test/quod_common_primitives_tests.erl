@@ -8,10 +8,23 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_vm_limits.hrl").
--export([quod_names_dormant_marker_function/1]).
 
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
+
+voxel_primitive_is_pure_and_preserves_unification_test() ->
+    with_authored([],fun(St) ->
+        Request = {sample,{field_v1,1,500,[{plane,250}],7},
+                   {vector,0,0,0},{dimensions,2,2,2}},
+        Limits = {sampling_limits,8,8,0,24},
+        Result = value({'Samples'},{'$quod_voxel',Request,Limits,{'Samples'}},St),
+        ?assertMatch({samples_v1,<<_:64>>,<<_:128>>},Result),
+        ?assertMatch({succeed,_},erlog_int:prove_goal({'$quod_voxel',Request,Limits,Result},St)),
+        ?assertMatch({fail,_},erlog_int:prove_goal({'$quod_voxel',Request,Limits,wrong},St)),
+        ?assertMatch({erlog_error,instantiation_error,_},catch erlog_int:prove_goal(
+            {'$quod_voxel',{'Request'},Limits,{'Samples'}},St)),
+        ?assertEqual([],quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
+    end).
 
 agent_request_bytes_are_inert_exact_intent_test() ->
     with_authored([], fun(St) ->
@@ -475,24 +488,15 @@ invalid_inputs_are_errors_test() ->
                                 {?DRAW, {f, [1, <<"b">>, c]}, 10, I}))
     end).
 
-%% The founding guard's basis is the release's own applications, not the
-%% code path: this test module is on the path and loaded here, yet a symbol
-%% only it defines is still reported as new — as a release node that never
-%% ships it would see it.
-cold_vocabulary_ignores_modules_outside_the_basis_test() ->
-    Marker = list_to_atom("quod_names_dormant_marker_" ++ integer_to_list(?LINE)),
-    ?assert(lists:member(Marker, quod_wire_term:cold_new_symbols({Marker, x}))),
-    ?assert(lists:member(quod_names_dormant_marker_function,
-                         quod_wire_term:cold_new_symbols(
-                           [{quod_names_dormant_marker_function, 1}]))),
-    ?assertEqual([], quod_wire_term:cold_new_symbols({findall, ':-', is, member})),
-    Modules = quod_wire_term:release_modules(),
-    ?assert(lists:member(quod_wire_term, Modules)),
-    ?assert(lists:member(erlog_int, Modules)),
-    ?assertNot(lists:member(?MODULE, Modules)),
-    ?assert(lists:all(fun(M) -> code:which(M) =/= non_existing end, Modules)).
-
-quod_names_dormant_marker_function(X) -> X.
+%% Symbol admission counts semantic names equally in warm and cold VMs.
+symbol_vocabulary_is_independent_of_loaded_modules_test() ->
+    Name = <<"quod_material_warm_cold_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Cold = {{'$quod_symbol', Name}, x},
+    {ok, Before} = quod_wire_term:symbol_names(Cold),
+    ?assertEqual(lists:sort([Name, <<"x">>]), Before),
+    {ok, Warm} = quod_wire_term:materialize_symbols(Cold),
+    ?assertEqual({ok, Before}, quod_wire_term:symbol_names(Warm)),
+    ?assertEqual({ok, Before}, quod_wire_term:symbol_names(Cold)).
 
 %% --- helpers ---------------------------------------------------------------
 

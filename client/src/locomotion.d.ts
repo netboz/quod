@@ -20,5 +20,5 @@ export function readControl(text: string): PhysicsControl | null
 export function driveInput(velocity: number[], angular?: number[]): PrologTerm
 export function snapInput(angle: number): PrologTerm
 export function jumpInput(speed: number): PrologTerm
-export function teleportInput(position: number[]): PrologTerm
+export function teleportInput(position: number[], origin?: bigint[]): PrologTerm
 export function pushInput(body: string, revision: string, impulse: number[]): PrologTerm

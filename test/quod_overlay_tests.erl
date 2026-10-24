@@ -44,7 +44,7 @@ overlay_apply_roundtrip_test() ->
     %% with an exact mutation-version token for each dependency.
     ?assertEqual([{no_follow, 1}, {parent, 2}], maps:keys(ReadSet)),
     ?assertEqual({present, 1}, maps:get({parent, 2}, ReadSet)),
-    ?assertEqual(never_present, maps:get({no_follow, 1}, ReadSet)),
+    ?assertEqual({present, 0}, maps:get({no_follow, 1}, ReadSet)),
     %% the committed db was NOT touched — child(bob) is only staged
     ?assertEqual(undefined, proc(C, {child, 1})),
     %% applying the diff to a fresh db makes child(bob) provable

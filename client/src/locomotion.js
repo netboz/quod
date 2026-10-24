@@ -92,9 +92,11 @@ export function driveInput(velocity, angular = [0, 0, 0]) {
 
 export const snapInput = angle => compound('snap', [number(angle)])
 export const jumpInput = speed => compound('jump', [number(speed)])
-export const teleportInput = position => {
-  if (position.length !== 3 || !position.every(Number.isFinite)) throw new Error('invalid landing')
-  return compound('teleport', [compound('vector', position.map(milliUnits))])
+export const teleportInput = (position, origin = [0n, 0n, 0n]) => {
+  if (position.length !== 3 || !position.every(n => Number.isFinite(n) && Number.isSafeInteger(Math.trunc(n * 1000))) ||
+      origin.length !== 3 || !origin.every(n => typeof n === 'bigint')) throw new Error('invalid landing')
+  return compound('teleport', [compound('vector', position.map((n, axis) =>
+    number(BigInt(Math.trunc(n * 1000)) + origin[axis])))])
 }
 
 // Stable body identity/revision come from the authoritative projection, never

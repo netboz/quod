@@ -735,39 +735,21 @@ relay_verifies_before_decode_test() ->
                  quod_transaction:decode_verified_submission(
                    ?BINDING, AuthenticatedGarbage)).
 
-authenticated_relay_etf_cannot_allocate_atoms_test() ->
+authenticated_relay_replays_admitted_vocabulary_on_a_cold_vm_test() ->
     Prefix = integer_to_binary(erlang:unique_integer([positive])),
-    AtomNames =
-        [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
-         || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
-    [?assertException(
-        error, badarg, binary_to_existing_atom(Name, utf8))
-     || Name <- AtomNames],
-    %% The signed envelope itself contains only fixed atoms. Agent vocabulary is
-    %% represented by bounded wire symbols; exceeding the explicit allocation
-    %% cap rejects the complete material before any symbol is interned.
-    DiffWire = wire_list([{0, Name} || Name <- AtomNames]),
-    MaterialWire = {4, [DiffWire, {5}]},
-    EffectsWire = quod_wire_term:encode_canonical([]),
-    {ok, CanonicalEffects} = EffectsWire,
+    Names = [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
+             || N <- lists:seq(1, 600)],
+    [?assertException(error, badarg, binary_to_existing_atom(Name, utf8)) || Name <- Names],
+    Diff = [{assert, {{{'$quod_symbol', Name}, 1}, true}} || Name <- Names],
     {Author, Identity} = identity(),
-    Canonical =
-        term_to_binary(
-          {quod_transaction, 15, ?NS, ?ANCHOR, ?ADMISSION,
-           <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
-           <<>>, <<>>, term_to_binary(MaterialWire, [deterministic]),
-           CanonicalEffects,
-           application, none, [], none, none, Author, 1, 0},
-          [deterministic]),
-    Signature = quod_identity:sign(Canonical, Identity),
-    Submission = {submit, Author, Signature, Canonical},
+    Tx0 = (unsigned(Author))#transaction{diff = Diff},
+    Tx1 = quod_transaction:bind_id({?NS, ?ANCHOR}, Tx0),
+    {ok, Tx} = quod_transaction:sign(?BINDING, Tx1, Identity),
+    {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
     ?assert(quod_transaction:verify_submission(Submission)),
-    ?assertEqual(
-       {error, too_many_new_atoms},
-       quod_transaction:decode_verified_submission(?BINDING, Submission)),
-    [?assertException(
-        error, badarg, binary_to_existing_atom(Name, utf8))
-     || Name <- AtomNames].
+    {ok, Materialized} = quod_transaction:decode_verified_submission(?BINDING, Submission),
+    ?assertEqual({ok, Submission}, quod_transaction:submission(?BINDING, Materialized)),
+    [?assert(is_atom(binary_to_existing_atom(Name, utf8))) || Name <- Names].
 
 bounded_material_failure_is_total_test() ->
     {Author, Identity} = identity(),
@@ -813,9 +795,6 @@ foreign_ledger_decode_keeps_unknown_vocabulary_opaque_test() ->
 
 deep_term(0, Term) -> Term;
 deep_term(Depth, Term) -> deep_term(Depth - 1, {nested, Term}).
-
-wire_list([]) -> {5};
-wire_list([Head | Tail]) -> {6, Head, wire_list(Tail)}.
 
 flip_first(<<Byte, Rest/binary>>) -> <<(Byte bxor 1), Rest/binary>>.
 

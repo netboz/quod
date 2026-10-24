@@ -1,0 +1,20 @@
+#{field =>
+      {field_v1,1947,1000,
+                [{plane,7000},
+                 {relief,6500,20000,1},
+                 {relief,1200,6000,2},
+                 {carve_sphere,{vector,0,3000,0},6000},
+                 {carve_tunnel,{vector,-32000,3000,0},
+                               {vector,32000,3000,0},
+                               3000},
+                 {material_below,6000,2},
+                 {material_below,3000,3},
+                 {material_below,0,4},
+                 {clip_box,{vector,-24000,-4000,-16000},
+                           {vector,24000,22000,16000}}],
+                1},
+  brush => {dig_sphere,{vector,11000,7000,-7000},4500},
+  limits =>
+      {prepare_limits,{sampling_limits,1331,20000,200000,3993},
+                      {surface_limits,512,10000,10000},
+                      200000,500000}}.

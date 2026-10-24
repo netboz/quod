@@ -15,7 +15,9 @@ unsigned_empty_source_seals_only_for_multiple_foreign_writers_test() ->
                     ?assert(quod_dtx:verify(Plan)),
                     ?assertEqual(0, quod_dtx:diff_ops(Plan)),
                     ?assertEqual(0, quod_dtx:effects_count(Plan)),
-                    ?assertEqual(#{}, quod_ct:plan_material(read_check, Plan));
+                    ?assertEqual([{material_default_limit,3},{material_limit,3},
+                                  {material_limit_override,3}],
+                                 lists:sort(maps:keys(quod_ct:plan_material(read_check, Plan))));
                 error -> ok
             end
         end)
@@ -66,7 +68,8 @@ empty_source_vote_admission_uses_the_existing_own_plan_header_test() ->
     with_scopes(2, fun({Ns, Anchor} = Origin, Targets, Handles) ->
         {ok, Plans} = quod_proof_context:seal_plans(),
         Plan = maps:get(Origin, Plans),
-        ?assertNot(quod_dtx:participates(Plan)),
+        ?assert(quod_dtx:participates(Plan)),
+        ?assertEqual(0, quod_dtx:diff_ops(Plan)),
         Manifest = unsigned_manifest(Origin, Targets, Plans, quod_proof_context:vote_deadline_ms()),
         {ok, Attestation} = quod_scope_session:attest_plan(maps:get(Origin, Handles), Plan, Manifest),
         {ok, Group} = quod_atomic:new_group(Manifest, none, Attestation),

@@ -14,7 +14,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import '@babylonjs/core/Culling/ray.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { PALETTE } from './palette.js'
-import { paintMarks, clearMarks, paintBodyPoses } from './scene.js'
+import { paintMarks, clearMarks, paintBodyPoses, paintTerrain, paintSkies, compareOpaqueMarks } from './scene.js'
 import { createRenderResources } from './render-resources.js'
 import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
@@ -41,6 +41,7 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   const engine = new Engine(canvas, true, { stencil: true })
   const scene = new Scene(engine)
   scene.useRightHandedSystem = true
+  scene.setRenderingOrder(0, compareOpaqueMarks)
   const resources = createRenderResources(scene)
   const sky = Color3.FromHexString(PALETTE.navy).scale(0.34)
   scene.clearColor.set(sky.r, sky.g, sky.b, 1)
@@ -98,7 +99,37 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   }, PointerEventTypes.POINTERPICK)
   let painted = new Map()
   let currentMarks = null
+  let coordinateFrame = null
+  let simulation = null, terrainCamera = null, terrainObserver = null
   let xr = null
+  scene.onBeforeCameraRenderObservable.add(view => paintSkies(painted, view))
+
+  function cameraInterest() {
+    const active = scene.activeCamera
+    if (simulation?.selection === 'active' && active) simulation.interest?.(active.globalPosition.asArray())
+  }
+  function terrainHorizon() {
+    const root = simulation?.marks.find(mark => mark.kind === 'terrain')
+    const distance = simulation?.selection === 'active' && root ? root.size.viewDistance[0] / 1000 : null
+    scene.fogMode = distance === null ? Scene.FOGMODE_NONE : Scene.FOGMODE_LINEAR
+    if (distance !== null) {
+      const atmosphere = simulation.marks.find(mark => mark.kind === 'sky_sphere')?.material
+      scene.fogColor.copyFrom(atmosphere
+        ? Color3.FromHexString(atmosphere.colour).toLinearSpace().scale(atmosphere.emission).toGammaSpace() : sky)
+      scene.fogStart = distance * 0.75; scene.fogEnd = distance
+    }
+  }
+  function bindTerrainCamera() {
+    if (terrainCamera) {
+      terrainCamera.onViewMatrixChangedObservable.remove(terrainObserver)
+    }
+    terrainCamera = scene.activeCamera
+    terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(cameraInterest) ?? null
+    terrainHorizon()
+    cameraInterest()
+  }
+  scene.onActiveCameraChanged.add(bindTerrainCamera)
+  bindTerrainCamera()
 
   function closeMenu() {
     menu.root?.dispose(false, true)
@@ -213,6 +244,14 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   engine.runRenderLoop(() => scene.render())
   return {
     update(current) {
+      simulation = null
+      if (current?.selection === 'active') {
+        if (coordinateFrame?.fence === current.fence && coordinateFrame.originSeq !== current.originSeq) {
+          playerNavigation.rebase(Vector3.FromArray(current.origin.map((n, i) =>
+            Number(coordinateFrame.origin[i] - n) / 1000)))
+        }
+        coordinateFrame = { fence: current.fence, originSeq: current.originSeq, origin: current.origin }
+      } else if (current) coordinateFrame = null
       const observer = current?.selection === 'nonphysical' ||
         (current?.selection === 'active' && current.control === null)
       playerNavigation.update(observer ? undefined : current?.selection === 'active' ? current : null)
@@ -221,6 +260,11 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
         currentMarks = current.marks
       }
       if (current) paintBodyPoses(painted, current.poses ?? new Map())
+      simulation = current
+      terrainHorizon()
+      scene.activeCamera?.getViewMatrix(true)
+      cameraInterest()
+      return paintTerrain(scene, painted, current, resources, onResourceError)
     },
     setActionMenu(entries, activate) {
       closeMenu()

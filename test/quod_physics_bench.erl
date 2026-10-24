@@ -30,7 +30,7 @@ surface_motion() ->
             [{I,1,fixed,{{float(I)+20.0,0.5,0.0},{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0}
                 || I <- lists:seq(3,16)]],
     {ok,R} = quod_physics_native:new_world({16,16,128,1000.0,32,256,256},0.016667,-9.81),
-    {Install,{ok,16}} = timer:tc(fun() -> quod_physics_native:install(R,Rows) end),
+    {Install,{ok,16}} = timer:tc(fun() -> quod_physics_native:install(R,{0,0,0},Rows) end),
     {ok,_} = quod_physics_native:step(R,false),
     Samples = [begin
         X = case I rem 2 of 0 -> 0.033334; 1 -> -0.033334 end,
@@ -40,7 +40,7 @@ surface_motion() ->
         {ok,_} = quod_physics_native:step(R,false), Us
     end || I <- lists:seq(1,2000)],
     Rss = rss_kb(),
-    {Unchanged,{ok,0}} = timer:tc(fun() -> quod_physics_native:install(R,Rows) end),
+    {Unchanged,{ok,0}} = timer:tc(fun() -> quod_physics_native:install(R,{0,0,0},Rows) end),
     {Retire,ok} = timer:tc(fun() -> quod_physics_native:retire(R) end),
     io:format("surface_motion bodies=16 vertices=144 triangles=242 install_us=~p query_us=~p unchanged_us=~p retire_us=~p rss_kb_after=~p~n",
         [Install,percentiles(Samples),Unchanged,Retire,Rss]).
@@ -48,7 +48,7 @@ surface_motion() ->
 dense(N) ->
     {ok,R} = quod_physics_native:new_world({N,N,N*N,1000.0,256,4096,4096},1/60,-9.81),
     Rows = [{I,1,dynamic,{{0.0,3.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0} || I <- lists:seq(1,N)],
-    {ok,N} = quod_physics_native:install(R,Rows),
+    {ok,N} = quod_physics_native:install(R,{0,0,0},Rows),
     {Times,Contacts} = lists:unzip([begin
         {Us,{ok,{_,_,C}}} = timer:tc(fun() -> quod_physics_native:step(R,false) end),
         {Us,length(C)}
@@ -60,7 +60,7 @@ owner_death(N) ->
     Parent = self(),
     {Pid,M} = spawn_monitor(fun() ->
         {ok,R} = quod_physics_native:new_world({N,N,N*N,1000.0,256,4096,4096},1/60,-9.81),
-        {ok,N} = quod_physics_native:install(R,bodies(N)),
+        {ok,N} = quod_physics_native:install(R,{0,0,0},bodies(N)),
         {ok,_} = quod_physics_native:step(R,false),
         Parent ! native_ready,
         %% Keep the only resource reference on the heap until external kill.
@@ -89,10 +89,10 @@ echo() -> receive {ping, From} -> From ! pong, echo(); stop -> ok end.
 measure(N) -> io:format("world ~p~n", [work(N, 500)]).
 work(N, Steps) ->
     {Create, {ok, Resource}} = timer:tc(fun() -> quod_physics_native:new_world({N,N,N*N,1000.0,256,4096,4096},1/60,-9.81) end),
-    {Install, {ok, N}} = timer:tc(fun() -> quod_physics_native:install(Resource, bodies(N)) end),
+    {Install, {ok, N}} = timer:tc(fun() -> quod_physics_native:install(Resource,{0,0,0}, bodies(N)) end),
     {ActiveTimes, IdleTimes, QueryTimes, MaxContacts} = fold(Resource, Steps, true, [], [], [], 0),
     Rss = rss_kb(),
-    {Unchanged, {ok,0}} = timer:tc(fun() -> quod_physics_native:install(Resource,bodies(N)) end),
+    {Unchanged, {ok,0}} = timer:tc(fun() -> quod_physics_native:install(Resource,{0,0,0},bodies(N)) end),
     {Retire, ok} = timer:tc(fun() -> quod_physics_native:retire(Resource) end),
     #{bodies => N, joints => 0, chunks => 0, steps => Steps, active_calls => length(ActiveTimes), rss_kb_after => Rss,
       max_contacts => MaxContacts, create_us => Create, install_us => Install,

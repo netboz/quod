@@ -7,6 +7,84 @@
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).
 
+-export([preview_worlds/1]).
+
+material_admission_uses_committed_root_policy_test_() ->
+    {timeout,60,fun() ->
+        F = setup(),
+        Override = {material_limit_override,founding,canonical_bytes,0},
+        try
+            commit_root({assertz,Override}),
+            Read = fun() -> ?assertMatch({ok,[#{}],_},
+                quod_prolog:prove_ro(?ROOT_NS,{material_limit,founding,canonical_bytes,0})) end,
+            Read(),
+            quod_lobby_tests:assert_read_has_no_io(fun() -> Read(),Read() end),
+            Ns = unique_ns(<<"governed-material">>), Goal = create_goal(Ns,[]),
+            {fail,Reasons} = quod_prolog:execute(?ROOT_NS,Goal),
+            ?assert(lists:any(fun
+                ({ontology_creation_failed,{material_limit,founding,canonical_bytes,Actual,0}})
+                  when Actual > 0 -> true;
+                (_) -> false end,Reasons)),
+            ?assertEqual({ok,not_hosted},quod_ontology:local_state(Ns)),
+            ?assertEqual([], [R || R=#{target := {Target,_}} <- quod_effect_journal:rows(),Target =:= Ns]),
+            commit_root({retract,Override}),
+            ?assertMatch({ok,[#{}],_},quod_prolog:execute(?ROOT_NS,Goal)),
+            ok = wait_ready(Ns,300),
+            [ok = quod_effect_journal:await(Id,5000) || #{effect_id := Id} <- quod_effect_journal:rows()],
+            Before = maps:get(committed,quod_simplex:stats(?ROOT_NS)),
+            quod_lobby_tests:assert_read_has_no_io(fun() ->
+                ?assertMatch({ok,[#{}],_},quod_prolog:execute(?ROOT_NS,Goal))
+            end),
+            ?assertEqual(Before,maps:get(committed,quod_simplex:stats(?ROOT_NS)))
+        after cleanup(F) end
+    end}.
+
+%% Browser acceptance uses the same disposable factory and real signed owners.
+%% Metadata contains only this fixture's key, in an owner-only file.
+preview_worlds(MetadataPath) ->
+    F = setup(),
+    #{dir := Dir, actor_ns := ActorNs, actor_principal := Principal} = F,
+    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    Unlock = filename:join(Dir, "vault-unlock"),
+    ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+    {ok, Vault} = quod_agent_vault:start_link(
+        #{directory => filename:join(Dir, "vault"), unlock_file => Unlock}),
+    unlink(Vault),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    {ok, Cursors} = quod_client_cursor:start_link(),
+    unlink(Cursors),
+    try
+        User = found_lobby_user(found_lobby_classes(), Network, Node),
+        #{reference := Owner = {agent_instance_ref, UserNs, UserAnchor, me},
+          lobby_name := Ns, keypair := {Public, Seed}} = User,
+        commit_root({assertz, {ontology_creator_agent, Owner}}),
+        {ok, _, _} = quod_prolog:execute(ActorNs,
+            {assertz, {can_host_ontology, Owner, Node, Ns, {'Anchor'}, discoverable}}),
+        {ok, _, {normalized, {committed, _, _}}} =
+            submit_lobby(User, execute, {provision_lobby, me}),
+        ok = wait_ready(Ns, 300),
+        {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
+        application:set_env(quod, client_enabled, true),
+        application:set_env(quod, client_ip, {127, 0, 0, 1}),
+        application:set_env(quod, client_port, 0),
+        {ok, _} = application:ensure_all_started(ssl),
+        {ok, _} = application:ensure_all_started(cowboy),
+        {ok, Client} = quod_client:start_link(),
+        unlink(Client),
+        Encode = fun(B) -> base64:encode(B, #{mode => urlsafe, padding => false}) end,
+        Metadata = #{port => ranch:get_port(quod_client_listener),
+            namespace => UserNs, anchor => Encode(UserAnchor), instanceText => <<"me.">>,
+            network => Encode(Network), public_key => Encode(Public), seed => Encode(Seed),
+            lobby_namespace => Ns, lobby_anchor => Encode(Anchor)},
+        ok = quod_file:write_atomic(MetadataPath, iolist_to_binary(json:encode(Metadata)), 8#600),
+        io:format("Isolated world-library endpoint ready.~n"),
+        try receive stop -> ok end
+        after stop_process(Client) end
+    after stop_process(Cursors), stop_process(Auth), cleanup(F), stop_process(Vault) end.
+
 default_lobby_physics_startup_test_() ->
     {timeout, 90, fun() ->
         F = setup(),
@@ -32,6 +110,8 @@ default_lobby_physics_startup_test_() ->
             ok = wait_ready(Ns, 300),
             {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
             Scoped = fun(G) -> {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, G}} end,
+            ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
+                submit_lobby(User, read, Scoped({gui_schema,world_creation,{0},{1}}))),
             [ok = quod_effect_journal:await(Id,5000)
              || #{effect_id := Id} <- quod_effect_journal:rows()],
             Manager = quod_reg:where({namespace_manager,node}),
@@ -106,16 +186,16 @@ lobby_safety_queries(Pid,Spec) ->
     Expected = #{fence => quod_physics:fence(Spec),structure => maps:get(structure,Spec),
         incarnation => maps:get(run_token,Spec)},
     Query = fun(Q) -> quod_physics:motion_query(Pid,Expected,{Pilot,Revision},Q,{query_limits,2,0,8,128},1000) end,
-    ?assertMatch({ok,_,{clear,_,_}},Query({place,{pose,{vector,0,1000,2800},{rotation,0,0,0}}})),
-    {ok,_,{clipped,{{X,Y,Z},_},Contacts,_}} = Query({landing,{vector,0,1000,0},4000,2000,900}),
+    ?assertMatch({ok,_,{0,0,0},{clear,_,_}},Query({place,{pose,{vector,0,1000,2800},{rotation,0,0,0}}})),
+    {ok,_,{0,0,0},{clipped,{{X,Y,Z},_},Contacts,_}} = Query({landing,{vector,0,1000,0},4000,2000,900}),
     ?assert(abs(X)<0.01 andalso abs(Z)<0.01 andalso Y>0.19 andalso Y<0.23),
     ?assert(lists:keymember(Floor,1,Contacts)),
-    {ok,_,{clipped,{{_,RimY,RimZ},_},RimContacts,_}} = Query({travel,{vector,0,0,-15000},{angular,0,0,0}}),
+    {ok,_,{0,0,0},{clipped,{{_,RimY,RimZ},_},RimContacts,_}} = Query({travel,{vector,0,0,-15000},{angular,0,0,0}}),
     ?assert(RimZ > -8.6 andalso RimZ < -8.0 andalso RimY >= 0.99),
     ?assert(lists:keymember(Floor,1,RimContacts)),
     Before = gen_server:call(Pid,status),
     quod_lobby_tests:assert_read_has_no_io(fun() ->
-        [?assertMatch({ok,_,{clipped,_,_,_}},Query({landing,{vector,0,1000,0},4000,2000,900})) || _ <- lists:seq(1,3)]
+        [?assertMatch({ok,_,{0,0,0},{clipped,_,_,_}},Query({landing,{vector,0,1000,0},4000,2000,900})) || _ <- lists:seq(1,3)]
     end),
     ?assertEqual(maps:with([installs,steps,incarnation],Before),
         maps:with([installs,steps,incarnation],gen_server:call(Pid,status))).
@@ -293,6 +373,10 @@ setup(Mode) ->
           [{source_file, NodeSource},
            {external_predicate_modules, [quod_ontology_predicates]}]),
     ok = wait_ready(?NODE_NS, 300),
+    %% Authored GUI class references use the registered vocabulary identity.
+    %% Every factory in this isolated node shares that immutable vocabulary.
+    {<<"quod:gui">>, _} = found_lobby_named_sources(<<"quod:gui">>,
+        ["quod_gui.pl"], [], [quod_agent_predicates,quod_gui_predicates]),
     ok = wait_effect_limits({64, unlimited}, 300),
     Base = #{dir => Dir, saved => Saved, manager => Manager,
              ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
@@ -1230,6 +1314,7 @@ signup_namespace(Token) ->
     <<"human:", Encoded/binary>>.
 
 found_lobby_classes() ->
+    {NamesNs, NamesAnchor} = found_lobby_source(<<"names">>, "quod_names.pl", []),
     {RenderNs, RenderAnchor} = found_lobby_source(<<"rendering">>, "quod_rendering.pl", []),
     {ModelNs, ModelAnchor} = found_lobby_source(<<"modelling">>, "quod_modelling.pl",
         [{rendering_vocabulary, RenderNs, RenderAnchor}]),
@@ -1243,13 +1328,15 @@ found_lobby_classes() ->
     {EnvironmentEidolonNs, EnvironmentEidolonAnchor} = found_lobby_source(
         <<"environment-eidolons">>, "quod_environment_eidolons.pl",
         [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
-    {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
+    GuiNs = <<"quod:gui">>, GuiAnchor = quod_simplex:genesis_hash(GuiNs),
     Templates = [{lobby_source_file, list_to_binary(filename:join(
         code:priv_dir(quod), "ontologies/" ++ File))}
         || File <- ["lobby_instance.pl", "space.pl", "agent_instance.pl",
-                    "quod_physics.pl", "space_view.pl"]],
+                    "quod_physics.pl", "space_view.pl", "voxel_world.pl", "voxel_world_view.pl",
+                    "gui_instance.pl", "gui_question.pl", "voxel_world_gui.pl", "lobby_worlds.pl"]],
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
-        [{rendering_vocabulary, RenderNs, RenderAnchor},
+        [{names_vocabulary, NamesNs, NamesAnchor},
+         {rendering_vocabulary, RenderNs, RenderAnchor},
          {modelling_vocabulary, ModelNs, ModelAnchor},
          {material_eidolons, EidolonNs, EidolonAnchor},
          {environment_vocabulary, EnvironmentNs, EnvironmentAnchor},
@@ -2780,24 +2867,27 @@ wait_system_content(Ns, Anchor, N) ->
     end.
 
 
-%% A genesis carrying more new symbols than a cold node admits per envelope
-%% would found here and never join or replay anywhere else: refused at the
-%% founding seam. A source inside the budget founds as before.
+%% Founding admission is authored policy, independent of current VM vocabulary.
+%% The exact compiled source consumes the allowance, including its syntax.
 oversized_vocabulary_never_reaches_hosting(#{dir := Dir}) ->
-    Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
+    Limits = quod_ct:material_limits(founding),
+    Budget = maps:get(symbols, Limits),
     Novel = fun(N) ->
                     [{list_to_atom("cold_vocabulary_" ++ integer_to_list(I)), I}
                      || I <- lists:seq(1, N)]
             end,
     TooMany = unique_ns(<<"oversized-vocabulary">>),
     Over = Novel(Budget + 1),
-    ?assertEqual({error, {genesis_vocabulary, Budget + 1, Budget}},
+    ?assertEqual({error, {material_limit, founding, symbols, Budget + 1, Budget}},
                  quod_ontology:create(TooMany, [{terms, Over}])),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(TooMany)),
     ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, TooMany))),
     AtBudget = unique_ns(<<"budget-vocabulary">>),
+    {ok, #{symbols := BaseSymbols}} = quod_material_admission:usage(
+        quod_prolog:terms_to_diff(Novel(1))),
+    AtLimit = Novel(Budget - BaseSymbols + 1),
     ?assertMatch({ok, created, AtBudget, _},
-                 quod_ontology:create(AtBudget, [{terms, Novel(Budget)}])),
+                 quod_ontology:create(AtBudget, [{terms, AtLimit}])),
     ok = wait_ready(AtBudget, 300),
     ?assertMatch({ok, [#{}], _},
                  quod_prolog:prove(AtBudget, {cold_vocabulary_1, 1})).

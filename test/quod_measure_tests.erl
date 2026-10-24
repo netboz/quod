@@ -116,8 +116,7 @@ policy_test() ->
 
 vocabulary_fits_the_genesis_budget_test() ->
     Terms = quod_committed_projection:read_terms(source()),
-    New = quod_wire_term:cold_new_symbols(Terms),
-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {New, length(New)}),
+    quod_ct:assert_material_admissible(Terms),
     %% no float reaches the committed content
     ?assertNot(lists:any(fun has_float/1, Terms)).
 

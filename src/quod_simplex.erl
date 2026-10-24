@@ -15389,7 +15389,7 @@ source_present({file, none}) -> false;
 source_present({_Kind, undefined}) -> false;
 source_present({_Kind, _Value}) -> true.
 
-%% Config-time shape/size check for the genesis_diff option. It deliberately
+%% Config-time shape check for the genesis_diff option. It deliberately
 %% does NOT require a policy clause: a RESUME passes its (ignored) genesis_diff
 %% through here too, and forcing policy would reject a valid resume. Fresh
 %% founding adds the host-entry policy before valid_genesis_transaction/3
@@ -15398,15 +15398,7 @@ validate_genesis_diff(Diff) ->
     case quod_diff:valid_ops(Diff) of
         false ->
             {error, invalid_genesis_diff};
-        true ->
-            try byte_size(term_to_binary(Diff, [deterministic])) of
-                Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES ->
-                    {ok, {diff, Diff}};
-                _TooLarge ->
-                    {error, initial_content_too_large}
-            catch
-                _:_ -> {error, invalid_genesis_diff}
-            end
+        true -> {ok, {diff, Diff}}
     end.
 
 valid_batch_window(Cfg) ->

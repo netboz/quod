@@ -34,6 +34,23 @@ pub enum Geometry {
     Solid(Primitive),
     Parts(Vec<(Transform, Primitive)>),
     Surface(Vec<V3>, Vec<(u32, u32, u32)>),
+    Terrain(u32,Vec<TerrainChunk>),
+}
+
+#[derive(Clone,rustler::NifTuple)]
+pub struct TerrainChunk {
+    pub origin: (i64,i64,i64), // Local-frame integer millimetres.
+    pub prepared: crate::voxel::chunk::Shared,
+}
+impl PartialEq for TerrainChunk {
+    fn eq(&self,other: &Self) -> bool {
+        self.origin == other.origin && self.prepared.collision_eq(&other.prepared)
+    }
+}
+impl std::fmt::Debug for TerrainChunk {
+    fn fmt(&self,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TerrainChunk").field("origin",&self.origin).finish_non_exhaustive()
+    }
 }
 
 pub fn vector(v: V3, limit: f64) -> Result<Vector, Error> {
@@ -104,11 +121,21 @@ impl Geometry {
                 take(&mut budget.vertices,points.len())?;
                 take(&mut budget.triangles,faces.len())
             }
+            Self::Terrain(_,chunks) => {
+                for c in chunks {
+                    // Even an empty/full chunk retains metadata and coverage.
+                    take(&mut budget.parts,1)?;
+                    take(&mut budget.vertices,c.prepared.generated.mesh.0.len())?;
+                    take(&mut budget.triangles,c.prepared.generated.mesh.1.len())?;
+                }
+                Ok(())
+            }
         }
     }
 
     pub fn build(&self, kind: Kind, budget: &mut Budget) -> Result<SharedShape, Error> {
         match self {
+            Self::Terrain(_,_) => Err(Error::InvalidBody), // Installed as retained constituent colliders.
             Self::Solid(p) => p.build(budget),
             Self::Parts(parts) => {
                 if parts.is_empty() { return Err(Error::InvalidBody); }

@@ -299,6 +299,14 @@ gui_view(proof_console, View) :-
           button(run, <<"Run">>), button(next, <<"Next solution">>),
           button(accept, <<"Accept solution">>), button(stop, <<"Stop">>), button(resolve, <<"Check saved outcome">>)], View).
 
+gui_view(space_library, View) :-
+    gui_workspace(<<"My worlds">>,
+        [catalogue_selection(world, <<"World">>), text_box(status, <<"Status">>),
+         button(create, <<"Create world">>), button(enter, <<"Enter world">>),
+         button(settings, <<"Viewing distance">>), button(edit, <<"Terrain tools">>),
+         button(refresh, <<"Refresh worlds">>), button(setup, <<"Set up world tools">>),
+         button(resolve, <<"Check saved operation">>), button(return, <<"Return to lobby">>)], View).
+
 gui_view(prolog_editor, View) :-
     gui_workspace(<<"Prolog code">>,
          [catalogue_selection(predicate, <<"Source lens">>), text_box(new_predicate, <<"New predicate (name/arity)">>),

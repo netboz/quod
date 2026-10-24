@@ -127,9 +127,15 @@ physics_space_change(W, Subject, withdrawn) :-
         (physics_body_definition(W,B,R,K,P,D),D = live(Subject,_,_,_)),
         [body(Body,Revision,Kind,Pose,Definition)]),
     Definition = live(Subject,Assignment,_,_), Subject = entity_ref(Ns,Anchor,Entity),
-    physics_removable_body(W,Body),
     Ns::(current_ontology_identity(Ns,Anchor),
          physics_release_definition(Entity,World,Assignment)),
+    physics_remove_body(W,Body,Revision,Kind,Pose,Definition).
+
+%% Shared retirement consequence. Admission and source delegation belong to
+%% the calling domain; body constraints, custody and cleanup belong here.
+physics_remove_body(W,Body,Revision,Kind,Pose,Definition) :-
+    physics_body_definition(W,Body,Revision,Kind,Pose,Definition),
+    physics_removable_body(W,Body),
     physics_advance_structure(W,_),
     retract(physics_body_definition(W,Body,Revision,Kind,Pose,Definition)),
     physics_remove_rest_checkpoint(W,Body), physics_remove_rest_state(W,Body),
@@ -226,14 +232,22 @@ physics_refresh_definition(W,Subject,Assignment,Before,Next,Definition) :-
         findall(body(B,R,K,Position,D),
             (physics_body_definition(W,B,R,K,Position,D),D = live(Subject,Assignment,Before,_)),
             [body(Body,Revision,Kind,Pose,Old)]),
-        physics_unconstrained_body(W,Body),
-        physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
         Definition = geometry(Shape,Density),
-        physics_checked_body(Body,Kind,Pose,Shape,Density,Coordinate), term_digest(Definition,Digest),
-        physics_advance_structure(W,Structure),
-        retract(physics_body_definition(W,Body,Revision,Kind,Pose,Old)),
-        assertz(physics_body_definition(W,Body,Structure,Kind,Pose,live(Subject,Assignment,Next,Digest))),
-        physics_remove_rest_checkpoint(W,Body), physics_cancel_rest_edit(W,Body))).
+        term_digest(geometry(Shape,Density),Digest),
+        physics_replace_body(W,Body,Revision,Kind,Pose,Old,Pose,live(Subject,Assignment,Next,Digest),Definition))).
+
+%% Shared consequence of an authorized authored-body change. The caller owns
+%% admission; this helper owns validation, revision fencing and checkpoint
+%% invalidation. Unrelated free-body checkpoints are retained.
+physics_replace_body(W,Body,Revision,Kind,BeforePose,Before,Pose,Definition,geometry(Shape,Density)) :-
+    physics_body_definition(W,Body,Revision,Kind,BeforePose,Before),
+    physics_unconstrained_body(W,Body),
+    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
+    physics_checked_body(Body,Kind,Pose,Shape,Density,Coordinate),
+    physics_advance_structure(W,Structure),
+    retract(physics_body_definition(W,Body,Revision,Kind,BeforePose,Before)),
+    assertz(physics_body_definition(W,Body,Structure,Kind,Pose,Definition)),
+    physics_remove_rest_checkpoint(W,Body), physics_cancel_rest_edit(W,Body).
 
 physics_delete_definition(Entity, Expected) :-
     term_variables([Entity,Expected], []),
@@ -296,12 +310,12 @@ physics_configuration_rows(Template, Goal, Missing, Rows) :-
     findall(Template, Goal, Rows),
     (Rows = [] -> fail_with_reason(Missing) ; true).
 
-physics_query_input(place(pose(Position, rotation(X,Y,Z))), Coordinate, _, Turn) :-
-    physics_query_vector(Position, Coordinate), physics_query_vector(vector(X,Y,Z), Turn).
+physics_query_input(place(pose(Position, rotation(X,Y,Z))), _, _, Turn) :-
+    physics_world_position(Position), physics_query_vector(vector(X,Y,Z), Turn).
 physics_query_input(travel(Translation, angular(X,Y,Z)), _, Travel, Turn) :-
     physics_query_vector(Translation, Travel), physics_query_vector(vector(X,Y,Z), Turn).
-physics_query_input(landing(Position, Reach, Drop, Up), Coordinate, Travel, _) :-
-    physics_query_vector(Position, Coordinate),
+physics_query_input(landing(Position, Reach, Drop, Up), _, Travel, _) :-
+    physics_world_position(Position),
     physics_landing_parameters(Reach, Drop, Up), Reach =< Travel, Drop =< Travel.
 physics_landing_parameters(Reach, Drop, Up) :-
     integer(Reach), Reach > 0, integer(Drop), Drop > 0,
@@ -451,7 +465,7 @@ physics_motion_capabilities([reposition | Rest], Seen) :-
     \+ member(reposition, Seen), physics_motion_capabilities(Rest, [reposition | Seen]).
 physics_absolute_input(reposition(Pose), Coordinate) :-
     physics_query_input(place(Pose), Coordinate, Coordinate, Coordinate).
-physics_absolute_input(teleport(Position), Coordinate) :- physics_query_vector(Position, Coordinate).
+physics_absolute_input(teleport(Position), _) :- physics_world_position(Position).
 physics_absolute_input(drive(_, _), _).
 physics_absolute_input(snap(_), _).
 physics_absolute_input(jump(_), _).
@@ -617,10 +631,17 @@ physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
     integer(Id), Id >= 0, Id < 18446744073709551616,
     member(Kind, [fixed, dynamic, controlled]), physics_positive_scalar(Density),
     integer(Coordinate), Coordinate > 0,
-    physics_valid_pose(Pose, Coordinate), physics_valid_shape(Kind, Shape, Coordinate).
+    physics_world_pose(Pose), physics_valid_shape(Kind, Shape, Coordinate).
 physics_checked_body(Id, Kind, Pose, Shape, Density, Coordinate) :-
     (physics_valid_body(Id, Kind, Pose, Shape, Density, Coordinate) -> true
     ; fail_with_reason(invalid_physics_body(Id))).
+%% Absolute positions are exact millimetres. The coordinate allowance governs
+%% the current native window and local shapes, not distance from world zero.
+physics_world_position(vector(X,Y,Z)) :- integer(X), integer(Y), integer(Z).
+physics_world_pose(vector(X,Y,Z)) :- physics_world_position(vector(X,Y,Z)).
+physics_world_pose(pose(Position,rotation(X,Y,Z))) :-
+    physics_world_position(Position),
+    physics_milli_integer(X), physics_milli_integer(Y), physics_milli_integer(Z).
 physics_valid_pose(vector(X,Y,Z), Coordinate) :-
     physics_body_vector(vector(X,Y,Z), Coordinate).
 physics_valid_pose(pose(Position, rotation(X,Y,Z)), Coordinate) :-
@@ -719,16 +740,8 @@ physics_move_body(W,D,Revision,Structure,Position) :-
     transaction((current_principal(P), can_edit_physics(W,P),
         physics_structure(W,Structure), physics_body_definition(W,D,Revision,Kind,Old,Definition),
         physics_resolve_definition(W,Definition,Shape,Density),
-        physics_unconstrained_body(W,D),
-        physics_required_allowances(W,limits(_,_,_,Coordinate, _),_,_,_),
         Position = vector(_,_,_), physics_relocated_pose(Old,Position,Pose),
-        physics_checked_body(D,Kind,Pose,Shape,Density,Coordinate),
-        Next is Structure + 1,
-        retract(physics_structure(W,Structure)), assertz(physics_structure(W,Next)),
-        retract(physics_body_definition(W,D,Revision,Kind,Old,Definition)),
-        assertz(physics_body_definition(W,D,Next,Kind,Pose,Definition)),
-        physics_remove_rest_checkpoint(W,D),
-        physics_cancel_rest_edit(W,D))).
+        physics_replace_body(W,D,Revision,Kind,Old,Definition,Pose,Definition,geometry(Shape,Density)))).
 
 physics_relocated_pose(vector(_,_,_),Position,Position).
 physics_relocated_pose(pose(_,Rotation),Position,pose(Position,Rotation)).
@@ -826,8 +839,7 @@ physics_rest_measurement(Sample) :-
     physics_free_body(W,D,Revision), physics_rest(W,D,_,waiting(R)),
     physics_rest_policy(W,D,recovery(Tolerance,Checks)),
     integer(Tolerance), Tolerance >= 0, integer(Checks), Checks > 0,
-    physics_required_allowances(W,limits(_,_,_,Coordinate,_),_,_,_),
-    Pose = pose(Position,quaternion(X,Y,Z,Q)), physics_query_vector(Position,Coordinate),
+    Pose = pose(Position,quaternion(X,Y,Z,Q)), physics_world_position(Position),
     physics_coordinate(X,1000000), physics_coordinate(Y,1000000),
     physics_coordinate(Z,1000000), physics_coordinate(Q,1000000),
     Norm is X*X+Y*Y+Z*Z+Q*Q, Norm >= 999996000000, Norm =< 1000004000000,

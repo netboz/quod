@@ -1,5 +1,6 @@
 -module(quod_physics_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_client_goal_limits.hrl").
 
 first_host_and_complete_configuration_commit_together_test_() ->
     [{binary_to_list(Ns),{timeout,90,fun() -> with_world(Ns,
@@ -151,7 +152,7 @@ live_source_control_continuity_test_() ->
         Command = fun(Sequence) -> control_goal({'::',Ns,{physics_control_input,room,Frame,1,Sequence,
             {drive,{vector,0,0,0},{angular,0,0,0}},{0}}}) end,
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1)),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         _ = input_frame(Pid,Ref,maps:get(node,F),1),
         Runtime = quod_reg:where({quod_runtime,Ns}), Parent = self(), Token = make_ref(),
         Observe = fun(State,{in,{quod_foreign_follow,_,_,{Source0,_},
@@ -174,7 +175,7 @@ live_source_control_continuity_test_() ->
             await_live_source_height(Token,quod_prolog:applied(Source)), _ = quod_runtime:stats(Ns),
             ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(2)),
             ?assertMatch({ok,_,_},quod_physics:snapshot(Pid,Expected#{tick => -1})),
-            quod_physics:ack(Pid,Ref,maps:get(tick,Initial))
+            quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial))
         after sys:remove(Runtime,Observe), quod_physics:unwatch(Pid,Ref) end
     end) end}.
 
@@ -475,7 +476,7 @@ live_source_lifecycle_test_() ->
                          lists:keyfind(4,1,maps:get(bodies,Before))),
             Query = {place,{pose,{vector,3000,1000,0},{rotation,0,0,0}}},
             Limits = {query_limits,2,0,8,128},
-            ?assertMatch({ok,_,{clear,_,_}},quod_physics:motion_query(Pid,
+            ?assertMatch({ok,_,{0,0,0},{clear,_,_}},quod_physics:motion_query(Pid,
                 #{fence => quod_physics:fence(Before),structure => 2,
                   incarnation => maps:get(run_token,Before)}, {2,1},Query,Limits,1000)),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,1})),
@@ -493,7 +494,7 @@ live_source_lifecycle_test_() ->
             #{World := #{spec := After}} = worlds(Ns),
             ?assertMatch({4,3,fixed,_,{solid,{ball,0.75}},_},
                          lists:keyfind(4,1,maps:get(bodies,After))),
-            ?assertMatch({ok,_,{occupied,4,_}},quod_physics:motion_query(Pid,
+            ?assertMatch({ok,_,{0,0,0},{occupied,4,_}},quod_physics:motion_query(Pid,
                 #{fence => quod_physics:fence(After),structure => 3,
                   incarnation => maps:get(run_token,After)}, {2,1},Query,Limits,1000)),
             ?assertEqual(lists:keyfind(2,1,maps:get(bodies,Before)),
@@ -596,7 +597,7 @@ live_source_unchanged_work_and_recovery_test_() ->
         #{World := #{spec := BeforeSpec}} = worlds(Ns),
         Expected = #{fence => quod_physics:fence(BeforeSpec),structure => 2,
                      incarnation => maps:get(run_token,BeforeSpec)},
-        ?assertMatch({ok,_,_},quod_physics:body_state(Pid,Expected,{4,2},1000)),
+        ?assertMatch({ok,_,{0,0,0},_},quod_physics:body_state(Pid,Expected,{4,2},1000)),
         Runtime = quod_reg:where({quod_runtime,Ns}), Parent = self(), Token = make_ref(),
         Seen = fun(State,{in,{physics_invalidation_seen,Owner,_,_}},_) when Owner =:= Pid ->
                         Parent ! {live_source_lost,Token}, State;
@@ -622,7 +623,7 @@ assert_no_live_geometry_work(Fun) ->
     Collector = spawn_link(fun() -> trace_calls([]) end),
     Trace = trace:session_create(live_geometry_unchanged,Collector,[]),
     Watched = [{quod_foreign_projection,start_monitor,4},{quod_committed_projection,apply_entry,3},
-               {quod_physics_native,install,2},{quod_physics_native,install_hinges,2},
+               {quod_physics_native,install,3},{quod_physics_native,install_hinges,2},
                {quod_physics_native,new_world,3},{quod_ledger_store,fold,5},
                {quod_ledger_store,open,3},{file,write,2},{file,pwrite,3},
                {file,sync,1},{file,datasync,1}],
@@ -873,8 +874,10 @@ numeric_geometry_and_hinge_refusals_test_() ->
         end,Bodies),
         Body = {physics_body_definition, room, 2, 1, fixed, Position, {owned, Shape, 1}}, commit(Ns,{assertz,Body}),
         BeforeRange = quod_prolog:applied(Ns),
-        assert_reason({coordinate_allowance,1000000},door_action(Ns,
-            {physics_move_body,room,2,1,2,{vector,1000001,3000,0}})),
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+            {physics_checked_body,2,fixed,{vector,Huge,3000,0},Shape,1,1000000})),
+        assert_reason({invalid_physics_body,2},door_action(Ns,
+            {physics_move_body,room,2,1,2,{vector,1.5,3000,0}})),
         ?assertEqual(BeforeRange,quod_prolog:applied(Ns)), commit(Ns,{retract,Body}),
         lists:foreach(fun({Name,Recipe,Reason}) ->
             commit(Ns,{assertz,{physics_hinged_class,Name,1,Recipe}}),
@@ -906,7 +909,7 @@ native_hinge_revision_and_restore_validation_test() ->
     lists:foreach(fun({Definition,Restore,Reason}) ->
         {ok,R} = quod_physics_native:new_world({2,2,4,100.0,2,0,0},1/60,0.0),
         try
-            ?assertEqual({ok,2},quod_physics_native:install(R,[Frame,Moving])),
+            ?assertEqual({ok,2},quod_physics_native:install(R,{0,0,0},[Frame,Moving])),
             ?assertEqual({error,Reason},quod_physics_native:install_hinges(R,[{Definition,Restore}])),
             ?assertEqual({error,retired},quod_physics_native:sample(R))
         after quod_physics_native:retire(R) end
@@ -916,7 +919,7 @@ native_hinge_revision_and_restore_validation_test() ->
          {setelement(5,Hinge,{{100.0,0.0,0.0},{-10.0,0.0,0.0}}),0.0,coordinate_allowance}]),
     {ok,Valid} = quod_physics_native:new_world({2,2,4,100.0,2,0,0},1/60,0.0),
     try
-        {ok,2} = quod_physics_native:install(Valid,[Frame,Moving]),
+        {ok,2} = quod_physics_native:install(Valid,{0,0,0},[Frame,Moving]),
         ?assertEqual({ok,1},quod_physics_native:install_hinges(Valid,[{Hinge,1.5}])),
         ?assertEqual({ok,[{2,1500,false}]},quod_physics_native:hinge_samples(Valid)),
         ?assertEqual({error,stale_revision},quod_physics_native:control_hinge(Valid,2,6,hold)),
@@ -1016,7 +1019,7 @@ signed_live_body_predicate_test_() ->
         #{World := #{spec := Spec}} = worlds(Ns),
         Expected = #{fence => quod_physics:fence(Spec),structure => 1,
                      incarnation => maps:get(run_token,Spec)},
-        ?assertMatch({ok,_,{1,1,world,_,_,_}},quod_physics:body_state(Pid,Expected,{1,1},1000)),
+        ?assertMatch({ok,_,{0,0,0},{1,1,world,_,_,_}},quod_physics:body_state(Pid,Expected,{1,1},1000)),
         ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         #{installs := Installs,queries := Queries} = gen_server:call(Pid,status),
         assert_no_physics_io(fun() ->
@@ -1288,17 +1291,17 @@ signed_motion_query_owner_test_() ->
                      incarnation => maps:get(run_token,Spec)},
         Query = {travel,{vector,5000,0,2000},{angular,0,0,0}},
         Limits = {query_limits,2,0,8,128},
-        {ok,_,{clipped,{{X,_,Z},_},_,_}} = quod_physics:motion_query(Pid,Expected,{2,1},Query,Limits,1000),
+        {ok,_,{0,0,0},{clipped,{{X,_,Z},_},_,_}} = quod_physics:motion_query(Pid,Expected,{2,1},Query,Limits,1000),
         ?assert(X < 1.4 andalso X > 1.39), ?assert(abs(Z-2.0) < 0.001),
-        {ok,_,Before} = quod_physics:body_state(Pid,Expected,{2,1},1000),
+        {ok,_,{0,0,0},Before} = quod_physics:body_state(Pid,Expected,{2,1},1000),
         assert_no_physics_io(fun() ->
             [?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)) || _ <- lists:seq(1,3)]
         end),
-        ?assertMatch({ok,_,Before},quod_physics:body_state(Pid,Expected,{2,1},1000)),
-        ?assertMatch({ok,_,{occupied,3,_}},quod_physics:motion_query(Pid,Expected,{2,1},
+        ?assertMatch({ok,_,{0,0,0},Before},quod_physics:body_state(Pid,Expected,{2,1},1000)),
+        ?assertMatch({ok,_,{0,0,0},{occupied,3,_}},quod_physics:motion_query(Pid,Expected,{2,1},
             {place,{pose,{vector,2000,1002,0},{rotation,0,0,0}}},Limits,1000)),
-        ?assertMatch({ok,_,exhausted},quod_physics:motion_query(Pid,Expected,{2,1},Query,{query_limits,2,0,8,1},1000)),
-        ?assertMatch({ok,_,unavailable},quod_physics:motion_query(Pid,Expected,{2,0},Query,Limits,1000)),
+        ?assertMatch({ok,_,{0,0,0},exhausted},quod_physics:motion_query(Pid,Expected,{2,1},Query,{query_limits,2,0,8,1},1000)),
+        ?assertMatch({ok,_,{0,0,0},unavailable},quod_physics:motion_query(Pid,Expected,{2,0},Query,Limits,1000)),
         ?assertMatch({error,unavailable},quod_physics:motion_query(Pid,Expected#{structure => 0},{2,1},Query,Limits,1000)),
         ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         commit(Ns,{retract,{can_query_physics_motion,room,Human,2,{'_'}}}),
@@ -1344,7 +1347,7 @@ signed_control_releases_only_successful_proof_test_() ->
         assert_reason(transient_already_staged,control_goal(
             {'::',Ns,{',',Go,Command(11,Drive)}})),
         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,Go})),
         ?assertMatch(#{inputs := #{Human := #{sequence := 10}}},gen_server:call(Pid,status)),
         Moved = receive {physics_frame,Pid,Ref,V} -> V after 5000 -> error(control_did_not_move) end,
@@ -1407,7 +1410,7 @@ grounded_jump_and_ceiling_test_() ->
         {Pid,World} = enable(F),
         Motion = {motion,{grounded,900},2500,1600,500,{query_limits,2,0,8,128},[{jump,4000}]},
         {_,Expected,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
         ?assertMatch({ok,_,{normalized,{failed,_}}},Command(0,{jump,4001})),
@@ -1433,7 +1436,7 @@ grounded_jump_and_ceiling_test_() ->
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
         {ok,NewRef,Restored} = quod_physics:watch(Pid,Expected,none),
         ?assert(jump_height(Restored) > 0.502),
-        quod_physics:ack(Pid,NewRef,maps:get(tick,Restored)),
+        quod_physics:ack(Pid,NewRef,maps:get(tick,Restored),maps:get(origin_sequence,Restored)),
         assert_reason(stale_registration,Command(4,{jump,4000})),
         _ = jump_landing(Pid,NewRef,jump_height(Restored)),
         quod_physics:unwatch(Pid,NewRef)
@@ -1454,7 +1457,7 @@ jump_height(Frame) ->
     {2,_,world,{_,Y,_},_,_} = lists:keyfind(2,1,maps:get(poses,Frame)), Y.
 jump_landing(Pid,Ref,Peak) ->
     receive {physics_frame,Pid,Ref,Frame} ->
-        quod_physics:ack(Pid,Ref,maps:get(tick,Frame)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Frame),maps:get(origin_sequence,Frame)),
         Y = jump_height(Frame), Maximum = max(Y,Peak),
         case Y =< 0.505 of true -> Maximum; false -> jump_landing(Pid,Ref,Maximum) end
     after 5000 -> error(jump_did_not_land) end.
@@ -1462,13 +1465,13 @@ jump_landing(Pid,Ref,Peak) ->
 lobby_rim_jump_test_() ->
     [{lists:concat([Angle,"-",Start]),{timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
         {Pid,World} = enable(F),
-        [{':-',{physics_agent,personal_lobby,pilot,1,_,Motion},_}] =
-            [T || T={':-',{physics_agent,personal_lobby,pilot,1,_,_},_} <-
+        [{':-',{physics_agent,_,_,1,_,Motion},_}] =
+            [T || T={':-',{physics_agent,_,_,1,_,_},_} <-
                 quod_prolog:read_terms("priv/ontologies/lobby_instance.pl")],
         {motion,_,_,_,_,_,Capabilities} = Motion,
         {jump,Launch} = lists:keyfind(jump,1,Capabilities),
         {_,_,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
         Direction = {vector,round(2499*math:sin(Angle*math:pi()/180)),0,
@@ -1543,7 +1546,7 @@ lobby_rim_frames(Pid,Ref,Command,Direction={vector,Dx,0,Dz},Seq,Remaining,Frame,
         _ -> ok
     end,
     receive {physics_frame,Pid,Ref,Next} ->
-        quod_physics:ack(Pid,Ref,maps:get(tick,Next)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Next),maps:get(origin_sequence,Next)),
         lobby_rim_frames(Pid,Ref,Command,Direction,Seq+1,Remaining-1,Next,NextEvidence)
     after 5000 -> error(lobby_rim_frame_missing) end.
 
@@ -1554,7 +1557,7 @@ grounded_reinstall_and_wedge_settling_test_() ->
         {_,Expected,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
         %% Consume only already-delivered idle notices before issuing input.
         _ = gen_server:call(Pid,status), flush_sleeping(Pid),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,1,{drive,{vector,0,0,0},{angular,0,0,0}},{0}}})),
         {Falling,_} = input_frame(Pid,Ref,Human,1),
@@ -1610,7 +1613,7 @@ signed_landing_reposition_and_feedback_test_() ->
                   [{teleport,6000,2000,700},{snap,785},reposition]},
         {_,_,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
         ?assert(is_float(maps:get(view_clearance,Initial))),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
         ?assertMatch({ok,_,{normalized,{failed,_}}},Command(0,{snap,2000})),
@@ -1689,7 +1692,7 @@ foreign_signed_control_view_and_reconnect_test_() ->
 
 input_frame(Pid,Ref,Principal,Seq) ->
     receive {physics_frame,Pid,Ref,Frame} ->
-        quod_physics:ack(Pid,Ref,maps:get(tick,Frame)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Frame),maps:get(origin_sequence,Frame)),
         case maps:get(Principal,maps:get(inputs,Frame,#{}),none) of
             #{sequence := Seq,pending := false,result := Result} -> {Frame,Result};
             _ -> input_frame(Pid,Ref,Principal,Seq)
@@ -1701,7 +1704,7 @@ changed_control_view_retains_sequence_test_() ->
         {Pid,World} = enable(F),
         Motion = {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[]},
         {Definition,Expected,OldFrame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,
             {physics_control_input,room,OldFrame,1,7,
                 {drive,{vector,0,0,0},{angular,0,0,0}},{0}}})),
@@ -1724,7 +1727,7 @@ changed_control_view_retains_sequence_test_() ->
             after 5000 -> error(socket_not_released) end,
             {ok,FreshRef,FreshView} = quod_physics:watch(Pid,Expected#{structure => 2,
                 control => {control,Human,1,setelement(5,Definition,2)}},none),
-            quod_physics:ack(Pid,FreshRef,maps:get(tick,FreshView)),
+            quod_physics:ack(Pid,FreshRef,maps:get(tick,FreshView),maps:get(origin_sequence,FreshView)),
             #{World := #{spec := Spec}} = worlds(Ns),
             ControlFrame = {control_frame,{physics_frame,World,maps:get(authority,Spec),maps:get(epoch,Spec),
                 maps:get(generation,Spec),maps:get(run_token,Spec),2},
@@ -1780,7 +1783,7 @@ renewed_control_preserves_input_and_fences_registration_test_() ->
         {Pid,World} = enable(F),
         Motion = {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[{snap,785}]},
         {_,Expected,OldFrame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
-        quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Input = {drive,{vector,1000,0,0},{angular,0,0,0}},
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal({'::',Ns,
             {physics_control_input,room,OldFrame,1,7,Input,{0}}})),
@@ -1805,11 +1808,11 @@ renewed_control_preserves_input_and_fences_registration_test_() ->
         after 5000 -> error(foreign_watch_missing) end,
         %% Retired acknowledgements and detach messages have no authority over
         %% the replacement. Only its own acknowledgement releases credit.
-        quod_physics:ack(Pid,Ref,maps:get(tick,Moving)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Moving),maps:get(origin_sequence,Moving)),
         quod_physics:unwatch(Pid,Ref), _ = gen_server:call(Pid,status),
         receive {physics_frame,Pid,Fresh,_} -> error(uncredited_renewal_frame) after 0 -> ok end,
         ?assertEqual(Original,maps:with([control,sequence,input,expiry],Row())),
-        quod_physics:ack(Pid,Fresh,maps:get(tick,Renewed)),
+        quod_physics:ack(Pid,Fresh,maps:get(tick,Renewed),maps:get(origin_sequence,Renewed)),
         {Continued,_} = input_frame(Pid,Fresh,Human,7),
         {2,1,world,{X0,_,_},_,_} = lists:keyfind(2,1,maps:get(poses,Renewed)),
         {2,1,world,{X1,_,_},_,_} = lists:keyfind(2,1,maps:get(poses,Continued)),
@@ -1850,12 +1853,12 @@ current_view_credit_and_revision_test_() ->
         _ = gen_server:call(Pid, status),
         receive {physics_frame, Pid, Ref, _} -> error(uncredited_frame)
         after 0 -> ok end,
-        quod_physics:ack(Pid, Ref, maps:get(tick, First)),
+        quod_physics:ack(Pid, Ref, maps:get(tick, First),maps:get(origin_sequence,First)),
         Latest = receive {physics_frame, Pid, Ref, Frame} -> Frame
                  after 5000 -> error(no_latest_frame) end,
         ?assert(maps:get(tick, Latest) > maps:get(tick, First)),
         assert_no_physics_io(fun() ->
-            quod_physics:ack(Pid, Ref, maps:get(tick, Latest)),
+            quod_physics:ack(Pid, Ref, maps:get(tick, Latest),maps:get(origin_sequence,Latest)),
             _ = gen_server:call(Pid, status),
             receive {physics_frame, Pid, Ref, _} -> error(unchanged_frame)
             after 0 -> ok end
@@ -2482,6 +2485,251 @@ simulation_state(Socket) ->
     receive {simulation_state, Ref, State} -> State
     after 5000 -> error(socket_state_unavailable) end.
 
+voxel_runtime_retains_chunks_and_applies_committed_dig_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+        Field = {field_v1,1,500,[{plane,1000}],9},
+        Created = door_action(Ns,{voxel_create,room,0,{terrain_v1,unbounded,smooth,Field}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),
+        await_source_receipt(Created),
+        {Pid,World} = enable(F), reconcile(Ns),
+        #{World := #{spec := Before}} = worlds(Ns),
+        Artifacts = maps:get(voxel_resources,Before),
+        ?assertEqual(3,map_size(Artifacts)),
+        {Body,_} = hd(maps:keys(Artifacts)),
+        ?assertMatch({Body,2,fixed,_,{terrain,500,[_,_,_]},_},
+                     lists:keyfind(Body,1,maps:get(bodies,Before))),
+        %% Observe the real worker/owner seam, including numerical calls and
+        %% persistence: retaining a helper's result alone is insufficient.
+        assert_no_physics_io(fun() -> [reconcile(Ns) || _ <- lists:seq(1,5)] end),
+        Brush = {dig_sphere,{vector,4000,1000,2000},600},
+        Dig = door_action(Ns,{',',{voxel_edit_basis,room,Brush,{'R'},{'Cs'}},
+                                  {voxel_edit,room,{'R'},{'Cs'},Brush}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Dig),
+        await_source_receipt(Dig),
+        {Pid,World} = installed_structure(Ns,3), reconcile(Ns),
+        #{World := #{spec := After}} = worlds(Ns),
+        NewArtifacts = maps:get(voxel_resources,After),
+        ?assertEqual(maps:get(run_token,Before),maps:get(run_token,After)),
+        lists:foreach(fun(C) ->
+            ?assertNotEqual(maps:get(input_digest,maps:get({Body,C},Artifacts)),
+                            maps:get(input_digest,maps:get({Body,C},NewArtifacts)))
+        end,[{chunk_v1,0,0,0},{chunk_v1,1,0,0}]),
+        ?assertEqual(maps:get({Body,{chunk_v1,3,0,0}},Artifacts),
+                     maps:get({Body,{chunk_v1,3,0,0}},NewArtifacts)),
+        assert_no_physics_io(fun() -> [reconcile(Ns) || _ <- lists:seq(1,5)] end),
+        %% A retained window must also fit the current aggregate installation
+        %% budget. Refusal reports the actual resource and preserves the owner.
+        Allowance = {physics_allowances,room,
+            {limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+        TooSmall = setelement(3,Allowance,{limits,64,64,256,1000000,{geometry,256,0,4096}}),
+        commit(Ns,{',',{retract,Allowance},{assertz,TooSmall}}),
+        ?assertMatch({error,{physics_materialization,[{World,{geometry_allowance,{vertices,_,0}}}]}},
+            quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),physics_worlds,
+                                            all,quod_time:mono_ms()+10000)),
+        ?assertMatch(#{World := #{pid := Pid,spec := #{voxel_resources := NewArtifacts}}},worlds(Ns)),
+        ?assertMatch(#{navigation_ready := false},gen_server:call(Pid,status)),
+        commit(Ns,{',',{retract,TooSmall},{assertz,Allowance}}),
+        {Pid,World} = installed_structure(Ns,3),
+        #{World := #{spec := Resumed}} = worlds(Ns),
+        ?assertEqual(maps:get(run_token,Before),maps:get(run_token,Resumed)),
+        ?assertEqual(NewArtifacts,maps:get(voxel_resources,Resumed)),
+        %% Leave the edited region, actually reclaim its artifacts, then visit
+        %% it again. The current patches, not a retained mesh, restore the dig.
+        Definition = {owned,{ball,250},1}, Far = {vector,18000,2000,2000},
+        Near = {vector,2000,2000,2000},
+        commit(Ns,{',',{physics_advance_structure,room,{'R'}},
+            {assertz,{physics_body_definition,room,7,{'R'},controlled,Far,Definition}}}),
+        {Pid,World} = installed_structure(Ns,4),
+        await_voxel_chunks(Pid,World,[{Body,{chunk_v1,4,0,0}}],quod_time:mono_ms()+10000),
+        commit(Ns,{physics_replace_body,room,7,4,controlled,Far,Definition,Near,Definition,
+                   {geometry,{ball,250},1}}),
+        {Pid,World} = installed_structure(Ns,5),
+        Key = {Body,{chunk_v1,0,0,0}},
+        await_voxel_chunks(Pid,World,[Key],quod_time:mono_ms()+10000),
+        #{World := #{spec := #{voxel_resources := Revisited}}} = worlds(Ns),
+        EditedDigest = maps:get(output_digest,maps:get(Key,NewArtifacts)),
+        ?assertEqual(EditedDigest,maps:get(output_digest,maps:get(Key,Revisited))),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end),
+        Runtime = quod_reg:where({quod_runtime,Ns}),
+        Monitor = monitor(process,Pid),exit(Runtime,kill),
+        receive {'DOWN',Monitor,process,Pid,_} -> ok after 5000 -> error(runtime_kept_old_physics) end,
+        {Recovered,World} = installed(Ns),
+        ?assertNotEqual(Pid,Recovered),
+        await_voxel_chunks(Recovered,World,[Key],quod_time:mono_ms()+10000),
+        #{World := #{spec := RecoveredSpec}} = worlds(Ns),
+        ?assertEqual(maps:get(generation,Resumed)+1,maps:get(generation,RecoveredSpec)),
+        ?assertEqual(EditedDigest,maps:get(output_digest,maps:get(Key,maps:get(voxel_resources,RecoveredSpec))))
+    end) end}.
+
+voxel_missing_coverage_wakes_existing_resource_worker_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+        Field = {field_v1,1,500,[{plane,1000}],9},
+        Created = door_action(Ns,{voxel_create,room,0,{terrain_v1,unbounded,smooth,Field}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),
+        await_source_receipt(Created),
+        commit(Ns,{assertz,{physics_body_definition,room,7,2,controlled,
+                            {vector,18000,2000,2000},{owned,{ball,250},1}}}),
+        commit(Ns,{assertz,{physics_body_definition,room,8,2,controlled,
+                            {vector,26000,2000,2000},{owned,{ball,250},1}}}),
+        {Pid,World} = enable(F), reconcile(Ns),
+        #{World := #{spec := Spec,terrain_demand := {Pid,Token,2,Ranges,Focus}}} = worlds(Ns),
+        ?assertEqual(maps:get(run_token,Spec),Token),
+        Artifacts = maps:get(voxel_resources,Spec),
+        %% Startup coverage is not a permanent pin. Both live bodies retain
+        %% their regions while the unused initial chunks are reclaimed.
+        ?assertEqual(2,map_size(Artifacts)),
+        RequiredKeys = [K || K = {_,{chunk_v1,X,0,0}} <- maps:keys(Artifacts),X =:= 4 orelse X =:= 6],
+        ?assertEqual(2,length(RequiredKeys)),
+        Height = quod_prolog:applied(Ns),
+        Runtime = quod_reg:where({quod_runtime,Ns}),
+        assert_no_physics_io(fun() ->
+            Runtime ! {physics_terrain_demand,Pid,World,Token,2,Ranges,Focus},
+            Runtime ! {physics_terrain_demand,self(),World,Token,2,[],#{}},
+            [reconcile(Ns) || _ <- lists:seq(1,5)]
+        end),
+        ?assertEqual(Height,quod_prolog:applied(Ns)),
+        ?assertMatch(#{phase := active,incarnation := Token,navigation_ready := true},gen_server:call(Pid,status)),
+        ?assertMatch({ok,[#{'Rows' := []}],_},quod_prolog:prove_ro(Ns,
+            {findall,{'P'},{voxel_chunk_override,room,{'_'},{'_'},{'P'}},{'Rows'}})),
+        Brush = {dig_sphere,{vector,4000,1000,2000},600},
+        Dig = door_action(Ns,{',',{voxel_edit_basis,room,Brush,{'R'},{'Cs'}},
+                                  {voxel_edit,room,{'R'},{'Cs'},Brush}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Dig), await_source_receipt(Dig),
+        {Pid,World} = installed_structure(Ns,3), reconcile(Ns),
+        #{World := #{spec := #{voxel_resources := Updated}}} = worlds(Ns),
+        ?assertEqual(maps:with(RequiredKeys,Artifacts),maps:with(RequiredKeys,Updated)),
+        commit(Ns,{',',{retract,{physics_body_definition,room,7,2,controlled,
+            {vector,18000,2000,2000},{owned,{ball,250},1}}},
+            {',',{retract,{physics_body_definition,room,8,2,controlled,
+                {vector,26000,2000,2000},{owned,{ball,250},1}}},
+                {physics_advance_structure,room,{'_'}}}}),
+        {Pid,World} = installed_structure(Ns,4), reconcile(Ns),
+        await_voxel_chunks(Pid,World,[],quod_time:mono_ms()+5000),
+        #{World := #{spec := #{voxel_resources := Empty}}} = worlds(Ns),
+        ?assertEqual(0,map_size(Empty)),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
+    end) end}.
+
+voxel_eye_clearance_uses_the_retained_consumer_demand_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+        Created = door_action(Ns,{voxel_create,room,0,
+            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),await_source_receipt(Created),
+        commit(Ns,{assertz,{physics_body_definition,room,7,2,controlled,
+                            {vector,3700,2000,2000},{owned,{ball,100},1}}}),
+        {Pid,World} = enable(F),
+        #{World := #{spec := #{voxel_resources := Resources}}} = worlds(Ns),
+        [Terrain] = lists:usort([Id || {Id,_} <- maps:keys(Resources)]),
+        Support = {Terrain,{chunk_v1,0,0,0}},Eye = {Terrain,{chunk_v1,1,0,0}},
+        {_,Expected,_,First,_} = install_test_control(F,Pid,World,
+            {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[reposition]},7),
+        quod_physics:unwatch(Pid,First),
+        await_voxel_chunks(Pid,World,[Support],quod_time:mono_ms()+10000),
+        Runtime = quod_reg:where({quod_runtime,Ns}),ok = sys:suspend(Runtime),
+        Ref = try
+            {ok,R1,Unknown} = quod_physics:watch(Pid,Expected,none),
+            ?assertEqual(null,maps:get(view_clearance,Unknown)),
+            {ok,R2,StillUnknown} = quod_physics:watch(Pid,Expected,R1),
+            ?assertEqual(null,maps:get(view_clearance,StillUnknown)),
+            {messages,Queued} = process_info(Runtime,messages),
+            Demands = [M || M = {physics_terrain_demand,P,W,_,_,_,_} <- Queued,P =:= Pid,W =:= World],
+            ?assertEqual(1,length(Demands)),R2
+        after sys:resume(Runtime) end,
+        await_voxel_chunks(Pid,World,[Support,Eye],quod_time:mono_ms()+10000),
+        Renewals = make_ref(),
+        assert_no_physics_io(fun() ->
+            Last = lists:foldl(fun(_,Previous) ->
+                {ok,Next,Known} = quod_physics:watch(Pid,Expected,Previous),
+                ?assert(maps:get(view_clearance,Known) > 0),
+                ?assert(is_float(maps:get(view_clearance,Known))),Next
+            end,Ref,lists:seq(1,3)),
+            reconcile(Ns),self() ! {Renewals,Last},ok
+        end),
+        %% Reclamation is a real update, outside the unchanged-renewal trace.
+        receive {Renewals,Last} -> quod_physics:unwatch(Pid,Last) end,
+        await_voxel_chunks(Pid,World,[Support],quod_time:mono_ms()+10000)
+    end) end}.
+
+voxel_query_gap_preserves_registered_input_and_its_expiry_test_() ->
+    [{atom_to_list(Outcome),{timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns,node := Human}) ->
+        Field = {field_v1,1,500,[{plane,1000}],9},
+        Created = door_action(Ns,{voxel_create,room,0,{terrain_v1,unbounded,smooth,Field}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created), await_source_receipt(Created),
+        commit(Ns,{assertz,{physics_body_definition,room,7,2,controlled,
+                            {vector,2000,2000,2000},{owned,{ball,250},1}}}),
+        {Pid,World} = enable(F), Limits = {query_limits,2,0,8,128},
+        {_,Expected,_,Ref,Initial} = install_test_control(F,Pid,World,
+            {motion,free,2000,1600,1000,Limits,[reposition]},7),
+        quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
+        Installed = Expected#{registration => maps:get(registration,Initial)},
+        Control = maps:get(control,Expected), Runtime = quod_reg:where({quod_runtime,Ns}),
+        Parent = self(), Tag = make_ref(),
+        Seen = fun(State,{in,{timeout,_,step}},_) -> Parent ! {terrain_input_step,Tag},State;
+                  (State,_,_) -> State end,
+        Row = fun() ->
+            [Inputs] = [M || M <- tuple_to_list(sys:get_state(Pid)),is_map(M),is_map_key(Human,M)],
+            maps:get(Human,Inputs)
+        end,
+        Expiry = quod_time:now_ms()+case Outcome of expired -> 1000; _ -> 10000 end,
+        ok = sys:install(Pid,{Seen,none}), ok = sys:suspend(Runtime),
+        try
+            ok = quod_physics:input(Pid,Installed,Control,1,
+                {{reposition,{vector,18000,2000,2000}},Limits},Expiry,quod_time:mono_ms()+10000),
+            receive {terrain_input_step,Tag} -> ok after 5000 -> error(input_step_missing) end,
+            ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
+            ?assertMatch(#{sequence := 1,pending := true,expiry := Expiry},Row()),
+            case Outcome of
+                applied -> ok;
+                disconnected ->
+                    quod_physics:unwatch(Pid,Ref),
+                    _ = gen_server:call(Pid,status);
+                source_changed ->
+                    commit(Ns,{',',{retract,{physics_structure,room,2}},
+                                   {assertz,{physics_structure,room,3}}});
+                expired ->
+                    Timer = erlang:start_timer(max(0,Expiry-quod_time:now_ms()+1),self(),input_expired),
+                    receive {timeout,Timer,input_expired} -> ok end
+            end,
+            ok = sys:resume(Runtime),
+            case Outcome of
+                Removed when Removed =:= disconnected; Removed =:= source_changed ->
+                    reconcile(Ns),
+                    case gen_server:call(Pid,status) of
+                        #{phase := active,navigation_ready := true} -> ok;
+                        _ -> ?assertEqual({Pid,World},installed(Ns))
+                    end,
+                    ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status)),
+                    ?assertMatch(#{pending := false},Row()),
+                    ?assertNot(maps:is_key(terrain,Row())),
+                    CurrentExpected = case Outcome of source_changed -> Expected#{structure => 3}; _ -> Expected end,
+                    ?assertMatch({ok,_,_,{7,2,world,{2.0,2.0,2.0},_,_}},
+                        quod_physics:body_state(Pid,CurrentExpected,{7,2},1000)),
+                    ?assertMatch({ok,_,_},quod_physics:watch(Pid,CurrentExpected,none));
+                _ ->
+                    {Frame,Result} = input_frame(Pid,Ref,Human,1),
+                    Position = case Outcome of
+                        applied -> ?assertMatch({clear,_,_},Result),{18.0,2.0,2.0};
+                        expired -> ?assertEqual(expired,Result),{2.0,2.0,2.0}
+                    end,
+                    ?assertMatch({7,2,world,Position,_,_},lists:keyfind(7,1,maps:get(poses,Frame))),
+                    ?assertMatch(#{sequence := 1,pending := false,expiry := Expiry},Row()),
+                    ?assertNot(maps:is_key(terrain,Row())),
+                    ?assertEqual(maps:get(registration,Initial),maps:get(registration,Frame))
+            end
+        after catch sys:resume(Runtime),sys:remove(Pid,Seen) end
+    end) end}} || Outcome <- [applied,expired,disconnected,source_changed]].
+
+with_voxel_world(Fun) -> with_voxel_world(Fun,[]).
+with_voxel_world(Fun,Extra) ->
+    with_world(Fun,fun(Rules) ->
+        [R || R <- Rules,element(1,R) =/= physics_body_definition] ++
+        quod_prolog:read_terms("priv/ontologies/voxel_world.pl") ++ Extra ++
+        [{can_create_voxel_world,room,{'_'}},{can_edit_voxel_world,room,{'_'},{'_'}},
+         {voxel_allowances,room,{voxel_limits,{sampling_limits,1331,10648,85184,3993},
+              {surface_limits,512,10000,10000},64,69120,1048576}},
+         {voxel_initial_chunks,room,{'_'},[{chunk_v1,0,0,0},{chunk_v1,1,0,0},{chunk_v1,3,0,0}]}]
+    end).
+
 with_world(Fun) -> with_world(Fun, fun(Rules) -> Rules end).
 with_world(Fun, Transform) ->
     with_world(<<"host-test-agent">>, Fun, Transform).
@@ -2583,7 +2831,8 @@ sleeping_world_and_unchanged_cost_test_() ->
 assert_no_physics_io(Fun) ->
     Collector = spawn_link(fun() -> trace_calls([]) end),
     Trace = trace:session_create(physics_unchanged, Collector, []),
-    Watched = [{quod_physics_native,new_world,3}, {quod_physics_native,install,2},
+    Watched = [{quod_voxel,sample,4}, {quod_physics_native,voxel_prepare,5},
+               {quod_physics_native,new_world,3}, {quod_physics_native,install,3},
                {quod_physics_native,install_hinges,2}, {quod_physics_native,control_hinge,4}, {quod_ledger_store,append,2}, {quod_ledger_store,fold,5},
                {quod_ledger_store,fold_groups,3}, {quod_ledger_store,open,3},
                {quod_file,write_atomic,3}, {dets,insert,2}, {dets,sync,1}, {file,write,2}, {file,sync,1}, {file,datasync,1}],
@@ -2843,7 +3092,7 @@ runtime_collapse_retires_native_world_test_() ->
 native_boundary_retires_on_unwind_test() ->
     {ok, R} = quod_physics_native:new_world({2,2,1,1000.0,256,4096,4096},1/60,-9.81),
     Body = {1,1,dynamic,{{0.0,3.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0},
-    {ok,1} = quod_physics_native:install(R,[Body]),
+    {ok,1} = quod_physics_native:install(R,{0,0,0},[Body]),
     Parent = self(),
     spawn(fun() -> Parent ! {foreign_native_call,quod_physics_native:step(R,false)} end),
     receive {foreign_native_call, Result} -> ?assertEqual({error,wrong_owner},Result)
@@ -2851,7 +3100,7 @@ native_boundary_retires_on_unwind_test() ->
     ?assertMatch({ok,{true,[_],[]}},quod_physics_native:sample(R)),
     %% Rustler's list iterator panics on an improper tail. Decoding is inside
     %% this adapter's unwind boundary, so the partially touched resource dies.
-    ?assertEqual({error,native_failure},quod_physics_native:install(R,[Body|malformed])),
+    ?assertEqual({error,native_failure},quod_physics_native:install(R,{0,0,0},[Body|malformed])),
     ?assertEqual({error,retired},quod_physics_native:sample(R)),
     ?assertEqual(ok,quod_physics_native:retire(R)),
     ?assertEqual({error,invalid_step},quod_physics_native:new_world({2,2,1,1000.0,256,4096,4096},1.0e-320,-9.81)).
@@ -3039,13 +3288,13 @@ unobserved_custody_has_explicit_lifecycle_exit_test_() ->
 
 native_reports_the_exceeded_output_allowance_test() ->
     {ok,R} = quod_physics_native:new_world({2,0,2,1000.0,256,4096,4096},1/60,-9.81),
-    {ok,1} = quod_physics_native:install(R,[{1,1,dynamic,{{0.0,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0}]),
+    {ok,1} = quod_physics_native:install(R,{0,0,0},[{1,1,dynamic,{{0.0,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0}]),
     ?assertEqual({error,pose_allowance},quod_physics_native:sample(R)),
     ?assertEqual({error,retired},quod_physics_native:step(R,false)).
 
 native_density_is_not_a_coordinate_budget_test() ->
     {ok,R} = quod_physics_native:new_world({1,1,1,1000.0,256,4096,4096},1/60,-9.81),
-    {ok,1} = quod_physics_native:install(R,[{1,1,dynamic,{{0.0,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},7850.0}]),
+    {ok,1} = quod_physics_native:install(R,{0,0,0},[{1,1,dynamic,{{0.0,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},7850.0}]),
     ?assertMatch({ok,{true,[_],[]}},quod_physics_native:step(R,false)),
     ok = quod_physics_native:retire(R).
 
@@ -3211,7 +3460,7 @@ submit_fixture(F,Goal) ->
 
 native_nonfinite_quarantine_retires_world_test() ->
     {ok,R} = quod_physics_native:new_world({1,1,1,1.7e308,256,4096,4096},1/60,-9.81),
-    {ok,1} = quod_physics_native:install(R,[{1,1,dynamic,{{1.5e308,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0e308,1.0e-150,1.0e-150}},1.0}]),
+    {ok,1} = quod_physics_native:install(R,{0,0,0},[{1,1,dynamic,{{1.5e308,2.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0e308,1.0e-150,1.0e-150}},1.0}]),
     ?assertEqual({error,non_finite_state},quod_physics_native:step(R,false)),
     ?assertEqual({error,retired},quod_physics_native:step(R,false)).
 
@@ -3306,6 +3555,81 @@ with_simulator(Custody,Fun) ->
              custody => Custody,budget => 5000,navigation_guard => {Guard,0}},
     {ok,Pid} = quod_physics:start(self(),Spec),
     try Fun(Pid,Spec) after gen_server:stop(Pid) end.
+
+step_envelope_rebases_or_refuses_before_integration_test_() ->
+    [{atom_to_list(Outcome),fun() -> with_simulator(none,fun(Pid,Spec) ->
+        {Activation,Token} = receive
+            {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+        after 5000 -> error(activation_missing) end,
+        {Limit,Position} = case Outcome of
+            rebase -> {10.0,{4900,0,0}};
+            refuse -> {1.0,{0,0,0}}
+        end,
+        Body = {1,1,dynamic,{world_mm,Position,{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0},
+        Current = Spec#{generation => 1,run_token => Token,
+            custody => {request,Token,0,<<2>>,<<0:512>>},
+            limits => {2,2,8,Limit,2,100,100},dt => 0.02,gravity => 0.0,
+            structure => 1,activities => #{},bodies => [Body]},
+        Pid ! {physics_selected,self(),make_ref(),Current},
+        Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+        case Outcome of
+            rebase ->
+                receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(frame_install_missing) end,
+                ?assertMatch(#{phase := active,incarnation := Token},gen_server:call(Pid,status)),
+                Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token},
+                {ok,_,Origin,{1,1,world,Local,_,_}} = quod_physics:body_state(Pid,Expected,{1,1},1000),
+                ?assertEqual({4900,0,0},Origin),
+                ?assertEqual(Position,quod_physics_coordinates:canonical(Local,Origin));
+            refuse ->
+                receive {physics_status,Pid,_,Token,{unavailable,coordinate_allowance}} -> ok
+                after 5000 -> error(coordinate_refusal_missing) end,
+                Before = gen_server:call(Pid,status),
+                ?assertMatch(#{phase := {blocked,coordinate_allowance},incarnation := Token,steps := 0},Before),
+                lists:foreach(fun(Next) ->
+                    Selection = make_ref(), Pid ! {physics_selected,self(),Selection,Next},
+                    receive {physics_selection_applied,Pid,_,Selection} -> ok after 5000 -> error(selection_missing) end,
+                    ?assertEqual(Before,gen_server:call(Pid,status))
+                end,[Current,Current#{budget => 6000}])
+        end,
+        receive {physics_work,Pid,_,_,activate,_,_} -> error(coordinate_refusal_restarted_world)
+        after 0 -> ok end
+    end) end} || Outcome <- [rebase,refuse]].
+
+terrain_coverage_wait_retains_incarnation_and_unchanged_selection_test() ->
+    {ok,{Air,_}} = quod_physics_native:voxel_prepare(binary:copy(<<127>>,1331),
+        binary:copy(<<9:16>>,1331),500,{512,10000,10000,500000},[]),
+    with_simulator(none,fun(Pid,Spec) ->
+        {Activation,Token} = receive
+            {physics_work,Pid,_,A,activate,{{physics_activate,room,0,T},_,_},_} -> {A,T}
+        after 5000 -> error(activation_missing) end,
+        Body = {1,1,dynamic,{world_mm,{2000,2000,2000},{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0},
+        Terrain = fun(Chunks) -> {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+                                  {terrain,500,Chunks},1.0} end,
+        Current = Spec#{generation => 1,run_token => Token,
+            custody => {request,Token,0,<<2>>,<<0:512>>},
+            limits => {8,8,128,1000.0,512,100000,100000},dt => 1/60,gravity => -9.81,
+            structure => 1,activities => #{},bodies => [Terrain([{{0,0,0},Air}]),Body]},
+        Pid ! {physics_selected,self(),make_ref(),Current},
+        Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+        receive {physics_status,Pid,_,Token,{unavailable,terrain_coverage}} -> ok
+        after 5000 -> error(coverage_wait_missing) end,
+        Before = gen_server:call(Pid,status),
+        ?assertMatch(#{phase := coverage,steps := 0,navigation_ready := false},Before),
+        Selection = make_ref(), Pid ! {physics_selected,self(),Selection,Current},
+        receive {physics_selection_applied,Pid,_,Selection} -> ok
+        after 5000 -> error(coverage_selection_missing) end,
+        ?assertEqual(Before,gen_server:call(Pid,status)),
+        receive {physics_status,Pid,_,_,installed} -> error(false_coverage_readiness)
+        after 0 -> ok end,
+        Chunks = [{{X*4000,Y*4000,Z*4000},Air} || X <- lists:seq(-2,2),
+                    Y <- lists:seq(-2,2),Z <- lists:seq(-2,2)],
+        Pid ! {physics_selected,self(),make_ref(),Current#{bodies => [Terrain(Chunks),Body]}},
+        receive {physics_status,Pid,_,Token,installed} -> ok
+        after 5000 -> error(coverage_install_missing) end,
+        ?assertMatch(#{phase := active,incarnation := Token,navigation_ready := true},gen_server:call(Pid,status)),
+        receive {physics_work,Pid,_,_,activate,_,_} -> error(coverage_restarted_world)
+        after 0 -> ok end
+    end).
 
 input_uninstalled_world_and_expiry_test() ->
     with_simulator(none,fun(Pid,_) ->
@@ -3417,7 +3741,7 @@ idle_compound_agent_blocks_moving_door_test_() ->
         %% retained physical query path without pushing the door.
         reconcile(Ns),
         QueryExpected = Expected#{incarnation => maps:get(run_token,Spec)},
-        {ok,_,Escape} = quod_physics:motion_query(Pid,QueryExpected,{3,1},
+        {ok,_,{0,0,0},Escape} = quod_physics:motion_query(Pid,QueryExpected,{3,1},
             {travel,{vector,0,0,2000},{angular,0,0,0}},{query_limits,2,0,8,128},1000),
         ?assertMatch({clear,_,_},Escape),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
@@ -3437,12 +3761,12 @@ native_geometry_budget_and_retained_parts_test() ->
                    {{{1.0,0.0,0.0},{0.0,1.5,0.0}},{box,0.5,0.2,0.1}}]},
     Row = {1,1,controlled,{{0.0,1.0,0.0},{0.0,0.0,0.0}},Shape,1.0},
     {ok,R} = quod_physics_native:new_world(Limits,1/60,-9.81),
-    ?assertEqual({ok,1},quod_physics_native:install(R,[Row])),
+    ?assertEqual({ok,1},quod_physics_native:install(R,{0,0,0},[Row])),
     Before = quod_physics_native:sample(R),
-    ?assertEqual({ok,0},quod_physics_native:install(R,[Row])),
+    ?assertEqual({ok,0},quod_physics_native:install(R,{0,0,0},[Row])),
     ?assertEqual(Before,quod_physics_native:sample(R)),
     Extra = {2,1,fixed,{{5.0,0.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0,1.0,1.0}},1.0},
-    ?assertEqual({error,geometry_allowance},quod_physics_native:install(R,[Row,Extra])),
+    ?assertEqual({error,geometry_allowance},quod_physics_native:install(R,{0,0,0},[Row,Extra])),
     ?assertEqual({error,retired},quod_physics_native:sample(R)).
 
 unobstructed_door_signed_transition_test_() ->
@@ -4024,8 +4348,8 @@ with_door_simulator(SavedCustody,Fun) ->
         Current = Spec#{generation => 1,run_token => Token,
             custody => {request,Token,0,<<2>>,<<0:512>>},
             limits => {2,2,1,100.0,2,0,0},dt => 1/60,gravity => 0.0,structure => 1,
-            bodies => [{10,1,dynamic,{{0.0,1.0,0.0},{0.0,0.0,0.0}},{solid,{box,1.0,1.0,0.1}},1.0},
-                       {11,1,fixed,{{0.0,1.0,0.0},{0.0,0.0,0.0}},{solid,{box,0.05,1.0,0.05}},1.0}],
+            bodies => [{10,1,dynamic,{world_mm,{0,1000,0},{0.0,0.0,0.0}},{solid,{box,1.0,1.0,0.1}},1.0},
+                       {11,1,fixed,{world_mm,{0,1000,0},{0.0,0.0,0.0}},{solid,{box,0.05,1.0,0.05}},1.0}],
             hinges => [{{{10,1},1,{11,1},{0.0,1.0,0.0},{{0.0,0.0,0.0},{-1.0,0.0,0.0}},
                          {-1.5,1.5},1.5},0.0}],
             activities => #{{hinge,10} => #{reference => {hinge,10,1},request => R,
@@ -4086,14 +4410,14 @@ same_namespace_signed_chair_push_test_() ->
             simulation_ack(Socket,View,Initial),
             _ = simulation_input_frame(Socket,View,<<"1">>),
             Expected = #{fence => quod_physics:fence(Spec),incarnation => maps:get(run_token,Spec),structure => 1},
-            {ok,_,{3,1,world,{X,_,_},_,_}} = quod_physics:body_state(Pid,Expected,{3,1},1000),
+            {ok,_,{0,0,0},{3,1,world,{X,_,_},_,_}} = quod_physics:body_state(Pid,Expected,{3,1},1000),
             ?assert(X > 0),
             ?assertMatch({control,Principal,_,_},Control)
         after Socket ! stop end
     end) end}.
 
 simulation_ack(Socket,View,Frame) ->
-    Socket ! {client,iolist_to_binary(json:encode(#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame)}))}.
+    Socket ! {client,iolist_to_binary(json:encode(#{type => ack,origin_seq => <<"0">>,view => View,tick => maps:get(<<"tick">>,Frame)}))}.
 
 simulation_input_frame(Socket,View,Sequence) ->
     Delivered = simulation_reply(Socket,<<"simulation_frame">>),
@@ -4126,7 +4450,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,
                 {',',{physics_control_input,room,Frame,1,1,Push,{0}},fail}})),
             ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
-            quod_physics:ack(Pid,Ref,maps:get(tick,Initial)),
+            quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
             ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1,Push)),
             {Moved,pushed} = input_frame(Pid,Ref,Human,1),
             {3,1,world,{X,_,_},_,{Vx,_,_}} = lists:keyfind(3,1,maps:get(poses,Moved)),
@@ -4138,7 +4462,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             {_,refused} = input_frame(Pid,Ref,Human,2),
             %% Appearance and unchanged resource installation cannot reset the body.
             commit(Ns,{assertz,{chair_label,<<"Moved chair">>}}), reconcile(Ns),
-            {ok,_,{3,1,world,{Later,_,_},_,_}} = quod_physics:body_state(Pid,Expected,{3,1},1000),
+            {ok,_,{0,0,0},{3,1,world,{Later,_,_},_,_}} = quod_physics:body_state(Pid,Expected,{3,1},1000),
             ?assert(Later >= X),
             R = {rest,1,<<201:256>>},
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},
@@ -4171,7 +4495,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             %% collapse. Recovery must use the rest checkpoint, not this motion.
             {ok,ResumeRef,ResumeView} = quod_physics:watch(Pid,Expected,none),
             ResumeFrame = setelement(3,Frame,maps:get(registration,ResumeView)),
-            quod_physics:ack(Pid,ResumeRef,maps:get(tick,ResumeView)),
+            quod_physics:ack(Pid,ResumeRef,maps:get(tick,ResumeView),maps:get(origin_sequence,ResumeView)),
             ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Send(ResumeFrame,3,Push)),
             {Unsaved,pushed} = input_frame(Pid,ResumeRef,Human,3),
             {3,1,world,{UnsavedX,_,_},_,{UnsavedVx,_,_}} = lists:keyfind(3,1,maps:get(poses,Unsaved)),
@@ -4182,7 +4506,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             #{World := #{spec := Spec}} = worlds(Ns),
             ?assert(maps:get(generation,Spec) > element(5,element(2,Frame))),
             Fresh = #{fence => quod_physics:fence(Spec),structure => 1,incarnation => maps:get(run_token,Spec)},
-            {ok,_,{3,1,world,{RestoredX,_,_},_,_}} = quod_physics:body_state(Next,Fresh,{3,1},1000),
+            {ok,_,{0,0,0},{3,1,world,{RestoredX,_,_},_,_}} = quod_physics:body_state(Next,Fresh,{3,1},1000),
             ?assert(abs(RestoredX-SavedX/1000) < 0.002),
             ?assertNotMatch({ok,_,{normalized,{answers,_,[_]}}},Command(3,Push)),
             ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Next,status)),
@@ -4191,7 +4515,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
                 {physics_move_body,room,3,1,1,{vector,4000,500,0}})),
             ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,CP})),
             {Next,World} = installed(Ns),
-            {ok,_,{3,2,world,{EditX,_,_},_,_}} = quod_physics:body_state(Next,Fresh#{structure => 2},{3,2},1000),
+            {ok,_,{0,0,0},{3,2,world,{EditX,_,_},_,_}} = quod_physics:body_state(Next,Fresh#{structure => 2},{3,2},1000),
             ?assert(abs(EditX-4.0) < 0.001)
         after catch quod_reg:unsubscribe({runtime,Ns}) end
     end) end}.
@@ -4229,7 +4553,7 @@ native_rest_recovery_rejects_overlap_and_bad_rotation_test() ->
     Wall = {3,1,fixed,{{2.0,0.5,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0},
     lists:foreach(fun({Rows,Pose}) ->
         {ok,Resource} = quod_physics_native:new_world({3,3,4,100.0,64,1024,1024},1/60,-9.81),
-        {ok,_} = quod_physics_native:install(Resource,Rows),
+        {ok,_} = quod_physics_native:install(Resource,{0,0,0},Rows),
         ?assertEqual({error,invalid_checkpoint},quod_physics_native:restore_rest(Resource,[{2,1,Pose,0.005,128}])),
         ?assertEqual({error,retired},quod_physics_native:sample(Resource))
     end,[{[Ground,Chair,Wall],{{2.0,0.5,0.0},{0.0,0.0,0.0,1.0}}},
@@ -4354,7 +4678,7 @@ expired_rest_observation_resamples_test_() ->
         Current = Spec#{generation => 1,run_token => Token,
             custody => {request,Token,0,<<2>>,<<0:512>>},
             limits => {1,1,0,100.0,1,0,0},dt => 1/60,gravity => 0.0,structure => 1,
-            bodies => [{3,1,dynamic,{{0.0,0.5,0.0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0}],
+            bodies => [{3,1,dynamic,{world_mm,{0,500,0},{0.0,0.0,0.0}},{solid,{box,0.5,0.5,0.5}},1.0}],
             hinges => [],activities => #{{rest,3} => #{reference => {rest,3,1},
                 request => R,command => rest,native_command => none,references => [{body,3,1}],
                 custody => none,outcome_key => none}}},
@@ -4545,7 +4869,7 @@ authored_hinged_examples_in_independent_worlds_test_() ->
         BeforeB = gen_server:call(P2,status), HeightB = quod_prolog:applied(B),
         %% A real command change affects only its owner; no geometry rebuild.
         Calls = physics_trace_calls([{quod_physics_native,control_hinge,4},
-            {quod_physics_native,install,2},{quod_physics_native,install_hinges,2}],fun() ->
+            {quod_physics_native,install,3},{quod_physics_native,install_hinges,2}],fun() ->
             commit(A,{',',{retract,{physics_hinged_control,room,10,hinged_command(Target)}},
                           {assertz,{physics_hinged_control,room,10,hinged_command(-200)}}}),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},
@@ -4820,3 +5144,648 @@ finished_hinged_group_move_can_close_again_test_() ->
                 {physics_checkpoint,room,{hinge,10,3,{body,10,3},{body,11,3},1,{'_'},{'_'}}}))
         end || F <- [First,Second]]
     end) end}.
+
+terrain_delivery_credit_and_replacement_test_() ->
+    [{atom_to_list(Mode),{timeout,20,fun() ->
+    Field = {field_v1,1,500,[{plane,1000}],9},
+    Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
+              {surface_limits,512,10000,10000},69120,500000},
+    {ok,{A,generated}} = quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
+    #{handle := Handle,payload := Payload} = A,
+    with_simulator(none,fun(Pid,Spec) ->
+        {Activation,Token} = receive
+            {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+        after 5000 -> error(activation_missing) end,
+        Initial = Spec#{generation => 1,run_token => Token,
+            custody => {request,Token,0,<<2>>,<<0:512>>},
+            %% This step keeps the full conservative dynamic envelope inside
+            %% the fixture's one resident chunk throughout the fall.
+            limits => {2,2,1,1000.0,2,10000,10000},dt => 1/600,gravity => -9.81,structure => 1,
+            activities => #{},bodies => [{0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+                {terrain,500,[{{0,0,0},Handle}]},1.0}] ++ case Mode of
+                    static -> [];
+                    moving -> [{1,1,dynamic,{world_mm,{2000,2500,2000},{0.0,0.0,0.0}},
+                                 {solid,{ball,0.25}},1.0}]
+                end,voxel_resources => #{{0,{chunk_v1,0,0,0}} => A}},
+        Pid ! {physics_selected,self(),make_ref(),Initial},
+        Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+        receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(install_missing) end,
+        Current = case Mode of
+            static -> Initial;
+            moving ->
+                receive {physics_terrain_demand,Pid,_,Token,1,Ranges,Focus} ->
+                    ?assertEqual([{0,{0,0,0},{0,0,0}}],Ranges),
+                    Selected = Initial#{terrain_demand => {Pid,Token,1,Ranges,Focus}},
+                    Pid ! {physics_selected,self(),make_ref(),Selected},Selected
+                after 5000 -> error(physical_demand_missing) end
+        end,
+        Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token,
+            control => none,terrain => [{0,1,{view_distance,4000,1000,2000},[10000,20000,1000,1000,2]}]},
+        {ok,Ref,Frame} = quod_physics:watch(Pid,Expected,none),
+        Tick = maps:get(tick,Frame),
+        quod_physics:ack(Pid,Ref,Tick,0),
+        {Manifest,[Row]} = receive {physics_resource,Pid,Ref,{terrain_manifest,M,0,Rows}} -> {M,Rows}
+            after 5000 -> error(manifest_missing) end,
+        ?assertMatch(#{body := 0,revision := 1,index := 0,costs := [4880,13824,384,128,1]},Row),
+        case Mode of
+            static -> ok;
+            moving -> receive {physics_status,Pid,_,Token,sleeping} -> ok
+                      after 15000 -> error(moving_body_did_not_settle) end
+        end,
+        quod_physics:ack(Pid,Ref,Tick,0),
+        quod_physics:resource_ack(Pid,Ref,<<0:256>>,{want,[0]}),
+        _ = gen_server:call(Pid,status),
+        receive {physics_resource,Pid,Ref,_} -> error(stale_ack_released_credit) after 0 -> ok end,
+        quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+        case Mode of
+            static -> ok;
+            moving ->
+                Latest = receive {physics_frame,Pid,Ref,F} -> F
+                         after 5000 -> error(terrain_starved_pose_delivery) end,
+                ?assert(maps:get(tick,Latest) > Tick),
+                %% The resource acknowledgement cannot release the pose now
+                %% holding credit; its own exact acknowledgement is required.
+                quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+                quod_physics:ack(Pid,Ref,Tick,0),
+                _ = gen_server:call(Pid,status),
+                receive {physics_resource,Pid,Ref,_} -> error(pose_credit_not_fenced) after 0 -> ok end,
+                quod_physics:ack(Pid,Ref,maps:get(tick,Latest),maps:get(origin_sequence,Latest))
+        end,
+        receive {physics_resource,Pid,Ref,{terrain_chunks,Manifest,[{0,Payload}],true}} -> ok
+            after 5000 -> error(chunk_missing) end,
+        quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+        _ = gen_server:call(Pid,status),
+        receive {physics_resource,Pid,Ref,_} -> error(duplicate_ack_released_credit) after 0 -> ok end,
+        %% A new retained selection replaces the manifest even if body revision
+        %% and the current physical sample have not advanced.
+        Pid ! {physics_selected,self(),make_ref(),Current#{voxel_resources => #{}}},
+        _ = gen_server:call(Pid,status),
+        quod_physics:resource_ack(Pid,Ref,Manifest,complete),
+        Replacement = receive {physics_resource,Pid,Ref,{terrain_manifest,M2,0,[]}} -> M2
+            after 5000 -> error(empty_replacement_missing) end,
+        ?assertNotEqual(Manifest,Replacement),
+        quod_physics:resource_ack(Pid,Ref,Replacement,{want,[]}),
+        receive {physics_resource,Pid,Ref,{terrain_chunks,Replacement,[],true}} -> ok
+            after 5000 -> error(empty_complete_missing) end
+    end) end}} || Mode <- [static,moving]].
+
+voxel_signed_view_delivers_only_bound_resident_chunks_test_() ->
+    {timeout,90,fun() -> with_voxel_view(fun(F = #{namespace := Ns,identity := Identity,
+        physics := Pid,world := World,socket := Socket,projection := Projection}) ->
+            ?assertEqual(<<"active">>,maps:get(<<"selection">>,Projection)),
+            View = maps:get(<<"view">>,Projection),
+            Tick = maps:get(<<"tick">>,maps:get(<<"frame">>,Projection)),
+            Socket ! {client,iolist_to_binary(json:encode(#{type => ack,origin_seq => <<"0">>,view => View,tick => Tick}))},
+            Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
+            Rows = maps:get(<<"chunks">>,Manifest), Token = maps:get(<<"token">>,Manifest),
+            ?assertEqual(3,length(Rows)),
+            Ack = fun(Value) -> Socket ! {client,iolist_to_binary(json:encode(
+                Value#{type => terrain_ack,view => View,token => Token}))} end,
+            Ack(#{want => [0,1,2]}),
+            #{World := #{spec := Spec}} = worlds(Ns), Artifacts = maps:get(voxel_resources,Spec),
+            Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
+            ?assertEqual(Token,maps:get(<<"token">>,Content)),
+            Chunks = maps:get(<<"chunks">>,Content),?assertEqual(length(Rows),length(Chunks)),
+            lists:foreach(fun({Row,Chunk}) ->
+                I = maps:get(<<"index">>,Row),
+                ?assertEqual(I,maps:get(<<"index">>,Chunk)),
+                Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
+                ?assertEqual(binary:encode_hex(crypto:hash(sha256,Bytes),lowercase),maps:get(<<"digest">>,Row)),
+                [X,Y,Z] = [binary_to_integer(N) || N <- maps:get(<<"chunk">>,Row)],
+                B = binary_to_integer(maps:get(<<"body">>,Row)),
+                ?assertEqual(maps:get(payload,maps:get({B,{chunk_v1,X,Y,Z}},Artifacts)),Bytes)
+            end,lists:zip(Rows,Chunks)),
+            Ack(#{complete => true}),
+            ?assertMatch(#{pid := Pid},simulation_state(Socket)),
+            assert_no_physics_io(fun() ->
+                Socket ! {client,simulation_open(F,simulation_session(Identity))},
+                Renewed = simulation_reply(Socket,<<"projection">>),
+                NextView = maps:get(<<"view">>,Renewed),
+                Socket ! {client,iolist_to_binary(json:encode(#{type => ack,origin_seq => <<"0">>,view => NextView,
+                    tick => maps:get(<<"tick">>,maps:get(<<"frame">>,Renewed))}))},
+                Retained = terrain_reply(Socket,NextView,<<"terrain_manifest">>),
+                ?assertEqual(Rows,maps:get(<<"chunks">>,Retained)),
+                Socket ! {client,iolist_to_binary(json:encode(#{type => terrain_ack,view => NextView,
+                    token => maps:get(<<"token">>,Retained),want => []}))},
+                ?assertEqual([],maps:get(<<"chunks">>,terrain_reply(Socket,NextView,<<"terrain_chunks">>)))
+            end)
+    end,{view_distance,4000,1000,2000},{resources,20000,60000,2000,1000,3},[]) end}.
+
+voxel_signed_view_batches_large_resident_selection_test_() ->
+    {timeout,90,fun() -> with_voxel_view(fun(#{physics := Pid,socket := Socket,projection := Projection}) ->
+        View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
+        socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
+            centre_mm => [<<"2000">>,<<"2000">>,<<"2000">>]}),
+        socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
+            origin_seq => maps:get(<<"origin_seq">>,Frame)}),
+        Manifest = large_terrain_manifest(Socket,View),
+        Rows = maps:get(<<"chunks">>,Manifest),Token = maps:get(<<"token">>,Manifest),
+        ?assertEqual(27,length(Rows)),
+        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+        socket_command(Socket,#{type => terrain_ack,view => View,token => Token,
+            want => [maps:get(<<"index">>,R) || R <- Rows]}),
+        Batches = consume_large_terrain(Socket,Pid,View,Token,Rows,0),
+        ?assert(Batches > 1),
+        ?assertMatch(#{pid := Pid},simulation_state(Socket))
+    end,{view_distance,4000,1000,2000},{resources,2000000,4000000,100000,50000,64},[],
+    fun(#{namespace := Ns}) ->
+        %% This authored field exercises the ordinary resident-resource path
+        %% with more content than a single view frame can encode.
+        Before = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+        After = setelement(3,Before,{limits,64,64,256,1000000,{geometry,256,100000,100000}}),
+        commit(Ns,{',',{retract,Before},{assertz,After}}),
+        {field_v1,41,500,[{plane,100000},{caves,2000,8,12000,1500}],9}
+    end) end}.
+
+large_terrain_manifest(Socket,View) ->
+    Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
+    case maps:get(<<"interest_seq">>,Manifest) of
+        <<"1">> -> Manifest;
+        <<"0">> ->
+            Token = maps:get(<<"token">>,Manifest),
+            socket_command(Socket,#{type => terrain_ack,view => View,token => Token,want => []}),
+            %% The owner may replace an obsolete snapshot immediately after
+            %% its acknowledgement, without sending its empty completion.
+            large_terrain_manifest(Socket,View)
+    end.
+
+consume_large_terrain(Socket,Pid,View,Token,Rows,Count) ->
+    Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
+    ?assert(iolist_size(json:encode(Content)) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+    ?assertEqual(Token,maps:get(<<"token">>,Content)),
+    Chunks = maps:get(<<"chunks">>,Content),?assertNotEqual([],Chunks),
+    {Selected,Rest} = lists:split(length(Chunks),Rows),
+    lists:foreach(fun({Row,Chunk}) ->
+        ?assertEqual(maps:get(<<"index">>,Row),maps:get(<<"index">>,Chunk)),
+        Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
+        ?assertEqual(hd(maps:get(<<"costs">>,Row)),byte_size(Bytes)),
+        ?assertEqual(maps:get(<<"digest">>,Row),binary:encode_hex(crypto:hash(sha256,Bytes),lowercase))
+    end,lists:zip(Selected,Chunks)),
+    ?assertEqual(Rest =:= [],maps:get(<<"complete">>,Content)),
+    Ack = fun(Value) -> socket_command(Socket,Value#{type => terrain_ack,view => View,token => Token}) end,
+    case Rest of
+        [] -> Ack(#{complete => true}),Count+1;
+        _ ->
+            Last = maps:get(<<"index">>,lists:last(Chunks)),
+            Ack(#{complete => true}),Ack(#{through => Last+1}),
+            _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
+            receive {simulation,Socket,_} -> error(inexact_ack_released_delivery) after 0 -> ok end,
+            Ack(#{through => Last}),
+            consume_large_terrain(Socket,Pid,View,Token,Rest,Count+1)
+    end.
+
+with_voxel_view(Fun,Distance,Resources,ExtraBodies) ->
+    with_voxel_view(Fun,Distance,Resources,ExtraBodies,
+        fun(_) -> {field_v1,1,500,[{plane,1000}],9} end).
+
+with_voxel_view(Fun,Distance,Resources,ExtraBodies,FieldSetup) ->
+    with_voxel_world(fun(F = #{namespace := Ns,identity := Identity,directory := Dir}) ->
+        ModellingNs = <<"physics-test-modelling">>,
+        Modelling = quod_agent_hosting_tests:start_ontology(ModellingNs,Dir,Identity,
+            quod_prolog:genesis_diff("priv/ontologies/quod_modelling.pl"),
+            [{rendering_vocabulary,<<"physics-test-rendering">>,quod_simplex:genesis_hash(<<"physics-test-rendering">>)}]),
+        try
+        commit(Ns,{assertz,{modelling_vocabulary,ModellingNs,quod_simplex:genesis_hash(ModellingNs)}}),
+        Field = FieldSetup(F),
+        Created = door_action(Ns,{voxel_create,room,0,
+            {terrain_v1,unbounded,smooth,Field}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created), await_source_receipt(Created),
+        lists:foreach(fun(Definition) -> commit(Ns,{assertz,Definition}) end,ExtraBodies),
+        {Pid,World} = enable(F),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        Presentation = {voxel_presentation,room,<<"land">>,
+            [{material,9,{surface,<<"#447722">>,0,900,0,[]}}],Distance,Resources},
+        commit(Ns,{',',{assertz,{agent_key,viewer,maps:get(pubkey,Identity),active}},
+            {',',{assertz,{can_view_physics,room,{'_'}}},
+                {assertz,Presentation}}}),
+        commit(Ns,{assertz,{can_invoke,{'_'},
+            {agent_instance_ref,Ns,Anchor,viewer},{'_'},Ns}}),
+        reconcile(Ns),
+        Parent = self(), Socket = spawn_link(fun() -> simulation_socket(Parent,#{peer => {127,0,0,1}}) end),
+        try
+            Socket ! {client,simulation_open(F,simulation_session(Identity))},
+            Projection = simulation_reply(Socket,<<"projection">>),
+            Fun(F#{physics => Pid,world => World,socket => Socket,projection => Projection})
+        after Socket ! stop end
+        after quod_agent_hosting_tests:stop_ontology(Modelling) end
+    end,lists:append([quod_prolog:read_terms("priv/ontologies/" ++ Name) ||
+                      Name <- ["space_view.pl","voxel_world_view.pl"]])).
+
+
+voxel_signed_camera_interest_reclaims_consumers_without_domain_writes_test_() ->
+    Occupant = {physics_body_definition,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}},
+    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,world := World,
+                                            socket := Socket,projection := Projection}) ->
+        View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
+        Height = quod_prolog:applied(Ns),
+        Interest = fun(Sequence,X) -> socket_command(Socket,#{type => terrain_interest,view => View,
+            sequence => integer_to_binary(Sequence),centre_mm => [integer_to_binary(X),<<"2000">>,<<"2000">>]}) end,
+        Interest(1,2000),
+        socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
+            origin_seq => maps:get(<<"origin_seq">>,Frame)}),
+        First = consume_terrain_manifest(Socket,View,1),
+        ?assertEqual(8,length(maps:get(<<"chunks">>,First))),
+        #{World := #{spec := #{voxel_resources := Before}}} = worlds(Ns),
+        [Terrain] = lists:usort([Id || {Id,_} <- maps:keys(Before)]),
+        assert_no_physics_io(fun() ->
+            Interest(1,2000),
+            socket_command(Socket,#{type => terrain_interest,view => <<"stale">>,sequence => <<"20">>,
+                centre_mm => [<<"18000">>,<<"2000">>,<<"2000">>]}),
+            _ = simulation_state(Socket), _ = gen_server:call(Pid,status),reconcile(Ns)
+        end),
+        Interest(2,6000), Interest(3,18000),
+        Last = consume_terrain_manifest(Socket,View,3),
+        ?assertEqual(8,length(maps:get(<<"chunks">>,Last))),
+        %% The current camera's nearest chunk is first; within the next shell,
+        %% forward travel wins over sideways chunks. This is the actual signed
+        %% delivery manifest, not a separate preview's ordering.
+        [Nearest,Forward|_] = maps:get(<<"chunks">>,Last),
+        ?assertEqual([<<"4">>,<<"0">>,<<"0">>],maps:get(<<"chunk">>,Nearest)),
+        ?assertEqual([<<"5">>,<<"0">>,<<"0">>],maps:get(<<"chunk">>,Forward)),
+        #{World := #{spec := #{voxel_resources := After}}} = worlds(Ns),
+        #{World := #{terrain_demand := {Pid,_,_,_,Focus}}} = worlds(Ns),
+        ?assertEqual({{18000,2000,2000},{12000,0,0}},maps:get(Terrain,Focus)),
+        ?assertEqual(9,map_size(After)),
+        Support = {Terrain,{chunk_v1,0,0,0}},
+        ?assertEqual(maps:get(Support,Before),maps:get(Support,After)),
+        ?assertEqual(Height,quod_prolog:applied(Ns)),
+        ?assertEqual([], [K || K = {_,{chunk_v1,X,_,_}} <- maps:keys(After),X =/= 0,X =/= 4,X =/= 5]),
+        Monitor = monitor(process,Socket),Socket ! stop,
+        receive {'DOWN',Monitor,process,Socket,normal} -> ok after 5000 -> error(view_not_closed) end,
+        await_voxel_chunks(Pid,World,[Support],quod_time:mono_ms()+10000),
+        ?assertEqual(Height,quod_prolog:applied(Ns)),
+        commit(Ns,{physics_remove_body,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}}),
+        await_voxel_chunks(Pid,World,[],quod_time:mono_ms()+10000),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
+    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,64},[Occupant]) end}.
+
+voxel_camera_interest_refuses_its_signed_chunk_allowance_before_generation_test_() ->
+    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,
+                                            socket := Socket,projection := Projection}) ->
+        Height = quod_prolog:applied(Ns),
+        assert_no_physics_io(fun() ->
+            socket_command(Socket,#{type => terrain_interest,view => maps:get(<<"view">>,Projection),
+                sequence => <<"1">>,centre_mm => [<<"2000">>,<<"2000">>,<<"2000">>]}),
+            Refused = simulation_reply(Socket,<<"unavailable">>),
+            ?assertEqual(<<"terrain_chunk_allowance_exceeded">>,maps:get(<<"reason">>,Refused)),
+            ?assertMatch(#{phase := active},gen_server:call(Pid,status)),reconcile(Ns)
+        end),
+        ?assertEqual(Height,quod_prolog:applied(Ns))
+    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,1},[]) end}.
+
+voxel_camera_interest_refuses_an_incoherent_window_before_generation_test_() ->
+    Occupant = {physics_body_definition,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}},
+    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,
+                                            socket := Socket,projection := Projection}) ->
+        Height = quod_prolog:applied(Ns),
+        Before = gen_server:call(Pid,status),
+        ?assertMatch(#{phase := active,navigation_ready := true},Before),
+        assert_no_physics_io(fun() ->
+            socket_command(Socket,#{type => terrain_interest,view => maps:get(<<"view">>,Projection),
+                sequence => <<"1">>,centre_mm => [<<"4000000">>,<<"2000">>,<<"2000">>]}),
+            Refused = simulation_reply(Socket,<<"unavailable">>),
+            ?assertEqual(<<"coordinate_allowance">>,maps:get(<<"reason">>,Refused)),
+            ?assertEqual(Before,gen_server:call(Pid,status)),reconcile(Ns)
+        end),
+        ?assertEqual(Height,quod_prolog:applied(Ns))
+    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,64},[Occupant]) end}.
+
+voxel_camera_interest_admits_a_coherent_rebase_test_() ->
+    Occupant = {physics_body_definition,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}},
+    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,world := World,
+                                            socket := Socket,projection := Projection}) ->
+        View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
+        Height = quod_prolog:applied(Ns), Before = gen_server:call(Pid,status),
+        %% Outside the current local allowance, but inside a valid joint window
+        %% after rebasing. The observer need not have its own controlled body.
+        socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
+            centre_mm => [<<"1500000">>,<<"2000">>,<<"2000">>]}),
+        socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
+            origin_seq => maps:get(<<"origin_seq">>,Frame)}),
+        Manifest = consume_terrain_manifest(Socket,View,1),
+        ?assertEqual(8,length(maps:get(<<"chunks">>,Manifest))),
+        After = gen_server:call(Pid,status),
+        ?assertMatch(#{phase := active,navigation_ready := true},After),
+        ?assertEqual(maps:get(incarnation,Before),maps:get(incarnation,After)),
+        #{World := #{spec := Spec}} = worlds(Ns),
+        Expected = #{fence => quod_physics:fence(Spec),structure => maps:get(structure,Spec),
+                     incarnation => maps:get(incarnation,After)},
+        {ok,_,Origin,{7,2,world,Local,_,_}} = quod_physics:body_state(Pid,Expected,{7,2},1000),
+        ?assert(element(1,Origin) > 0),
+        ?assertEqual({2000,2000,2000},quod_physics_coordinates:canonical(Local,Origin)),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end),
+        ?assertEqual(Height,quod_prolog:applied(Ns))
+    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,64},[Occupant]) end}.
+
+voxel_obstruction_reports_the_body_and_recovers_in_place_test_() ->
+    [{atom_to_list(Correction),{timeout,30,fun() ->
+        Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
+                  {surface_limits,512,10000,10000},69120,500000},
+        Field = {field_v1,1,500,[{plane,1000}],9},
+        {ok,{Artifact = #{handle := Handle},generated}} =
+            quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
+        with_simulator(none,fun(Pid,Spec) ->
+            {Activation,Token} = receive
+                {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+            after 5000 -> error(activation_missing) end,
+            Terrain = {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+                       {terrain,500,[{{0,0,0},Handle}]},1.0},
+            Body = {1,1,controlled,{world_mm,{2000,500,2000},{0.0,0.0,0.0}},
+                    {solid,{ball,0.25}},1.0},
+            Current = Spec#{generation => 1,run_token => Token,
+                custody => {request,Token,0,<<2>>,<<0:512>>},
+                limits => {2,2,8,1000.0,2,10000,10000},dt => 1/60,gravity => 0.0,
+                structure => 1,activities => #{},bodies => [Terrain,Body],
+                voxel_resources => #{{0,{chunk_v1,0,0,0}} => Artifact}},
+            Pid ! {physics_selected,self(),make_ref(),Current},
+            Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+            receive {physics_status,Pid,_,Token,{unavailable,{terrain_occupied,1,0}}} -> ok
+            after 5000 -> error(obstruction_notice_missing) end,
+            Before = gen_server:call(Pid,status),
+            ?assertMatch(#{phase := {blocked,{terrain_occupied,1,0}},steps := 0,
+                          navigation_ready := false},Before),
+            assert_no_physics_io(fun() ->
+                Pid ! {physics_selected,self(),make_ref(),Current},
+                ?assertEqual(Before,gen_server:call(Pid,status))
+            end),
+            {Updated,Position} = case Correction of
+                body ->
+                    Clear = setelement(4,setelement(2,Body,2),{world_mm,{2000,2000,2000},{0.0,0.0,0.0}}),
+                    {Current#{bodies => [Terrain,Clear]},{2000,2000,2000}};
+                terrain ->
+                    {ok,{Air = #{handle := AirHandle},generated}} =
+                        quod_voxel:prepare({field_v1,1,500,[{plane,-1000}],9},{chunk_v1,0,0,0},[],Limits,none),
+                    Dug = setelement(5,setelement(2,Terrain,2),{terrain,500,[{{0,0,0},AirHandle}]}),
+                    {Current#{bodies => [Dug,Body],voxel_resources => #{{0,{chunk_v1,0,0,0}} => Air}},
+                     {2000,500,2000}}
+            end,
+            Pid ! {physics_selected,self(),make_ref(),Updated},
+            receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(corrected_install_missing) end,
+            ?assertMatch(#{phase := active,incarnation := Token,navigation_ready := true},gen_server:call(Pid,status)),
+            Revision = case Correction of body -> 2; terrain -> 1 end,
+            Expected = #{fence => quod_physics:fence(Updated),structure => 1,incarnation => Token},
+            {ok,_,Origin,{1,Revision,world,Local,_,_}} = quod_physics:body_state(Pid,Expected,{1,Revision},1000),
+            ?assertEqual(Position,quod_physics_coordinates:canonical(Local,Origin)),
+            BadBinding = Expected#{terrain => [{99,1,{view_distance,1000,1000,2000},
+                                               [1000000,2000000,20000,10000,64]}]},
+            {ok,ViewRef,_} = quod_physics:watch(Pid,BadBinding,none),
+            assert_no_physics_io(fun() ->
+                quod_physics:view_interest(Pid,ViewRef,1,Position),
+                receive {physics_resource,Pid,ViewRef,{terrain_unavailable,invalid_terrain_binding}} -> ok
+                after 5000 -> error(invalid_binding_not_refused) end,
+                ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status))
+            end)
+        end)
+    end}} || Correction <- [body,terrain]].
+
+socket_command(Socket,Message) -> Socket ! {client,iolist_to_binary(json:encode(Message))}.
+
+consume_terrain_manifest(Socket,View,Target) ->
+    Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
+    #{<<"token">> := Token,<<"interest_seq">> := Sequence} = Manifest,
+    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,want => []}),
+    Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
+    ?assertEqual(Token,maps:get(<<"token">>,Content)),?assertEqual([],maps:get(<<"chunks">>,Content)),
+    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,complete => true}),
+    case binary_to_integer(Sequence) of
+        Target -> Manifest;
+        Earlier when Earlier < Target -> consume_terrain_manifest(Socket,View,Target);
+        Other -> error({unexpected_interest,Other,Target})
+    end.
+
+terrain_reply(Socket,View,Type) -> terrain_reply(Socket,View,Type,quod_time:mono_ms()+10000).
+terrain_reply(Socket,View,Type,Deadline) ->
+    receive
+        {simulation,Socket,#{<<"type">> := Type,<<"view">> := View} = Message} -> Message;
+        {simulation,Socket,#{<<"type">> := <<"simulation_frame">>,<<"view">> := View,<<"frame">> := Frame}} ->
+            socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
+                origin_seq => maps:get(<<"origin_seq">>,Frame)}),
+            terrain_reply(Socket,View,Type,Deadline);
+        {simulation,Socket,Other} -> error({terrain_view_unavailable,Other})
+    after max(0,Deadline-quod_time:mono_ms()) -> error({terrain_reply_missing,Type}) end.
+
+voxel_dig_preserves_a_loaded_resting_body_in_the_same_chunk_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+        %% The fixture authors enough resident chunks for Rapier's conservative
+        %% dynamic-body envelope; this is ordinary Prolog resource policy.
+        Policy = {voxel_allowances,room,{voxel_limits,{sampling_limits,1331,10648,85184,3993},
+                    {surface_limits,512,10000,10000},64,69120,1048576}},
+        commit(Ns,{',',{retract,Policy},{assertz,setelement(3,Policy,setelement(4,element(3,Policy),128))}}),
+        Created = door_action(Ns,{voxel_create,room,0,
+            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),await_source_receipt(Created),
+        commit(Ns,{',',
+            {assertz,{physics_body_definition,room,7,2,dynamic,{vector,2000,1500,2000},{owned,{box,600,400,600},1}}},
+            {assertz,{physics_body_definition,room,8,2,dynamic,{vector,2000,3000,2000},{owned,{box,400,400,400},100}}}}),
+        {Pid,World} = enable(F),
+        receive {physics_status,_,Pid,World,_,sleeping} -> ok after 15000 -> error(stack_did_not_settle) end,
+        Before = gen_server:call(Pid,status),flush_sleeping(Pid),
+        #{World := #{spec := Spec}} = worlds(Ns),
+        assert_loaded_stack(Pid,Spec),
+        Brush = {dig_sphere,{vector,3500,750,3500},300},
+        Dig = door_action(Ns,{',',{voxel_edit_basis,room,Brush,{'R'},{'Cs'}},
+                                  {voxel_edit,room,{'R'},{'Cs'},Brush}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Dig),await_source_receipt(Dig),
+        {Pid,World} = installed_structure(Ns,3),
+        receive {physics_status,_,Pid,World,_,sleeping} -> ok after 15000 -> error(stack_stopped_after_dig) end,
+        After = gen_server:call(Pid,status),
+        ?assertMatch(#{phase := active,navigation_ready := true},After),
+        ?assertEqual(maps:get(incarnation,Before),maps:get(incarnation,After)),
+        ?assert(maps:get(steps,After) > maps:get(steps,Before)),
+        #{World := #{spec := NewSpec}} = worlds(Ns),
+        assert_loaded_stack(Pid,NewSpec),
+        [Terrain] = lists:usort([Id || {Id,_} <- maps:keys(maps:get(voxel_resources,Spec))]),
+        Key = {Terrain,{chunk_v1,0,0,0}},
+        ?assertNotEqual(maps:get(input_digest,maps:get(Key,maps:get(voxel_resources,Spec))),
+                        maps:get(input_digest,maps:get(Key,maps:get(voxel_resources,NewSpec)))),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
+    end) end}.
+
+assert_loaded_stack(Pid,Spec) ->
+    {ok,Frame,_} = quod_physics:snapshot(Pid,#{fence => quod_physics:fence(Spec),
+                                            structure => maps:get(structure,Spec),tick => -1}),
+    ?assert(lists:any(fun({A,_,B,_}) -> lists:sort([A,B]) =:= [7,8] end,maps:get(contacts,Frame))),
+    {7,_,world,{_,Lower,_},_,_} = lists:keyfind(7,1,maps:get(poses,Frame)),
+    {8,_,world,{_,Upper,_},_,_} = lists:keyfind(8,1,maps:get(poses,Frame)),
+    ?assert(Upper-Lower > 0.7).
+
+voxel_pending_restore_keeps_its_original_insertion_test_() ->
+    [{atom_to_list(Change),fun() ->
+        Field = {field_v1,1,500,[{plane,-1000}],9},
+        Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
+                  {surface_limits,512,10000,10000},69120,500000},
+        {ok,{#{handle := Handle},generated}} = quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
+        with_simulator(none,fun(Pid,Spec) ->
+            {Activation,Token} = receive
+                {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+            after 5000 -> error(activation_missing) end,
+            Terrain = {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+                       {terrain,500,[{{0,0,0},Handle}]},1.0},
+            Actor = {1,1,dynamic,{world_mm,{2000,2000,2000},{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0},
+            CP = {1,1,{{18000,2000,2000},{0.0,0.0,0.0,1.0}},0.005,128},
+            Current = Spec#{generation => 1,run_token => Token,
+                custody => {request,Token,0,<<2>>,<<0:512>>},
+                limits => {2,2,1,1000.0,2,10000,10000},dt => 0.001,gravity => 0.0,structure => 1,
+                activities => #{},bodies => [Terrain,Actor],restores => [CP]},
+            Pid ! {physics_selected,self(),make_ref(),Current},
+            Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+            receive {physics_terrain_demand,Pid,_,Token,1,Required,_} ->
+                ?assert(lists:member({0,{4,0,0},{4,0,0}},Required))
+            after 5000 -> error(restore_demand_missing) end,
+            ?assertMatch(#{phase := coverage},gen_server:call(Pid,status)),
+            assert_no_physics_io(fun() ->
+                Pid ! {physics_selected,self(),make_ref(),Current},
+                _ = gen_server:call(Pid,status),
+                Pid ! {physics_selected,self(),make_ref(),Current#{agent_controls => [],agent_bindings => []}},
+                Pid ! advance,
+                ?assertMatch(#{phase := coverage},gen_server:call(Pid,status)),
+                %% A refused frame must not make an unfinished restore ready
+                %% when the original selection is restored unchanged.
+                Far = setelement(5,Terrain,{terrain,500,[{{4000000,0,0},Handle}]}),
+                Pid ! {physics_selected,self(),make_ref(),Current#{bodies => [Far,Actor]}},
+                ?assertMatch(#{phase := {blocked,coordinate_allowance}},gen_server:call(Pid,status)),
+                Pid ! {physics_selected,self(),make_ref(),Current},
+                ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
+                receive {physics_terrain_demand,Pid,_,Token,_,Unexpected,_} ->
+                    error({pending_restore_demand_replaced,Unexpected})
+                after 0 -> ok end
+            end),
+            Updated = Current#{restores => case Change of
+                removed -> [];
+                changed -> [setelement(3,CP,{{22000,2000,2000},{0.0,0.0,0.0,1.0}})]
+            end},
+            Pid ! {physics_selected,self(),make_ref(),Updated},
+            ?assertMatch(#{phase := coverage},gen_server:call(Pid,status)),
+            Resident = setelement(5,Terrain,{terrain,500,[{{16000,0,0},Handle}]}),
+            Pid ! {physics_selected,self(),make_ref(),Updated#{bodies => [Resident,Actor]}},
+            receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(restore_install_missing) end,
+            Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token},
+            {ok,_,Origin,{1,1,world,Position,_,_}} = quod_physics:body_state(Pid,Expected,{1,1},1000),
+            ?assertEqual({18000,2000,2000},quod_physics_coordinates:canonical(Position,Origin))
+        end)
+    end} || Change <- [changed,removed]].
+
+voxel_viewer_removal_preserves_unfinished_physics_test_() ->
+    [{atom_to_list(Wait),fun() ->
+        Field = {field_v1,1,500,[{plane,-1000}],9},
+        Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
+                  {surface_limits,512,10000,10000},69120,500000},
+        {ok,{#{handle := Handle},generated}} = quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
+        with_simulator(none,fun(Pid,Spec) ->
+            {Activation,Token} = receive
+                {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+            after 5000 -> error(activation_missing) end,
+            Terrain = {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+                       {terrain,500,[{{0,0,0},Handle}]},1.0},
+            Actor = {1,1,dynamic,{world_mm,{2000,2000,2000},{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0},
+            Current = Spec#{generation => 1,run_token => Token,
+                custody => {request,Token,0,<<2>>,<<0:512>>},
+                limits => {2,2,1,1000.0,2,10000,10000},dt => 0.001,gravity => 0.0,structure => 1,
+                activities => #{},bodies => [Terrain,Actor],restores => []},
+            Pid ! {physics_selected,self(),make_ref(),Current},
+            Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+            receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(initial_install_missing) end,
+            Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token},
+            {ok,View,_} = quod_physics:watch(Pid,Expected,none),
+            Waiting = case Wait of
+                restoration -> Current#{structure => 2,bodies => [Terrain,setelement(2,Actor,2)],
+                    restores => [{1,2,{{18000,2000,2000},{0.0,0.0,0.0,1.0}},0.005,128}]};
+                body_coverage -> Current#{structure => 2,bodies => [setelement(5,Terrain,{terrain,500,[]}),Actor]}
+            end,
+            Pid ! {physics_selected,self(),make_ref(),Waiting},
+            ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
+            quod_physics:unwatch(Pid,View),
+            ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
+            Resident = case Wait of
+                restoration -> setelement(5,Terrain,{terrain,500,[{{16000,0,0},Handle}]});
+                body_coverage -> Terrain
+            end,
+            [_OldTerrain,RetainedActor] = maps:get(bodies,Waiting),
+            Pid ! {physics_selected,self(),make_ref(),Waiting#{bodies => [Resident,RetainedActor]}},
+            ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status))
+        end)
+    end} || Wait <- [restoration,body_coverage]].
+
+voxel_checkpoint_recovery_loads_missing_terrain_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+        Allowance = {physics_allowances,room,
+            {limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+        commit(Ns,{',',{retract,Allowance},{assertz,setelement(4,setelement(5,Allowance,0),1000)}}),
+        Created = door_action(Ns,{voxel_create,room,0,
+            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),await_source_receipt(Created),
+        commit(Ns,{',',{assertz,{physics_body_definition,room,3,2,dynamic,
+            {vector,2000,2000,2000},{owned,{ball,250},1}}},
+            {assertz,{physics_rest_policy,room,3,{recovery,5,128}}}}),
+        {Pid,World} = enable(F),
+        #{World := #{spec := Spec}} = worlds(Ns),
+        Source = {source,maps:get(authority,Spec),maps:get(epoch,Spec),maps:get(generation,Spec),
+                  maps:get(run_token,Spec),2,1},
+        CP = {rest_v1,3,2,Source,world_mm_quaternion_million,
+              {pose,{vector,18000,2000,2000},{quaternion,0,0,0,1000000}},zero_velocity},
+        commit(Ns,{assertz,{physics_checkpoint,room,CP}}),reconcile(Ns),
+        ?assert(lists:all(fun({_,C}) -> C =/= {chunk_v1,4,0,0} end,
+                         maps:keys(maps:get(voxel_resources,Spec)))),
+        Monitor = monitor(process,Pid),exit(Pid,kill),
+        receive {'DOWN',Monitor,process,Pid,killed} -> ok after 5000 -> error(owner_alive) end,
+        {Next,World} = installed(Ns),?assertNotEqual(Pid,Next),
+        #{World := #{spec := Recovered}} = worlds(Ns),
+        Fresh = #{fence => quod_physics:fence(Recovered),structure => 2,
+                  incarnation => maps:get(run_token,Recovered)},
+        {ok,_,Origin,{3,2,world,Position,_,_}} = quod_physics:body_state(Next,Fresh,{3,2},1000),
+        ?assertEqual({18000,2000,2000},quod_physics_coordinates:canonical(Position,Origin)),
+        ?assert(lists:any(fun({_,C}) -> C =:= {chunk_v1,4,0,0} end,
+                         maps:keys(maps:get(voxel_resources,Recovered)))),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
+    end) end}.
+
+voxel_large_origin_rebases_pending_motion_without_restart_test_() ->
+    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns,node := Human}) ->
+        Cx = 1 bsl 100, Huge = Cx*4000,
+        Initial = {voxel_initial_chunks,room,{'_'},[{chunk_v1,0,0,0},{chunk_v1,1,0,0},{chunk_v1,3,0,0}]},
+        Before = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+        After = setelement(3,Before,{limits,64,64,256,12000,{geometry,256,4096,4096}}),
+        commit(Ns,{',',{retract,Initial},{',',{assertz,{voxel_initial_chunks,room,{'_'},[{chunk_v1,Cx,0,0}]}},
+            {',',{retract,Before},{assertz,After}}}}),
+        Created = door_action(Ns,{voxel_create,room,0,
+            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
+        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),await_source_receipt(Created),
+        Position = {vector,Huge+2000,2000,2000},
+        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+            {physics_checked_body,7,controlled,Position,{ball,250},1,12000})),
+        commit(Ns,{assertz,{physics_body_definition,room,7,2,controlled,Position,{owned,{ball,250},1}}}),
+        {Pid,World} = enable(F), Limits = {query_limits,2,0,8,128},
+        {_,Expected,_,Ref,First} = install_test_control(F,Pid,World,
+            {motion,free,2000,1600,1000,Limits,[reposition]},7),
+        ?assertEqual({Huge,0,0},maps:get(origin,First)),
+        quod_physics:ack(Pid,Ref,maps:get(tick,First),maps:get(origin_sequence,First)),
+        Installed = Expected#{registration => maps:get(registration,First)},
+        Control = maps:get(control,Expected),
+        ok = quod_physics:input(Pid,Installed,Control,1,
+            {{reposition,{vector,Huge+18000,2000,2000}},Limits},quod_time:now_ms()+10000,quod_time:mono_ms()+10000),
+        {Moved,{clear,_,_}} = input_frame(Pid,Ref,Human,1),
+        {7,2,world,Local,_,_} = lists:keyfind(7,1,maps:get(poses,Moved)),
+        ?assertEqual({Huge+18000,2000,2000},quod_physics_coordinates:canonical(Local,maps:get(origin,Moved))),
+        ?assert(maps:get(origin_sequence,Moved) > maps:get(origin_sequence,First)),
+        ?assertEqual(maps:get(incarnation,First),maps:get(incarnation,Moved)),
+        ?assertEqual(maps:get(registration,First),maps:get(registration,Moved)),
+        #{World := #{spec := #{voxel_resources := CurrentChunks}}} = worlds(Ns),
+        [TerrainBody] = lists:usort([Id || {Id,_} <- maps:keys(CurrentChunks)]),
+        await_voxel_chunks(Pid,World,[{TerrainBody,{chunk_v1,Cx+4,0,0}}],quod_time:mono_ms()+5000),
+        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end),
+        %% An absolute command authored before the shift retains its meaning.
+        ok = quod_physics:input(Pid,Installed,Control,2,
+            {{reposition,Position},Limits},quod_time:now_ms()+10000,quod_time:mono_ms()+10000),
+        {Returned,{clear,_,_}} = input_frame(Pid,Ref,Human,2),
+        {7,2,world,Back,_,_} = lists:keyfind(7,1,maps:get(poses,Returned)),
+        ?assertEqual({Huge+2000,2000,2000},quod_physics_coordinates:canonical(Back,maps:get(origin,Returned)))
+    end) end}.
+
+await_voxel_chunks(Pid,World,Keys,Deadline) ->
+    case gen_server:call(Pid,status) of
+        #{phase := active,terrain_chunks := Keys} -> ok;
+        _ -> receive
+            {physics_status,_,Pid,World,_,_} -> await_voxel_chunks(Pid,World,Keys,Deadline)
+        after max(0,Deadline-quod_time:mono_ms()) ->
+            error({terrain_residency_not_installed,Keys,gen_server:call(Pid,status)}) end
+    end.

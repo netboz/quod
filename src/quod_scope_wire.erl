@@ -923,6 +923,16 @@ validate_public_error(independent_mixed_writes) -> ok;
 validate_public_error(independent_scope_required) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
+validate_public_error({material_limit, Kind, Resource, Actual, Limit})
+  when Kind =:= founding; Kind =:= plan ->
+    case lists:member(Resource, [canonical_bytes, symbols, operations, reads])
+         andalso valid_uint64(Actual) andalso valid_uint64(Limit)
+         andalso Actual > Limit of
+        true -> ok;
+        false -> protocol_error(bad_error_code)
+    end;
+validate_public_error({invalid_material_policy, Kind})
+  when Kind =:= founding; Kind =:= plan -> ok;
 validate_public_error({effect_custody_limit, prepared_bytes, Actual, Limit}) ->
     case valid_uint64(Actual) andalso valid_uint64(Limit) andalso Actual > Limit of
         true -> ok;

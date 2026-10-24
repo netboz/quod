@@ -916,6 +916,33 @@ four_disjoint_groups_select_once_across_real_vote_publications_test() ->
     ?assertEqual(4, lists:sum([N || {quod_commit_validation, prepare_vote, 3, Ps} <- Counts,
                                   {_Pid, N, _} <- Ps])).
 
+reservation_notifications_match_real_reader_writer_conflicts_test() ->
+    Base = fixture(), Node = maps:get(node_identity,Base), KeyPair = maps:get(key_pair,Base),
+    Fs = [fixture(#{node_identity => Node,key_pair => KeyPair,operation_id => <<N:256>>,
+                    proof_id => <<N:256>>,goal_text => Goal}) || {N,Goal} <-
+        [{1,<<"assertz(first(ok)).">>},{2,<<"assertz(second(ok)).">>},
+         {3,<<"assertz(material_limit_override(plan,symbols,1024)).">>}]],
+    [First|_] = Fs,T = {Ns,_} = maps:get(origin,First),Member = maps:get(pubkey,Node),
+    I = publish_outcome(memory_outcome(T),1),
+    Est = #est{db = #db{ref = Kb}} = quod_ct:committed_kb(quod_ct:signed_agent_facts(First) ++
+        [{can_invoke,{'_'},{'_'},{'_'},Ns},{peer_admitted,Member,"validator",14567,Member}]),
+    try quod_ct:with_network_identity(maps:get(network,First),fun() ->
+        lists:foreach(fun(F) ->
+            #{control := C} = vote(F,T,own(F,T),prepared),
+            Material = quod_atomic:control_material(C),
+            {ok,{selection,{vote,Material},Basis},_} = quod_commit_validation:prepare_vote(
+                Material,1,quod_commit_validation:new(T,1,Est,I,none,none)),
+            lists:foreach(fun(Other) ->
+                OtherVote = #{control := OtherControl} = vote(Other,T,own(Other,T),prepared),
+                {_,Reserved} = fold(OtherVote,fresh(T)),
+                Changes = maps:from_keys(quod_selection_basis:role_changes(OtherControl,[]),true),
+                Conflicts = quod_atomic:reservation_readiness(Material,Reserved) =/= ready,
+                ?assertEqual(Conflicts,quod_selection_basis:affected(Basis,Changes))
+            end,[Other || Other <- Fs,Other =/= F])
+        end,Fs)
+    end)
+    after ok = quod_outcome:close(I),quod_erlog_db_mvcc:delete(Kb) end.
+
 disjoint_selection_probe() ->
     F0 = fixture(), Node = maps:get(node_identity, F0), KeyPair = maps:get(key_pair, F0),
     Fs = [fixture(#{node_identity => Node, key_pair => KeyPair, operation_id => <<N:256>>,

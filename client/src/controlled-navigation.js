@@ -24,11 +24,12 @@ export function createControlledNavigation(scene, camera, canvas, {
   const saved = { position: camera.position.clone(), rotation: camera.rotation.clone(), parent: camera.parent,
     inertia: camera.inertia, keys: ['keysUp', 'keysDown', 'keysLeft', 'keysRight'].map(k => [...camera[k]]) }
   const owner = canvas.ownerDocument
+  const commandReady = () => current?.control && current.command && current.terrainReady !== false
   const down = event => {
     if (current === undefined || !active() || blocked() || event.ctrlKey || event.metaKey || event.altKey) return
     if (event.key === ' ' && current?.control?.grounded && current.control.jump && current.command) {
       event.preventDefault()
-      if (!event.repeat) {
+      if (!event.repeat && commandReady()) {
         lastDrive = ''
         void current.command(jumpInput(current.control.jump))
       }
@@ -134,7 +135,7 @@ export function createControlledNavigation(scene, camera, canvas, {
       mask(distance > Math.min(current.clearance, control.viewpoint.trackingRadius),
         'View blocked. Return your head toward your starting position.')
     } else mask(false)
-    if (!control || !current.command) return
+    if (!commandReady()) return
     const enabled = !blocked() && (xrCamera !== null || active())
     const pressed = (...keys) => keys.some(k => held.has(k)) ? 1 : 0
     const forward = enabled ? (xrCamera ? -axes.y : pressed('w', 'z', 'ArrowUp') - pressed('s', 'ArrowDown')) : 0
@@ -173,20 +174,27 @@ export function createControlledNavigation(scene, camera, canvas, {
     },
     axes(value) { axes = value },
     snap(sign) {
-      if (!blocked() && current?.control?.snap && current.command) {
+      if (!blocked() && commandReady() && current.control.snap) {
         reset(); void current.command(snapInput(Math.sign(sign) * current.control.snap))
+      }
+    },
+    rebase(delta) {
+      saved.position.addInPlace(delta)
+      if (current === undefined) {
+        camera.position.addInPlace(delta)
+        if (xrCamera) xrCamera.position.addInPlace(delta)
       }
     },
     teleport(direction, fraction = 0.5) {
       const control = current?.control
-      if (blocked() || !control?.grounded || !control.teleport || !current.command) return
+      if (blocked() || !commandReady() || !control.grounded || !control.teleport) return
       const body = current.poses.get(`${control.body}:${control.bodyRevision}`)
       const ray = direction.clone(); ray.y = 0; ray.normalize()
       // The controller selects a body-origin target and the physics predicate
       // checks the complete straight path and downward landing. No mesh pick
       // grants permission. Half-range is the default gesture, not a world cap.
       const target = Vector3.FromArray(body.position).addInPlace(ray.scale(control.teleport.reach * fraction))
-      reset(); void current.command(teleportInput(target.asArray()))
+      reset(); void current.command(teleportInput(target.asArray(), current.origin))
     },
     dispose() {
       update(undefined)

@@ -8,7 +8,8 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { readMarks } from '../src/marks.js'
 import { radialIndex } from '../src/world-scene.js'
 import { Ray } from '@babylonjs/core/Culling/ray.js'
-import { paintMarks, clearMarks } from '../src/scene.js'
+import { paintMarks, clearMarks, paintSkies, compareOpaqueMarks } from '../src/scene.js'
+import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 
 const root = 'mark(<<"console">>,<<"group">>,[],transform(1000,0,0,0,90,0),no_surface,unlabelled,depicts_nothing)'
 const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),surface(<<"#F9C80E">>,0,900,700,[]),unlabelled,depicts_nothing)'
@@ -69,6 +70,7 @@ test('the Babylon adapter draws an unlit inward sky which cannot intercept selec
     const painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
     const dome = painted.get('sky').node
     assert.equal(dome.isPickable, false)
+    assert.equal(dome.applyFog, false)
     assert.equal(dome.material.unlit, true)
     assert.equal(dome.material.backFaceCulling, false)
     assert.equal(dome.material.disableDepthWrite, true)
@@ -78,14 +80,32 @@ test('the Babylon adapter draws an unlit inward sky which cannot intercept selec
   })
 })
 
-test('a sky panorama drives the adapter emissive texture', async () => {
+test('a parented panorama follows translated and rebased viewing positions without changing rotation', () => {
+  withScene(scene => {
+    const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+      'relative(<<"console">>,transform(0,0,0,0,35,0)),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+      'unlabelled,depicts_nothing)'
+    const painted = paintMarks(scene, readMarks(`[${root},${sky}]`))
+    const camera = new UniversalCamera('viewer', new Vector3(70, 25, -100), scene)
+    const dome = painted.get('sky').node, rotation = dome.rotationQuaternion.clone()
+    for (const position of [[70, 25, -100], [-2, 3, 4]]) {
+      camera.position.set(...position); camera.getViewMatrix(true)
+      paintSkies(painted, camera)
+      assert.ok(Vector3.Distance(dome.getAbsolutePosition(), camera.globalPosition) < 1e-5)
+      assert.deepEqual(dome.rotationQuaternion.asArray(), rotation.asArray())
+    }
+    clearMarks(painted)
+  })
+})
+
+test('a sky panorama applies brightness once through its unlit surface', async () => {
   const engine = new NullEngine()
   const scene = new Scene(engine)
   const texture = { dispose() {} }
   const resources = { acquire() { return { ready: Promise.resolve(texture), release() {} } } }
   const sky = readMarks(
     '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,250,' +
     '[texture(<<"base_colour">>,asset(<<"' + 'a'.repeat(64) +
     '">>,<<"image/jpeg">>),repeat(1000,1000))]),unlabelled,depicts_nothing)]')
   let painted = new Map()
@@ -95,8 +115,26 @@ test('a sky panorama drives the adapter emissive texture', async () => {
     await Promise.resolve()
     const material = painted.get('sky').node.material
     assert.equal(material.albedoTexture, texture)
-    assert.equal(material.emissiveTexture, texture)
+    assert.equal(material.emissiveTexture, null)
+    assert.deepEqual(material.emissiveColor.asArray(), [0, 0, 0])
+    assert.deepEqual(material.albedoColor.asArray(), [0.25, 0.25, 0.25])
   } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
+test('a changed panorama surface still renders before foreground geometry', () => {
+  withScene(scene => {
+    const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+      'transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),unlabelled,depicts_nothing)'
+    let painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
+    const foreground = painted.get('screen').node
+    painted = paintMarks(scene, readMarks(`[${sky.replace('#FFFFFF', '#BCC9D8')},${root},${child}]`), painted)
+    const dome = painted.get('sky').node
+    assert.ok(dome.material.uniqueId > foreground.material.uniqueId)
+    assert.ok(compareOpaqueMarks(dome.subMeshes[0], foreground.subMeshes[0]) < 0)
+    assert.ok(compareOpaqueMarks(foreground.subMeshes[0], dome.subMeshes[0]) > 0)
+    assert.equal(dome.material.disableDepthWrite, true)
+    clearMarks(painted)
+  })
 })
 
 test('reparented children survive removed parents; geometry replacement retires only old resources', () => {

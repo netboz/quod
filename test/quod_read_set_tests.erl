@@ -115,13 +115,20 @@ golden_producer(FixtureBytes) ->
     ?assertEqual({error, malformed_ledger_transaction},
       quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), materialized)),
     {ok, PubSeed} = test_signer(),
-    Session = quod_proof_session:start(quod_ct:committed_kb([]),
+    Est = quod_ct:committed_kb([]),
+    {ok, _, PolicyReads} = quod_material_admission:policy(plan, Est),
+    Session = quod_proof_session:start(Est,
       #{read_set => true, signer => PubSeed, proof_context => {origin, golden174}}),
     try
         ok = quod_proof_session:absorb_read_set(Session, maps:get(read_check, Material)),
         Core = element(2, Plan),
-        ?assertEqual({ok, Plan}, quod_dtx:seal_session(Session,
-          maps:with([target, base_height, proof_id, origin, principal, request_binding], Core)))
+        {ok, NewPlan} = quod_dtx:seal_session(Session,
+          maps:with([target, base_height, proof_id, origin, principal, request_binding], Core)),
+        %% New admission retains policy dependencies; historical golden bytes
+        %% below still decode and re-encode exactly without today's policy.
+        ?assertEqual(maps:merge(maps:get(read_check, Material), PolicyReads),
+                     quod_ct:plan_material(read_check, NewPlan)),
+        ?assert(quod_dtx:verify(NewPlan))
     after quod_proof_session:stop(Session)
     end,
     ?assertEqual(maps:get(plan_digest, F), quod_dtx:digest(Plan)),

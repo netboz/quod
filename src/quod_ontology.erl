@@ -25,8 +25,8 @@ conveniences around that preparation and execution code.
 
 -include("quod_ingress_limits.hrl").
 -include("quod_proof_limits.hrl").
--include("quod_vm_limits.hrl").
 -include("quod_ledger.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 
 -export([validate_action/1, prepare_action/2, canonical_name/1,
          execute_prepared/1,
@@ -85,7 +85,7 @@ conveniences around that preparation and execution code.
 create(Name, Options) ->
     case validate_action({create_ontology, Name, Options}) of
         {ok, Structural} ->
-            case prepare_action(Structural, none) of
+            case prepare_action(Structural) of
                 {ok, Prepared} -> execute_prepared(Prepared);
                 {error, _} = Error -> Error
             end;
@@ -168,14 +168,21 @@ already normalized.
 -ifdef(TEST).
 -spec prepare_action(structural_descriptor()) ->
           {ok, prepared_descriptor()} | {error, term()}.
-prepare_action(Structural) -> prepare_action(Structural, none).
+prepare_action(Structural) ->
+    %% Fixture callers use the same authored defaults as a new ontology.
+    #est{db = #db{ref = Ref}} = Est = quod_committed_projection:new_est(),
+    try
+        {ok, Limits, _} = quod_material_admission:policy(founding, Est),
+        prepare_action(Structural, Limits)
+    after quod_erlog_db_mvcc:delete(Ref)
+    end.
 -endif.
 
--spec prepare_action(structural_descriptor(), term()) ->
+-spec prepare_action(structural_descriptor(), quod_material_admission:limits()) ->
           {ok, prepared_descriptor()} | {error, term()}.
 prepare_action(
   #lifecycle_request{kind = create, namespace = Ns, payload = Options},
-  _Principal) ->
+  Limits) ->
     case split_create_options(Options) of
         {error, _} = Error ->
             Error;
@@ -187,11 +194,11 @@ prepare_action(
                         {error, _} = Error ->
                             Error;
                         {ok, InitialTerms} ->
-                            case validate_initial_terms(InitialTerms) of
+                            case validate_initial_terms(InitialTerms, Limits) of
                                 {error, _} = Error ->
                                     Error;
                                 {ok, InitialDiff} ->
-                                    case initial_diff_admissible(InitialDiff) of
+                                    case initial_diff_admissible(InitialDiff, Limits) of
                                         ok ->
                                             prepare_create(
                                               Ns, InitialDiff, Modules);
@@ -203,11 +210,11 @@ prepare_action(
     end;
 prepare_action(
   #lifecycle_request{kind = join, namespace = Ns,
-                     payload = {RawGenesisHash, SeedPeers}}, _Principal)
+                     payload = {RawGenesisHash, SeedPeers}}, _Limits)
   when is_binary(RawGenesisHash), byte_size(RawGenesisHash) =:= 32,
        is_list(SeedPeers) ->
     prepare_join(Ns, RawGenesisHash, SeedPeers);
-prepare_action(_InvalidDescriptor, _Principal) ->
+prepare_action(_InvalidDescriptor, _Limits) ->
     {error, invalid_action}.
 
 -doc """
@@ -227,7 +234,7 @@ execute_action(Action) ->
         {error, _} = Error ->
             Error;
         {ok, Structural} ->
-            case prepare_action(Structural, none) of
+            case prepare_action(Structural) of
                 {error, _} = Error -> Error;
                 {ok, Prepared} -> execute_prepared(Prepared)
             end
@@ -814,12 +821,20 @@ local_state_validated(Ns) ->
             end
     end.
 
-validate_initial_terms(WireTerms) when is_list(WireTerms) ->
+validate_initial_terms(WireTerms, Limits) when is_list(WireTerms) ->
     %% A remote policy's founding terms are still opaque data until this
     %% authorized creation boundary. Materialize once before both reserved
-    %% head validation and compilation, under the shared symbol bound.
-    case quod_wire_term:materialize_symbols(WireTerms) of
-        {ok, Terms} -> validate_materialized_terms(Terms);
+    %% head validation and compilation, after Prolog allocation admission.
+    case quod_wire_term:symbol_names(WireTerms) of
+        {ok, Names} ->
+            case quod_material_admission:check(founding, #{symbols => length(Names)}, Limits) of
+                ok ->
+                    case quod_wire_term:materialize_symbols(WireTerms) of
+                        {ok, Terms} -> validate_materialized_terms(Terms);
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
         {error, _} = Error -> Error
     end.
 
@@ -857,29 +872,12 @@ compile_initial_terms(Terms) ->
             {error, invalid_initial_terms}
     end.
 
-%% A genesis is decoded by nodes that never saw its source: joiners, and the
-%% founder itself after a restart. They admit at most
-%% ?QUOD_MAX_NEW_MATERIAL_ATOMS unknown symbols per envelope
-%% (m:quod_wire_term), so a founding whose diff would exceed that on a cold
-%% node of this release is refused here, where it can still be corrected.
-initial_diff_admissible(Diff) ->
-    case initial_diff_size(Diff) of
-        ok ->
-            case quod_wire_term:cold_new_symbols(Diff) of
-                New when length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS -> ok;
-                New ->
-                    {error, {genesis_vocabulary, length(New),
-                             ?QUOD_MAX_NEW_MATERIAL_ATOMS}}
-            end;
-        {error, _} = Error -> Error
-    end.
-
-initial_diff_size(Diff) ->
-    try byte_size(term_to_binary(Diff, [deterministic])) of
-        Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES -> ok;
-        _ -> {error, initial_content_too_large}
-    catch
-        _:_ -> {error, invalid_initial_terms}
+%% Admission measures the canonical source diff. The genesis builder checks
+%% the complete transaction and block, including generated founding facts.
+initial_diff_admissible(Diff, Limits) ->
+    case quod_material_admission:usage(Diff) of
+        {ok, Usage} -> quod_material_admission:check(founding, Usage, Limits);
+        {error, _} -> {error, invalid_initial_terms}
     end.
 
 invalid_initial_term(Term) ->

@@ -7,11 +7,11 @@ import { CreateCapsule } from '@babylonjs/core/Meshes/Builders/capsuleBuilder.js
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
-import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { Vector3, Quaternion, Matrix } from '@babylonjs/core/Maths/math.vector.js'
+import { RenderingGroup } from '@babylonjs/core/Rendering/renderingGroup.js'
 
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
-import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js'
+import { createSurface } from './render-resources.js'
 
 import { PALETTE } from './palette.js'
 
@@ -35,7 +35,7 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
       entry = null
     }
     if (!entry) {
-      const node = mark.kind === 'group' || mark.kind === 'mesh'
+      const node = ['group', 'mesh', 'terrain'].includes(mark.kind)
         ? new TransformNode(`mark:${mark.id}`, scene)
         : buildGeometry(scene, mark)
       entry = { node, geometry, signature: null, label: null }
@@ -52,7 +52,8 @@ export function paintMarks(scene, marks, painted = new Map(), resources, onError
       }
       if (JSON.stringify(entry.body) !== JSON.stringify(mark.body)) entry.node.setEnabled(!mark.body)
       entry.body = mark.body
-      entry.node.metadata = { markId: mark.id, depicts: mark.depicts }
+      entry.terrain = mark.kind === 'terrain' ? mark.size : null
+      entry.node.metadata = { markId: mark.id, depicts: mark.depicts, sky: mark.kind === 'sky_sphere' }
       if (mark.kind === 'mesh') updateModelFrame(entry, mark.size)
       if (mark.material && entry.surfaceSignature !== JSON.stringify(mark.material)) {
         applyMaterial(scene, entry, mark, resources, onError)
@@ -95,15 +96,73 @@ export function paintBodyPoses(painted, poses) {
   }
 }
 
+// A panorama follows the viewing position, including through an authored
+// parent transform. It keeps its rotation and never becomes a physical body.
+export function paintSkies(painted, camera) {
+  for (const { node } of painted.values()) {
+    if (!node.metadata?.sky) continue
+    const eye = camera.globalPosition
+    node.position.copyFrom(node.parent
+      ? Vector3.TransformCoordinates(eye, node.parent.computeWorldMatrix(true).clone().invert()) : eye)
+    node.computeWorldMatrix(true)
+  }
+}
+
+// Backgrounds never write depth and must precede foreground geometry, even
+// when a surface edit gives the panorama a newer material than that geometry.
+export function compareOpaqueMarks(a, b) {
+  return Number(Boolean(b.getMesh().metadata?.sky)) - Number(Boolean(a.getMesh().metadata?.sky)) ||
+    RenderingGroup.PainterSortCompare(a, b)
+}
+
+// Terrain is an ordinary body-bound mark whose children lease immutable models
+// from the shared render owner. Eviction releases instances before allocation.
+export function paintTerrain(scene, painted, current, resources, onError = () => {}) {
+  const pending = []
+  for (const entry of painted.values()) {
+    if (!entry.terrain) continue
+    if (!current || current.terrain === null) { entry.node.setEnabled(false); continue }
+    entry.chunks ??= new Map()
+    const rows = new Map([...(current?.terrain?.entries() ?? [])].filter(([, row]) =>
+      row.body === entry.body.id && row.revision === entry.body.revision))
+    for (const [id, chunk] of entry.chunks) {
+      if (rows.get(id)?.digest !== chunk.digest) {
+        disposeEntry(chunk); entry.chunks.delete(id)
+      }
+    }
+    for (const [id, row] of rows) {
+      let chunk = entry.chunks.get(id)
+      if (!chunk) {
+        const node = new TransformNode(`terrain:${id}`, scene)
+        node.parent = entry.node
+        chunk = { node, digest: row.digest }
+        entry.chunks.set(id, chunk)
+        const extent = row.spacing_mm * 8
+        const palette = new Map(entry.terrain.palette)
+        attachModel(scene, chunk, { id, size: { profile: 'qvt1', digest: row.digest,
+          allowed: row.costs.slice(0, 4), bounds: [0, 0, 0, extent, extent, extent],
+          palette, payload: row.payload, originMm: row.origin_mm } }, resources, onError, true)
+      }
+      chunk.node.position.set(...row.origin_mm.map((n, axis) => Number(BigInt(n) - current.origin[axis]) / MM))
+      pending.push(chunk.ready)
+    }
+    // Each installed child already passed the current manifest's verification.
+    // Transport completion gates movement, not visibility of those children.
+    entry.node.setEnabled(current.poses.has(`${entry.body.id}:${entry.body.revision}`))
+  }
+  return Promise.all(pending).then(() => undefined)
+}
+
 export function clearMarks(painted) {
   for (const entry of painted.values()) disposeEntry(entry)
   return new Map()
 }
 
 function disposeEntry(entry) {
+  for (const chunk of entry.chunks?.values() ?? []) disposeEntry(chunk)
+  entry.chunks?.clear()
   entry.label?.dispose(false, true)
   entry.node.material?.dispose(false, false)
-  entry.binding?.release()
   const model = entry.model
   entry.model = null
   entry.instance?.dispose()
@@ -112,14 +171,14 @@ function disposeEntry(entry) {
   entry.node.dispose(true, false)
 }
 
-function attachModel(scene, entry, mark, resources, onError) {
+function attachModel(scene, entry, mark, resources, onError, propagate = false) {
   if (!resources) throw new Error('mesh assets require a render resource owner')
   const frame = new TransformNode(`asset-frame:${mark.id}`, scene)
   frame.parent = entry.node
   entry.modelFrame = frame
   const lease = resources.acquireModel(mark.size)
   entry.model = lease
-  lease.ready.then(container => {
+  entry.ready = lease.ready.then(container => {
     if (!container || entry.model !== lease) return
     const instance = container.instantiateModelsToScene(name => `asset:${mark.id}:${name}`)
     if (entry.model !== lease) { instance.dispose(); return }
@@ -130,7 +189,10 @@ function attachModel(scene, entry, mark, resources, onError) {
     }
     entry.instance = instance
   }).catch(error => {
-    if (entry.model === lease) onError(new Error(`Cannot draw ${mark.id}: ${error.message}`))
+    if (entry.model === lease) {
+      onError(new Error(`Cannot draw ${mark.id}: ${error.message}`))
+      if (propagate) throw error
+    }
   })
 }
 
@@ -178,6 +240,7 @@ function buildGeometry(scene, { id, kind, size }) {
         diameter: size.diameter / MM, segments: 48, sideOrientation: Mesh.BACKSIDE,
       }, scene)
       sky.isPickable = false
+      sky.applyFog = false
       return sky
     }
     default:
@@ -189,47 +252,18 @@ function buildGeometry(scene, { id, kind, size }) {
 // The single neutral surface contract maps to Babylon's metallic/roughness
 // material. Resource leases survive transform changes and unchanged refreshes.
 function applyMaterial(scene, entry, { id, kind, material }, resources, onError) {
-  const mesh = entry.node
-  const surface = mesh.material ?? new PBRMaterial(`mark-material:${id}`, scene)
-  const colour = Color3.FromHexString(material.colour)
-  surface.albedoColor = colour.toLinearSpace()
-  surface.metallic = material.metallic
-  surface.roughness = material.roughness
-  surface.emissiveColor = surface.albedoColor.scale(material.emission)
-  surface.unlit = kind === 'sky_sphere'
-  surface.backFaceCulling = kind !== 'sky_sphere'
-  surface.disableDepthWrite = kind === 'sky_sphere'
-  surface.albedoTexture = surface.bumpTexture = surface.metallicTexture = surface.emissiveTexture = null
-  // OpenGL tangent-space normal maps, matching the glTF adapter convention.
-  surface.invertNormalMapX = !scene.useRightHandedSystem
-  surface.invertNormalMapY = scene.useRightHandedSystem
-  surface.useRoughnessFromMetallicTextureAlpha = false
-  surface.useRoughnessFromMetallicTextureGreen = true
-  surface.useMetallnessFromMetallicTextureBlue = true
-  surface.useAmbientOcclusionFromMetallicTextureRed = true
-  mesh.material = surface
-  const leases = material.textures.map(binding => {
-    if (!resources) throw new Error('textured surfaces require a render resource owner')
-    return resources.acquire(binding)
-  })
-  // Acquire the replacement before releasing the old surface: shared assets
-  // remain alive even when a different slot or tiling is selected.
-  entry.binding?.release()
-  let active = true
-  entry.binding = { release() { active = false; leases.forEach(lease => lease.release()) } }
-  mesh.isVisible = leases.length === 0
-  if (!leases.length) return
-  Promise.all(leases.map(lease => lease.ready)).then(textures => {
-    if (!active) return
-    const slots = { base_colour: 'albedoTexture', normal: 'bumpTexture', orm: 'metallicTexture' }
-    textures.forEach((texture, i) => {
-      const slot = material.textures[i].slot
-      surface[slots[slot]] = texture
-      if (kind === 'sky_sphere' && slot === 'base_colour') surface.emissiveTexture = texture
-    })
-    mesh.isVisible = true
+  const mesh = entry.node, previous = mesh.material
+  const binding = createSurface(scene, `mark-material:${id}`, material, resources, kind === 'sky_sphere')
+  // Acquire first, so common texture assets survive a surface replacement.
+  mesh.material = binding.material
+  previous?.dispose(false, false)
+  mesh.isVisible = material.textures.length === 0
+  binding.ready.then(surface => {
+    if (surface && mesh.material === surface && !mesh.isDisposed()) mesh.isVisible = true
   }).catch(error => {
-    if (active) onError(new Error(`Cannot draw ${id}: ${error.message}`))
+    if (!mesh.isDisposed() && mesh.material === binding.material) {
+      onError(new Error(`Cannot draw ${id}: ${error.message}`))
+    }
   })
 }
 

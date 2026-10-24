@@ -1,7 +1,8 @@
 -module(quod_lobby_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([start/1, start/4, stop/1, preview/1, read/2, submit/3,
-         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2]).
+         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2,
+         complete_source/2]).
 
 cohosted_certified_progress_test_() ->
     {timeout, 30, fun() ->
@@ -324,7 +325,7 @@ lobby_projection_recovery_test_() ->
                 {'::', Ns, {lobby_workspace, console, proof_console, {0}}}),
             ?assertEqual([editor, bindings, button, button, button, button, button],
                          [element(3, Component) || Component <- Components]),
-            ?assertMatch({ok, [#{<<"V0">> := [{menu_entry, prove_goal, _, _}]}], _},
+            ?assertMatch({ok, [#{<<"V0">> := [{menu_entry, my_worlds, _, _},{menu_entry, prove_goal, _, _}]}], _},
                 read(Ctx, {'::', Ns, {lobby_menu, console, {0}}})),
             %% A valid second actor can read its origin, but cannot read this
             %% private lobby. Privacy is the ontology policy, not UI filtering.
@@ -630,7 +631,7 @@ signed_prolog_eidolon_edits_use_target_policy_test_() ->
             {ok, [#{<<"V0">> := OntologyChoices}], _} = read(Ctx,
                 Scope(Ns, {entity_eidolons, Target, {0}})),
             ?assert(lists:member(CodeEidolon, OntologyChoices)),
-            ?assertMatch({ok, [#{<<"V0">> := [{menu_entry, prove_goal, _, _}]}], _},
+            ?assertMatch({ok, [#{<<"V0">> := [{menu_entry, my_worlds, _, _},{menu_entry, prove_goal, _, _}]}], _},
                          read(Ctx, Scope(Ns, {lobby_menu, console, {0}}))),
             Tools = <<"quod:prolog">>,
             ToolsAnchor = quod_simplex:genesis_hash(Tools),
@@ -1486,7 +1487,7 @@ start(Dir, ExtraClassFacts, CatalogueKind, ExtraLobbyTerms) ->
        {attribute, personal_sky, panorama, belfast_sunset_puresky},
        {attribute, personal_sky, diameter, 80000},
        {attribute, personal_sky, rotation, 75},
-       {attribute, personal_sky, brightness, 120},
+       {attribute, personal_sky, brightness, 1000},
        {attribute, personal_sky, tint, <<"#FFFFFF">>},
        {instance_of, prolog_console, console},
        {instance_of, space, personal_lobby},
@@ -1535,7 +1536,7 @@ presentation_clause(T) ->
     H = case T of {':-',Head,_} -> Head; Head -> Head end,
     {F,_} = erlog_int:functor(H),
     lists:member(F,[ontology_source_mode,lobby_modes,lobby_sky,one_attribute,
-                   entity_scene,class_eidolon,no_follow,vocabulary_class,lobby_menu,lobby_workspace]).
+                   entity_scene,lobby_physical_space,class_eidolon,no_follow,vocabulary_class,lobby_menu,lobby_workspace]).
 
 presentation_layout({'=',{'Layout'},physical}) -> {one_attribute,{'Entity'},layout,{'Layout'}};
 presentation_layout(T) when is_tuple(T) -> list_to_tuple([presentation_layout(X) || X <- tuple_to_list(T)]);

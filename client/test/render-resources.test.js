@@ -2,11 +2,65 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { createRenderResources } from '../src/render-resources.js'
+import { createRenderResources, createSurface } from '../src/render-resources.js'
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
+import { Scene } from '@babylonjs/core/scene.js'
+import { Material } from '@babylonjs/core/Materials/material.js'
 
 const bytes = new TextEncoder().encode('verified asset fixture')
 const digest = createHash('sha256').update(bytes).digest('hex')
 const binding = { digest, slot: 'base_colour', repeat: [1, 2.5] }
+
+test('generated terrain uses shared verified model resources and real engine disposal', async () => {
+  const payload = readFileSync(new URL('./fixtures/voxel-plane.qvt', import.meta.url))
+  const terrain = { digest: createHash('sha256').update(payload).digest('hex'), profile: 'qvt1',
+    payload, palette: new Map([[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, textures: [] }]]),
+    allowed: [500000, 1000000, 20000, 10000], bounds: [0, 0, 0, 4000, 4000, 4000] }
+  const engine = new NullEngine(), scene = new Scene(engine)
+  scene.useRightHandedSystem = true
+  const resources = createRenderResources(scene, { fetchAsset: () => { throw new Error('terrain fetched a public asset') } })
+  try {
+    const a = resources.acquireModel(terrain), b = resources.acquireModel(terrain)
+    const model = await a.ready
+    assert.equal(await b.ready, model)
+    assert.equal(model.meshes.length, 1)
+    assert.equal(model.meshes[0].getTotalVertices(), 384)
+    // Native upward triangles must be front-facing from above in the actual
+    // right-handed scene, including after the model becomes an instance.
+    assert.equal(model.meshes[0].sideOrientation, Material.CounterClockWiseSideOrientation)
+    assert.equal(scene.meshes.length, 0)
+    const instance = model.instantiateModelsToScene()
+    assert.equal(instance.rootNodes.length, 1)
+    assert.equal(instance.rootNodes[0].sideOrientation, Material.CounterClockWiseSideOrientation)
+    assert.equal(scene.meshes.length, 1)
+    a.release()
+    assert.equal(model.meshes[0].isDisposed(), false)
+    instance.dispose()
+    const mesh = model.meshes[0]
+    b.release()
+    assert.equal(mesh.isDisposed(), true)
+  } finally { resources.dispose(); scene.dispose(); engine.dispose() }
+})
+
+test('terrain verification and cancellation precede engine allocation', async () => {
+  const payload = readFileSync(new URL('./fixtures/voxel-plane.qvt', import.meta.url))
+  const terrain = { digest: createHash('sha256').update(payload).digest('hex'), profile: 'qvt1',
+    payload, palette: new Map([[9, { colour: '#447722', metallic: 0, roughness: 0.9, emission: 0, textures: [] }]]),
+    allowed: [500000, 1000000, 20000, 10000], bounds: [0, 0, 0, 4000, 4000, 4000] }
+  let decodes = 0
+  const resources = createRenderResources(null, { decodeTerrain: () => { decodes++; throw new Error('unexpected decoding') } })
+  const cancelled = resources.acquireModel(terrain)
+  cancelled.release()
+  assert.equal(await cancelled.ready, null)
+  const corrupt = resources.acquireModel({ ...terrain, digest: '0'.repeat(64) })
+  await assert.rejects(corrupt.ready, /digest mismatch/)
+  corrupt.release()
+  const limited = resources.acquireModel({ ...terrain, allowed: [500000, 1, 20000, 10000] })
+  await assert.rejects(limited.ready, /geometry bytes exceeded/)
+  limited.release()
+  assert.equal(decodes, 0)
+  resources.dispose()
+})
 function fixture() {
   let reads = 0
   const decoded = []
@@ -20,6 +74,35 @@ function fixture() {
   })
   return { resources, decoded, reads: () => reads }
 }
+
+test('terrain and ordinary surfaces share texture custody and preserve independent optical properties', async () => {
+  const payload = Uint8Array.from(readFileSync(new URL('./fixtures/voxel-plane.qvt', import.meta.url)))
+  const data = new DataView(payload.buffer)
+  for (let t = 64; t < 128; t++) data.setUint16(16 + 38 * t + 36, 10)
+  const definition = { colour: '#FFFFFF', metallic: 0.1, roughness: 0.6, emission: 0,
+    textures: [binding] }
+  const engine = new NullEngine(), scene = new Scene(engine)
+  let fetches = 0, disposals = 0
+  const shared = createRenderResources(scene, { fetchAsset: async () => { fetches++; return new Response(bytes) },
+    decode: () => ({ texture: { dispose() { disposals++ } }, ready: Promise.resolve() }) })
+  const ordinary = createSurface(scene, 'ordinary', definition, shared)
+  const terrain = shared.acquireModel({ digest: createHash('sha256').update(payload).digest('hex'), profile: 'qvt1',
+    payload, palette: new Map([[9, definition], [10, { ...definition, roughness: 0.9 }]]),
+    originMm: [2n ** 100n, -4000n, 0n], allowed: [500000, 1000000, 20000, 10000], bounds: [0, 0, 0, 4000, 4000, 4000] })
+  try {
+    const model = await terrain.ready
+    await ordinary.ready
+    assert.equal(fetches, 1)
+    assert.deepEqual(model.materials.map(m => m.roughness), [0.6, 0.9])
+    assert.equal(model.meshes[0].subMeshes.length, 2)
+    assert.equal(model.materials[0].albedoTexture, ordinary.material.albedoTexture)
+    assert.equal(model.materials[1].albedoTexture, ordinary.material.albedoTexture)
+    terrain.release()
+    assert.equal(disposals, 0)
+    ordinary.material.dispose()
+    assert.equal(disposals, 1)
+  } finally { terrain.release(); ordinary.material.dispose(); shared.dispose(); scene.dispose(); engine.dispose() }
+})
 
 test('shared bindings retain textures until their last consumer leaves', async () => {
   const { resources, decoded, reads } = fixture()

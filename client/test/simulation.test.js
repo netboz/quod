@@ -14,7 +14,7 @@ const mark = (body = '10', revision = '2', colour = '#FFFFFF', id = 'door') =>
   `mark(<<"${id}">>,<<"box">>,[f(<<"width">>,2000),f(<<"height">>,2000),f(<<"depth">>,200)],` +
   `body_pose(${body},${revision}),surface(<<"${colour}">>,0,900,0,[]),unlabelled,` +
   `depicts(<<"room">>,<<"${anchor}">>,door(${body})))`
-const sample = (changes = {}) => ({ schema: 1, units: 'metres_seconds', space: 'world',
+const sample = (changes = {}) => ({ schema: 2, units: 'metres_seconds', space: 'local', origin_mm: ['0', '0', '0'], origin_seq: '0',
   world: 'room', authority: 'actor', epoch: '1', generation: '1', incarnation: 'token',
   structure: '2', tick: '1', poses: [{ body: '10', revision: '2', position: [0, 1, 0], rotation: [0, 0, 0, 1] }], ...changes })
 const projection = (frame = sample(), marks = `[${mark()}]`, view = 'read1') =>
@@ -222,7 +222,7 @@ test('socket refresh and reconnect sign fresh reads and reject delayed messages 
   socket.onopen()
   const open = await socket.next(), first = await viewId(open)
   socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), view: first, height: '4', marks: `[${mark()}]`, frame: sample() })
-  assert.deepEqual(await socket.next(), { type: 'ack', view: first, tick: '1' })
+  assert.deepEqual(await socket.next(), { type: 'ack', view: first, tick: '1', origin_seq: '0' })
   socket.receive({ type: 'refresh', reason: 'durable_gap' })
   assert.equal(refreshes.length, 1)
   assert.equal(statuses.length, 0, 'refresh must keep the painted pose visible')
@@ -277,7 +277,7 @@ function renewalFixture(t, selection = 'active') {
   const physical = sample({ world: `world_ref(<<"room">>,<<"${anchor}">>,room)`,
     authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,
     incarnation: Buffer.alloc(32).toString('base64url'), registration: Buffer.alloc(32, 1).toString('base64url'),
-    control_state: { sequence: '7', pending: false, result: 'idle' } })
+    control_state: { origin_mm: ['0', '0', '0'], sequence: '7', pending: false, result: 'idle' } })
   const stream = connectWorldView(identity, { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }, {
     projection: value => projections.push(value), frame: value => frames.push(value),
     unavailable: value => statuses.push(value), refreshing: value => refreshes.push(value),
@@ -454,7 +454,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     const frame = sample({ world: `world_ref(<<"room">>,<<"${anchor}">>,room)`,
       authority: `agent_instance_ref(<<"room">>,<<"${anchor}">>,actor)`,
       incarnation: Buffer.alloc(32).toString('base64url'), registration: Buffer.alloc(32, 1).toString('base64url'),
-      control_state: { sequence: '7', pending: false, result: 'idle' } })
+      control_state: { origin_mm: ['0', '0', '0'], sequence: '7', pending: false, result: 'idle' } })
     socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view, frame,
       control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })
     const first = stream.command(input)
@@ -467,7 +467,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     if (kind === 'push') assert.ok(request.includes('push(body(18446744073709551615,2),vector(1000,0,0))'))
     settle.resolve({ result: 'ok' }); assert.equal(await first, true)
     assert.equal(await stream.command(driveInput([0, 0, 0])), false, 'queued discrete input must not be overwritten')
-    socket.receive(motion({ ...frame, tick: '2', control_state: { sequence: '8', pending: false, result: 'clear' } }, view))
+    socket.receive(motion({ ...frame, tick: '2', control_state: { origin_mm: ['0', '0', '0'], sequence: '8', pending: false, result: 'clear' } }, view))
     const next = stream.command(driveInput([0, 0, 0]))
     await Promise.resolve()
     settle.reject(new Error('lost response'))
@@ -483,7 +483,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     const freshView = Buffer.from(await crypto.subtle.digest('SHA-256', Buffer.from(fresh.request, 'base64url'))).toString('base64url')
     socket.receive({ type: 'projection', selection: 'active', expires_ms: String(Date.now() + 30000), height: '5', marks: `[${mark()}]`, view: freshView,
       frame: { ...frame, registration: Buffer.alloc(32, 2).toString('base64url'),
-        control_state: { sequence: '9', pending: false, result: 'suspended' } },
+        control_state: { origin_mm: ['0', '0', '0'], sequence: '9', pending: false, result: 'suspended' } },
       control: 'control(human,2,controlled_agent(vehicle,1,10,2,motion(free,2000,1600,500,query_limits(2,0,8,128),[snap(785)]),viewpoint(eye,pose(vector(0,0,0),rotation(0,0,0)),view_only)))' })
     assert.equal(posts.length, 2, 'a fresh projection does not replay the uncertain command')
     const resumed = recovered.command(input)
@@ -494,7 +494,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     settle.resolve({ result: 'ok' })
     assert.equal(await resumed, true)
     socket.receive(motion({ ...frame, tick: '2', registration: Buffer.alloc(32, 2).toString('base64url'),
-      control_state: { sequence: '10', pending: false, result: 'clear' } }, freshView))
+      control_state: { origin_mm: ['0', '0', '0'], sequence: '10', pending: false, result: 'clear' } }, freshView))
     const refused = recovered.command(input)
     await Promise.resolve()
     settle.resolve({ result: 'fail', reasons: ['stale_sequence(10)'] })
@@ -508,7 +508,7 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
     settle.resolve({ result: 'ok' })
     assert.equal(await following, true)
     socket.receive(motion({ ...frame, tick: '3', registration: Buffer.alloc(32, 2).toString('base64url'),
-      control_state: { sequence: '12', pending: false, result: 'clear' } }, freshView))
+      control_state: { origin_mm: ['0', '0', '0'], sequence: '12', pending: false, result: 'clear' } }, freshView))
     const uncertain = recovered.command(input)
     await Promise.resolve()
     settle.resolve({ result: 'error', error: 'owner_unavailable' })
@@ -520,3 +520,19 @@ test(`${kind} admission waits for its discrete outcome and stops after uncertain
   } finally { stream.close(); recovered?.close() }
 })
 }
+
+test('local frame sequence fences rebases without changing the world incarnation', () => {
+  const origin = 2n ** 100n
+  const first = projection(sample({ origin_seq: '7', origin_mm: [String(origin), '0', String(-origin)] }))
+  assert.deepEqual(first.origin, [origin, 0n, -origin])
+  const shifted = advanceSimulation(first, motion(sample({ tick: '1', origin_seq: '8',
+    origin_mm: [String(origin + 4000n), '0', String(-origin)], poses: [
+      { body: '10', revision: '2', position: [-4, 1, 0], rotation: [0, 0, 0, 1] },
+    ] })))
+  assert.notEqual(shifted, first)
+  assert.equal(shifted.fence, first.fence)
+  assert.equal(advanceSimulation(shifted, motion(sample({ tick: '900', origin_seq: '7',
+    origin_mm: [String(origin), '0', String(-origin)] }))), shifted)
+  assert.throws(() => advanceSimulation(shifted, motion(sample({ tick: '2', origin_seq: '8',
+    origin_mm: ['0', '0', '0'] }))), /origin changed/)
+})

@@ -279,6 +279,9 @@ seal_operations_round_trip_and_stay_bounded_test() ->
       [independent_requires_signed_request, independent_nesting,
        independent_mixed_writes, independent_scope_required,
        {too_large, transcript}, {too_large, plan}, {too_large, result},
+       {material_limit, plan, symbols, 2049, 2048},
+       {material_limit, founding, canonical_bytes, 10, 9},
+       {invalid_material_policy, plan},
        {non_transactional_dependency, {directory_host, 5}},
        {network_identity_unavailable, <<"quod:target">>}]),
     ?assertEqual(

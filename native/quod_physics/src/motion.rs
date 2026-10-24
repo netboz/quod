@@ -31,6 +31,7 @@ pub enum Answer {
     Blocked(u64, usize),
     NoSupport,
     ViewClearance(f64, usize),
+    TerrainCoverage(Vec<crate::terrain::Requirement>),
     Unavailable,
     Unsupported,
     Invalid,
@@ -44,6 +45,7 @@ fn position(p: Pose) -> Position {
 fn tuple(v: Vector) -> V3 { (v.x,v.y,v.z) }
 
 struct Space<'a> {
+    world: &'a World,
     query: QueryPipeline<'a>,
     shape: &'a dyn Shape,
     checks: usize,
@@ -59,6 +61,14 @@ impl Space<'_> {
     }
 
     fn occupied(&mut self, pose: Pose) -> Result<Option<u64>,Answer> {
+        if let Some(ranges) = self.world.terrain_query_coverage(self.shape.compute_aabb(&pose)).map_err(|_| Answer::Unavailable)? {
+            return Err(Answer::TerrainCoverage(ranges));
+        }
+        let parts = self.shape.as_compound().map_or(1,|c| c.shapes().len());
+        for _ in 0..self.world.terrain.len()*parts { self.charge()?; }
+        if let Some(id) = self.world.terrain_occupied(self.shape,&pose).map_err(|_| Answer::Unavailable)? {
+            return Ok(Some(id));
+        }
         let query = self.query;
         for (_,other) in query.intersect_aabb_conservative(self.shape.compute_aabb(&pose)) {
             self.charge()?;
@@ -84,6 +94,9 @@ impl Space<'_> {
             Aabb::from_half_extents(pose.translation,Vector::splat(radius))
                 .merged(&Aabb::from_half_extents(pose.translation+travel,Vector::splat(radius)))
         }.loosened(skin);
+        if let Some(ranges) = self.world.terrain_query_coverage(bounds).map_err(|_| Answer::Unavailable)? {
+            return Err(Answer::TerrainCoverage(ranges));
+        }
         let pipeline = self.query;
         let mut earliest: Option<(f64,u64,Vector)> = None;
         for (_,other) in pipeline.intersect_aabb_conservative(bounds) {
@@ -151,7 +164,7 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
     let body_handle = *body;
     let body = &world.bodies[body_handle];
     let shape = world.colliders[body.colliders()[0]].shape();
-    let mut space = Space { query: world.broad.as_query_pipeline(&DefaultQueryDispatcher,
+    let mut space = Space { world, query: world.broad.as_query_pipeline(&DefaultQueryDispatcher,
         &world.bodies,&world.colliders,QueryFilter::default().exclude_rigid_body(body_handle)),
         shape, checks: 0, remaining: checks, tolerance };
     let mut pose = *body.position();
@@ -160,6 +173,13 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
             if !radius.is_finite() || radius <= 0.0 || radius > world.limits.3 { return Err(Answer::Invalid); }
             let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
             let point = pose.transform_point(local);
+            if let Some(ranges) = world.terrain_query_coverage(Aabb::from_half_extents(point,Vector::splat(radius))).map_err(|_| Answer::Unavailable)? {
+                return Err(Answer::TerrainCoverage(ranges));
+            }
+            for _ in 0..world.terrain.len() { space.charge()?; }
+            if world.terrain_point(point).map_err(|_| Answer::Unavailable)?.is_some() {
+                return Ok(Answer::ViewClearance(0.0,space.checks));
+            }
             let pipeline = space.query;
             let mut clearance = radius;
             for (_,other) in pipeline.intersect_aabb_conservative(Aabb::from_half_extents(point,Vector::splat(clearance))) {
@@ -252,7 +272,7 @@ mod tests {
         let mut rows = vec![box_at(1,Kind::Controlled,(0.0,1.002,0.0),(0.5,1.0,0.5)),
             box_at(2,Kind::Fixed,(0.0,-0.5,0.0),(20.0,0.5,20.0))];
         rows.extend(extra);
-        world.install(rows).unwrap(); world.step().unwrap(); world
+        world.install(rows,(0,0,0)).unwrap(); world.step().unwrap(); world
     }
     fn travel(world: &World, p: V3) -> Answer { evaluate(world,1,1,Query::Travel(p,(0.0,0.0,0.0)),LIMITS) }
     fn end(answer: Answer) -> V3 {
@@ -291,9 +311,9 @@ mod tests {
         assert!(end(travel(&world,(5.0,0.0,0.0))).0 < 1.0);
         let mut rows: Vec<_> = world.rows.values().map(|(row,_)| row.clone()).collect();
         rows[2].1 = 2; rows[2].3.0 = (10.0,1.0,0.0);
-        world.install(rows.clone()).unwrap(); world.step().unwrap();
+        world.install(rows.clone(),(0,0,0)).unwrap(); world.step().unwrap();
         assert!(end(travel(&world,(5.0,0.0,0.0))).0 > 4.99);
-        rows.pop(); world.install(rows).unwrap(); world.step().unwrap();
+        rows.pop(); world.install(rows,(0,0,0)).unwrap(); world.step().unwrap();
         assert!(end(travel(&world,(15.0,0.0,0.0))).0 > 14.99);
     }
 
@@ -306,7 +326,7 @@ mod tests {
             (((-1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
             (((1.0,0.0,0.0),(0.0,0.0,0.0)),Primitive::Box(0.2,1.0,0.2)),
         ]);
-        world.install(rows).unwrap(); world.step().unwrap();
+        world.install(rows,(0,0,0)).unwrap(); world.step().unwrap();
         let p = end(evaluate(&world,1,2,Query::Travel((0.0,0.0,6.0),(0.0,0.0,0.0)),LIMITS));
         assert!(p.2 > 5.99,"opening was incorrectly filled: {p:?}");
         let pose = ((0.0,1.002,3.0),(0.0,std::f64::consts::FRAC_PI_2,0.0));
@@ -339,7 +359,7 @@ mod tests {
                      (-1.0,0.0,-1.0),(1.0,0.0,-1.0),(1.0,0.0,1.0),(-1.0,0.0,1.0)],
                 vec![(0,4,1),(1,4,5),(1,5,2),(2,5,6),
                      (2,6,3),(3,6,7),(3,7,0),(0,7,4)]),1.0);
-        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor]).unwrap();
+        world.install(vec![box_at(1,Kind::Controlled,(0.0,3.0,0.0),(0.5,1.0,0.5)),floor],(0,0,0)).unwrap();
         world.step().unwrap();
         assert!(matches!(travel(&world,(0.0,-6.0,0.0)),Answer::Clear(_,_)));
         let moved = apply(&mut world,1,1,Query::Place(((3.0,3.0,0.0),(0.0,0.0,0.0))),LIMITS);
@@ -445,7 +465,7 @@ mod tests {
         world.install(vec![
             (1,1,Kind::Fixed,(offset,(0.0,0.0,roll)),annular_surface(walls),1.0),
             (2,1,Kind::Controlled,(tuple(position),(0.0,yaw,roll)),Geometry::Solid(Primitive::Capsule(0.5,0.25)),1.0),
-        ]).unwrap();
+        ],(0,0,0)).unwrap();
         world.step().unwrap();
         (world,frame)
     }
@@ -686,7 +706,7 @@ mod tests {
                     (((-0.4,0.0,0.0),(0.0,0.0,0.0)),Primitive::Capsule(0.5,0.25)),
                     (((0.4,0.0,0.0),(0.0,0.0,0.0)),Primitive::Capsule(0.5,0.25)),
                 ]);
-                world.install(rows).unwrap();world.step().unwrap();
+                world.install(rows,(0,0,0)).unwrap();world.step().unwrap();
                 let delta=frame.rotation*Vector::new(0.04,0.02,0.04);
                 let p=end(apply(&mut world,2,2,Query::Travel(tuple(delta),(0.0,0.0,0.0)),(0.002,0.0,8,128)));
                 let local=frame.inverse_transform_point(Vector::new(p.0,p.1,p.2));
@@ -800,7 +820,7 @@ mod tests {
             let ground=rows.iter_mut().find(|row|row.0==1).unwrap();ground.1=2;
             let Geometry::Surface(points,faces)=annular_surface(false) else {unreachable!()};
             let (a,b,c)=faces[18];ground.4=Geometry::Surface(vec![points[a as usize],points[b as usize],points[c as usize]],vec![(0,1,2)]);
-            world.install(rows).unwrap();world.step().unwrap();
+            world.install(rows,(0,0,0)).unwrap();world.step().unwrap();
             let d=speed*0.016667/std::f64::consts::SQRT_2;
             let answer=apply(&mut world,2,1,Query::Travel((d,-0.002725109,-d),(0.0,0.0,0.0)),(0.002,0.0,8,128));
             eprintln!("SINGLE_EDGE speed={speed} answer={answer:?}");

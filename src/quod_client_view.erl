@@ -27,8 +27,12 @@ gui_call(Agent, <<_:256>> = Connection, Message, Deadline)
     case quod_reg:where({client_view, {gui_hud, Agent, Connection}}) of
         undefined -> {error, human_unavailable};
         Owner ->
-            try gen_server:call(Owner, Message, max(0, Deadline-quod_time:mono_ms()))
-            catch exit:{timeout,_} -> {error, presentation_timeout};
+            %% Cowboy reserves '$gen_call' for its supervisor interface.
+            %% A labelled OTP call retains monitored replies and late-reply
+            %% cancellation while reaching the existing websocket owner.
+            try gen:call(Owner, quod_gui_request, Message, max(0, Deadline-quod_time:mono_ms())) of
+                {ok, Reply} -> Reply
+            catch exit:timeout -> {error, presentation_timeout};
                   exit:_ -> {error, human_unavailable}
             end
     end;
@@ -69,18 +73,44 @@ decode_command(Bytes) ->
               <<"status">> := Status} when Status =:= <<"active">>; Status =:= <<"expired">> ->
                 <<_:256>> = Token = base64:decode(Token64, #{mode => urlsafe, padding => false}),
                 {gui_activated, Token, Status};
+            #{<<"type">> := <<"terrain_ack">>,<<"view">> := View,<<"token">> := Token64} = Ack ->
+                <<_:256>> = Token = base64:decode(Token64,#{mode => urlsafe,padding => false}),
+                Value = case Ack of
+                    #{<<"want">> := Ids} when is_list(Ids) -> {want,Ids};
+                    #{<<"through">> := Index} when is_integer(Index),Index >= 0 -> {through,Index};
+                    #{<<"complete">> := true} -> complete
+                end,
+                {terrain_ack,View,Token,Value};
+            #{<<"type">> := <<"terrain_interest">>,<<"view">> := View,
+              <<"sequence">> := Sequence,<<"centre_mm">> := Centre} ->
+                [X,Y,Z] = [begin N = binary_to_integer(B), B = integer_to_binary(N), N end || B <- Centre],
+                Seq = binary_to_integer(Sequence), Sequence = integer_to_binary(Seq),
+                true = Seq > 0 andalso Seq < (1 bsl 64),
+                {terrain_interest,View,Seq,{X,Y,Z}};
             #{<<"type">> := <<"ack">>} = Ack -> Ack;
             _ -> error
         end
     catch error:_ -> error end.
 
+command({terrain_interest,View,Sequence,Centre},S = #{view := View,pid := Pid,ref := Ref,expires := Expiry}) ->
+    case Expiry > quod_time:now_ms() of
+        true -> quod_physics:view_interest(Pid,Ref,Sequence,Centre),{ok,S};
+        false -> reply(#{type => unavailable,reason => expired},release(S))
+    end;
+command({terrain_interest,_,_,_},S) -> {ok,S};
+command({terrain_ack,View,Token,Ack},S = #{view := View,pid := Pid,ref := Ref,expires := Expiry}) ->
+    case Expiry > quod_time:now_ms() of
+        true -> quod_physics:resource_ack(Pid,Ref,Token,Ack),{ok,S};
+        false -> reply(#{type => unavailable,reason => expired},release(S))
+    end;
+command({terrain_ack,_,_,_},S) -> {ok,S};
 command({gui_prepared, Token, Accepted}, S) -> gui_prepared(Token, Accepted, S);
 command({gui_activated, Token, Status}, S) -> gui_activated(Token, Status, S);
 command({open, Session, Bytes, Signature, Ns, Anchor, Kind}, S) ->
     open_request(Session,Bytes,Signature,Ns,Anchor,Kind,S);
-command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick},
-        S = #{view := View, pid := Pid, ref := Ref, tick := Tick}) ->
-    quod_physics:ack(Pid, Ref, binary_to_integer(Tick)), {ok, S};
+command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick,<<"origin_seq">> := OriginSequence},
+        S = #{view := View, pid := Pid, ref := Ref, tick := Tick,origin_sequence := OriginSequence}) ->
+    quod_physics:ack(Pid, Ref, binary_to_integer(Tick),binary_to_integer(OriginSequence)), {ok, S};
 command(#{<<"type">> := <<"ack">>}, S) -> {ok, S};
 command(_, S) -> {reply, {close, 1008, <<"invalid view command">>}, S}.
 
@@ -422,7 +452,8 @@ open_selection({simulation_view,World = {world_ref,Ns,Anchor,Instance},Authority
   when Ns =:= map_get(namespace,S), Anchor =:= map_get(anchor,S),
        Instance =:= map_get(instance,S) ->
             Expected = #{fence => {World, Authority, Epoch, Generation},
-                         structure => Structure, incarnation => Token,control => Control},
+                         structure => Structure, incarnation => Token,control => Control,
+                         terrain => terrain_bindings(Marks)},
             case quod_reg:where({physics_world, World}) of
                 Pid when is_pid(Pid) ->
                     attach(Pid, Expected, Marks, Digest, Height, Expiry, S);
@@ -457,7 +488,7 @@ attach_current(Pid,Expected,Marks,Digest,Height,Expiry,S) ->
                     case Expiry > quod_time:now_ms() andalso candidate_live(S) of
                         true ->
                             View = b64(Digest), Tick = decimal(maps:get(tick, Frame)),
-                            Next = (projection_deadline(Watched,Expiry))#{installed => true,view => View, tick => Tick, height => Height,
+                            Next = (projection_deadline(Watched,Expiry))#{installed => true,view => View, tick => Tick, origin_sequence => decimal(maps:get(origin_sequence,Frame)), height => Height,
                                 bodies => Bodies, control => maps:get(control,Expected),
                                 world => element(1, maps:get(fence, Expected))},
                             reply(#{type => projection,selection => active,view => View, height => decimal(Height),expires_ms => decimal(Expiry),
@@ -512,14 +543,25 @@ body_bindings(Marks, Control, #{poses := Poses}) ->
         {ok, maps:from_list(Controlled ++ [{Body, true} || {_, Body} <- Rows, Body =/= none])}
     catch error:_ -> error end.
 
+terrain_bindings(Marks) ->
+    Bindings = lists:foldl(fun
+        ({mark,_,<<"terrain">>,{terrain_geometry,<<"qvt1">>,_,View,{resources,A,B,C,D,E}},Pose,_,_,Depicts},Acc) ->
+            Key = mark_body(Pose,Depicts),
+            Limits = [A,B,C,D,E],
+            {View,Previous} = maps:get(Key,Acc,{View,Limits}),
+            Acc#{Key => {View,lists:zipwith(fun erlang:min/2,Limits,Previous)}};
+        (_,Acc) -> Acc
+    end,#{},Marks),
+    [{Id,Revision,View,Limits} || {{Id,Revision},{View,Limits}} <- lists:sort(maps:to_list(Bindings))].
+
 mark_body({relative, _, Pose}, Depicts) -> mark_body(Pose, Depicts);
 mark_body({body_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
 mark_body({transform, _, _, _, _, _, _}, _) -> none.
 
-websocket_info({'$gen_call', From,
+websocket_info({quod_gui_request, From,
                 {gui_prepare, Agent, Connection, Request, Question, Descriptor, Capacity, Expiry, Deadline}}, S) ->
     gui_prepare(From, Agent, Connection, Request, Question, Descriptor, Capacity, Expiry, Deadline, S);
-websocket_info({'$gen_call', From, {gui_activate, Request, Token}}, S) ->
+websocket_info({quod_gui_request, From, {gui_activate, Request, Token}}, S) ->
     gui_activate(From, Request, Token, S);
 websocket_info({timeout, Timer, {gui_resource, Token}}, S) ->
     case maps:get(Token, maps:get(gui_resources,S,#{}), none) of
@@ -539,9 +581,17 @@ websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M}}) ->
             false -> finish_cleanup(Clean)
         end
     end;
+websocket_info({physics_resource,Pid,Ref,Resource},S = #{pid := Pid,ref := Ref,view := View,expires := Expiry}) ->
+    case Expiry > quod_time:now_ms() of
+        true -> case Resource of
+            {terrain_unavailable,Reason} -> reply(#{type => unavailable,reason => Reason},release(S));
+            _ -> reply((quod_terrain_wire:message(Resource))#{view => View},S)
+        end;
+        false -> reply(#{type => unavailable,reason => expired},release(S))
+    end;
 websocket_info({physics_frame, Pid, Ref, Frame}, S = #{pid := Pid, ref := Ref, view := View, bodies := Bodies,control := Control}) ->
     Tick = decimal(maps:get(tick, Frame)),
-    reply(#{type => simulation_frame, view => View, frame => frame_json(Frame, Bodies,Control)}, S#{tick => Tick});
+    reply(#{type => simulation_frame, view => View, frame => frame_json(Frame, Bodies,Control)}, S#{tick => Tick,origin_sequence => decimal(maps:get(origin_sequence,Frame))});
 websocket_info({physics_refresh, Pid, Ref}, S = #{pid := Pid, ref := Ref}) -> refresh(S, structure_changed);
 websocket_info({'DOWN', M, process, _, _}, S = #{monitor := M}) -> refresh(S, owner_changed);
 websocket_info({timeout, Timer, expired}, S = #{timer := Timer, installed := true}) -> refresh(S, expired);
@@ -627,7 +677,9 @@ dependency_height(Ns,Height,S = #{heights := Heights,local_ready := Ready}) ->
 
 frame_json(Frame = #{fence := {World, Authority, Epoch, Generation}, structure := Structure,
              incarnation := Token, tick := Tick, poses := Poses}, Bodies,Control) ->
-    #{schema => 1, units => metres_seconds, space => world,
+    #{schema => 2, units => metres_seconds, space => local,
+      origin_mm => [decimal(N) || N <- tuple_to_list(maps:get(origin,Frame))],
+      origin_seq => decimal(maps:get(origin_sequence,Frame)),
       world => quod_client_goal_parser:value_text(World),
       authority => quod_client_goal_parser:value_text(Authority),
       epoch => decimal(Epoch), generation => decimal(Generation),
@@ -641,14 +693,17 @@ frame_json(Frame = #{fence := {World, Authority, Epoch, Generation}, structure :
 
 control_feedback(_,none) -> null;
 control_feedback(Frame,Control = {control,Principal,_,_}) ->
-    case maps:get(Principal,maps:get(inputs,Frame,#{}),none) of
+    Row = maps:get(Principal,maps:get(inputs,Frame,#{}),none),
+    Feedback = case Row of
         #{control := Control,sequence := Seq,pending := Pending,result := Result} ->
             #{sequence => decimal(Seq),pending => Pending,
               result => quod_client_goal_parser:value_text(quod_physics_predicates:motion_answer(Result))};
         #{sequence := Seq} ->
             #{sequence => decimal(Seq),pending => false,result => <<"suspended">>};
         _ -> #{sequence => <<"-1">>,pending => false,result => <<"idle">>}
-    end.
+    end,
+    Origin = case Row of #{result_origin := O} -> O; _ -> maps:get(origin,Frame) end,
+    Feedback#{origin_mm => [decimal(N) || N <- tuple_to_list(Origin)]}.
 
 reply(Message, S) ->
     Encoded = iolist_to_binary(json:encode(Message)),
@@ -671,7 +726,7 @@ b64(B) -> base64:encode(B, #{mode => urlsafe, padding => false}).
 detach(S) ->
     case S of #{pid := Pid, ref := Ref, monitor := M} ->
         quod_physics:unwatch(Pid, Ref), demonitor(M, [flush]); _ -> ok end,
-    maps:without([pid,ref,monitor,view,tick,height,bodies,control],S).
+    maps:without([pid,ref,monitor,view,tick,origin_sequence,height,bodies,control],S).
 
 release(S) ->
     HasGui = map_size(maps:get(gui_resources,S,#{})) > 0,

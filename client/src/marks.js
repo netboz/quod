@@ -23,6 +23,7 @@ const GEOMETRY = Object.freeze({
   sky_sphere: ['diameter'],
   group: [],
   mesh: [],
+  terrain: [],
 })
 
 const PLACEMENTS = Object.freeze(['above', 'centre', 'below'])
@@ -35,6 +36,8 @@ export function readMarks(text) {
   const ids = new Set(marks.map(mark => mark.id))
   if (ids.size !== marks.length) throw new Error('two marks share one identity')
   const seen = new Set()
+  const horizons = new Set(marks.filter(mark => mark.kind === 'terrain').map(mark => JSON.stringify(mark.size.viewDistance)))
+  if (horizons.size > 1) throw new Error('terrain view distances disagree')
   for (const mark of marks) {
     if (mark.parent !== null && !seen.has(mark.parent)) {
       throw new Error('a parent must precede its child')
@@ -62,23 +65,48 @@ function readMark(term) {
   }) : null
   const group = name === 'group'
   const mesh = name === 'mesh'
+  const terrain = name === 'terrain'
   if (group && (material.type !== 'atom' || material.value !== 'no_surface')) {
     throw new Error('a group has no surface')
   }
   if (mesh && (material.type !== 'atom' || material.value !== 'asset_surfaces')) {
     throw new Error('a mesh uses its embedded asset surfaces')
   }
+  const subject = readDepicts(depicts)
+  if (terrain && (!body || !subject?.anchor || material.type !== 'atom' || material.value !== 'terrain_surfaces' ||
+    label.type !== 'atom' || label.value !== 'unlabelled')) throw new Error('terrain requires an anchored body and generated surfaces')
   return Object.freeze({
     id: binaryValue(id, 'mark id'),
     kind: name,
-    size: mesh ? readMesh(size) : readSize(size, fields, name),
+    size: terrain ? readTerrain(size) : mesh ? readMesh(size) : readSize(size, fields, name),
     parent: parent === null ? null : binaryValue(parent, 'parent id'),
     transform: driven ? null : readTransform(local),
     ...(body ? { body: Object.freeze({ id: body[0], revision: body[1] }) } : {}),
-    material: group || mesh ? null : readMaterial(material),
+    material: group || mesh || terrain ? null : readMaterial(material),
     label: readLabel(label),
-    depicts: readDepicts(depicts),
+    depicts: subject,
   })
+}
+
+function readTerrain(term) {
+  const [profile, palette, view, resources] = args(term, 'terrain_geometry', 4)
+  oneOf(profile, ['qvt1'], 'terrain profile')
+  if (palette.type !== 'list' || palette.tail !== null || !palette.items.length) throw new Error('invalid terrain palette')
+  let previous = -1
+  const materials = palette.items.map(item => {
+    const [id, surface] = args(item, 'material', 2), value = whole(id, 'material identity')
+    if (value <= previous || value > 65535) throw new Error('invalid terrain material identity')
+    previous = value
+    return Object.freeze([value, readMaterial(surface)])
+  })
+  const limits = args(resources, 'resources', 5).map(n => whole(n, 'terrain allowance'))
+  if (limits.some(n => n <= 0)) throw new Error('invalid terrain allowance')
+  const viewDistance = args(view, 'view_distance', 3).map(n => whole(n, 'view distance'))
+  if (viewDistance[0] <= 0 || viewDistance[1] <= 0 || viewDistance[2] < viewDistance[1] ||
+      !Number.isSafeInteger(viewDistance[0] + viewDistance[2])) throw new Error('invalid view distance')
+  return Object.freeze({ profile: 'qvt1', palette: Object.freeze(materials),
+    viewDistance: Object.freeze(viewDistance),
+    allowed: Object.freeze(limits.slice(0, 4)), chunks: limits[4] })
 }
 
 function readMesh(term) {

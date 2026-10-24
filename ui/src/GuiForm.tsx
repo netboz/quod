@@ -116,7 +116,7 @@ function GuiField({ field, model, inheritedEnabled, resources }: {
     disabled={!enabled || !model.enabled[field.role]} onClick={() => model.invoke(field.role)}>
     {field.image && <GuiImage digest={field.image} label="" resources={resources} />}{field.label}</button>
 
-  const family = guiValueKind(field.kind)
+  const family = guiValueKind(field.kind) ?? (field.kind === 'catalogue_selection' ? 'choice' : null)
   const numeric = family === 'number'
   const range = numeric ? numericControlRange(field.range) : null
   const number = range ? numericDraft(range, value) : null
@@ -161,7 +161,7 @@ function GuiField({ field, model, inheritedEnabled, resources }: {
             {option.label}
           </label>)}
         </div>
-      : field.kind === 'selection' ? <select id={id} value={value} disabled={!editable}
+      : field.kind === 'selection' || field.kind === 'catalogue_selection' ? <select id={id} value={value} disabled={!editable}
           aria-describedby={description} aria-invalid={!!error} onChange={event => edit(event.target.value)}>
           {!knownSelection && <option value={value} disabled>Choose a value.</option>}
           {options.map(option =>

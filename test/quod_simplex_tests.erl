@@ -5699,30 +5699,12 @@ protocol_progress_nacks_raw_collection(Kind) ->
 %% rejected fast ({error, too_large}) so a block can never blow past the wire frame; a leader whose
 %% depth-one pipeline is already full now PARKS the append in the bounded ingress queue instead of
 %% rejecting {error, busy} — the caller waits for the pipeline's own events, not a retry timer.
-batch_caps_reject_oversized_and_park_test() ->
+full_pipeline_parks_and_coalesces_test() ->
     {Me, Id} = id(),
     Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
              history_head => {3, quod_simplex:block_hash(blk(3))},
              eng => notarized_prefix([{Me, Id}], 3, 3)},   %% a caught-up sole leader
     From = {self(), make_ref()},
-    %% The transaction itself remains within its canonical envelope, while
-    %% the enclosing signed-transaction and block bytes cross MAX_BLOCK_BYTES.
-    %% That keeps this test on the Simplex block-cap seam now that R2 refuses
-    %% an intrinsically oversized transaction before it can be signed.
-    Big = bind_test_id(
-            #transaction{tx_id = <<>>, origin = {<<"t">>, <<0:256>>},
-                         proof_id = <<0:256>>, plan_digest = <<0:256>>,
-                         goal = durable_goal({test, big}),
-                         result = durable_result(),
-                         author = Me, sig = none, read_check = #{},
-                         diff = [{assert,
-                                  {{blob,
-                                    binary:copy(<<0>>, 255 * 1024 + 512)},
-                                   true}}]}),
-    {keep_state, _, A1} =
-        quod_simplex:running(
-          {call, From}, {append, Big, otel_ctx:new()}, st(Base)),
-    ?assert(lists:member({reply, From, {error, too_large}}, A1)),
     %% material pipeline full (height 3, two notarized writes pending): the append PARKS —
     %% no reply action, no busy, one queued item under this author.
     Small = bind_test_id(
@@ -6139,11 +6121,11 @@ blocked_author_does_not_block_other_authors_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"batch-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"a-small">>, 11,
@@ -6196,11 +6178,11 @@ drain_rechecks_held_authors_after_route_change_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"multipass-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"multipass-a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"multipass-a-small">>, 11,
@@ -7185,11 +7167,11 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
            author = Me, sig = none, read_check = #{},
            diff =
                [{assert,
-                 {{blob, binary:copy(<<1>>, 120000)}, true}}]}),
+                 {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES div 2)}, true}}]}),
     Filler =
         signed_tx(
           <<"t">>, <<"ready-order-filler">>,
-          [{assert, {{blob, binary:copy(<<2>>, 220000)}, true}}],
+          [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
           {FillerAuthor, FillerId}),
     Small = bind_test_id(
         #transaction{

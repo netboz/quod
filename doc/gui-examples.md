@@ -94,9 +94,10 @@ opening also requires the human's `gui_receiver_policy(HumanInstance, Actor)`.
 The ordinary hosted actor must have the shared completion handler installed.
 The `quod:gui` scope uses the governed `quod_gui_predicates` module through normal
 ontology founding; source composition does not install runtime capabilities.
-The human and application scopes need the ordinary `quod_agent_predicates`
-module for authenticated context; the responder also uses
-`quod_agent_work_predicates`. Use the existing namespace manager and system
+The human, application and responder scopes need the ordinary
+`quod_agent_predicates` module for authenticated context. GUI completion uses
+the shared question handler and requires no additional work predicate module.
+Use the existing namespace manager and system
 catalogue to serve the anchored GUI capability on a receiving node; an observer
 replica suffices, and that node need not host the human or application ontology.
 
@@ -188,6 +189,67 @@ ordinary button with that image attribute and a verb label; it uses exactly the
 same activation and submission path. There are no image URLs or client
 callbacks in the ontology. Both adapters reuse verified asset bytes and show
 loading/error feedback; resource leases end when their controls are retired.
+
+## Voxel world generation
+
+Compose `voxel_world.pl` and `voxel_world_gui.pl` with the existing GUI instance
+bundle. Classify a world slot with `instance_of(voxel_world, World)` and present
+`voxel_generation(World)` through ordinary `gui_question_policy/3`.
+Classification alone allocates nothing. Supply the usual vocabulary, responder
+and permissions, plus world-specific physics/voxel allowances and initial
+chunk selection. Creation and regeneration require their explicit domain ACLs.
+
+The eight fields compile a preset into an authored field definition. Ownership
+is assigned to the human in the question policy, while the authorized responder
+performs the existing transaction. The form's exact world/patch basis becomes
+part of its revision: digging invalidates a previously opened regeneration
+form. Regeneration requires an empty physical world without persistent edits;
+the help text directs the user to a new world to preserve an edited landscape.
+
+Compose [voxel_world_view.pl](../priv/ontologies/voxel_world_view.pl) and the
+ordinary space view to display terrain through its class-selected Eidolon.
+Supply exact `modelling_vocabulary/2` and `rendering_vocabulary/2` references,
+one `voxel_presentation/5` row, and the application's ordinary view permissions.
+The same space may contain other admitted or decorative subjects.
+
+Two further forms use the same question policy and responder:
+
+- `voxel_excavation(World)` submits world coordinates and sphere radius in
+  millimetres. Supply `voxel_brush_controls(World,CoordinateRange,RadiusRange)`
+  using ordinary `range(Min,Max,Step)` terms, and grant the responder
+  `can_edit_voxel_world/3` under the application's policy. Its exact definition
+  and patch basis rejects intervening edits; completion commits the dig and
+  consumes the question together.
+- `voxel_view_settings(World)` changes viewing distance in metres. Supply
+  `voxel_view_range(World,Range)` and `can_manage_voxel_world(World,Actor,view)`.
+  Prefetch, retention and resource allocation remain authored presentation
+  policy. Distance changes preserve physical revisions and existing digs.
+
+Open these forms with `gui_open/2`. Pointer sculpting and moving a flying lobby
+into the world remain separate integration work.
+
+## Personal world library
+
+Compose [lobby_worlds.pl](../priv/ontologies/lobby_worlds.pl), the terrain and
+GUI sources with the ordinary personal lobby. The console's **My worlds**
+workspace derives its rows from owned `voxel_world` instances. Creation uses
+the same generation controls and an optional display name. A blank name draws
+once from the pinned naming vocabulary's `landscape/world/neutral` pool and
+saves that result with the world. Duplicate labels are allowed; exact anchored
+space references identify selections.
+
+Each world has its own physics authority and controlled pilot. Entering selects
+that space through the shared signed view and physics initializer; returning
+selects the exact personal lobby. The form responder uses the existing hosted
+agent and accepted-question completion. A configured host declaration and
+installed runtime readiness are distinct states.
+
+The initial viewing distance and its prefetch/retained border scale with ground
+detail, keeping a fine-detail world's initial chunk count bounded. Viewing
+distance remains an ordinary form setting. A generated view that exceeds its
+authored rendering allowance reports the resource, required amount and limit;
+the user can return to the lobby and choose a smaller distance without changing
+the saved terrain or disabling its physics owner.
 
 Fresh human creation lists [human_user_instance.pl](../priv/ontologies/human_user_instance.pl),
 [agent_instance.pl](../priv/ontologies/agent_instance.pl),

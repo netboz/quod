@@ -15,7 +15,7 @@ kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
-                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
         %% the order a descriptor must use is the order they are written in.
@@ -176,7 +176,7 @@ the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
         ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
-                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"torus">>],
+                      <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
                      solutions({'F'}, {attribute, <<"cylinder">>, field, {'F'}}, St))
@@ -197,8 +197,7 @@ policy_test() ->
 vocabulary_fits_the_genesis_budget_test() ->
     lists:foreach(fun(Name) ->
         Terms = quod_committed_projection:read_terms(filename:join("priv/ontologies", Name)),
-        New = quod_wire_term:cold_new_symbols(Terms),
-        ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {Name, New, length(New)}),
+        quod_ct:assert_material_admissible(Terms),
         ?assertNot(lists:any(fun has_float/1, Terms))
     end, ["quod_rendering.pl", "quod_modelling.pl", "quod_material.pl",
           "quod_material_eidolons.pl", "quod_environment.pl",
@@ -295,6 +294,23 @@ mesh_geometry_is_typed_and_resource_policy_owned_test() ->
             setelement(6, Asset, {resources, 8000001, 1000, 100, 100, 10, 2, 1000}))}, St),
         fails({well_formed_mark, setelement(6, Mark,
             {surface, <<"#FFFFFF">>, 0, 1000, 0, []})}, St)
+    end).
+
+terrain_descriptor_is_body_bound_and_bounded_test() ->
+    with_rendering(fun(St) ->
+        Geometry = {terrain_geometry,<<"qvt1">>,[{material,9,{surface,<<"#447722">>,0,900,0,[]}}],
+                    {view_distance,4000,1000,2000},
+                    {resources,500000,1000000,20000,10000,64}},
+        Mark = {mark,<<"ground">>,<<"terrain">>,Geometry,{body_pose,4,2},
+                terrain_surfaces,unlabelled,{depicts,<<"world">>,<<7:256>>,land}},
+        holds({well_formed_mark,Mark},St),
+        fails({well_formed_mark,setelement(5,Mark,{transform,0,0,0,0,0,0})},St),
+        fails({well_formed_mark,setelement(8,Mark,depicts_nothing)},St),
+        fails({well_formed_mark,setelement(4,Mark,[])},St),
+        fails({well_formed_mark,setelement(4,Mark,setelement(3,Geometry,
+            [{material,9,{surface,<<"#447722">>,0,900,0,[]}},{material,9,{surface,<<"#FFFFFF">>,0,900,0,[]}}]))},St),
+        fails({well_formed_mark,setelement(4,Mark,setelement(5,Geometry,
+            {resources,500000,1000000,20000,10000,1025}))},St)
     end).
 
 mesh_mark() ->

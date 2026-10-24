@@ -78,6 +78,41 @@ Neither policy tightening nor recovery re-admits already accepted obligations.
 Unchanged policy checks do not write the journal. Canonical transaction and
 genesis encoding bounds remain separate from this resource policy.
 
+New founding material and sealed plans use the shared
+[material policy](../priv/ontologies/material_policy.pl). Root's existing
+creation proof selects founding limits; each target session selects its plan
+limits. The selection is a strictly local, read-only proof over the pinned
+committed state. Its exact reads enter the existing OCC set, so a proposed
+change cannot grant itself a larger allowance and a concurrent policy change
+conflicts normally. Overrides are ordinary ontology facts under its existing
+authorization. Missing, ambiguous or invalid limits refuse new admission.
+Refusals identify the material kind, resource, actual quantity and allowance.
+If a proposed diff changes a dependency of the selected plan policy, sealing
+checks that the final candidate still selects a valid policy. An atomic
+replacement is checked as one final state, including changes to helper
+predicates. This does not grant the candidate's larger allowance to its own
+write. Zero remains an explicit owner policy: it can permanently close the
+ordinary write lane. There is no implicit repair allowance or privileged
+recovery write that bypasses that policy.
+
+Founding counts the authored source's distinct symbols before allocation and
+checks its compiled canonical diff. Plans count their complete encoded
+envelope, joint decoded vocabulary (including transcript goals), operations
+and read entries. Counts do not depend on which atoms a VM already knows.
+Admission is enforced by the sealing proposer under the existing trusted
+validator execution boundary. Validators enforce the sealed policy reads and
+encoding bounds; material decoding retains VM headroom checks. This is not a
+new resource sandbox for arbitrary traffic from admitted committee members.
+The full enclosing transaction, block and transport still have encoding
+capacity checks. Their shared material capacity fits both the existing scope
+carrier and the history page with a full-committee compact witness; accepted
+canonical bytes are unchanged. Decoding accepted history does not reapply current admission
+policy. It still validates the wire alphabet and real VM atom-table headroom.
+Retained vote selections distinguish read and write reservation changes.
+Shared policy readers do not invalidate each other's unchanged selections;
+an overlapping writer still invalidates readers and writers through the
+existing installed-change notification.
+
 ## Exact terminal outcome reads
 
 `committed_operation_outcome(Bytes, Status)` reads the current scope's exact

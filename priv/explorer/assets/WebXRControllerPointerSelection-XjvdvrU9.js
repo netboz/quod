@@ -1,0 +1,1 @@
+import{n as e,t}from"./WebXRControllerPointerSelection.pure-CIF5iX8c.js";t();export{t as RegisterWebXRControllerPointerSelection,e as WebXRControllerPointerSelection};

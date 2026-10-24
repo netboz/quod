@@ -36,6 +36,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          wait_until/1, wait_until/2,
          install_directory_generation/5]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
+-export([material_limits/1, assert_material_admissible/1]).
 -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
 -export([proof_gate_row/3, https_request/4, https_request/5]).
 -export([node_identity_options/3]).
@@ -997,11 +998,19 @@ set_ref(#est{db = Db} = Est, Ref) -> Est#est{db = Db#db{ref = Ref}}.
 
 %% a committed MVCC kb (unknown=fail) holding `Facts`, published at height 1
 committed_kb(Facts) ->
-    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
-    State0 = element(3, Erl),
-    {succeed, State1} =
-        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
-    commit_kb(assert_facts(Facts, State1)).
+    commit_kb(assert_facts(Facts, quod_committed_projection:new_est())).
+
+material_limits(Kind) ->
+    #est{db = #db{ref = Ref}} = Est = quod_committed_projection:new_est(),
+    try
+        {ok, Limits, _} = quod_material_admission:policy(Kind, Est),
+        Limits
+    after quod_erlog_db_mvcc:delete(Ref)
+    end.
+
+assert_material_admissible(Terms) ->
+    {ok, Usage} = quod_material_admission:usage(quod_prolog:terms_to_diff(Terms)),
+    ok = quod_material_admission:check(founding, Usage, material_limits(founding)).
 
 %% assertz each erlog `Fact` into `Est`, failing loudly on the first refusal
 assert_facts(Facts, Est) ->

@@ -44,8 +44,10 @@ model_geometry(<<"mesh">>,
     AX is EAX, AY is EAY, AZ is EAZ,
     BX is EBX, BY is EBY, BZ is EBZ,
     PX is EPX, PY is EPY, PZ is EPZ.
+model_geometry(<<"terrain">>, terrain_geometry(Profile,Palette,View,Resources),
+               terrain_geometry(Profile,Palette,View,Resources)).
 model_geometry(Kind, Expressions, Size) :-
-    Kind \== <<"mesh">>, model_dimensions(Expressions, Size).
+    Kind \== <<"mesh">>, Kind \== <<"terrain">>, model_dimensions(Expressions, Size).
 model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
 model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
@@ -63,6 +65,8 @@ shape(torus(D, T), <<"torus">>, [f(<<"diameter">>, D), f(<<"thickness">>, T)]).
 shape(sky_sphere(D), <<"sky_sphere">>, [f(<<"diameter">>, D)]).
 shape(mesh_asset(Asset, Profile, Scale, Frame, Resources), <<"mesh">>,
       mesh_asset(Asset, Profile, Scale, Frame, Resources)).
+shape(terrain_geometry(Profile,Palette,View,Resources), <<"terrain">>,
+      terrain_geometry(Profile,Palette,View,Resources)).
 
 %% Align two axis-aligned bounding-box anchors in the target's local frame.
 %% A positive gap runs outward along the target face's normal. The returned
@@ -166,3 +170,4 @@ scoped_transform(Prefix, relative(Parent, At), relative(Scoped, At)) :-
     scoped_id(Prefix, Parent, Scoped).
 scoped_transform(Prefix, transform(X,Y,Z,RX,RY,RZ),
                  relative(Prefix, transform(X,Y,Z,RX,RY,RZ))).
+scoped_transform(Prefix, body_pose(Body,Revision), relative(Prefix,body_pose(Body,Revision))).

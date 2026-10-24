@@ -15,6 +15,11 @@ export function initializeSpace(identity, agent, reference, options = {}) {
   return initializeResource(identity, agent, reference, 'physics', [reference.instance], spaceKey(reference), options)
 }
 
+export function initializeWorldLibrary(identity, agent, reference, options = {}) {
+  return initializeResource(identity, agent, reference, 'world_library', [],
+    JSON.stringify([reference.namespace, b64url(reference.anchor), 'world_library']), options)
+}
+
 export async function initializeResource(identity, agent, reference, name, arguments_, setup, options = {}) {
   const pending = await pendingSignedOperations(identity, options)
   if (pending.some(row => row.context?.setup === setup && row.id !== options.replaceOperation)) {

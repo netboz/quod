@@ -25,7 +25,7 @@ note(Event, Est) -> quod_observation:note(Event, Est).
 
 dependency_keys({fact, Functor}) -> [{fact, Functor}];
 dependency_keys({request, Key}) -> [{request, Key}];
-dependency_keys({reservations, Material}) -> reservation_keys(Material);
+dependency_keys({reservations, Material}) -> reservation_keys(Material, dependencies);
 dependency_keys({flag_value, '$quod_ctx', _EscapedContext}) ->
     %% The raw Prolog flag exposes the whole context, not just whichever
     %% field a later goal happens to inspect. All components are observed.
@@ -46,12 +46,22 @@ affected(Basis, Changed) ->
 
 -doc "Reservation keys use the authenticated plan's existing conflict descriptor.".
 -spec reservation_keys(quod_atomic:admission_material()) -> [term()].
-reservation_keys({{quod_dtx_vote, _, _, Target, _, _}, _, #{plans := Plans}}) ->
+reservation_keys(Material) -> reservation_keys(Material, changes).
+
+%% Reading a reserved predicate conflicts only with a writer. Writing it
+%% depends on both readers and writers. Publication reports the acquired or
+%% released modes, matching the ordinary reservation conflict relation.
+reservation_keys({{quod_dtx_vote, _, _, Target, _, _}, _, #{plans := Plans}}, Mode) ->
     case maps:find(Target, Plans) of
         {ok, Plan} ->
             #{reads := Reads, writes := Writes, custody := Custody} =
                 maps:get(conflict_descriptor, quod_dtx:core(Plan)),
-            [{reservation, F} || F <- ordsets:union(Reads, Writes)] ++
+            {Readers,Writers} = case Mode of
+                changes -> {Reads,Writes};
+                dependencies -> {Writes,ordsets:union(Reads,Writes)}
+            end,
+            [{reservation,read,F} || F <- Readers] ++
+                [{reservation,write,F} || F <- Writers] ++
                 [{custody, Identity} || Identity <- Custody];
         error -> []
     end.

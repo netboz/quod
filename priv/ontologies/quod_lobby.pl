@@ -14,6 +14,7 @@ lobby_query(isa(_, _)).
 lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
 lobby_query(lobby_options(_, _, _)).
+lobby_query(world_palette(_)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 lobby_query(Goal) :- public_source_query(Goal).
 
@@ -50,7 +51,7 @@ lobby_options(Owner, Node, Options) :-
             attribute(personal_sky, panorama, belfast_sunset_puresky),
             attribute(personal_sky, diameter, 80000),
             attribute(personal_sky, rotation, 75),
-            attribute(personal_sky, brightness, 120),
+            attribute(personal_sky, brightness, 1000),
             attribute(personal_sky, tint, <<"#FFFFFF">>),
             instance_of(prolog_console, console),
             instance_of(lobby_roof, personal_roof),
@@ -58,7 +59,8 @@ lobby_options(Owner, Node, Options) :-
             modelling_vocabulary(ModellingNamespace, ModellingAnchor),
             environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
             environment_eidolons(EnvironmentEidolonNs,EnvironmentEidolonAnchor),
-            gui_vocabulary(GuiNamespace, GuiAnchor) | Bodies]),
+            gui_vocabulary(GuiNamespace, GuiAnchor),
+            names_vocabulary(NamesNamespace, NamesAnchor) | Bodies]),
         external_predicate_modules([quod_agent_predicates])], Options),
     current_ontology_identity(Namespace, Anchor),
     lobby_definitions(Bodies),
@@ -67,7 +69,8 @@ lobby_options(Owner, Node, Options) :-
     modelling_vocabulary(ModellingNamespace, ModellingAnchor),
     environment_vocabulary(EnvironmentNamespace, EnvironmentAnchor),
     environment_eidolons(EnvironmentEidolonNs,EnvironmentEidolonAnchor),
-    gui_vocabulary(GuiNamespace, GuiAnchor).
+    gui_vocabulary(GuiNamespace, GuiAnchor),
+    findall(ontology_ref(N,A),names_vocabulary(N,A),[ontology_ref(NamesNamespace,NamesAnchor)]).
 
 %% Authored floor includes the depressed glass porthole and the raised outer
 %% coping. The roof keeps its oculus and six entrances.
@@ -143,7 +146,8 @@ device_menu(Classes, Entries) :-
     sort(Raw, Entries).
 
 class_device_menu(prolog_console,
-    [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console))]).
+    [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console)),
+     menu_entry(my_worlds, <<"My worlds">>, open_view(space_library))]).
 
 eidolon(lobby_floor,device(_),[
     part(<<"model">>,
@@ -161,6 +165,20 @@ material_surface(Material, Surface) :-
          class_eidolon(Material, playing, solid, recipe(RecipeNs, RecipeAnchor, Recipe))),
     RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
                eidolon(Recipe, material(Material), Surface)).
+
+%% New worlds freeze these catalogue-selected surfaces into their own state.
+world_palette([
+    material(1,surface(<<"#B7D6AA">>,0,950,0,[Grass])),
+    material(2,surface(<<"#A58868">>,0,950,0,[Ground])),
+    material(3,surface(<<"#E5D8AC">>,0,900,0,[Ground])),
+    material(4,surface(<<"#C99B79">>,0,900,0,[Ground])),
+    material(5,surface(<<"#E7E9E5">>,0,800,0,[])),
+    material(6,surface(<<"#A1A5A5">>,0,900,0,[Ground]))]) :-
+    material_eidolons(Ns,A),
+    Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_grass,<<"base_colour">>,GrassAsset,_)),
+    Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_ground,<<"base_colour">>,GroundAsset,_)),
+    Grass = texture(<<"base_colour">>,GrassAsset,repeat(500,500)),
+    Ground = texture(<<"base_colour">>,GroundAsset,repeat(500,500)).
 
 %% Roof and ground are separate appearance assets, not physical body identities.
 eidolon(lobby_roof, device(_),

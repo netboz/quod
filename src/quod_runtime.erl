@@ -259,9 +259,11 @@ handle_call({reconcile_resource, MinHeight, Resource, Scope, Deadline}, From, S 
     end;
 handle_call({reconcile_resource, _, _, _, _}, _From, S) ->
     {reply, {error, not_ready}, S};
-handle_call(physics_selection_identity, {Caller, _},
+handle_call(physics_selection_state, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
-    {reply,Identity,S};
+    Retained = maps:map(fun(_,Entry) -> maps:get(voxel_resources,maps:get(spec,Entry),#{}) end,S#s.physics),
+    Demand = maps:map(fun(_,Entry) -> maps:get(terrain_demand,Entry,none) end,S#s.physics),
+    {reply,{Identity,Retained,Demand},S};
 handle_call({physics_source, World, Identity}, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := {Ns,Anchor}}})
   when element(1,World) =:= world_ref, element(2,World) =:= Ns, element(3,World) =:= Anchor ->
@@ -273,7 +275,7 @@ handle_call({physics_source, World, Identity}, {Caller, _},
     end,
     {reply,{source,source_fence(Row),Handle},S};
 handle_call({physics_source, _, _}, _, S) -> {reply,{error,stale_resource_owner},S};
-handle_call({project_physics, Rows, Unavailable}, {Caller, _},
+handle_call({project_physics, Rows, Unavailable, Resources}, {Caller, _},
             S = #s{runner = {resource, Caller, _, _, _}, binding = #{identity := Identity}}) ->
     Changes = queued_resource_changes(S#s.queue,S#s.height),
     Basis = maps:get(physics_worlds,S#s.resource_basis,#{}),
@@ -282,8 +284,13 @@ handle_call({project_physics, Rows, Unavailable}, {Caller, _},
         true -> {reply,{error,selection_superseded},queue_resource_key(physics_worlds,changed,S)};
         false -> case physics_projections(Identity,Rows) of
             {Specs,Rejected,Reply} ->
-                Blocked = lists:usort(Unavailable ++ Rejected),
-                Current = [physics_guard(Spec,S) || Spec <- Specs],
+                Failures = [{W,Reason} || {unavailable,W,Reason} <- Unavailable],
+                Blocked = lists:usort([case X of {unavailable,W,_} -> W; W -> W end
+                                      || X <- Unavailable] ++ Rejected),
+                Current = [physics_guard(Spec#{
+                    voxel_resources => maps:get(maps:get(world,Spec),Resources,#{}),
+                    terrain_demand => maps:get(terrain_demand,maps:get(maps:get(world,Spec),S#s.physics,#{}),none)
+                },S) || Spec <- Specs],
                 %% An unavailable source is not deletion. Keep its exact owner
                 %% suspended while another world's valid selection can install.
                 Kept = [maps:get(spec,E) || {W,E} <- maps:to_list(S#s.physics),
@@ -294,11 +301,15 @@ handle_call({project_physics, Rows, Unavailable}, {Caller, _},
                         false -> E#{local_invalidated => false,navigation_invalidated => false,source_waits => #{}}
                     end
                 end,S#s.physics)},
-                {reply,Reply,install_physics(Current ++ Kept,invalidate_physics_worlds(Blocked,Clean))};
+                Result = case {Reply,Failures} of
+                    {ok,[_|_]} -> {error,{physics_materialization,Failures}};
+                    _ -> Reply
+                end,
+                {reply,Result,install_physics(Current ++ Kept,invalidate_physics_worlds(Blocked,Clean))};
             Error -> {reply, Error, stop_physics(S)}
         end
     end;
-handle_call({project_physics, _, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
+handle_call({project_physics, _, _, _}, _, S) -> {reply, {error, stale_resource_owner}, S};
 handle_call(physics_worlds, _, S) ->
     {reply, S#s.physics, S};
 handle_call({project_agent_observers, all, []}, {Caller, _},
@@ -716,6 +727,18 @@ handle_info({physics_selection_applied, Pid, World, Ref}, S) ->
             end,
             {noreply, S#s{physics = (S#s.physics)#{World => Next}}};
         _ -> {noreply, S}
+    end;
+handle_info({physics_terrain_demand,Pid,World,Token,Structure,Ranges,Focus},S) ->
+    case maps:get(World,S#s.physics,none) of
+        #{pid := Pid,stopping := false,spec := #{run_token := Token,structure := Structure}} = Entry ->
+            Demand = {Pid,Token,Structure,Ranges,Focus},
+            case maps:get(terrain_demand,Entry,none) =:= Demand of
+                true -> {noreply,S};
+                false ->
+                    Next = S#s{physics = (S#s.physics)#{World => Entry#{terrain_demand => Demand}}},
+                    {noreply,maybe_run_events(queue_resource_key(physics_worlds,changed,Next))}
+            end;
+        _ -> {noreply,S}
     end;
 handle_info({physics_status, Pid, World, Token, Status}, S) ->
     case maps:get(World, S#s.physics, none) of
@@ -2727,6 +2750,8 @@ source_fence(#{follow_ref := Follow,state := State}) -> {Follow,State}.
 
 source_basis_current(Basis,S) ->
     maps:fold(fun
+        ({terrain_demand,World,Demand},_,Current) ->
+            Current andalso maps:get(terrain_demand,maps:get(World,S#s.physics,#{}),none) =:= Demand;
         ({source_fence,Identity,{snapshot,Follow,H,Projection,Pid,Generation,Deadline}},_,Current) ->
             Current andalso
             source_fence(maps:get(Identity,S#s.source_views,undefined)) =:= {Follow,H,Projection,{Pid,Generation}}
@@ -2736,21 +2761,85 @@ source_basis_current(Basis,S) ->
         (_,_,Current) -> Current
     end,true,Basis).
 
-resolve_resource_sources(_,_,_,{physics_worlds,[]},_) -> {physics_worlds,[],[]};
+resolve_resource_sources(_,_,_,{physics_worlds,[]},_) -> {physics_worlds,[],[],#{}};
 resolve_resource_sources(Ns,H,Est,{physics_worlds,Rows},Deadline) ->
-    Identity = gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_selection_identity,infinity),
-    {Ready,Unavailable} = lists:foldl(fun(Row,{Accepted,Failed}) ->
-        {world,W,I,_,_,_,_,_,_,_,_,_,Bodies,_,_} = Row,
+    {Identity,Retained,Demands} = gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_selection_state,infinity),
+    {Ready,Unavailable,Resources} = lists:foldl(fun(Row,{Accepted,Failed,Artifacts}) ->
+        {world,W,I,_,_,_,Token,_,_,Limits,_,_,Bodies,_,_} = Row,
         {Ns,Anchor} = Identity,
         World = {world_ref,Ns,Anchor,W}, Authority = {agent_instance_ref,Ns,Anchor,I},
+        Demand = maps:get(World,Demands,none),
+        quod_observation:note({terrain_demand,World,Demand},Est),
+        %% A structural edit must not evict the same incarnation's consumers.
+        %% These retained regions are materialization hints; native stepping
+        %% rechecks every current body and can demand additional coverage.
+        {Ranges,Focus} = case Demand of {_,Token,_,Required,Priority} -> {Required,Priority}; _ -> {initial,#{}} end,
         Resolved = [resolve_physics_body({Ns,H},Est,World,Authority,B,Deadline) || B <- Bodies],
         case lists:all(fun({ok,_}) -> true; (_) -> false end,Resolved) of
-            true -> {[setelement(13,Row,[B || {ok,B} <- Resolved])|Accepted],Failed};
-            false -> {Accepted,[World|Failed]}
+            true -> case materialize_physics_bodies({Ns,H},Est,W,[B || {ok,B} <- Resolved],
+                                                   maps:get(World,Retained,#{}),Ranges,Focus,Deadline) of
+                {ok,Native,Current} ->
+                    Admission = case map_size(Current) of
+                        0 -> ok;
+                        _ -> quod_physics:geometry_allowance(Native,Limits)
+                    end,
+                    case Admission of
+                        ok -> {[setelement(13,Row,Native)|Accepted],Failed,Artifacts#{World => Current}};
+                        {error,Reason} -> {Accepted,[{unavailable,World,Reason}|Failed],Artifacts}
+                    end;
+                {error,Reason} -> {Accepted,[{unavailable,World,Reason}|Failed],Artifacts}
+            end;
+            false -> {Accepted,[World|Failed],Artifacts}
         end
-    end,{[],[]},Rows),
-    {physics_worlds,lists:reverse(Ready),Unavailable};
+    end,{[],[],#{}},Rows),
+    {physics_worlds,lists:reverse(Ready),Unavailable,Resources};
 resolve_resource_sources(_,_,_,Selected,_) -> Selected.
+
+%% Numerical work stays in this existing killable resource worker. The runtime
+%% and simulator retain immutable artifacts for their consumer lifetime; a
+%% repeated selection reads dependencies but neither samples nor builds shapes.
+materialize_physics_bodies(Identity,Est,W,Bodies,Previous,Ranges,Focus,Deadline) ->
+    try
+        {Rows,Current} = lists:mapfoldl(fun
+            ({body,B,R,fixed,Pose,{voxel_field_v1,W0,Revision,Digest},Density},Acc) when W0 =:= W ->
+                {Ns,H} = Identity,
+                Demand = case Ranges of
+                    initial -> initial;
+                    _ -> {regions,[{chunk_box,{chunk_v1,X,Y,Z},{chunk_v1,A,B0,C}} ||
+                        {Id,{X,Y,Z},{A,B0,C}} <- Ranges,Id =:= B]}
+                end,
+                Plan = select_resource(Ns,H,Est,{voxel_materialization_plan,W,Revision,Digest,Demand,{'Plan'}},required),
+                #{'Plan' := {materialization,Field,Chunks,
+                             {prepare_limits,Sampling,Surface,PatchBytes,GeometryBytes}}} = Plan,
+                {field_v1,_,Spacing,_,_} = Field,
+                {Pieces,{Artifacts,_Used}} = lists:mapfoldl(fun(C,{Kept,Used}) ->
+                    case Deadline > quod_time:mono_ms() of
+                        true -> ok;
+                        false -> throw({voxel_materialization,deadline_exceeded})
+                    end,
+                    #{'Overrides' := Overrides} = select_resource(Ns,H,Est,
+                        {voxel_chunk_inputs,W,C,Field,{'Overrides'}}),
+                    Limits = {prepare_limits,Sampling,Surface,PatchBytes,GeometryBytes-Used},
+                    case quod_voxel:prepare(Field,C,Overrides,Limits,maps:get({B,C},Previous,none)) of
+                        {ok,{Artifact,_Work}} ->
+                            {chunk_v1,X,Y,Z} = C,
+                            Origin = {vector,X*8*Spacing,Y*8*Spacing,Z*8*Spacing},
+                            Piece = {Origin,maps:get(handle,Artifact)},
+                            {Piece,{Kept#{{B,C} => Artifact},Used+byte_size(maps:get(payload,Artifact))}};
+                        {error,Reason} -> throw({voxel_materialization,Reason})
+                    end
+                end,{Acc,0},quod_voxel:prioritize_chunks(Chunks,Spacing,maps:get(B,Focus,none))),
+                {{body,B,R,fixed,Pose,{voxel_resident_v1,Spacing,lists:sort(Pieces)},Density},Artifacts};
+            ({body,_,_,_,_,{voxel_field_v1,_,_,_},_},_) -> throw({voxel_materialization,invalid_terrain_binding});
+            (Row,Acc) -> {Row,Acc}
+        end,#{},Bodies),
+        {ok,Rows,Current}
+    catch
+        throw:{voxel_materialization,Reason} -> {error,Reason};
+        throw:{resource_selection_failed,Reason} -> {error,Reason};
+        error:{badmatch,_} -> {error,invalid_voxel_materialization};
+        error:nif_not_loaded -> {error,native_unavailable}
+    end.
 
 resolve_physics_body(_,_,_,_,{body,B,R,Kind,Pose,{owned,Shape,Density}},_) ->
     {ok,{body,B,R,Kind,Pose,Shape,Density}};
@@ -2922,8 +3011,8 @@ install_resource(<<"quod:root">>, _, effect_custody, {error, _} = Error) ->
         ok -> Error;
         {error, _} = Unavailable -> Unavailable
     end;
-install_resource(Ns, _, _, {physics_worlds, Rows, Unavailable}) ->
-    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows, Unavailable}, infinity);
+install_resource(Ns, _, _, {physics_worlds, Rows, Unavailable, Resources}) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_physics, Rows, Unavailable, Resources}, infinity);
 install_resource(Ns, _, _, {agent_hosts, Scope, Rows}) -> resource_result(project_agents(Ns, Scope, Rows));
 install_resource(Ns, _, _, {agent_observers, Scope, Rows}) -> resource_result(project_agent_observers(Ns, Scope, Rows));
 install_resource(Ns, H, _, {node_ontologies, Hosts, Contacts}) ->
@@ -2956,11 +3045,16 @@ local_node_reference() ->
 %% The current committed program supplies the selector; there is no caller
 %% overlay and no governed bridge can perform I/O during row selection.
 select_resource(Ns, H, Est, Goal) ->
+    select_resource(Ns,H,Est,Goal,optional).
+select_resource(Ns, H, Est, Goal, Requirement) ->
     Context = quod_predicates:policy_verdict_context(Ns, H),
     case quod_proof_session:run_first(Goal, quod_predicates:set_context(Est, Context),
                                       #{read_set => true, read_only => true}) of
         {ok, Bindings, [], _ReadSet} -> Bindings;
-        {fail, _} -> fail;
+        {fail, Reasons} -> case Requirement of
+            optional -> fail;
+            required -> throw({resource_selection_failed,{no_solution,functor_key(Goal),Reasons}})
+        end;
         {error, Reason} -> throw({resource_selection_failed, Reason})
     end.
 

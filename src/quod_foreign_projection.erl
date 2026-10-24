@@ -362,10 +362,10 @@ merge_publications(Left, Right, false) -> Left ++ Right.
 
 merge_changed(resnapshot, _Right) -> resnapshot;
 merge_changed(_Left, resnapshot) -> resnapshot;
-merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_PLAN_DIFF_OPS ->
+merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_CHANGED_HEADS ->
     resnapshot;
 merge_changed(Left, Right) ->
-    case bounded_changed(Left, ?QUOD_MAX_PLAN_DIFF_OPS, #{}, []) of
+    case bounded_changed(Left, ?QUOD_MAX_CHANGED_HEADS, #{}, []) of
         resnapshot -> resnapshot;
         {Remaining, Seen, Rev} ->
             case bounded_changed(Right, Remaining, Seen, Rev) of

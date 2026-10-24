@@ -1,6 +1,41 @@
 -module(quod_client_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-export([init/2, websocket_init/1, websocket_handle/2, websocket_info/2, terminate/3]).
+
+gui_resource_call_crosses_the_real_cowboy_loop_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {ok, _} = application:ensure_all_started(cowboy),
+    Agent = <<"isolated-gui-owner">>, Connection = crypto:strong_rand_bytes(32),
+    Route = cowboy_router:compile([{'_', [{"/gui", ?MODULE,
+        #{parent => self(), agent => Agent, connection => Connection}}]}]),
+    {ok, _} = cowboy:start_clear(quod_gui_call_test,
+        [{ip,{127,0,0,1}},{port,0}], #{env => #{dispatch => Route}}),
+    try
+        {ok, Socket} = gen_tcp:connect({127,0,0,1},ranch:get_port(quod_gui_call_test),
+            [binary,{active,false},{packet,http_bin}],5000),
+        try
+            ok = gen_tcp:send(Socket,
+                <<"GET /gui HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
+                  "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                  "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n">>),
+            ?assertMatch({ok,{http_response,_,101,_}},gen_tcp:recv(Socket,0,5000)),
+            receive gui_socket_ready -> ok after 5000 -> error(no_gui_socket) end,
+            ?assertEqual({ok,expired},quod_client_view:activate_gui(Agent,Connection,
+                <<1:256>>,<<2:256>>,quod_time:mono_ms()+1000))
+        after gen_tcp:close(Socket) end
+    after cowboy:stop_listener(quod_gui_call_test) end.
+
+%% Delegate application messages to the production handler, inside Cowboy's
+%% real dispatch loop. No signed view is installed; an unknown receipt expires.
+init(Req, State) -> {cowboy_websocket,Req,State}.
+websocket_init(#{parent := Parent,agent := Agent,connection := Connection}) ->
+    Key = {client_view,{gui_hud,Agent,Connection}},
+    true = quod_reg:reg(Key), Parent ! gui_socket_ready,
+    {ok,#{receiver_key => Key,gui_resources => #{}}}.
+websocket_handle(Message, State) -> quod_client_view:websocket_handle(Message,State).
+websocket_info(Message, State) -> quod_client_view:websocket_info(Message,State).
+terminate(Reason, Req, State) -> quod_client_view:terminate(Reason,Req,State).
 
 client_schema_defaults_test() ->
     Fields = maps:from_list(quod_schema:fields(client)),

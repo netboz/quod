@@ -2,6 +2,15 @@
 // assets; this owner verifies and loads them, never interprets domain state.
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js'
 import { validateGlb, checkGlbCosts } from './glb-profile.js'
+import { decodeVoxel } from './voxel-profile.js'
+import { AssetContainer } from '@babylonjs/core/assetContainer.js'
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js'
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js'
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js'
+import { Material } from '@babylonjs/core/Materials/material.js'
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js'
+import { SubMesh } from '@babylonjs/core/Meshes/subMesh.js'
+import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 
 export function createRenderResources(scene, {
   fetchAsset = (url, options) => fetch(url, options),
@@ -12,21 +21,24 @@ export function createRenderResources(scene, {
     return LoadAssetContainerAsync(new Uint8Array(bytes), scene,
       { pluginExtension: '.glb', name: 'verified.glb' })
   },
+  decodeTerrain,
 } = {}) {
   const assets = new Map()
   const bindings = new Map()
   const models = new Map()
   const images = new Map()
   let disposed = false
+  decodeTerrain ??= data => terrainContainer(scene, data, { acquire })
 
-  function acquireBytes(kind, digest, maximum = Infinity) {
+  function acquireBytes(kind, digest, maximum = Infinity, supplied) {
     const key = `${kind}:${digest}`
     let asset = assets.get(key)
     if (!asset) {
       const controller = new AbortController()
       asset = { users: 0, controller, maximum,
-        ready: verifiedBytes(kind, digest, controller.signal, fetchAsset,
-          () => asset.maximum).catch(error => {
+        ready: (kind === 'voxel'
+          ? verifiedSuppliedBytes(supplied, digest, maximum)
+          : verifiedBytes(kind, digest, controller.signal, fetchAsset, () => asset.maximum)).catch(error => {
             if (assets.get(key) === asset) assets.delete(key)
             throw error
           }) }
@@ -118,17 +130,30 @@ export function createRenderResources(scene, {
     entry.bytes.release()
   }
 
-  function acquireModel({ digest, profile, allowed, bounds }) {
+  function acquireModel({ digest, profile, allowed, bounds, payload, palette, originMm }) {
     if (disposed) throw new Error('render resources are disposed')
-    if (profile !== 'gltf2-static-v1') throw new Error('unsupported mesh profile')
-    const key = `${profile}:${digest}`
+    const terrain = profile === 'qvt1'
+    if (!terrain && profile !== 'gltf2-static-v1') throw new Error('unsupported mesh profile')
+    if (terrain && (!(payload instanceof Uint8Array) || !(palette instanceof Map))) {
+      throw new Error('terrain requires authorized bytes and a material palette')
+    }
+    const surfaces = terrain ? new Map([...palette].sort((a, b) => a[0] - b[0])
+      .map(([id, surface]) => [id, structuredClone(surface)])) : null
+    // Every authored repeat is an integer number of thousandths. Reducing the
+    // canonical origin modulo 1000 m preserves all texture phases, even far
+    // beyond Number's integer range, and never moves during a local rebase.
+    const phase = terrain ? (originMm ?? [0n, 0n, 0n]).map(n => Number((BigInt(n) % 1000000n + 1000000n) % 1000000n)) : null
+    const key = `${profile}:${digest}:${terrain ? JSON.stringify([[...surfaces], phase]) : ''}`
     let entry = models.get(key)
     if (!entry) {
-      const bytes = acquireBytes('model', digest, allowed[0])
+      const bytes = acquireBytes(terrain ? 'voxel' : 'model', digest, allowed[0], payload)
       entry = { users: new Set(), active: true, container: null, bytes }
       entry.ready = bytes.asset.ready.then(async data => {
         if (!entry.active) return null
-        const { costs, boundsMm } = validateGlb(data)
+        // Allocation is checked before generating terrain vertex buffers.
+        const allocation = terrain ? allowed.map((_, i) => Math.max(...[...entry.users].map(user => user.allowed[i]))) : null
+        const decoded = terrain ? decodeVoxel(data, surfaces, allocation, phase) : validateGlb(data)
+        const { costs, boundsMm } = decoded
         entry.costs = costs
         entry.boundsMm = boundsMm
         // No template is decoded unless at least one current, authorized
@@ -136,14 +161,21 @@ export function createRenderResources(scene, {
         if (![...entry.users].some(user => permits(costs, user.allowed) &&
           sameBounds(boundsMm, user.bounds))) {
           const first = [...entry.users][0]
-          checkGlbCosts(costs, first.allowed)
+          checkCosts(costs, first.allowed)
           checkBounds(boundsMm, first.bounds)
         }
-        const container = await decodeModel(data)
+        let container
+        if (terrain) {
+          const loading = decodeTerrain(decoded)
+          container = loading.container
+          entry.container = container
+          await loading.ready
+        } else container = await decodeModel(data)
         if (!entry.active) { container.dispose(); return null }
         entry.container = container
         return container
       }).catch(error => {
+        entry.container?.dispose(); entry.container = null
         if (models.get(key) === entry) models.delete(key)
         throw error
       })
@@ -157,7 +189,7 @@ export function createRenderResources(scene, {
     return {
       ready: entry.ready.then(container => {
         if (!container || released) return null
-        checkGlbCosts(entry.costs, allowed)
+        checkCosts(entry.costs, allowed)
         checkBounds(entry.boundsMm, bounds)
         return container
       }),
@@ -176,6 +208,11 @@ export function createRenderResources(scene, {
     if (models.get(key) === entry) models.delete(key)
     entry.container?.dispose()
     entry.bytes.release()
+  }
+
+  function checkCosts(costs, allowed) {
+    if (costs.length === 7) checkGlbCosts(costs, allowed)
+    else if (!permits(costs, allowed)) throw new Error('terrain geometry allocation exceeded')
   }
 
   return {
@@ -202,7 +239,7 @@ function sameBounds(actual, declared) {
 
 function checkBounds(actual, declared) {
   if (!sameBounds(actual, declared)) {
-    throw new Error(`asset-local bounds differ from verified GLB: ${actual.join(',')}`)
+    throw new Error(`asset-local bounds differ from verified geometry: ${actual.join(',')}`)
   }
 }
 
@@ -229,10 +266,86 @@ async function verifiedBytes(kind, digest, signal, fetchAsset, maximum) {
     bytes = new Uint8Array(await response.arrayBuffer())
     if (bytes.length > maximum()) throw new Error(`${kind} transfer bytes exceeded`)
   }
+  return verifyDigest(bytes, digest, kind)
+}
+
+async function verifiedSuppliedBytes(input, digest, maximum) {
+  if (!(input instanceof Uint8Array) || input.byteLength > maximum) throw new Error('terrain transfer bytes exceeded')
+  return verifyDigest(Uint8Array.from(input), digest, 'voxel')
+}
+
+async function verifyDigest(bytes, digest, kind) {
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
   const actual = [...hash].map(n => n.toString(16).padStart(2, '0')).join('')
   if (actual !== digest) throw new Error(`${kind} ${digest}: content digest mismatch`)
   return bytes
+}
+
+function terrainContainer(scene, data, resources) {
+  const container = new AssetContainer(scene)
+  if (!data.indices.length) return { container, ready: Promise.resolve() }
+  try {
+    const mesh = new Mesh('verified-terrain', scene)
+    // QVT1 uses outward right-handed winding, independent of Babylon's
+    // procedural-mesh default winding for the scene's handedness.
+    mesh.sideOrientation = Material.CounterClockWiseSideOrientation
+    container.meshes.push(mesh)
+    const vertices = new VertexData()
+    vertices.positions = data.positions; vertices.normals = data.normals
+    vertices.uvs = data.uvs; vertices.indices = data.indices
+    vertices.applyToMesh(mesh)
+    const material = new MultiMaterial('terrain-surfaces', scene)
+    container.multiMaterials.push(material)
+    mesh.material = material
+    mesh.releaseSubMeshes()
+    const pending = data.groups.map((group, index) => {
+      const surface = createSurface(scene, `terrain:${group.material}`, data.palette.get(group.material), resources)
+      container.materials.push(surface.material)
+      material.subMaterials.push(surface.material)
+      new SubMesh(index, 0, data.positions.length / 3, group.start, group.count, mesh)
+      return surface.ready
+    })
+    container.populateRootNodes(); container.removeAllFromScene()
+    return { container, ready: Promise.all(pending) }
+  } catch (error) { container.dispose(); throw error }
+}
+
+// One neutral surface binding for ordinary marks and generated terrain.
+// Disposing its material releases texture leases, including pending decodes.
+export function createSurface(scene, name, definition, resources, sky = false) {
+  const material = new PBRMaterial(name, scene), leases = []
+  let active = true
+  material.onDisposeObservable.addOnce(() => {
+    active = false
+    for (const lease of leases) lease.release()
+  })
+  try {
+    material.albedoColor = Color3.FromHexString(definition.colour).toLinearSpace()
+    material.metallic = definition.metallic; material.roughness = definition.roughness
+    if (sky) material.albedoColor.scaleInPlace(definition.emission)
+    else material.emissiveColor = material.albedoColor.scale(definition.emission)
+    material.unlit = sky; material.backFaceCulling = !sky; material.disableDepthWrite = sky
+    material.invertNormalMapX = !scene.useRightHandedSystem
+    material.invertNormalMapY = scene.useRightHandedSystem
+    material.useRoughnessFromMetallicTextureAlpha = false
+    material.useRoughnessFromMetallicTextureGreen = true
+    material.useMetallnessFromMetallicTextureBlue = true
+    material.useAmbientOcclusionFromMetallicTextureRed = true
+    for (const binding of definition.textures) {
+      if (!resources) throw new Error('textured surfaces require a render resource owner')
+      leases.push(resources.acquire(binding))
+    }
+    const ready = Promise.all(leases.map(lease => lease.ready)).then(textures => {
+      if (!active) return null
+      const slots = { base_colour: 'albedoTexture', normal: 'bumpTexture', orm: 'metallicTexture' }
+      textures.forEach((texture, i) => {
+        const slot = definition.textures[i].slot
+        material[slots[slot]] = texture
+      })
+      return material
+    })
+    return { material, ready }
+  } catch (error) { material.dispose(); throw error }
 }
 
 function decodeTexture(scene, bytes, identity) {

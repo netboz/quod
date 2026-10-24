@@ -19,6 +19,11 @@ import { connectGuiHud } from '../../client/src/gui-view.js'
 import { questionController, questionKey } from '../../client/src/question-controller.js'
 import type { QuestionController } from '../../client/src/question-controller.js'
 import type { GuiQuestionReference } from '../../client/src/world.js'
+import { SpaceLibrary } from './SpaceLibrary'
+import { spaceLibraryController } from '../../client/src/space-library.js'
+import type { SpaceLibraryController } from '../../client/src/space-library.js'
+import { spaceKey } from '../../client/src/space-entry.js'
+import type { SpaceReference } from '../../client/src/world.js'
 import { connectWorldView } from '../../client/src/simulation.js'
 
 export default function World() {
@@ -37,6 +42,27 @@ export default function World() {
   const [marks, setMarks] = useState<WorldMark[]>([])
   const [status, setStatus] = useState('Sign in and select an agent to open its lobby.')
   const [view, setView] = useState('lobby')
+  const actorKey = JSON.stringify([identity && b64url(identity.networkId),
+    identity && b64url(identity.provider.publicKey), agent?.namespace,
+    agent?.anchor instanceof Uint8Array ? b64url(agent.anchor) : agent?.anchor, agent?.instanceText])
+  const [destination, setDestination] = useState<{ reference: SpaceReference; label: string; actor: string } | null>(null)
+  const space = destination?.actor === actorKey ? destination : null
+  const spaceIdentity = space ? spaceKey(space.reference) : null
+  const retireView = useRef<() => void>(() => {})
+  const library = useRef<SpaceLibraryController | null>(null)
+  useEffect(() => () => { library.current?.close(); library.current = null }, [identity, agent, view, spaceIdentity])
+  const retireSpace = () => {
+    retireView.current(); scene?.releaseNavigation()
+    library.current?.close(); library.current = null
+  }
+  const navigate = (reference: SpaceReference | null, label = '') => {
+    library.current?.close(); library.current = null
+    setFocused(false)
+    if (view === 'lobby' && (reference ? spaceKey(reference) : null) === spaceIdentity) return
+    retireSpace()
+    setDestination(reference ? { reference, label, actor: actorKey } : null)
+    setView('lobby')
+  }
   const [missingLobby, setMissingLobby] = useState(false)
   const [mode, setMode] = useState('playing')
   const [modes, setModes] = useState<string[]>([])
@@ -47,7 +73,7 @@ export default function World() {
   const [menu, setMenu] = useState<{ subject: Subject; entries: MenuEntry[]; error?: string } | null>(null)
   const [eidolons, setEidolons] = useState<{ subject: Subject; choices: EidolonChoice[]; error?: string; accessDenied?: boolean } | null>(null)
   const [workspace, setWorkspace] = useState<
-    { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace; subject: Subject; choice: EidolonChoice } |
+    { kind: 'library'; key: string; controller: SpaceLibraryController } | { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace; subject: Subject; choice: EidolonChoice } |
     { kind: 'inspection'; key: string; representation: Extract<EidolonRepresentation, { kind: 'lens' }>; title: string } |
     { kind: 'question'; key: string; reference: GuiQuestionReference; controller: QuestionController } | { kind: 'questions'; key: string } | null>(null)
   const [focused, setFocused] = useState(false)
@@ -70,7 +96,10 @@ export default function World() {
         const current = new Set(references.map(questionKey))
         for (const [key, presentation] of questionPresentations) {
           if (current.has(key)) presentation.discovered = true
-          else if (presentation.discovered) { presentation.controller.close(); questionPresentations.delete(key) }
+          else if (presentation.discovered) {
+            presentation.controller.close(); questionPresentations.delete(key)
+            void library.current?.refresh()
+          }
         }
         setQuestions(references); setQuestionError(null)
       },
@@ -103,11 +132,10 @@ export default function World() {
   const pick = useRef(setSelected)
   pick.current = setSelected
   // Async view reads are invalidated when the acting identity or target changes.
-  const projectionScope = JSON.stringify([identity && b64url(identity.networkId),
-    identity && b64url(identity.provider.publicKey), agent?.id, view])
+  const projectionScope = JSON.stringify([actorKey, view, spaceIdentity, mode])
   const projection = useRef(projectionScope)
-  const context = useRef({ identity, agent, selected, view, mode, revision })
-  context.current = { identity, agent, selected, view, mode, revision }
+  const context = useRef({ identity, agent, selected, view, mode, revision, spaceIdentity })
+  context.current = { identity, agent, selected, view, mode, revision, spaceIdentity }
   const currentRequest = (request: typeof context.current) =>
     Object.entries(request).every(([key, value]) => context.current[key as keyof typeof request] === value)
 
@@ -176,10 +204,12 @@ export default function World() {
   useEffect(() => {
     let active = true
     let stream: ReturnType<typeof connectWorldView> | undefined
+    let terrainReady: boolean | undefined
     scene?.update(null)
     const sameScope = projection.current === projectionScope
     projection.current = projectionScope
     if (!sameScope) {
+      library.current?.close(); library.current = null
       setMarks([])
       scene?.update({ marks: [], selection: 'unavailable' })
       setWorkspace(null)
@@ -202,26 +232,35 @@ export default function World() {
     const load = async () => {
       try {
         if (view === 'lobby') {
-          const result = await readSpaceNavigation(identity, agent)
+          const result = await readSpaceNavigation(identity, agent, space?.reference)
           if (!active) return
           setModes(result?.modes ?? [])
-          setMissingLobby(result === null)
-          if (!result) { setStatus('This agent has no personal lobby yet.'); return }
+          setMissingLobby(!space && result === null)
+          if (!result) { setStatus(space ? 'This world is unavailable or access was refused.' : 'This agent has no personal lobby yet.'); return }
           stream = connectWorldView(identity, agent, {
             projection(current) {
               if (!active) return
-              scene?.update(current)
+              const presented = scene?.update(current)
               setMarks(current.marks)
               setMovementHint(current.control?.jump ? ' · Space to jump'
                 : current.selection === 'nonphysical' ? ' · Shift for faster movement' : '')
-              setMissingLobby(current.selection === 'unavailable')
-              setStatus({ active: 'Physical space ready.', nonphysical: 'Space ready. Observer travel.',
+              setMissingLobby(!space && current.selection === 'unavailable')
+              terrainReady = current.selection === 'active' ? current.terrainReady : undefined
+              setStatus(terrainReady === false ? 'Loading terrain. Movement paused…' : { active: 'Physical space ready.', nonphysical: 'Space ready. Observer travel.',
                 disabled: 'Physics is disabled. Body travel paused.', denied: 'Physics access denied. Body travel paused.',
                 recovering: 'Physics is recovering. Body travel paused.', unavailable: current.marks.length
                   ? 'Physics unavailable. Body travel paused.' : 'The scene is unavailable. Check its setup and source.'
               }[current.selection])
+              return presented
             },
-            frame(current) { if (active) scene?.update(current) },
+            frame(current) {
+              if (!active) return
+              if (terrainReady !== current.terrainReady) {
+                terrainReady = current.terrainReady
+                setStatus(terrainReady === false ? 'Loading terrain. Movement paused…' : 'Physical space ready.')
+              }
+              return scene?.update(current)
+            },
             refused(reason, reasons) { if (active) setStatus([reason, ...reasons].join(' ')) },
             refreshing() {
               if (active) { scene?.update(null); setStatus('Space updating. Movement paused…'); setRevision(n => n + 1) }
@@ -241,6 +280,7 @@ export default function World() {
         if (active) { scene?.update(null); setStatus(`Could not open this view: ${String(error)}`) }
       }
     }
+    retireView.current = () => { active = false; stream?.close(); scene?.update(null) }
     void load()
     const online = () => setRevision(n => n + 1)
     window.addEventListener('online', online)
@@ -284,15 +324,44 @@ export default function World() {
       const goal = anchoredGoal({ namespace: subject.ontology, anchor: subject.anchor },
         compound('lobby_workspace', [subject.entity, atom(action.view), variable('View')]))
       const reply = await signedGoal(identity, { mode: 'read', agent, goal })
-      const form = proofForm(readGuiView(singleBinding(reply, 'View')))
+      const form = readGuiView(singleBinding(reply, 'View'))
       if (!currentRequest(request)) return
-      setWorkspace({ kind: 'proof', key, view: form })
+      if (action.view === 'space_library') {
+        openLibraryController({ namespace: subject.ontology, anchor: subject.anchor }, form, key)
+      } else setWorkspace({ kind: 'proof', key, view: proofForm(form) })
       setFocused(true)
     } catch (error) {
       if (currentRequest(request)) setToolError(`Could not open the console: ${String(error)}`)
     } finally {
       if (currentRequest(request)) setOpeningTool(false)
     }
+  }
+
+  const openLibraryController = (reference: { namespace: string; anchor: Uint8Array },
+    form: Parameters<typeof spaceLibraryController>[3], key: string) => {
+    if (!identity || !agent) return
+    library.current?.close()
+    const controller = spaceLibraryController(identity, agent, reference, form, {
+      close: () => setFocused(false), return: () => navigate(null),
+      enter: (target, label) => navigate(target, label), question: openQuestion,
+    })
+    library.current = controller
+    setWorkspace({ kind: 'library', key, controller }); setFocused(true)
+  }
+  const openLibrary = async () => {
+    if (!identity || !agent || openingTool) return
+    const request = context.current
+    setOpeningTool(true); setToolError(null)
+    try {
+      const lobby = await readSpaceNavigation(identity, agent)
+      if (!lobby) throw new Error('The personal lobby has not been set up.')
+      const reply = await signedGoal(identity, { mode: 'read', agent,
+        goal: anchoredGoal(lobby.reference, compound('world_library_workspace', [variable('View')])) })
+      const form = readGuiView(singleBinding(reply, 'View'))
+      if (currentRequest(request)) openLibraryController(lobby.reference, form, `library:${spaceKey(lobby.reference)}`)
+    } catch (error) {
+      if (currentRequest(request)) setToolError(`Could not open My worlds: ${String(error)}`)
+    } finally { if (currentRequest(request)) setOpeningTool(false) }
   }
 
   const openEidolon = async (choice: EidolonChoice, subject = selected) => {
@@ -336,15 +405,18 @@ export default function World() {
   activate.current = entry => {
     if (entry.id === '@gui/questions') {
       setWorkspace({ kind: 'questions', key: '@gui/questions' }); setFocused(true)
-    } else void openWorkspace(entry)
+    } else if (entry.id === '@space/library') void openLibrary()
+    else if (entry.id === '@space/return') navigate(null)
+    else void openWorkspace(entry)
   }
   useEffect(() => {
     const entries = [...(selectedMenu ?? []), ...(identity && agent ? [{
       id: '@gui/questions', label: `Questions (${questions.length})`, view: 'gui_questions',
-    }] : [])]
+    }, { id: '@space/library', label: 'My worlds', view: 'space_library' },
+      ...(space || view !== 'lobby' ? [{ id: '@space/return', label: 'Return to lobby', view: 'lobby' }] : [])] : [])]
     scene?.setActionMenu(entries, entry => activate.current(entry))
     return () => scene?.setActionMenu([], entry => activate.current(entry))
-  }, [scene, selected, selectedMenu, identity, agent, questions.length])
+  }, [scene, selected, selectedMenu, identity, agent, questions.length, spaceIdentity, view])
 
   const account = identity ? accountReference(identity) : null
   const selectedAccount = account && account.namespace === agent?.namespace &&
@@ -366,7 +438,7 @@ export default function World() {
     ontologies.set(ref.namespace + ':' + ref.anchor, ref)
   }
   return <div className="world-shell">
-    <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" tabIndex={0} />
+    <canvas ref={canvas} className="world-canvas" aria-label={space?.label ?? "Personal lobby"} tabIndex={0} />
     {navigationActive && <div className="world-crosshair" aria-hidden="true" />}
     <div className={`world-navigation-hint${navigationActive ? ' active' : ''}`} aria-live="polite">
       {`${navigationActive ? 'Mouse to look' : 'Click the world to explore'} · ZQSD, WASD or arrows to move${movementHint}${navigationActive ? ' · Esc to release' : ''}`}
@@ -378,7 +450,7 @@ export default function World() {
     </header>
     <section className={`world-panel${navigationActive ? ' navigation-active' : ''}`} aria-label="World controls">
       <p className="world-eyebrow">YOUR SPACE</p>
-      <h1>Personal lobby</h1>
+      <h1>{space?.label ?? 'Personal lobby'}</h1>
       <p role="status">{sessionError ?? status}</p>
       {sceneError && <>
         <p>The 3D view could not start, so Enter VR is unavailable. You can still open the console below.</p>
@@ -388,11 +460,12 @@ export default function World() {
         </details>
       </>}
       <div className="world-controls">
-        {view === 'lobby'
+        {view === 'lobby' && !space
           ? <button className="world-primary" disabled={!consoleSubject || openingTool}
               onClick={() => void openWorkspace(undefined, consoleSubject)}>
               {openingTool ? 'Opening…' : 'Open console'}</button>
-          : <button className="world-primary" onClick={() => setView('lobby')}>Return to lobby</button>}
+          : <button className="world-primary" onClick={() => navigate(null)}>Return to lobby</button>}
+        <button disabled={!identity || !agent || openingTool} onClick={() => void openLibrary()}>My worlds</button>
         <button disabled={!scene || !vr.available || enteringVR || immersive} aria-describedby="vr-availability" onClick={() => {
           setEnteringVR(true)
           void scene?.immersive().catch(error => setVr({ available: true, reason: `VR could not start: ${String(error)}` }))
@@ -402,7 +475,7 @@ export default function World() {
           <button disabled={busy || unresolved > 0} onClick={() => void finishSetup()}>Finish account setup</button>}
       </div>
       <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.' : vr.reason}</p>
-      {view === 'lobby' && !consoleSubject && <p>The console is unavailable until its lobby view loads.</p>}
+      {view === 'lobby' && !space && !consoleSubject && <p>The console is unavailable until its lobby view loads.</p>}
       {toolError && <p role="alert">{toolError}</p>}
       {selected && (selectedMenu === null || menu?.error || Boolean(selectedMenu.length)) &&
         <div className="world-menu" aria-label="Selected object actions">
@@ -421,11 +494,11 @@ export default function World() {
       <details className="world-advanced">
         <summary>Advanced</summary>
         <div className="world-controls">
-          <label>Scene <select aria-label="Scene" value={view} onChange={event => setView(event.target.value)}>
+          <label>Scene <select aria-label="Scene" value={view} onChange={event => { retireSpace(); setDestination(null); setView(event.target.value) }}>
             <option value="lobby">Personal lobby</option>
             <option value="licence" disabled={licenceUnavailable !== null}>Software licences</option>
           </select></label>
-          {view === 'lobby' && <label>Appearance <select aria-label="Appearance" value={mode} onChange={event => setMode(event.target.value)}>
+          {view === 'lobby' && <label>Appearance <select aria-label="Appearance" value={mode} onChange={event => { retireSpace(); setMode(event.target.value) }}>
             {modes.map(purpose => <option key={purpose} value={purpose}>
               {purpose === 'playing' ? 'Normal' : purpose === 'edition' ? 'Structure' : purpose}
             </option>)}
@@ -469,7 +542,9 @@ export default function World() {
       </details>
     </section>
     {workspace && <section className="world-workspace" hidden={!focused || immersive} aria-label="Focused console">
-      {workspace.kind === 'questions'
+      {workspace.kind === 'library'
+        ? <SpaceLibrary controller={workspace.controller} scene={scene} visible={focused} />
+        : workspace.kind === 'questions'
         ? <GuiQuestionList references={questions} status={questionError} scene={scene} visible={focused}
             select={openQuestion} reload={() => setHudRevision(value => value + 1)} onClose={() => setFocused(false)} />
         : workspace.kind === 'question'

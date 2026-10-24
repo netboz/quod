@@ -1,6 +1,4 @@
 {
-  "license": "CC0-1.0",
-  "license_url": "https://polyhaven.com/license",
   "assets": [
     {
       "asset": "wood_table_001",
@@ -58,6 +56,24 @@
       "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/belfast_sunset_puresky.jpg",
       "license": "CC0-1.0",
       "derived": "resized to 2048x1024, metadata stripped, JPEG quality 90"
+    },
+    {
+      "asset": "babylon_grass",
+      "slot": "base_colour",
+      "digest": "25ebb5a3408f3a17e80ee1d56fc1290c945076ee648aacb8ac5ff6a0725fc46c",
+      "bytes": 699241,
+      "source": "https://raw.githubusercontent.com/BabylonJS/Babylon.js/master/packages/tools/playground/public/textures/grass.jpg",
+      "license": "Apache-2.0",
+      "license_file": "babylon-samples-license.md"
+    },
+    {
+      "asset": "babylon_ground",
+      "slot": "base_colour",
+      "digest": "e3637cbd17d1f086f32ebdf21c8399b0bac9d6dccecae1bd2207482895e17678",
+      "bytes": 471886,
+      "source": "https://raw.githubusercontent.com/BabylonJS/Babylon.js/master/packages/tools/playground/public/textures/ground.jpg",
+      "license": "Apache-2.0",
+      "license_file": "babylon-samples-license.md"
     }
   ]
 }

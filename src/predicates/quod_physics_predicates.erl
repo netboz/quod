@@ -102,15 +102,15 @@ sample_physics({'$quod_sample_physics', H0, A0, F0, R0, L0, Result}, Next, St = 
 
 read_physics(Pid, Expected, Body, {physics_body_state,_,_}, none, Timeout, Frame) ->
     case quod_physics:body_state(Pid,Expected,Body,Timeout) of
-        {ok,Tick,{Id,Revision,world,P,Q,{Vx,Vy,Vz}}} ->
-            {body_state,Frame,Tick,{body,Id,Revision},metres_seconds,
+        {ok,Tick,{Ox,Oy,Oz},{Id,Revision,world,P,Q,{Vx,Vy,Vz}}} ->
+            {body_state,Frame,Tick,{body,Id,Revision},{local_metres_seconds,{vector,Ox,Oy,Oz}},
              pose({P,Q}),{velocity,Vx,Vy,Vz}};
         {error,unavailable} -> unavailable
     end;
 read_physics(Pid, Expected, Body = {Id,Revision}, {physics_motion_query,_,_,Query}, Limits, Timeout, Frame) ->
     case quod_physics:motion_query(Pid,Expected,Body,Query,Limits,Timeout) of
-        {ok,Tick,Answer} ->
-            {motion_query,Frame,Tick,{body,Id,Revision},metres_seconds,motion_answer(Answer)};
+        {ok,Tick,{Ox,Oy,Oz},Answer} ->
+            {motion_query,Frame,Tick,{body,Id,Revision},{local_metres_seconds,{vector,Ox,Oy,Oz}},motion_answer(Answer)};
         {error,unavailable} -> unavailable
     end.
 

@@ -98,7 +98,8 @@ complete(Ref, Result, Binding, S = #s{owner = Owner, slot = Slot}) ->
     case maps:get(reply_to, Binding, none) of
         {Caller, Monitor} ->
             demonitor(Monitor, [flush]),
-            Caller ! {agent_instruction_result, Ref, Result};
+            Caller ! {agent_instruction_result, Ref, Result},
+            ok;
         none -> ok
     end,
     Owner ! {agent_completed, Slot, self(), Ref},

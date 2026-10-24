@@ -13,14 +13,14 @@ planStatus:
     - eidolons
   created: "2026-10-17"
   startDate: "2026-10-24T14:22:52Z"
-  updated: "2026-10-24T15:14:02Z"
+  updated: "2026-10-24T15:25:58Z"
   progress: 29
 ---
 # Space and interaction architecture — implementation plan
 
 ## Purpose and boundaries
 
-The design for **stage 1 — one empty space through the user's agent** is closed and ready for implementation. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented and verified, including ordinary foreign-only recovery; it is in review and uncommitted. The remaining stage-1 tickets and stages 2–3 are unstarted.
+The design for **stage 1 — one empty space through the user's agent** is closed and ready for implementation. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented, verified and committed (`671e1f76`), including ordinary foreign-only recovery; its ticket is completed. The remaining stage-1 tickets and stages 2–3 are unstarted.
 
 **Fixed scope:** the four final choices are settled below. Signing, result lookup, generated-ID binding, source loading and rollback are implementation obligations with acceptance checks, not further design approvals. Routine implementation choices are delegated within the agreed behavior. Recursive displays, ontology contents/founding, terrain/physical embodiment and live specialization remain the already-listed later work; they are not prerequisites for this first stage. Reopen an agreed decision only if concrete implementation evidence requires changing its behavior or guarantees, not to add another preference question.
 
@@ -53,7 +53,7 @@ Stage 0 records completed design decisions. Production implementation starts at 
 
 ## Implementation tickets
 
-S1.1 is **in-review / implemented and verified, uncommitted**; the other eight stage-1 implementation tickets remain **to-do / unstarted**. Stage 1 remains incomplete; stages 2 and 3 are unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
+S1.1 is **completed / implemented, verified and committed**; the other eight stage-1 implementation tickets remain **to-do / unstarted**. Stage 1 remains incomplete; stages 2 and 3 are unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
 
 | Stage work item | Completion dependency |
 | --- | --- |

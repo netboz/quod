@@ -5,7 +5,7 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 - Stage 1 — One empty space through the user's agent #task[id:tsk_01M5PY8TEX7NP119X8SXNN3HNB status:in-progress priority:medium created:2026-10-24 tags:architecture,space]
   Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#smallest-staged-normalization). Implements stage 1 and confirmed decisions D1–D4/D8–D10; the plan remains authoritative. Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md) before implementation.
   
-  Status: in progress; S1.1 is implemented and verified, in review and uncommitted, while S1.2–S1.9 remain unstarted. Parent work item for S1.1–S1.9; completion depends on S1.9 [tsk_01M5Q1YXC21Z70NX4DJXSZHD1X](nimbalyst://tsk_01M5Q1YXC21Z70NX4DJXSZHD1X) and its prerequisites. Stage 0 is complete. Blocks stage 2. [Execution map and checklist ownership](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets).
+  Status: in progress; S1.1 is completed and committed (`671e1f76`), while S1.2–S1.9 remain unstarted. Parent work item for S1.1–S1.9; completion depends on S1.9 [tsk_01M5Q1YXC21Z70NX4DJXSZHD1X](nimbalyst://tsk_01M5Q1YXC21Z70NX4DJXSZHD1X) and its prerequisites. Stage 0 is complete. Blocks stage 2. [Execution map and checklist ownership](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets).
   
   **Outcome**
   
@@ -82,8 +82,8 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
   
   Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md) before implementation. Keep domain policy/state in Prolog and reuse existing actions, atomic transactions, recovery, reactions and runtime owners. No gameplay, rendering, fog or further voxel feature work is included. Implementation remains unstarted; this ticket authorizes no deployment, commit or data wipe.
 
-- S1.1 — Recover original result bindings through ordinary transaction outcomes #task[id:tsk_01M5Q1YXC2H4S1BERCY9ERXWJQ status:in-review priority:medium created:2026-10-24 tags:architecture,space,stage-1]
-  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: implemented and verified, in review and uncommitted, including the ordinary foreign-only recovery correction. Other stage-1 tickets remain unstarted.
+- S1.1 — Recover original result bindings through ordinary transaction outcomes #task[id:tsk_01M5Q1YXC2H4S1BERCY9ERXWJQ status:done priority:medium created:2026-10-24 tags:architecture,space,stage-1]
+  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: completed; implemented, verified and committed as `671e1f76a3919c2aa3a0c80bce1878781d918cf2`, including the ordinary foreign-only recovery correction. Other stage-1 tickets remain unstarted.
   
   Dependencies: none. Implementation remains within the agreed stage-1 scope.
   

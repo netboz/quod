@@ -1,6 +1,6 @@
 # S1.1 Claude review — original result bindings through ordinary outcomes
 
-> Parent correction: the foreign-only gap and relevant duplicate/HTTP cleanup are now implemented and verified (346 EUnit tests and xref pass). The review below records the earlier frozen tree; the final parent disposition is appended. Claude has not reviewed the corrected tree.
+> Parent correction: the foreign-only gap and relevant duplicate/HTTP cleanup are implemented, verified (346 EUnit tests and xref pass) and committed as `671e1f76`. S1.1 is completed; the stage and plan remain open. The review below records the earlier frozen tree; the final parent disposition is appended. Claude has not reviewed the corrected tree.
 
 Reviewer: Claude Fable 5.1, 2026-10-24 (revised after parent inspection). Consultative; the parent verifies against code and architecture. Ticket `tsk_01M5Q1YXC2H4S1BERCY9ERXWJQ`. Diff reviewed: `/tmp/quod-s1.1-review.patch` (session-only). Source hashes in the working tree match `/tmp/quod-s1.1-final.sha256`; I attribute nothing outside that patch to S1.1.
 

@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quod · Lens view concept</title>
+<style>
+  :root { color-scheme:dark; --ink:#f5f1eb; --muted:#c9d2db; --gold:#f9c80e; --gold-soft:#fbd85d; --rose:#c14953;
+    --olive:#698f3f; --gray:#848fa5; --well:#0f1b20; --edge:#848fa580; --surface:25 43 50; --alpha:.8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.5 system-ui,sans-serif; color:var(--ink); background:#062538; }
+  button,input,select { font:inherit; color:inherit; }
+  button,select,input[type=text] { min-height:44px; border:1px solid var(--edge); border-radius:10px; background:#304c56; color:var(--ink); padding:8px 14px; }
+  button,select { cursor:pointer; } button:hover:not(:disabled) { background:#416471; }
+  button:disabled { cursor:default; color:#bac4c8; background:#263940; border-style:dashed; }
+  :focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
+  code,.mono { font:13px ui-monospace,"JetBrains Mono",Menlo,monospace; }
+  [hidden] { display:none!important; }
+
+  .lab { padding:14px 24px; display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; border-bottom:1px solid var(--edge); background:#0a1d29; }
+  .lab strong { font-size:18px; } .lab small { color:var(--muted); }
+  .lab label { display:flex; align-items:center; gap:10px; } .lab select { min-height:40px; padding:6px 10px; }
+
+  .scene { position:relative; min-height:860px; overflow:hidden; padding:28px 28px 90px;
+    background:radial-gradient(ellipse at 83% 5%,#456570 0%,transparent 55%),linear-gradient(145deg,#132c38,#081b28); }
+  .scene.bright { background:radial-gradient(ellipse at 80% 15%,#fff7c8,transparent 60%),linear-gradient(145deg,#aed5d4,#779fa8); }
+  .landscape { position:absolute; inset:38% -15% -40%; transform:perspective(500px) rotateX(60deg); pointer-events:none;
+    background-image:linear-gradient(#8ab1ba30 1px,transparent 1px),linear-gradient(90deg,#8ab1ba30 1px,transparent 1px); background-size:80px 80px; }
+
+  .header { position:relative; display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-bottom:20px; }
+  .brand { font-size:1.6rem; font-weight:650; letter-spacing:-.06em; } .brand span { color:var(--gold); }
+  .header nav { display:flex; gap:6px; } .header nav button { min-height:38px; padding:6px 14px; background:transparent; }
+  .header nav button[aria-current=page] { border-color:var(--gold); color:var(--gold-soft); }
+  .header .who { margin-left:auto; font-size:.8rem; color:var(--muted); }
+
+  .workspace { position:relative; margin:auto; max-width:1240px; display:grid; grid-template-columns:276px minmax(0,1fr) 300px; gap:20px; align-items:start; }
+  .glass { background:rgb(var(--surface) / var(--alpha)); border:1px solid var(--edge); border-radius:20px; box-shadow:0 16px 48px #0005; }
+  .eyebrow { margin:0 0 5px; font-size:.65rem; letter-spacing:.2em; color:var(--gold); text-transform:uppercase; }
+  h1 { margin:0; font-size:24px; line-height:1.25; font-weight:650; }
+  h2 { margin:0 0 10px; font-size:15px; font-weight:600; }
+  .help { color:var(--muted); font-size:.85rem; margin:6px 0; line-height:1.5; }
+
+  /* left rail: the lens */
+  .rail { padding:20px 18px; }
+  .rail h1 { font-size:22px; margin-bottom:4px; }
+  .field { display:block; margin:14px 0; } .field>span { display:block; font-size:.75rem; font-weight:600; margin-bottom:6px; color:var(--muted); letter-spacing:.04em; text-transform:uppercase; }
+  .field select,.field input[type=text] { width:100%; } .field input[type=text] { background:var(--well); }
+  .purpose { margin:0 0 4px; font-style:italic; color:var(--muted); font-size:.9rem; }
+  .checks { list-style:none; margin:0; padding:0; }
+  .checks li { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px solid #848fa540; font-size:.85rem; }
+  .checks li:first-child { border-top:0; }
+  .tick { flex:none; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:13px; font-weight:700; background:#698f3f; color:#062538; }
+  .tick.no { background:var(--rose); color:var(--ink); }
+  .checks .mono { display:block; color:var(--ink); } .checks small { color:var(--muted); display:block; }
+
+  /* centre: the picture */
+  .panel { overflow:hidden; }
+  .panel header { display:flex; align-items:flex-start; gap:16px; padding:20px 24px 10px; }
+  .panel header>div { flex:1; }
+  .panel header .toolbar { display:flex; gap:8px; flex:none; }
+  .panel header .toolbar button { min-height:38px; padding:6px 12px; font-size:.85rem; background:transparent; }
+  .stage { position:relative; height:590px; margin:0 24px; border-radius:14px; overflow:hidden;
+    background:linear-gradient(#0e2330,#0a1b25); border:1px solid #848fa540; perspective:900px; }
+  .stage .floor { position:absolute; inset:46% -40% -40%; transform:rotateX(62deg);
+    background-image:linear-gradient(#8ab1ba26 1px,transparent 1px),linear-gradient(90deg,#8ab1ba26 1px,transparent 1px); background-size:48px 48px; }
+  .rowline { position:absolute; left:24px; bottom:calc(40px + var(--d) * 108px); display:flex; align-items:flex-end; gap:var(--gap,18px);
+    transform:translateX(calc(var(--d) * 64px)) scale(calc(1 - var(--d) * .06)); transform-origin:bottom left; opacity:calc(1 - var(--d) * .09); }
+  .rowline .gname { width:118px; flex:none; text-align:right; padding-right:14px; font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); line-height:1.2; padding-bottom:2px; }
+  .rowline::before { content:''; position:absolute; left:118px; right:-30px; bottom:-1px; height:1px; background:#8ab1ba40; }
+  .bar { position:relative; width:var(--w,46px); height:var(--h); background:var(--c); border-radius:3px 3px 0 0;
+    box-shadow:inset -10px 0 0 #0003, 0 8px 18px #0006; cursor:pointer; transition:transform .15s; }
+  .bar::before { content:''; position:absolute; left:0; right:0; top:-9px; height:9px; background:var(--c); filter:brightness(1.35); transform:skewX(-35deg); transform-origin:bottom left; border-radius:2px 2px 0 0; }
+  .bar::after { content:attr(data-label); position:absolute; left:50%; top:-28px; translate:-50% 0; white-space:nowrap; font-size:.72rem; color:var(--ink); text-shadow:0 1px 3px #000; }
+  .bar.absent { background:repeating-linear-gradient(45deg,var(--c) 0 6px,#3a4050 6px 12px); }
+  .bar.selected { outline:3px solid var(--gold); outline-offset:3px; }
+  .bar:hover { transform:translateY(-3px); }
+  .axis { position:absolute; right:18px; top:16px; text-align:right; font-size:.7rem; color:var(--muted); line-height:1.6; }
+  .axis b { color:var(--ink); font-weight:600; }
+  .status { margin:14px 24px 0; border-top:1px solid #848fa540; padding:12px 0 0; font-size:.9rem; min-height:44px; }
+  .status.error { color:#ffb8bd; }
+  .snapshot { display:flex; flex-wrap:wrap; gap:6px 18px; padding:12px 24px 20px; font-size:.75rem; color:var(--muted); }
+  .snapshot span b { color:var(--ink); font-weight:500; }
+
+  /* refused state */
+  .refused { margin:0 24px; padding:28px; border-radius:14px; border:1px solid #c1495380; background:#2a1a20cc; }
+  .refused h2 { color:#ffb8bd; font-size:18px; }
+  .refused ul { margin:12px 0 0; padding:0; list-style:none; }
+  .refused li { padding:12px 0; border-top:1px solid #c1495340; font-size:.9rem; }
+  .refused li .mono { color:#ffd3d6; display:block; margin-bottom:4px; }
+  .refused .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+
+  /* right rail: reading + selection */
+  .side { padding:20px 18px; display:grid; gap:18px; }
+  .legend { list-style:none; margin:0; padding:0; font-size:.85rem; }
+  .legend li { display:flex; justify-content:space-between; gap:8px; padding:5px 0; border-top:1px solid #848fa530; }
+  .legend li:first-child { border-top:0; } .legend li span:last-child { color:var(--muted); text-align:right; }
+  .chips { display:flex; flex-direction:column; gap:5px; font-size:.8rem; }
+  .chip { display:flex; align-items:center; gap:8px; } .chip i { width:14px; height:14px; border-radius:3px; display:inline-block; flex:none; }
+  .chip small { margin-left:auto; color:var(--muted); }
+  .selection { border-top:1px solid #848fa550; padding-top:16px; }
+  .selection h1 { font-size:18px; }
+  .selection .mono { color:var(--gold-soft); display:block; margin:4px 0 8px; overflow-wrap:anywhere; }
+  .facts { font-size:.85rem; margin:8px 0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
+  .facts dt { color:var(--muted); } .facts dd { margin:0; }
+  .selection button { width:100%; margin-top:8px; text-align:left; font-size:.9rem; }
+  .selection .primary { background:var(--gold); color:#062538; border-color:var(--gold); font-weight:650; }
+  .none { color:var(--muted); font-size:.85rem; }
+
+  .note { max-width:1240px; margin:20px auto; padding:0 24px; color:var(--muted); font-size:.9rem; }
+  @media(max-width:1000px) { .workspace { grid-template-columns:1fr; } .stage { height:360px; } }
+</style>
+</head>
+<body>
+<div class="lab" aria-label="Prototype controls">
+  <div><strong>Quod / Lens view concept</strong><br><small>Visual proposal · illustrative data, no live ontology</small></div>
+  <label>World <select id="background"><option value="dark">Dark</option><option value="bright">Bright</option></select></label>
+  <label>State <select id="state">
+    <option value="marks">Marks drawn</option>
+    <option value="selected">A mark selected</option>
+    <option value="refused">Refused · diagnosis</option>
+    <option value="stale">Ledger moved</option>
+    <option value="reading">Reading…</option>
+  </select></label>
+</div>
+
+<main class="scene" id="scene">
+  <div class="landscape" aria-hidden="true"></div>
+  <div class="header">
+    <div class="brand">quo<span>d</span></div>
+    <nav aria-label="Surfaces"><button>Lobby</button><button aria-current="page">Lens</button><button>Inspect</button><button>Questions <b style="color:var(--gold)">1</b></button></nav>
+    <p class="who">human_user(yan) · kp_1572e0dc · read at height <b class="mono">1 058</b></p>
+  </div>
+
+  <div class="workspace">
+    <!-- LEFT: the lens -->
+    <aside class="rail glass" aria-label="Lens">
+      <p class="eyebrow">quod:lens · 5551835B…F51AFF</p>
+      <h1>What am I looking at</h1>
+      <p class="help">A lens selects subjects, groups and measures for a purpose. An encoding says how that becomes a picture. Change either on its own.</p>
+      <label class="field"><span>Lens</span>
+        <select><option>work_licences</option><option>ontology_policy</option><option>ontology_interfaces</option><option>ontology_routes</option></select>
+      </label>
+      <p class="purpose">“what may this work ship under”</p>
+      <label class="field"><span>Parameter · Work</span><input type="text" value="quod"></label>
+      <label class="field"><span>Encoding</span>
+        <select><option>reach_columns · grouped columns · quod:rendering</option></select>
+      </label>
+      <p class="help">One encoding is authored for this lens. Nothing is picked automatically.</p>
+      <h2 style="margin-top:18px">Preconditions</h2>
+      <p class="help">Checked on the selected rows before any mark is built.</p>
+      <ul class="checks" id="checks">
+        <li><span class="tick">✓</span><div><span class="mono">single_valued(reach)</span><small>every part carries one reach</small></div></li>
+        <li><span class="tick">✓</span><div><span class="mono">ranked(reach, 0, 4)</span><small>ranks lie in the declared band</small></div></li>
+        <li><span class="tick">✓</span><div><span class="mono">ordered(family)</span><small>every family present has one position</small></div></li>
+        <li><span class="tick">✓</span><div><span class="mono">distinct_colours(family)</span><small>no two families share a colour</small></div></li>
+        <li><span class="tick">✓</span><div><span class="mono">within(marks)</span><small>13 of 256</small></div></li>
+      </ul>
+    </aside>
+
+    <!-- CENTRE: the picture -->
+    <section class="panel glass" aria-labelledby="title">
+      <header>
+        <div>
+          <p class="eyebrow">quod:licence · one signed read</p>
+          <h1 id="title">quod may ship under four licences</h1>
+          <p class="help" id="subtitle">Front row: the answer. Behind it, each part under its family, lifted by how far its copyleft reaches.</p>
+        </div>
+        <div class="toolbar"><button>Open in world</button><button>Reload</button><button>Source</button></div>
+      </header>
+
+      <div class="stage" id="stage">
+        <div class="floor" aria-hidden="true"></div>
+        <div class="axis"><b>height</b> ← reach (ordinal, 300 mm steps, drawn 1:15)<br><b>back</b> ← family (declared order)<br><b>label</b> ← component</div>
+
+        <div class="rowline" style="--d:4; --gap:12px"><span class="gname">unestablished · 11</span>
+          <div class="bar absent" data-label="quokka-font" style="--h:20px; --c:#2E3340"></div></div>
+        <div class="rowline" style="--d:3; --gap:12px"><span class="gname">gpl · 8</span>
+          <div class="bar" data-label="xz-bindings" style="--h:60px; --c:#B0603A"></div></div>
+        <div class="rowline" style="--d:2; --gap:14px"><span class="gname">ogl · 5</span>
+          <div class="bar" data-label="names" style="--h:40px; --c:#848FA5"></div></div>
+        <div class="rowline" style="--d:1; --gap:14px"><span class="gname">permissive · 2</span>
+          <div class="bar" data-label="babylon.js" style="--h:20px; --c:#698F3F"></div>
+          <div class="bar" data-label="cowboy" style="--h:20px; --c:#698F3F"></div>
+          <div class="bar" data-label="erlang_quic" style="--h:20px; --c:#698F3F"></div>
+          <div class="bar" id="m7" data-label="erlog" style="--h:20px; --c:#698F3F"></div>
+          <div class="bar" data-label="rapier" style="--h:20px; --c:#698F3F"></div>
+          <div class="bar" data-label="react" style="--h:20px; --c:#698F3F"></div></div>
+        <div class="rowline" style="--d:0; --gap:26px"><span class="gname">may_ship · 1<br>the answer</span>
+          <div class="bar" data-label="Apache-2.0" style="--h:20px; --c:#F9C80E"></div>
+          <div class="bar" data-label="MIT" style="--h:20px; --c:#F9C80E"></div>
+          <div class="bar" data-label="MPL-2.0" style="--h:40px; --c:#F9C80E"></div>
+          <div class="bar" data-label="GPL-3.0-only" style="--h:80px; --c:#F9C80E"></div></div>
+      </div>
+
+      <div class="refused" id="refused" hidden>
+        <p class="eyebrow">diagnosis/3</p>
+        <h2>No compatible representation for this data</h2>
+        <p class="help">The encoding <code>reach_columns</code> states what it needs. The rows selected for <code>quod</code> do not meet one requirement, so the view is refused and named, not drawn differently.</p>
+        <ul>
+          <li><span class="mono">single_valued(reach)</span>One part carries two values. <code>component(quod, rapier)</code> is dual-licensed <code>Apache-2.0</code> and <code>MIT</code>; the lens makes one row per family, and the column height cannot show both.</li>
+        </ul>
+        <div class="actions"><button disabled>Choose another encoding · none authored</button><button>Read the rows as text</button><button>Open quod:licence source</button></div>
+      </div>
+
+      <p class="status" id="status" role="status" aria-live="polite">13 marks · lens work_licences · encoding reach_columns · parameters [quod]</p>
+      <div class="snapshot" aria-label="Reproducibility">
+        <span>ledger <b class="mono">1 058</b></span>
+        <span>quod:lens <b class="mono">5551835B…</b></span>
+        <span>quod:licence <b class="mono">8E2C41A0…</b></span>
+        <span>quod:rendering <b class="mono">4D71B9E3…</b></span>
+        <span>layout <b>grouped_columns</b></span>
+        <span>read <b>12:04:31</b></span>
+      </div>
+    </section>
+
+    <!-- RIGHT: reading the picture, and what is selected -->
+    <aside class="side glass" aria-label="Reading">
+      <div>
+        <h2>How to read it</h2>
+        <ul class="legend">
+          <li><span>Height</span><span>reach · ordinal<br>base 300 mm, step 300 mm</span></li>
+          <li><span>Colour, row</span><span>family · nominal<br>declared precedence</span></li>
+          <li><span>Label</span><span>component · 24 chars max</span></li>
+          <li><span>Absent reach</span><span>hatched, at the base step<br>never dropped, never zero</span></li>
+        </ul>
+      </div>
+      <div id="groups">
+        <h2>Groups present</h2>
+        <div class="chips">
+          <span class="chip"><i style="background:#F9C80E"></i>may_ship <small>at 1 · the answer</small></span>
+          <span class="chip"><i style="background:#698F3F"></i>permissive <small>at 2</small></span>
+          <span class="chip"><i style="background:#848FA5"></i>ogl <small>at 5</small></span>
+          <span class="chip"><i style="background:#B0603A"></i>gpl <small>at 8</small></span>
+          <span class="chip"><i style="background:#2E3340;border:1px solid #848fa5"></i>unestablished <small>at 11</small></span>
+        </div>
+      </div>
+      <div class="selection" id="selection">
+        <p class="none" id="noneSelected">Choose a mark to see what it depicts.</p>
+        <div id="selected" hidden>
+          <p class="eyebrow">mark m7 · box · depicts</p>
+          <h1>erlog</h1>
+          <span class="mono">quod:licence · component(quod, erlog)</span>
+          <dl class="facts">
+            <dt>licence</dt><dd>Apache-2.0</dd>
+            <dt>family</dt><dd>permissive</dd>
+            <dt>reach</dt><dd>0 · no copyleft</dd>
+            <dt>must carry</dt><dd>notice, licence text</dd>
+          </dl>
+          <ul class="checks">
+            <li><span class="tick">✓</span><div><span>Presentation available</span><small>work_licences is offered to you</small></div></li>
+            <li><span class="tick">✓</span><div><span>Property reads</span><small>licence, family, reach disclosed</small></div></li>
+            <li><span class="tick no">–</span><div><span>Editing</span><small>not a purpose of this presentation; no authority implied</small></div></li>
+          </ul>
+          <button class="primary">Ask: notice(quod, erlog, L, What)</button>
+          <button>Open representations of this entity</button>
+          <button>Show in world</button>
+          <button id="dismiss">Dismiss selection</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+<p class="note">Lens and encoding are separate controls; the picture carries its own reading, taken from the encoding's declarations rather than typed into the client. A refusal is a list of unmet requirements, not an empty scene. The footer names every input a second reader needs to reproduce the view at that height. Data shown is illustrative: quod's component facts are not authored in quod:licence yet.</p>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const bar = $('m7');
+  function apply(state) {
+    const refused = state === 'refused', reading = state === 'reading';
+    $('stage').hidden = refused || reading; $('refused').hidden = !refused;
+    $('selected').hidden = state !== 'selected'; $('groups').hidden = refused || reading; $('noneSelected').hidden = state === 'selected';
+    bar.classList.toggle('selected', state === 'selected');
+    const checks = $('checks').querySelectorAll('.tick');
+    checks[0].className = refused ? 'tick no' : 'tick'; checks[0].textContent = refused ? '✕' : '✓';
+    $('title').textContent = refused ? 'quod · view refused' : reading ? 'quod' : 'quod may ship under four licences';
+    $('subtitle').textContent = refused ? 'The encoding cannot honestly show these rows.' : reading ? 'Reading the lens over signed reads…'
+      : 'Front row: the answer. Behind it, each part under its family, lifted by how far its copyleft reaches.';
+    const s = $('status'); s.className = 'status' + (refused || state === 'stale' ? ' error' : '');
+    s.textContent = ({
+      marks: '13 marks · lens work_licences · encoding reach_columns · parameters [quod]',
+      selected: 'Selected m7 · depicts quod:licence component(quod, erlog)',
+      refused: 'Refused · 1 of 5 requirements unmet · diagnosis shown instead of a picture',
+      stale: 'Ledger moved to 1 061 · this picture is as of 1 058 · Reload to read again',
+      reading: 'Reading… view/3 then, if it fails, diagnosis/3'
+    })[state];
+  }
+  $('state').onchange = e => apply(e.target.value);
+  $('background').onchange = e => $('scene').classList.toggle('bright', e.target.value === 'bright');
+  bar.onclick = () => { $('state').value = 'selected'; apply('selected'); };
+  $('dismiss').onclick = () => { $('state').value = 'marks'; apply('marks'); };
+  apply('marks');
+</script>
+</body>
+</html>

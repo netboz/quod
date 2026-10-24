@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quod · style guide (derived from ui/src/index.css and doc/*.mockup.html)</title>
+<style>
+  :root { color-scheme:dark; --ink:#f5f1eb; --muted:#c9d2db; --gold:#f9c80e; --gold-soft:#fbd85d;
+    --teal:#0b3954; --teal-light:#1a5f7a; --teal-dark:#062538; --gray:#848fa5; --rose:#c14953; --rose-light:#d4737b;
+    --olive:#698f3f; --olive-light:#8ab85a; --cream:#f5f1eb; --slate:#2e3440;
+    --well:#0f1b20; --edge:#848fa580; --surface:25 43 50; --alpha:.78; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px; background:var(--teal-dark); color:var(--ink); font:16px/1.5 system-ui,sans-serif; }
+  h1 { font-size:28px; font-weight:650; margin:0 0 4px; } h1 span { color:var(--gold); }
+  h2 { font-size:18px; font-weight:600; margin:32px 0 12px; border-top:1px solid #848fa550; padding-top:16px; }
+  p { color:var(--muted); margin:0 0 12px; max-width:70ch; }
+  code { font:13px ui-monospace,"JetBrains Mono",Menlo,monospace; color:var(--gold-soft); }
+  .swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .swatch { border:1px solid var(--edge); border-radius:10px; overflow:hidden; background:var(--well); }
+  .swatch div { height:56px; } .swatch p { padding:8px 10px; font-size:13px; margin:0; }
+  .glass { background:rgb(var(--surface) / var(--alpha)); border:1px solid var(--edge); border-radius:20px; box-shadow:0 16px 48px #0005; padding:24px 28px; max-width:560px; }
+  .eyebrow { font-size:.65rem; letter-spacing:.2em; color:var(--gold); margin:0 0 6px; }
+  button,input,select { font:inherit; color:inherit; }
+  button,select,input[type=text] { min-height:48px; border:1px solid var(--edge); border-radius:10px; background:#304c56; color:var(--ink); padding:10px 14px; }
+  button { cursor:pointer; } button:hover:not(:disabled) { background:#416471; }
+  button.primary { background:var(--gold); color:var(--teal-dark); border-color:var(--gold); font-weight:650; }
+  button.quiet { background:transparent; } button.danger { color:#ffb8bd; }
+  button:disabled { cursor:default; color:#bac4c8; background:#263940; border-style:dashed; }
+  input[type=text] { background:var(--well); width:100%; }
+  :focus-visible { outline:3px solid var(--gold); outline-offset:4px; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:12px 0; }
+  .status { border-top:1px solid var(--edge); background:var(--well); padding:14px 20px; margin:16px -28px -24px; border-radius:0 0 20px 20px; }
+  .status.error { color:#ffb8bd; } .status.done { color:#c5e7a0; }
+  .world { position:relative; height:160px; border-radius:16px; overflow:hidden; max-width:560px;
+    background:radial-gradient(ellipse at 83% 5%,#456570 0%,transparent 55%),linear-gradient(145deg,#132c38,#081b28); }
+  .world .grid { position:absolute; inset:42% -15% -40%; transform:perspective(500px) rotateX(60deg);
+    background-image:linear-gradient(#8ab1ba30 1px,transparent 1px),linear-gradient(90deg,#8ab1ba30 1px,transparent 1px); background-size:60px 60px; }
+  table { border-collapse:collapse; font-size:14px; } td,th { text-align:left; padding:6px 14px 6px 0; border-bottom:1px solid #848fa530; color:var(--muted); } th { color:var(--ink); }
+</style>
+</head>
+<body>
+<h1>quo<span>d</span> · style guide</h1>
+<p>Derived from <code>ui/src/index.css</code> (Tailwind theme tokens, world shell) and the two design mockups in <code>doc/</code>. The explorer surface is light (cream ground, slate ink); the world surface and every GUI concept are dark glass. New presentation mockups follow the dark world surface.</p>
+
+<h2>Palette (BBSVX house palette, doc/BBSVX Palette.pdf)</h2>
+<div class="swatches">
+  <div class="swatch"><div style="background:#0b3954"></div><p>teal #0B3954<br>ink / dark ground</p></div>
+  <div class="swatch"><div style="background:#062538"></div><p>teal-dark #062538<br>world background</p></div>
+  <div class="swatch"><div style="background:#1a5f7a"></div><p>teal-light #1A5F7A</p></div>
+  <div class="swatch"><div style="background:#848fa5"></div><p>gray #848FA5<br>edges at 50%, captions</p></div>
+  <div class="swatch"><div style="background:#c14953"></div><p>rose #C14953<br>refusal, danger</p></div>
+  <div class="swatch"><div style="background:#698f3f"></div><p>olive #698F3F<br>secondary / system</p></div>
+  <div class="swatch"><div style="background:#f9c80e"></div><p>gold #F9C80E<br>primary action, focus, eyebrow</p></div>
+  <div class="swatch"><div style="background:#fbd85d"></div><p>gold-soft #FBD85D<br>hover, fresh-row flash</p></div>
+  <div class="swatch"><div style="background:#f5f1eb"></div><p style="color:#2e3440;background:#f5f1eb">cream #F5F1EB<br>ink on dark / explorer ground</p></div>
+  <div class="swatch"><div style="background:#2e3440"></div><p>slate #2E3440<br>explorer ink</p></div>
+  <div class="swatch"><div style="background:#0f1b20"></div><p>well #0F1B20<br>input wells, status strip</p></div>
+  <div class="swatch"><div style="background:rgb(25 43 50 / .78)"></div><p>glass rgb(25 43 50 / .78)<br>panel surface, 20px radius</p></div>
+</div>
+
+<h2>Typography</h2>
+<table>
+  <tr><th>Role</th><th>Spec</th></tr>
+  <tr><td>Body</td><td>system-ui 16px / 1.5, cream ink, muted #C9D2DB for help text</td></tr>
+  <tr><td>Panel title</td><td>28px / 1.25, weight 650</td></tr>
+  <tr><td>Rail title</td><td>22px, weight 600</td></tr>
+  <tr><td>Eyebrow</td><td>0.65rem, letter-spacing .2em, gold, uppercase (world) or muted 1em uppercase (forms)</td></tr>
+  <tr><td>Code / anchors</td><td>ui-monospace, JetBrains Mono, 13px; 32-byte anchors shown short (kp_ + 8 hex, or b64url)</td></tr>
+  <tr><td>Brand</td><td>"quod" 1.6rem weight 650, letter-spacing -.06em, the final letter gold</td></tr>
+</table>
+
+<h2>World surface and glass panel</h2>
+<div class="world"><div class="grid"></div></div>
+<p style="margin-top:12px">World: radial highlight top-right over a 145° teal gradient, with a perspective grid below the horizon. Panels float as translucent glass (only the tint is translucent; text and controls stay opaque). Shadow 0 16px 48px #0005. Left rail 240–280px, main panel fluid, gap 24px, max width 1080–1180px.</p>
+<section class="glass">
+  <p class="eyebrow">SOURCE · RESPONSIBLE AGENT</p>
+  <h1 style="font-size:28px">Panel title</h1>
+  <p>Short instruction. Title and actions stay outside the scrollable field region.</p>
+  <div class="row"><input type="text" value="Text well" aria-label="example"></div>
+  <div class="row"><button class="quiet danger">Cancel request</button><button class="quiet">Later</button><button class="primary" style="margin-left:auto">Submit</button><button disabled>Disabled</button></div>
+  <p class="status">Draft · Your changes stay here until you submit.</p>
+</section>
+
+<h2>Controls and feedback</h2>
+<p>Minimum control height 48px (56px in larger-text mode), radius 10px, 1px gray edge, raised surface #304C56, hover #416471. Primary = gold fill with teal-dark text. Disabled = dashed edge, dimmed. Focus ring: 3px gold, 4px offset. Range and checkbox accent gold. Status strip at the panel foot: neutral muted, error #FFB8BD, done #C5E7A0. Pending list items are full-width buttons; the active one gets a 2px gold border. Nothing steals focus or opens a modal.</p>
+
+<h2>Vocabulary used in UI text</h2>
+<p>Plain words. "Representation" (not eidolon) when facing the user; "lens" for what is looked at and why; "mark" only in technical detail. Reads disclose knowledge; invocation and edits are authorized separately by the current owner. Outcomes are stated: Draft, Submitted, Applied, Outcome unknown, Refused with the reason.</p>
+</body>
+</html>

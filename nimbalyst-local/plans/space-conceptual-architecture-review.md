@@ -12,7 +12,7 @@ tags:
   - eidolons
 created: '2026-10-17'
 startDate: '2026-10-24T14:22:52Z'
-updated: '2026-10-24'
+updated: '2026-10-24T18:13:46.188719Z'
 progress: 35
 trackerStatus:
   type: plan
@@ -21,7 +21,7 @@ trackerStatus:
 
 ## Purpose and boundaries
 
-The design for **stage 1 — one empty space through the user's agent** is closed and ready for implementation. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented, verified and committed (`671e1f76`), including ordinary foreign-only recovery; its ticket is completed. S1.2 is implemented and verified (uncommitted); S1.3–S1.9 and stages 2–3 are unstarted.
+The design for **stage 1 — one empty space through the user's agent** is closed and ready for implementation. It includes generic constructors/inheritance, the permission rules, explicit storage, placement, signed submission and recovery of the original result. S1.1 is implemented, verified and committed (`671e1f76`), including ordinary foreign-only recovery; its ticket is completed. S1.2 is implemented, verified and committed (`6db307c5`); S1.3–S1.9 and stages 2–3 are unstarted.
 
 **Fixed scope:** the four final choices are settled below. Signing, result lookup, generated-ID binding, source loading and rollback are implementation obligations with acceptance checks, not further design approvals. Routine implementation choices are delegated within the agreed behavior. Recursive displays, ontology contents/founding, terrain/physical embodiment and live specialization remain the already-listed later work; they are not prerequisites for this first stage. Reopen an agreed decision only if concrete implementation evidence requires changing its behavior or guarantees, not to add another preference question.
 
@@ -54,9 +54,9 @@ Stage 0 records completed design decisions. Production implementation starts at 
 
 ## Implementation tickets
 
-S1.1 is **completed / implemented, verified and committed**; S1.2 is **in-review / implemented and verified, uncommitted**; the other seven stage-1 implementation tickets remain **to-do / unstarted**. Stage 1 remains incomplete; stages 2 and 3 are unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
+S1.1 is **completed / implemented, verified and committed**; S1.2 is **completed / implemented, verified and committed**; the other seven stage-1 implementation tickets remain **to-do / unstarted**. Stage 1 remains incomplete; stages 2 and 3 are unstarted. Stage 0 is complete and has no additional ticket. The installed task schema has dependencies but no parent/child field, so parentage is recorded by explicit reciprocal links rather than an invented hierarchy field.
 
-S1.2 review follow-up: both confirmed Claude Fable findings are corrected and verified. Definite refusals preserve prior-operation uncertainty; authorization no longer reparses historical instructions. Final gates passed: 372 backend tests, 234 client tests, TypeScript and xref. [Correction evidence and retained failures](/tmp/quod-s1.2-refinement-verification.md). S1.2 remains uncommitted and in review.
+S1.2 review follow-up: both confirmed Claude Fable findings are corrected and verified. Definite refusals preserve prior-operation uncertainty; authorization no longer reparses historical instructions. Final gates passed: 372 backend tests, 234 client tests, TypeScript and xref. [Correction evidence and retained failures](/tmp/quod-s1.2-refinement-verification.md). S1.2 is committed as `6db307c5`. The isolated commit includes Yan-approved account/setup prerequisites and passed 370 backend tests, 196 client tests, TypeScript and xref. [Commit verification and scope](/tmp/quod-s1.2-commit-verification.md). Unrelated user-owned work remains uncommitted.
 
 | Stage work item | Completion dependency |
 | --- | --- |

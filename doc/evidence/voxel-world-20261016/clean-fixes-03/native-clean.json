@@ -1,0 +1,15 @@
+{
+  "name": "native-clean",
+  "command": [
+    "cargo",
+    "clean",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "-p",
+    "quod_physics"
+  ],
+  "started": "2026-10-16T20:52:51.172536+00:00",
+  "exit": 0,
+  "seconds": 0.08,
+  "sources_unchanged": true
+}

@@ -1,0 +1,48 @@
+--- a/test/quod_names_SUITE.erl
++++ b/test/quod_names_SUITE.erl
+@@ -69,6 +69,7 @@
+     ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
+     ok = wait_ready(Target, ?AGENT_NS, true),
+     ok = wait_ready(Asker, ?ASKER_NS, true),
++    NamesCount = count(Target, ?NAMES_NS),
+     ok = peer:call(Asker, quod_quic, learn, [TargetPub, TargetAddr]),
+     {ok, _} = peer:call(
+                 Asker, quod_ct, install_directory_generation,
+@@ -78,7 +79,7 @@
+     [{target, Target}, {asker, Asker}, {target_pub, TargetPub},
+      {target_key, TargetKey}, {asker_pub, AskerPub}, {target_addr, TargetAddr},
+      {asker_addr, AskerAddr}, {names_anchor, NamesAnchor},
+-     {names_source, Names}, {agent_genesis, AgentGenesis} | Config].
++     {names_source, Names}, {names_count, NamesCount}, {agent_genesis, AgentGenesis} | Config].
+ 
+ end_per_suite(Config) ->
+     quod_ct:stop_all([?config(target, Config), ?config(asker, Config)]),
+@@ -354,8 +355,8 @@
+               end, 30000)).
+ 
+ %% The asker never loaded the naming source: joining quod:names makes it
+-%% decode the genesis over the wire as a cold receiver, within the symbol
+-%% budget of one envelope, and then answer draws itself.
++%% decode the genesis over the wire as a cold receiver and then answer draws
++%% itself.
+ cold_peer_joins_quod_names(Config) ->
+     Asker = ?config(asker, Config),
+     AskerPub = ?config(asker_pub, Config),
+@@ -391,7 +392,7 @@
+     ?assertEqual(Anchor, peer:call(Asker, quod_simplex, genesis_hash, [?NAMES_NS])),
+     ?assertMatch(#{role := observer, syncing := false},
+                  peer:call(Asker, quod_simplex, status, [?NAMES_NS])),
+-    ?assertEqual(1449227, count(Asker, ?NAMES_NS)),
++    ?assertEqual(?config(names_count, Config), count(Asker, ?NAMES_NS)),
+     {ok, [#{'N' := Name}], _} =
+         execute(Asker, ?ASKER_NS, {remote_label, cold_join, {'N'}}),
+     ?assert(is_binary(Name)),
+@@ -420,7 +421,7 @@
+     ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
+     ok = wait_ready(Target, ?AGENT_NS, true),
+     ?assertEqual(Anchor, peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS])),
+-    ?assertEqual(1449227, count(Target, ?NAMES_NS)),
++    ?assertEqual(?config(names_count, Config), count(Target, ?NAMES_NS)),
+     {ok, [#{'N' := Local}], _} =
+         execute(Target, ?AGENT_NS, {label_me, after_vm_restart, {'N'}}),
+     ?assertNotEqual([], classes(Target, ?NAMES_NS, Local)),

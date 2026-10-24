@@ -1,0 +1,3 @@
+{
+  "reason": "Fable original report retrieved after freeze exposed additional domain/controller fixes and validator-side material admission concern; stop at current gate boundary, do not treat this scope as release-ready"
+}

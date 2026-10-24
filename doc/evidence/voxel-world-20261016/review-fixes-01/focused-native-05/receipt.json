@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "validated_rest_uses_its_authored_contact_tolerance",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "seconds": 1.93
+}

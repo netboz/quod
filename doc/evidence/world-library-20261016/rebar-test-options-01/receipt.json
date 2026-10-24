@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "help",
+    "eunit"
+  ],
+  "started": "2026-10-16T23:15:56.496650+00:00",
+  "exit": 0,
+  "seconds": 0.24
+}

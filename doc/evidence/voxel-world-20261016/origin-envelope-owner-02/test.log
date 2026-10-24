@@ -1,0 +1,56 @@
+===> Verifying dependencies...
+warning: function `generate` is never used
+ --> src/voxel/cubic.rs:7:15
+  |
+7 | pub(super) fn generate(density:&[u8],materials:&[u8],spacing:u32,
+  |               ^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `quod_physics` (lib) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 0.16s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1030 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1030 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1030 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 2.878 seconds
+[0;32m3 tests, 0 failures
+[0m

@@ -1,0 +1,8 @@
+{
+  "captured_after_run": "2026-10-16T15:56:47.894851+00:00",
+  "note": "Post-run copy for reproducibility. The original run captured production input hashes, but did not pre-freeze these measurement scripts.",
+  "scripts": {
+    "generation-measurements.escript": "deb3f89e2d64157f0a4e8354867496af771d9ff3b51343e85b0774b2cace5c1b",
+    "quod-voxel-measure.py": "0d33b9f544ce5a33f00c1a14cdc0313ff7e2c9586ba4258536588a0fc03a5994"
+  }
+}

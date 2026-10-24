@@ -1,0 +1,31 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.18s
+===> Analyzing applications...
+===> Compiling quod
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_physics_coordinates_tests'
+  quod_physics_coordinates_tests: large_signed_origins_preserve_exact_world_positions_test...[0.004 s] ok
+  quod_physics_coordinates_tests: native_shift_refusal_preserves_live_resource_test...[0.019 s] ok
+  [done in 0.036 s]
+=======================================================
+  2 tests passed.

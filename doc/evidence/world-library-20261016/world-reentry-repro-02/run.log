@@ -1,0 +1,75 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_gui_examples_tests: world_library...*failed*
+in function quod_gui_examples_tests:consume_world_terrain/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 183)
+in call from quod_gui_examples_tests:world_terrain_delivery/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 160)
+in call from quod_gui_examples_tests:'-world_library/0-lc$^27/1-5-'/3 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_examples_tests:'-world_library/0-fun-37-'/11 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_question_tests:with_receiver/3 (/home/yan/src/quod/test/quod_gui_question_tests.erl, line 377)
+in call from quod_gui_examples_tests:'-world_library/0-fun-38-'/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 51)
+in call from quod_gui_examples_tests:with_responder/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 445)
+in call from quod_gui_examples_tests:world_library/0 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 19)
+**error:{world_terrain_delivery_missing,#{tick => 2,phase => active,
+                                  navigation_ready => true,
+                                  incarnation =>
+                                      <<101,189,240,218,200,173,252,29,180,134,
+                                        205,174,173,56,205,211,...>>,
+                                  observations => #{},steps => 2,
+                                  inputs => #{},
+                                  terrain_chunks =>
+                                      [{0,{chunk_v1,-3,-3,-3}},
+                                       {0,{chunk_v1,-3,-3,-2}},
+                                       {0,{chunk_v1,-3,-3,-1}},
+                                       {0,{chunk_v1,-3,-3,0}},
+                                       {0,{chunk_v1,-3,-3,1}},
+                                       {0,{chunk_v1,-3,-3,2}},
+                                       {0,{chunk_v1,-3,-2,-3}},
+                                       {0,{chunk_v1,-3,-2,-2}},
+                                       {0,{chunk_v1,-3,-2,-1}},
+                                       {0,{chunk_v1,-3,-2,0}},
+                                       {0,{chunk_v1,-3,-2,...}},
+                                       {0,{chunk_v1,-3,...}},
+                                       {0,{chunk_v1,...}},
+                                       {0,{...}},
+                                       {0,...},
+                                       {...}|...],
+                                  installs => 3,queries => 0},
+                                #{status => installed,
+                                  terrain_demand =>
+                                      {<0.2767.0>,
+                                       <<101,189,240,218,200,173,252,29,180,
+                                         134,205,174,173,...>>,
+                                       3,
+                                       [{0,{-4,-4,-4},{3,3,3}},
+                                        {0,{-1,1,-1},{0,1,0}}],
+                                       #{0 => {{0,1535,2817},{0,0,0}}}},
+                                  selection => none,
+                                  needs_reconciliation => false},
+                                #{terrain_demand =>
+                                      {<0.2767.0>,
+                                       <<101,189,240,218,200,173,252,29,180,
+                                         134,205,174,...>>,
+                                       3,
+                                       [{0,{-3,-3,-3},{2,2,2}},
+                                        {0,{-1,1,-1},{0,1,0}}],
+                                       #{0 => {{0,1535,2817},{0,0,0}}}}},
+                                #{runner_active => true,
+                                  reaction_failures => 0,hosted_agents => 4,
+                                  reaction_candidates => 155,e_frontier => 29,
+                                  agent_work_blocked => 0,
+                                  source_targets_active => 0,reconciles => 1,
+                                  p_height => 29,reactions_active => 2,
+                                  physics_worlds => 3,
+                                  source_views_active => 0,
+                                  agent_observation_bytes => 0,
+                                  agent_observation_capacity => ready,...}}
+  output:<<"World library fixture retained at /tmp/quod-world-library-5E6D670CE0A55D856BAC90FA
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

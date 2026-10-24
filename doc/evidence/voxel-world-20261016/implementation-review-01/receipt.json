@@ -1,0 +1,24 @@
+{
+  "sessionId": "adfe378b-ec93-48f1-9d18-e938d963889e",
+  "provider": "claude-code",
+  "model": "claude-code:fable",
+  "status": "idle",
+  "toolScope": "read",
+  "editedFiles": [],
+  "updatedAt": 1792177117523,
+  "checked_at": "2026-10-16T19:02:54.220429+00:00",
+  "source_files": 1198,
+  "source_changes": {
+    "workspace": [],
+    "frozen": []
+  },
+  "missing_document_links": [],
+  "report_sha256": "23b84023f6c5a43907b94cfe0268fa90186056cb245ac1ff942408659172957f",
+  "parent_reproduction_child_exit": 0,
+  "parent_reproduction_seconds": 8.02,
+  "confirmed_unfixed_defects": 2,
+  "production_changes_this_planning_turn": false,
+  "authority": "Explicit user request for Fable review; planning and read-only implementation review. No production fixes, commit, deployment or live ontology mutation in this turn.",
+  "assessment": "assessment.md",
+  "report": "fable-review.md"
+}

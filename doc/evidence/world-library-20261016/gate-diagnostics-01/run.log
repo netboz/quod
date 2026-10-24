@@ -1,0 +1,1672 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_client_goal_ingress_tests'
+  quod_client_goal_ingress_tests: refused_group_selector_authenticates_its_exact_source_request_test...[0.086 s] ok
+  quod_client_goal_ingress_tests: refused_group_reconciles_through_archived_phase_and_prolog_outcome_test...[0.157 s] ok
+  quod_client_goal_ingress_tests:167: -signed_local_read_test_/0-fun-17-...[0.005 s] ok
+  quod_client_goal_ingress_tests:168: -signed_local_read_test_/0-fun-16-...ok
+  quod_client_goal_ingress_tests:169: -signed_local_read_test_/0-fun-15-...ok
+  quod_client_goal_ingress_tests:170: -signed_local_read_test_/0-fun-14-...[0.006 s] ok
+  quod_client_goal_ingress_tests:171: -signed_local_read_test_/0-fun-13-...ok
+  quod_client_goal_ingress_tests:172: -signed_local_read_test_/0-fun-12-...ok
+  quod_client_goal_ingress_tests:173: -signed_local_read_test_/0-fun-11-...[0.003 s] ok
+  quod_client_goal_ingress_tests:174: -signed_local_read_test_/0-fun-10-...ok
+  quod_client_goal_ingress_tests:175: -signed_local_read_test_/0-fun-9-...ok
+  quod_client_goal_ingress_tests:176: -signed_local_read_test_/0-fun-8-...[0.303 s] ok
+  quod_client_goal_ingress_tests:177: -signed_local_read_test_/0-fun-7-...[0.001 s] ok
+  quod_client_goal_ingress_tests:178: -signed_local_read_test_/0-fun-6-...ok
+  quod_client_goal_ingress_tests:179: -signed_local_read_test_/0-fun-5-...[0.006 s] ok
+  quod_client_goal_ingress_tests:180: -signed_local_read_test_/0-fun-4-...ok
+  quod_client_goal_ingress_tests:181: -signed_local_read_test_/0-fun-3-...[0.150 s] ok
+  quod_client_goal_ingress_tests:182: -signed_local_read_test_/0-fun-2-...ok
+  quod_client_goal_ingress_tests:183: -signed_local_read_test_/0-fun-1-...[0.001 s] ok
+  quod_client_goal_ingress_tests:184: -signed_local_read_test_/0-fun-0-...[0.030 s] ok
+  [done in 0.815 s]
+module 'quod_commit_validation_tests'
+  quod_commit_validation_tests: receipt_application_envelope_equality_ignores_symbol_representation_test...[0.005 s] ok
+  quod_commit_validation_tests: inclusion_only_receipts_are_refused_in_admission_and_replay_test...[0.014 s] ok
+  quod_commit_validation_tests: foreign_read_certificates_use_exact_reference_committees_test...[0.001 s] ok
+  quod_commit_validation_tests: remote_completion_cannot_carry_foreign_reads_test...ok
+  quod_commit_validation_tests: duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test...[0.007 s] ok
+  quod_commit_validation_tests: non_identical_remote_completion_remains_invalid_in_proposal_check_test...[0.008 s] ok
+  quod_commit_validation_tests: remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test...[0.014 s] ok
+  quod_commit_validation_tests: content_check_and_committed_claim_share_one_validator_test...[0.011 s] ok
+  quod_commit_validation_tests: source_vote_check_and_committed_claim_share_one_validator_test...[0.014 s] ok
+  quod_commit_validation_tests: expired_request_cannot_acquire_a_first_source_claim_test...[0.009 s] ok
+  quod_commit_validation_tests: expired_independent_source_claim_is_not_admissible_test...[0.006 s] ok
+  quod_commit_validation_tests: missing_network_identity_splits_check_from_committed_claim_test...[0.010 s] ok
+  quod_commit_validation_tests: captured_network_survives_readiness_loss_in_content_and_vote_test...[0.065 s] ok
+  quod_commit_validation_tests: -membership_validation_contract_is_owned_here_test_/0-fun-1- (assert)...[0.085 s] ok
+  quod_commit_validation_tests: -membership_validation_contract_is_owned_here_test_/0-fun-1- (asserta)...[0.012 s] ok
+  quod_commit_validation_tests: vote_validation_and_materialization_are_owned_here_test...[0.014 s] ok
+  quod_commit_validation_tests: expiry_remote_application_captures_network_before_its_second_check_test...[0.009 s] ok
+  quod_commit_validation_tests: expiry_read_uses_certification_and_vote_admission_owners_test...[0.015 s] ok
+  quod_commit_validation_tests: read_certificate_validates_terminal_outcome_evidence_test...[0.019 s] ok
+  quod_commit_validation_tests: read_certificate_refuses_a_stale_read_token_test...[0.013 s] ok
+  quod_commit_validation_tests: external_predicate_manifest_is_immutable_after_genesis_test...[0.002 s] ok
+  quod_commit_validation_tests: atomic_vote_cannot_change_external_predicate_manifest_test...[0.010 s] ok
+  [done in 0.410 s]
+module 'quod_ingress_state_tests'
+  quod_ingress_state_tests: era_view_routes_without_a_material_append_test...[0.003 s] ok
+  quod_ingress_state_tests: era_change_rejects_old_placement_with_the_same_members_test...ok
+  quod_ingress_state_tests: membership_readiness_is_independent_of_empty_protocol_views_test...ok
+  quod_ingress_state_tests: view_source_change_with_same_facts_does_not_wake_test...ok
+  quod_ingress_state_tests: validator_order_is_canonicalized_once_per_view_test...ok
+  quod_ingress_state_tests: capability_gates_remain_lazy_but_relay_validation_is_first_test...ok
+  quod_ingress_state_tests: local_route_and_fifo_truth_table_test...ok
+  quod_ingress_state_tests: relay_owner_and_recovery_truth_table_test...ok
+  quod_ingress_state_tests: custody_preserves_ambiguity_and_sequence_test...ok
+  quod_ingress_state_tests: barrier_future_slot_and_capacity_truth_table_test...[0.005 s] ok
+  quod_ingress_state_tests: request_size_is_cached_in_queue_accounting_test...ok
+  quod_ingress_state_tests: queue_order_restore_expiry_and_reset_test...ok
+  quod_ingress_state_tests: queue_per_author_bound_test...ok
+  quod_ingress_state_tests: fingerprints_separate_queue_and_custody_wakes_test...ok
+  [done in 0.050 s]
+module 'quod_prolog_tests'
+  quod_prolog_tests: -native_execution_uses_ordinary_acl_and_commit_test_/0-fun-8-...=WARNING REPORT==== 17-Oct-2026::01:14:38.395487 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 6
+[0.232 s] ok
+  quod_prolog_tests: -native_engine_loss_before_checkpoint_is_not_an_unknown_operation_test_/0-fun-3-...=SUPERVISOR REPORT==== 17-Oct-2026::01:14:38.434510 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"host-test-agent">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.1436.0>},
+               {id,quod_prolog},
+               {mfargs,
+                {quod_prolog,start_link,
+                 [<<"host-test-agent">>,
+                  #{mode => create,
+                    data_dir =>
+                     "/tmp/quod_hosted_95AA0EDE1937B28B/host-test-agent",
+                    node_id =>
+                     <<232,242,146,230,92,117,235,217,132,97,224,65,22,101,47,
+                       181,172,34,234,121,160,133,69,48,113,82,124,244,90,44,
+                       245,188>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<141,69,241,149,34,81,27,48,191,80,51,143,120,59,36,
+                           88,199,116,86,136,24,185,61,60,168,43,221,79,25,50,
+                           117,78>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<232,242,146,230,92,117,235,217,132,97,224,65,22,101,
+                           47,181,172,34,234,121,160,133,69,48,113,82,124,244,
+                           90,44,245,188>>,
+                         asn1_NOVALUE},
+                       cert =>
+                        <<48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,43,
+                          101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,112,
+                          95,101,56,102,50,57,50,101,54,48,30,23,13,50,54,48,
+                          49,48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,48,
+                          49,48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,85,4,3,
+                          12,11,107,112,95,101,56,102,50,57,50,101,54,48,42,48,
+                          5,6,3,43,101,112,3,33,0,232,242,146,230,92,117,235,
+                          217,132,97,224,65,22,101,47,181,172,34,234,121,160,
+                          133,69,48,113,82,124,244,90,44,245,188,48,5,6,3,43,
+                          101,112,3,65,0,53,214,118,20,43,178,137,200,114,103,
+                          197,217,5,227,58,112,246,7,149,145,93,6,152,183,137,
+                          128,195,14,21,98,46,217,107,146,105,47,122,144,222,
+                          255,44,18,217,123,58,186,132,159,109,240,227,80,141,
+                          52,98,129,122,22,177,135,112,132,22,5>>,
+                       pubkey =>
+                        <<232,242,146,230,92,117,235,217,132,97,224,65,22,101,
+                          47,181,172,34,234,121,160,133,69,48,113,82,124,244,
+                          90,44,245,188>>},
+                    external_predicate_modules =>
+                     [quod_agent_predicates,quod_agent_work_predicates,
+                      quod_agent_hosting_tests],
+                    genesis_diff =>
+                     [{assert,
+                       {{resolve_agent_recovery,{0},{1},{2},{3}},
+                        {[{retract,{agent_recovery_round,{0},{1},{2},{3}}},
+                          {agent_retract_matching,
+                           {agent_failure_report,
+                            {0},
+                            {1},
+                            {2},
+                            {3},
+                            {4},
+                            {5},
+                            {6}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_observation,{0},{1},{2},{3},{4},{5},{6}},
+                        {[{term_variables,
+                           {report,{0},{1},{2},{3},{4},{5},{6}},
+                           []},
+                          {agent_observation_round,{3},{0},{1},{2},{4}},
+                          {report_agent_and_converge,{0},{1},{2},{4},{5},{6}},
+                          {{if_then_else},
+                           [{agent_recovery_current,{0},{1},{2},{4}},
+                            {current_principal,{7}},
+                            {can_resolve_agent_recovery,{7},{0},{1},{2},{4}}],
+                           [{goal,{agent_recovery_resolved,{0},{1},{2},{4}}}],
+                           [],sture}],
+                         false}}},
+                      {assert,
+                       {{agent_assignment,{0},{1},{2},{3},{4},{5}},
+                        {[{term_variables,{old,{1},{2}},[]},
+                          {integer,{2}},
+                          {is,{4},{'+',{2},1}},
+                          {agent_hosted,{0},{3},{4},{5}}],
+                         false}}},
+                      {assert,
+                       {{initialize_agent_host,{0},{1},{2}},
+                        {[{assertz,{agent_key,{0},{2},active}},
+                          {assertz,{agent_host,{0},{1},1,{2}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_failure,{0},{1},{2},{3},{4},{5}},
+                        {[{current_principal,{6}},
+                          {agent_retract_matching,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{7},{8}}},
+                          {assertz,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{4},{5}}},
+                          {trigger_event,
+                           {agent_failure_observed,
+                            {0},
+                            {1},
+                            {2},
+                            {3},
+                            {6},
+                            {4},
+                            {5}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_observation_with_custody,
+                         {0},
+                         {1},
+                         {2},
+                         {3},
+                         {4},
+                         {5},
+                         {6},
+                         {7}},
+                        {[{term_variables,
+                           {report,{0},{1},{2},{3},{4},{5},{6},{7}},
+                           []},
+                          {agent_observation_custody,{7},{0},{1},{2}},
+                          {report_agent_observation,
+                           {0},
+                           {1},
+                           {2},
+                           {3},
+                           {4},
+                           {5},
+                           {6}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosting_scope,{agent,{0}},{keys,[{0}]}},
+                        {[],false}}},
+                      {assert,{{agent_hosting_scope,all,all},{[],false}}},
+                      {assert,
+                       {{agent_report_support,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_observation_kind,{5}},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {current_request_expiry,{6}},
+                          {agent_failure_report,{0},{1},{2},{3},{4},{7},{5}},
+                          {findall,
+                           {report,{8},{9}},
+                           {agent_failure_report,{0},{1},{2},{3},{4},{8},{9}},
+                           [{report,{observation,{10},{11},{12}},{5}}]},
+                          {'=<',{6},{12}}],
+                         false}}},
+                      {assert,{{agent_failure_kind,process_down},{[],false}}},
+                      {assert,
+                       {{agent_failure_kind,suspected_unreachable},
+                        {[],false}}},
+                      {assert,{{agent_work_after,start,{0}},{[],false}}},
+                      {assert,
+                       {{agent_work_after,{'after',{0}},{1}},
+                        {[{'@>',{1},{0}}],false}}},
+                      {assert,
+                       {{agent_hosting_instances,{keys,{0}},{1},{0}},
+                        {[],false}}},
+                      {assert,
+                       {{agent_hosting_instances,all,{0},{1}},
+                        {[{findall,{2},{agent_host,{2},{0},{3},{4}},{5}},
+                          {sort,{5},{1}}],
+                         false}}},
+                      {assert,{{agent_report_sequence,[],1},{[],false}}},
+                      {assert,
+                       {{agent_report_sequence,
+                         [{observation,{0},{1},{2}}],
+                         {3}},
+                        {[{integer,{0}},{'>',{0},0},{is,{3},{'+',{0},1}}],
+                         false}}},
+                      {assert,
+                       {{prepare_agent_key,{0},{1},{2},{3},{4}},
+                        {[{assertz,{agent_candidate_key,{0},{1},{2},{3},{4}}}],
+                         false}}},
+                      {assert,
+                       {{prepare_agent_and_converge,{0},{1},{2},{3},{4}},
+                        {[{term_variables,
+                           {preparation,{0},{1},{2},{3},{4}},
+                           []},
+                          {goal,{agent_candidate_key,{0},{1},{2},{3},{4}}},
+                          {{if_then_else},
+                           [{agent_recovery_current,{0},{1},{2},{5}}],
+                           [{converge_agent_assignment,{0},{1},{2},{5}}],
+                           [],sture}],
+                         false}}},
+                      {assert,
+                       {{can_sign_agent_request,
+                         {0},
+                         {1},
+                         {agent_goal_v1,{2},{3},{4},{5},{6},{7},{8},{9},{10}}},
+                        {[{'=',{0},{1}},
+                          {'=',{3},{agent_instance_ref,{11},{12},{13}}},
+                          {agent_hosted,{13},{1},{14},{5}},
+                          {can_request_agent_signature,
+                           {0},
+                           {13},
+                           {agent_goal_v1,
+                            {2},
+                            {3},
+                            {4},
+                            {5},
+                            {6},
+                            {7},
+                            {8},
+                            {9},
+                            {10}}}],
+                         false}}},
+                      {assert,
+                       {{agent_identifier,{0}},
+                        {[{binary_codes,{0},{1}},{length,{1},32}],false}}},
+                      {assert,
+                       {{agent_observation_kind,process_down},{[],false}}},
+                      {assert,
+                       {{agent_observation_kind,suspected_unreachable},
+                        {[],false}}},
+                      {assert,{{agent_observation_kind,reachable},{[],false}}},
+                      {assert,
+                       {{agent_observation_kind,withdrawing},{[],false}}},
+                      {assert,
+                       {{agent_retract_matching,{0}},
+                        {[{findall,{0},{0},{1}},{agent_retract_rows,{1}}],
+                         false}}},
+                      {assert,{{agent_hosting_suspended,{0}},{[fail],false}}},
+                      {assert,
+                       {{agent_recovery_resolved,{0},{1},{2},{3}},
+                        {[{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {agent_hosted,{0},{1},{2},{4}},
+                          {'\\+',{agent_recovery_round,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{assign_agent_host,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_hosted,{0},{1},{2},{6}},
+                          {retract,{agent_host,{0},{1},{2},{6}}},
+                          {retract,{agent_key,{0},{6},active}},
+                          {assertz,{agent_key,{0},{6},revoked}},
+                          {assertz,{agent_key,{0},{5},active}},
+                          {assertz,{agent_host,{0},{3},{4},{5}}},
+                          {agent_retract_matching,
+                           {agent_recovery_round,{0},{7},{8},{9}}},
+                          {agent_retract_matching,
+                           {agent_failure_report,
+                            {0},
+                            {10},
+                            {11},
+                            {12},
+                            {13},
+                            {14},
+                            {15}}},
+                          {agent_retract_matching,
+                           {agent_candidate_key,{0},{16},{17},{18},{19}}}],
+                         false}}},
+                      {assert,
+                       {{action,
+                         {initialize_agent_host,{0},{1},{2}},
+                         [{current_principal,{3}},
+                          {can_assign_agent_host,{3},{0},none,0,{1},{2}},
+                          {agent_preparation_assignment,{0},none,0},
+                          {term_variables,{0},[]},
+                          {term_variables,{1},[]},
+                          {agent_identifier,{2}}],
+                         {agent_hosted,{0},{1},1,{2}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {assign_agent_host,{0},{1},{2},{3},{4},{5}},
+                         [{term_variables,{old,{1},{2}},[]},
+                          {current_principal,{6}},
+                          {can_assign_agent_host,{6},{0},{1},{2},{3},{5}},
+                          {agent_hosted,{0},{1},{2},{7}},
+                          {integer,{2}},
+                          {is,{4},{'+',{2},1}},
+                          {term_variables,{3},[]},
+                          {agent_identifier,{5}},
+                          {'\\+',{agent_key,{0},{5},{8}}}],
+                         {agent_assignment,{0},{1},{2},{3},{4},{5}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {begin_agent_recovery,{0},{1},{2},{3}},
+                         [{current_principal,{4}},
+                          {can_report_agent_failure,{4},{0},{1},'begin'},
+                          {agent_hosted,{0},{1},{2},{5}},
+                          {'\\+',{agent_recovery_round,{0},{6},{7},{8}}},
+                          {agent_identifier,{3}}],
+                         {agent_recovery_current,{0},{1},{2},{3}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {resolve_agent_recovery,{0},{1},{2},{3}},
+                         [{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {current_principal,{4}},
+                          {can_resolve_agent_recovery,{4},{0},{1},{2},{3}},
+                          {agent_recovery_current,{0},{1},{2},{3}}],
+                         {agent_recovery_resolved,{0},{1},{2},{3}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {prepare_agent_key,{0},{1},{2},{3},{4}},
+                         [{current_principal,{3}},
+                          {term_variables,{old,{1},{2}},[]},
+                          {integer,{2}},
+                          {'>',{2},0},
+                          {agent_key_preparation,{3},{0},{1},{2},{3}},
+                          {agent_identifier,{4}},
+                          {'\\+',{agent_key,{0},{4},{5}}},
+                          {'\\+',{agent_candidate_key,{0},{1},{2},{3},{6}}}],
+                         {agent_candidate_key,{0},{1},{2},{3},{4}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {report_agent_failure,
+                          {0},
+                          {1},
+                          {2},
+                          {3},
+                          {observation,{4},{5},{6}},
+                          {7}},
+                         [{current_principal,{8}},
+                          {can_report_agent_failure,{8},{0},{1},{7}},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {agent_identifier,{5}},
+                          {agent_observation_kind,{7}},
+                          {current_request_expiry,{6}},
+                          {agent_report_next,{0},{1},{2},{3},{8},{4}}],
+                         {agent_failure_report,
+                          {0},
+                          {1},
+                          {2},
+                          {3},
+                          {8},
+                          {observation,{4},{5},{6}},
+                          {7}}},
+                        {[],false}}},
+                      {assert,
+                       {{agent_observation_round,none,{0},{1},{2},{3}},
+                        {[{'\\+',{agent_recovery_round,{0},{4},{5},{6}}},
+                          {goal,{agent_recovery_current,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_round,
+                         {current,{0}},
+                         {1},
+                         {2},
+                         {3},
+                         {0}},
+                        {[{agent_recovery_current,{1},{2},{3},{0}}],false}}},
+                      {assert,
+                       {{begin_agent_recovery,{0},{1},{2},{3}},
+                        {[{assertz,{agent_recovery_round,{0},{1},{2},{3}}},
+                          {trigger_event,
+                           {agent_recovery_started,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{agent_converge_candidate,[],{0},{1},{2}},{[],false}}},
+                      {assert,
+                       {{agent_converge_candidate,
+                         [{candidate,{0},{1},{2}}|{3}],
+                         {4},
+                         {5},
+                         {6}},
+                        {[{is,{7},{'+',{6},1}},
+                          {goal,{agent_assignment,{4},{5},{6},{1},{7},{2}}}],
+                         false}}},
+                      {assert,
+                       {{agent_failure_support,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_failure_kind,{5}},
+                          {agent_report_support,{0},{1},{2},{3},{4},{5}}],
+                         false}}},
+                      {assert,
+                       {{converge_agent_assignment,{0},{1},{2},{3}},
+                        {[{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {current_principal,{4}},
+                          {findall,
+                           {candidate,{5},{6},{7}},
+                           {',',
+                            {agent_candidate_key,{0},{1},{2},{6},{7}},
+                            {',',
+                             {'\\+',{agent_key,{0},{7},{8}}},
+                             {',',
+                              {agent_recovery_candidate,
+                               {4},
+                               {0},
+                               {1},
+                               {2},
+                               {3},
+                               {6},
+                               {5}},
+                              {',',
+                               {term_variables,{candidate,{5},{6},{7}},[]},
+                               {can_assign_agent_host,
+                                {4},
+                                {0},
+                                {1},
+                                {2},
+                                {6},
+                                {7}}}}}},
+                           {9}},
+                          {sort,{9},{10}},
+                          {agent_converge_candidate,{10},{0},{1},{2}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosting_projection,{0},{1},{2},{3}},
+                        {[{agent_hosting_scope,{0},{2}},
+                          {{if_then_else},
+                           [{'\\=',{1},none}],
+                           [{agent_hosting_instances,{2},{1},{4}},
+                            {findall,
+                             {host,{5},{1},{6},{7}},
+                             {',',
+                              {member,{5},{4}},
+                              {',',
+                               {agent_hosted,{5},{1},{6},{7}},
+                               {'\\+',{agent_hosting_suspended,{5}}}}},
+                             {3}}],
+                           [{'=',{3},[]}],
+                           sture}],
+                         false}}},
+                      {assert,
+                       {{report_agent_and_converge,{0},{1},{2},{3},{4},{5}},
+                        {[{term_variables,{report,{0},{1},{2},{3},{4},{5}},[]},
+                          {current_principal,{6}},
+                          {goal,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{4},{5}}},
+                          {converge_agent_assignment,{0},{1},{2},{3}}],
+                         false}}},
+                      {assert,
+                       {{agent_recovery_current,{0},{1},{2},{3}},
+                        {[{agent_hosted,{0},{1},{2},{4}},
+                          {findall,
+                           {recovery,{5},{6},{7}},
+                           {agent_recovery_round,{0},{5},{6},{7}},
+                           [{recovery,{1},{2},{3}}]}],
+                         false}}},
+                      {assert,
+                       {{agent_key_preparation,{0},{1},{2},{3},{4}},
+                        {[{agent_preparation_assignment,{1},{2},{3}},
+                          {can_prepare_agent_key,{0},{1},{2},{3},{4}}],
+                         false}}},
+                      {assert,
+                       {{agent_preparation_assignment,{0},none,0},
+                        {[{'\\+',{agent_host,{0},{1},{2},{3}}},
+                          {'\\+',{agent_key,{0},{4},{5}}}],
+                         false}}},
+                      {assert,
+                       {{agent_preparation_assignment,{0},{1},{2}},
+                        {[{integer,{2}},
+                          {'>',{2},0},
+                          {agent_hosted,{0},{1},{2},{3}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosted,{0},{1},{2},{3}},
+                        {[{findall,
+                           {host,{4},{5},{6}},
+                           {agent_host,{0},{4},{5},{6}},
+                           [{host,{1},{2},{3}}]},
+                          {findall,{6},{agent_key,{0},{6},active},[{3}]}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_custody,{prepared,{0}},{1},{2},{3}},
+                        {[{current_principal,{4}},
+                          {goal,{agent_candidate_key,{1},{2},{3},{4},{0}}}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_custody,
+                         {unavailable,{0}},
+                         {1},
+                         {2},
+                         {3}},
+                        {[],false}}},
+                      {assert,{{agent_retract_rows,[]},{[],false}}},
+                      {assert,
+                       {{agent_retract_rows,[{0}|{1}]},
+                        {[{retract,{0}},{agent_retract_rows,{1}}],false}}},
+                      {assert,
+                       {{agent_report_next,{0},{1},{2},{3},{4},{5}},
+                        {[{findall,
+                           {6},
+                           {agent_failure_report,{0},{1},{2},{3},{4},{6},{7}},
+                           {8}},
+                          {agent_report_sequence,{8},{5}}],
+                         false}}},
+                      {assert,
+                       {{record_ping,{0}},
+                        {[{assertz,{ping,{0}}},{trigger_event,{request,{0}}}],
+                         false}}},
+                      {assert,
+                       {{react_on,pause_batch,true},
+                        {[{me,{agent_instance_ref,{0},{1},actor}},
+                          test_reaction_barrier],
+                         false}}},
+                      {assert,
+                       {{react_on,fill_agents,true},
+                        {[{me,{agent_instance_ref,{0},{1},actor}},
+                          test_fill_agents],
+                         false}}},
+                      {assert,
+                       {{react_on,{do_short_work,{0},{1}},{record_ping,{0}}},
+                        {[{me,{agent_instance_ref,{2},{3},actor}},
+                          {limit_reaction_expiry,{1}}],
+                         false}}},
+                      {assert,
+                       {{react_on,{do_work,{0}},{record_ping,{0}}},
+                        {[{me,{agent_instance_ref,{1},{2},actor}}],false}}},
+                      {assert,
+                       {{can_request_agent_signature,
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<172,212,220,154,2,112,61,68,221,154,88,131,84,146,
+                            206,159,102,205,58,53,181,119,138,170,143,100,146,
+                            111,229,123,190,215>>,
+                          physical_node},
+                         actor,
+                         {0}},
+                        {[],false}}},
+                      {assert,
+                       {{can_invoke,
+                         {0},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<172,212,220,154,2,112,61,68,221,154,88,131,84,146,
+                            206,159,102,205,58,53,181,119,138,170,143,100,146,
+                            111,229,123,190,215>>,
+                          physical_node},
+                         {1},
+                         <<"host-test-agent">>},
+                        {[],false}}},
+                      {assert,
+                       {{can_invoke,
+                         {record_ping,{0}},
+                         {agent_instance_ref,<<"host-test-agent">>,{1},actor},
+                         {2},
+                         <<"host-test-agent">>},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<232,242,146,230,92,117,235,217,132,97,224,65,22,
+                            101,47,181,172,34,234,121,160,133,69,48,113,82,
+                            124,244,90,44,245,188>>},
+                         actor,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<172,212,220,154,2,112,61,68,221,154,88,131,84,146,
+                            206,159,102,205,58,53,181,119,138,170,143,100,146,
+                            111,229,123,190,215>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<232,242,146,230,92,117,235,217,132,97,224,65,22,
+                            101,47,181,172,34,234,121,160,133,69,48,113,82,
+                            124,244,90,44,245,188>>},
+                         actor,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"remote-node">>,
+                          <<172,212,220,154,2,112,61,68,221,154,88,131,84,146,
+                            206,159,102,205,58,53,181,119,138,170,143,100,146,
+                            111,229,123,190,215>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<232,242,146,230,92,117,235,217,132,97,224,65,22,
+                            101,47,181,172,34,234,121,160,133,69,48,113,82,
+                            124,244,90,44,245,188>>},
+                         other,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<172,212,220,154,2,112,61,68,221,154,88,131,84,146,
+                            206,159,102,205,58,53,181,119,138,170,143,100,146,
+                            111,229,123,190,215>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}}]}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0.040 s] ok
+  quod_prolog_tests: -native_async_execute_rejects_a_replaced_target_test_/0-fun-3-...[0.036 s] ok
+  quod_prolog_tests: -native_engine_loss_after_checkpoint_retains_the_actual_operation_test_/0-fun-4-...=SUPERVISOR REPORT==== 17-Oct-2026::01:14:38.518150 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"host-test-agent">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.1574.0>},
+               {id,quod_prolog},
+               {mfargs,
+                {quod_prolog,start_link,
+                 [<<"host-test-agent">>,
+                  #{mode => create,
+                    data_dir =>
+                     "/tmp/quod_hosted_554D09EBD536F797/host-test-agent",
+                    node_id =>
+                     <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,84,217,
+                       219,199,69,181,0,127,174,164,102,76,24,34,41,124,64,30>>,
+                    identity =>
+                     #{key =>
+                        {'ECPrivateKey',1,
+                         <<103,49,140,192,255,89,158,216,62,117,148,77,137,33,
+                           113,230,250,32,41,195,37,77,238,5,162,54,217,162,
+                           130,85,86,131>>,
+                         {namedCurve,{1,3,101,112}},
+                         <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,84,
+                           217,219,199,69,181,0,127,174,164,102,76,24,34,41,
+                           124,64,30>>,
+                         asn1_NOVALUE},
+                       cert =>
+                        <<48,129,216,48,129,139,160,3,2,1,2,2,1,1,48,5,6,3,43,
+                          101,112,48,22,49,20,48,18,6,3,85,4,3,12,11,107,112,
+                          95,53,49,53,53,50,50,51,102,48,30,23,13,50,54,48,49,
+                          48,49,48,48,48,48,48,48,90,23,13,51,54,48,49,48,49,
+                          48,48,48,48,48,48,90,48,22,49,20,48,18,6,3,85,4,3,12,
+                          11,107,112,95,53,49,53,53,50,50,51,102,48,42,48,5,6,
+                          3,43,101,112,3,33,0,81,85,34,63,122,36,26,221,238,92,
+                          152,171,149,163,84,217,219,199,69,181,0,127,174,164,
+                          102,76,24,34,41,124,64,30,48,5,6,3,43,101,112,3,65,0,
+                          225,5,43,243,42,203,71,251,187,33,36,208,77,73,33,74,
+                          66,201,61,206,216,210,81,214,31,247,82,128,121,94,
+                          228,57,170,54,71,133,84,251,74,33,24,113,12,190,181,
+                          57,218,247,124,52,185,169,206,174,123,239,51,105,35,
+                          47,117,197,93,14>>,
+                       pubkey =>
+                        <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,84,
+                          217,219,199,69,181,0,127,174,164,102,76,24,34,41,
+                          124,64,30>>},
+                    external_predicate_modules =>
+                     [quod_agent_predicates,quod_agent_work_predicates,
+                      quod_agent_hosting_tests],
+                    genesis_diff =>
+                     [{assert,
+                       {{resolve_agent_recovery,{0},{1},{2},{3}},
+                        {[{retract,{agent_recovery_round,{0},{1},{2},{3}}},
+                          {agent_retract_matching,
+                           {agent_failure_report,
+                            {0},
+                            {1},
+                            {2},
+                            {3},
+                            {4},
+                            {5},
+                            {6}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_observation,{0},{1},{2},{3},{4},{5},{6}},
+                        {[{term_variables,
+                           {report,{0},{1},{2},{3},{4},{5},{6}},
+                           []},
+                          {agent_observation_round,{3},{0},{1},{2},{4}},
+                          {report_agent_and_converge,{0},{1},{2},{4},{5},{6}},
+                          {{if_then_else},
+                           [{agent_recovery_current,{0},{1},{2},{4}},
+                            {current_principal,{7}},
+                            {can_resolve_agent_recovery,{7},{0},{1},{2},{4}}],
+                           [{goal,{agent_recovery_resolved,{0},{1},{2},{4}}}],
+                           [],sture}],
+                         false}}},
+                      {assert,
+                       {{agent_assignment,{0},{1},{2},{3},{4},{5}},
+                        {[{term_variables,{old,{1},{2}},[]},
+                          {integer,{2}},
+                          {is,{4},{'+',{2},1}},
+                          {agent_hosted,{0},{3},{4},{5}}],
+                         false}}},
+                      {assert,
+                       {{initialize_agent_host,{0},{1},{2}},
+                        {[{assertz,{agent_key,{0},{2},active}},
+                          {assertz,{agent_host,{0},{1},1,{2}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_failure,{0},{1},{2},{3},{4},{5}},
+                        {[{current_principal,{6}},
+                          {agent_retract_matching,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{7},{8}}},
+                          {assertz,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{4},{5}}},
+                          {trigger_event,
+                           {agent_failure_observed,
+                            {0},
+                            {1},
+                            {2},
+                            {3},
+                            {6},
+                            {4},
+                            {5}}}],
+                         false}}},
+                      {assert,
+                       {{report_agent_observation_with_custody,
+                         {0},
+                         {1},
+                         {2},
+                         {3},
+                         {4},
+                         {5},
+                         {6},
+                         {7}},
+                        {[{term_variables,
+                           {report,{0},{1},{2},{3},{4},{5},{6},{7}},
+                           []},
+                          {agent_observation_custody,{7},{0},{1},{2}},
+                          {report_agent_observation,
+                           {0},
+                           {1},
+                           {2},
+                           {3},
+                           {4},
+                           {5},
+                           {6}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosting_scope,{agent,{0}},{keys,[{0}]}},
+                        {[],false}}},
+                      {assert,{{agent_hosting_scope,all,all},{[],false}}},
+                      {assert,
+                       {{agent_report_support,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_observation_kind,{5}},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {current_request_expiry,{6}},
+                          {agent_failure_report,{0},{1},{2},{3},{4},{7},{5}},
+                          {findall,
+                           {report,{8},{9}},
+                           {agent_failure_report,{0},{1},{2},{3},{4},{8},{9}},
+                           [{report,{observation,{10},{11},{12}},{5}}]},
+                          {'=<',{6},{12}}],
+                         false}}},
+                      {assert,{{agent_failure_kind,process_down},{[],false}}},
+                      {assert,
+                       {{agent_failure_kind,suspected_unreachable},
+                        {[],false}}},
+                      {assert,{{agent_work_after,start,{0}},{[],false}}},
+                      {assert,
+                       {{agent_work_after,{'after',{0}},{1}},
+                        {[{'@>',{1},{0}}],false}}},
+                      {assert,
+                       {{agent_hosting_instances,{keys,{0}},{1},{0}},
+                        {[],false}}},
+                      {assert,
+                       {{agent_hosting_instances,all,{0},{1}},
+                        {[{findall,{2},{agent_host,{2},{0},{3},{4}},{5}},
+                          {sort,{5},{1}}],
+                         false}}},
+                      {assert,{{agent_report_sequence,[],1},{[],false}}},
+                      {assert,
+                       {{agent_report_sequence,
+                         [{observation,{0},{1},{2}}],
+                         {3}},
+                        {[{integer,{0}},{'>',{0},0},{is,{3},{'+',{0},1}}],
+                         false}}},
+                      {assert,
+                       {{prepare_agent_key,{0},{1},{2},{3},{4}},
+                        {[{assertz,{agent_candidate_key,{0},{1},{2},{3},{4}}}],
+                         false}}},
+                      {assert,
+                       {{prepare_agent_and_converge,{0},{1},{2},{3},{4}},
+                        {[{term_variables,
+                           {preparation,{0},{1},{2},{3},{4}},
+                           []},
+                          {goal,{agent_candidate_key,{0},{1},{2},{3},{4}}},
+                          {{if_then_else},
+                           [{agent_recovery_current,{0},{1},{2},{5}}],
+                           [{converge_agent_assignment,{0},{1},{2},{5}}],
+                           [],sture}],
+                         false}}},
+                      {assert,
+                       {{can_sign_agent_request,
+                         {0},
+                         {1},
+                         {agent_goal_v1,{2},{3},{4},{5},{6},{7},{8},{9},{10}}},
+                        {[{'=',{0},{1}},
+                          {'=',{3},{agent_instance_ref,{11},{12},{13}}},
+                          {agent_hosted,{13},{1},{14},{5}},
+                          {can_request_agent_signature,
+                           {0},
+                           {13},
+                           {agent_goal_v1,
+                            {2},
+                            {3},
+                            {4},
+                            {5},
+                            {6},
+                            {7},
+                            {8},
+                            {9},
+                            {10}}}],
+                         false}}},
+                      {assert,
+                       {{agent_identifier,{0}},
+                        {[{binary_codes,{0},{1}},{length,{1},32}],false}}},
+                      {assert,
+                       {{agent_observation_kind,process_down},{[],false}}},
+                      {assert,
+                       {{agent_observation_kind,suspected_unreachable},
+                        {[],false}}},
+                      {assert,{{agent_observation_kind,reachable},{[],false}}},
+                      {assert,
+                       {{agent_observation_kind,withdrawing},{[],false}}},
+                      {assert,
+                       {{agent_retract_matching,{0}},
+                        {[{findall,{0},{0},{1}},{agent_retract_rows,{1}}],
+                         false}}},
+                      {assert,{{agent_hosting_suspended,{0}},{[fail],false}}},
+                      {assert,
+                       {{agent_recovery_resolved,{0},{1},{2},{3}},
+                        {[{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {agent_hosted,{0},{1},{2},{4}},
+                          {'\\+',{agent_recovery_round,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{assign_agent_host,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_hosted,{0},{1},{2},{6}},
+                          {retract,{agent_host,{0},{1},{2},{6}}},
+                          {retract,{agent_key,{0},{6},active}},
+                          {assertz,{agent_key,{0},{6},revoked}},
+                          {assertz,{agent_key,{0},{5},active}},
+                          {assertz,{agent_host,{0},{3},{4},{5}}},
+                          {agent_retract_matching,
+                           {agent_recovery_round,{0},{7},{8},{9}}},
+                          {agent_retract_matching,
+                           {agent_failure_report,
+                            {0},
+                            {10},
+                            {11},
+                            {12},
+                            {13},
+                            {14},
+                            {15}}},
+                          {agent_retract_matching,
+                           {agent_candidate_key,{0},{16},{17},{18},{19}}}],
+                         false}}},
+                      {assert,
+                       {{action,
+                         {initialize_agent_host,{0},{1},{2}},
+                         [{current_principal,{3}},
+                          {can_assign_agent_host,{3},{0},none,0,{1},{2}},
+                          {agent_preparation_assignment,{0},none,0},
+                          {term_variables,{0},[]},
+                          {term_variables,{1},[]},
+                          {agent_identifier,{2}}],
+                         {agent_hosted,{0},{1},1,{2}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {assign_agent_host,{0},{1},{2},{3},{4},{5}},
+                         [{term_variables,{old,{1},{2}},[]},
+                          {current_principal,{6}},
+                          {can_assign_agent_host,{6},{0},{1},{2},{3},{5}},
+                          {agent_hosted,{0},{1},{2},{7}},
+                          {integer,{2}},
+                          {is,{4},{'+',{2},1}},
+                          {term_variables,{3},[]},
+                          {agent_identifier,{5}},
+                          {'\\+',{agent_key,{0},{5},{8}}}],
+                         {agent_assignment,{0},{1},{2},{3},{4},{5}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {begin_agent_recovery,{0},{1},{2},{3}},
+                         [{current_principal,{4}},
+                          {can_report_agent_failure,{4},{0},{1},'begin'},
+                          {agent_hosted,{0},{1},{2},{5}},
+                          {'\\+',{agent_recovery_round,{0},{6},{7},{8}}},
+                          {agent_identifier,{3}}],
+                         {agent_recovery_current,{0},{1},{2},{3}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {resolve_agent_recovery,{0},{1},{2},{3}},
+                         [{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {current_principal,{4}},
+                          {can_resolve_agent_recovery,{4},{0},{1},{2},{3}},
+                          {agent_recovery_current,{0},{1},{2},{3}}],
+                         {agent_recovery_resolved,{0},{1},{2},{3}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {prepare_agent_key,{0},{1},{2},{3},{4}},
+                         [{current_principal,{3}},
+                          {term_variables,{old,{1},{2}},[]},
+                          {integer,{2}},
+                          {'>',{2},0},
+                          {agent_key_preparation,{3},{0},{1},{2},{3}},
+                          {agent_identifier,{4}},
+                          {'\\+',{agent_key,{0},{4},{5}}},
+                          {'\\+',{agent_candidate_key,{0},{1},{2},{3},{6}}}],
+                         {agent_candidate_key,{0},{1},{2},{3},{4}}},
+                        {[],false}}},
+                      {assert,
+                       {{action,
+                         {report_agent_failure,
+                          {0},
+                          {1},
+                          {2},
+                          {3},
+                          {observation,{4},{5},{6}},
+                          {7}},
+                         [{current_principal,{8}},
+                          {can_report_agent_failure,{8},{0},{1},{7}},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {agent_identifier,{5}},
+                          {agent_observation_kind,{7}},
+                          {current_request_expiry,{6}},
+                          {agent_report_next,{0},{1},{2},{3},{8},{4}}],
+                         {agent_failure_report,
+                          {0},
+                          {1},
+                          {2},
+                          {3},
+                          {8},
+                          {observation,{4},{5},{6}},
+                          {7}}},
+                        {[],false}}},
+                      {assert,
+                       {{agent_observation_round,none,{0},{1},{2},{3}},
+                        {[{'\\+',{agent_recovery_round,{0},{4},{5},{6}}},
+                          {goal,{agent_recovery_current,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_round,
+                         {current,{0}},
+                         {1},
+                         {2},
+                         {3},
+                         {0}},
+                        {[{agent_recovery_current,{1},{2},{3},{0}}],false}}},
+                      {assert,
+                       {{begin_agent_recovery,{0},{1},{2},{3}},
+                        {[{assertz,{agent_recovery_round,{0},{1},{2},{3}}},
+                          {trigger_event,
+                           {agent_recovery_started,{0},{1},{2},{3}}}],
+                         false}}},
+                      {assert,
+                       {{agent_converge_candidate,[],{0},{1},{2}},{[],false}}},
+                      {assert,
+                       {{agent_converge_candidate,
+                         [{candidate,{0},{1},{2}}|{3}],
+                         {4},
+                         {5},
+                         {6}},
+                        {[{is,{7},{'+',{6},1}},
+                          {goal,{agent_assignment,{4},{5},{6},{1},{7},{2}}}],
+                         false}}},
+                      {assert,
+                       {{agent_failure_support,{0},{1},{2},{3},{4},{5}},
+                        {[{agent_failure_kind,{5}},
+                          {agent_report_support,{0},{1},{2},{3},{4},{5}}],
+                         false}}},
+                      {assert,
+                       {{converge_agent_assignment,{0},{1},{2},{3}},
+                        {[{term_variables,{recovery,{0},{1},{2},{3}},[]},
+                          {agent_recovery_current,{0},{1},{2},{3}},
+                          {current_principal,{4}},
+                          {findall,
+                           {candidate,{5},{6},{7}},
+                           {',',
+                            {agent_candidate_key,{0},{1},{2},{6},{7}},
+                            {',',
+                             {'\\+',{agent_key,{0},{7},{8}}},
+                             {',',
+                              {agent_recovery_candidate,
+                               {4},
+                               {0},
+                               {1},
+                               {2},
+                               {3},
+                               {6},
+                               {5}},
+                              {',',
+                               {term_variables,{candidate,{5},{6},{7}},[]},
+                               {can_assign_agent_host,
+                                {4},
+                                {0},
+                                {1},
+                                {2},
+                                {6},
+                                {7}}}}}},
+                           {9}},
+                          {sort,{9},{10}},
+                          {agent_converge_candidate,{10},{0},{1},{2}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosting_projection,{0},{1},{2},{3}},
+                        {[{agent_hosting_scope,{0},{2}},
+                          {{if_then_else},
+                           [{'\\=',{1},none}],
+                           [{agent_hosting_instances,{2},{1},{4}},
+                            {findall,
+                             {host,{5},{1},{6},{7}},
+                             {',',
+                              {member,{5},{4}},
+                              {',',
+                               {agent_hosted,{5},{1},{6},{7}},
+                               {'\\+',{agent_hosting_suspended,{5}}}}},
+                             {3}}],
+                           [{'=',{3},[]}],
+                           sture}],
+                         false}}},
+                      {assert,
+                       {{report_agent_and_converge,{0},{1},{2},{3},{4},{5}},
+                        {[{term_variables,{report,{0},{1},{2},{3},{4},{5}},[]},
+                          {current_principal,{6}},
+                          {goal,
+                           {agent_failure_report,{0},{1},{2},{3},{6},{4},{5}}},
+                          {converge_agent_assignment,{0},{1},{2},{3}}],
+                         false}}},
+                      {assert,
+                       {{agent_recovery_current,{0},{1},{2},{3}},
+                        {[{agent_hosted,{0},{1},{2},{4}},
+                          {findall,
+                           {recovery,{5},{6},{7}},
+                           {agent_recovery_round,{0},{5},{6},{7}},
+                           [{recovery,{1},{2},{3}}]}],
+                         false}}},
+                      {assert,
+                       {{agent_key_preparation,{0},{1},{2},{3},{4}},
+                        {[{agent_preparation_assignment,{1},{2},{3}},
+                          {can_prepare_agent_key,{0},{1},{2},{3},{4}}],
+                         false}}},
+                      {assert,
+                       {{agent_preparation_assignment,{0},none,0},
+                        {[{'\\+',{agent_host,{0},{1},{2},{3}}},
+                          {'\\+',{agent_key,{0},{4},{5}}}],
+                         false}}},
+                      {assert,
+                       {{agent_preparation_assignment,{0},{1},{2}},
+                        {[{integer,{2}},
+                          {'>',{2},0},
+                          {agent_hosted,{0},{1},{2},{3}}],
+                         false}}},
+                      {assert,
+                       {{agent_hosted,{0},{1},{2},{3}},
+                        {[{findall,
+                           {host,{4},{5},{6}},
+                           {agent_host,{0},{4},{5},{6}},
+                           [{host,{1},{2},{3}}]},
+                          {findall,{6},{agent_key,{0},{6},active},[{3}]}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_custody,{prepared,{0}},{1},{2},{3}},
+                        {[{current_principal,{4}},
+                          {goal,{agent_candidate_key,{1},{2},{3},{4},{0}}}],
+                         false}}},
+                      {assert,
+                       {{agent_observation_custody,
+                         {unavailable,{0}},
+                         {1},
+                         {2},
+                         {3}},
+                        {[],false}}},
+                      {assert,{{agent_retract_rows,[]},{[],false}}},
+                      {assert,
+                       {{agent_retract_rows,[{0}|{1}]},
+                        {[{retract,{0}},{agent_retract_rows,{1}}],false}}},
+                      {assert,
+                       {{agent_report_next,{0},{1},{2},{3},{4},{5}},
+                        {[{findall,
+                           {6},
+                           {agent_failure_report,{0},{1},{2},{3},{4},{6},{7}},
+                           {8}},
+                          {agent_report_sequence,{8},{5}}],
+                         false}}},
+                      {assert,
+                       {{record_ping,{0}},
+                        {[{assertz,{ping,{0}}},{trigger_event,{request,{0}}}],
+                         false}}},
+                      {assert,
+                       {{react_on,pause_batch,true},
+                        {[{me,{agent_instance_ref,{0},{1},actor}},
+                          test_reaction_barrier],
+                         false}}},
+                      {assert,
+                       {{react_on,fill_agents,true},
+                        {[{me,{agent_instance_ref,{0},{1},actor}},
+                          test_fill_agents],
+                         false}}},
+                      {assert,
+                       {{react_on,{do_short_work,{0},{1}},{record_ping,{0}}},
+                        {[{me,{agent_instance_ref,{2},{3},actor}},
+                          {limit_reaction_expiry,{1}}],
+                         false}}},
+                      {assert,
+                       {{react_on,{do_work,{0}},{record_ping,{0}}},
+                        {[{me,{agent_instance_ref,{1},{2},actor}}],false}}},
+                      {assert,
+                       {{can_request_agent_signature,
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<104,219,125,128,58,41,169,228,130,238,226,200,19,
+                            165,157,82,178,236,183,107,16,66,31,61,37,130,45,
+                            177,114,238,237,138>>,
+                          physical_node},
+                         actor,
+                         {0}},
+                        {[],false}}},
+                      {assert,
+                       {{can_invoke,
+                         {0},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<104,219,125,128,58,41,169,228,130,238,226,200,19,
+                            165,157,82,178,236,183,107,16,66,31,61,37,130,45,
+                            177,114,238,237,138>>,
+                          physical_node},
+                         {1},
+                         <<"host-test-agent">>},
+                        {[],false}}},
+                      {assert,
+                       {{can_invoke,
+                         {record_ping,{0}},
+                         {agent_instance_ref,<<"host-test-agent">>,{1},actor},
+                         {2},
+                         <<"host-test-agent">>},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,
+                            84,217,219,199,69,181,0,127,174,164,102,76,24,34,
+                            41,124,64,30>>},
+                         actor,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<104,219,125,128,58,41,169,228,130,238,226,200,19,
+                            165,157,82,178,236,183,107,16,66,31,61,37,130,45,
+                            177,114,238,237,138>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,
+                            84,217,219,199,69,181,0,127,174,164,102,76,24,34,
+                            41,124,64,30>>},
+                         actor,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"remote-node">>,
+                          <<104,219,125,128,58,41,169,228,130,238,226,200,19,
+                            165,157,82,178,236,183,107,16,66,31,61,37,130,45,
+                            177,114,238,237,138>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}},
+                      {assert,
+                       {{can_assign_agent_host,
+                         {node,
+                          <<81,85,34,63,122,36,26,221,238,92,152,171,149,163,
+                            84,217,219,199,69,181,0,127,174,164,102,76,24,34,
+                            41,124,64,30>>},
+                         other,
+                         {0},
+                         {1},
+                         {agent_instance_ref,<<"host-test-node">>,
+                          <<104,219,125,128,58,41,169,228,130,238,226,200,19,
+                            165,157,82,178,236,183,107,16,66,31,61,37,130,45,
+                            177,114,238,237,138>>,
+                          physical_node},
+                         {2}},
+                        {[],false}}}]}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+[0.043 s] ok
+  quod_prolog_tests: -native_caller_loss_cancels_its_proof_without_stopping_the_engine_test_/0-fun-4-...[0.036 s] ok
+  quod_prolog_tests: -owned_async_execute_preserves_absolute_deadline_test_/0-fun-5-...[1.037 s] ok
+  quod_prolog_tests: mark_ready_acknowledges_from_the_handling_engine_test...[0.002 s] ok
+  quod_prolog_tests: committed_result_survives_scope_cleanup_failure_test...ok
+  quod_prolog_tests: terminal_result_accepts_any_typed_rejection_reason_test...ok
+  quod_prolog_tests: agent_identity_freshness_tracks_the_proved_key_not_ledger_height_test...[0.002 s] ok
+  quod_prolog_tests: agent_identity_signing_accepts_unrelated_height_advance_test...[0.007 s] ok
+  quod_prolog_tests: live_signed_operation_is_busy_not_outcome_unknown_test...ok
+  quod_prolog_tests: signed_remote_selector_materializes_only_its_authenticated_target_test...ok
+  quod_prolog_tests: keyed_engine_threads_its_signer_into_scope_plans_test...[0.003 s] ok
+  quod_prolog_tests: shared_plan_submission_gate_rejects_rebuilding_target_test...ok
+  quod_prolog_tests: remote_submission_preserves_retryable_classification_test...ok
+  quod_prolog_tests: absent_pending_group_keeps_exact_waiter_test...ok
+  quod_prolog_tests: -t_unknown_fails/1-fun-2-...ok
+  quod_prolog_tests: -t_explicit_failure_reason_and_internal_bare_fail/1-fun-2-...[0.001 s] ok
+  quod_prolog_tests: -t_apply_and_read/1-fun-3-...[0.001 s] ok
+  quod_prolog_tests: -t_occ_reject/1-fun-3-...[0.001 s] ok
+  quod_prolog_tests: -t_policy_self_seal/1-fun-5-...[0.001 s] ok
+  quod_prolog_tests: -t_batch_apply/1-fun-8-...[0.001 s] ok
+  quod_prolog_tests: -t_duplicate_plan_applies_once/1-fun-4-...[0.001 s] ok
+  quod_prolog_tests: -t_same_block_read_after_write/1-fun-4-...[0.002 s] ok
+  quod_prolog_tests: -t_submit_plan_validation/1-fun-5-...[0.005 s] ok
+  quod_prolog_tests: -t_pending_votes_projection_is_atomic_and_clearable/1-fun-6-...ok
+  quod_prolog_tests: -t_worker_limit/1-fun-4-...ok
+  quod_prolog_tests:711: -absolute_proof_timeout_test_/0-fun-1-...[0.061 s] ok
+  quod_prolog_tests: -idle_cursor_uses_the_absolute_proof_deadline_test_/0-fun-2-...[0.081 s] ok
+  quod_prolog_tests: -outcome_unknown_timeout_test_/0-fun-11-...[0.202 s] ok
+  quod_prolog_tests: -unavailable_append_reply_waits_for_outcome_unknown_test_/0-fun-12-...[0.181 s] ok
+  quod_prolog_tests: crossed_dtx_handoff_replies_keep_their_exact_worker_test...ok
+  quod_prolog_tests: cancelled_dtx_handoff_abandons_its_exact_request_test...[0.021 s] ok
+  quod_prolog_tests: dtx_handoff_activation_capacity_cancels_preparation_not_source_responsibility_test...ok
+  quod_prolog_tests: -t_verdict_basic/1-fun-4-...[0.001 s] ok
+  quod_prolog_tests: -t_verdict_can_join_fail/1-fun-2-...ok
+  quod_prolog_tests: -t_verdict_side_effects/1-fun-1-...ok
+  quod_prolog_tests: -t_verdict_lifecycle/1-fun-4-...[0.652 s] ok
+  quod_prolog_tests: -t_verdict_tag_reuse/1-fun-3-...[0.303 s] ok
+  quod_prolog_tests: -t_parent_validation_trace_lifecycle/2-fun-25-...[0.538 s] ok
+  quod_prolog_tests: -t_parent_validation_trace_lifecycle/2-fun-25-...[0.502 s] ok
+  quod_prolog_tests: -t_signed_operation_uses_the_same_content_verdict_path/1-fun-8-...[0.039 s] ok
+  quod_prolog_tests: -t_signed_operation_rechecks_the_parent_policy/1-fun-4-...[0.010 s] ok
+  quod_prolog_tests: -t_committed_signed_operation_waits_for_network_identity/1-fun-8-...=WARNING REPORT==== 17-Oct-2026::01:14:42.425509 ===
+committed record is waiting for root network identity: not_hosted
+[0.012 s] ok
+  quod_prolog_tests: -t_signed_vote_checks_identity_and_source_material_acl/1-fun-6-...[0.010 s] ok
+  quod_prolog_tests: -t_lockstep/1-fun-2-...=WARNING REPORT==== 17-Oct-2026::01:14:42.451123 ===
+quod_prolog[memtest:1074]: can_invoke refused a top-level goal at pinned height 3
+[0.001 s] ok
+  quod_prolog_tests: -t_live_emits_event/1-fun-5-...ok
+  quod_prolog_tests: -t_live_reject_emits_event/1-fun-5-...[0.203 s] ok
+  quod_prolog_tests: -t_replay_no_event/1-fun-2-...[0.201 s] ok
+  quod_prolog_tests: -t_replay_reentry/1-fun-12-...[0.210 s] ok
+  quod_prolog_tests: -t_no_boundary_without_advance/1-fun-1-...[0.604 s] ok
+  quod_prolog_tests: -t_projection_progress_includes_duplicate_material/1-fun-6-...[0.403 s] ok
+  quod_prolog_tests: dtx_validation_waits_for_published_outcome_floor_test...ok
+  quod_prolog_tests: -t_attach_refused_until_ready/1-fun-2-...[0.002 s] ok
+  quod_prolog_tests: -t_direct_envelope_carries_committed_snapshot/1-fun-4-...[0.001 s] ok
+  quod_prolog_tests: -t_reject_not_direct_sent/1-fun-2-...[0.201 s] ok
+  quod_prolog_tests: -t_floor_pins_and_raises/1-fun-4-...[0.001 s] ok
+  quod_prolog_tests: -t_runtime_down_clears_floor/1-fun-4-...[0.001 s] ok
+  quod_prolog_tests: -t_quiet_boot_ready_edge_once/1-fun-0-...[0.203 s] ok
+  [done in 6.410 s]
+module 'quod_read_set_tests'
+  quod_read_set_tests:7: -representation_and_size_test_/0-fun-9-...ok
+  quod_read_set_tests:7: -representation_and_size_test_/0-fun-9-...ok
+  quod_read_set_tests:7: -representation_and_size_test_/0-fun-9-...ok
+  quod_read_set_tests:7: -representation_and_size_test_/0-fun-9-...ok
+  quod_read_set_tests: aliases_never_merge_or_drop_reads_test...ok
+  quod_read_set_tests: same_name_distinct_arities_are_distinct_dependencies_test...ok
+  quod_read_set_tests: wire_order_and_shape_are_checked_before_a_map_test...ok
+  quod_read_set_tests: utf8_order_preserves_atom_codepoint_order_test...ok
+  quod_read_set_tests: signed_bad_order_is_refused_before_vocabulary_materializes_test...ok
+  quod_read_set_tests: -golden_and_two_vm_roundtrip_test_/0-fun-9-...[0.399 s] ok
+  [done in 0.430 s]
+module 'quod_relay_tests'
+  quod_relay_tests: frame_dispatch_test...ok
+  quod_relay_tests: canonical_block_and_sidecar_wire_test...[0.003 s] ok
+  quod_relay_tests: decoded_block_wire_shapes_are_hard_rejected_test...ok
+  quod_relay_tests: certified_reply_carries_hash_not_a_second_certificate_test...ok
+  quod_relay_tests: bounded_result_cache_test...ok
+  quod_relay_tests: frame_shape_rejection_test...ok
+  [done in 0.021 s]
+module 'quod_simplex_tests'
+  quod_simplex_tests: era_vote_bytes_bind_kind_chain_era_view_and_value_test...ok
+  quod_simplex_tests: era_vote_cannot_be_reused_at_the_same_view_in_another_era_test...ok
+  quod_simplex_tests: era_certificate_cannot_mix_eras_or_duplicate_signers_test...[0.002 s] ok
+  quod_simplex_tests: era_complaint_has_no_value_and_never_becomes_a_commit_test...[0.001 s] ok
+  quod_simplex_tests: era_eight_voter_split_recovers_without_changing_parent_votes_test...[0.011 s] ok
+  quod_simplex_tests: era_stacked_splits_allow_a_third_view_with_a_silent_voter_test...[0.004 s] ok
+  quod_simplex_tests: era_complaint_certificate_advances_without_a_ledger_result_test...[0.002 s] ok
+  quod_simplex_tests: era_terminal_membership_refuses_material_descendants_test...[0.002 s] ok
+  quod_simplex_tests: signed_material_height_is_checked_before_support_and_tree_installation_test...[0.006 s] ok
+  quod_simplex_tests: era_delayed_parent_wakes_its_certified_child_once_test...[0.002 s] ok
+  quod_simplex_tests: era_gapped_parent_waits_for_every_complaint_test...[0.048 s] ok
+  quod_simplex_tests: -era_settlement_work_does_not_rescan_the_unfinished_prefix_test_/0-fun-1-...[0.740 s] ok
+  quod_simplex_tests: era_cold_recovery_resumes_after_archived_carriers_test...[0.007 s] ok
+  quod_simplex_tests: era_cold_recovery_seals_only_the_certified_old_era_test...[0.006 s] ok
+  quod_simplex_tests: era_cold_recovery_refuses_bad_history_before_retiring_any_vote_test...[0.005 s] ok
+  quod_simplex_tests: era_cold_recovery_refuses_a_witness_with_unarchived_material_test...[0.005 s] ok
+  quod_simplex_tests: era_carriers_inherit_time_in_live_and_pruned_engines_test...[0.005 s] ok
+  quod_simplex_tests: era_material_parent_is_cached_across_carriers_and_pruning_test...[0.091 s] ok
+  quod_simplex_tests: era_delayed_dtx_verdict_can_install_history_without_voting_in_an_old_view_test...[0.007 s] ok
+  quod_simplex_tests: era_complaint_replaces_placement_without_resolving_or_resigning_request_test...[0.003 s] ok
+  quod_simplex_tests: healthy_notarization_waits_for_direct_finality_without_carrier_test...[0.003 s] ok
+  quod_simplex_tests: era_owner_admits_carriers_without_consuming_material_window_test...[0.046 s] ok
+  quod_simplex_tests: finalized_empty_proposal_retires_watchdog_and_periodic_shares_test...[0.002 s] ok
+  quod_simplex_tests: same_height_reconnect_recovers_empty_finality_without_periodic_shares_test...[0.002 s] ok
+  quod_simplex_tests: era_watchdog_tracks_view_without_quorum_grace_or_deadline_renewal_test...ok
+  quod_simplex_tests: era_parent_validation_uses_material_height_after_carriers_test...[0.046 s] ok
+  quod_simplex_tests: era_cold_join_without_material_keeps_owner_alive_and_admission_closed_test...[0.001 s] ok
+  quod_simplex_tests: era_live_archive_group_preserves_material_heights_and_reuses_proofs_test...[0.029 s] ok
+  quod_simplex_tests: era_live_membership_group_retires_old_votes_and_starts_at_material_root_test...[0.027 s] ok
+  quod_simplex_tests: era_recovery_group_restores_protocol_head_without_replaying_live_events_test...[0.027 s] ok
+  quod_simplex_tests: era_recovery_membership_group_seals_old_votes_before_reseating_test...[0.026 s] ok
+  quod_simplex_tests: era_observer_proof_group_preserves_live_and_replay_apply_origins_test...[0.004 s] ok
+  quod_simplex_tests: era_owner_commits_only_on_its_notarization_view_edge_test...[0.002 s] ok
+  quod_simplex_tests: era_relay_material_result_is_only_a_hint_for_the_original_placement_test...ok
+  quod_simplex_tests: quorum_test...ok
+  quod_simplex_tests: block_hash_deterministic_test...[0.002 s] ok
+  quod_simplex_tests: block_bytes_and_hash_match_across_fresh_vms_test...[0.412 s] ok
+  quod_simplex_tests: block_producer_rejects_map_inside_map_key_test...ok
+  quod_simplex_tests: committee_view_projection_test...ok
+  quod_simplex_tests: committee_view_is_not_invented_before_membership_test...ok
+  quod_simplex_tests: live_state_projection_retains_current_committee_era_start_test...ok
+  quod_simplex_tests: committee_view_recurring_set_revision_test...[0.001 s] ok
+  quod_simplex_tests: canonical_ledger_payload_test...[0.008 s] ok
+  quod_simplex_tests: ahead_cert_ceiling_test...[0.002 s] ok
+  quod_simplex_tests: initial_sync_test...ok
+  quod_simplex_tests: proof_gate_requires_exact_ready_ack_test...ok
+  quod_simplex_tests: resolve_applied_opens_only_the_exact_pending_fence_test...ok
+  quod_simplex_tests: dtx_certificate_cannot_bypass_parent_validation_test...[0.001 s] ok
+  quod_simplex_tests: dtx_local_and_relayed_controls_share_slot_leader_test...ok
+  quod_simplex_tests: dtx_endpoint_reads_survive_validator_retirement_test...[0.007 s] ok
+  quod_simplex_tests: dtx_outcome_facade_preserves_only_authoritative_results_test...ok
+  quod_simplex_tests: owner_terminal_results_follow_the_retired_row_not_the_wrapper_test...ok
+  quod_simplex_tests: operation_recovery_owner_replies_once_and_retains_exact_result_test...ok
+  quod_simplex_tests: operation_waiter_survives_relay_reply_before_claim_projection_test...[0.005 s] ok
+  quod_simplex_tests: dtx_endpoint_response_correlation_is_exact_and_released_test...ok
+  quod_simplex_tests: dtx_endpoint_accepted_response_carries_exact_committed_entry_test...[0.008 s] ok
+  quod_simplex_tests: dtx_outbound_response_normalizes_transport_identity_test...ok
+  quod_simplex_tests: dtx_endpoint_request_sends_only_after_exact_pinned_link_up_test...ok
+  quod_simplex_tests: dtx_endpoint_exact_link_down_releases_only_its_correlation_test...ok
+  quod_simplex_tests: dtx_endpoint_timeout_then_late_link_up_preserves_other_lease_test...ok
+  quod_simplex_tests: dtx_endpoint_terminal_paths_release_exact_request_leases_test...ok
+  quod_simplex_tests: dtx_endpoint_requests_have_no_rate_gate_test...ok
+  quod_simplex_tests: dtx_contact_is_bound_to_the_resolves_certified_source_test...[0.007 s] ok
+  quod_simplex_tests: dtx_unverified_endpoint_contacts_are_never_retained_test...[0.012 s] ok
+  quod_simplex_tests: content_reference_seen_reuse_is_type_safe_test...ok
+  quod_simplex_tests: content_reference_contact_is_claim_only_test...[0.004 s] ok
+  quod_simplex_tests: dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test...[0.010 s] ok
+  quod_simplex_tests: dtx_endpoint_local_submit_drives_on_mailbox_edge_test...[0.009 s] ok
+  quod_simplex_tests: dtx_reliable_relay_is_placed_once_per_link_test...[0.009 s] ok
+  quod_simplex_tests: dtx_relay_waits_for_elected_ontology_readiness_test...[0.008 s] ok
+  quod_simplex_tests: dtx_relay_received_while_leader_busy_is_retained_test...[0.009 s] ok
+  quod_simplex_tests: dtx_origin_vote_relay_keeps_its_original_author_test...[0.009 s] ok
+  quod_simplex_tests: dtx_semantic_commit_retires_an_equivalent_retained_envelope_test...[0.008 s] ok
+  quod_simplex_tests: dtx_owner_stats_keep_peak_after_committed_cleanup_test...[0.008 s] ok
+  quod_simplex_tests: dtx_catchup_retires_retained_submission_and_replies_exact_ref_test...[0.013 s] ok
+  quod_simplex_tests: unsigned_vote_history_replay_does_not_require_root_identity_test...[0.009 s] ok
+  quod_simplex_tests: signed_content_history_replay_waits_for_root_identity_test...[0.009 s] ok
+  quod_simplex_tests: signed_vote_history_replay_waits_for_root_identity_test...[0.010 s] ok
+  quod_simplex_tests: dtx_retained_selection_skips_an_older_ineligible_group_test...[0.015 s] ok
+  quod_simplex_tests: dtx_retained_wave_selects_one_reference_variant_per_group_test...[0.008 s] ok
+  quod_simplex_tests: dtx_retained_registry_has_no_population_cap_test...[0.104 s] ok
+  quod_simplex_tests: dtx_retained_resign_updates_exact_bytes_and_preserves_observation_test...[0.008 s] ok
+  quod_simplex_tests: source_coordinators_adopt_votes_and_restart_from_durable_own_material_test...=WARNING REPORT==== 17-Oct-2026::01:14:47.204479 ===
+quod[quod:dtx-fixture-a]: DTX coordinator worker for <<133,227,90,79,113,21,
+                                                       134,210,164,244,111,111,
+                                                       93,80,187,243,70,150,
+                                                       243,44,72,35,99,227,1,
+                                                       53,152,114,204,114,244,5>> exited: killed
+[0.021 s] ok
+  quod_simplex_tests: dtx_source_commit_wakes_owned_coordinator_directly_test...ok
+  quod_simplex_tests: test_state_explicit_admissions_override_validator_defaults_test...ok
+  quod_simplex_tests: pending_vote_same_admission_stale_sequence_reenvelopes_test...[0.008 s] ok
+  quod_simplex_tests: dtx_endpoint_applied_uses_resolve_committee_test...[0.008 s] ok
+  quod_simplex_tests: read_attest_observer_returns_typed_unavailable_without_signing_test...[0.007 s] ok
+  quod_simplex_tests: history_view_role_and_readiness_are_checked_by_the_consensus_owner_test...[0.030 s] ok
+  quod_simplex_tests: read_attest_stale_token_refusal_remains_typed_test...[0.007 s] ok
+  quod_simplex_tests: read_attest_requires_one_exact_applied_height_test...[0.008 s] ok
+  quod_simplex_tests: read_attest_validator_signs_the_exact_current_ledger_anchor_test...[0.014 s] ok
+  quod_simplex_tests: read_attest_keeps_the_admitted_snapshot_when_consensus_advances_test...[0.014 s] ok
+  quod_simplex_tests: read_attest_validator_signs_the_pinned_genesis_anchor_test...[0.011 s] ok
+  quod_simplex_tests: dtx_endpoint_applied_waits_for_exact_projection_message_test...[0.008 s] ok
+  quod_simplex_tests: dtx_endpoint_outcome_is_current_view_and_floor_bound_test...ok
+  quod_simplex_tests: dtx_invalid_resolve_is_released_for_phase_replan_test...ok
+  quod_simplex_tests: dtx_verdict_cleanup_discards_only_the_exact_stale_request_test...ok
+  quod_simplex_tests: is_participant_test...ok
+  quod_simplex_tests: gate_truth_table_test...ok
+  quod_simplex_tests: confirm_live_test...ok
+  quod_simplex_tests: should_sync_and_syncing_test...ok
+  quod_simplex_tests: next_slot_finalizer_revokes_stale_voting_test...ok
+  quod_simplex_tests: sync_completion_is_height_bound_test...ok
+  quod_simplex_tests: tip_quorum_test...ok
+  quod_simplex_tests: hint_warm_threshold_test...ok
+  quod_simplex_tests: recovery_failure_revokes_capability_test...ok
+  quod_simplex_tests: sink_ownership_test...ok
+  quod_simplex_tests: feed_apply_origin_test...ok
+  quod_simplex_tests: catchup_window_publishes_one_wake_only_certified_head_test...[0.003 s] ok
+  quod_simplex_tests: sync_arm_pacing_test...ok
+  quod_simplex_tests: ts_acceptable_test...ok
+  quod_simplex_tests: pipeline_frontier_test...[0.004 s] ok
+  quod_simplex_tests: pipelined_demand_survives_parent_finality_test...[0.002 s] ok
+  quod_simplex_tests: finalized_request_is_not_resurrected_test...ok
+  quod_simplex_tests: single_peer_complaint_wakes_existing_watchdog_test...ok
+  quod_simplex_tests: unaccepted_complaints_do_not_wake_watchdog_test...[0.001 s] ok
+  quod_simplex_tests: passive_and_future_complaints_track_the_current_view_test...[0.001 s] ok
+  quod_simplex_tests: relay_readiness_requires_current_inbound_generation_test...ok
+  quod_simplex_tests: committee_change_prunes_stale_links_test...ok
+  quod_simplex_tests: committee_prune_retirement_is_nonblocking_and_monotonic_test...ok
+  quod_simplex_tests: ready_proposal_redrive_supports_without_timeout_grace_test...[0.001 s] ok
+  quod_simplex_tests: redrive_queues_proposal_for_disconnected_validators_test...[0.003 s] ok
+  quod_simplex_tests: certified_block_request_targets_one_holder_test...[0.003 s] ok
+  quod_simplex_tests: finalized_empty_body_recovery_at_unchanged_material_height_test...[0.002 s] ok
+  quod_simplex_tests: certified_block_request_is_committee_scoped_test...[0.003 s] ok
+  quod_simplex_tests: certified_block_from_non_leader_restores_finality_test...[0.003 s] ok
+  quod_simplex_tests: certified_dtx_block_uses_phase_aware_recovery_test...[0.007 s] ok
+  quod_simplex_tests: certified_block_response_requires_outstanding_request_test...[0.003 s] ok
+  quod_simplex_tests: certified_block_recovery_accepts_losing_local_support_test...[0.004 s] ok
+  quod_simplex_tests: certified_block_hash_mismatch_is_rejected_test...[0.004 s] ok
+  quod_simplex_tests: recovery_stats_include_certificate_evidence_test...[0.003 s] ok
+  content-complaints-0
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.003 s] ok
+    [done in 0.006 s]
+  content-complaints-3
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.004 s] ok
+    [done in 0.007 s]
+  content-complaints-4
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.005 s] ok
+    [done in 0.008 s]
+  membership-complaints-0
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.004 s] ok
+    [done in 0.007 s]
+  membership-complaints-3
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.004 s] ok
+    [done in 0.007 s]
+  membership-complaints-4
+    quod_simplex_tests: -resume_observed_notarization_after_readiness_test_/0-fun-2-...[0.005 s] ok
+    [done in 0.008 s]
+  quod_simplex_tests: resume_multiple_observed_notarization_edges_test...[0.004 s] ok
+  quod_simplex_tests: restart_preserves_complaint_latch_test...[0.005 s] ok
+  quod_simplex_tests: restart_restores_supported_block_and_prevents_competing_proposal_test...[0.004 s] ok
+  quod_simplex_tests: restart_preserves_commit_latch_test...[0.006 s] ok
+  quod_simplex_tests: restart_restores_exact_effect_custody_test...[0.001 s] ok
+  quod_simplex_tests: dormant_operation_owner_down_starts_exact_cancellation_test...[0.003 s] ok
+  quod_simplex_tests: dormant_operation_transitions_require_exact_process_owner_test...[0.003 s] ok
+  quod_simplex_tests: admission_change_cancels_remote_operation_from_every_placement_test...[0.023 s] ok
+  quod_simplex_tests: dormant_operation_activation_vs_owner_down_is_serialized_test...[0.005 s] ok
+  quod_simplex_tests: dormant_operation_cancellation_worker_crash_restarts_once_test...[0.002 s] ok
+  quod_simplex_tests: restart_reconstructs_dormant_operation_cancellation_owner_test...[0.005 s] ok
+  quod_simplex_tests: restart_with_changed_admission_cancels_ready_operation_test...[0.005 s] ok
+  quod_simplex_tests: dormant_operation_is_not_released_by_lane_or_catchup_reconciliation_test...[0.003 s] ok
+  quod_simplex_tests: catchup_commit_retires_effect_signing_custody_test...[0.005 s] ok
+  quod_simplex_tests: effect_custody_does_not_saturate_after_live_commits_test...[0.015 s] ok
+  quod_simplex_tests: batch_consensus_barrier_test...[0.001 s] ok
+  quod_simplex_tests: transaction_signature_acceptance_test...ok
+  quod_simplex_tests: committed_author_sequence_replay_test...ok
+  quod_simplex_tests: prune_dials_test...ok
+  quod_simplex_tests: share_roundtrip_test...ok
+  quod_simplex_tests: domain_separation_test...ok
+  quod_simplex_tests: legacy_unversioned_share_is_rejected_test...ok
+  quod_simplex_tests: namespace_and_genesis_bound_consensus_replay_rejected_test...[0.002 s] ok
+  quod_simplex_tests: form_and_verify_cert_test...[0.001 s] ok
+  quod_simplex_tests: cert_insufficient_test...ok
+  quod_simplex_tests: cert_rejects_outsider_test...ok
+  quod_simplex_tests: cert_rejects_bad_sig_test...ok
+  quod_simplex_tests: cert_dedup_signer_test...ok
+  quod_simplex_tests: verify_cert_rejects_wrong_block_test...[0.001 s] ok
+  quod_simplex_tests:5676: -protocol_progress_nacks_raw_collection_test_/0-fun-1-...[0.002 s] ok
+  quod_simplex_tests:5676: -protocol_progress_nacks_raw_collection_test_/0-fun-1-...[0.002 s] ok
+  quod_simplex_tests: batch_caps_reject_oversized_and_park_test...*failed*
+in function quod_simplex_tests:batch_caps_reject_oversized_and_park_test/0 (/home/yan/src/quod/test/quod_simplex_tests.erl, line 5721)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assert,[{module,quod_simplex_tests},
+         {line,5721},
+         {expression,"lists : member ( { reply , From , { error , too_large } } , A1 )"},
+         {expected,true},
+         {value,false}]}
+  output:<<"">>
+
+  quod_simplex_tests: different_validator_envelopes_for_same_transaction_converge_test...ok
+  quod_simplex_tests: batch_rejects_duplicate_author_sequence_without_mutation_test...ok
+  quod_simplex_tests: batch_operation_claims_coalesce_aliases_and_reject_conflicts_test...[0.025 s] ok
+  quod_simplex_tests: batch_population_does_not_flush_before_byte_limit_test...[0.032 s] ok
+  quod_simplex_tests: keep_progress_retains_unchanged_ingress_view_test...ok
+  quod_simplex_tests: far_finalizer_invalidates_cached_ingress_view_test...[0.002 s] ok
+  quod_simplex_tests: multi_item_drain_seals_one_block_test...[0.004 s] ok
+  quod_simplex_tests: singleton_drain_keeps_batch_window_test...[0.004 s] ok
+  quod_simplex_tests: queued_membership_stops_the_drain_test...[0.002 s] ok
+  quod_simplex_tests: blocked_author_does_not_block_other_authors_test...[0.013 s] ok
+  quod_simplex_tests: drain_rechecks_held_authors_after_route_change_test...[0.014 s] ok
+  quod_simplex_tests: queued_work_survives_temporary_unready_state_test...ok
+  quod_simplex_tests: ingress_overflow_and_author_cap_test...[0.003 s] ok
+  quod_simplex_tests: ingress_ttl_expires_visibly_test...[0.004 s] ok
+  quod_simplex_tests: drain_forwards_to_next_leader_with_anchored_deadline_test...ok
+  quod_simplex_tests: origin_routes_to_earliest_seat_test...ok
+  quod_simplex_tests: all_authors_target_earliest_seat_test...ok
+  quod_simplex_tests: origin_collects_at_the_notarized_frontier_test...[0.001 s] ok
+  quod_simplex_tests: parked_ingress_implies_armed_watchdog_test...[0.003 s] ok
+  quod_simplex_tests: stale_seq_is_retryable_test...ok
+  quod_simplex_tests: local_append_survives_recovery_before_signing_test...ok
+  quod_simplex_tests: closed_target_slot_is_rejected_test...[0.001 s] ok
+  quod_simplex_tests: route_decision_cells_test...[0.009 s] ok
+  quod_simplex_tests: round_probe_lifecycle_test...[0.001 s] ok
+  quod_simplex_tests: relay_lane_creation_rejects_divergent_target_test...ok
+  =ERROR REPORT==== 17-Oct-2026::01:14:47.952327 ===
+quod[t]: refusing divergent relay lane: {relay_lane_conflict,{<<49,131,112,236,68,57,168,255,186,215,65,193,212,70,252,3,106,229,18,214,36,31,119,105,226,85,152,213,61,10,255,220>>,5,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7>>},{<<94,41,191,22,29,114,27,129,117,128,4,251,81,211,132,33,82,154,47,77,18,144,49,205,113,104,132,179,77,108,208,168>>,6,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7>>}}
+quod_simplex_tests: retained_custody_relay_lane_conflict_defers_without_reply_test...[0.001 s] ok
+  quod_simplex_tests: retained_custody_unready_route_defers_without_reply_test...[0.001 s] ok
+  quod_simplex_tests: retained_custody_relay_has_no_population_cap_test...[0.007 s] ok
+  quod_simplex_tests: retained_custody_duplicate_attempt_defers_and_wakes_test...[0.001 s] ok
+  quod_simplex_tests: retained_custody_demotion_remains_ambiguous_until_deadline_test...ok
+  quod_simplex_tests: admission_change_retires_exact_signed_custody_test...ok
+  quod_simplex_tests: committee_view_lane_conflict_parks_without_bad_change_test...ok
+  quod_simplex_tests: stable_relay_lane_preserves_author_order_test...[0.002 s] ok
+  quod_simplex_tests: same_lane_partial_completion_and_view_change_retargets_cohort_test...[0.002 s] ok
+  quod_simplex_tests: ready_lower_sequence_capacity_block_prevents_local_overtake_test...[0.017 s] ok
+  quod_simplex_tests: membership_view_change_preserves_signed_custody_test...[0.004 s] ok
+  quod_simplex_tests: local_view_change_retains_exact_submission_test...[0.001 s] ok
+  quod_simplex_tests: future_target_drains_at_declared_slot_test...[0.002 s] ok
+  quod_simplex_tests: stale_target_hint_cannot_decide_placement_or_outcome_test...[0.002 s] ok
+  quod_simplex_tests: relay_accepted_is_exact_and_timer_free_test...ok
+  quod_simplex_tests: duplicate_inflight_relay_is_acknowledged_test...ok
+  quod_simplex_tests: inflight_attempt_is_answerable_after_view_change_test...ok
+  quod_simplex_tests: cached_result_is_served_after_view_change_test...ok
+  quod_simplex_tests:7511: -destination_restart_refuses_closed_placement_without_history_reads_test_/0-fun-2-...[0.007 s] ok
+  quod_simplex_tests:7511: -destination_restart_refuses_closed_placement_without_history_reads_test_/0-fun-2-...[0.009 s] ok
+  quod_simplex_tests:7511: -destination_restart_refuses_closed_placement_without_history_reads_test_/0-fun-2-...[0.010 s] ok
+  quod_simplex_tests:7511: -destination_restart_refuses_closed_placement_without_history_reads_test_/0-fun-2-...[0.007 s] ok
+  quod_simplex_tests: non_author_replay_cannot_poison_or_read_result_cache_test...ok
+  quod_simplex_tests: invalid_signature_precedes_cache_and_durable_recovery_test...ok
+  quod_simplex_tests: catchup_window_settles_inbound_and_outbound_relays_test...[0.006 s] ok
+  quod_simplex_tests: relay_channel_cutover_is_strict_test...ok
+  quod_simplex_tests: removed_relay_source_is_rejected_before_dispatch_test...ok
+  quod_simplex_tests: late_current_member_result_does_not_close_ingress_test...[0.021 s] ok
+  quod_simplex_tests: duplicate_same_pid_link_up_is_idempotent_test...[0.042 s] ok
+  quod_simplex_tests: relay_pruning_retains_pending_and_inflight_owners_test...[0.042 s] ok
+  quod_simplex_tests: relay_transport_failure_isolated_from_consensus_test...ok
+  quod_simplex_tests: relay_recovery_invalidation_is_nonblocking_and_monotonic_test...ok
+  quod_simplex_tests: reseat_invalidates_only_relay_affected_inbound_generation_test...ok
+  quod_simplex_tests: queued_old_inbound_frame_cannot_reverse_link_replacement_test...ok
+  quod_simplex_tests: stale_live_consensus_generation_cannot_block_or_reverse_test...=ERROR REPORT==== 17-Oct-2026::01:14:48.261060 ===
+quod[t]: refusing divergent relay terminal state for <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3>>
+[0.021 s] ok
+  quod_simplex_tests: terminal_cache_is_write_once_test...ok
+  quod_simplex_tests: first_admission_requires_current_view_and_exact_owner_test...ok
+  quod_simplex_tests: source_ignores_foreign_metadata_and_waits_for_local_finality_test...ok
+  quod_simplex_tests: custody_deadline_survives_retarget_and_expires_once_test...[0.001 s] ok
+  quod_simplex_tests: relay_emission_is_attempt_scoped_and_link_recovery_is_immutable_test...ok
+  quod_simplex_tests: signature_is_checked_before_canonical_decode_test...ok
+  quod_simplex_tests: unsupported_and_malformed_relay_terms_are_safely_dropped_test...ok
+  quod_simplex_tests: latched_leader_still_redrives_proposal_test...[0.002 s] ok
+  quod_simplex_tests: metrics_matcher_lockstep_test...ok
+  quod_simplex_tests: cert_boundary_test...[0.001 s] ok
+  quod_simplex_tests: sole_validator_cert_test...ok
+  quod_simplex_tests: empty_validators_test...ok
+  quod_simplex_tests: complaint_cert_test...[0.001 s] ok
+  quod_simplex_tests: complaint_quorum_subsets_have_one_protocol_position_test...[0.002 s] ok
+  quod_simplex_tests: share_shape_test...ok
+  quod_simplex_tests: fields_lie_test...[0.002 s] ok
+  quod_simplex_tests: verify_cert_caps_sigs_test...[0.001 s] ok
+  quod_simplex_tests: validator_cap_certificate_boundary_test...[0.018 s] ok
+  quod_simplex_tests: eng_live_window_follows_protocol_view_test...[0.006 s] ok
+  quod_simplex_tests: eng_far_finalizer_is_bounded_recovery_hint_test...[0.008 s] ok
+  quod_simplex_tests: eng_conflicting_share_spam_is_bounded_test...[0.012 s] ok
+  quod_simplex_tests: ordinary_block_equivocation_is_bounded_and_does_not_crash_test...[0.002 s] ok
+  quod_simplex_tests: malformed_leader_payload_is_rejected_without_crash_test...[0.001 s] ok
+  quod_simplex_tests: eng_certified_alternate_replaces_only_unnotarized_block_test...[0.003 s] ok
+  quod_simplex_tests: eng_notarize_then_commit_test...[0.001 s] ok
+  quod_simplex_tests: old_era_certificate_survives_new_committee_quorum_test...[0.002 s] ok
+  quod_simplex_tests: old_era_and_removed_signer_shares_do_not_count_in_new_era_test...[0.001 s] ok
+  quod_simplex_tests: eng_sole_validator_test...ok
+  quod_simplex_tests: eng_parent_ordering_test...[0.001 s] ok
+  quod_simplex_tests: eng_child_finalizes_before_parent_test...[0.002 s] ok
+  quod_simplex_tests: eng_rejects_outsider_test...ok
+  quod_simplex_tests: eng_relays_cert_once_test...[0.001 s] ok
+  quod_simplex_tests: eng_leader_rotates_test...ok
+  quod_simplex_tests: eng_complaint_advances_once_without_material_test...ok
+  quod_simplex_tests: leader_empty_committee_test...ok
+  quod_simplex_tests: committee_delta_test...ok
+  quod_simplex_tests: admitted_endpoints_test...ok
+  quod_simplex_tests: validator_routes_follow_the_committee_history_test...ok
+  quod_simplex_tests: content_only_catchup_repopulates_verified_validator_routes_test...[0.004 s] ok
+  quod_simplex_tests: membership_gate_test...[0.001 s] ok
+  quod_simplex_tests: membership_gate_enforces_validator_cap_test...ok
+  quod_simplex_tests: membership_gate_improper_list_test...ok
+  quod_simplex_tests: transaction_shape_gate_test...ok
+  quod_simplex_tests: committee_grows_test...ok
+  quod_simplex_tests: eng_prune_test...[0.003 s] ok
+  [done in 3.413 s]
+module 'quod_atomic_origin_tests'
+  quod_atomic_origin_tests: unsigned_empty_source_seals_only_for_multiple_foreign_writers_test...[0.012 s] ok
+  quod_atomic_origin_tests: empty_source_is_sealed_once_and_can_attest_the_group_test...[0.007 s] ok
+  quod_atomic_origin_tests: unsigned_atomic_group_cannot_omit_deadline_test...[0.004 s] ok
+  quod_atomic_origin_tests: empty_source_vote_admission_uses_the_existing_own_plan_header_test...[0.007 s] ok
+  quod_atomic_origin_tests: origin_role_cannot_be_forced_on_a_foreign_scope_test...[0.002 s] ok
+  quod_atomic_origin_tests: source_role_selection_matches_routing_test...[0.013 s] ok
+  quod_atomic_origin_tests: source_last_sealing_keeps_failed_branch_material_atomic_test...[0.005 s] ok
+  quod_atomic_origin_tests: source_last_sealing_keeps_cut_pruned_residue_atomic_test...[0.003 s] ok
+  quod_atomic_origin_tests: source_last_sealing_does_not_erase_mixed_provenance_test...[0.004 s] ok
+  quod_atomic_origin_tests: source_last_sealing_keeps_selected_independent_intent_test...[0.003 s] ok
+  quod_atomic_origin_tests: source_last_sealing_keeps_failed_branch_events_in_order_test...[0.003 s] ok
+  quod_atomic_origin_tests: source_last_sealing_uses_restored_writes_and_monotone_reads_test...[0.003 s] ok
+  quod_atomic_origin_tests: whole_proof_failure_never_seals_any_scope_test...[0.005 s] ok
+  [done in 0.110 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 419.
+===> Error running tests

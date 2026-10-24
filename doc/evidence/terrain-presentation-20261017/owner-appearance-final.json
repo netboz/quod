@@ -1,0 +1,11 @@
+{
+  "compiled_transition": "owner-appearance-03 committed in own account, pending0, unchanged terrain definitions; source edits and selected-world appearance confirmed",
+  "final_guard": "owner-appearance-07 positive read, staged positive solution then Stop, staged negative fail, restored read ok, exact sky attributes unchanged, no Accept and pending0",
+  "final_review": "doc/evidence/terrain-presentation-20261017/review-05/fable-owner-postcondition-09.md",
+  "portable": "doc/evidence/terrain-presentation-20261017/wild-realm-appearance.pl",
+  "portable_sha256": "6be0002a41c81acc825a6f8c63d13bbb5f7df3fe5a0cca77d0f07862dd3ef89a",
+  "portable_bytes": 9615,
+  "real_parser_record": "_build/terrain-presentation-20261017/owner-appearance-07/parser.json",
+  "user_private_state_modified": false,
+  "user_signature_required": true
+}

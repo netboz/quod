@@ -1,0 +1,30 @@
+{
+  "time": "2026-10-16T23:59:54.599879+00:00",
+  "jobs": {
+    "quod-finality-candidate-v6-20260926": {
+      "version": 91,
+      "modify_index": 866029,
+      "groups": {
+        "quod-node": 8,
+        "quod-cloud": 0
+      }
+    },
+    "quod": {
+      "version": 246,
+      "modify_index": 826727,
+      "groups": {
+        "quod-node": 8,
+        "quod-cloud": 2
+      }
+    },
+    "quod27-client-30519": {
+      "version": 1,
+      "modify_index": 846370,
+      "groups": {
+        "ingress": 1
+      }
+    }
+  },
+  "tag_273_status": 404,
+  "mutations": false
+}

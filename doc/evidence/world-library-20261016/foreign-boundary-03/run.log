@@ -1,0 +1,9 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_foreign_log_tests: maximal_material_and_compact_witness_fit_transfer_page_test...[0.221 s] ok
+=======================================================
+  Test passed.

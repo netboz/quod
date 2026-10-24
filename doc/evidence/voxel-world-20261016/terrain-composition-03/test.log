@@ -1,0 +1,39 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.05s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_gui_examples_tests:-voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_/0-fun-23-/0
+[0;31m     Failure/Error: ?assertEqual(#{}, maps : get ( gui_resources , gui_socket_state ( Hud ) , # { } ))
+       expected: #{}
+            got: #{<<244,39,160,253,181,0,140,168,231,103,122,164,189,231,97,
+                     166,193,168,43,154,38,182,191,24,81,153,53,81,16,66,244,
+                     47>> =>
+                       #{request =>
+                             <<228,198,72,62,61,16,90,240,64,209,178,63,77,127,
+                               8,184,224,13,194,135,170,94,205,13,211,132,95,
+                               180,246,99,37,17>>,
+                         state => active,
+                         timer => #Ref<0.3897023090.2676490242.247764>,
+                         question =>
+                             {question_ref,<<"gui:examples-responder">>,
+                                 <<234,29,63,6,175,24,140,115,235,59,184,87,42,
+                                   22,66,142,61,137,164,66,221,236,72,74,99,
+                                   177,88,168,176,143,213,77>>,
+                                 {question,
+                                     <<221,85,37,79,143,7,7,184,74,184,159,
+                                       39,78,5,100,230,56,218,136,91,157,7,
+                                       215,188,29,121,116,159,131,69,140,242>>}},
+                         expires => 1792164791724}}[0m
+[0;36m     %% eunit_test.erl:83:in `eunit_test:run_testfun/1`[0m
+[0;36m     Output: Failed voxel GUI fixture retained at /tmp/quod-voxel-gui-44FEFD746E462BE42A79594A
+[0m
+[0;36m     Output: Failed voxel GUI fixture retained at /tmp/quod-voxel-gui-44FEFD746E462BE42A79594A
+[0m
+
+Finished in 21.134 seconds
+[0;31m9 tests, 1 failures
+[0m===> Error running tests

@@ -1,0 +1,9 @@
+{
+  "command": [
+    "node",
+    "client/test/space-library.test.js"
+  ],
+  "started": "2026-10-16T21:45:31.530746+00:00",
+  "exit": 0,
+  "seconds": 0.09
+}

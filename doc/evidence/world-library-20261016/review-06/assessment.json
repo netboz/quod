@@ -1,0 +1,21 @@
+{
+  "tree": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-06/tree",
+  "assessed_at": "2026-10-17T00:30:37.899653+00:00",
+  "manifest_entries": 1212,
+  "manifest_verified": true,
+  "live_source_matches": true,
+  "confirmed_defects_remaining": 0,
+  "independent_assessment": "independent-notes.md",
+  "fable_report": "fable-review.md",
+  "fable_sha256": "53cdf888da9c383f80640245a42a3f57313d9041f705587ab7f933e5dab1895f",
+  "scope": "World-library integration, shared material admission and final coverage corrections",
+  "consultative_review": true,
+  "release_gates_complete": false,
+  "deployment_permitted_only_after": "complete clean-integration-06 PASSED.json and exact image/source checks",
+  "limitations": [
+    "No physical VR hardware validation",
+    "Browser acceptance predates the last corrections; deployed acceptance required",
+    "Optional risks retained verbatim in Fable report",
+    "Trusted committee execution boundary unchanged; ingress hardening is separate"
+  ]
+}

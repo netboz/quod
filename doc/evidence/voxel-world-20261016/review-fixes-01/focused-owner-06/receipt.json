@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:voxel_dig_preserves_a_loaded_resting_body_in_the_same_chunk_test_"
+  ],
+  "exit": 1,
+  "seconds": 30.16
+}

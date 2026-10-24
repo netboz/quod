@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_personal_agent_tests",
+    "--verbose"
+  ],
+  "exit": 0,
+  "seconds": 8.809026235001511
+}

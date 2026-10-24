@@ -1,0 +1,348 @@
+===> Verifying dependencies...
+===> Fetching rebar3_hex v7.1.0
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/rebar3_hex-7.1.0.tar
+===> Fetching hex_core v0.12.2
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/hex_core-0.12.2.tar
+===> Fetching verl v1.1.1
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/verl-1.1.1.tar
+===> Analyzing applications...
+===> Compiling verl
+===> Compiling hex_core
+===> Compiling rebar3_hex
+===> Analyzing applications...
+===> Compiling accept
+===> Compiling ctx
+===> Compiling quic
+===> Compiling quantile_estimator
+    ┌─ _build/default/lib/quantile_estimator/src/quantile.erl:
+    │
+ 17 │  quantile(0.0, [First|_]) ->
+    │           ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ _build/default/lib/quantile_estimator/src/quantile.erl:
+    │
+ 54 │  			[ceil(Size * Quantile)]
+    │  			 ╰── Warning: ambiguous call of overridden auto-imported BIF ceil/1 --
+use erlang:ceil/1 or "-compile({no_auto_import,[ceil/1]})." to resolve name clash
+
+
+    ┌─ _build/default/lib/quantile_estimator/src/quantile_estimator.erl:
+    │
+ 97 │  				false -> #group{v = V, g = 1, delta = clamp(floor(Invariant(Ranki, N)) - 1), rank = RankLast +1}
+    │  				                                            ╰── Warning: ambiguous call of overridden auto-imported BIF floor/1 --
+use erlang:floor/1 or "-compile({no_auto_import,[floor/1]})." to resolve name clash
+
+
+===> Compiling prometheus
+===> Compiling prometheus_httpd
+===> Compiling ssl_verify_fun
+===> Compiling tls_certificate_check
+===> Compiling opentelemetry_api
+===> Compiling opentelemetry
+===> Compiling gproc
+===> Compiling hpack
+===> Compiling chatterbox
+===> Compiling acceptor_pool
+===> Compiling grpcbox
+===> Compiling opentelemetry_exporter
+===> Compiling erlang_qq
+===> Compiling typerefl
+===> Compiling getopt
+===> Compiling hocon
+===> Compiling erlog
+    ┌─ _build/default/lib/erlog/src/erlog_ets.erl:
+    │
+ 23 │  -compile(export_all).
+    │   ╰── Warning: export_all flag enabled - all functions will be exported
+
+
+     ┌─ _build/default/lib/erlog/src/erlog_io.erl:
+     │
+ 229 │  write_term1({'$VAR',N}, _, #ops{numbervars=true}=Ops)
+     │                                                   ╰── Warning: variable 'Ops' is unused
+
+
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1158 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1158 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1158 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 16-Oct-2026::22:17:18.641413 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.18417.0>
+    registered_name: []
+    exception exit: invalid_vault_configuration
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.18416.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.18416.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 233
+    stack_size: 29
+    reductions: 110
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=CRASH REPORT==== 16-Oct-2026::22:17:18.711675 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.18433.0>
+    registered_name: []
+    exception exit: vault_receipts_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.18432.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.18432.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 2690
+  neighbours:
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 16-Oct-2026::22:17:19.087256 ===
+Failed to start Ranch listener quod_agent_vault_listener in ranch_ssl:listen([{cacerts,'...'},{key,'...'},{cert,'...'},{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{port,0},{ip,{127,0,0,1}},{certfile,"/tmp/quod_vault_FDF4372F9DA43770/tls/server.crt.pem"},{keyfile,"/tmp/quod_vault_FDF4372F9DA43770/tls/server.key.pem"},{cacertfile,"/tmp/quod_vault_FDF4372F9DA43770/clients.pem"},{verify,verify_peer},{fail_if_no_peer_cert,true}]) for reason eperm (not owner)
+
+=CRASH REPORT==== 16-Oct-2026::22:17:19.087376 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.18534.0>
+    registered_name: []
+    exception exit: {listen_error,quod_agent_vault_listener,eperm}
+      in function  ranch_acceptors_sup:listen_error/5 (/home/yan/src/quod/_build/voxel-world-20261016/clean-fixes-01/tree/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:66)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.18532.0>,ranch_sup,<0.18523.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.18532.0>]
+    dictionary: [{logger,error_logger}]
+    trap_exit: true
+    status: running
+    heap_size: 2586
+    stack_size: 29
+    reductions: 18072
+  neighbours:
+
+=SUPERVISOR REPORT==== 16-Oct-2026::22:17:19.087540 ===
+    supervisor: {<0.18532.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_agent_vault_listener,eperm}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_agent_vault_listener,ranch_ssl]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=CRASH REPORT==== 16-Oct-2026::22:17:19.087756 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.18531.0>
+    registered_name: []
+    exception exit: vault_provider_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.18363.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.18363.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 2402
+  neighbours:
+    neighbour:
+      pid: <0.18498.0>
+      registered_name: []
+      initial_call: {eunit_proc,group_leader_process,1}
+      current_function: {eunit_proc,group_leader_loop,3}
+      ancestors: []
+      message_queue_len: 0
+      links: [<0.18363.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 233
+      stack_size: 5
+      reductions: 7
+      current_stacktrace: [{eunit_proc,group_leader_loop,3,
+                              [{file,"eunit_proc.erl"},{line,627}]}]
+    neighbour:
+      pid: <0.18501.0>
+      registered_name: quod_client_auth
+      initial call: quod_client_auth:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.18363.0>]
+      message_queue_len: 0
+      links: [<0.18363.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 376
+      stack_size: 9
+      reductions: 390
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.18508.0>
+      registered_name: []
+      initial call: quod_prolog:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.18363.0>]
+      message_queue_len: 0
+      links: [<0.18363.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 1598
+      stack_size: 9
+      reductions: 63512
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.18502.0>
+      registered_name: []
+      initial call: quod_prolog:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.18363.0>]
+      message_queue_len: 0
+      links: [<0.18363.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 2586
+      stack_size: 9
+      reductions: 22853
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.18500.0>
+      registered_name: []
+      initial call: quod_ask_router:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.18363.0>]
+      message_queue_len: 0
+      links: [<0.18363.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 987
+      stack_size: 9
+      reductions: 847
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.18363.0>
+      registered_name: []
+      initial_call: {erlang,apply,2}
+      current_function: {proc_lib,sync_start,2}
+      ancestors: []
+      message_queue_len: 0
+      links: [<0.18500.0>,<0.18502.0>,<0.18508.0>,<0.18531.0>,<0.18501.0>,
+                  <0.18498.0>,<0.18362.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 6772
+      stack_size: 111
+      reductions: 5468187
+      current_stacktrace: [{proc_lib,sync_start,2,[{file,"proc_lib.erl"},{line,438}]},
+                  {quod_agent_vault_tests,with_provider,2,
+                      [{file,
+                           "/home/yan/src/quod/_build/voxel-world-20261016/clean-fixes-01/tree/test/quod_agent_vault_tests.erl"},
+                       {line,644}]},
+                  {quod_agent_vault_tests,
+                      '-custody_and_signing_through_signed_ingress_and_foreign_scope_test/0-fun-9-',
+                      3,
+                      [{file,
+                           "/home/yan/src/quod/_build/voxel-world-20261016/clean-fixes-01/tree/test/quod_agent_vault_tests.erl"},
+                       {line,514}]},
+                  {quod_agent_vault_tests,with_vault,1,
+                      [{file,
+                           "/home/yan/src/quod/_build/voxel-world-20261016/clean-fixes-01/tree/test/quod_agent_vault_tests.erl"},
+                       {line,673}]},
+                  {eunit_test,'-mf_wrapper/2-fun-0-',2,
+                      [{file,"eunit_test.erl"},{line,285}]},
+                  {eunit_test,run_testfun,1,
+                      [{file,"eunit_test.erl"},{line,83}]},
+                  {eunit_proc,run_test,1,[{file,"eunit_proc.erl"},{line,554}]},
+                  {eunit_proc,with_timeout,3,
+                      [{file,"eunit_proc.erl"},{line,379}]}]
+
+Pending:
+[0;33m  undefined
+[0m[0;36m    %% Related process exited with reason: vault_provider_unavailable
+[0m
+
+Finished in ? seconds
+[0;33m49 tests, 0 failures, 6 cancelled
+[0m===> Error running tests

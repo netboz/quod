@@ -1,0 +1,57 @@
+{
+  "completed_at": "2026-10-17T01:46:35.712812+00:00",
+  "version": "0.7.273",
+  "url": "https://192.168.1.10:30519/",
+  "image": "192.168.1.11:5000/quod:0.7.273@sha256:4fa80d816a4d7583b988d63b6ff4d530c74b3df2ef0379d5bb7b40ff763a33c5",
+  "source_committed": false,
+  "frozen_source": "clean-integration-07",
+  "release_gates": 12,
+  "candidate_job": "quod-finality-candidate-v6-20260926",
+  "candidate_version": 95,
+  "candidate_modify_index": 869134,
+  "root_anchor": "EAFE717C9894C99D25D50D92853A65A1D7E9B66CF756E2F7583F562685F37CCB",
+  "nodes": 8,
+  "restarts": 0,
+  "system_ontologies_per_node": 18,
+  "module_profiles_verified": true,
+  "main_unchanged": {
+    "version": 246,
+    "job_modify_index": 826727
+  },
+  "ingress_unchanged": true,
+  "retired_candidate_volumes_deleted": 16,
+  "desktop_passed": true,
+  "pending_operations": 0,
+  "page_errors": [],
+  "walking": [
+    {
+      "case": "walked across meadow terrain",
+      "horizontal_metres": 1.4584114502756227
+    },
+    {
+      "case": "walked across highland terrain",
+      "horizontal_metres": 1.1676114948104936
+    },
+    {
+      "case": "walked after reentry",
+      "horizontal_metres": 1.4178182370970902
+    }
+  ],
+  "production_delta": {
+    "added": 995,
+    "removed": 338,
+    "net": 657,
+    "files": 40
+  },
+  "physical_vr_tested": false,
+  "application_fable_review": "../review-06/fable-review.md",
+  "application_independent_assessment": "../review-07/assessment.md",
+  "deployment_recipe_review": "../deployment-02-independent-assessment.md",
+  "additional_fable_recipe_review_completed": false,
+  "additional_fable_recipe_review_limit": "Provider session quota; response saved separately",
+  "preview_shutdown": {
+    "backend_exit": 0,
+    "vite_exit": 130,
+    "intentional": true
+  }
+}

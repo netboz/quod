@@ -1,0 +1,537 @@
+--- frozen04/src/quod_terrain_wire.erl
++++ clean06/src/quod_terrain_wire.erl
+@@ -0,0 +1,56 @@
++-module(quod_terrain_wire).
++-moduledoc "Pure terrain message encoding and packing under the existing view-frame bound.".
++-include("quod_client_goal_limits.hrl").
++-export([message/1, admit/3, batch/2]).
++
++message({terrain_manifest,Token,Interest,Rows}) ->
++    #{type => terrain_manifest,token => b64(Token),interest_seq => decimal(Interest),chunks => [
++        #{index => maps:get(index,R),body => decimal(maps:get(body,R)),
++          revision => decimal(maps:get(revision,R)),
++          chunk => [decimal(N) || N <- tuple_to_list(maps:get(chunk,R))],
++          origin_mm => [decimal(N) || N <- tuple_to_list(maps:get(origin,R))],
++          spacing_mm => maps:get(spacing,R),digest => binary:encode_hex(maps:get(digest,R),lowercase),
++          costs => maps:get(costs,R)} || R <- Rows]};
++message({terrain_chunks,Token,Chunks,Complete}) ->
++    #{type => terrain_chunks,token => b64(Token),complete => Complete,
++      chunks => [chunk(I,Payload) || {I,Payload} <- Chunks]}.
++
++%% View and resource tokens are canonical URL-safe encodings of 256-bit hashes.
++%% Measure the actual envelope; false is one byte longer than the final true.
++envelope(Token) -> encoded_size(message({terrain_chunks,Token,[],false})).
++encoded_size(Message) ->
++    iolist_size(json:encode(Message#{view => b64(<<0:256>>)})).
++
++admit(Token,Interest,Rows) ->
++    try
++        check_size("manifest",encoded_size(message({terrain_manifest,Token,Interest,Rows}))),
++        Base = envelope(Token),
++        lists:foreach(fun(#{index := I,payload := Payload}) ->
++            check_size("chunk",Base + chunk_size({I,Payload}))
++        end,Rows),
++        ok
++    catch throw:Reason -> {error,Reason} end.
++
++%% The owner retains the snapshot and remaining indices. This pure prefix
++%% selection adds no queue or allocation policy; admit/3 already checked rows.
++batch(Token,Chunks) ->
++    take(Chunks,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES-envelope(Token),0,[]).
++take([],_,_,Acc) -> {lists:reverse(Acc),[]};
++take([Row|Rest] = Remaining,Available,Separator,Acc) ->
++    Needed = chunk_size(Row) + Separator,
++    case Needed =< Available of
++        true -> take(Rest,Available-Needed,1,[Row|Acc]);
++        false -> {lists:reverse(Acc),Remaining}
++    end.
++
++%% URL-safe base64 needs no JSON escaping and omits padding. All other entry
++%% bytes come from the same serializer used for delivery, including the index.
++chunk_size({I,Payload}) ->
++    iolist_size(json:encode(chunk(I,<<>>))) + (4*byte_size(Payload)+2) div 3.
++chunk(I,Payload) -> #{index => I,payload => b64(Payload)}.
++check_size(Kind,Bytes) when Bytes > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES ->
++    throw(iolist_to_binary(io_lib:format("Terrain ~s encoding: required ~B bytes, frame limit ~B.",
++                                        [Kind,Bytes,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES])));
++check_size(_,_) -> ok.
++decimal(N) -> integer_to_binary(N).
++b64(B) -> base64:encode(B,#{mode => urlsafe,padding => false}).
+--- frozen04/src/quod_physics.erl
++++ clean06/src/quod_physics.erl
+@@ -184,7 +184,8 @@
+                 true -> V#{terrain_wanted => lists:sort(Ids),credit => true};
+                 false -> V
+             end;
+-        {{terrain_chunks,Token},complete} -> V#{terrain_complete => true,credit => true};
++        {{terrain_chunks,Token,complete},complete} -> V#{terrain_complete => true,credit => true};
++        {{terrain_chunks,Token,{through,Index}},{through,Index}} -> V#{credit => true};
+         _ -> V
+     end,
+     {noreply,deliver_frame(S#s{viewer = Next})};
+@@ -918,10 +919,15 @@
+                 {ok,[]} when Requests =:= [] -> deliver_pose(S#s{viewer = V#{terrain_source => SourceKey}},Frame,Previous);
+                 {ok,Rows} ->
+                     Token = crypto:strong_rand_bytes(32),
+-                    send_view_resource({terrain_manifest,Token,Interest,[maps:remove(payload,R) || R <- Rows]},V),
+-                    S#s{viewer = V#{terrain_source => SourceKey,terrain_snapshot => Rows,
+-                        terrain_token => Token,terrain_complete => false,terrain_wanted => [],
+-                        delivery => {terrain_manifest,Token},credit => false}};
++                    case quod_terrain_wire:admit(Token,Interest,Rows) of
++                        ok ->
++                            send_view_resource({terrain_manifest,Token,Interest,[maps:remove(payload,R) || R <- Rows]},V),
++                            S#s{viewer = V#{terrain_source => SourceKey,terrain_snapshot => Rows,
++                                terrain_token => Token,terrain_complete => false,terrain_wanted => [],
++                                delivery => {terrain_manifest,Token},credit => false}};
++                        {error,Reason} ->
++                            send_view_resource({terrain_unavailable,Reason},V),clear_viewer(S)
++                    end;
+                 {error,Reason} ->
+                     send_view_resource({terrain_unavailable,Reason},V),clear_viewer(S)
+             end
+@@ -935,8 +941,12 @@
+             Wanted = maps:from_keys(maps:get(terrain_wanted,V),true),
+             Chunks = [{I,maps:get(payload,Row)} || Row = #{index := I} <- maps:get(terrain_snapshot,V),
+                                                  is_map_key(I,Wanted)],
+-            send_view_resource({terrain_chunks,Token,Chunks},V),
+-            S#s{viewer = V#{delivery => {terrain_chunks,Token},credit => false}}
++            {Batch,Remaining} = quod_terrain_wire:batch(Token,Chunks),
++            Complete = Remaining =:= [],
++            Ack = case Complete of true -> complete; false -> {through,element(1,lists:last(Batch))} end,
++            send_view_resource({terrain_chunks,Token,Batch,Complete},V),
++            S#s{viewer = V#{delivery => {terrain_chunks,Token,Ack},
++                            terrain_wanted => [I || {I,_} <- Remaining],credit => false}}
+     end.
+ 
+ send_view_resource(Message,#{pid := Pid,ref := Ref}) ->
+--- frozen04/src/quod_client_view.erl
++++ clean06/src/quod_client_view.erl
+@@ -77,6 +77,7 @@
+                 <<_:256>> = Token = base64:decode(Token64,#{mode => urlsafe,padding => false}),
+                 Value = case Ack of
+                     #{<<"want">> := Ids} when is_list(Ids) -> {want,Ids};
++                    #{<<"through">> := Index} when is_integer(Index),Index >= 0 -> {through,Index};
+                     #{<<"complete">> := true} -> complete
+                 end,
+                 {terrain_ack,View,Token,Value};
+@@ -584,7 +585,7 @@
+     case Expiry > quod_time:now_ms() of
+         true -> case Resource of
+             {terrain_unavailable,Reason} -> reply(#{type => unavailable,reason => Reason},release(S));
+-            _ -> reply((terrain_json(Resource))#{view => View},S)
++            _ -> reply((quod_terrain_wire:message(Resource))#{view => View},S)
+         end;
+         false -> reply(#{type => unavailable,reason => expired},release(S))
+     end;
+@@ -673,18 +674,6 @@
+         {{ok,Height},_} -> resume_projection(S#{local_ready := Ready#{Ns => true}});
+         _ -> {ok,S}
+     end.
+-
+-terrain_json({terrain_manifest,Token,Interest,Rows}) ->
+-    #{type => terrain_manifest,token => b64(Token),interest_seq => decimal(Interest),chunks => [
+-        #{index => maps:get(index,R),body => decimal(maps:get(body,R)),
+-          revision => decimal(maps:get(revision,R)),
+-          chunk => [decimal(N) || N <- tuple_to_list(maps:get(chunk,R))],
+-          origin_mm => [decimal(N) || N <- tuple_to_list(maps:get(origin,R))],
+-          spacing_mm => maps:get(spacing,R),digest => binary:encode_hex(maps:get(digest,R),lowercase),
+-          costs => maps:get(costs,R)} || R <- Rows]};
+-terrain_json({terrain_chunks,Token,Chunks}) ->
+-    #{type => terrain_chunks,token => b64(Token),
+-      chunks => [#{index => Id,payload => b64(Payload)} || {Id,Payload} <- Chunks]}.
+ 
+ frame_json(Frame = #{fence := {World, Authority, Epoch, Generation}, structure := Structure,
+              incarnation := Token, tick := Tick, poses := Poses}, Bodies,Control) ->
+--- frozen04/client/src/simulation.js
++++ clean06/client/src/simulation.js
+@@ -218,14 +218,19 @@
+       await render(view)
+       if (live()) send({ type: 'terrain_ack', view: view.view, token, want })
+     } else if (message.token === token) {
++      require(Array.isArray(message.chunks) && typeof message.complete === 'boolean' &&
++        (message.complete || message.chunks.length > 0) &&
++        message.chunks.every(chunk => Number.isSafeInteger(chunk.index) && chunk.index >= 0), 'content batch')
++      const acknowledgement = message.complete ? { complete: true } : { through: message.chunks.at(-1).index }
+       // Superseded interest releases only this token's delivery credit. It
+       // cannot install geometry or announce completion for the newer camera.
+       if (manifestInterest !== interest) {
+-        send({ type: 'terrain_ack', view: view.view, token, complete: true })
++        send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement })
+         return
+       }
+       const missing = rows.filter(row => !retained.has(key(row)))
+-      require(Array.isArray(message.chunks) && message.chunks.length === missing.length &&
++      require(message.chunks.length <= missing.length &&
++        message.complete === (message.chunks.length === missing.length) &&
+         message.chunks.every((chunk, i) => chunk.index === missing[i].index), 'requested chunks')
+       const verified = []
+       for (const [i, chunk] of message.chunks.entries()) {
+@@ -237,7 +242,7 @@
+           .map(n => n.toString(16).padStart(2, '0')).join('')
+         if (!live()) return
+         if (manifestInterest !== interest) {
+-          send({ type: 'terrain_ack', view: view.view, token, complete: true }); return
++          send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement }); return
+         }
+         require(digest === row.digest, 'content digest')
+         const header = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
+@@ -249,11 +254,11 @@
+       view.terrain = retained
+       await render(view)
+       if (!live()) return
+-      if (manifestInterest === interest) {
++      if (message.complete && manifestInterest === interest) {
+         view.terrainReady = true
+         await render(view)
+       }
+-      if (live()) send({ type: 'terrain_ack', view: view.view, token, complete: true })
++      if (live()) send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement })
+     }
+   }
+   return { project, discard,
+--- frozen04/client/test/terrain-delivery.test.js
++++ clean06/client/test/terrain-delivery.test.js
+@@ -66,7 +66,7 @@
+     let release
+     hold = new Promise(resolve => { release = resolve })
+     rendered = new Promise(resolve => { signal = resolve })
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await rendered
+     assert.equal(socket.sent.length, 0, 'renderer completion holds delivery credit')
+     const chunk = painted.get('land').chunks.get('0:0,0,0'), instance = chunk.instance
+@@ -89,7 +89,7 @@
+     assert.deepEqual((await socket.next()).want, [])
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, instance)
+     assert.equal(painted.get('land').node.isEnabled(), true, 'confirmed retained chunks stay visible')
+-    socket.receive({ type: 'terrain_chunks', view, token: nextToken, chunks: [] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token: nextToken, chunks: [] })
+     await socket.next()
+     socket.receive({ type: 'terrain_manifest', interest_seq: '1', view, token, chunks: [] })
+     assert.deepEqual((await socket.next()).want, [])
+@@ -111,6 +111,50 @@
+     assert.match(failures[0], /aggregate allowance/)
+     assert.equal(rendered.length, 1)
+     assert.equal(socket.sent.length, 0)
++  } finally { stream.close() }
++})
++
++test('content batches retain visible progress and acknowledge exact prefixes before final readiness', async () => {
++  const failures = []
++  let current
++  const { socket, stream, view } = await connection(value => { current = value }, failures)
++  const token = Buffer.alloc(32, 12).toString('base64url')
++  const encoded = Buffer.from(payload).toString('base64url')
++  try {
++    socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row,
++      { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
++    assert.deepEqual((await socket.next()).want, [0, 1])
++    socket.receive({ type: 'terrain_chunks', view, token, complete: false, chunks: [{ index: 0, payload: encoded }] })
++    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
++    assert.equal(current.terrain.size, 1)
++    assert.equal(current.terrainReady, false)
++    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '2' } })
++    assert.equal((await socket.next()).tick, '2')
++    assert.equal(current.terrain.size, 1)
++    socket.receive({ type: 'terrain_chunks', view, token, complete: true, chunks: [{ index: 1, payload: encoded }] })
++    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, complete: true })
++    assert.equal(current.terrain.size, 2)
++    assert.equal(current.terrainReady, true)
++    assert.deepEqual(failures, [])
++  } finally { stream.close() }
++})
++
++test('a stale partial batch releases only its own ending without installing content', async () => {
++  const failures = []
++  let current
++  const { socket, stream, view } = await connection(value => { current = value }, failures)
++  const token = Buffer.alloc(32, 13).toString('base64url')
++  try {
++    socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row,
++      { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
++    await socket.next()
++    current.interest([2, 0, 0]); await socket.next()
++    socket.receive({ type: 'terrain_chunks', view, token, complete: false,
++      chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
++    assert.equal(current.terrain.size, 0)
++    assert.equal(current.terrainReady, false)
++    assert.deepEqual(failures, [])
+   } finally { stream.close() }
+ })
+ 
+@@ -133,7 +177,7 @@
+         const damaged = Buffer.from(payload); damaged[20] ^= 1
+         chunks[1].payload = damaged.toString('base64url')
+       }
+-      socket.receive({ type: 'terrain_chunks', view, token, chunks })
++      socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks })
+       assert.match(await failure, bad === 'digest' ? /content digest/ : /requested chunks/)
+       assert.equal(current.terrain.size, 0)
+       assert.equal(current.terrainReady, false)
+@@ -157,7 +201,7 @@
+   try {
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row] })
+     await socket.next()
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await socket.next()
+     const model = painted.get('land').chunks.get('0:0,0,0').instance
+     socket.receive({ type: 'refresh', reason: 'changed' })
+@@ -172,7 +216,7 @@
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, model)
+     socket.receive({ type: 'terrain_manifest', view: next, token, interest_seq: '0', chunks: [{ ...row, revision: '2' }] })
+     assert.deepEqual((await socket.next()).want, [])
+-    socket.receive({ type: 'terrain_chunks', view: next, token, chunks: [] }); await socket.next()
++    socket.receive({ type: 'terrain_chunks', complete: true, view: next, token, chunks: [] }); await socket.next()
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, model)
+     assert.equal(painted.get('land').node.isEnabled(), true)
+     assert.deepEqual(failures, [])
+@@ -196,7 +240,7 @@
+     try {
+       socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row] })
+       await socket.next()
+-      socket.receive({ type: 'terrain_chunks', view, token,
++      socket.receive({ type: 'terrain_chunks', complete: true, view, token,
+         chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+       assert.equal((await socket.next()).complete, true)
+       const model = painted.get('land').chunks.get('0:0,0,0').instance
+@@ -232,12 +276,12 @@
+     assert.equal(current.terrainReady, false)
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [placed] })
+     assert.deepEqual((await socket.next()).want, [])
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [] })
+     assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, false)
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '1', chunks: [placed] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, true)
+     assert.equal(current.interest([3.2, 2, 2]), true)
+@@ -269,7 +313,7 @@
+     current.interest([0, 0, 0]); await socket.next()
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '1', chunks: [row] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await checking
+     current.interest([2, 0, 0]); assert.equal((await socket.next()).sequence, '2')
+     release()
+@@ -296,7 +340,7 @@
+     socket.receive({ type: 'terrain_manifest', interest_seq: '0', view, token, chunks: [{ ...row,
+       chunk: [String(chunkX), '0', '0'], origin_mm: [String(origin), '0', '0'] }] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    socket.receive({ type: 'terrain_chunks', complete: true, view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await socket.next()
+     const entry = painted.get('land').chunks.get(`0:${chunkX},0,0`), model = entry.instance
+     assert.deepEqual(entry.node.position.asArray(), [0, 0, 0])
+--- frozen04/test/quod_terrain_wire_tests.erl
++++ clean06/test/quod_terrain_wire_tests.erl
+@@ -0,0 +1,36 @@
++-module(quod_terrain_wire_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include("quod_client_goal_limits.hrl").
++
++content_batches_fit_the_actual_json_frame_test() ->
++    Token = <<42:256>>,
++    Chunks = [{I,binary:copy(<<I>>,N)} || {I,N} <- [{0,233488},{1,100000},{2,233488},{3,100000}]],
++    ?assertEqual(ok,quod_terrain_wire:admit(Token,1,[row(I,B) || {I,B} <- Chunks])),
++    ?assert(frame_size({terrain_chunks,Token,Chunks,true}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++    ?assertEqual(2,check_batches(Token,Chunks,0)),
++    ?assertEqual({[],[]},quod_terrain_wire:batch(Token,[])).
++
++individual_content_and_manifest_bounds_test() ->
++    Token = <<42:256>>,Payload = binary:copy(<<255>>,400000),
++    ?assertMatch({error,<<"Terrain chunk encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,[row(0,Payload)])),
++    Rows = [row(I,<<>>) || I <- lists:seq(0,3999)],
++    ?assert(frame_size({terrain_manifest,Token,1,Rows}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++    ?assertMatch({error,<<"Terrain manifest encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,Rows)).
++
++check_batches(_,[],Count) -> Count;
++check_batches(Token,Chunks,Count) ->
++    {Batch,Rest} = quod_terrain_wire:batch(Token,Chunks),
++    ?assertNotEqual([],Batch),?assertEqual(Chunks,Batch++Rest),
++    ?assert(frame_size({terrain_chunks,Token,Batch,Rest =:= []}) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++    case Rest of
++        [Next|_] -> ?assert(frame_size({terrain_chunks,Token,Batch++[Next],false}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES);
++        [] -> ok
++    end,
++    check_batches(Token,Rest,Count+1).
++
++frame_size(Resource) ->
++    Message = quod_terrain_wire:message(Resource),
++    iolist_size(json:encode(Message#{view => base64:encode(<<7:256>>,#{mode => urlsafe,padding => false})})).
++row(I,Payload) ->
++    #{index => I,body => 1,revision => 1,chunk => {I,0,0},origin => {I*4000,0,0},
++      spacing => 500,digest => crypto:hash(sha256,Payload),costs => [byte_size(Payload),0,0,0,1],payload => Payload}.
+--- frozen04/test/quod_physics_tests.erl
++++ clean06/test/quod_physics_tests.erl
+@@ -1,5 +1,6 @@
+ -module(quod_physics_tests).
+ -include_lib("eunit/include/eunit.hrl").
++-include("quod_client_goal_limits.hrl").
+ 
+ first_host_and_complete_configuration_commit_together_test_() ->
+     [{binary_to_list(Ns),{timeout,90,fun() -> with_world(Ns,
+@@ -5210,7 +5211,7 @@
+                 receive {physics_resource,Pid,Ref,_} -> error(pose_credit_not_fenced) after 0 -> ok end,
+                 quod_physics:ack(Pid,Ref,maps:get(tick,Latest),maps:get(origin_sequence,Latest))
+         end,
+-        receive {physics_resource,Pid,Ref,{terrain_chunks,Manifest,[{0,Payload}]}} -> ok
++        receive {physics_resource,Pid,Ref,{terrain_chunks,Manifest,[{0,Payload}],true}} -> ok
+             after 5000 -> error(chunk_missing) end,
+         quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+         _ = gen_server:call(Pid,status),
+@@ -5224,7 +5225,7 @@
+             after 5000 -> error(empty_replacement_missing) end,
+         ?assertNotEqual(Manifest,Replacement),
+         quod_physics:resource_ack(Pid,Ref,Replacement,{want,[]}),
+-        receive {physics_resource,Pid,Ref,{terrain_chunks,Replacement,[]}} -> ok
++        receive {physics_resource,Pid,Ref,{terrain_chunks,Replacement,[],true}} -> ok
+             after 5000 -> error(empty_complete_missing) end
+     end) end}} || Mode <- [static,moving]].
+ 
+@@ -5270,7 +5271,74 @@
+             end)
+     end,{view_distance,4000,1000,2000},{resources,20000,60000,2000,1000,3},[]) end}.
+ 
++voxel_signed_view_batches_large_resident_selection_test_() ->
++    {timeout,90,fun() -> with_voxel_view(fun(#{physics := Pid,socket := Socket,projection := Projection}) ->
++        View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
++        socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
++            centre_mm => [<<"2000">>,<<"2000">>,<<"2000">>]}),
++        socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
++            origin_seq => maps:get(<<"origin_seq">>,Frame)}),
++        Manifest = large_terrain_manifest(Socket,View),
++        Rows = maps:get(<<"chunks">>,Manifest),Token = maps:get(<<"token">>,Manifest),
++        ?assertEqual(27,length(Rows)),
++        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++        socket_command(Socket,#{type => terrain_ack,view => View,token => Token,
++            want => [maps:get(<<"index">>,R) || R <- Rows]}),
++        Batches = consume_large_terrain(Socket,Pid,View,Token,Rows,0),
++        ?assert(Batches > 1),
++        ?assertMatch(#{pid := Pid},simulation_state(Socket))
++    end,{view_distance,4000,1000,2000},{resources,2000000,4000000,100000,50000,64},[],
++    fun(#{namespace := Ns}) ->
++        %% This authored field exercises the ordinary resident-resource path
++        %% with more content than a single view frame can encode.
++        Before = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
++        After = setelement(3,Before,{limits,64,64,256,1000000,{geometry,256,100000,100000}}),
++        commit(Ns,{',',{retract,Before},{assertz,After}}),
++        {field_v1,41,500,[{plane,100000},{caves,2000,8,12000,1500}],9}
++    end) end}.
++
++large_terrain_manifest(Socket,View) ->
++    Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
++    case maps:get(<<"interest_seq">>,Manifest) of
++        <<"1">> -> Manifest;
++        <<"0">> ->
++            Token = maps:get(<<"token">>,Manifest),
++            socket_command(Socket,#{type => terrain_ack,view => View,token => Token,want => []}),
++            %% The owner may replace an obsolete snapshot immediately after
++            %% its acknowledgement, without sending its empty completion.
++            large_terrain_manifest(Socket,View)
++    end.
++
++consume_large_terrain(Socket,Pid,View,Token,Rows,Count) ->
++    Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
++    ?assert(iolist_size(json:encode(Content)) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++    ?assertEqual(Token,maps:get(<<"token">>,Content)),
++    Chunks = maps:get(<<"chunks">>,Content),?assertNotEqual([],Chunks),
++    {Selected,Rest} = lists:split(length(Chunks),Rows),
++    lists:foreach(fun({Row,Chunk}) ->
++        ?assertEqual(maps:get(<<"index">>,Row),maps:get(<<"index">>,Chunk)),
++        Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
++        ?assertEqual(hd(maps:get(<<"costs">>,Row)),byte_size(Bytes)),
++        ?assertEqual(maps:get(<<"digest">>,Row),binary:encode_hex(crypto:hash(sha256,Bytes),lowercase))
++    end,lists:zip(Selected,Chunks)),
++    ?assertEqual(Rest =:= [],maps:get(<<"complete">>,Content)),
++    Ack = fun(Value) -> socket_command(Socket,Value#{type => terrain_ack,view => View,token => Token}) end,
++    case Rest of
++        [] -> Ack(#{complete => true}),Count+1;
++        _ ->
++            Last = maps:get(<<"index">>,lists:last(Chunks)),
++            Ack(#{complete => true}),Ack(#{through => Last+1}),
++            _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
++            receive {simulation,Socket,_} -> error(inexact_ack_released_delivery) after 0 -> ok end,
++            Ack(#{through => Last}),
++            consume_large_terrain(Socket,Pid,View,Token,Rest,Count+1)
++    end.
++
+ with_voxel_view(Fun,Distance,Resources,ExtraBodies) ->
++    with_voxel_view(Fun,Distance,Resources,ExtraBodies,
++        fun(_) -> {field_v1,1,500,[{plane,1000}],9} end).
++
++with_voxel_view(Fun,Distance,Resources,ExtraBodies,FieldSetup) ->
+     with_voxel_world(fun(F = #{namespace := Ns,identity := Identity,directory := Dir}) ->
+         ModellingNs = <<"physics-test-modelling">>,
+         Modelling = quod_agent_hosting_tests:start_ontology(ModellingNs,Dir,Identity,
+@@ -5278,8 +5346,9 @@
+             [{rendering_vocabulary,<<"physics-test-rendering">>,quod_simplex:genesis_hash(<<"physics-test-rendering">>)}]),
+         try
+         commit(Ns,{assertz,{modelling_vocabulary,ModellingNs,quod_simplex:genesis_hash(ModellingNs)}}),
++        Field = FieldSetup(F),
+         Created = door_action(Ns,{voxel_create,room,0,
+-            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
++            {terrain_v1,unbounded,smooth,Field}}),
+         ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created), await_source_receipt(Created),
+         lists:foreach(fun(Definition) -> commit(Ns,{assertz,Definition}) end,ExtraBodies),
+         {Pid,World} = enable(F),
+--- frozen04/test/quod_gui_examples_tests.erl
++++ clean06/test/quod_gui_examples_tests.erl
+@@ -187,10 +187,11 @@
+         {physics_resource,Pid,Ref,{terrain_manifest,Token,Interest,Rows}} ->
+             quod_physics:resource_ack(Pid,Ref,Token,{want,[maps:get(index,R) || R <- Rows]}),
+             consume_world_terrain(Runtime,World,Pid,Ref,{Token,Interest},Deadline);
+-        {physics_resource,Pid,Ref,{terrain_chunks,Token,_Chunks}} ->
+-            quod_physics:resource_ack(Pid,Ref,Token,complete),
+-            case Current of
+-                {Token,1} -> ok;
++        {physics_resource,Pid,Ref,{terrain_chunks,Token,Chunks,Complete}} ->
++            Ack = case Complete of true -> complete; false -> {through,element(1,lists:last(Chunks))} end,
++            quod_physics:resource_ack(Pid,Ref,Token,Ack),
++            case {Current,Complete} of
++                {{Token,1},true} -> ok;
+                 _ -> consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline)
+             end;
+         {physics_frame,Pid,Ref,Frame} ->
+--- frozen04/doc/voxel-world.md
++++ clean06/doc/voxel-world.md
+@@ -331,11 +331,15 @@
+ and terrain resources. A bounded manifest names current chunks, canonical
+ origins, content digests and measured costs. The browser discards obsolete
+ leases and requests only missing indices. The owner delivers those indices in
+-one content message bounded by the manifest's already admitted transfer and
+-geometry allowances, including an empty message when everything is retained.
+-The browser verifies the exact requested set and all digests before installing
+-new bytes, then acknowledges completion after rendering. There is no network
+-round trip per chunk. A fresh physical frame alternates with resources on that
++ordered content batches that each fit the existing encoded view-message limit.
++The manifest's Prolog transfer and geometry allowances still bound the whole
++window. The shared terrain serializer also measures the envelope and rejects
++an oversized manifest or individual chunk before delivering the manifest.
++The browser verifies each requested prefix and all digests before installing
++new bytes, then acknowledges its last index after rendering. Only the final
++batch carries completion; a fully retained window receives one empty final
++batch. Early completion and acknowledgements for another batch release no
++credit. There is no network round trip per chunk. A fresh physical frame alternates with resources on that
+ same credit between acknowledgements; each outstanding delivery retains that
+ credit until its own acknowledgement.
+ Watch/reference and manifest tokens make stale acknowledgements harmless.
+--- frozen04/doc/physics-native.md
++++ clean06/doc/physics-native.md
+@@ -813,7 +813,9 @@
+ An origin shift can publish a new coherent frame without advancing the tick;
+ an acknowledgement for the old origin cannot release that frame's credit.
+ Terrain manifests and chunks share this same credit, with exact watch and
+-manifest tokens. Fresh frames alternate with resources on that credit, so a
++manifest tokens and exact acknowledged batch endings. Content batches fit the
++existing encoded message limit; aggregate allocation remains Prolog policy.
++Fresh frames alternate with resources on that credit, so a
+ long manifest cannot starve motion updates or vice versa. Completion gates
+ navigation commands; already verified chunks stay visible while loading.
+ 

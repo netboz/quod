@@ -1,0 +1,11 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_rendering_tests"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:43:38.641453+00:00"
+}

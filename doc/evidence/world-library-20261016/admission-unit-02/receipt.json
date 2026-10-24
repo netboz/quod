@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--module=quod_material_admission_tests,quod_genesis_tests,quod_dtx_tests,quod_transaction_tests,quod_scope_wire_tests"
+  ],
+  "started": "2026-10-16T22:31:12.840223+00:00",
+  "exit": 0,
+  "seconds": 2.86
+}

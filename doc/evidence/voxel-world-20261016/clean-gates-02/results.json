@@ -1,0 +1,119 @@
+[
+  {
+    "name": "native-clean",
+    "command": [
+      "cargo",
+      "clean",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "-p",
+      "quod_physics"
+    ],
+    "started": "2026-10-16T15:47:52.468787+00:00",
+    "exit": 0,
+    "seconds": 0.09,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-16T15:47:53.050074+00:00",
+    "exit": 0,
+    "seconds": 25.33,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-release-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--release",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-16T15:48:18.762011+00:00",
+    "exit": 0,
+    "seconds": 27.52,
+    "sources_unchanged": true
+  },
+  {
+    "name": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started": "2026-10-16T15:48:46.783950+00:00",
+    "exit": 0,
+    "seconds": 1.19,
+    "sources_unchanged": true
+  },
+  {
+    "name": "client-tests",
+    "command": [
+      "npm",
+      "--prefix",
+      "client",
+      "test"
+    ],
+    "started": "2026-10-16T15:48:48.239756+00:00",
+    "exit": 0,
+    "seconds": 1.4,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "started": "2026-10-16T15:48:50.073463+00:00",
+    "exit": 0,
+    "seconds": 6.01,
+    "sources_unchanged": true,
+    "public_assets_preserved": true
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "started": "2026-10-16T15:48:56.481452+00:00",
+    "exit": 0,
+    "seconds": 0.23,
+    "sources_unchanged": true
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit"
+    ],
+    "started": "2026-10-16T15:48:57.170721+00:00",
+    "exit": 1,
+    "seconds": 1024.65,
+    "sources_unchanged": true
+  }
+]

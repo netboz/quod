@@ -1,0 +1,165 @@
+--- original/prepare_candidate.py
++++ rolling/prepare_candidate.py
+@@ -1,4 +1,4 @@
+-"""Freeze the exact candidate maintenance/release/rollback bodies; no network writes."""
++"""Freeze the exact candidate release/rollback bodies; no network writes."""
+ from pathlib import Path
+ import copy,hashlib,json
+ b=Path(__file__).resolve().parent
+@@ -8,8 +8,7 @@
+ assert before['Version']==95 and before['JobModifyIndex']==869134
+ assert image.startswith('192.168.1.11:5000/quod:0.7.274@sha256:')
+ old='192.168.1.11:5000/quod:0.7.273@sha256:4fa80d816a4d7583b988d63b6ff4d530c74b3df2ef0379d5bb7b40ff763a33c5'
+-maintenance=copy.deepcopy(before);release=copy.deepcopy(before)
+-for g in maintenance['TaskGroups']:g['Count']=0
++release=copy.deepcopy(before)
+ changes=[]
+ for gi,g in enumerate(release['TaskGroups']):
+  for ti,t in enumerate(g['Tasks']):
+@@ -27,10 +26,9 @@
+   assert len(a)==len(c),path
+   return [d for i in range(len(a)) for d in diff(a[i],c[i],path+'/'+str(i))]
+  return [] if a==c else [{'path':path,'before':a,'after':c}]
+-for name,job in [('candidate-maintenance',maintenance),('candidate-release',release),('candidate-rollback',before)]:
++for name,job in [('candidate-release',release),('candidate-rollback',before)]:
+  with (b/(name+'.json')).open('x') as out:json.dump(job,out,indent=2);out.write('\n')
+-record={'maintenance_from_v95':diff(before,maintenance),'release_from_v95':diff(before,release),'release_from_maintenance':diff(maintenance,release)}
+-assert record['maintenance_from_v95']==[{'path':'/TaskGroups/0/Count','before':8,'after':0}]
++record={'release_from_v95':diff(before,release)}
+ assert [x['path'] for x in record['release_from_v95']]==changes
+ (b/'candidate-exact-diff.json').write_text(json.dumps(record,indent=2)+'\n')
+ print(json.dumps(record,indent=2))
+--- original/mutate_once.py
++++ rolling/mutate_once.py
+@@ -1,21 +1,18 @@
+ """One reviewed Nomad CAS mutation, then indexed observation; never resubmit."""
+ from pathlib import Path
+-import datetime,hashlib,json,socket,sys,time,urllib.error,urllib.request
++import datetime,hashlib,json,time,urllib.error,urllib.request
+ b=Path(__file__).resolve().parent
+ address='http://192.168.1.10:4646'; candidate='quod-finality-candidate-v6-20260926'
+-phase=sys.argv[1]
+-phases={'maintenance':('candidate-maintenance.json','candidate-before.json',{'quod-node':{'Stop':8}}),
+- 'release':('candidate-release.json','maintenance/job-after.json',{'quod-node':{'Place':8}})}
+-assert phase in phases
++phase='release'
++name='candidate-release.json';predecessor='candidate-before.json';expected_updates={'quod-node':{'DestructiveUpdate':1}}
+ clearance=json.loads((b/'review-clearance.json').read_text())
+ assert clearance['approved'] and clearance['mutation_manifest_sha256']==hashlib.sha256((b/'mutation-inputs.json').read_bytes()).hexdigest()
+ for name,digest in json.loads((b/'mutation-inputs.json').read_text()).items():
+  assert hashlib.sha256((b/name).read_bytes()).hexdigest()==digest,name
+ assert json.loads(Path('/home/yan/src/quod/doc/evidence/terrain-presentation-20261017/clean-presentation-05/PASSED.json').read_text())['passed']
+ assert json.loads((b/'verified-image.json').read_text())['registry_digest_matches']
+-name,predecessor,expected_updates=phases[phase];desired=json.loads((b/name).read_text()); jobid=desired['ID']
+-expected=json.loads((b/predecessor).read_text()) if predecessor else None
+-if phase=='release':assert json.loads((b/'maintenance/PASSED.json').read_text())['passed']
++desired=json.loads((b/name).read_text()); jobid=desired['ID']
++expected=json.loads((b/predecessor).read_text())
+ out=b/phase;out.mkdir()
+ def save(name,value):
+  with (out/name).open('x') as f:json.dump(value,f,indent=2);f.write('\n')
+@@ -43,13 +40,12 @@
+          and not confirmation.get('FailedTGAllocs') and not confirmation.get('Warnings'))
+ def check_before():
+  current=get_job(jobid)
+- if expected is None:assert current is None
+- else:
+-  assert current['JobModifyIndex']==expected['JobModifyIndex']
+-  assert semantic(current)==semantic(expected)
++ assert current is not None
++ assert current['JobModifyIndex']==expected['JobModifyIndex']
++ assert semantic(current)==semantic(expected)
+  unchanged_main()
+  return current
+-before=check_before();index=0 if before is None else before['JobModifyIndex'];version=0 if before is None else before['Version']+1
++before=check_before();index=before['JobModifyIndex'];version=before['Version']+1
+ plan,_=request('/v1/job/'+jobid+'/plan',{'Job':desired,'Diff':True});save('plan.json',plan)
+ assert plan['JobModifyIndex']==index and not plan.get('FailedTGAllocs'),plan.get('FailedTGAllocs')
+ assert not plan.get('Warnings'),plan.get('Warnings')
+@@ -82,22 +78,14 @@
+ print(json.dumps({'phase':phase,'version':version,'evaluation':response['EvalID']}),flush=True)
+ # Every observation follows Nomad's blocking index and one absolute deadline.
+ deadline=time.monotonic()+1200;watch='0';events=[]
+-path='/v1/job/'+jobid+('/allocations?all=true' if phase=='maintenance' else '/deployments?all=true')
++path='/v1/job/'+jobid+'/deployments?all=true'
+ while time.monotonic()<deadline:
+  rows,watch=request(path+'&index='+watch+'&wait=30s',timeout=min(40,max(1,deadline-time.monotonic())))
+- if phase=='maintenance':
+-  required={a['ID'] for a in json.loads((b/'allocations-before.json').read_text()) if a['DesiredStatus']=='run' and a['ClientStatus']=='running'}
+-  selected=[a for a in rows if a['ID'] in required]
+-  assert len(required)==8 and len(selected)==8
+-  active=[a for a in selected if a['ClientStatus']!='complete' or a['DesiredStatus']!='stop']
+-  state={'remaining':[{'id':a['ID'],'desired':a['DesiredStatus'],'client':a['ClientStatus']} for a in active]}
+-  done=not active
+- else:
+-  matches=[d for d in rows if d['JobVersion']==version]
+-  assert len(matches)<=1
+-  state=matches[0] if matches else {'awaiting_job_version':version}
+-  assert state.get('Status') not in ('failed','cancelled','blocked'),state
+-  done=state.get('Status')=='successful'
++ matches=[d for d in rows if d['JobVersion']==version]
++ assert len(matches)<=1
++ state=matches[0] if matches else {'awaiting_job_version':version}
++ assert state.get('Status') not in ('failed','cancelled','blocked'),state
++ done=state.get('Status')=='successful'
+  events.append(state);(out/'events.json').write_text(json.dumps(events,indent=2)+'\n')
+  print(json.dumps({'phase':phase,'status':state.get('Status'),'remaining':len(state.get('remaining',[]))}),flush=True)
+  if done:
+--- original/fleet_probe.py
++++ rolling/fleet_probe.py
+@@ -111,7 +111,7 @@
+ }
+ record.write_text(json.dumps(document, indent=2) + '\n')
+ 
+-assert candidate['Version'] == scope['candidate_version'] + 2
++assert candidate['Version'] == scope['candidate_version'] + 1
+ assert deployment['Status'] == 'successful'
+ assert set(task_images) == {image}
+ assert task_group['Volumes']['quod-data']['Source'] == volume_family
+--- original/shared_appearance.py
++++ rolling/shared_appearance.py
+@@ -22,11 +22,18 @@
+     assert clearance['approved'] and clearance['mutation_manifest_sha256']==hashlib.sha256((b/'mutation-inputs.json').read_bytes()).hexdigest()
+     for n,h in json.loads((b/'mutation-inputs.json').read_text()).items():assert hashlib.sha256((b/n).read_bytes()).hexdigest()==h,n
+     prepared=json.loads((b/'shared-appearance-prepare-03/result.json').read_text())
+-    expression='Edit=binary_to_term(base64:decode(<<"'+prepared['goal_base64']+'">>),[safe]),Result=quod_prolog:execute(<<"quod:root">>,Edit),#{result=>iolist_to_binary(io_lib:format("~0p",[Result])),success=>case Result of {ok,[_],_}->true;_->false end}'
++    expression='{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{material_eidolons,{\'MaterialNs\'},{\'MaterialAnchor\'}}),Edit=binary_to_term(base64:decode(<<"'+prepared['goal_base64']+'">>),[safe]),Result=quod_prolog:execute(<<"quod:root">>,Edit),#{result=>iolist_to_binary(io_lib:format("~0p",[Result])),success=>case Result of {ok,[_],_}->true;_->false end}'
+ else:
++    checks=[]
++    for row in json.loads((b/'shared-appearance-delta.json').read_text()):
++        name,arity=row['predicate'].split('/')
++        source='base64:decode(<<"'+base64.b64encode(row['after'].encode()).decode()+'">>)'
++        checks.append("{'$quod_program_source',{'Clauses'},"+source+"}")
++        checks[-1]="{',',"+checks[-1]+",{',',{'$quod_program_source',{'Clauses'},{'Canonical'}},{'$quod_predicate_source',{'/',"+name+","+arity+"},{'Canonical'}}}}"
+     expression='''{ok,[#{'Palette':=Palette}],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{world_palette,{'Palette'}}),
+ {ok,[#{'Source':=Source}],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{'$quod_predicate_source',{'/',lobby_options,3},{'Source'}}),
+-#{palette=>iolist_to_binary(erlog_io:writeq1(Palette)),lobby_options=>Source}'''
++lists:foreach(fun(Check)->{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,Check) end,[CHECKS]),
++#{verified=>true,palette=>iolist_to_binary(erlog_io:writeq1(Palette)),lobby_options=>Source}'''.replace('CHECKS',','.join(checks))
+ encoded='binary_to_list(base64:encode(iolist_to_binary(json:encode(begin '+expression+' end)))).'
+ command=['nomad','alloc','exec','-i=false','-t=false','-address='+address,'-task','quod',alloc[0]['ID'],'/opt/quod/bin/quod','eval',encoded]
+ (out/'intent.json').write_text(json.dumps({'phase':phase,'allocation':alloc[0]['ID'],'expression':expression,'read_only':phase!='execute'},indent=2)+'\n')
+--- original/wild-realm-owner-update.pl
++++ rolling/wild-realm-owner-update.pl
+@@ -19,7 +19,8 @@
+ assertz((space_member(SkyWorld,entity_ref(SkyNamespace,SkyAnchor,world_sky(SkyWorld))) :-
+     lobby_terrain_world(SkyWorld),current_ontology_identity(SkyNamespace,SkyAnchor))),
+ retract(attribute(personal_sky,brightness,120)),assertz(attribute(personal_sky,brightness,1000)),
+-world_palette(Palette),
++lobby_vocabulary(Vocabulary,VocabularyAnchor),
++Vocabulary::(current_ontology_identity(Vocabulary,VocabularyAnchor),world_palette(Palette)),
+ retract(voxel_presentation(W,<<"terrain">>,[
+     material(1,surface(<<"#668B45">>,0,950,0,[])),
+     material(2,surface(<<"#755338">>,0,950,0,[])),
+--- original/acceptance-owner-update.pl
++++ rolling/acceptance-owner-update.pl
+@@ -19,7 +19,8 @@
+ assertz((space_member(SkyWorld,entity_ref(SkyNamespace,SkyAnchor,world_sky(SkyWorld))) :-
+     lobby_terrain_world(SkyWorld),current_ontology_identity(SkyNamespace,SkyAnchor))),
+ retract(attribute(personal_sky,brightness,120)),assertz(attribute(personal_sky,brightness,1000)),
+-world_palette(Palette),
++lobby_vocabulary(Vocabulary,VocabularyAnchor),
++Vocabulary::(current_ontology_identity(Vocabulary,VocabularyAnchor),world_palette(Palette)),
+ retract(voxel_presentation(W,<<"terrain">>,[
+     material(1,surface(<<"#668B45">>,0,950,0,[])),
+     material(2,surface(<<"#755338">>,0,950,0,[])),

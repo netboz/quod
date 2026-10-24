@@ -1,0 +1,12 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_voxel_tests,quod_voxel_world_tests,quod_common_primitives_tests,quod_resource_basis_tests",
+    "--test=quod_physics_tests:terrain_coverage_wait_retains_incarnation_and_unchanged_selection_test"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:08:16.841566+00:00"
+}

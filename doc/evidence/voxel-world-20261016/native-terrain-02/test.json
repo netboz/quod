@@ -1,0 +1,10 @@
+{
+  "args": [
+    "cargo",
+    "test",
+    "--locked",
+    "--offline"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:01:44.076659+00:00"
+}

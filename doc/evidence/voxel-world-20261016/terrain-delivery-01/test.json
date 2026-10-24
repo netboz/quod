@@ -1,0 +1,12 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--test=quod_physics_tests:terrain_delivery_credit_and_replacement_test",
+    "--verbose"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:52:34.770121+00:00"
+}

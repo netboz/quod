@@ -1,0 +1,138 @@
+--- reviewed274/build.py
++++ new275/build.py
+@@ -5,13 +5,13 @@
+ root = Path('/home/yan/src/quod')
+ out = Path(__file__).resolve().parent
+ evidence = root/'doc/evidence/terrain-presentation-20261017'
+-gate = evidence/'clean-presentation-05'
+-tree = root/'_build/terrain-presentation-20261017/clean-presentation-05/tree'
+-version = '0.7.274'
++gate = evidence/'clean-presentation-08'
++tree = root/'_build/terrain-presentation-20261017/clean-presentation-08/tree'
++version = '0.7.275'
+ passed = json.loads((gate/'PASSED.json').read_text())
+ assert passed['passed'] and len(passed['results']) == 12
+ assert all(r['exit'] == 0 and r['sources_unchanged'] for r in passed['results'])
+-assessment = json.loads((evidence/'review-04/assessment.json').read_text())
++assessment = json.loads((evidence/'review-05/assessment.json').read_text())
+ assert assessment['confirmed_defects_remaining'] == 0 and assessment['review_manifest_sha256'] == hashlib.sha256((gate/'source-manifest.json').read_bytes()).hexdigest()
+ manifest = json.loads((gate/'source-manifest.json').read_text())
+ assert all(hashlib.sha256((tree/n).read_bytes()).hexdigest() == h for n,h in manifest.items())
+@@ -30,13 +30,13 @@
+     q = context/n; q.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(p,q)
+ for name in ['rebar.config','src/quod.app.src']:
+     original = (tree/name).read_text()
+-    assert original.count('0.7.273') == 1
+-    labelled = original.replace('0.7.273',version)
++    assert original.count('0.7.274') == 1
++    labelled = original.replace('0.7.274',version)
+     assert (root/name).read_text() == labelled, name
+     (context/name).write_text(labelled)
+     manifest[name] = hashlib.sha256(labelled.encode()).hexdigest()
+ record = {'version':version, 'provenance':'Exact frozen reviewed source with separate version-only delta; uncommitted',
+-          'tree':str(tree), 'gate':str(gate), 'review':str(evidence/'review-04'),
++          'tree':str(tree), 'gate':str(gate), 'review':str(evidence/'review-05'),
+           'base_commit':json.loads((gate/'freeze.json').read_text())['head'],
+           'files':{n:manifest[n] for n in files}}
+ (out/'image-source-manifest.json').write_text(json.dumps(record,indent=2)+'\n')
+--- reviewed274/boot_probe.py
++++ new275/boot_probe.py
+@@ -5,7 +5,7 @@
+ image, label = sys.argv[1:]
+ evidence = out / label
+ evidence.mkdir()
+-template = Path('/home/yan/src/quod/_build/terrain-presentation-20261017/clean-presentation-05/tree/deploy/quod.nomad')
++template = Path('/home/yan/src/quod/_build/terrain-presentation-20261017/clean-presentation-08/tree/deploy/quod.nomad')
+ assert template.read_bytes() == Path('/home/yan/src/quod/deploy/quod.nomad').read_bytes()
+ rendered = subprocess.check_output([
+     'nomad', 'job', 'run', '-output', '-var=bootstrap=true',
+--- reviewed274/prepare_candidate.py
++++ new275/prepare_candidate.py
+@@ -5,8 +5,8 @@
+ before=json.loads((b/'candidate-before.json').read_text())
+ image=json.loads((b/'verified-image.json').read_text())['pinned_image']
+ assert before['ID']=='quod-finality-candidate-v6-20260926'
+-assert before['Version']==95 and before['JobModifyIndex']==869134
+-assert image.startswith('192.168.1.11:5000/quod:0.7.274@sha256:')
++assert before['Version']==97 and before['JobModifyIndex']==870647
++assert image.startswith('192.168.1.11:5000/quod:0.7.275@sha256:')
+ old='192.168.1.11:5000/quod:0.7.273@sha256:4fa80d816a4d7583b988d63b6ff4d530c74b3df2ef0379d5bb7b40ff763a33c5'
+ release=copy.deepcopy(before)
+ changes=[]
+@@ -28,7 +28,7 @@
+  return [] if a==c else [{'path':path,'before':a,'after':c}]
+ for name,job in [('candidate-release',release),('candidate-rollback',before)]:
+  with (b/(name+'.json')).open('x') as out:json.dump(job,out,indent=2);out.write('\n')
+-record={'release_from_v95':diff(before,release)}
+-assert [x['path'] for x in record['release_from_v95']]==changes
++record={'release_from_v97':diff(before,release)}
++assert [x['path'] for x in record['release_from_v97']]==changes
+ (b/'candidate-exact-diff.json').write_text(json.dumps(record,indent=2)+'\n')
+ print(json.dumps(record,indent=2))
+--- reviewed274/mutate_once.py
++++ new275/mutate_once.py
+@@ -9,7 +9,7 @@
+ assert clearance['approved'] and clearance['mutation_manifest_sha256']==hashlib.sha256((b/'mutation-inputs.json').read_bytes()).hexdigest()
+ for input_name,digest in json.loads((b/'mutation-inputs.json').read_text()).items():
+  assert hashlib.sha256((b/input_name).read_bytes()).hexdigest()==digest,input_name
+-assert json.loads(Path('/home/yan/src/quod/doc/evidence/terrain-presentation-20261017/clean-presentation-05/PASSED.json').read_text())['passed']
++assert json.loads(Path('/home/yan/src/quod/doc/evidence/terrain-presentation-20261017/clean-presentation-08/PASSED.json').read_text())['passed']
+ assert json.loads((b/'verified-image.json').read_text())['registry_digest_matches']
+ desired=json.loads((b/'candidate-release.json').read_text()); jobid=desired['ID']
+ expected=json.loads((b/'candidate-before.json').read_text())
+--- reviewed274/fleet_probe.py
++++ new275/fleet_probe.py
+@@ -10,7 +10,7 @@
+ out = Path(__file__).resolve().parent
+ address = 'http://192.168.1.10:4646'
+ job = 'quod-finality-candidate-v6-20260926'
+-scope = {'candidate_version':95,'main_version':246,'main_modify_index':826727}
++scope = {'candidate_version':97,'main_version':246,'main_modify_index':826727}
+ label = sys.argv[1] if len(sys.argv) == 2 else 'fleet-probe'
+ assert label in ['fleet-probe', 'fleet-probe-after-desktop']
+ record = out / (label + '.json')
+@@ -121,7 +121,7 @@
+ assert all(r['exit'] == 0 and r['restarts'] == 0 for r in results)
+ for row in results:
+     p = row['probe']
+-    assert p['version'] == '0.7.274'
++    assert p['version'] == '0.7.275'
+     assert p['module_profiles']['quod:gui'] == ['quod_agent_predicates','quod_gui_predicates']
+     assert len(p['module_profiles']) == 18
+     assert p['custody_limits'] == {'count':64,'prepared_bytes':'unlimited'}
+--- doc/evidence/terrain-presentation-20261017/walk-acceptance.mjs
++++ doc/evidence/terrain-presentation-20261017/walk-acceptance-02.mjs
+@@ -11,7 +11,7 @@
+ assert.ok(world, 'Select the acceptance world explicitly')
+ assert.ok(!process.env.QUOD_PREVIEW_TREE, 'Acceptance must use the deployed client bundle')
+ const out = resolve('_build/terrain-presentation-20261017', label)
+-mkdirSync(out, { recursive: true })
++mkdirSync(out)
+ const result = { events: [], errors: [], poses: [], phase: 'opening', url, world, previewTree: null }
+ const save = () => writeFileSync(join(out, 'observation.json'), JSON.stringify(result, null, 2) + '\n')
+ const event = value => { result.events.push(value); save() }
+@@ -37,13 +37,13 @@
+     if (m.frame) { latest = m.frame; result.poses.push({ at: Date.now(), position: pose() }) }
+     if (['projection', 'terrain_manifest', 'terrain_chunks', 'unavailable'].includes(m.type))
+       result.events.push({ at: Date.now(), type: m.type, selection: m.selection, interest: m.interest_seq,
+-        chunks: m.chunks?.length, index: m.index, encodedBytes: m.chunks?.reduce((sum, row) => sum + (row.payload?.length ?? 0), 0), reason: m.reason })
++        chunks: m.chunks?.length, complete: m.complete, frameBytes: Buffer.byteLength(String(e.payload)), encodedBytes: m.chunks?.reduce((sum, row) => sum + (row.payload?.length ?? 0), 0), reason: m.reason })
+   })
+   s.on('framesent', e => {
+     const m = JSON.parse(String(e.payload))
+     if (s === socket && m.type === 'terrain_interest') result.events.push({ ...m, at: Date.now() })
+     if (s === socket && m.type === 'terrain_ack') result.events.push({ at: Date.now(), type: m.type,
+-      want: m.want?.length, chunk: m.chunk, complete: m.complete })
++      want: m.want?.length, through: m.through, complete: m.complete })
+   })
+ })
+ try {
+@@ -132,6 +132,8 @@
+   assert.ok(result.rendering.frames > 100, 'Movement was rendered throughout the observation')
+   assert.ok(excursion > 8 && interests >= 4, 'Sustained walking crossed several chunk boundaries')
+   assert.ok(content.length >= 4, 'Observed the new bounded content delivery')
++  assert.ok(content.every(message => message.frameBytes <= 512*1024), 'Every deployed content frame fits the unchanged reply guard')
++  assert.ok(content.some(message => message.complete === false), 'The deployed window actually crossed a batch boundary')
+   assert.ok(content.some(message => message.encodedBytes > 0), 'Content messages carried actual terrain bytes')
+   assert.ok(result.acceptance.maximumPoseGapMs < 2000, 'No multi-second pose stalls while walking')
+   assert.equal(result.appearance.skies, 1, 'One enabled authored sky')

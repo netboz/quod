@@ -1,0 +1,300 @@
+{
+  "created": "2026-10-16T10:31:35.036091+00:00",
+  "quod_head": "6404ec95b4703203b5bd08a82b0b4d4b5f98961f",
+  "files": [
+    {
+      "file": "quod/AGENTS.md",
+      "source": "/home/yan/src/quod/AGENTS.md",
+      "sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+      "bytes": 8636
+    },
+    {
+      "file": "quod/nimbalyst-local/plans/voxel-world-generation-ontology.md",
+      "source": "/home/yan/src/quod/nimbalyst-local/plans/voxel-world-generation-ontology.md",
+      "sha256": "b4596979e325d268b7f07f35156af65852a48ac82ae177925442e1b00bb2e1cb",
+      "bytes": 46295
+    },
+    {
+      "file": "quod/nimbalyst-local/plans/voxel-world-algorithm-research.md",
+      "source": "/home/yan/src/quod/nimbalyst-local/plans/voxel-world-algorithm-research.md",
+      "sha256": "4eb68b504d2700baee5e2a1155d48aa456c87e0394a852c108d3bf2e2c058a6c",
+      "bytes": 19591
+    },
+    {
+      "file": "quod/nimbalyst-local/plans/voxel-world-architecture.excalidraw",
+      "source": "/home/yan/src/quod/nimbalyst-local/plans/voxel-world-architecture.excalidraw",
+      "sha256": "b93c3cc776e4034de12b38145cd8a6df5afff0ae8f7278691ba63b143f89db29",
+      "bytes": 48922
+    },
+    {
+      "file": "quod/doc/architecture.md",
+      "source": "/home/yan/src/quod/doc/architecture.md",
+      "sha256": "69871b583093c1a1e17385d294b208c448472619d873a752334e2c0b19745d45",
+      "bytes": 3887
+    },
+    {
+      "file": "quod/doc/multiwrite-architecture.md",
+      "source": "/home/yan/src/quod/doc/multiwrite-architecture.md",
+      "sha256": "9a10791ac69f6d2ac222c80317473e597d96401285efb3b0dbd08969eb3ec5f2",
+      "bytes": 8757
+    },
+    {
+      "file": "quod/doc/world.md",
+      "source": "/home/yan/src/quod/doc/world.md",
+      "sha256": "0c4fa18e5155498314a6d311b06011f7eb7d61baa7047282d2591bc766aaf5e1",
+      "bytes": 43703
+    },
+    {
+      "file": "quod/doc/spaces.md",
+      "source": "/home/yan/src/quod/doc/spaces.md",
+      "sha256": "8470e5a5f64e96c225c6387214ad601f2951a8ff02380eb28f48d7a744ff36ce",
+      "bytes": 10569
+    },
+    {
+      "file": "quod/doc/physics-native.md",
+      "source": "/home/yan/src/quod/doc/physics-native.md",
+      "sha256": "b3510c2a71710704542a1573d56b1e89275cd031bdb813555858f31ad2222553",
+      "bytes": 59575
+    },
+    {
+      "file": "quod/doc/proofs.md",
+      "source": "/home/yan/src/quod/doc/proofs.md",
+      "sha256": "a0aab92fd03307c61efdf0c9f2f6da9bcc3b5bd939c4088c3016fa19025de0e0",
+      "bytes": 10987
+    },
+    {
+      "file": "quod/doc/runtime-and-agents.md",
+      "source": "/home/yan/src/quod/doc/runtime-and-agents.md",
+      "sha256": "6ae6f2285baff319f21458a3b875c315b59d8bd7852f4eb51cc57f544a6fad25",
+      "bytes": 6585
+    },
+    {
+      "file": "quod/doc/gui-examples.md",
+      "source": "/home/yan/src/quod/doc/gui-examples.md",
+      "sha256": "949e08ef560ae1e883387c9bec8b3d5e8e4d7d9bdd4cff358c13c154cf92d77e",
+      "bytes": 9739
+    },
+    {
+      "file": "quod/doc/eidolon-mesh-support.md",
+      "source": "/home/yan/src/quod/doc/eidolon-mesh-support.md",
+      "sha256": "50f053b18bf35af0a3b49f0bb3dd63721effb77bc685600d26ffcd9ce1a3a8fe",
+      "bytes": 8594
+    },
+    {
+      "file": "quod/src/quod_runtime.erl",
+      "source": "/home/yan/src/quod/src/quod_runtime.erl",
+      "sha256": "3443df710d39c53fda284f23eb8cdd968b2eabe2904926240f6a5623856fbd14",
+      "bytes": 163308
+    },
+    {
+      "file": "quod/src/quod_physics.erl",
+      "source": "/home/yan/src/quod/src/quod_physics.erl",
+      "sha256": "8263f45623046d0abc36c8305b98ab8e49c3e92cb4cf9ef288cebebb0ed1c89d",
+      "bytes": 56097
+    },
+    {
+      "file": "quod/src/quod_physics_native.erl",
+      "source": "/home/yan/src/quod/src/quod_physics_native.erl",
+      "sha256": "9e39ca1c35b967fb9927aa9b8b0695e76cb48accc310ec0683a365198247c5ba",
+      "bytes": 1737
+    },
+    {
+      "file": "quod/src/quod_resource_basis.erl",
+      "source": "/home/yan/src/quod/src/quod_resource_basis.erl",
+      "sha256": "0e2e2b4c06b8512d020d07df0ca6c57084bc96927d3a58b12975f8e02be17a1c",
+      "bytes": 4021
+    },
+    {
+      "file": "quod/src/quod_client_view.erl",
+      "source": "/home/yan/src/quod/src/quod_client_view.erl",
+      "sha256": "f72429d0fed347eeb6e5ce88b24741dcc35dab43f0097ed691f5feb6a87ca8ca",
+      "bytes": 45584
+    },
+    {
+      "file": "quod/src/quod_predicates.erl",
+      "source": "/home/yan/src/quod/src/quod_predicates.erl",
+      "sha256": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+      "bytes": 21656
+    },
+    {
+      "file": "quod/src/predicates/quod_common_primitives.erl",
+      "source": "/home/yan/src/quod/src/predicates/quod_common_primitives.erl",
+      "sha256": "6b17b520bbe5bae58470eaca3cb2f35a499095b6bae45e4387518e7272fa4425",
+      "bytes": 18632
+    },
+    {
+      "file": "quod/src/predicates/quod_physics_predicates.erl",
+      "source": "/home/yan/src/quod/src/predicates/quod_physics_predicates.erl",
+      "sha256": "555510448adbfe45b5f6ecaec37278c908834019bac58ef011b101f7fb8971c5",
+      "bytes": 12642
+    },
+    {
+      "file": "quod/priv/ontologies/quod_physics.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/quod_physics.pl",
+      "sha256": "66d90e8fac358e4cf7970d51c8f799e0ec3e84b12c68e177dd53860220d5ca25",
+      "bytes": 49347
+    },
+    {
+      "file": "quod/priv/ontologies/space.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/space.pl",
+      "sha256": "f82e7da421f52343672bf46c1c3ac07147431133432fe05bfe2393473cbd9cab",
+      "bytes": 7022
+    },
+    {
+      "file": "quod/priv/ontologies/space_view.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/space_view.pl",
+      "sha256": "596fc3865eb17c543d92993d1543ef209133fa3950cf5636d68139248f98e4c9",
+      "bytes": 1993
+    },
+    {
+      "file": "quod/priv/ontologies/common_predicates.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/common_predicates.pl",
+      "sha256": "f8bb9adc1222105441b0d09732ade0a33fe34f62a3e620a69c7c003ab4189bb4",
+      "bytes": 16361
+    },
+    {
+      "file": "quod/priv/ontologies/quod_rendering.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/quod_rendering.pl",
+      "sha256": "8311df121c26b0d79f5d06162fa2e7f61ef9fe0c74428415c0f3eba2d7475447",
+      "bytes": 14701
+    },
+    {
+      "file": "quod/priv/ontologies/quod_gui.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/quod_gui.pl",
+      "sha256": "f7ad1c4d422cff8d8839110d2b3a9e5ccf899618935f9f82a795eb7fc5faa32d",
+      "bytes": 15945
+    },
+    {
+      "file": "quod/priv/ontologies/gui_instance.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/gui_instance.pl",
+      "sha256": "23d526b1632b5d761ad71302cb16f8f4922a729c9411c6a50ef989a32bc8be3e",
+      "bytes": 13336
+    },
+    {
+      "file": "quod/priv/ontologies/lobby_instance.pl",
+      "source": "/home/yan/src/quod/priv/ontologies/lobby_instance.pl",
+      "sha256": "24857d5d4dbded96a611069952856ec2551362c1816171cce5590f21cbb75209",
+      "bytes": 7467
+    },
+    {
+      "file": "quod/native/quod_physics/src/geometry.rs",
+      "source": "/home/yan/src/quod/native/quod_physics/src/geometry.rs",
+      "sha256": "16f7628cd9a14aaa03c68201eef2433cd2ee423911d4cbaa988ad7a3c339fcaa",
+      "bytes": 8270
+    },
+    {
+      "file": "quod/native/quod_physics/src/lib.rs",
+      "source": "/home/yan/src/quod/native/quod_physics/src/lib.rs",
+      "sha256": "f8322dbd94f0ce3176f567c125097894061decb2435692cd6bd0f4ea03160a94",
+      "bytes": 34545
+    },
+    {
+      "file": "quod/native/quod_physics/src/motion.rs",
+      "source": "/home/yan/src/quod/native/quod_physics/src/motion.rs",
+      "sha256": "ba784c6a11da83e77e6cd326cc442bd52b9929e608ea8e3586329b86da9b86b0",
+      "bytes": 46466
+    },
+    {
+      "file": "quod/native/quod_physics/Cargo.toml",
+      "source": "/home/yan/src/quod/native/quod_physics/Cargo.toml",
+      "sha256": "d841aac31a559e7da91cf6f57bdc8fbb313d75e4db20e958aa23c2bf27a6da74",
+      "bytes": 451
+    },
+    {
+      "file": "quod/client/src/marks.js",
+      "source": "/home/yan/src/quod/client/src/marks.js",
+      "sha256": "b98d47d66739b13bfd5dd2c7463f922f36ee216ce9ba5b22866954f5117ceacf",
+      "bytes": 9516
+    },
+    {
+      "file": "quod/client/src/scene.js",
+      "source": "/home/yan/src/quod/client/src/scene.js",
+      "sha256": "a04b84874cef85cfb8900509e4140354747171385e70b7153ff87271f54da9a4",
+      "bytes": 12226
+    },
+    {
+      "file": "quod/client/src/render-resources.js",
+      "source": "/home/yan/src/quod/client/src/render-resources.js",
+      "sha256": "0c54c81d66bec9a7f3e1369881a9c6718e43867d82caed890fd68f6945c6884c",
+      "bytes": 9224
+    },
+    {
+      "file": "quod/client/src/signed-view.js",
+      "source": "/home/yan/src/quod/client/src/signed-view.js",
+      "sha256": "5276c564ceb4cda2e9b2916d12a882038af5801d6cf1cb9cd18a2f659d0e27c1",
+      "bytes": 4775
+    },
+    {
+      "file": "quod/client/src/controlled-navigation.js",
+      "source": "/home/yan/src/quod/client/src/controlled-navigation.js",
+      "sha256": "83ea37127e2af4946ab6d394578b2dfeafae1fbea63c693e0ea867d1ca70f2b5",
+      "bytes": 10224
+    },
+    {
+      "file": "quod/test/quod_physics_tests.erl",
+      "source": "/home/yan/src/quod/test/quod_physics_tests.erl",
+      "sha256": "5fde7876557d1ff6cd203c86f3b616fa0501b021f7480e9d7340a007d6ac6d45",
+      "bytes": 301047
+    },
+    {
+      "file": "quod/test/quod_space_tests.erl",
+      "source": "/home/yan/src/quod/test/quod_space_tests.erl",
+      "sha256": "6b5aab67773ec6e42f92f3bae1c4d07e9b9e262891f0d11e2cac2e7a6180aba8",
+      "bytes": 19148
+    },
+    {
+      "file": "bbsvx/priv/ontologies/bbsvx_voxel.pl",
+      "source": "/home/yan/src/bbsvx/priv/ontologies/bbsvx_voxel.pl",
+      "sha256": "47b5516fd83bbe36ece4491be7a0999bd32f0ec4541aee6b9777de0f12481631",
+      "bytes": 14595
+    },
+    {
+      "file": "bbsvx/src/ontologies/bbsvx_voxel_predicates.erl",
+      "source": "/home/yan/src/bbsvx/src/ontologies/bbsvx_voxel_predicates.erl",
+      "sha256": "e7fe8b4030da74d453387bad52f84e2fa8c06bb62a9caadd428ba405a8092528",
+      "bytes": 10539
+    },
+    {
+      "file": "bbsvx/priv/ontiris/src/voxel/TerrainGenerator.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/src/voxel/TerrainGenerator.ts",
+      "sha256": "1a71e85253c52efee0d2585ac5767b111cf57b5391646069435eafb4341c6aad",
+      "bytes": 6163
+    },
+    {
+      "file": "bbsvx/priv/ontiris/src/voxel/ChunkLoader.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/src/voxel/ChunkLoader.ts",
+      "sha256": "fd2cd776eeead409a1de31fa23e4fa7e0e051fd4e145d938256ebd47885d0cc0",
+      "bytes": 13713
+    },
+    {
+      "file": "bbsvx/priv/ontiris/src/voxel/ChunkManager.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/src/voxel/ChunkManager.ts",
+      "sha256": "b1e7f1925fa77cfeb6630551177ca5241599c61844f35fafc714c0d27f352f08",
+      "bytes": 7743
+    },
+    {
+      "file": "bbsvx/priv/ontiris/src/voxel/GreedyMesher.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/src/voxel/GreedyMesher.ts",
+      "sha256": "4f6e5e9c00e6726e4f40d6d4864e7caa7d449aa0e0cd6ef07b9fafb0785b5d61",
+      "bytes": 15470
+    },
+    {
+      "file": "bbsvx/priv/ontiris/src/voxel/VoxelConfigObserver.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/src/voxel/VoxelConfigObserver.ts",
+      "sha256": "f73afc961db04251816cb9c0feb3266c7a5b30963928b61696948b388913c40f",
+      "bytes": 2122
+    },
+    {
+      "file": "bbsvx/priv/ontiris/test/GreedyMesher.test.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/test/GreedyMesher.test.ts",
+      "sha256": "e5ebd806d470d76cff5a4abbd77342fa96d2b4d9b5a8af2336f620f3431d0598",
+      "bytes": 10434
+    },
+    {
+      "file": "bbsvx/priv/ontiris/test/terrain-wasm-benchmark.test.ts",
+      "source": "/home/yan/src/bbsvx/priv/ontiris/test/terrain-wasm-benchmark.test.ts",
+      "sha256": "9b62af515f18c7e6a90a853a48f4d9038bce10cb2a4fa276e1b8f912116dee25",
+      "bytes": 11355
+    }
+  ]
+}

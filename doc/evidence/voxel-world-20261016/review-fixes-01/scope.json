@@ -1,0 +1,18 @@
+{
+  "created": "2026-10-16T20:04:47.350620+00:00",
+  "authority": "User authorized the two fixes and tests, refactoring and dead-code removal; requested Claude validation. No backward compatibility required. Preserve data and previous evidence.",
+  "baseline": "clean-gates-04 / implementation-review-01",
+  "head": "6404ec95b4703203b5bd08a82b0b4d4b5f98961f",
+  "initial_files": [
+    "src/quod_physics.erl",
+    "src/quod_physics_coordinates.erl",
+    "src/quod_runtime.erl",
+    "src/quod_client_view.erl",
+    "native/quod_physics/src/lib.rs",
+    "native/quod_physics/src/terrain.rs",
+    "test/quod_physics_tests.erl",
+    "test/quod_physics_coordinates_tests.erl",
+    "doc/voxel-world.md",
+    "doc/physics-native.md"
+  ]
+}

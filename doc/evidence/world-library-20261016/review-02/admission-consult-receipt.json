@@ -1,0 +1,8 @@
+{
+  "sessionId": "0d4c4ef5-911b-45f6-9e89-7587a7a80742",
+  "model": "claude-code:fable",
+  "statusAtRetrieval": "running",
+  "source": "Nimbalyst get_session_result fullResponse; saved before queued trust-boundary report was processed",
+  "scope": "current source, bounded read-only consultation",
+  "editedFiles": []
+}

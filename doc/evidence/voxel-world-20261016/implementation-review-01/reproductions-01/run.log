@@ -1,0 +1,23 @@
+/home/yan/src/quod/doc/evidence/voxel-world-20261016/implementation-review-01/reproductions-01/quod_physics_review_fixture.erl:996:47: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+%  996|             #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+%     |                                               ^
+
+/home/yan/src/quod/doc/evidence/voxel-world-20261016/implementation-review-01/reproductions-01/quod_physics_review_fixture.erl:1621:34: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1621|         ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+%     |                                  ^
+
+/home/yan/src/quod/doc/evidence/voxel-world-20261016/implementation-review-01/reproductions-01/quod_physics_review_fixture.erl:1621:40: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1621|         ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+%     |                                        ^
+
+embedded_owner: #{first =>
+                      #{navigation_ready => false,steps => 0,
+                        phase => coverage},
+                  unchanged_selection =>
+                      #{navigation_ready => false,steps => 0,
+                        phase => coverage}}
+far_interest: #{world_invalidation_refresh => true,
+                sampling_calls_before_refusal => 8}

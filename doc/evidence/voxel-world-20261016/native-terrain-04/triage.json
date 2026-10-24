@@ -1,0 +1,4 @@
+{
+  "cause": "A Rust-only test called an atom-valued NIF refusal outside BEAM. Rustler atom initialization aborted the process because no NIF environment exists.",
+  "correction": "Test the geometric precondition in Rust; exercise the actual step refusal and retained pose through the loaded NIF in quod_voxel_tests. No fake atom initializer or production fallback added."
+}

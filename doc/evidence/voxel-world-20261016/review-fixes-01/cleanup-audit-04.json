@@ -1,0 +1,22 @@
+{
+  "retired_names_remaining": {
+    "terrain_step_coverage": [],
+    "terrain_admission": [],
+    "coordinate_wait": [],
+    "phase = coordinate": [],
+    "request_terrain([],": []
+  },
+  "unchanged_from_fix_baseline": [
+    "src/quod_runtime.erl",
+    "src/quod_client_view.erl",
+    "test/quod_physics_coordinates_tests.erl"
+  ],
+  "replacements": [
+    "body_points/5 is shared by coordinate plan and prospective view admission",
+    "known obstruction and indeterminate geometry have explicit Step outcomes",
+    "body_admission plus exact changed surfaces replace collider-wide terrain admission",
+    "restore_pending replaces the Erlang fake empty coverage result",
+    "blocked reason replaces coordinate-only phase and duplicated resume clauses"
+  ],
+  "scope": "Source and caller inspection. Final xref/Dialyzer receipts are separate checks; absence of a name alone is not proof of semantic deadness."
+}

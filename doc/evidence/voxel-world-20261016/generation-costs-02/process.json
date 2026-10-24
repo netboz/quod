@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "wall_seconds": 2.133933550096117,
+  "user_seconds": 3.096751,
+  "system_seconds": 0.241164,
+  "max_rss_kib": 99264,
+  "meaning": "Peak resident set of the complete benchmark VM; includes baseline, measurement overhead, and GC. Not incremental native memory."
+}

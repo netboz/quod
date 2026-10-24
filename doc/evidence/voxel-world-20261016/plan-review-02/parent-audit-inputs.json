@@ -1,0 +1,40 @@
+{
+  "purpose": "Additional source inspected by parent after Fable review; not part of reviewer frozen inputs",
+  "files": [
+    {
+      "file": "client/src/simulation.js",
+      "sha256": "ba95231b28500f7ee68a85509700d4ffa4c20cc3b446a3c08d6a780295f7f4b0",
+      "bytes": 7220
+    },
+    {
+      "file": "client/src/locomotion.js",
+      "sha256": "92b8118d045d1fdff12a2d492a932a420bdddc5751f26039db0ed3174f07d3ff",
+      "bytes": 6038
+    },
+    {
+      "file": "include/quod_client_goal_limits.hrl",
+      "sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "bytes": 2341
+    },
+    {
+      "file": "include/quod_ingress_limits.hrl",
+      "sha256": "a84f0cdbd01920aa72ea8b39c6bdf73f592c0c809c06b05a450bceca8d83f24c",
+      "bytes": 1616
+    },
+    {
+      "file": "include/quod_proof_limits.hrl",
+      "sha256": "92a057f0e7e249da6e20f20d2f3443e204b6cffe7a017ce58705527a25e8fa9d",
+      "bytes": 5437
+    },
+    {
+      "file": "src/quod_committed_projection.erl",
+      "sha256": "acaeecee6f1dbaa4cc7c0cd53ce0891ff9b47fbaf511acc59b45cb99133cae8c",
+      "bytes": 28222
+    },
+    {
+      "file": "src/quod_transaction.erl",
+      "sha256": "eae76d9827346a704a1131f3213c8579a9bab716e4b9b632c6d329d28df0bae0",
+      "bytes": 87446
+    }
+  ]
+}

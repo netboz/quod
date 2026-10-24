@@ -1,0 +1,66 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 994 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1619 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1619 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_voxel_tests'
+  quod_voxel_tests: plane_sampling_and_native_surface_share_integer_units_test...[0.008 s] ok
+  quod_voxel_tests: negative_coordinate_seams_and_request_order_test...[0.020 s] ok
+  quod_voxel_tests: coordinates_do_not_wrap_at_32_or_64_bits_test...[0.002 s] ok
+  quod_voxel_tests: tunnel_carving_changes_inside_and_keeps_surrounding_rock_test...ok
+  quod_voxel_tests: sampling_admission_is_explicit_and_precedes_allocation_test...ok
+  quod_voxel_tests: dig_across_negative_chunk_corner_is_current_state_and_idempotent_test...[0.014 s] ok
+  quod_voxel_tests: paint_uses_same_patch_and_restoring_base_removes_record_test...ok
+  quod_voxel_tests: patch_format_and_budget_refuse_before_returning_partial_edits_test...[0.001 s] ok
+  quod_voxel_tests: retained_geometry_does_no_generation_but_obeys_current_output_allocation_test...[0.007 s] ok
+  quod_voxel_tests: native_terrain_coverage_refusal_preserves_existing_body_state_test...ok
+  quod_voxel_tests: resident_union_is_bounded_before_box_enumeration_test...ok
+  [done in 0.085 s]
+module 'quod_voxel_world_tests'
+  quod_voxel_world_tests: creation_and_boundary_dig_use_one_existing_atomic_diff_test...[0.541 s] ok
+  quod_voxel_world_tests: late_validation_failure_and_outer_cut_roll_back_all_chunks_test...[0.255 s] ok
+  quod_voxel_world_tests: paint_preserves_physical_revision_and_revocation_refuses_edits_test...[0.102 s] ok
+  [done in 0.907 s]
+module 'quod_resource_basis_tests'
+  quod_resource_basis_tests: voxel_arithmetic_does_not_invalidate_on_unrelated_commits_test...[0.007 s] ok
+  quod_resource_basis_tests: helper_reads_are_selective_test...ok
+  quod_resource_basis_tests: terrain_demand_keeps_its_exact_owner_fence_test...ok
+  quod_resource_basis_tests:41: -failed_negative_and_backtracked_reads_test_/0-fun-4-...ok
+  quod_resource_basis_tests:41: -failed_negative_and_backtracked_reads_test_/0-fun-4-...ok
+  quod_resource_basis_tests:41: -failed_negative_and_backtracked_reads_test_/0-fun-4-...ok
+  quod_resource_basis_tests:41: -failed_negative_and_backtracked_reads_test_/0-fun-4-...ok
+  quod_resource_basis_tests: absent_optional_predicate_is_retained_test...ok
+  quod_resource_basis_tests: predicate_enumeration_remembers_absent_names_test...ok
+  quod_resource_basis_tests: reflection_is_observed_without_changing_transaction_tokens_test...ok
+  quod_resource_basis_tests: pure_native_backtracking_keeps_normal_selection_selective_test...ok
+  quod_resource_basis_tests: unknown_native_and_its_continuation_stay_conservative_test...ok
+  quod_resource_basis_tests: errors_retain_prior_dependencies_and_cleanup_test...ok
+  quod_resource_basis_tests: proof_errors_retain_dependencies_after_session_cleanup_test...ok
+  quod_resource_basis_tests: context_and_unknown_inputs_are_conservative_test...ok
+  quod_resource_basis_tests: explicit_owner_inputs_are_selective_test...ok
+  [done in 0.055 s]
+quod_physics_tests: terrain_coverage_wait_retains_incarnation_and_unchanged_selection_test...[0.116 s] ok
+quod_physics_tests: -voxel_runtime_retains_chunks_and_applies_committed_dig_test_/0-fun-18-...[5.003 s] ok
+quod_physics_tests: -voxel_missing_coverage_wakes_existing_resource_worker_test_/0-fun-11-...[2.566 s] ok
+=======================================================
+  All 33 tests passed.

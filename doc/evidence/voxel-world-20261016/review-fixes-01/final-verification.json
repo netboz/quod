@@ -1,0 +1,13 @@
+{
+  "verified_at": "2026-10-16T21:22:14.812286+00:00",
+  "head": "6404ec95b4703203b5bd08a82b0b4d4b5f98961f",
+  "frozen_source_mismatches": [],
+  "live_source_mismatches": [],
+  "frozen_document_mismatches": [],
+  "live_document_mismatches": [],
+  "source_files": 1198,
+  "gate_count": 12,
+  "runner_exit": 0,
+  "authoritative_review": "fable-review-04.md",
+  "historical_reproduction": "fable-review-03.md"
+}

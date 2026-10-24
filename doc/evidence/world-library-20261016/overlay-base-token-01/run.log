@@ -1,0 +1,31 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_overlay_tests'
+  quod_overlay_tests: overlay_apply_roundtrip_test...[0.113 s] ok
+  quod_overlay_tests: validate_conflict_test...[0.004 s] ok
+  quod_overlay_tests: absent_present_absent_conflicts_test...[0.005 s] ok
+  quod_overlay_tests: retract_to_empty_tokens_absent_test...[0.012 s] ok
+  quod_overlay_tests: staged_expectation_never_validates_test...[0.007 s] ok
+  quod_overlay_tests: capture_guards_test...[0.003 s] ok
+  quod_overlay_tests: generation_guard_blocks_every_overlay_surface_test...[0.053 s] ok
+  quod_overlay_tests: guard_is_preserved_by_overlay_revisions_test...[0.007 s] ok
+  quod_overlay_tests: read_after_local_write_is_tracked_test...[0.003 s] ok
+  quod_overlay_tests: read_after_local_abolish_is_tracked_test...[0.041 s] ok
+  quod_overlay_tests: write_only_abolish_conflicts_with_concurrent_change_test...[0.009 s] ok
+  quod_overlay_tests: pure_read_no_writes_test...[0.005 s] ok
+  quod_overlay_tests: committed_state_drops_staged_data_and_resets_proof_frame_test...[0.011 s] ok
+  quod_overlay_tests: checkpoint_restores_all_write_kinds_but_not_reads_test...[0.008 s] ok
+  quod_overlay_tests: checkpoint_is_bound_to_one_overlay_test...[0.004 s] ok
+  quod_overlay_tests: read_only_rejects_every_mutation_at_first_attempt_test...[0.005 s] ok
+  quod_overlay_tests: read_only_rejects_explicit_event_staging_without_mutation_test...[0.004 s] ok
+  quod_overlay_tests: read_only_bypasses_mutation_hooks_but_ordinary_overlay_keeps_them_test...[0.008 s] ok
+  quod_overlay_tests: read_only_does_not_control_follower_policy_test...[0.012 s] ok
+  quod_overlay_tests: read_only_frame_uses_same_staged_view_and_restores_writes_test...[0.004 s] ok
+  quod_overlay_tests: read_only_frames_are_nestable_test...[0.003 s] ok
+  [done in 0.478 s]
+=======================================================
+  All 21 tests passed.

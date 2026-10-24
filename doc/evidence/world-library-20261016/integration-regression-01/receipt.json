@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--module=quod_lifecycle_single_path_tests,quod_gui_examples_tests,quod_voxel_world_tests,quod_names_tests,quod_lobby_tests,quod_common_primitives_tests"
+  ],
+  "started": "2026-10-16T22:36:49.818450+00:00",
+  "exit": 1,
+  "seconds": 164.56
+}

@@ -1,0 +1,25 @@
+[#{name => flat,
+   totals =>
+       #{bytes => 78848,sample_us => 31323,native_us => 5088,
+         retained_us => 190,triangles => 2048,vertices => 1296},
+   maximum_chunk_bytes => 4880,failures => []},
+ #{name => rough,
+   totals =>
+       #{bytes => 258360,sample_us => 141496,native_us => 8439,
+         retained_us => 324,triangles => 6772,vertices => 4333},
+   maximum_chunk_bytes => 15368,failures => []},
+ #{name => thin_tunnel,
+   totals =>
+       #{bytes => 108032,sample_us => 55967,native_us => 5545,
+         retained_us => 322,triangles => 2816,vertices => 1872},
+   maximum_chunk_bytes => 6704,failures => []},
+ #{name => materials,
+   totals =>
+       #{bytes => 78848,sample_us => 32801,native_us => 4685,
+         retained_us => 243,triangles => 2048,vertices => 1296},
+   maximum_chunk_bytes => 4880,failures => []},
+ #{name => biomes_and_caves,
+   totals =>
+       #{bytes => 75808,sample_us => 414383,native_us => 7433,
+         retained_us => 930,triangles => 1968,vertices => 1226},
+   maximum_chunk_bytes => 7084,failures => []}]

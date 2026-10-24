@@ -1,0 +1,18 @@
+{
+  "name": "native-clippy",
+  "command": [
+    "cargo",
+    "clippy",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "--all-targets",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "started": "2026-10-16T16:48:54.442598+00:00",
+  "exit": 0,
+  "seconds": 1.31,
+  "sources_unchanged": true
+}

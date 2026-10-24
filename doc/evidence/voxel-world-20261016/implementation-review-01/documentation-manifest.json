@@ -1,0 +1,11 @@
+{
+  "captured": "2026-10-16T18:40:37.939887+00:00",
+  "purpose": "Current documentation supplement. clean-gates-04 froze production/test source, not every newly authored documentation file.",
+  "files": {
+    "doc/voxel-world.md": "d0a66d83ecf5779431292c8b7166b3a635976e67b1529f697d408009a44c9254",
+    "doc/physics-native.md": "6bfa02befb520eee8a78e5e37f00b6562de70e9efc4b95306916cea451a01c91",
+    "doc/gui-examples.md": "c73582d9e1aec9582c98b93386809bb54feb4c8f2d16a703ca8ee3e792ba7ea4",
+    "nimbalyst-local/plans/voxel-world-generation-ontology.md": "1064e89aeb90b2a93d60db10850aa19e3243cbdc772367b083426322b868afb2",
+    "doc/evidence/voxel-world-20261016/implementation-acceptance.md": "97669e7f322e740632849064e51d2625945b992a5f867627bd161433c2883b2e"
+  }
+}

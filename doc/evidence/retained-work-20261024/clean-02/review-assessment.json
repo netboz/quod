@@ -1,0 +1,18 @@
+{
+  "scope": "Remaining user-owned source, generated explorer assets, historical evidence and authored design archives. No new ticket implementation.",
+  "historical_source_matches": 117,
+  "later_shared_changes": "All eight non-label differences are completed S1.1 result recovery or S1.2 personal-agent provisioning/instruction integration; exact diff retained. Version-only ninth difference is 0.7.275.",
+  "historical_gates": "terrain-presentation-20261017/clean-presentation-08: 12 sequential gates pass, source frozen; no claims of current-tree validation until fresh gates finish.",
+  "architecture": "Prolog owns terrain definitions, edit rights, allocation and material policy. Existing runtime/resource/physics/view owners retain derived chunks and control coverage; pure voxel/numerical/coordinate/wire modules own no process or durable state. Existing atomic transitions cover domain edits.",
+  "limitations": [
+    "Fresh world creation had pre-walk GUI proof_unavailable/question lifecycle failures in historical deployment 275. Terrain movement/reentry acceptance passed, full creation did not.",
+    "Physical VR, fuller biome authoring and terrain-specific distributed measurements remain unverified/outside archived milestone.",
+    "This work does not deploy source, modify founded ontologies, resume archived plans, or advance S1.3."
+  ],
+  "excluded": [
+    "Generated .agents/skills/.nimbalyst-generated files",
+    "Editor transcript screenshots under .nimbalyst/transcript-images",
+    "Editor voice-memory preference note"
+  ],
+  "evidence_handling": "Original failed campaigns, stop markers, source manifests and review text are preserved byte for byte. Automated scans found no embedded credential patterns. Retired plan ZIP CRC and all five SHA256 entries passed."
+}

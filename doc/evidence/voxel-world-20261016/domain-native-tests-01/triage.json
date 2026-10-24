@@ -1,0 +1,5 @@
+{
+  "failures": 1,
+  "cause": "Coverage waiting used the native fatal-error channel; access/3 correctly retired worlds on errors, so an unchanged sample returned retired.",
+  "correction": "Introduce a successful Step::Coverage waiting result. Preserve fatal-error retirement, and verify waiting leaves the same native world usable."
+}

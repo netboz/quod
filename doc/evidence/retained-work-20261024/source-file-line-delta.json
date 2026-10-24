@@ -1,0 +1,281 @@
+{
+  "definition": "Production Erlang, Prolog, Rust, browser source and declarations; excludes tests, docs, generated UI bundle, tools, licenses, Cargo lockfile and texture data",
+  "files": {
+    "client/src/controlled-navigation.js": {
+      "added": 13,
+      "removed": 5
+    },
+    "client/src/locomotion.d.ts": {
+      "added": 1,
+      "removed": 1
+    },
+    "client/src/locomotion.js": {
+      "added": 5,
+      "removed": 3
+    },
+    "client/src/marks.js": {
+      "added": 31,
+      "removed": 3
+    },
+    "client/src/render-resources.d.ts": {
+      "added": 11,
+      "removed": 1
+    },
+    "client/src/render-resources.js": {
+      "added": 125,
+      "removed": 12
+    },
+    "client/src/scene.js": {
+      "added": 82,
+      "removed": 48
+    },
+    "client/src/signed-view.js": {
+      "added": 20,
+      "removed": 6
+    },
+    "client/src/simulation.d.ts": {
+      "added": 9,
+      "removed": 3
+    },
+    "client/src/simulation.js": {
+      "added": 167,
+      "removed": 9
+    },
+    "client/src/space-entry.d.ts": {
+      "added": 2,
+      "removed": 0
+    },
+    "client/src/space-entry.js": {
+      "added": 5,
+      "removed": 0
+    },
+    "client/src/world-scene.d.ts": {
+      "added": 1,
+      "removed": 1
+    },
+    "client/src/world-scene.js": {
+      "added": 45,
+      "removed": 1
+    },
+    "include/quod_ingress_limits.hrl": {
+      "added": 19,
+      "removed": 6
+    },
+    "include/quod_proof_limits.hrl": {
+      "added": 7,
+      "removed": 9
+    },
+    "include/quod_transport_limits.hrl": {
+      "added": 2,
+      "removed": 0
+    },
+    "include/quod_vm_limits.hrl": {
+      "added": 3,
+      "removed": 4
+    },
+    "native/quod_physics/src/geometry.rs": {
+      "added": 27,
+      "removed": 0
+    },
+    "native/quod_physics/src/lib.rs": {
+      "added": 182,
+      "removed": 44
+    },
+    "native/quod_physics/src/motion.rs": {
+      "added": 29,
+      "removed": 9
+    },
+    "priv/ontologies/lobby_instance.pl": {
+      "added": 50,
+      "removed": 43
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "added": 8,
+      "removed": 0
+    },
+    "priv/ontologies/quod_lobby.pl": {
+      "added": 22,
+      "removed": 4
+    },
+    "priv/ontologies/quod_material_eidolons.pl": {
+      "added": 8,
+      "removed": 0
+    },
+    "priv/ontologies/quod_modelling.pl": {
+      "added": 6,
+      "removed": 1
+    },
+    "priv/ontologies/quod_names.pl": {
+      "added": 18,
+      "removed": 8
+    },
+    "priv/ontologies/quod_physics.pl": {
+      "added": 37,
+      "removed": 25
+    },
+    "priv/ontologies/quod_rendering.pl": {
+      "added": 30,
+      "removed": 3
+    },
+    "src/predicates/quod_common_primitives.erl": {
+      "added": 32,
+      "removed": 3
+    },
+    "src/predicates/quod_ontology_predicates.erl": {
+      "added": 14,
+      "removed": 3
+    },
+    "src/predicates/quod_physics_predicates.erl": {
+      "added": 4,
+      "removed": 4
+    },
+    "src/quod_client_view.erl": {
+      "added": 69,
+      "removed": 14
+    },
+    "src/quod_committed_projection.erl": {
+      "added": 3,
+      "removed": 3
+    },
+    "src/quod_dtx.erl": {
+      "added": 47,
+      "removed": 28
+    },
+    "src/quod_foreign_log.erl": {
+      "added": 1,
+      "removed": 1
+    },
+    "src/quod_foreign_projection.erl": {
+      "added": 2,
+      "removed": 2
+    },
+    "src/quod_ontology.erl": {
+      "added": 35,
+      "removed": 37
+    },
+    "src/quod_physics.erl": {
+      "added": 537,
+      "removed": 97
+    },
+    "src/quod_physics_native.erl": {
+      "added": 9,
+      "removed": 2
+    },
+    "src/quod_resource_basis.erl": {
+      "added": 2,
+      "removed": 0
+    },
+    "src/quod_runtime.erl": {
+      "added": 112,
+      "removed": 18
+    },
+    "src/quod_scope_wire.erl": {
+      "added": 10,
+      "removed": 0
+    },
+    "src/quod_selection_basis.erl": {
+      "added": 13,
+      "removed": 3
+    },
+    "src/quod_simplex.erl": {
+      "added": 2,
+      "removed": 10
+    },
+    "src/quod_wire_term.erl": {
+      "added": 5,
+      "removed": 70
+    },
+    "ui/src/GuiForm.tsx": {
+      "added": 2,
+      "removed": 2
+    },
+    "ui/src/World.tsx": {
+      "added": 101,
+      "removed": 26
+    },
+    "client/src/space-library.d.ts": {
+      "added": 16,
+      "removed": 0
+    },
+    "client/src/space-library.js": {
+      "added": 161,
+      "removed": 0
+    },
+    "client/src/voxel-profile.js": {
+      "added": 73,
+      "removed": 0
+    },
+    "native/quod_physics/src/origin.rs": {
+      "added": 206,
+      "removed": 0
+    },
+    "native/quod_physics/src/terrain.rs": {
+      "added": 495,
+      "removed": 0
+    },
+    "native/quod_physics/src/voxel/chunk.rs": {
+      "added": 224,
+      "removed": 0
+    },
+    "native/quod_physics/src/voxel/mc33.rs": {
+      "added": 121,
+      "removed": 0
+    },
+    "native/quod_physics/src/voxel/mc33_table.rs": {
+      "added": 198,
+      "removed": 0
+    },
+    "native/quod_physics/src/voxel/mod.rs": {
+      "added": 204,
+      "removed": 0
+    },
+    "priv/ontologies/lobby_worlds.pl": {
+      "added": 178,
+      "removed": 0
+    },
+    "priv/ontologies/material_policy.pl": {
+      "added": 20,
+      "removed": 0
+    },
+    "priv/ontologies/voxel_world.pl": {
+      "added": 219,
+      "removed": 0
+    },
+    "priv/ontologies/voxel_world_gui.pl": {
+      "added": 156,
+      "removed": 0
+    },
+    "priv/ontologies/voxel_world_view.pl": {
+      "added": 42,
+      "removed": 0
+    },
+    "src/quod_material_admission.erl": {
+      "added": 89,
+      "removed": 0
+    },
+    "src/quod_physics_coordinates.erl": {
+      "added": 121,
+      "removed": 0
+    },
+    "src/quod_terrain_wire.erl": {
+      "added": 56,
+      "removed": 0
+    },
+    "src/quod_voxel.erl": {
+      "added": 406,
+      "removed": 0
+    },
+    "ui/src/SpaceLibrary.tsx": {
+      "added": 16,
+      "removed": 0
+    },
+    "src/quod_agent.erl": {
+      "added": 2,
+      "removed": 1,
+      "net": 1
+    }
+  },
+  "added": 4968,
+  "removed": 573,
+  "net": 4395
+}

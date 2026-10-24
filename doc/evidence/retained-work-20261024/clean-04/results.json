@@ -1,0 +1,36 @@
+[
+  {
+    "name": "ct",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "ct"
+    ],
+    "exit": 0,
+    "seconds": 575.65,
+    "sources_unchanged": true,
+    "test_summary_complete": true,
+    "passed_tests": 148
+  },
+  {
+    "name": "xref",
+    "command": [
+      "rebar3",
+      "xref"
+    ],
+    "exit": 0,
+    "seconds": 7.13,
+    "sources_unchanged": true
+  },
+  {
+    "name": "dialyzer",
+    "command": [
+      "rebar3",
+      "dialyzer"
+    ],
+    "exit": 1,
+    "seconds": 85.78,
+    "sources_unchanged": true
+  }
+]

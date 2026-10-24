@@ -1,0 +1,94 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Running Common Test suites...
+%%% feed_SUITE: ..
+%%% growth_SUITE: .........
+%%% join_SUITE: .....
+%%% quod_agent_failover_SUITE: .....
+%%% quod_ask_SUITE: ............................................
+%%% quod_names_SUITE: .......
+%%% quod_names_SUITE ==> cold_peer_joins_quod_names: FAILED
+%%% quod_names_SUITE ==> 
+Failure/Error: ?assertEqual(1449227, count ( Asker , ? NAMES_NS ))
+  expected: 1449227
+       got: 1449371
+      line: 394
+
+%%% quod_names_SUITE ==> founder_restarts_and_replays: FAILED
+%%% quod_names_SUITE ==> 
+Failure/Error: ?assertEqual(1449227, count ( Target , ? NAMES_NS ))
+  expected: 1449227
+       got: 1449371
+      line: 423
+
+%%% quod_ns_SUITE: ...
+%%% quod_peer_capacity_SUITE: ......
+%%% quod_peer_observation_SUITE: ....
+%%% quod_quic_SUITE: .....................................
+%%% quod_read_set_SUITE: ...
+%%% quod_simplex_SUITE: ............
+%%% simplex_SUITE: .........
+EXPERIMENTAL: Writing retry specification at /home/yan/src/quod/_build/world-library-20261016/clean-integration-06/tree/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 2 tests. Passed 146 tests. 
+Results written to "/home/yan/src/quod/_build/world-library-20261016/clean-integration-06/tree/_build/test/logs/index.html".
+===> Failures occurred running tests: 2

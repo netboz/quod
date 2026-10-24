@@ -1,0 +1,13 @@
+{
+  "name": "release",
+  "command": [
+    "rebar3",
+    "as",
+    "prod",
+    "release"
+  ],
+  "started": "2026-10-16T17:19:03.913954+00:00",
+  "exit": 0,
+  "seconds": 13.38,
+  "sources_unchanged": true
+}

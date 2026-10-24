@@ -1,0 +1,1016 @@
+--- before/client/src/simulation.js
++++ after/client/src/simulation.js
+@@ -154,13 +154,18 @@
+   const require = (ok, reason) => { if (!ok) throw new Error(`Invalid terrain: ${reason}`) }
+   const discard = () => { epoch++; current = null; token = null; rows = []; centre = null; interest = 0n; manifestInterest = 0n }
+   function project(view) {
++    const terrainMarks = value => JSON.stringify(value?.marks.filter(mark => mark.kind === 'terrain'),
++      (_, item) => typeof item === 'bigint' ? `${item}n` : item)
++    const continuous = current?.selection === 'active' && view.selection === 'active' &&
++      Date.now() < current.expires && current.fence === view.fence &&
++      terrainMarks(current) === terrainMarks(view)
+     discard(); current = view
+     const bindings = new Set(view.marks.filter(mark => mark.kind === 'terrain')
+       .map(mark => mark.body.id))
+     retained = new Map([...retained].filter(([, row]) => bindings.has(row.body)))
+     // Keep dormant model leases until the replacement manifest confirms or
+     // retires them. An authored body revision alone does not change all chunks.
+-    view.terrain = null
++    view.terrain = continuous ? retained : null
+     view.terrainReady = !view.marks.some(mark => mark.kind === 'terrain')
+     return view
+   }
+@@ -213,38 +218,42 @@
+       await render(view)
+       if (live()) send({ type: 'terrain_ack', view: view.view, token, want })
+     } else if (message.token === token) {
+-      // Superseded interest still releases this token's delivery credit. It
++      // Superseded interest releases only this token's delivery credit. It
+       // cannot install geometry or announce completion for the newer camera.
+       if (manifestInterest !== interest) {
+-        if (message.type === 'terrain_complete') send({ type: 'terrain_ack', view: view.view, token, complete: true })
+-        else if (message.type === 'terrain_chunk') send({ type: 'terrain_ack', view: view.view, token, chunk: message.index })
++        send({ type: 'terrain_ack', view: view.view, token, complete: true })
+         return
+       }
+-      if (message.type === 'terrain_chunk') {
+-        const row = rows[message.index]
+-        require(Number.isSafeInteger(message.index) && row && !retained.has(key(row)), 'unexpected chunk')
+-        require(typeof message.payload === 'string' && message.payload.length <= Math.ceil(row.costs[0] * 4 / 3), 'encoded length')
+-        const payload = fromB64url(message.payload)
++      const missing = rows.filter(row => !retained.has(key(row)))
++      require(Array.isArray(message.chunks) && message.chunks.length === missing.length &&
++        message.chunks.every((chunk, i) => chunk.index === missing[i].index), 'requested chunks')
++      const verified = []
++      for (const [i, chunk] of message.chunks.entries()) {
++        const row = missing[i]
++        require(typeof chunk.payload === 'string' && chunk.payload.length <= Math.ceil(row.costs[0] * 4 / 3), 'encoded length')
++        const payload = fromB64url(chunk.payload)
+         require(payload.length === row.costs[0], 'payload length')
+         const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', payload))]
+           .map(n => n.toString(16).padStart(2, '0')).join('')
+         if (!live()) return
+         if (manifestInterest !== interest) {
+-          send({ type: 'terrain_ack', view: view.view, token, chunk: row.index }); return
++          send({ type: 'terrain_ack', view: view.view, token, complete: true }); return
+         }
+         require(digest === row.digest, 'content digest')
+         const header = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
+         require(header.getUint32(0) === 0x51565431 && header.getUint32(4) === row.spacing_mm &&
+           header.getUint32(8) === row.costs[3], 'content metadata')
+-        retained.set(key(row), { ...row, payload }); view.terrain = retained
+-        await render(view)
+-        if (live()) send({ type: 'terrain_ack', view: view.view, token, chunk: row.index })
+-      } else if (message.type === 'terrain_complete') {
+-        require(rows.every(row => retained.has(key(row))), 'incomplete manifest')
++        verified.push({ ...row, payload })
++      }
++      for (const row of verified) retained.set(key(row), row)
++      view.terrain = retained
++      await render(view)
++      if (!live()) return
++      if (manifestInterest === interest) {
+         view.terrainReady = true
+         await render(view)
+-        if (live()) send({ type: 'terrain_ack', view: view.view, token, complete: true })
+-      }
++      }
++      if (live()) send({ type: 'terrain_ack', view: view.view, token, complete: true })
+     }
+   }
+   return { project, discard,
+@@ -266,7 +275,7 @@
+     advance(view) { current = view; return view },
+     close() { discard(); retained.clear() },
+     message(message, view, send, fail) {
+-      if (!['terrain_manifest', 'terrain_chunk', 'terrain_complete'].includes(message.type)) return false
++      if (!['terrain_manifest', 'terrain_chunks'].includes(message.type)) return false
+       if (!view || view !== current || view.selection !== 'active' || message.view !== view.view) return true
+       const version = epoch
+       void handle(message, view, send).catch(error => { if (version === epoch && view === current) fail(error) })
+--- before/client/src/scene.js
++++ after/client/src/scene.js
+@@ -8,6 +8,7 @@
+ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
+ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+ import { Vector3, Quaternion, Matrix } from '@babylonjs/core/Maths/math.vector.js'
++import { RenderingGroup } from '@babylonjs/core/Rendering/renderingGroup.js'
+ 
+ import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
+ import { createSurface } from './render-resources.js'
+@@ -52,7 +53,7 @@
+       if (JSON.stringify(entry.body) !== JSON.stringify(mark.body)) entry.node.setEnabled(!mark.body)
+       entry.body = mark.body
+       entry.terrain = mark.kind === 'terrain' ? mark.size : null
+-      entry.node.metadata = { markId: mark.id, depicts: mark.depicts }
++      entry.node.metadata = { markId: mark.id, depicts: mark.depicts, sky: mark.kind === 'sky_sphere' }
+       if (mark.kind === 'mesh') updateModelFrame(entry, mark.size)
+       if (mark.material && entry.surfaceSignature !== JSON.stringify(mark.material)) {
+         applyMaterial(scene, entry, mark, resources, onError)
+@@ -95,6 +96,25 @@
+   }
+ }
+ 
++// A panorama follows the viewing position, including through an authored
++// parent transform. It keeps its rotation and never becomes a physical body.
++export function paintSkies(painted, camera) {
++  for (const { node } of painted.values()) {
++    if (!node.metadata?.sky) continue
++    const eye = camera.globalPosition
++    node.position.copyFrom(node.parent
++      ? Vector3.TransformCoordinates(eye, node.parent.computeWorldMatrix(true).clone().invert()) : eye)
++    node.computeWorldMatrix(true)
++  }
++}
++
++// Backgrounds never write depth and must precede foreground geometry, even
++// when a surface edit gives the panorama a newer material than that geometry.
++export function compareOpaqueMarks(a, b) {
++  return Number(Boolean(b.getMesh().metadata?.sky)) - Number(Boolean(a.getMesh().metadata?.sky)) ||
++    RenderingGroup.PainterSortCompare(a, b)
++}
++
+ // Terrain is an ordinary body-bound mark whose children lease immutable models
+ // from the shared render owner. Eviction releases instances before allocation.
+ export function paintTerrain(scene, painted, current, resources, onError = () => {}) {
+@@ -126,8 +146,9 @@
+       chunk.node.position.set(...row.origin_mm.map((n, axis) => Number(BigInt(n) - current.origin[axis]) / MM))
+       pending.push(chunk.ready)
+     }
+-    entry.node.setEnabled(current?.terrainReady === true &&
+-      current.poses.has(`${entry.body.id}:${entry.body.revision}`))
++    // Each installed child already passed the current manifest's verification.
++    // Transport completion gates movement, not visibility of those children.
++    entry.node.setEnabled(current.poses.has(`${entry.body.id}:${entry.body.revision}`))
+   }
+   return Promise.all(pending).then(() => undefined)
+ }
+@@ -219,6 +240,7 @@
+         diameter: size.diameter / MM, segments: 48, sideOrientation: Mesh.BACKSIDE,
+       }, scene)
+       sky.isPickable = false
++      sky.applyFog = false
+       return sky
+     }
+     default:
+--- before/client/src/world-scene.js
++++ after/client/src/world-scene.js
+@@ -14,7 +14,7 @@
+ import '@babylonjs/core/Culling/ray.js'
+ import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
+ import { PALETTE } from './palette.js'
+-import { paintMarks, clearMarks, paintBodyPoses, paintTerrain } from './scene.js'
++import { paintMarks, clearMarks, paintBodyPoses, paintTerrain, paintSkies, compareOpaqueMarks } from './scene.js'
+ import { createRenderResources } from './render-resources.js'
+ import { createWorkspacePanel } from './workspace-panel.js'
+ import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
+@@ -41,6 +41,7 @@
+   const engine = new Engine(canvas, true, { stencil: true })
+   const scene = new Scene(engine)
+   scene.useRightHandedSystem = true
++  scene.setRenderingOrder(0, compareOpaqueMarks)
+   const resources = createRenderResources(scene)
+   const sky = Color3.FromHexString(PALETTE.navy).scale(0.34)
+   scene.clearColor.set(sky.r, sky.g, sky.b, 1)
+@@ -99,8 +100,9 @@
+   let painted = new Map()
+   let currentMarks = null
+   let coordinateFrame = null
+-  let simulation = null, terrainCamera = null, terrainObserver = null, ordinaryFar = null
++  let simulation = null, terrainCamera = null, terrainObserver = null
+   let xr = null
++  scene.onBeforeCameraRenderObservable.add(view => paintSkies(painted, view))
+ 
+   function cameraInterest() {
+     const active = scene.activeCamera
+@@ -111,17 +113,16 @@
+     const distance = simulation?.selection === 'active' && root ? root.size.viewDistance[0] / 1000 : null
+     scene.fogMode = distance === null ? Scene.FOGMODE_NONE : Scene.FOGMODE_LINEAR
+     if (distance !== null) {
+-      scene.fogColor.copyFrom(sky); scene.fogStart = distance * 0.75; scene.fogEnd = distance
+-    }
+-    if (terrainCamera) terrainCamera.maxZ = distance ?? ordinaryFar
++      const atmosphere = simulation.marks.find(mark => mark.kind === 'sky_sphere')?.material
++      scene.fogColor.copyFrom(atmosphere ? Color3.FromHexString(atmosphere.colour).scale(atmosphere.emission) : sky)
++      scene.fogStart = distance * 0.75; scene.fogEnd = distance
++    }
+   }
+   function bindTerrainCamera() {
+     if (terrainCamera) {
+       terrainCamera.onViewMatrixChangedObservable.remove(terrainObserver)
+-      terrainCamera.maxZ = ordinaryFar
+     }
+     terrainCamera = scene.activeCamera
+-    ordinaryFar = terrainCamera?.maxZ ?? null
+     terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(cameraInterest) ?? null
+     terrainHorizon()
+     cameraInterest()
+@@ -252,7 +253,7 @@
+       } else if (current) coordinateFrame = null
+       const observer = current?.selection === 'nonphysical' ||
+         (current?.selection === 'active' && current.control === null)
+-      playerNavigation.update(observer ? undefined : current?.selection === 'active' && current.terrainReady !== false ? current : null)
++      playerNavigation.update(observer ? undefined : current?.selection === 'active' ? current : null)
+       if (current && current.marks !== currentMarks) {
+         painted = paintMarks(scene, current.marks, painted, resources, onResourceError)
+         currentMarks = current.marks
+--- before/client/src/controlled-navigation.js
++++ after/client/src/controlled-navigation.js
+@@ -24,11 +24,12 @@
+   const saved = { position: camera.position.clone(), rotation: camera.rotation.clone(), parent: camera.parent,
+     inertia: camera.inertia, keys: ['keysUp', 'keysDown', 'keysLeft', 'keysRight'].map(k => [...camera[k]]) }
+   const owner = canvas.ownerDocument
++  const commandReady = () => current?.control && current.command && current.terrainReady !== false
+   const down = event => {
+     if (current === undefined || !active() || blocked() || event.ctrlKey || event.metaKey || event.altKey) return
+     if (event.key === ' ' && current?.control?.grounded && current.control.jump && current.command) {
+       event.preventDefault()
+-      if (!event.repeat) {
++      if (!event.repeat && commandReady()) {
+         lastDrive = ''
+         void current.command(jumpInput(current.control.jump))
+       }
+@@ -134,7 +135,7 @@
+       mask(distance > Math.min(current.clearance, control.viewpoint.trackingRadius),
+         'View blocked. Return your head toward your starting position.')
+     } else mask(false)
+-    if (!control || !current.command) return
++    if (!commandReady()) return
+     const enabled = !blocked() && (xrCamera !== null || active())
+     const pressed = (...keys) => keys.some(k => held.has(k)) ? 1 : 0
+     const forward = enabled ? (xrCamera ? -axes.y : pressed('w', 'z', 'ArrowUp') - pressed('s', 'ArrowDown')) : 0
+@@ -173,7 +174,7 @@
+     },
+     axes(value) { axes = value },
+     snap(sign) {
+-      if (!blocked() && current?.control?.snap && current.command) {
++      if (!blocked() && commandReady() && current.control.snap) {
+         reset(); void current.command(snapInput(Math.sign(sign) * current.control.snap))
+       }
+     },
+@@ -186,7 +187,7 @@
+     },
+     teleport(direction, fraction = 0.5) {
+       const control = current?.control
+-      if (blocked() || !control?.grounded || !control.teleport || !current.command) return
++      if (blocked() || !commandReady() || !control.grounded || !control.teleport) return
+       const body = current.poses.get(`${control.body}:${control.bodyRevision}`)
+       const ray = direction.clone(); ray.y = 0; ray.normalize()
+       // The controller selects a body-origin target and the physics predicate
+--- before/client/src/render-resources.js
++++ after/client/src/render-resources.js
+@@ -322,7 +322,8 @@
+   try {
+     material.albedoColor = Color3.FromHexString(definition.colour).toLinearSpace()
+     material.metallic = definition.metallic; material.roughness = definition.roughness
+-    material.emissiveColor = material.albedoColor.scale(definition.emission)
++    if (sky) material.albedoColor.scaleInPlace(definition.emission)
++    else material.emissiveColor = material.albedoColor.scale(definition.emission)
+     material.unlit = sky; material.backFaceCulling = !sky; material.disableDepthWrite = sky
+     material.invertNormalMapX = !scene.useRightHandedSystem
+     material.invertNormalMapY = scene.useRightHandedSystem
+@@ -340,7 +341,6 @@
+       textures.forEach((texture, i) => {
+         const slot = definition.textures[i].slot
+         material[slots[slot]] = texture
+-        if (sky && slot === 'base_colour') material.emissiveTexture = texture
+       })
+       return material
+     })
+--- before/client/test/terrain-delivery.test.js
++++ after/client/test/terrain-delivery.test.js
+@@ -60,30 +60,38 @@
+     assert.equal(painted.get('land').node.isEnabled(), false)
+     socket.receive({ type: 'terrain_manifest', interest_seq: '0', view, token, chunks: [row] })
+     assert.deepEqual((await socket.next()).want, [0])
++    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '2' } })
++    assert.equal((await socket.next()).tick, '2', 'poses advance between resources on the same credit')
++    assert.equal(current.terrainReady, false)
+     let release
+     hold = new Promise(resolve => { release = resolve })
+     rendered = new Promise(resolve => { signal = resolve })
+-    socket.receive({ type: 'terrain_chunk', view, token, index: 0, payload: Buffer.from(payload).toString('base64url') })
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await rendered
+     assert.equal(socket.sent.length, 0, 'renderer completion holds delivery credit')
+     const chunk = painted.get('land').chunks.get('0:0,0,0'), instance = chunk.instance
+     assert.ok(instance.rootNodes.length > 0)
+-    assert.equal(painted.get('land').node.isEnabled(), false)
++    assert.equal(painted.get('land').node.isEnabled(), true, 'verified chunks are visible before transport completion')
+     release(); hold = null; signal = null
+-    assert.equal((await socket.next()).chunk, 0)
+-    socket.receive({ type: 'terrain_complete', view, token })
+     assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, true)
+     assert.equal(painted.get('land').node.isEnabled(), true)
++    current.interest([0, 0, 0])
++    assert.equal((await socket.next()).type, 'terrain_interest')
++    assert.equal(current.terrainReady, false)
++    await render(current)
++    assert.equal(painted.get('land').node.isEnabled(), true, 'streaming preserves the installed landscape')
++    assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, instance)
+     const nextToken = Buffer.alloc(32, 2).toString('base64url')
+-    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '2' } })
+-    assert.equal((await socket.next()).tick, '2')
+-    socket.receive({ type: 'terrain_manifest', interest_seq: '0', view, token: nextToken, chunks: [row] })
++    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '3' } })
++    assert.equal((await socket.next()).tick, '3')
++    socket.receive({ type: 'terrain_manifest', interest_seq: '1', view, token: nextToken, chunks: [row] })
+     assert.deepEqual((await socket.next()).want, [])
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, instance)
+-    socket.receive({ type: 'terrain_complete', view, token: nextToken })
+-    await socket.next()
+-    socket.receive({ type: 'terrain_manifest', interest_seq: '0', view, token, chunks: [] })
++    assert.equal(painted.get('land').node.isEnabled(), true, 'confirmed retained chunks stay visible')
++    socket.receive({ type: 'terrain_chunks', view, token: nextToken, chunks: [] })
++    await socket.next()
++    socket.receive({ type: 'terrain_manifest', interest_seq: '1', view, token, chunks: [] })
+     assert.deepEqual((await socket.next()).want, [])
+     assert.equal(painted.get('land').chunks.size, 0)
+     assert.equal(chunk.node.isDisposed(), true)
+@@ -105,6 +113,34 @@
+     assert.equal(socket.sent.length, 0)
+   } finally { stream.close() }
+ })
++
++for (const bad of ['missing', 'duplicate', 'unrequested', 'digest']) {
++  test(`a ${bad} chunk bundle cannot install partial content or release credit`, { timeout: 5000 }, async () => {
++    let current, rejected
++    const failure = new Promise(resolve => { rejected = resolve })
++    const { socket, stream, view } = await connection(value => { current = value }, { push: rejected })
++    const token = Buffer.alloc(32, 9).toString('base64url')
++    try {
++      socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row,
++        { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
++      assert.deepEqual((await socket.next()).want, [0, 1])
++      const encoded = Buffer.from(payload).toString('base64url')
++      const chunks = [{ index: 0, payload: encoded }, { index: 1, payload: encoded }]
++      if (bad === 'missing') chunks.pop()
++      if (bad === 'duplicate') chunks[1].index = 0
++      if (bad === 'unrequested') chunks[1].index = 2
++      if (bad === 'digest') {
++        const damaged = Buffer.from(payload); damaged[20] ^= 1
++        chunks[1].payload = damaged.toString('base64url')
++      }
++      socket.receive({ type: 'terrain_chunks', view, token, chunks })
++      assert.match(await failure, bad === 'digest' ? /content digest/ : /requested chunks/)
++      assert.equal(current.terrain.size, 0)
++      assert.equal(current.terrainReady, false)
++      assert.equal(socket.sent.length, 0)
++    } finally { stream.close() }
++  })
++}
+ 
+ test('a body revision keeps unchanged models dormant until its new signed manifest confirms them', { timeout: 5000 }, async () => {
+   const engine = new NullEngine(), scene = new Scene(engine), resources = createRenderResources(scene)
+@@ -121,9 +157,8 @@
+   try {
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row] })
+     await socket.next()
+-    socket.receive({ type: 'terrain_chunk', view, token, index: 0, payload: Buffer.from(payload).toString('base64url') })
+-    await socket.next()
+-    socket.receive({ type: 'terrain_complete', view, token }); await socket.next()
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    await socket.next()
+     const model = painted.get('land').chunks.get('0:0,0,0').instance
+     socket.receive({ type: 'refresh', reason: 'changed' })
+     const open = await socket.next()
+@@ -137,12 +172,50 @@
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, model)
+     socket.receive({ type: 'terrain_manifest', view: next, token, interest_seq: '0', chunks: [{ ...row, revision: '2' }] })
+     assert.deepEqual((await socket.next()).want, [])
+-    socket.receive({ type: 'terrain_complete', view: next, token }); await socket.next()
++    socket.receive({ type: 'terrain_chunks', view: next, token, chunks: [] }); await socket.next()
+     assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, model)
+     assert.equal(painted.get('land').node.isEnabled(), true)
+     assert.deepEqual(failures, [])
+   } finally { stream.close(); clearMarks(painted); resources.dispose(); scene.dispose(); engine.dispose() }
+ })
++
++for (const change of ['unchanged', 'incarnation', 'allowance']) {
++  test(`authorization renewal ${change === 'unchanged' ? 'preserves' : 'rechecks'} terrain for ${change} bindings`, async t => {
++    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1800000000000 })
++    const engine = new NullEngine(), scene = new Scene(engine), resources = createRenderResources(scene)
++    let painted = new Map(), current
++    const failures = []
++    const render = value => {
++      current = value
++      painted = paintMarks(scene, value.marks, painted, resources)
++      paintBodyPoses(painted, value.poses)
++      return paintTerrain(scene, painted, value, resources)
++    }
++    const { socket, stream, view } = await connection(render, failures)
++    const token = Buffer.alloc(32, 10).toString('base64url')
++    try {
++      socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row] })
++      await socket.next()
++      socket.receive({ type: 'terrain_chunks', view, token,
++        chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++      assert.equal((await socket.next()).complete, true)
++      const model = painted.get('land').chunks.get('0:0,0,0').instance
++      t.mock.timers.tick(15000)
++      const open = await socket.next()
++      assert.equal(open.type, 'open')
++      const renewed = createHash('sha256').update(Buffer.from(open.request, 'base64url')).digest('base64url')
++      socket.receive({ type: 'projection', selection: 'active', view: renewed, height: '1',
++        expires_ms: String(Date.now() + 30000), marks: `[${change === 'allowance' ? terrain.replace('1000,1000,2)', '1000,1000,1)') : terrain}]`,
++        frame: { ...frame, incarnation: change === 'incarnation' ? 'replacement' : frame.incarnation } })
++      assert.equal((await socket.next()).type, 'ack')
++      assert.equal(current.terrainReady, false, 'the new registration still waits for its own completion')
++      assert.equal(current.terrain !== null, change === 'unchanged')
++      assert.equal(painted.get('land').node.isEnabled(), change === 'unchanged')
++      if (change === 'unchanged') assert.equal(painted.get('land').chunks.get('0:0,0,0').instance, model)
++      assert.deepEqual(failures, [])
++    } finally { stream.close(); clearMarks(painted); resources.dispose(); scene.dispose(); engine.dispose() }
++  })
++}
+ 
+ test('camera interest is canonical, boundary driven, and stale completion cannot open the new horizon', { timeout: 5000 }, async () => {
+   let current
+@@ -159,14 +232,12 @@
+     assert.equal(current.terrainReady, false)
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [placed] })
+     assert.deepEqual((await socket.next()).want, [])
+-    socket.receive({ type: 'terrain_complete', view, token })
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [] })
+     assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, false)
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '1', chunks: [placed] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunk', view, token, index: 0, payload: Buffer.from(payload).toString('base64url') })
+-    assert.equal((await socket.next()).chunk, 0)
+-    socket.receive({ type: 'terrain_complete', view, token })
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, true)
+     assert.equal(current.interest([3.2, 2, 2]), true)
+@@ -198,14 +269,12 @@
+     current.interest([0, 0, 0]); await socket.next()
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '1', chunks: [row] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunk', view, token, index: 0, payload: Buffer.from(payload).toString('base64url') })
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+     await checking
+     current.interest([2, 0, 0]); assert.equal((await socket.next()).sequence, '2')
+     release()
+-    assert.equal((await socket.next()).chunk, 0)
++    assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrain.size, 0)
+-    socket.receive({ type: 'terrain_complete', view, token })
+-    assert.equal((await socket.next()).complete, true)
+     assert.equal(current.terrainReady, false)
+     assert.deepEqual(failures, [])
+   } finally { release(); stream.close() }
+@@ -227,9 +296,8 @@
+     socket.receive({ type: 'terrain_manifest', interest_seq: '0', view, token, chunks: [{ ...row,
+       chunk: [String(chunkX), '0', '0'], origin_mm: [String(origin), '0', '0'] }] })
+     assert.deepEqual((await socket.next()).want, [0])
+-    socket.receive({ type: 'terrain_chunk', view, token, index: 0, payload: Buffer.from(payload).toString('base64url') })
+-    await socket.next()
+-    socket.receive({ type: 'terrain_complete', view, token }); await socket.next()
++    socket.receive({ type: 'terrain_chunks', view, token, chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
++    await socket.next()
+     const entry = painted.get('land').chunks.get(`0:${chunkX},0,0`), model = entry.instance
+     assert.deepEqual(entry.node.position.asArray(), [0, 0, 0])
+     socket.receive({ type: 'simulation_frame', view, frame: { ...physical, tick: '2', origin_seq: '1',
+--- before/client/test/scene.test.js
++++ after/client/test/scene.test.js
+@@ -8,7 +8,8 @@
+ import { readMarks } from '../src/marks.js'
+ import { radialIndex } from '../src/world-scene.js'
+ import { Ray } from '@babylonjs/core/Culling/ray.js'
+-import { paintMarks, clearMarks } from '../src/scene.js'
++import { paintMarks, clearMarks, paintSkies, compareOpaqueMarks } from '../src/scene.js'
++import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
+ 
+ const root = 'mark(<<"console">>,<<"group">>,[],transform(1000,0,0,0,90,0),no_surface,unlabelled,depicts_nothing)'
+ const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),surface(<<"#F9C80E">>,0,900,700,[]),unlabelled,depicts_nothing)'
+@@ -69,6 +70,7 @@
+     const painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
+     const dome = painted.get('sky').node
+     assert.equal(dome.isPickable, false)
++    assert.equal(dome.applyFog, false)
+     assert.equal(dome.material.unlit, true)
+     assert.equal(dome.material.backFaceCulling, false)
+     assert.equal(dome.material.disableDepthWrite, true)
+@@ -78,14 +80,32 @@
+   })
+ })
+ 
+-test('a sky panorama drives the adapter emissive texture', async () => {
++test('a parented panorama follows translated and rebased viewing positions without changing rotation', () => {
++  withScene(scene => {
++    const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
++      'relative(<<"console">>,transform(0,0,0,0,35,0)),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
++      'unlabelled,depicts_nothing)'
++    const painted = paintMarks(scene, readMarks(`[${root},${sky}]`))
++    const camera = new UniversalCamera('viewer', new Vector3(70, 25, -100), scene)
++    const dome = painted.get('sky').node, rotation = dome.rotationQuaternion.clone()
++    for (const position of [[70, 25, -100], [-2, 3, 4]]) {
++      camera.position.set(...position); camera.getViewMatrix(true)
++      paintSkies(painted, camera)
++      assert.ok(Vector3.Distance(dome.getAbsolutePosition(), camera.globalPosition) < 1e-5)
++      assert.deepEqual(dome.rotationQuaternion.asArray(), rotation.asArray())
++    }
++    clearMarks(painted)
++  })
++})
++
++test('a sky panorama applies brightness once through its unlit surface', async () => {
+   const engine = new NullEngine()
+   const scene = new Scene(engine)
+   const texture = { dispose() {} }
+   const resources = { acquire() { return { ready: Promise.resolve(texture), release() {} } } }
+   const sky = readMarks(
+     '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
+-    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,' +
++    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,250,' +
+     '[texture(<<"base_colour">>,asset(<<"' + 'a'.repeat(64) +
+     '">>,<<"image/jpeg">>),repeat(1000,1000))]),unlabelled,depicts_nothing)]')
+   let painted = new Map()
+@@ -95,8 +115,26 @@
+     await Promise.resolve()
+     const material = painted.get('sky').node.material
+     assert.equal(material.albedoTexture, texture)
+-    assert.equal(material.emissiveTexture, texture)
+-  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
++    assert.equal(material.emissiveTexture, null)
++    assert.deepEqual(material.emissiveColor.asArray(), [0, 0, 0])
++    assert.deepEqual(material.albedoColor.asArray(), [0.25, 0.25, 0.25])
++  } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
++})
++
++test('a changed panorama surface still renders before foreground geometry', () => {
++  withScene(scene => {
++    const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
++      'transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),unlabelled,depicts_nothing)'
++    let painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
++    const foreground = painted.get('screen').node
++    painted = paintMarks(scene, readMarks(`[${sky.replace('#FFFFFF', '#BCC9D8')},${root},${child}]`), painted)
++    const dome = painted.get('sky').node
++    assert.ok(dome.material.uniqueId > foreground.material.uniqueId)
++    assert.ok(compareOpaqueMarks(dome.subMeshes[0], foreground.subMeshes[0]) < 0)
++    assert.ok(compareOpaqueMarks(foreground.subMeshes[0], dome.subMeshes[0]) > 0)
++    assert.equal(dome.material.disableDepthWrite, true)
++    clearMarks(painted)
++  })
+ })
+ 
+ test('reparented children survive removed parents; geometry replacement retires only old resources', () => {
+--- before/priv/ontologies/lobby_worlds.pl
++++ after/priv/ontologies/lobby_worlds.pl
+@@ -92,6 +92,13 @@
+         assertz(physics_next_body(W,0)),assertz(physics_run(W,0,none)),
+         assertz(physics_definition(world_pilot(W),1,geometry(capsule(500,250),1))),
+         assertz(world_arrival(W,Pose)),
++        assertz(instance_of(sky_sphere,world_sky(W))),
++        assertz(attribute(world_sky(W),mark_id,<<"sky">>)),
++        assertz(attribute(world_sky(W),panorama,belfast_sunset_puresky)),
++        assertz(attribute(world_sky(W),diameter,80000)),
++        assertz(attribute(world_sky(W),rotation,75)),
++        assertz(attribute(world_sky(W),brightness,1000)),
++        assertz(attribute(world_sky(W),tint,<<"#BCC9D8">>)),
+         world_palette(Palette),world_render_resources(Resources),
+         world_initial_view(Spec,View),
+         assertz(voxel_presentation(W,<<"terrain">>,Palette,View,Resources)),
+@@ -123,13 +130,10 @@
+     (D >= 128,Row > Before -> Next = Row ; Next = Before),
+     J is I+1,world_highest_solid(Ds,N,J,Next,Highest).
+ 
+-world_palette([
+-    material(1,surface(<<"#668B45">>,0,950,0,[])),
+-    material(2,surface(<<"#755338">>,0,950,0,[])),
+-    material(3,surface(<<"#C6B47B">>,0,900,0,[])),
+-    material(4,surface(<<"#B47A54">>,0,900,0,[])),
+-    material(5,surface(<<"#E7E9E5">>,0,800,0,[])),
+-    material(6,surface(<<"#727F83">>,0,900,0,[]))]).
++world_palette(Palette) :-
++    lobby_vocabulary(Ns,A),Ns::(current_ontology_identity(Ns,A),world_palette(Palette)).
++space_member(W,entity_ref(Ns,A,world_sky(W))) :-
++    lobby_terrain_world(W),current_ontology_identity(Ns,A).
+ 
+ %% Allocate within the selected renderer's authored policy. The proof retains
+ %% these dependencies; a larger physical-world allowance is not a view budget.
+--- before/priv/ontologies/quod_lobby.pl
++++ after/priv/ontologies/quod_lobby.pl
+@@ -14,6 +14,7 @@
+ lobby_query(class_eidolon(_, _, _, _)).
+ lobby_query(eidolon(_, _, _)).
+ lobby_query(lobby_options(_, _, _)).
++lobby_query(world_palette(_)).
+ lobby_query(ontology_creation_allowed(_, _, _)).
+ lobby_query(Goal) :- public_source_query(Goal).
+ 
+@@ -164,6 +165,20 @@
+          class_eidolon(Material, playing, solid, recipe(RecipeNs, RecipeAnchor, Recipe))),
+     RecipeNs::(current_ontology_identity(RecipeNs, RecipeAnchor),
+                eidolon(Recipe, material(Material), Surface)).
++
++%% New worlds freeze these catalogue-selected surfaces into their own state.
++world_palette([
++    material(1,surface(<<"#B7D6AA">>,0,950,0,[Grass])),
++    material(2,surface(<<"#A58868">>,0,950,0,[Ground])),
++    material(3,surface(<<"#E5D8AC">>,0,900,0,[Ground])),
++    material(4,surface(<<"#C99B79">>,0,900,0,[Ground])),
++    material(5,surface(<<"#E7E9E5">>,0,800,0,[])),
++    material(6,surface(<<"#A1A5A5">>,0,900,0,[Ground]))]) :-
++    material_eidolons(Ns,A),
++    Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_grass,<<"base_colour">>,GrassAsset,_)),
++    Ns::(current_ontology_identity(Ns,A),texture_asset(babylon_ground,<<"base_colour">>,GroundAsset,_)),
++    Grass = texture(<<"base_colour">>,GrassAsset,repeat(500,500)),
++    Ground = texture(<<"base_colour">>,GroundAsset,repeat(500,500)).
+ 
+ %% Roof and ground are separate appearance assets, not physical body identities.
+ eidolon(lobby_roof, device(_),
+--- before/doc/voxel-world.md
++++ after/doc/voxel-world.md
+@@ -206,7 +206,11 @@
+ physical geometry. The excavation and viewing-distance forms use the same
+ question/responder lifecycle; see [application forms](gui-examples.md).
+ 
+-The bundle is not installed in a live ontology. Cubic integration is deferred.
++The lobby library creates owned smooth worlds through this composition. Its
++creation transaction freezes catalogue-selected grass and ground textures into
++the palette and creates an independently editable sky instance using the
++existing environment Eidolon. Geometry, physics and terrain edits do not own
++these appearance assets. Cubic integration is deferred.
+ 
+ The existing physics resource worker selects initial resident chunks from the
+ same verified snapshot as the ordinary bodies. `quod_voxel:prepare/5` consumes
+@@ -326,8 +330,13 @@
+ The existing signed view shares one delivery credit between physical frames
+ and terrain resources. A bounded manifest names current chunks, canonical
+ origins, content digests and measured costs. The browser discards obsolete
+-leases, requests only missing indices, and acknowledges each complete resource
+-after verified rendering. A completion acknowledgement releases frame delivery.
++leases and requests only missing indices. The owner delivers those indices in
++one content message bounded by the manifest's already admitted transfer and
++geometry allowances, including an empty message when everything is retained.
++The browser verifies the exact requested set and all digests before installing
++new bytes, then acknowledges completion after rendering. There is no network
++round trip per chunk. A fresh physical frame alternates with resources on that
++same credit; preparing a manifest does not withhold motion updates.
+ Watch/reference and manifest tokens make stale acknowledgements harmless.
+ Replacement and expiration use the same view lifecycle. No public asset route
+ or durable generated-blob service is involved.
+@@ -335,8 +344,13 @@
+ The browser resource owner validates QVT1 framing, coordinates, winding,
+ nondegeneracy, materials, measured allocation and digest before constructing
+ an ordinary model template. Terrain occurrences lease and instantiate those
+-models through the existing scene reconciler. A root stays unavailable for
+-navigation and hidden until its complete current manifest is installed.
++models through the existing scene reconciler. Verified content becomes visible
++when installed; requesting a new window does not hide retained geometry.
++Navigation waits for the complete current manifest while its physical camera
++binding and held input remain intact. An uninterrupted, unexpired authorization
++renewal keeps verified terrain visible only when the physical fence and full
++terrain marks, including resource allowances, are unchanged. Invalidation or a
++changed binding hides the old terrain until the new manifest confirms it.
+ Equal content retains its model; removed chunks release instances and leases.
+ The authenticated view connection accepts monotonic `terrain_interest` messages
+ bound to its exact view digest, watch and absolute expiry. Their centres are
+@@ -352,8 +366,13 @@
+ view's regions, while distant bodies retain their collision support.
+ 
+ Camera movement requests another window after crossing the prefetch margin;
+-there is no readiness polling. Common linear fog and the camera's far plane
+-end at the authored distance. Manifests carry the acknowledged interest sequence.
++there is no readiness polling. Common linear fog ends at the authored distance.
++Sky panoramas use the existing environment marks and verified texture leases,
++follow the viewer through their authored parent transforms, render before
++foreground geometry without writing depth, and remain outside terrain fog.
++Their unlit surface applies authored brightness once. The camera retains its ordinary far plane so the panorama is not
++clipped by the terrain viewing distance. Fog takes the authored atmosphere tint
++and brightness when present. Manifests carry the acknowledged interest sequence.
+ An older manifest or a checksum finishing after camera movement releases only
+ its own delivery credit and cannot mark the newer window ready. Viewer
+ disappearance reclaims its regions through the existing owner notification;
+--- before/test/quod_gui_examples_tests.erl
++++ after/test/quod_gui_examples_tests.erl
+@@ -22,6 +22,8 @@
+         Facts = [{lobby_owner,Human},{physics_initial_host,personal_lobby,Node},
+             {gui_vocabulary,<<"quod:gui">>,quod_simplex:genesis_hash(<<"quod:gui">>)},
+             {names_vocabulary,<<"quod:names">>,quod_simplex:genesis_hash(<<"quod:names">>)},
++            {environment_eidolons,<<"lobby-test-environment-eidolons">>,
++                quod_simplex:genesis_hash(<<"lobby-test-environment-eidolons">>)},
+             {lobby_vocabulary,<<"lobby-test-classes">>,quod_simplex:genesis_hash(<<"lobby-test-classes">>)},
+             {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
+             {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)}],
+@@ -98,6 +100,14 @@
+                         read(Ctx,Ns,{client_world_view,W,playing,[],{0}}),
+                     ?assert(lists:any(fun({mark,_,<<"terrain">>,_,_,_,_,_}) -> true;
+                                         (_) -> false end,Visible)),
++                    ?assert(lists:any(fun({mark,_,<<"sky_sphere">>,_,_,
++                        {surface,_,_,_,1000,[{texture,<<"base_colour">>,_,_}]},_,_}) -> true;
++                        (_) -> false end,Visible)),
++                    {ok,[#{<<"V0">> := Palette}],_} = read(Ctx,Ns,
++                        {voxel_presentation,W,<<"terrain">>,{0},{1},{2}}),
++                    ?assertMatch({material,1,{surface,_,_,_,_,[{texture,<<"base_colour">>,_,_}]}},
++                        lists:keyfind(1,2,Palette)),
++                    ?assertMatch({ok,[_],_},read(Ctx,Ns,{instance_of,sky_sphere,{world_sky,W}})),
+                     {W,Owner}
+                 end || {world,{entity_ref,_,_,W},_} <- Worlds],
+                 World = {world_ref,Ns,Anchor,W1},
+--- before/client/test/controlled-navigation.test.js
++++ after/client/test/controlled-navigation.test.js
+@@ -49,9 +49,17 @@
+     owner.dispatchEvent(event)
+     navigation.render(0)
+     const placement = camera.parent.position.asArray()
+-    navigation.update({ ...current, view: 'renewed', expires: Date.now() + 30000,
++    navigation.update({ ...current, terrainReady: false })
++    navigation.snap(1)
++    navigation.teleport(Vector3.Forward())
++    current.control.jump = 3
++    const jump = new Event('keydown'); Object.defineProperty(jump, 'key', { value: ' ' })
++    owner.dispatchEvent(jump)
++    navigation.render(250)
++    assert.equal(sent.length, 1, 'loading terrain pauses commands without clearing held input')
++    navigation.update({ ...current, terrainReady: true, view: 'renewed', expires: Date.now() + 30000,
+       physicalFrame: { registration: 'renewed' } })
+-    navigation.render(250)
++    navigation.render(500)
+     assert.equal(sent.length, 2)
+     assert.deepEqual(sent[1], sent[0], 'renewal retains the held direction without another keydown')
+     assert.deepEqual(camera.parent.position.asArray(), placement)
+--- before/src/quod_physics.erl
++++ after/src/quod_physics.erl
+@@ -184,9 +184,7 @@
+                 true -> V#{terrain_wanted => lists:sort(Ids),credit => true};
+                 false -> V
+             end;
+-        {{terrain_chunk,Token,Id},{chunk,Id}} ->
+-            [Id|Rest] = maps:get(terrain_wanted,V), V#{terrain_wanted => Rest,credit => true};
+-        {{terrain_complete,Token},complete} -> V#{terrain_complete => true,credit => true};
++        {{terrain_chunks,Token},complete} -> V#{terrain_complete => true,credit => true};
+         _ -> V
+     end,
+     {noreply,deliver_frame(S#s{viewer = Next})};
+@@ -884,7 +882,17 @@
+                                credit := Credit, tick := Previous} = V, frame = Frame}) ->
+     case current_projection(Frame, Expected) of
+         false -> Pid ! {physics_refresh, self(), Ref}, clear_viewer(S);
+-        true when Credit -> deliver_resources(S,V,Expected,Frame,Previous);
++        true when Credit ->
++            %% Alternate a fresh pose with resources on the same credit. A
++            %% long manifest must not freeze motion, nor motion starve chunks.
++            Next = case maps:get(delivery,V) of
++                frame -> S;
++                _ -> deliver_pose(S,Frame,Previous)
++            end,
++            case Next#s.viewer of
++                #{credit := false} -> Next;
++                _ -> deliver_resources(S,V,Expected,Frame,Previous)
++            end;
+         true -> S
+     end.
+ 
+@@ -920,17 +928,15 @@
+     end.
+ 
+ deliver_resource_snapshot(S,V,Frame,Previous) ->
+-    case {maps:get(terrain_complete,V,true),maps:get(terrain_wanted,V,[])} of
+-        {true,_} -> deliver_pose(S,Frame,Previous);
+-        {false,[Id|_]} ->
++    case maps:get(terrain_complete,V,true) of
++        true -> deliver_pose(S,Frame,Previous);
++        false ->
+             Token = maps:get(terrain_token,V),
+-            Row = lists:nth(Id+1,maps:get(terrain_snapshot,V)),
+-            send_view_resource({terrain_chunk,Token,Id,maps:get(payload,Row)},V),
+-            S#s{viewer = V#{delivery => {terrain_chunk,Token,Id},credit => false}};
+-        {false,[]} ->
+-            Token = maps:get(terrain_token,V),
+-            send_view_resource({terrain_complete,Token},V),
+-            S#s{viewer = V#{delivery => {terrain_complete,Token},credit => false}}
++            Wanted = maps:from_keys(maps:get(terrain_wanted,V),true),
++            Chunks = [{I,maps:get(payload,Row)} || Row = #{index := I} <- maps:get(terrain_snapshot,V),
++                                                 is_map_key(I,Wanted)],
++            send_view_resource({terrain_chunks,Token,Chunks},V),
++            S#s{viewer = V#{delivery => {terrain_chunks,Token},credit => false}}
+     end.
+ 
+ send_view_resource(Message,#{pid := Pid,ref := Ref}) ->
+--- before/test/quod_physics_tests.erl
++++ after/test/quod_physics_tests.erl
+@@ -5144,7 +5144,8 @@
+         end || F <- [First,Second]]
+     end) end}.
+ 
+-terrain_delivery_credit_and_replacement_test() ->
++terrain_delivery_credit_and_replacement_test_() ->
++    [{atom_to_list(Mode),{timeout,20,fun() ->
+     Field = {field_v1,1,500,[{plane,1000}],9},
+     Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
+               {surface_limits,512,10000,10000},69120,500000},
+@@ -5154,14 +5155,29 @@
+         {Activation,Token} = receive
+             {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
+         after 5000 -> error(activation_missing) end,
+-        Current = Spec#{generation => 1,run_token => Token,
++        Initial = Spec#{generation => 1,run_token => Token,
+             custody => {request,Token,0,<<2>>,<<0:512>>},
+-            limits => {2,2,1,1000.0,2,10000,10000},dt => 1/60,gravity => 0.0,structure => 1,
++            %% This step keeps the full conservative dynamic envelope inside
++            %% the fixture's one resident chunk throughout the fall.
++            limits => {2,2,1,1000.0,2,10000,10000},dt => 1/600,gravity => -9.81,structure => 1,
+             activities => #{},bodies => [{0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
+-                {terrain,500,[{{0,0,0},Handle}]},1.0}],voxel_resources => #{{0,{chunk_v1,0,0,0}} => A}},
+-        Pid ! {physics_selected,self(),make_ref(),Current},
++                {terrain,500,[{{0,0,0},Handle}]},1.0}] ++ case Mode of
++                    static -> [];
++                    moving -> [{1,1,dynamic,{world_mm,{2000,2500,2000},{0.0,0.0,0.0}},
++                                 {solid,{ball,0.25}},1.0}]
++                end,voxel_resources => #{{0,{chunk_v1,0,0,0}} => A}},
++        Pid ! {physics_selected,self(),make_ref(),Initial},
+         Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
+         receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(install_missing) end,
++        Current = case Mode of
++            static -> Initial;
++            moving ->
++                receive {physics_terrain_demand,Pid,_,Token,1,Ranges,Focus} ->
++                    ?assertEqual([{0,{0,0,0},{0,0,0}}],Ranges),
++                    Selected = Initial#{terrain_demand => {Pid,Token,1,Ranges,Focus}},
++                    Pid ! {physics_selected,self(),make_ref(),Selected},Selected
++                after 5000 -> error(physical_demand_missing) end
++        end,
+         Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token,
+             control => none,terrain => [{0,1,{view_distance,4000,1000,2000},[10000,20000,1000,1000,2]}]},
+         {ok,Ref,Frame} = quod_physics:watch(Pid,Expected,none),
+@@ -5170,19 +5186,35 @@
+         {Manifest,[Row]} = receive {physics_resource,Pid,Ref,{terrain_manifest,M,0,Rows}} -> {M,Rows}
+             after 5000 -> error(manifest_missing) end,
+         ?assertMatch(#{body := 0,revision := 1,index := 0,costs := [4880,13824,384,128,1]},Row),
++        case Mode of
++            static -> ok;
++            moving -> receive {physics_status,Pid,_,Token,sleeping} -> ok
++                      after 15000 -> error(moving_body_did_not_settle) end
++        end,
+         quod_physics:ack(Pid,Ref,Tick,0),
+         quod_physics:resource_ack(Pid,Ref,<<0:256>>,{want,[0]}),
+         _ = gen_server:call(Pid,status),
+         receive {physics_resource,Pid,Ref,_} -> error(stale_ack_released_credit) after 0 -> ok end,
+         quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+-        receive {physics_resource,Pid,Ref,{terrain_chunk,Manifest,0,Payload}} -> ok
++        case Mode of
++            static -> ok;
++            moving ->
++                Latest = receive {physics_frame,Pid,Ref,F} -> F
++                         after 5000 -> error(terrain_starved_pose_delivery) end,
++                ?assert(maps:get(tick,Latest) > Tick),
++                %% The resource acknowledgement cannot release the pose now
++                %% holding credit; its own exact acknowledgement is required.
++                quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
++                quod_physics:ack(Pid,Ref,Tick,0),
++                _ = gen_server:call(Pid,status),
++                receive {physics_resource,Pid,Ref,_} -> error(pose_credit_not_fenced) after 0 -> ok end,
++                quod_physics:ack(Pid,Ref,maps:get(tick,Latest),maps:get(origin_sequence,Latest))
++        end,
++        receive {physics_resource,Pid,Ref,{terrain_chunks,Manifest,[{0,Payload}]}} -> ok
+             after 5000 -> error(chunk_missing) end,
+         quod_physics:resource_ack(Pid,Ref,Manifest,{want,[0]}),
+         _ = gen_server:call(Pid,status),
+         receive {physics_resource,Pid,Ref,_} -> error(duplicate_ack_released_credit) after 0 -> ok end,
+-        quod_physics:resource_ack(Pid,Ref,Manifest,{chunk,0}),
+-        receive {physics_resource,Pid,Ref,{terrain_complete,Manifest}} -> ok
+-            after 5000 -> error(complete_missing) end,
+         %% A new retained selection replaces the manifest even if body revision
+         %% and the current physical sample have not advanced.
+         Pid ! {physics_selected,self(),make_ref(),Current#{voxel_resources => #{}}},
+@@ -5192,9 +5224,9 @@
+             after 5000 -> error(empty_replacement_missing) end,
+         ?assertNotEqual(Manifest,Replacement),
+         quod_physics:resource_ack(Pid,Ref,Replacement,{want,[]}),
+-        receive {physics_resource,Pid,Ref,{terrain_complete,Replacement}} -> ok
++        receive {physics_resource,Pid,Ref,{terrain_chunks,Replacement,[]}} -> ok
+             after 5000 -> error(empty_complete_missing) end
+-    end).
++    end) end}} || Mode <- [static,moving]].
+ 
+ voxel_signed_view_delivers_only_bound_resident_chunks_test_() ->
+     {timeout,90,fun() -> with_voxel_view(fun(F = #{namespace := Ns,identity := Identity,
+@@ -5203,25 +5235,25 @@
+             View = maps:get(<<"view">>,Projection),
+             Tick = maps:get(<<"tick">>,maps:get(<<"frame">>,Projection)),
+             Socket ! {client,iolist_to_binary(json:encode(#{type => ack,origin_seq => <<"0">>,view => View,tick => Tick}))},
+-            Manifest = simulation_reply(Socket,<<"terrain_manifest">>),
++            Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
+             Rows = maps:get(<<"chunks">>,Manifest), Token = maps:get(<<"token">>,Manifest),
+             ?assertEqual(3,length(Rows)),
+             Ack = fun(Value) -> Socket ! {client,iolist_to_binary(json:encode(
+                 Value#{type => terrain_ack,view => View,token => Token}))} end,
+             Ack(#{want => [0,1,2]}),
+             #{World := #{spec := Spec}} = worlds(Ns), Artifacts = maps:get(voxel_resources,Spec),
+-            lists:foreach(fun(Row) ->
++            Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
++            ?assertEqual(Token,maps:get(<<"token">>,Content)),
++            Chunks = maps:get(<<"chunks">>,Content),?assertEqual(length(Rows),length(Chunks)),
++            lists:foreach(fun({Row,Chunk}) ->
+                 I = maps:get(<<"index">>,Row),
+-                Chunk = simulation_reply(Socket,<<"terrain_chunk">>),
+                 ?assertEqual(I,maps:get(<<"index">>,Chunk)),
+                 Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
+                 ?assertEqual(binary:encode_hex(crypto:hash(sha256,Bytes),lowercase),maps:get(<<"digest">>,Row)),
+                 [X,Y,Z] = [binary_to_integer(N) || N <- maps:get(<<"chunk">>,Row)],
+                 B = binary_to_integer(maps:get(<<"body">>,Row)),
+-                ?assertEqual(maps:get(payload,maps:get({B,{chunk_v1,X,Y,Z}},Artifacts)),Bytes),
+-                Ack(#{chunk => I})
+-            end,Rows),
+-            ?assertEqual(Token,maps:get(<<"token">>,simulation_reply(Socket,<<"terrain_complete">>))),
++                ?assertEqual(maps:get(payload,maps:get({B,{chunk_v1,X,Y,Z}},Artifacts)),Bytes)
++            end,lists:zip(Rows,Chunks)),
+             Ack(#{complete => true}),
+             ?assertMatch(#{pid := Pid},simulation_state(Socket)),
+             assert_no_physics_io(fun() ->
+@@ -5230,11 +5262,11 @@
+                 NextView = maps:get(<<"view">>,Renewed),
+                 Socket ! {client,iolist_to_binary(json:encode(#{type => ack,origin_seq => <<"0">>,view => NextView,
+                     tick => maps:get(<<"tick">>,maps:get(<<"frame">>,Renewed))}))},
+-                Retained = simulation_reply(Socket,<<"terrain_manifest">>),
++                Retained = terrain_reply(Socket,NextView,<<"terrain_manifest">>),
+                 ?assertEqual(Rows,maps:get(<<"chunks">>,Retained)),
+                 Socket ! {client,iolist_to_binary(json:encode(#{type => terrain_ack,view => NextView,
+                     token => maps:get(<<"token">>,Retained),want => []}))},
+-                _ = simulation_reply(Socket,<<"terrain_complete">>),ok
++                ?assertEqual([],maps:get(<<"chunks">>,terrain_reply(Socket,NextView,<<"terrain_chunks">>)))
+             end)
+     end,{view_distance,4000,1000,2000},{resources,20000,60000,2000,1000,3},[]) end}.
+ 
+@@ -5440,23 +5472,28 @@
+ socket_command(Socket,Message) -> Socket ! {client,iolist_to_binary(json:encode(Message))}.
+ 
+ consume_terrain_manifest(Socket,View,Target) ->
++    Manifest = terrain_reply(Socket,View,<<"terrain_manifest">>),
++    #{<<"token">> := Token,<<"interest_seq">> := Sequence} = Manifest,
++    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,want => []}),
++    Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
++    ?assertEqual(Token,maps:get(<<"token">>,Content)),?assertEqual([],maps:get(<<"chunks">>,Content)),
++    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,complete => true}),
++    case binary_to_integer(Sequence) of
++        Target -> Manifest;
++        Earlier when Earlier < Target -> consume_terrain_manifest(Socket,View,Target);
++        Other -> error({unexpected_interest,Other,Target})
++    end.
++
++terrain_reply(Socket,View,Type) -> terrain_reply(Socket,View,Type,quod_time:mono_ms()+10000).
++terrain_reply(Socket,View,Type,Deadline) ->
+     receive
+-        {simulation,Socket,#{<<"type">> := <<"simulation_frame">>,<<"frame">> := Frame}} ->
++        {simulation,Socket,#{<<"type">> := Type,<<"view">> := View} = Message} -> Message;
++        {simulation,Socket,#{<<"type">> := <<"simulation_frame">>,<<"view">> := View,<<"frame">> := Frame}} ->
+             socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
+                 origin_seq => maps:get(<<"origin_seq">>,Frame)}),
+-            consume_terrain_manifest(Socket,View,Target);
+-        {simulation,Socket,#{<<"type">> := <<"terrain_manifest">>,<<"token">> := Token,
+-                            <<"interest_seq">> := Sequence} = Manifest} ->
+-            socket_command(Socket,#{type => terrain_ack,view => View,token => Token,want => []}),
+-            ?assertEqual(Token,maps:get(<<"token">>,simulation_reply(Socket,<<"terrain_complete">>))),
+-            socket_command(Socket,#{type => terrain_ack,view => View,token => Token,complete => true}),
+-            case binary_to_integer(Sequence) of
+-                Target -> Manifest;
+-                Earlier when Earlier < Target -> consume_terrain_manifest(Socket,View,Target);
+-                Other -> error({unexpected_interest,Other,Target})
+-            end;
++            terrain_reply(Socket,View,Type,Deadline);
+         {simulation,Socket,Other} -> error({terrain_view_unavailable,Other})
+-    after 10000 -> error({terrain_manifest_missing,Target}) end.
++    after max(0,Deadline-quod_time:mono_ms()) -> error({terrain_reply_missing,Type}) end.
+ 
+ voxel_dig_preserves_a_loaded_resting_body_in_the_same_chunk_test_() ->
+     {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+--- before/doc/physics-native.md
++++ after/doc/physics-native.md
+@@ -813,7 +813,9 @@
+ An origin shift can publish a new coherent frame without advancing the tick;
+ an acknowledgement for the old origin cannot release that frame's credit.
+ Terrain manifests and chunks share this same credit, with exact watch and
+-manifest tokens; the complete current manifest gates visual readiness.
++manifest tokens. Fresh frames alternate with resources on that credit, so a
++long manifest cannot starve motion updates or vice versa. Completion gates
++navigation commands; already verified chunks stay visible while loading.
+ 
+ The browser signs one replacement read halfway through the view's remaining
+ lifetime, unless the view already reaches sign-in expiry. An unchanged ready
+--- before/src/quod_client_view.erl
++++ after/src/quod_client_view.erl
+@@ -77,7 +77,6 @@
+                 <<_:256>> = Token = base64:decode(Token64,#{mode => urlsafe,padding => false}),
+                 Value = case Ack of
+                     #{<<"want">> := Ids} when is_list(Ids) -> {want,Ids};
+-                    #{<<"chunk">> := Id} when is_integer(Id),Id >= 0 -> {chunk,Id};
+                     #{<<"complete">> := true} -> complete
+                 end,
+                 {terrain_ack,View,Token,Value};
+@@ -683,9 +682,9 @@
+           origin_mm => [decimal(N) || N <- tuple_to_list(maps:get(origin,R))],
+           spacing_mm => maps:get(spacing,R),digest => binary:encode_hex(maps:get(digest,R),lowercase),
+           costs => maps:get(costs,R)} || R <- Rows]};
+-terrain_json({terrain_chunk,Token,Id,Payload}) ->
+-    #{type => terrain_chunk,token => b64(Token),index => Id,payload => b64(Payload)};
+-terrain_json({terrain_complete,Token}) -> #{type => terrain_complete,token => b64(Token)}.
++terrain_json({terrain_chunks,Token,Chunks}) ->
++    #{type => terrain_chunks,token => b64(Token),
++      chunks => [#{index => Id,payload => b64(Payload)} || {Id,Payload} <- Chunks]}.
+ 
+ frame_json(Frame = #{fence := {World, Authority, Epoch, Generation}, structure := Structure,
+              incarnation := Token, tick := Tick, poses := Poses}, Bodies,Control) ->

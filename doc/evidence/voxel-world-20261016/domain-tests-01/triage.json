@@ -1,0 +1,5 @@
+{
+  "failures": 3,
+  "cause": "New ontology used <<>> where the Prolog parser requires <<\"\">> for an empty binary. It became an atom and the numerical validator correctly refused it.",
+  "correction": "Use the canonical quoted binary syntax; retain all refusal assertions."
+}

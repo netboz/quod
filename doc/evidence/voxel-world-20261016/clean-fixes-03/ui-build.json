@@ -1,0 +1,15 @@
+{
+  "name": "ui-build",
+  "command": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "build"
+  ],
+  "started": "2026-10-16T20:54:05.459250+00:00",
+  "exit": 0,
+  "seconds": 6.35,
+  "sources_unchanged": true,
+  "public_assets_preserved": true
+}

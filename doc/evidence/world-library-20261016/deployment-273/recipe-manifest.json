@@ -1,0 +1,58 @@
+{
+  "bootstrap.py": {
+    "archived": "recipe/bootstrap.py",
+    "sha256": "9ca4a84bedbd03ec4059482dea90d508e57178c9fb13f00c9528790e0e4b1099"
+  },
+  "create_new_volumes.py": {
+    "archived": "recipe/create_new_volumes.py",
+    "sha256": "40984187ef79ec7b7f16d41f195880f156a2c392583e20062c635419a49a8fa9"
+  },
+  "finish_deployment.py": {
+    "archived": "recipe/finish_deployment.py",
+    "sha256": "805af7c8491e2980963f7fcdd1eedfe1c99be8c4891029411e30d12b044b6a67"
+  },
+  "fleet_probe.py": {
+    "archived": "recipe/fleet_probe.py",
+    "sha256": "ed80f1d5de2ed5243c83e330ccfbfd3d494151eefe11694ec467755b18c9a4bc"
+  },
+  "install_remaining.py": {
+    "archived": "recipe/install_remaining.py",
+    "sha256": "db32b6a7ff2dc13b45f36953e117d7ad7db7363550b6cb128dd15dec2b176186"
+  },
+  "prepare_refound.py": {
+    "archived": "recipe/prepare_refound.py",
+    "sha256": "d1d2b0a3070846d96c5a2b6957fd6bf07dd136117750a9e773e5082383885a94"
+  },
+  "purge_old_volumes.py": {
+    "archived": "recipe/purge_old_volumes.py",
+    "sha256": "b227f67abeaa84853da2b561b17ebb0ca40b217b4f13fe4513db2c4eb9aa329e"
+  },
+  "refound/fresh_system_operator.py": {
+    "archived": "recipe/refound/fresh_system_operator.py",
+    "sha256": "cf31446c643694436c98064fda3ddd7fee5b5f42f559c28df0d16c0e0b8a5600"
+  },
+  "refound/quod_fresh_systems.beam": {
+    "archived": "recipe/refound/quod_fresh_systems.beam",
+    "sha256": "d7dcfa16dba6b9159a5ad783f7a52a9aac9da1a0d48e255812a3ee49fc568de2"
+  },
+  "refound/quod_fresh_systems.erl": {
+    "archived": "recipe/refound/quod_fresh_systems.erl",
+    "sha256": "abc9a12946affe102ff024bb8b46332886f0b6a52966de25357871b63f287cb6"
+  },
+  "run_deployment.py": {
+    "archived": "recipe/run_deployment.py",
+    "sha256": "6e7b94ab793bbba167ae024e205931c89dce923880734ff62961a93243bfaa11"
+  },
+  "scale_out.py": {
+    "archived": "recipe/scale_out.py",
+    "sha256": "acb521f7a6ea54c30724451a67ae5d49518cd033788c321fd2d772e3fe8bd8c9"
+  },
+  "watch_deployment.py": {
+    "archived": "recipe/watch_deployment.py",
+    "sha256": "73e84a7752bcd1a18bac437e71f5aa7d28ab18d5587fc12d9c4420e69073e53e"
+  },
+  "../../../doc/evidence/world-library-20261016/desktop-acceptance.mjs": {
+    "archived": "recipe/desktop-acceptance-original.mjs",
+    "sha256": "59cccfa13b691489a2ed6fafb0b28365581305383149bb67eab9161a7b9d5fe2"
+  }
+}

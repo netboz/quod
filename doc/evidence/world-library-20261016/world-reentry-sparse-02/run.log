@@ -1,0 +1,32 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_gui_examples_tests: world_library...*failed*
+in function quod_gui_examples_tests:consume_world_terrain/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 180)
+in call from quod_gui_examples_tests:world_terrain_delivery/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 167)
+in call from quod_gui_examples_tests:'-world_library/0-lc$^27/1-5-'/3 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_examples_tests:'-world_library/0-fun-37-'/11 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_question_tests:with_receiver/3 (/home/yan/src/quod/test/quod_gui_question_tests.erl, line 377)
+in call from quod_gui_examples_tests:'-world_library/0-fun-38-'/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 51)
+in call from quod_gui_examples_tests:with_responder/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 468)
+in call from quod_gui_examples_tests:world_library/0 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 19)
+**error:{terrain_unavailable,terrain_allocation_exceeded}
+  output:<<"Terrain profile 16000: 1650 ms [{{quod_runtime,select_resource,5},
+                                 {call_time,[{<0.3045.0>,231,0,160776}]}},
+                                {{quod_voxel,prepare,5},
+                                 {call_time,[{<0.3045.0>,224,0,124659}]}},
+                                {{quod_voxel,sample,4},
+                                 {call_time,[{<0.3045.0>,212,1,312385}]}}]
+Terrain profile 24000: 2861 ms [{{quod_runtime,select_resource,5},
+                                 {call_time,[{<0.3047.0>,1,0,9850}]}},
+                                {{quod_voxel,prepare,5},{call_time,[]}},
+                                {{quod_voxel,sample,4},{call_time,[]}}]
+World library fixture retained at /tmp/quod-world-library-6603E595DCBC5F3FE8BA299B
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

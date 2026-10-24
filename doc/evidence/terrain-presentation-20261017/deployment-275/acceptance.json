@@ -1,0 +1,91 @@
+{
+  "recorded_at": "2026-10-17T12:21:24.370615+00:00",
+  "image": {
+    "image": "192.168.1.11:5000/quod:0.7.275",
+    "pinned_image": "192.168.1.11:5000/quod:0.7.275@sha256:91246f8aee2a938c3ab34f43d5cb981a686fc95613b0824f3846b679f6ccb073",
+    "image_id": "sha256:3f2d7ed9a275bc963b2b1a41372af9f3cac9c1b23c7d931a350c6af738c138d9",
+    "source_manifest_sha256": "99d34d4c16dcb39d6a3ed58eb6e5dc09f216addf48230d5806f2a0d49b5375cc",
+    "priv_matches": true,
+    "profile": "prod",
+    "explorer_matches": true,
+    "registry_digest_matches": true,
+    "committed": false
+  },
+  "release": {
+    "job_version": 98,
+    "job_modify_index": 871075,
+    "healthy_nodes": 8
+  },
+  "all_twelve_release_gates_passed": true,
+  "retained_prefixes": 33,
+  "same_certificate": true,
+  "preserved_volumes_identities_accounts": true,
+  "movement_and_appearance_accepted": true,
+  "fresh_creation_end_to_end_accepted": false,
+  "walking_campaigns": [
+    {
+      "campaign": "deployed-walk-275-02",
+      "passed": true,
+      "url": "https://192.168.1.10:30519/",
+      "world": "Distant Heights",
+      "previewTree": null,
+      "created": null,
+      "excursion": 14.690699935131759,
+      "interests": 10,
+      "contentMessages": 13,
+      "maximumPoseGapMs": 1199,
+      "renderedFrames": 269,
+      "hiddenFrames": 0,
+      "appearance": {
+        "skies": 1,
+        "terrainMeshes": 147,
+        "texturedMaterials": 177,
+        "readyTexturedMaterials": 177
+      },
+      "largest_content_frame": 521057,
+      "partial_batches": 2
+    },
+    {
+      "campaign": "deployed-meadow-reentry-275-01",
+      "passed": true,
+      "url": "https://192.168.1.10:30519/",
+      "world": "Presentation Meadow 275",
+      "previewTree": null,
+      "created": null,
+      "excursion": 15.000223155022887,
+      "interests": 12,
+      "contentMessages": 14,
+      "maximumPoseGapMs": 1167,
+      "renderedFrames": 265,
+      "hiddenFrames": 0,
+      "appearance": {
+        "skies": 1,
+        "terrainMeshes": 127,
+        "texturedMaterials": 152,
+        "readyTexturedMaterials": 152
+      },
+      "largest_content_frame": 516336,
+      "partial_batches": 2
+    }
+  ],
+  "failed_campaigns_retained": [
+    "deployed-walk-275-01",
+    "deployed-meadow-275-01",
+    "deployed-meadow-275-02",
+    "deployed-create-diagnostic-275-01"
+  ],
+  "creation_diagnostic": {
+    "unavailable_kind": "gui_question",
+    "http_path": "/api/goals/read",
+    "http_status": 503,
+    "http_error": "proof_unavailable",
+    "before_walking": true,
+    "world_view_unavailable_observed": false,
+    "cause_of_signed_read_error": "Not captured; unresolved. Ingress-busy hypothesis is disproved by the response body."
+  },
+  "user_wild_realm_modified": false,
+  "owner_signature_required": true,
+  "portable_request_sha256": "6be0002a41c81acc825a6f8c63d13bbb5f7df3fe5a0cca77d0f07862dd3ef89a",
+  "production_line_delta": 118,
+  "committed": false
+}

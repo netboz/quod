@@ -1,0 +1,98 @@
+[
+  {
+    "path": "native/quod_physics/Cargo.lock",
+    "sha256": "c7f1649421b7126fc4b80d752174b44b2247c012218b47f937c5ee14cd982736"
+  },
+  {
+    "path": "native/quod_physics/Cargo.toml",
+    "sha256": "ef6d89cb0ffa24cf220931215dcf9eac6aed70849e3bfd221a68afb313710329"
+  },
+  {
+    "path": "native/quod_physics/src/geometry.rs",
+    "sha256": "08a4b2d0d18ccf056260ca97adc6f0e21978012f92485fa9fb4f627aaf6858be"
+  },
+  {
+    "path": "native/quod_physics/src/lib.rs",
+    "sha256": "925985004ffdba59f2f4becccbdddea63f8f926e99ab0ccfe391c668a6fbacc3"
+  },
+  {
+    "path": "native/quod_physics/src/motion.rs",
+    "sha256": "a37fb76946381d5ba5485b8423c38f4ecbe5f3e27e8f2d15d31b0e567185d03a"
+  },
+  {
+    "path": "native/quod_physics/src/terrain.rs",
+    "sha256": "0d16a0237feebaf230ecd04a5072f8409fb7fb42a324e472b8b2f73ad9e2b974"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/MC33-LICENSE.txt",
+    "sha256": "b8e1c58fe7f4e6b2183a42c7caa2005a04c866b30d6e419911b4cf24db19631b"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/chunk.rs",
+    "sha256": "9af41d304c696791cd763375d638f1271338584320931896086a7ac787ad11d4"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/mc33.rs",
+    "sha256": "102a073afa367f50ebe74ee441d407b19ce52481d183c38befd873748386c5c6"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/mc33_reference.txt",
+    "sha256": "60daa56837d9f4be9a927eb8173fbea12c223acd204ad0f30735eb330dceab92"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/mc33_table.rs",
+    "sha256": "26f8799f9744acda7112c6e202ce9ee2b9e92cf89a3bf8318ef2705307d2283c"
+  },
+  {
+    "path": "native/quod_physics/src/voxel/mod.rs",
+    "sha256": "f54a9d1cfb858d921f3a74b99d24dd5d4b76708f3568118e6aa82782c735cdbb"
+  },
+  {
+    "path": "priv/ontologies/quod_physics.pl",
+    "sha256": "7b3bc8d1ee66dba25064868c302233278dac6ecd1fc0de935515d62662ae8cc1"
+  },
+  {
+    "path": "priv/ontologies/voxel_world.pl",
+    "sha256": "9bc4c6d1693ef17bd435d23258df3076d4d61130e7a3584e64529fbb801a6bba"
+  },
+  {
+    "path": "src/predicates/quod_common_primitives.erl",
+    "sha256": "dff36413c49a6d26ff5088d4fff893c57610bffbb94b84cd3da46cf3f88fc08b"
+  },
+  {
+    "path": "src/quod_physics.erl",
+    "sha256": "d83d63e2cfb6f59143c4f27ce67d57e76692031da272b75596c07da0d3d0dd1b"
+  },
+  {
+    "path": "src/quod_physics_native.erl",
+    "sha256": "e2158edd0aa01c310fda403462fef1581f9c6f862b0620981a1477dc1ea4f552"
+  },
+  {
+    "path": "src/quod_resource_basis.erl",
+    "sha256": "57ba8052cc7bbdc01408234f436c6f5b738063cd94ae388669b35c0f0d17d7f5"
+  },
+  {
+    "path": "src/quod_voxel.erl",
+    "sha256": "5c8a8b65cca2cb5e06d214c12bef1d3c6578953c07fd307a8174c850cd164f16"
+  },
+  {
+    "path": "test/quod_common_primitives_tests.erl",
+    "sha256": "299db9a85b7e8d4f7172ea776177cdb9deafb59a3b3655a4202c4377504ebd4b"
+  },
+  {
+    "path": "test/quod_physics_tests.erl",
+    "sha256": "ce21b7589d443d19857e2d24305e986a038e2e5c19568fcf1502f286b86c214b"
+  },
+  {
+    "path": "test/quod_resource_basis_tests.erl",
+    "sha256": "7827dbea932fb5f190db9e0fcc2e96484e33e76eed4d742fd622f725c37ca099"
+  },
+  {
+    "path": "test/quod_voxel_tests.erl",
+    "sha256": "e0348ebbf83deb68e97d98261c5211b088eec488c8d5ea013683f7aaff60efe1"
+  },
+  {
+    "path": "test/quod_voxel_world_tests.erl",
+    "sha256": "d87742c59ca9d33bfa81cd2c718e211a39b9da275aec81af3f1f392c6853da02"
+  }
+]

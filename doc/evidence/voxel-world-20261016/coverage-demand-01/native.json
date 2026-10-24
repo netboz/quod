@@ -1,0 +1,11 @@
+{
+  "args": [
+    "cargo",
+    "test",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "terrain::tests"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:28:03.298619+00:00"
+}

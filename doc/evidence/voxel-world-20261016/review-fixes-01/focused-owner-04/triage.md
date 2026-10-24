@@ -1,0 +1,1 @@
+Confirmed regression: the Erlang pending-restore shortcut produced an empty coverage demand and reset mechanical demand. Corrected at the producer with restore_pending; unchanged work retains its existing demand. Owner 08 includes repeated selection and the production advance wake.

@@ -1,0 +1,19 @@
+{
+  "confirmed_defects_remaining": 0,
+  "review_manifest_sha256": "49df123803f29059eb9a0797f77a3dbd485966dbe628de801342861aa3a7206a",
+  "tree": "/home/yan/src/quod/_build/terrain-presentation-20261017/review-04/tree",
+  "fable_report_sha256": "28e811c017b0ae52d7a433c4d541f0470c7f2f2addd1a803ea64534734de0648",
+  "production_review": "Fable and parent independently find the corrected shared owner/rendering scope sound. GUI helper, sky brightness, fog conversion and credit docs are corrected.",
+  "release_gates": {
+    "passed": true,
+    "path": "/home/yan/src/quod/doc/evidence/terrain-presentation-20261017/clean-presentation-05/PASSED.json",
+    "sha256": "12f83a7c7e898df3ec6df74a503eaf027d431b3a11d2e3f137947d41fe1c4d94"
+  },
+  "deployment_recipe": {
+    "review": "fable-final-closure.md",
+    "confirmed_defects_remaining": 0,
+    "policy": "One-at-a-time existing rollout; exact image-only CAS; all identities and volumes retained; no uncertain resubmission."
+  },
+  "real_browser": "pending",
+  "physical_vr": false
+}

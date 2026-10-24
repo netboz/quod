@@ -1,0 +1,4 @@
+#{source_terms => 635,initial_etf_bytes => 130314,initial_cold_symbols => 516,
+  canonical_genesis_diff_bytes => 339337,
+  transaction_encoding => {error,too_large},
+  ledger_payload_size => error,valid_genesis => false}

@@ -1,0 +1,139 @@
+[
+  {
+    "name": "native-clean",
+    "command": [
+      "cargo",
+      "clean",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "-p",
+      "quod_physics"
+    ],
+    "started": "2026-10-17T08:59:40.465818+00:00",
+    "exit": 0,
+    "seconds": 0.11,
+    "sources_unchanged": true,
+    "stop_requested": false
+  },
+  {
+    "name": "native-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-17T08:59:40.875614+00:00",
+    "exit": 0,
+    "seconds": 37.74,
+    "sources_unchanged": true,
+    "test_summary_complete": true,
+    "passed_tests": 57,
+    "minimum_test_cases": 57,
+    "stop_requested": false
+  },
+  {
+    "name": "native-release-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--release",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml"
+    ],
+    "started": "2026-10-17T09:00:19.004523+00:00",
+    "exit": 0,
+    "seconds": 56.49,
+    "sources_unchanged": true,
+    "test_summary_complete": true,
+    "passed_tests": 57,
+    "minimum_test_cases": 57,
+    "stop_requested": false
+  },
+  {
+    "name": "native-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--manifest-path",
+      "native/quod_physics/Cargo.toml",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started": "2026-10-17T09:01:15.815304+00:00",
+    "exit": 0,
+    "seconds": 1.27,
+    "sources_unchanged": true,
+    "stop_requested": false
+  },
+  {
+    "name": "client-tests",
+    "command": [
+      "npm",
+      "--prefix",
+      "client",
+      "test"
+    ],
+    "started": "2026-10-17T09:01:17.407584+00:00",
+    "exit": 0,
+    "seconds": 1.6,
+    "sources_unchanged": true,
+    "test_summary_complete": true,
+    "passed_tests": 226,
+    "minimum_test_cases": 217,
+    "stop_requested": false
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "started": "2026-10-17T09:01:19.323156+00:00",
+    "exit": 0,
+    "seconds": 6.15,
+    "sources_unchanged": true,
+    "stop_requested": false,
+    "public_assets_preserved": true
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "started": "2026-10-17T09:01:25.881445+00:00",
+    "exit": 0,
+    "seconds": 0.21,
+    "sources_unchanged": true,
+    "stop_requested": false
+  },
+  {
+    "name": "eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit",
+      "--verbose"
+    ],
+    "started": "2026-10-17T09:01:26.420530+00:00",
+    "exit": 0,
+    "seconds": 241.14,
+    "sources_unchanged": true,
+    "test_summary_complete": false,
+    "minimum_test_cases": 4080,
+    "stop_requested": true
+  }
+]

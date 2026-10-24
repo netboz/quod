@@ -1,0 +1,10 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--generator=quod_lifecycle_single_path_tests:default_lobby_physics_startup_test_"
+  ],
+  "started": "2026-10-16T22:49:18.765616+00:00",
+  "exit": 0,
+  "seconds": 5.95
+}

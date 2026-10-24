@@ -1,0 +1,220 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_atomic_projection_tests'
+  quod_atomic_projection_tests: source_and_target_use_the_same_vote_and_resolve_transition_test...[0.106 s] ok
+  quod_atomic_projection_tests: generation_exhaustion_and_restored_material_are_checked_for_both_roles_test...[0.016 s] ok
+  quod_atomic_projection_tests: unvoted_tombstone_leaves_unrelated_reservations_and_apply_fences_unchanged_test...[0.013 s] ok
+  quod_atomic_projection_tests: one_vote_is_immutable_even_after_resolution_and_eviction_test...[0.011 s] ok
+  quod_atomic_projection_tests: unvoted_abort_is_an_inert_tombstone_not_an_expiring_vote_test...[0.011 s] ok
+  quod_atomic_projection_tests: negative_only_source_still_closes_the_complete_group_test...[0.010 s] ok
+  quod_atomic_projection_tests: every_committed_vote_activates_only_the_existing_role_duty_test...[0.016 s] ok
+  quod_atomic_projection_tests: owner_reuses_own_material_with_committed_truth_dominating_pending_test...[0.015 s] ok
+  quod_atomic_projection_tests: indexed_tombstone_refuses_a_late_vote_after_active_row_eviction_test...[0.010 s] ok
+  quod_atomic_projection_tests: retained_control_has_no_second_material_copy_test...[0.010 s] ok
+  quod_atomic_projection_tests: complete_requires_exact_source_application_ack_live_but_not_on_replay_test...[0.017 s] ok
+  quod_atomic_projection_tests: verified_suffix_does_not_resurrect_an_acknowledged_prefix_fence_test...[0.011 s] ok
+  quod_atomic_projection_tests: resolve_must_bind_the_exact_local_vote_and_generation_test...[0.012 s] ok
+  quod_atomic_projection_tests: certified_replay_needs_no_ephemeral_foreign_validation_state_test...[0.011 s] ok
+  quod_atomic_projection_tests: complete_verifies_required_certificates_from_its_record_not_sidecars_test...[0.044 s] ok
+  quod_atomic_projection_tests: resolve_application_certificate_uses_the_published_floor_not_a_staged_row_test...[0.022 s] ok
+  quod_atomic_projection_tests: resolve_application_certificate_rejects_every_mismatched_binding_test...[0.011 s] ok
+  quod_atomic_projection_tests: submission_correlation_does_not_substitute_for_the_certified_vote_test...[0.020 s] ok
+  quod_atomic_projection_tests: same_request_conflict_waits_in_both_group_orders_test...[0.011 s] ok
+  quod_atomic_projection_tests: different_request_conflicts_keep_one_wait_die_order_test...[0.016 s] ok
+  quod_atomic_projection_tests: negative_vote_reserves_nothing_even_with_retained_own_material_test...[0.009 s] ok
+  quod_atomic_projection_tests: content_uses_the_same_reservation_until_resolve_test...[0.009 s] ok
+  quod_atomic_projection_tests: front_insertions_reserve_foreign_predicates_until_resolve_test...[0.016 s] ok
+  quod_atomic_projection_tests: phase_index_captures_hide_later_records_of_the_same_group_test...[0.065 s] ok
+  quod_atomic_projection_tests: phase_index_delta_needs_the_existing_explicit_install_test...[0.010 s] ok
+  quod_atomic_projection_tests: phase_index_refuses_old_format_and_wrong_group_key_test...[0.009 s] ok
+  quod_atomic_projection_tests: restored_projection_rejects_missing_or_substituted_source_fence_test...[0.010 s] ok
+  quod_atomic_projection_tests: era_preview_uses_the_shared_transition_without_a_fake_certificate_test...[0.009 s] ok
+  quod_atomic_projection_tests: planner_queries_before_any_exact_submission_test...[0.011 s] ok
+  quod_atomic_projection_tests: planner_all_positive_votes_go_directly_to_one_resolve_wave_test...[0.010 s] ok
+  quod_atomic_projection_tests: planner_delivery_requires_new_progress_after_consumed_absence_test...[0.012 s] ok
+  quod_atomic_projection_tests: planner_consumed_target_does_not_block_other_resolves_test...[0.009 s] ok
+  quod_atomic_projection_tests: coordinator_observation_retains_no_foreign_vote_and_does_not_reauthenticate_test...[0.027 s] ok
+  quod_atomic_projection_tests: planner_negative_only_participant_has_only_source_presentation_duty_test...[0.010 s] ok
+  quod_atomic_projection_tests: coordinator_start_uses_own_role_and_requires_committed_participant_enrollment_test...[0.011 s] ok
+  quod_atomic_projection_tests: planner_source_negative_resolves_unvoted_roles_with_tombstones_test...[0.008 s] ok
+  quod_atomic_projection_tests: planner_absence_or_endpoint_refusal_never_decides_abort_test...[0.027 s] ok
+  quod_atomic_projection_tests: planner_terminal_uses_source_resolve_and_waits_for_exact_application_test...[0.014 s] ok
+  quod_atomic_projection_tests: planner_rejects_cross_group_or_cross_phase_evidence_test...[0.020 s] ok
+  quod_atomic_projection_tests: vote_admission_claims_only_a_positive_source_vote_test...[0.020 s] ok
+  quod_atomic_projection_tests: vote_refusal_is_certified_and_justified_not_a_peer_opinion_test...[0.021 s] ok
+  quod_atomic_projection_tests: vote_deadline_uses_block_time_and_negative_never_claims_request_test...[0.013 s] ok
+  quod_atomic_projection_tests: source_claim_refusal_waits_for_the_claims_committed_parent_test...[0.017 s] ok
+  quod_atomic_projection_tests: same_request_reservation_waits_while_other_request_keeps_wait_die_test...[0.026 s] ok
+  quod_atomic_projection_tests: future_parent_is_not_a_negative_vote_test...[0.018 s] ok
+  quod_atomic_projection_tests: committed_materializer_keeps_vote_hidden_and_publishes_resolve_before_ack_test...[0.030 s] ok
+  quod_atomic_projection_tests: own_vote_selection_matches_validator_policy_without_claiming_or_reauthenticating_test...[0.034 s] ok
+  quod_atomic_projection_tests: four_disjoint_groups_select_once_across_real_vote_publications_test...[0.066 s] ok
+  quod_atomic_projection_tests: reservation_notifications_match_real_reader_writer_conflicts_test...*failed*
+in function quod_atomic_projection_tests:'-reservation_notifications_match_real_reader_writer_conflicts_test/0-fun-4-'/5 (/home/yan/src/quod/test/quod_atomic_projection_tests.erl, line 932)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from quod_ct:with_network_identity/2 (/home/yan/src/quod/test/quod_ct.erl, line 316)
+in call from quod_atomic_projection_tests:reservation_notifications_match_real_reader_writer_conflicts_test/0 (/home/yan/src/quod/test/quod_atomic_projection_tests.erl, line 928)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{badmatch,
+ {ok,
+  {selection,
+   {vote,
+    {{quod_dtx_vote,4,
+      {quod_atomic_group,4,
+       {quod_dtx_manifest,4,<<0,...>>,{...},...},
+       {agent_goal_v1,<<"8["...>>,<<...>>,...},
+       {quod_dtx_attestation,2,...}},
+      {<<"atomic:origin">>,<<0,0,0,0,...>>},
+      {{<<"atomic:origi"...>>,<<0,0,...>>},
+       <<132,58,239,...>>,
+       <<131,104,...>>,
+       {quod_dtx_attestation,...}},
+      {refused,<<131,104,...>>}},
+     <<94,70,120,71,232,177,152,10,207,...>>,
+     #{context =>
+        #{origin => {<<"atomic:origin">>,<<0,0,0,0,...>>},
+          result => <<131,104,1,97,5>>,
+          proof_id => <<0,0,0,0,0,0,...>>,
+          plan_digest => <<132,58,239,226,232,192,...>>,
+          goal => <<131,104,2,97,4,108,...>>,
+          principal => {agent,<<131,104,2,97,...>>}},
+       group =>
+        #{request =>
+           #{evidence =>
+              #{request =>
+                 #{mode => execute,
+                   operation_id => <<0,0,0,...>>,
+                   goal_text => <<"assertz(seco"...>>,
+                   agent_instance_text => <<"human_user(t"...>>,...},
+                signature => <<"1Ä\"sC"...>>,
+                goal =>
+                 {{'$quod_symbol',<<"asse"...>>},{{'$quod_symbol',...},{...}}},
+                operation_ref =>
+                 {operation,<<"atomic:o"...>>,<<0,...>>,<<...>>,...},
+                variables => [],...},
+             principal => {agent,<<131,104,2,...>>},
+             claim =>
+              #{deadline => 1800000000000,
+                key => {<<131,104,2,...>>,<<0,0,...>>},
+                target => {<<"atomic:origi"...>>,<<0,0,...>>},
+                digest => <<56,91,19,124,...>>,
+                principal => {agent,<<131,104,...>>},...}},
+          origin => {<<"atomic:origin">>,<<0,0,0,0,...>>},
+          group =>
+           {quod_atomic_group,4,
+            {quod_dtx_manifest,4,<<...>>,...},
+            {agent_goal_v1,<<...>>,...},
+            {quod_dtx_attestation,...}},
+          result => <<131,104,1,97,5>>,
+          manifest =>
+           {quod_dtx_manifest,4,
+            <<0,0,0,...>>,
+            {<<"atom"...>>,<<...>>,...},
+            <<0,...>>,
+            {...},...},
+          proof_id => <<0,0,0,0,0,0,...>>,
+          goal => <<131,104,2,97,4,108,...>>,...},
+       plans =>
+        #{{<<"atomic:origin">>,<<0,0,0,0,...>>} =>
+           {quod_plan,
+            #{origin => {<<"atomic:o"...>>,<<0,...>>},
+              target => {<<"atomic:o"...>>,<<0,...>>},
+              read_check => <<131,104,3,...>>,
+              proof_id => <<0,0,0,...>>,...},
+            <<132,93,33,...>>,
+            <<1,96,...>>}},
+       intent_id => <<18,240,117,29,13,119,141,...>>}}},
+   #{{fact,{agent_key,3}} => true,
+     {fact,{can_invoke,4}} => true,
+     {fact,{material_default_limit,3}} => true,
+     {fact,{material_limit,3}} => true,
+     {fact,{material_limit_override,3}} => true,
+     {fact,{peer_admitted,4}} => true,
+     {fact,{second,1}} => true,
+     {request,{<<131,104,2,97,4,108,0,0,...>>,<<0,0,0,0,0,0,0,...>>}} =>
+      true}},
+  {context,
+   {<<"atomic:origin">>,<<0,0,0,0,0,0,0,0,0,0,...>>},
+   1,
+   {est,[],#{},1,
+    {db,quod_erlog_db_mvcc,
+     {ref,#Ref<0.2762361885.337510401.69720>,...},
+     [],#{},...},
+    [{bounded,false,none},{debug,off,...},{dialect,...},{...}|...],
+    [],0,false,0,...},
+   {index,<<"atomic:origin">>,
+    <<0,0,0,0,0,0,...>>,
+    {memory,
+     #{{dtx_state,<<...>>} =>
+        #{applied_floor => 1,projection => #{groups => #{},...},...},
+       {timestamp,<<...>>,...} => 1}},
+    #{{timestamp,<<0,...>>,1} => {1,1}},
+    {1,{1,...}},
+    1,#{},#{...},...},
+   none,
+   <<0,0,0,0,0,0,0,...>>}}}
+  output:<<"">>
+
+  quod_atomic_projection_tests: -key_revocation_and_signer_admission_invalidate_real_selections_test_/0-fun-6- (agent_key)...[0.016 s] ok
+  quod_atomic_projection_tests: -key_revocation_and_signer_admission_invalidate_real_selections_test_/0-fun-6- (peer_admitted)...[0.013 s] ok
+  quod_atomic_projection_tests: vote_selection_uses_the_existing_parent_queue_and_timeout_test...[0.075 s] ok
+  quod_atomic_projection_tests: timed_out_selection_wakes_from_real_parent_apply...[0.019 s] ok
+  quod_atomic_projection_tests: compact_presentation_authenticates_only_the_source_manifest_test...[0.009 s] ok
+  quod_atomic_projection_tests: presentation_receipt_retains_work_without_an_rpc_worker_or_readiness_test...[0.017 s] ok
+  quod_atomic_projection_tests: -presentation_capacity_returns_busy_without_losing_existing_work_test_/0-fun-9-...[4.026 s] ok
+  quod_atomic_projection_tests: committed_vote_answers_its_exact_group_intent_without_resigning_test...[0.037 s] ok
+  quod_atomic_projection_tests: committed_negative_answers_waiting_positive_with_exact_certificate_test...[0.014 s] ok
+  quod_atomic_projection_tests: source_reservation_during_recovery_checks_binding_and_caller_deadline_test...[0.016 s] ok
+  quod_atomic_projection_tests: -source_enrollment_survives_cancellation_engine_loss_and_reopen_test_/0-fun-1- (reserved)...[0.019 s] ok
+  quod_atomic_projection_tests: -source_enrollment_survives_cancellation_engine_loss_and_reopen_test_/0-fun-1- (cancelled)...[0.020 s] ok
+  quod_atomic_projection_tests: -source_enrollment_survives_cancellation_engine_loss_and_reopen_test_/0-fun-1- (engine_lost)...[0.015 s] ok
+  quod_atomic_projection_tests: -source_enrollment_survives_cancellation_engine_loss_and_reopen_test_/0-fun-1- (activated)...[0.014 s] ok
+  quod_atomic_projection_tests: source_owner_caches_parent_selection_until_journal_handoff_test...[0.030 s] ok
+  quod_atomic_projection_tests: peer_vote_relay_during_cached_parent_selection_test...[0.050 s] ok
+  quod_atomic_projection_tests: own_vote_echo_during_cached_parent_selection_test...[0.038 s] ok
+  quod_atomic_projection_tests: installed_admission_loss_keeps_source_custody_until_certified_history_test...[0.015 s] ok
+  quod_atomic_projection_tests: snapshot_absence_never_becomes_gateway_exclusion_test...[0.042 s] ok
+  quod_atomic_projection_tests: old_gateway_exclusion_wire_is_not_an_atomic_outcome_test...ok
+  quod_atomic_projection_tests: absent_local_group_preserves_outcome_uncertainty_test...[0.012 s] ok
+  quod_atomic_projection_tests: outcome_stores_source_resolve_height_but_waits_for_complete_publication_test...[0.013 s] ok
+  quod_atomic_projection_tests: negative_only_outcome_keeps_reasons_without_a_decision_or_foreign_bundle_test...[0.010 s] ok
+  quod_atomic_projection_tests: whole_outcome_wave_acknowledges_every_resolve_at_one_applied_boundary_test...[0.021 s] ok
+  quod_atomic_projection_tests: outcome_disk_replay_rebuilds_own_projection_and_retains_tombstones_test...[0.014 s] ok
+  quod_atomic_projection_tests: pending_vote_projection_uses_only_exact_journal_identity_test...[0.010 s] ok
+  [done in 5.806 s]
+module 'quod_atomic_admission_tests'
+  quod_atomic_admission_tests: many_reservations_keep_arrival_order_and_exact_engine_tokens_test...[0.595 s] ok
+  quod_atomic_admission_tests: reservation_activation_is_a_lifetime_transfer_test...[0.010 s] ok
+  quod_atomic_admission_tests: caller_loss_never_drops_or_restarts_accepted_work_test...[0.007 s] ok
+  quod_atomic_admission_tests: parent_incarnation_and_deadline_edges_are_the_only_redrives_test...[0.008 s] ok
+  quod_atomic_admission_tests: missing_material_does_not_block_later_groups_or_replace_owned_material_test...[0.016 s] ok
+  quod_atomic_admission_tests: repeated_manifest_does_not_restart_a_waiting_selection_test...[0.009 s] ok
+  quod_atomic_admission_tests: indexed_completion_and_selected_refusal_consume_one_row_test...[0.019 s] ok
+  quod_atomic_admission_tests: selected_material_waits_for_writer_readiness_without_revalidation_test...[0.008 s] ok
+  quod_atomic_admission_tests: journaled_selection_keeps_original_custody_until_replacement_test...[0.007 s] ok
+  quod_atomic_admission_tests: signed_missing_material_cannot_be_upgraded_to_another_intent_test...[0.008 s] ok
+  quod_atomic_admission_tests: admission_release_returns_the_one_owned_envelope_and_current_waiters_test...[0.009 s] ok
+  quod_atomic_admission_tests: waiting_selection_never_retries_without_a_changed_binding_test...[0.008 s] ok
+  quod_atomic_admission_tests: policy_wait_does_not_restart_selection_test...[0.007 s] ok
+  quod_atomic_admission_tests: only_the_applied_parent_wakes_an_abstained_validation_test...[0.008 s] ok
+  quod_atomic_admission_tests: out_of_order_removal_keeps_fifo_and_rejects_cross_group_tags_test...[0.039 s] ok
+  quod_atomic_admission_tests: -admission_bound_preserves_existing_and_durable_work_test_/0-fun-9-...[5.147 s] ok
+  quod_atomic_admission_tests: installed_dependency_edges_rebase_without_another_validation_test...[0.010 s] ok
+  quod_atomic_admission_tests: missing_delta_engine_change_and_deadline_never_reuse_a_selection_test...[0.009 s] ok
+  quod_atomic_admission_tests: application_overtaking_a_queued_verdict_requires_fresh_selection_test...[0.016 s] ok
+  [done in 5.997 s]
+module 'quod_retained_dtx_vote_order_tests'
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (live)...[0.045 s] ok
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (catchup)...[0.038 s] ok
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (catchup_paused)...[0.038 s] ok
+  [done in 0.131 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 96.
+===> Error running tests

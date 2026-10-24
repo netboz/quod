@@ -1,0 +1,74 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.54s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-5d12cd5f725a7cde)
+
+running 51 tests
+test geometry::tests::compound_preserves_an_authored_opening_and_rotation ... ok
+test geometry::tests::non_cubic_surface_and_explicit_hull_are_distinct ... ok
+test geometry::tests::malformed_geometry_and_resource_exhaustion_fail ... ok
+test motion::tests::authored_camera_clearance_is_sensory_and_excludes_its_own_body ... ok
+test motion::tests::declared_triangle_wall_blocks_travel_from_both_sides ... ok
+test motion::tests::explicit_surface_opening_remains_passable_with_solid_rim ... ok
+test motion::tests::floor_wall_slide_and_corner_do_not_move_native_body ... ok
+test motion::tests::compound_opening_and_rotation_use_all_parts ... ok
+test motion::tests::landing_checks_full_path_occupied_target_and_support ... ok
+SINGLE_EDGE speed=2 answer=Clipped(((-2.8028951599300096, 0.7515746790495993, 2.8068097300719677), (0.0, 0.0, 0.0, 1.0)), [(1, (0.00769503053777589, 0.9999407846846176, 0.00769503926787338))], 4)
+test motion::tests::head_on_surface_contact_converges ... ok
+test motion::tests::captured_clear_floor_travel_makes_progress ... ok
+SINGLE_EDGE speed=4 answer=Clipped(((-2.779324462472267, 0.75157468082602, 2.7832390326415655), (0.0, 0.0, 0.0, 1.0)), [(1, (0.00769503053777589, 0.9999407846846176, 0.00769503926787338))], 4)
+test motion::tests::occupied_spawn_freezes_travel_until_explicit_clear_reposition ... ok
+test motion::tests::installed_move_and_deletion_replace_collision_geometry ... ok
+test motion::tests::next_agent_queries_the_previous_agents_new_position ... ok
+test motion::tests::capsule_slides_over_surface_in_rotated_frames ... ok
+SINGLE_EDGE speed=8 answer=Clipped(((-2.7321830675567815, 0.7515746843788619, 2.736097637780762), (0.0, 0.0, 0.0, 1.0)), [(1, (0.00769503053777589, 0.9999407846846176, 0.00769503926787338))], 4)
+test motion::tests::grazing_near_a_single_triangle_edge ... ok
+test motion::tests::placement_overlap_and_unavailable_are_explicit ... ok
+test motion::tests::movement_stops_before_dynamic_objects_without_pushing_them ... ok
+test motion::tests::compound_parts_keep_each_nearby_face ... ok
+test motion::tests::shape_cast_preserves_authored_hole ... ok
+test motion::tests::resting_landing_path_still_checks_the_complete_body ... ok
+test motion::tests::target_distance_cast_finds_captured_triangle ... ok
+test motion::tests::shape_cast_obeys_the_existing_allowance ... ok
+test motion::tests::triangular_slope_blocks_downward_sweep ... ok
+test motion::tests::separating_floor_keeps_close_walls_in_the_same_mesh ... ok
+
+thread 'origin::tests::translation_preserves_resources_queries_and_body_motion' (534) panicked at src/origin.rs:128:18:
+queries changed: (Clear(((2.25, 2.0, 2.0), (0.0, 0.0, 0.0, 1.0)), 2), Unavailable)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test origin::tests::translation_preserves_resources_queries_and_body_motion ... FAILED
+test motion::tests::sliding_keeps_obstacles_in_the_same_surface ... ok
+test terrain::tests::known_solid_refuses_placement_even_without_any_surface_collider ... ok
+test terrain::tests::air_centre_does_not_admit_a_body_intersecting_terrain ... ok
+test terrain::tests::missing_step_coverage_preserves_motion_until_installed_without_a_new_body ... ok
+test terrain::tests::residency_and_authored_revisions_retain_unchanged_colliders ... ok
+test motion::tests::rotation_then_translation_keeps_surface_clearance ... ok
+test origin::tests::moving_joint_keeps_velocity_motor_and_handle_across_shift ... ok
+test tests::bounded_push_rest_and_recovery ... ok
+test tests::authored_axes_restore_and_drive_nonzero_targets ... ok
+ANALYTIC_CONTACT features=[828, 298, 264] count=1390 missing=0 within=(0.00018387985747883034, "x=0.003 y=0.751825 z=9.003 triangle=12 normal=DVec3(0.012092761725848838, 0.9998555756351504, 0.011941230470263162) expected=DVec3(0.011911344502798238, 0.999858109805722, 0.011911344502798689) true_gap=0.0018607365688427246 toi=0") all=(0.0018501184720682094, "x=4.330127 y=0.7523749999999999 z=2.5 triangle=4 normal=DVec3(0.001167656293204193, 0.9999972726565692, -0.002022685888668076) expected=DVec3(0.00024270373068117833, 0.9999998821889734, -0.00042037713822848816) true_gap=0.002375029644261617 toi=0.1376200844951322")
+test motion::tests::triangle_face_edge_vertex_normal_accuracy ... ok
+test voxel::chunk::tests::solid_and_empty_chunks_remain_distinct_without_triangles ... ok
+test tests::falling_and_retained_installation ... ok
+test tests::independent_hinges_brake_restore_and_retain ... ok
+test voxel::tests::corrected_mc33_reference_cases_and_integer_geometry ... ok
+test voxel::tests::empty_and_solid_are_valid_meshes_but_invalid_encoding_is_rejected ... ok
+test voxel::tests::explicit_allowances_report_the_resource_that_was_exceeded ... ok
+test voxel::tests::near_node_crossing_stays_distinct_at_minimum_spacing ... ok
+test voxel::tests::plane_winds_out_of_negative_solid_and_repeats_exactly ... ok
+test voxel::chunk::tests::volume_agrees_with_quantized_surface_including_nonplanar_cells ... ok
+test voxel::chunk::tests::complete_payload_has_exact_length_and_admitted_bytes ... ok
+test terrain::tests::surface_clearance_preserves_ordinary_falling_and_resting_contact ... ok
+test voxel::tests::adjacent_cells_share_faces_for_every_binary_sign_configuration ... ok
+test motion::tests::repeated_capsule_travel_keeps_surface_clearance ... ok
+test motion::tests::long_reciprocal_surface_walk_makes_progress ... ok
+SUMMARY count=23920 queries=91165 travel_bad=0 land_bad=0 path_bad=0
+test motion::tests::skin_boundary_travel_and_landing_paths_remain_clear ... ok
+
+failures:
+
+failures:
+    origin::tests::translation_preserves_resources_queries_and_body_motion
+
+test result: FAILED. 50 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.34s
+
+error: test failed, to rerun pass `--lib`

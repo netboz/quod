@@ -1,0 +1,1 @@
+Two fixture failures: the new draw test bypassed the required session proof context; it now uses the same real session helper as existing draw tests. The class projection expectation still listed only personal kinds and two genders; it now includes the new world/neutral pool. Production generation was not changed for these failures.

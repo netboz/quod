@@ -1,0 +1,10 @@
+✔ client/test/accounts.test.js (111.496538ms)
+✔ client/test/simulation.test.js (287.621205ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 302.309305

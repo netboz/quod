@@ -1,0 +1,11 @@
+{
+  "args": [
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "terrain::"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:04:00.969248+00:00"
+}

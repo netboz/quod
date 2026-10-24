@@ -1,0 +1,8 @@
+{
+  "source": "../numerical-01/upstream-manifest.json",
+  "cases": 512,
+  "case_set": "all 256 signs, equal magnitudes and [1,3,7,13,31,63,95,127]",
+  "fixture": "native/quod_physics/src/voxel/mc33_reference.txt",
+  "sha256": "60daa56837d9f4be9a927eb8173fbea12c223acd204ad0f30735eb330dceab92",
+  "comparison": "undirected edge-triple connectivity; winding tested separately"
+}

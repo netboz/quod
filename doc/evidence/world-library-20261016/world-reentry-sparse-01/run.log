@@ -1,0 +1,77 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_gui_examples_tests: world_library...*failed*
+in function quod_gui_examples_tests:consume_world_terrain/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 202)
+in call from quod_gui_examples_tests:world_terrain_delivery/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 167)
+in call from quod_gui_examples_tests:'-world_library/0-lc$^27/1-5-'/3 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_examples_tests:'-world_library/0-fun-37-'/11 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_question_tests:with_receiver/3 (/home/yan/src/quod/test/quod_gui_question_tests.erl, line 377)
+in call from quod_gui_examples_tests:'-world_library/0-fun-38-'/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 51)
+in call from quod_gui_examples_tests:with_responder/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 465)
+in call from quod_gui_examples_tests:world_library/0 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 19)
+**error:{world_terrain_delivery_missing,#{tick => 4,phase => active,
+                                  navigation_ready => true,
+                                  incarnation =>
+                                      <<149,118,231,211,75,96,252,218,167,61,
+                                        113,154,31,93,175,76,...>>,
+                                  observations => #{},steps => 4,
+                                  inputs => #{},
+                                  terrain_chunks =>
+                                      [{0,{chunk_v1,-1,1,-1}},
+                                       {0,{chunk_v1,-1,1,0}},
+                                       {0,{chunk_v1,0,1,-1}},
+                                       {0,{chunk_v1,0,1,0}}],
+                                  installs => 5,queries => 0},
+                                #{status => installed,
+                                  terrain_demand =>
+                                      {<0.2714.0>,
+                                       <<149,118,231,211,75,96,252,218,167,61,
+                                         113,154,31,...>>,
+                                       3,
+                                       [{0,{-1,1,-1},{0,1,0}}],
+                                       #{}},
+                                  selection => none,
+                                  needs_reconciliation => false},
+                                #{terrain_demand =>
+                                      {<0.2714.0>,
+                                       <<149,118,231,211,75,96,252,218,167,61,
+                                         113,154,...>>,
+                                       3,
+                                       [{0,{-1,1,-1},{0,1,0}}],
+                                       #{}}},
+                                #{runner_active => false,queue_len => 0,
+                                  resource_failures => #{}}}
+  output:<<"Terrain profile 16000: 1734 ms [{{quod_runtime,select_resource,5},
+                                 {call_time,[{<0.2935.0>,231,0,172579}]}},
+                                {{quod_voxel,prepare,5},
+                                 {call_time,[{<0.2935.0>,224,0,135401}]}},
+                                {{quod_voxel,sample,4},
+                                 {call_time,[{<0.2935.0>,212,1,377234}]}}]
+Terrain worker stacks [{<0.1396.0>,
+                        [{current_function,{gen_server,loop_hibernate,4}},
+                         {current_stacktrace,
+                             [{gen_server,loop_hibernate,4,
+                                  [{file,"gen_server.erl"},{line,2338}]},
+                              {proc_lib,init_p_do_apply,3,
+                                  [{file,"proc_lib.erl"},{line,333}]}]},
+                         {reductions,4520},
+                         {status,waiting}]}]
+Terrain profile 24000: 35004 ms [{{quod_runtime,select_resource,5},
+                                  {call_time,
+                                      [{<0.2938.0>,19,0,77878},
+                                       {<0.2937.0>,19,0,78539}]}},
+                                 {{quod_voxel,prepare,5},
+                                  {call_time,
+                                      [{<0.2938.0>,12,0,155},
+                                       {<0.2937.0>,12,0,143}]}},
+                                 {{quod_voxel,sample,4},{call_time,[]}}]
+World library fixture retained at /tmp/quod-world-library-504967B0EF8546F8EAC86BD4
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

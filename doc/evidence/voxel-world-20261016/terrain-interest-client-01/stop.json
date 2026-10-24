@@ -1,0 +1,5 @@
+{
+  "status": "stopped_not_accepted",
+  "exit": 130,
+  "reason": "New camera fixture sent origin-zero geometry into a huge-origin frame; origin validation correctly refused it. Awaiting a credit then hung. Correct the fixture origin and bound this event-driven test with a failure timeout."
+}

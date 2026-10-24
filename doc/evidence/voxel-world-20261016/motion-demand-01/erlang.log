@@ -1,0 +1,31 @@
+===> Verifying dependencies...
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `release` profile [optimized] target(s) in 4.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling src/quod_physics.erl failed
+     ┌─ src/quod_physics.erl:
+     │
+ 653 │                  {ok,{terrain_coverage,Ranges}} -> request_terrain(Ranges,S),null;
+     │                                                                           ╰── variable 'S' is unbound
+
+
+     ┌─ src/quod_physics.erl:
+     │
+ 829 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 829 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+     ┌─ src/quod_physics.erl:
+     │
+ 829 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+     │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+

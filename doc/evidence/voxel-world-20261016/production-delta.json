@@ -1,0 +1,204 @@
+{
+  "added": 3342,
+  "removed": 283,
+  "files": [
+    {
+      "path": "client/src/controlled-navigation.js",
+      "added": 8,
+      "removed": 1
+    },
+    {
+      "path": "client/src/locomotion.d.ts",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "client/src/locomotion.js",
+      "added": 5,
+      "removed": 3
+    },
+    {
+      "path": "client/src/marks.js",
+      "added": 32,
+      "removed": 4
+    },
+    {
+      "path": "client/src/render-resources.d.ts",
+      "added": 11,
+      "removed": 1
+    },
+    {
+      "path": "client/src/render-resources.js",
+      "added": 126,
+      "removed": 13
+    },
+    {
+      "path": "client/src/scene.js",
+      "added": 59,
+      "removed": 47
+    },
+    {
+      "path": "client/src/signed-view.js",
+      "added": 20,
+      "removed": 6
+    },
+    {
+      "path": "client/src/simulation.d.ts",
+      "added": 9,
+      "removed": 3
+    },
+    {
+      "path": "client/src/simulation.js",
+      "added": 153,
+      "removed": 9
+    },
+    {
+      "path": "client/src/world-scene.d.ts",
+      "added": 1,
+      "removed": 1
+    },
+    {
+      "path": "client/src/world-scene.js",
+      "added": 44,
+      "removed": 2
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "added": 27,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "added": 158,
+      "removed": 35
+    },
+    {
+      "path": "native/quod_physics/src/motion.rs",
+      "added": 21,
+      "removed": 1
+    },
+    {
+      "path": "priv/ontologies/quod_material_eidolons.pl",
+      "added": 8,
+      "removed": 0
+    },
+    {
+      "path": "priv/ontologies/quod_modelling.pl",
+      "added": 6,
+      "removed": 1
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "added": 37,
+      "removed": 25
+    },
+    {
+      "path": "priv/ontologies/quod_rendering.pl",
+      "added": 30,
+      "removed": 3
+    },
+    {
+      "path": "src/predicates/quod_common_primitives.erl",
+      "added": 32,
+      "removed": 2
+    },
+    {
+      "path": "src/predicates/quod_physics_predicates.erl",
+      "added": 4,
+      "removed": 4
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "added": 73,
+      "removed": 10
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "added": 438,
+      "removed": 88
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "added": 9,
+      "removed": 2
+    },
+    {
+      "path": "src/quod_resource_basis.erl",
+      "added": 2,
+      "removed": 0
+    },
+    {
+      "path": "src/quod_runtime.erl",
+      "added": 112,
+      "removed": 18
+    },
+    {
+      "path": "ui/src/World.tsx",
+      "added": 13,
+      "removed": 3
+    },
+    {
+      "path": "client/src/voxel-profile.js",
+      "added": 73,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/origin.rs",
+      "added": 84,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/terrain.rs",
+      "added": 222,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/voxel/chunk.rs",
+      "added": 160,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mc33.rs",
+      "added": 121,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mc33_table.rs",
+      "added": 198,
+      "removed": 0
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mod.rs",
+      "added": 115,
+      "removed": 0
+    },
+    {
+      "path": "priv/ontologies/voxel_world.pl",
+      "added": 215,
+      "removed": 0
+    },
+    {
+      "path": "priv/ontologies/voxel_world_gui.pl",
+      "added": 149,
+      "removed": 0
+    },
+    {
+      "path": "priv/ontologies/voxel_world_view.pl",
+      "added": 39,
+      "removed": 0
+    },
+    {
+      "path": "src/quod_physics_coordinates.erl",
+      "added": 121,
+      "removed": 0
+    },
+    {
+      "path": "src/quod_voxel.erl",
+      "added": 406,
+      "removed": 0
+    }
+  ],
+  "method": "Unified textual diff against HEAD for implementation source files. Native trailing cfg(test) modules excluded from both sides. Excludes separate test files, configuration/locks, generated browser bundles, docs, tooling, license text and binary assets.",
+  "explanation": "Adds the terrain domain and numerical kernel plus necessary extensions to existing collision, origin, GUI/model and signed delivery owners. No new process or durable geometry store. Includes the 198-line licensed MC33 table.",
+  "net": 3059
+}

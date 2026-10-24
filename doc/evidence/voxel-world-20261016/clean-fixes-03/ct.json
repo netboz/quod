@@ -1,0 +1,13 @@
+{
+  "name": "ct",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "ct"
+  ],
+  "started": "2026-10-16T20:55:21.298258+00:00",
+  "exit": -9,
+  "seconds": 23.9,
+  "sources_unchanged": true
+}

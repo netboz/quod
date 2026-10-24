@@ -1,0 +1,12 @@
+{
+  "session": "0d4c4ef5-911b-45f6-9e89-7587a7a80742",
+  "provider": "claude-code",
+  "model": "claude-code:fable",
+  "retrieved": "2026-10-17T00:17:00Z",
+  "scope": "clean-integration-05",
+  "source": "get_session_result.fullResponse",
+  "prefixOmitted": "initial commentary only",
+  "message_id": 115288,
+  "message_created_at": "2026-10-17T00:14:51.588Z",
+  "database_text_verified": true
+}

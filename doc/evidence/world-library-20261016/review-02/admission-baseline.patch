@@ -1,0 +1,2148 @@
+--- a/client/src/accounts.js
++++ b/client/src/accounts.js
+@@ -118,4 +118,3 @@
+   options.onAccount?.(saved)
+   return saved
+ }
+-
+--- a/include/quod_ingress_limits.hrl
++++ b/include/quod_ingress_limits.hrl
+@@ -1,13 +1,27 @@
+ -ifndef(QUOD_INGRESS_LIMITS_HRL).
+ -define(QUOD_INGRESS_LIMITS_HRL, true).
+ 
+-%% Shared protocol bounds for founding, ingress, consensus, and history validation.
++-include("quod_transport_limits.hrl").
++
++%% Encoding capacity, shared by founding, ingress and historical validation.
++%% A scope envelope carries two material blobs beside a principal and fixed
++%% metadata. History pages also carry a material block twice, with its full
++%% certificate and an empty finalizing carrier. Use the tighter carrier bound;
++%% authored material_policy.pl allowances govern admission below this ceiling.
++-define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (128 * 1024)).
++-define(QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES, 1024).
+ -define(MAX_VALIDATORS, 64).
+--define(MAX_BLOCK_BYTES, (256 * 1024)).
++%% ETF signature rows cost 108 bytes; 1024 covers entry, empty-carrier and page
++%% metadata. The maximal full-committee transfer test checks this envelope.
++-define(QUOD_COMPACT_HISTORY_OVERHEAD_BYTES, (?MAX_VALIDATORS * 108 + 1024)).
++-define(MAX_BLOCK_BYTES,
++        min((?QUOD_TRANSPORT_MAX_FRAME_BYTES - ?QUOD_MAX_TOPLEVEL_GOAL_BYTES -
++             ?QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES - 128) div 2,
++            (?QUOD_MAX_FOREIGN_PAGE_BYTES - ?QUOD_COMPACT_HISTORY_OVERHEAD_BYTES) div 2)).
+ %% New volatile admissions share the ingress population bound. It never
+ %% limits recovery of obligations already accepted into durable custody.
+ -define(MAX_INGRESS_TXS, 512).
+-%% Payload policy is unchanged. V2 adds three 32-byte ETF binaries (block era,
++%% V2 adds three 32-byte ETF binaries (block era,
+ %% parent era and parent hash) plus a tuple header to the prior envelope's
+ %% slot/parent/time/tag allowance. This is encoding overhead, not payload space.
+ -define(QUOD_MAX_CANONICAL_BLOCK_BYTES,
+@@ -16,11 +30,10 @@
+ %% transaction verification and relay admission.  An operation-custody
+ %% submission is the deterministic `{submit, Author, Signature, Canonical}`
+ %% wrapper; ETF adds 122 bytes, with six bytes of representation allowance.
+--define(QUOD_MAX_CANONICAL_TRANSACTION_BYTES, (256 * 1024)).
++-define(QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
++        (?MAX_BLOCK_BYTES - 128 - ?BATCH_ENVELOPE_BYTES)).
+ -define(QUOD_MAX_OPERATION_SUBMISSION_BYTES,
+         (?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 128)).
+-%% Leaves deterministic room for the generated incarnation and founding committee in slot 1.
+--define(MAX_GENESIS_INITIAL_DIFF_BYTES, (192 * 1024)).
+ %% ETF overhead for `{batch, [First]}` beyond First's standalone encoding.
+ %% Further elements reuse the list encoding and therefore cannot increase this
+ %% fixed allowance; the collector remains an O(1) incremental byte counter.
+--- a/include/quod_proof_limits.hrl
++++ b/include/quod_proof_limits.hrl
+@@ -16,7 +16,7 @@
+ -define(QUOD_MAX_PROXIES_PER_PROOF,
+         (?QUOD_MAX_SCOPES_PER_PROOF * ?QUOD_MAX_INVOCATIONS_PER_SCOPE)).
+ -define(QUOD_MAX_ANSWERS_PER_INVOCATION, 10000).
+--define(QUOD_MAX_NESTED_GOAL_BYTES, (128 * 1024)).
++-define(QUOD_MAX_NESTED_GOAL_BYTES, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
+ -define(QUOD_MAX_PROOF_ANSWER_BYTES, 65536).
+ -define(QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 1024).
+ 
+@@ -24,23 +24,23 @@
+ %% BEFORE a goal runs; the plan bounds are enforced at seal time and again on
+ %% every decode of a plan blob.
+ -define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (128 * 1024)).
+--define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (128 * 1024)).
+--define(QUOD_MAX_PLAN_DIFF_OPS, 1024).
+--define(QUOD_MAX_PLAN_READ_FUNCTORS, 1024).
++-define(QUOD_MAX_PLAN_ENVELOPE_BYTES, ?QUOD_MAX_DTX_BODY_BYTES).
++%% Coalesced change notices use an all-heads marker beyond this optimization
++%% bound. It neither refuses a write nor limits an ontology's population.
++-define(QUOD_MAX_CHANGED_HEADS, 1024).
+ %% Direct effects are deliberately singleton in the first protocol version.
+ %% The representation remains a bounded list so a later reviewed effect class
+ %% can raise the shared bound without another shape change.
+ -define(QUOD_MAX_DIRECT_EFFECTS, 1).
+ -define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
+ %% The committed envelope's durable top-level goal and selected result.
+--define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, ?QUOD_MAX_NESTED_GOAL_BYTES).
+ -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
+ %% Durable multi-ontology control records.  The semantic body limit leaves a
+-%% fixed margin below the existing 256 KiB block ceiling for the target-bound
++%% fixed encoding margin below the block ceiling for the target-bound
+ %% author envelope and one-item maximum-size block framing. A group has the same
+ %% participant ceiling as the proof that produced it.
+ -define(QUOD_MAX_DTX_PARTICIPANTS, ?QUOD_MAX_SCOPES_PER_PROOF).
+--define(QUOD_MAX_DTX_BODY_BYTES, (224 * 1024)).
++-define(QUOD_MAX_DTX_BODY_BYTES, (?MAX_BLOCK_BYTES - (32 * 1024))).
+ %% Deterministic ETF adds exactly 28 bytes around a binary in a canonical
+ %% one-control payload `{batch, [{dtx, Blob}]}`. Ordinary blocks may carry more
+ %% controls when their combined encoded size fits the block byte ceiling.
+@@ -53,7 +53,6 @@
+ %% follow needs them. Exact monitors, deadlines and byte bounds own live work;
+ %% there is no fixed population refusal.
+ -define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
+--define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+ 
+ %% Process-free DTX recovery endpoint.  It may carry one optional page-format
+ %% acceleration sidecar beside the semantic request/response, so it shares the
+@@ -74,7 +73,6 @@
+ %% and fixed scope/ETF metadata. Derive the envelope from those shared semantic
+ %% owners so every accepted submission can cross a remote scope. The 1024-byte
+ %% fixed allowance exceeds the current fixed metadata after the principal blob.
+--define(QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES, 1024).
+ -define(QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES,
+         (?QUOD_MAX_OPERATION_SUBMISSION_BYTES +
+          ?QUOD_MAX_DTX_BODY_BYTES +
+--- a/include/quod_transport_limits.hrl
++++ b/include/quod_transport_limits.hrl
+@@ -4,5 +4,7 @@
+ %% The largest payload carried by one quod_link frame.  Producers must stay
+ %% within this limit and consumers must reject larger payloads before decoding.
+ -define(QUOD_TRANSPORT_MAX_FRAME_BYTES, (1 bsl 20)).
++%% History pages retain room inside the transport envelope for channel framing.
++-define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+ 
+ -endif.
+--- a/include/quod_vm_limits.hrl
++++ b/include/quod_vm_limits.hrl
+@@ -5,10 +5,9 @@
+ %% vocabulary source has been refused. This is a safety reserve, not a quota.
+ -define(QUOD_ATOM_SAFETY_MARGIN, 100000).
+ 
+-%% One authenticated, ontology-owned material envelope may introduce only this
+-%% many previously unknown Prolog symbols.  Transaction relay and durable local
+-%% plans share the same materializer, so neither path can drift to a different
+-%% atom-allocation policy.
++%% Existing untrusted client goal/reference syntax allowance. Durable material
++%% uses the owning ontology's material_policy.pl admission instead; accepted
++%% history must remain materializable when current policy is tightened.
+ -define(QUOD_MAX_NEW_MATERIAL_ATOMS, 512).
+ 
+ -endif.
+--- a/priv/ontologies/human_user_instance.pl
++++ b/priv/ontologies/human_user_instance.pl
+@@ -1,4 +1,4 @@
+-%% Human-user instance behaviour. Founding supplies the local instance/key,
++%% Human-user instance behaviour, composed with gui_hud.pl. Founding supplies the local instance/key,
+ %% exact lobby vocabulary and one pending personal-lobby requirement.
+ %% Found with quod_agent_predicates; identity is the signed ontology instance.
+ %% The signed boundary verifies the principal's exact anchor. Admission must
+--- a/priv/ontologies/lobby_worlds.pl
++++ b/priv/ontologies/lobby_worlds.pl
+@@ -92,10 +92,10 @@
+         assertz(physics_next_body(W,0)),assertz(physics_run(W,0,none)),
+         assertz(physics_definition(world_pilot(W),1,geometry(capsule(500,250),1))),
+         assertz(world_arrival(W,Pose)),
+-        world_palette(Palette),
+-        assertz(voxel_presentation(W,<<"terrain">>,Palette,view_distance(16000,0,8000),
+-            resources(134217728,268435456,8000000,2000000,4096))),
+-        voxel_create(W,0,Spec))).
++        world_palette(Palette),world_render_resources(Resources),
++        world_initial_view(Spec,View),
++        assertz(voxel_presentation(W,<<"terrain">>,Palette,View,Resources)),
++        voxel_create(W,0,Spec),voxel_validate_presentation(W))).
+ world_library_count(Count) :- findall(W,lobby_terrain_world(W),Worlds),length(Worlds,Count).
+ 
+ world_creation_name(Entered,Occurrence,Name) :-
+@@ -131,6 +131,24 @@
+     material(5,surface(<<"#E7E9E5">>,0,800,0,[])),
+     material(6,surface(<<"#727F83">>,0,900,0,[]))]).
+ 
++%% Allocate within the selected renderer's authored policy. The proof retains
++%% these dependencies; a larger physical-world allowance is not a view budget.
++world_render_resources(resources(Transfer,Geometry,Vertices,Triangles,Chunks)) :-
++    world_render_limit(<<"mesh_transfer_bytes">>,Transfer),
++    world_render_limit(<<"mesh_geometry_bytes">>,Geometry),
++    world_render_limit(<<"mesh_vertices">>,Vertices),
++    world_render_limit(<<"mesh_triangles">>,Triangles),
++    world_render_limit(<<"mesh_nodes">>,Chunks).
++world_render_limit(Resource,Limit) :-
++    findall(ontology_ref(N,A),rendering_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
++    Ns::(current_ontology_identity(Ns,Anchor),limit(Resource,Limit)).
++
++%% Viewing policy scales with ground detail: the initial window spans the same
++%% number of chunks, including its prefetch and retained border.
++world_initial_view(Spec,view_distance(Distance,Prefetch,Retention)) :-
++    voxel_sampling_field(Spec,field_v1(_,Spacing,_,_)),
++    Distance is 16*Spacing,Prefetch is 4*Spacing,Retention is 8*Spacing.
++
+ lobby_physical_space(W,world_authority(W),world_pilot(W)) :- lobby_terrain_world(W).
+ instance_of(agent,world_authority(W)) :- lobby_terrain_world(W).
+ instance_of(agent,world_pilot(W)) :- lobby_terrain_world(W).
+@@ -145,7 +163,10 @@
+     surface_limits(512,10000,10000),4096,69120,134217728)) :- lobby_terrain_world(W).
+ voxel_initial_chunks(W,terrain_v1(_,smooth,field_v1(_,S,_,_)),[chunk_v1(0,C,0)]) :-
+     world_arrival(W,vector(_,Y,_)),C is (Y-1000) // (8*S).
+-voxel_view_range(W,range(8,32,8)) :- lobby_terrain_world(W).
++voxel_view_range(W,range(Step,Maximum,Step)) :-
++    lobby_terrain_world(W),voxel_world_state(W,_,Spec),
++    voxel_sampling_field(Spec,field_v1(_,Spacing,_,_)),
++    Step is 8*Spacing//1000,Maximum is 3*Step.
+ voxel_brush_controls(W,range(-1000000,1000000,100),range(600,2000,100)) :- lobby_terrain_world(W).
+ can_create_voxel_world(W,Actor) :- lobby_terrain_world(W),gui_question_policy(world_creation,_,Actor).
+ can_manage_voxel_world(W,Actor,view) :- gui_question_policy(voxel_view_settings(W),_,Actor).
+--- a/priv/ontologies/material_policy.pl
++++ b/priv/ontologies/material_policy.pl
+@@ -0,0 +1,18 @@
++%% New material is admitted by the ontology whose proof owns the transition.
++%% Root owns founding; each target owns its sealed plans. An override is an
++%% ordinary ontology fact, governed by that ontology's existing write policy.
++%% The engine selects from the pinned committed view and captures its reads.
++material_limit(Kind, Resource, Limit) :-
++    material_limit_override(Kind, Resource, Limit).
++material_limit(Kind, Resource, Limit) :-
++    material_default_limit(Kind, Resource, Limit),
++    \+ material_limit_override(Kind, Resource, _).
++
++%% Unlimited allocation remains subject to the complete enclosing encoding
++%% and VM bounds. Symbol counts include known names as well as new names.
++material_default_limit(founding, canonical_bytes, unlimited).
++material_default_limit(founding, symbols, 2048).
++material_default_limit(plan, canonical_bytes, unlimited).
++material_default_limit(plan, symbols, 2048).
++material_default_limit(plan, operations, 1024).
++material_default_limit(plan, reads, 1024).
+--- a/priv/ontologies/quod_names.pl
++++ b/priv/ontologies/quod_names.pl
+@@ -25,10 +25,9 @@
+ %% to weight dice; here each element counts once, and the few diaereses are
+ %% dropped (roel, Kallirrhoe).
+ %%
+-%% Vocabulary: a genesis may introduce at most 512 new symbols to a node that
+-%% never saw this source (quod_vm_limits), so every piece of data — table
+-%% names, syllables, names, cultures, kinds, genders — is a binary, never an
+-%% atom. Only the predicates and the recipe functors are symbolic.
++%% Table names, syllables, names, cultures, kinds and genders are binary data.
++%% Only predicates and recipe functors use symbols. Growing a name catalogue
++%% therefore does not allocate permanent VM atoms for its entries.
+ %%
+ %% Model, in the house vocabulary:
+ %%   isa(Culture, Wider)                        culture tree, rooted at <<"thing">>
+--- a/priv/ontologies/quod_signup.pl
++++ b/priv/ontologies/quod_signup.pl
+@@ -103,19 +103,19 @@
+     signup_options(Principal, Name, _, Options).
+ 
+ %% Both the action and root's independent permission proof use this exact
+-%% recipe. Founding pins the reviewed user source and lobby vocabulary.
+-signup_options(Principal, Name, Token,
+-    [source(Source),
+-     terms([instance_of(human_user, me), agent_key(me, Key, active),
+-            lobby_vocabulary(LobbyNamespace, LobbyAnchor),
+-            lobby_provisioning(me, pending(LobbyName)),
+-            hosting_node(Node),
+-            signup_origin(Namespace, Anchor, Token)]),
+-     external_predicate_modules([quod_agent_predicates])]) :-
++%% recipe. Ordinary creation freezes the reviewed source components into the
++%% genesis. The human's identity behavior and question HUD remain shared files.
++signup_options(Principal, Name, Token, Options) :-
++    findall(source_file(Path), user_source_file(Path), Sources), Sources = [_ | _],
++    append(Sources,
++        [terms([instance_of(human_user, me), agent_key(me, Key, active),
++                lobby_vocabulary(LobbyNamespace, LobbyAnchor),
++                lobby_provisioning(me, pending(LobbyName)), hosting_node(Node),
++                signup_origin(Namespace, Anchor, Token)]),
++         external_predicate_modules([quod_agent_predicates])], Options),
+     signup_principal(Principal, Key),
+     signup_name(Token, Name),
+     signup_lobby_name(Name, LobbyName),
+     current_ontology_identity(Namespace, Anchor),
+-    user_template(Source),
+     signup_host(Node),
+     lobby_vocabulary(LobbyNamespace, LobbyAnchor).
+--- a/priv/ontologies/voxel_world.pl
++++ b/priv/ontologies/voxel_world.pl
+@@ -178,10 +178,14 @@
+ voxel_chunk_inputs(W,C,Field,Overrides) :-
+     voxel_world_state(W,_,Spec), voxel_sampling_field(Spec,Field),
+     C = chunk_v1(X,Y,Z),
+-    findall(override(Owner,Patch),
+-        (member(Dx,[-1,0,1]),member(Dy,[-1,0,1]),member(Dz,[-1,0,1]),
+-         A is X+Dx, B is Y+Dy, E is Z+Dz, Owner = chunk_v1(A,B,E),
+-         voxel_patch_state(W,Owner,_,Patch)),Overrides).
++    %% Overrides are sparse. One read of the current relation also captures
++    %% absence; do not prove 27 empty patch states for every procedural chunk.
++    findall(Owner,(voxel_chunk_override(W,Owner,_,_),Owner = chunk_v1(A,B,E),
++                  abs(A-X) =< 1,abs(B-Y) =< 1,abs(E-Z) =< 1),Present),
++    sort(Present,Owners),voxel_override_inputs(W,Owners,Overrides).
++voxel_override_inputs(_,[],[]).
++voxel_override_inputs(W,[C|Cs],[override(C,Patch)|Rows]) :-
++    voxel_patch_state(W,C,_,Patch),voxel_override_inputs(W,Cs,Rows).
+ 
+ %% Called only when authoring changes or filling a consumer's missing
+ %% materialization. Ordinary descriptor proofs never generate triangle lists.
+--- a/priv/ontologies/voxel_world_gui.pl
++++ b/priv/ontologies/voxel_world_gui.pl
+@@ -52,7 +52,7 @@
+      attribute(help,<<"Zero disables underground caves. A 2 m roof is preserved.">>)]).
+ 
+ instance_of(quod:gui:form,voxel_generation(W)) :- instance_of(voxel_world,W).
+-instance_of(Class,voxel_setting(W,Key)) :- instance_of(voxel_world,W),voxel_parameter(Key,Class,_,_,_).
++instance_of(Class,voxel_setting(W,Key)) :- voxel_parameter(Key,Class,_,_,_),instance_of(voxel_world,W).
+ instance_of(quod:gui:button,generate_voxel(W)) :- instance_of(voxel_world,W).
+ gui_children(voxel_generation(W),[voxel_setting(W,preset),voxel_setting(W,seed),
+     voxel_setting(W,spacing),voxel_setting(W,extent),voxel_setting(W,radius),
+--- a/priv/ontologies/voxel_world_view.pl
++++ b/priv/ontologies/voxel_world_view.pl
+@@ -35,5 +35,8 @@
+         (Before = View -> true
+         ; retract(voxel_presentation(W,Id,Palette,Before,Resources)),
+           assertz(voxel_presentation(W,Id,Palette,View,Resources))),
+-        voxel_surface_mark(W,Mark),rendering_vocabulary(Ns,A),
+-        Ns::(current_ontology_identity(Ns,A),well_formed_mark(Mark)))).
++        voxel_validate_presentation(W))).
++
++voxel_validate_presentation(W) :-
++    voxel_surface_mark(W,Mark),rendering_vocabulary(Ns,A),
++    Ns::(current_ontology_identity(Ns,A),well_formed_mark(Mark)).
+--- a/src/predicates/quod_ontology_predicates.erl
++++ b/src/predicates/quod_ontology_predicates.erl
+@@ -124,8 +124,18 @@
+     erlog_int:domain_error(ontology_action,Goal,St).
+ 
+ prepare_and_stage_action(Action0, Desired0, RequestAction, Structural, Next, St) ->
+-    Principal = authenticated_principal(),
+-    case quod_ontology:prepare_action(Structural, Principal) of
++    Committed = quod_erlog_db_local_prove:committed_state(St),
++    Admission = case RequestAction of
++        {create_ontology, _, _} -> quod_material_admission:policy(founding, Committed);
++        {join_ontology, _, _, _} -> {ok, #{}, #{}}
++    end,
++    PreparedResult = case Admission of
++        {ok, Limits, Reads} ->
++            ok = quod_erlog_db_local_prove:absorb_read_set(St, Reads),
++            quod_ontology:prepare_action(Structural, Limits);
++        {error, _} = PolicyError -> PolicyError
++    end,
++    case PreparedResult of
+         {ok, Prepared} ->
+             bind_prepared_action(
+               Action0, Desired0, RequestAction, Prepared, Next, St);
+@@ -224,7 +234,8 @@
+ failure_reason({create_ontology, _, _}, Reason) -> {ontology_creation_failed,Reason};
+ failure_reason({join_ontology, _, _, _}, Reason) -> {ontology_join_failed,Reason}.
+ 
+-creation_reason(initial_content_too_large) -> initial_content_too_large;
++creation_reason({material_limit, founding, _, _, _} = Reason) -> Reason;
++creation_reason({invalid_material_policy, founding} = Reason) -> Reason;
+ creation_reason({source_file_error, Index, _Path, _Reason}) -> {source_file_error,Index};
+ creation_reason({already_configured, _Ns}) -> already_hosted;
+ creation_reason(_Reason) -> start_failed.
+--- a/src/quod_client_view.erl
++++ b/src/quod_client_view.erl
+@@ -27,8 +27,12 @@
+     case quod_reg:where({client_view, {gui_hud, Agent, Connection}}) of
+         undefined -> {error, human_unavailable};
+         Owner ->
+-            try gen_server:call(Owner, Message, max(0, Deadline-quod_time:mono_ms()))
+-            catch exit:{timeout,_} -> {error, presentation_timeout};
++            %% Cowboy reserves '$gen_call' for its supervisor interface.
++            %% A labelled OTP call retains monitored replies and late-reply
++            %% cancellation while reaching the existing websocket owner.
++            try gen:call(Owner, quod_gui_request, Message, max(0, Deadline-quod_time:mono_ms())) of
++                {ok, Reply} -> Reply
++            catch exit:timeout -> {error, presentation_timeout};
+                   exit:_ -> {error, human_unavailable}
+             end
+     end;
+@@ -554,10 +558,10 @@
+ mark_body({body_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
+ mark_body({transform, _, _, _, _, _, _}, _) -> none.
+ 
+-websocket_info({'$gen_call', From,
++websocket_info({quod_gui_request, From,
+                 {gui_prepare, Agent, Connection, Request, Question, Descriptor, Capacity, Expiry, Deadline}}, S) ->
+     gui_prepare(From, Agent, Connection, Request, Question, Descriptor, Capacity, Expiry, Deadline, S);
+-websocket_info({'$gen_call', From, {gui_activate, Request, Token}}, S) ->
++websocket_info({quod_gui_request, From, {gui_activate, Request, Token}}, S) ->
+     gui_activate(From, Request, Token, S);
+ websocket_info({timeout, Timer, {gui_resource, Token}}, S) ->
+     case maps:get(Token, maps:get(gui_resources,S,#{}), none) of
+--- a/src/quod_committed_projection.erl
++++ b/src/quod_committed_projection.erl
+@@ -611,10 +611,10 @@
+     end.
+ 
+ load_common_predicates(#est{db = Db0} = Est) ->
+-    File = filename:join(code:priv_dir(quod),
+-                         "ontologies/common_predicates.pl"),
+     Terms =
+-        try read_terms(File)
++        try lists:append(
++              [read_terms(filename:join([code:priv_dir(quod), "ontologies", File]))
++               || File <- ["common_predicates.pl", "material_policy.pl"]])
+         catch
+             throw:{genesis_failed, ReadReason} ->
+                 throw({common_predicates_failed, ReadReason})
+--- a/src/quod_dtx.erl
++++ b/src/quod_dtx.erl
+@@ -192,10 +192,16 @@
+             {[], 0, [], false} ->
+                 not_material;
+             _ ->
+-                seal_material(
+-                  Session, Target, BaseHeight, ProofId, Origin, Principal,
+-                  RequestBinding,
+-                  Diff, ReadCheck, Effects)
++                case quod_material_admission:policy(
++                       plan, quod_proof_session:committed_state(Session)) of
++                    {ok, Limits, PolicyReads} ->
++                        ok = quod_proof_session:absorb_read_set(Session, PolicyReads),
++                        seal_material(
++                          Session, Target, BaseHeight, ProofId, Origin, Principal,
++                          RequestBinding, Diff, quod_proof_session:read_set(Session),
++                          Effects, Limits);
++                    {error, _} = PolicyError -> PolicyError
++                end
+         end,
+     %% Extraction and encoding are pure, but the namespace may have committed
+     %% Vote/Resolve while they ran. Never expose a plan (or even classify a
+@@ -207,7 +213,7 @@
+ 
+ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
+               RequestBinding,
+-              Diff, ReadCheck, Effects) ->
++              Diff, ReadCheck, Effects, Limits) ->
+     Bridges = quod_proof_session:live_bridges(Session),
+     {Transcript, Generation} = quod_proof_session:transcript(Session),
+     case seal_bound_reads(Diff, ReadCheck, BaseHeight, Effects, Bridges) of
+@@ -238,7 +244,7 @@
+                              effects => EffectsBlob,
+                              live_bridges => BridgesBlob,
+                              transcript => TranscriptBlob},
+-                    sign_core(Core, quod_proof_session:signer(Session));
++                    admit_core(Core, quod_proof_session:signer(Session), Limits);
+                 {error, _} = Error ->
+                     Error
+             end;
+@@ -280,7 +286,7 @@
+ 
+ %% A material diff must not rest on live-bridge truth (module doc); the plan
+ %% itself must fit the network's fixed bounds before any signature is minted.
+-seal_admissible(Diff, ReadCheck, Effects, Bridges) ->
++seal_admissible(Diff, _ReadCheck, Effects, Bridges) ->
+     EffectiveBridges = admissibility_bridges(Diff, Bridges),
+     case {Diff, Effects, EffectiveBridges} of
+         {[_ | _], _, [Functor | _]} ->
+@@ -288,13 +294,9 @@
+         {[_ | _], [_ | _], _} ->
+             {error, effect_requires_empty_diff};
+         _ ->
+-            case {length(Diff) =< ?QUOD_MAX_PLAN_DIFF_OPS,
+-                  map_size(ReadCheck) =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
+-                  quod_effect:validate_list(Effects)} of
+-                {true, true, true} -> ok;
+-                {false, _, _} -> {error, {too_large, plan}};
+-                {_, false, _} -> {error, {too_large, plan}};
+-                {_, _, false} -> {error, invalid_direct_effect}
++            case quod_effect:validate_list(Effects) of
++                true -> ok;
++                false -> {error, invalid_direct_effect}
+             end
+     end.
+ 
+@@ -304,19 +306,30 @@
+         false -> Bridges
+     end.
+ 
+-sign_core(Core, Signer) ->
+-    Bytes = plan_bytes(Core),
+-    Plan =
++admit_core(Core, Signer, Limits) ->
++    Template =
+         case Signer of
+-            #{pubkey := Pubkey} = Identity ->
+-                {quod_plan, Core, Pubkey,
+-                 quod_identity:sign(Bytes, Identity)};
+-            none ->
+-                {quod_plan, Core, none, none}
++            #{pubkey := Pubkey} -> {quod_plan, Core, Pubkey, <<0:512>>};
++            none -> {quod_plan, Core, none, none}
+         end,
+-    case byte_size(deterministic(Plan)) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES of
+-        true -> {ok, Plan};
+-        false -> {error, {too_large, plan}}
++    Bytes = byte_size(deterministic(Template)),
++    case {Bytes =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES, decode_material(Core)} of
++        {true, {ok, Decoded}} ->
++            {ok, Names} = quod_wire_term:symbol_names(Decoded),
++            Usage = #{canonical_bytes => Bytes, symbols => length(Names),
++                      operations => maps:get(diff_ops, Core),
++                      reads => maps:get(read_functors, Core)},
++            case quod_material_admission:check(plan, Usage, Limits) of
++                ok ->
++                    Signature = case Signer of
++                        none -> none;
++                        _ -> quod_identity:sign(plan_bytes(Core), Signer)
++                    end,
++                    {ok, setelement(4, Template, Signature)};
++                {error, _} = Error -> Error
++            end;
++        {false, _} -> {error, {too_large, plan}};
++        {_, error} -> {error, {protocol_error, bad_payload}}
+     end.
+ 
+ plan_bytes(Core) ->
+@@ -386,9 +399,9 @@
+              transcript := Transcript} = Core)
+   when map_size(Core) =:= 16,
+        is_integer(DiffOps), DiffOps >= 0,
+-       DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
++       DiffOps =< byte_size(Diff),
+        is_integer(ReadFunctors), ReadFunctors >= 0,
+-       ReadFunctors =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
++       ReadFunctors =< byte_size(ReadCheck),
+        is_integer(EffectsCount), EffectsCount >= 0,
+        EffectsCount =< ?QUOD_MAX_DIRECT_EFFECTS ->
+     valid_identity(Target) andalso valid_identity(Origin) andalso
+--- a/src/quod_foreign_log.erl
++++ b/src/quod_foreign_log.erl
+@@ -97,7 +97,7 @@
+ -define(MAX_TIMER_MS, 16#FFFFFFFF).
+ -define(MANIFEST_RESERVE_BYTES, 4096).
+ -define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
+--define(MAX_CHANGED_HEADS, ?QUOD_MAX_PLAN_DIFF_OPS).
++-define(MAX_CHANGED_HEADS, ?QUOD_MAX_CHANGED_HEADS).
+ -define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
+ 
+ %% One live cache cursor belongs to the existing custodian, never to a route.
+--- a/src/quod_foreign_projection.erl
++++ b/src/quod_foreign_projection.erl
+@@ -362,10 +362,10 @@
+ 
+ merge_changed(resnapshot, _Right) -> resnapshot;
+ merge_changed(_Left, resnapshot) -> resnapshot;
+-merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_PLAN_DIFF_OPS ->
++merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_CHANGED_HEADS ->
+     resnapshot;
+ merge_changed(Left, Right) ->
+-    case bounded_changed(Left, ?QUOD_MAX_PLAN_DIFF_OPS, #{}, []) of
++    case bounded_changed(Left, ?QUOD_MAX_CHANGED_HEADS, #{}, []) of
+         resnapshot -> resnapshot;
+         {Remaining, Seen, Rev} ->
+             case bounded_changed(Right, Remaining, Seen, Rev) of
+--- a/src/quod_material_admission.erl
++++ b/src/quod_material_admission.erl
+@@ -0,0 +1,70 @@
++-module(quod_material_admission).
++-moduledoc """
++Pure material measurement and admission through the existing Prolog proof.
++
++Callers retain the returned policy reads in their existing proof scope. Policy
++is selected from its pinned committed state, never the proposed write. Historical
++decoding has no admission dependency and retains only encoding and VM checks.
++""".
++
++-export([policy/2, check/3, usage/1]).
++-export_type([limits/0]).
++
++-type limits() :: #{atom() => non_neg_integer() | unlimited}.
++
++-spec policy(founding | plan, tuple()) ->
++          {ok, limits(), map()} | {error, term()}.
++policy(Kind, Committed) ->
++    Context = quod_predicates:context(Committed),
++    Strict = quod_predicates:policy_verdict_context(
++               quod_predicates:ctx_ns(Context),
++               case quod_predicates:ctx_height(Context) of
++                   undefined -> 0;
++                   Height -> Height
++               end),
++    Goal = {findall, {limit, {'Resource'}, {'Limit'}},
++            {material_limit, Kind, {'Resource'}, {'Limit'}}, {'Limits'}},
++    case quod_proof_session:run_first(
++           Goal, quod_predicates:set_context(Committed, Strict),
++           #{read_only => true, read_set => true}) of
++        {ok, #{'Limits' := Rows}, [], Reads} ->
++            case valid_limits(Kind, Rows) of
++                {ok, Limits} -> {ok, Limits, Reads};
++                error -> {error, {invalid_material_policy, Kind}}
++            end;
++        _ -> {error, {invalid_material_policy, Kind}}
++    end.
++
++valid_limits(Kind, Rows) ->
++    Keys = case Kind of
++               founding -> [canonical_bytes, symbols];
++               plan -> [canonical_bytes, operations, reads, symbols]
++           end,
++    Pairs = [{Resource, Limit} || {limit, Resource, Limit} <- Rows,
++                Limit =:= unlimited orelse (is_integer(Limit) andalso Limit >= 0)],
++    case length(Pairs) =:= length(Rows) andalso
++         lists:sort([Key || {Key, _} <- Pairs]) =:= Keys of
++        true -> {ok, maps:from_list(Pairs)};
++        false -> error
++    end.
++
++-spec usage(term()) -> {ok, map()} | {error, term()}.
++usage(Term) ->
++    case {quod_wire_term:encode_canonical(Term),
++          quod_wire_term:symbol_names(Term)} of
++        {{ok, Bytes}, {ok, Names}} ->
++            {ok, #{canonical_bytes => byte_size(Bytes), symbols => length(Names)}};
++        _ -> {error, malformed_material}
++    end.
++
++-spec check(founding | plan, map(), limits()) -> ok | {error, term()}.
++check(Kind, Usage, Limits) ->
++    check_resources(Kind, lists:sort(maps:to_list(Usage)), Limits).
++
++check_resources(_Kind, [], _Limits) -> ok;
++check_resources(Kind, [{Resource, Actual} | Rest], Limits) ->
++    case maps:get(Resource, Limits) of
++        unlimited -> check_resources(Kind, Rest, Limits);
++        Limit when Actual =< Limit -> check_resources(Kind, Rest, Limits);
++        Limit -> {error, {material_limit, Kind, Resource, Actual, Limit}}
++    end.
+--- a/src/quod_ontology.erl
++++ b/src/quod_ontology.erl
+@@ -25,8 +25,8 @@
+ 
+ -include("quod_ingress_limits.hrl").
+ -include("quod_proof_limits.hrl").
+--include("quod_vm_limits.hrl").
+ -include("quod_ledger.hrl").
++-include_lib("erlog/src/erlog_int.hrl").
+ 
+ -export([validate_action/1, prepare_action/2, canonical_name/1,
+          execute_prepared/1,
+@@ -85,7 +85,7 @@
+ create(Name, Options) ->
+     case validate_action({create_ontology, Name, Options}) of
+         {ok, Structural} ->
+-            case prepare_action(Structural, none) of
++            case prepare_action(Structural) of
+                 {ok, Prepared} -> execute_prepared(Prepared);
+                 {error, _} = Error -> Error
+             end;
+@@ -168,14 +168,21 @@
+ -ifdef(TEST).
+ -spec prepare_action(structural_descriptor()) ->
+           {ok, prepared_descriptor()} | {error, term()}.
+-prepare_action(Structural) -> prepare_action(Structural, none).
++prepare_action(Structural) ->
++    %% Fixture callers use the same authored defaults as a new ontology.
++    #est{db = #db{ref = Ref}} = Est = quod_committed_projection:new_est(),
++    try
++        {ok, Limits, _} = quod_material_admission:policy(founding, Est),
++        prepare_action(Structural, Limits)
++    after quod_erlog_db_mvcc:delete(Ref)
++    end.
+ -endif.
+ 
+--spec prepare_action(structural_descriptor(), term()) ->
++-spec prepare_action(structural_descriptor(), quod_material_admission:limits()) ->
+           {ok, prepared_descriptor()} | {error, term()}.
+ prepare_action(
+   #lifecycle_request{kind = create, namespace = Ns, payload = Options},
+-  _Principal) ->
++  Limits) ->
+     case split_create_options(Options) of
+         {error, _} = Error ->
+             Error;
+@@ -187,11 +194,11 @@
+                         {error, _} = Error ->
+                             Error;
+                         {ok, InitialTerms} ->
+-                            case validate_initial_terms(InitialTerms) of
++                            case validate_initial_terms(InitialTerms, Limits) of
+                                 {error, _} = Error ->
+                                     Error;
+                                 {ok, InitialDiff} ->
+-                                    case initial_diff_admissible(InitialDiff) of
++                                    case initial_diff_admissible(InitialDiff, Limits) of
+                                         ok ->
+                                             prepare_create(
+                                               Ns, InitialDiff, Modules);
+@@ -203,11 +210,11 @@
+     end;
+ prepare_action(
+   #lifecycle_request{kind = join, namespace = Ns,
+-                     payload = {RawGenesisHash, SeedPeers}}, _Principal)
++                     payload = {RawGenesisHash, SeedPeers}}, _Limits)
+   when is_binary(RawGenesisHash), byte_size(RawGenesisHash) =:= 32,
+        is_list(SeedPeers) ->
+     prepare_join(Ns, RawGenesisHash, SeedPeers);
+-prepare_action(_InvalidDescriptor, _Principal) ->
++prepare_action(_InvalidDescriptor, _Limits) ->
+     {error, invalid_action}.
+ 
+ -doc """
+@@ -227,7 +234,7 @@
+         {error, _} = Error ->
+             Error;
+         {ok, Structural} ->
+-            case prepare_action(Structural, none) of
++            case prepare_action(Structural) of
+                 {error, _} = Error -> Error;
+                 {ok, Prepared} -> execute_prepared(Prepared)
+             end
+@@ -814,12 +821,20 @@
+             end
+     end.
+ 
+-validate_initial_terms(WireTerms) when is_list(WireTerms) ->
++validate_initial_terms(WireTerms, Limits) when is_list(WireTerms) ->
+     %% A remote policy's founding terms are still opaque data until this
+     %% authorized creation boundary. Materialize once before both reserved
+-    %% head validation and compilation, under the shared symbol bound.
+-    case quod_wire_term:materialize_symbols(WireTerms) of
+-        {ok, Terms} -> validate_materialized_terms(Terms);
++    %% head validation and compilation, after Prolog allocation admission.
++    case quod_wire_term:symbol_names(WireTerms) of
++        {ok, Names} ->
++            case quod_material_admission:check(founding, #{symbols => length(Names)}, Limits) of
++                ok ->
++                    case quod_wire_term:materialize_symbols(WireTerms) of
++                        {ok, Terms} -> validate_materialized_terms(Terms);
++                        {error, _} = Error -> Error
++                    end;
++                {error, _} = Error -> Error
++            end;
+         {error, _} = Error -> Error
+     end.
+ 
+@@ -857,29 +872,12 @@
+             {error, invalid_initial_terms}
+     end.
+ 
+-%% A genesis is decoded by nodes that never saw its source: joiners, and the
+-%% founder itself after a restart. They admit at most
+-%% ?QUOD_MAX_NEW_MATERIAL_ATOMS unknown symbols per envelope
+-%% (m:quod_wire_term), so a founding whose diff would exceed that on a cold
+-%% node of this release is refused here, where it can still be corrected.
+-initial_diff_admissible(Diff) ->
+-    case initial_diff_size(Diff) of
+-        ok ->
+-            case quod_wire_term:cold_new_symbols(Diff) of
+-                New when length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS -> ok;
+-                New ->
+-                    {error, {genesis_vocabulary, length(New),
+-                             ?QUOD_MAX_NEW_MATERIAL_ATOMS}}
+-            end;
+-        {error, _} = Error -> Error
+-    end.
+-
+-initial_diff_size(Diff) ->
+-    try byte_size(term_to_binary(Diff, [deterministic])) of
+-        Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES -> ok;
+-        _ -> {error, initial_content_too_large}
+-    catch
+-        _:_ -> {error, invalid_initial_terms}
++%% Admission measures the canonical source diff. The genesis builder checks
++%% the complete transaction and block, including generated founding facts.
++initial_diff_admissible(Diff, Limits) ->
++    case quod_material_admission:usage(Diff) of
++        {ok, Usage} -> quod_material_admission:check(founding, Usage, Limits);
++        {error, _} -> {error, invalid_initial_terms}
+     end.
+ 
+ invalid_initial_term(Term) ->
+--- a/src/quod_physics.erl
++++ b/src/quod_physics.erl
+@@ -941,10 +941,15 @@
+             Actual = lists:foldl(fun(#{costs := C},Acc) -> lists:zipwith(fun erlang:'+'/2,C,Acc) end,
+                                  [0,0,0,0,0],Selected),
+             true = length(Allowed) =:= 5,
+-            case lists:all(fun({A,L}) -> is_integer(L) andalso L >= A end,lists:zip(Actual,Allowed)) of
+-                true -> Selected;
+-                false -> throw(terrain_allocation_exceeded)
+-            end
++            lists:foreach(fun({Name,A,L}) ->
++                true = is_integer(L) andalso L >= 0,
++                case A =< L of
++                    true -> ok;
++                    false -> throw(iolist_to_binary(io_lib:format(
++                        "Terrain ~s: required ~B, allowance ~B. Reduce viewing distance.",[Name,A,L])))
++                end
++            end,lists:zip3(["transfer bytes","geometry bytes","vertices","triangles","chunks"],Actual,Allowed)),
++            Selected
+         end,Requests),
+         {ok,[R#{index => I} || {R,I} <- lists:zip(Rows,lists:seq(0,length(Rows)-1))]}
+     catch
+--- a/src/quod_scope_wire.erl
++++ b/src/quod_scope_wire.erl
+@@ -923,6 +923,16 @@
+ validate_public_error(independent_scope_required) -> ok;
+ validate_public_error(read_certificate_unavailable) -> ok;
+ validate_public_error(conflict_retry) -> ok;
++validate_public_error({material_limit, Kind, Resource, Actual, Limit})
++  when Kind =:= founding; Kind =:= plan ->
++    case lists:member(Resource, [canonical_bytes, symbols, operations, reads])
++         andalso valid_uint64(Actual) andalso valid_uint64(Limit)
++         andalso Actual > Limit of
++        true -> ok;
++        false -> protocol_error(bad_error_code)
++    end;
++validate_public_error({invalid_material_policy, Kind})
++  when Kind =:= founding; Kind =:= plan -> ok;
+ validate_public_error({effect_custody_limit, prepared_bytes, Actual, Limit}) ->
+     case valid_uint64(Actual) andalso valid_uint64(Limit) andalso Actual > Limit of
+         true -> ok;
+--- a/src/quod_simplex.erl
++++ b/src/quod_simplex.erl
+@@ -15369,7 +15369,7 @@
+ source_present({_Kind, undefined}) -> false;
+ source_present({_Kind, _Value}) -> true.
+ 
+-%% Config-time shape/size check for the genesis_diff option. It deliberately
++%% Config-time shape check for the genesis_diff option. It deliberately
+ %% does NOT require a policy clause: a RESUME passes its (ignored) genesis_diff
+ %% through here too, and forcing policy would reject a valid resume. Fresh
+ %% founding adds the host-entry policy before valid_genesis_transaction/3
+@@ -15378,15 +15378,7 @@
+     case quod_diff:valid_ops(Diff) of
+         false ->
+             {error, invalid_genesis_diff};
+-        true ->
+-            try byte_size(term_to_binary(Diff, [deterministic])) of
+-                Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES ->
+-                    {ok, {diff, Diff}};
+-                _TooLarge ->
+-                    {error, initial_content_too_large}
+-            catch
+-                _:_ -> {error, invalid_genesis_diff}
+-            end
++        true -> {ok, {diff, Diff}}
+     end.
+ 
+ valid_batch_window(Cfg) ->
+--- a/src/quod_wire_term.erl
++++ b/src/quod_wire_term.erl
+@@ -20,7 +20,8 @@
+ 
+ `materialize_symbols/1` is the sole controlled transition from decoded opaque
+ symbols to VM atoms.  Callers use it only after authenticating an ontology-owned
+-payload; one aggregate payload gets one bounded allocation budget.
++payload. New work is admitted by Prolog policy; historical materialization
++checks the real VM headroom without re-admitting accepted history.
+ """.
+ 
+ -include("quod_vm_limits.hrl").
+@@ -35,7 +36,6 @@
+          goal_symbol_names/1, symbol_names/1,
+          is_symbol/1, callable_functor/1,
+          is_ground/1,
+-         release_vocabulary/0, release_modules/0, cold_new_symbols/1,
+          encode_failure_reasons/1, decode_failure_reasons/1,
+          valid_failure_reason_stack/1]).
+ 
+@@ -193,83 +193,18 @@
+     valid_bindings(Rest, Name);
+ valid_bindings(_, _) -> false.
+ 
+--doc """
+-The vocabulary every node of this release holds: the atom tables of the
+-modules of the `quod` and `erlog` applications. The release runs embedded,
+-so every one of them is loaded at boot on every node — a receiver that
+-decodes an envelope knows exactly these symbols and nothing else. No code
+-path is scanned: modules from test or plugin directories never count.
+-Cached per VM.
+-""".
+--spec release_vocabulary() -> #{atom() => true}.
+-release_vocabulary() ->
+-    case persistent_term:get({?MODULE, vocabulary}, undefined) of
+-        #{} = Known -> Known;
+-        undefined ->
+-            Known = lists:foldl(fun module_atoms/2, #{}, release_modules()),
+-            persistent_term:put({?MODULE, vocabulary}, Known),
+-            Known
+-    end.
+-
+--doc "The modules of the release's own applications, as their app files list them.".
+--spec release_modules() -> [module()].
+-release_modules() ->
+-    lists:append(
+-      [case application:get_key(App, modules) of
+-           {ok, Modules} -> Modules;
+-           undefined ->
+-               _ = application:load(App),
+-               case application:get_key(App, modules) of
+-                   {ok, Modules} -> Modules;
+-                   undefined -> []
+-               end
+-       end || App <- [quod, erlog]]).
+-
+-module_atoms(Module, Acc) ->
+-    case code:which(Module) of
+-        Beam when is_list(Beam) ->
+-            case beam_lib:chunks(Beam, [atoms]) of
+-                {ok, {_, [{atoms, Atoms}]}} ->
+-                    lists:foldl(fun({_, A}, M) -> M#{A => true} end, Acc, Atoms);
+-                _ -> Acc
+-            end;
+-        _ -> Acc
+-    end.
+-
+--doc """
+-The distinct symbols of a term a cold node of this release would have to
+-allocate to materialize it: its atoms outside the release vocabulary. Erlog
+-variables (one-tuples) are not symbols.
+-""".
+--spec cold_new_symbols(term()) -> [atom()].
+-cold_new_symbols(Term) ->
+-    Known = release_vocabulary(),
+-    lists:usort([A || A <- term_atoms(Term, []), not maps:is_key(A, Known)]).
+-
+-term_atoms(A, Acc) when is_atom(A) -> [A | Acc];
+-term_atoms(T, Acc) when is_tuple(T), tuple_size(T) =:= 1 -> Acc;
+-term_atoms(T, Acc) when is_tuple(T) ->
+-    lists:foldl(fun term_atoms/2, Acc, tuple_to_list(T));
+-term_atoms([H | T], Acc) -> term_atoms(T, term_atoms(H, Acc));
+-term_atoms(M, Acc) when is_map(M) ->
+-    lists:foldl(fun term_atoms/2, Acc, maps:to_list(M));
+-term_atoms(_, Acc) -> Acc.
+-
+--doc "Materialize all unknown symbols in one authenticated payload under one budget.".
++-doc "Materialize authenticated material after admission, preserving real VM headroom.".
+ -spec materialize_symbols(term()) ->
+           {ok, term()} |
+-          {error, malformed_material | too_many_new_atoms | atom_limit}.
++          {error, malformed_material | atom_limit}.
+ materialize_symbols(Term) ->
+     case collect_new_symbols(Term, #{}) of
+-        {ok, Symbols}
+-          when map_size(Symbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
++        {ok, Symbols} ->
+             Names = lists:sort(maps:keys(Symbols)),
+             case materialize_symbol_names(Names) of
+                 ok -> {ok, replace_symbols(Term)};
+                 {error, _} = Error -> Error
+             end;
+-        {ok, _TooMany} ->
+-            {error, too_many_new_atoms};
+         error ->
+             {error, malformed_material}
+     end.
+--- a/test/quod_atomic_origin_tests.erl
++++ b/test/quod_atomic_origin_tests.erl
+@@ -15,7 +15,9 @@
+                     ?assert(quod_dtx:verify(Plan)),
+                     ?assertEqual(0, quod_dtx:diff_ops(Plan)),
+                     ?assertEqual(0, quod_dtx:effects_count(Plan)),
+-                    ?assertEqual(#{}, quod_ct:plan_material(read_check, Plan));
++                    ?assertEqual([{material_default_limit,3},{material_limit,3},
++                                  {material_limit_override,3}],
++                                 lists:sort(maps:keys(quod_ct:plan_material(read_check, Plan))));
+                 error -> ok
+             end
+         end)
+@@ -66,7 +68,8 @@
+     with_scopes(2, fun({Ns, Anchor} = Origin, Targets, Handles) ->
+         {ok, Plans} = quod_proof_context:seal_plans(),
+         Plan = maps:get(Origin, Plans),
+-        ?assertNot(quod_dtx:participates(Plan)),
++        ?assert(quod_dtx:participates(Plan)),
++        ?assertEqual(0, quod_dtx:diff_ops(Plan)),
+         Manifest = unsigned_manifest(Origin, Targets, Plans, quod_proof_context:vote_deadline_ms()),
+         {ok, Attestation} = quod_scope_session:attest_plan(maps:get(Origin, Handles), Plan, Manifest),
+         {ok, Group} = quod_atomic:new_group(Manifest, none, Attestation),
+--- a/test/quod_client_tests.erl
++++ b/test/quod_client_tests.erl
+@@ -1,6 +1,41 @@
+ -module(quod_client_tests).
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-export([init/2, websocket_init/1, websocket_handle/2, websocket_info/2, terminate/3]).
++
++gui_resource_call_crosses_the_real_cowboy_loop_test() ->
++    {ok, _} = application:ensure_all_started(gproc),
++    {ok, _} = application:ensure_all_started(cowboy),
++    Agent = <<"isolated-gui-owner">>, Connection = crypto:strong_rand_bytes(32),
++    Route = cowboy_router:compile([{'_', [{"/gui", ?MODULE,
++        #{parent => self(), agent => Agent, connection => Connection}}]}]),
++    {ok, _} = cowboy:start_clear(quod_gui_call_test,
++        [{ip,{127,0,0,1}},{port,0}], #{env => #{dispatch => Route}}),
++    try
++        {ok, Socket} = gen_tcp:connect({127,0,0,1},ranch:get_port(quod_gui_call_test),
++            [binary,{active,false},{packet,http_bin}],5000),
++        try
++            ok = gen_tcp:send(Socket,
++                <<"GET /gui HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
++                  "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
++                  "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n">>),
++            ?assertMatch({ok,{http_response,_,101,_}},gen_tcp:recv(Socket,0,5000)),
++            receive gui_socket_ready -> ok after 5000 -> error(no_gui_socket) end,
++            ?assertEqual({ok,expired},quod_client_view:activate_gui(Agent,Connection,
++                <<1:256>>,<<2:256>>,quod_time:mono_ms()+1000))
++        after gen_tcp:close(Socket) end
++    after cowboy:stop_listener(quod_gui_call_test) end.
++
++%% Delegate application messages to the production handler, inside Cowboy's
++%% real dispatch loop. No signed view is installed; an unknown receipt expires.
++init(Req, State) -> {cowboy_websocket,Req,State}.
++websocket_init(#{parent := Parent,agent := Agent,connection := Connection}) ->
++    Key = {client_view,{gui_hud,Agent,Connection}},
++    true = quod_reg:reg(Key), Parent ! gui_socket_ready,
++    {ok,#{receiver_key => Key,gui_resources => #{}}}.
++websocket_handle(Message, State) -> quod_client_view:websocket_handle(Message,State).
++websocket_info(Message, State) -> quod_client_view:websocket_info(Message,State).
++terminate(Reason, Req, State) -> quod_client_view:terminate(Reason,Req,State).
+ 
+ client_schema_defaults_test() ->
+     Fields = maps:from_list(quod_schema:fields(client)),
+--- a/test/quod_commit_validation_tests.erl
++++ b/test/quod_commit_validation_tests.erl
+@@ -540,7 +540,8 @@
+         quod_transaction:remote_application(ClaimRef, Claim, Target), CertifiedRef, Claim),
+     {ok, App} = quod_transaction:sign({Ns, Anchor, Admission},
+         App0#transaction{author = Pub, author_seq = 1, submitted_at = 12}, Signer),
+-    ?assertEqual(#{Key => Token}, App#transaction.read_check),
++    ?assertEqual(quod_ct:plan_material(read_check, Plan), App#transaction.read_check),
++    ?assertEqual(Token, maps:get(Key, App#transaction.read_check)),
+     ?assertEqual(none, App#transaction.request_auth),
+     Est = quod_ct:committed_kb([{can_invoke, {'G'}, {'P'}, {'C'}, Ns},
+                               {peer_admitted, Pub, "validator", 14567, Pub}]),
+--- a/test/quod_common_primitives_tests.erl
++++ b/test/quod_common_primitives_tests.erl
+@@ -8,7 +8,6 @@
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
+ -include("quod_vm_limits.hrl").
+--export([quod_names_dormant_marker_function/1]).
+ 
+ -define(NS, <<"test:primitives">>).
+ -define(DRAW, '$quod_draw').
+@@ -471,24 +470,15 @@
+                                 {?DRAW, {f, [1, <<"b">>, c]}, 10, I}))
+     end).
+ 
+-%% The founding guard's basis is the release's own applications, not the
+-%% code path: this test module is on the path and loaded here, yet a symbol
+-%% only it defines is still reported as new — as a release node that never
+-%% ships it would see it.
+-cold_vocabulary_ignores_modules_outside_the_basis_test() ->
+-    Marker = list_to_atom("quod_names_dormant_marker_" ++ integer_to_list(?LINE)),
+-    ?assert(lists:member(Marker, quod_wire_term:cold_new_symbols({Marker, x}))),
+-    ?assert(lists:member(quod_names_dormant_marker_function,
+-                         quod_wire_term:cold_new_symbols(
+-                           [{quod_names_dormant_marker_function, 1}]))),
+-    ?assertEqual([], quod_wire_term:cold_new_symbols({findall, ':-', is, member})),
+-    Modules = quod_wire_term:release_modules(),
+-    ?assert(lists:member(quod_wire_term, Modules)),
+-    ?assert(lists:member(erlog_int, Modules)),
+-    ?assertNot(lists:member(?MODULE, Modules)),
+-    ?assert(lists:all(fun(M) -> code:which(M) =/= non_existing end, Modules)).
+-
+-quod_names_dormant_marker_function(X) -> X.
++%% Symbol admission counts semantic names equally in warm and cold VMs.
++symbol_vocabulary_is_independent_of_loaded_modules_test() ->
++    Name = <<"quod_material_warm_cold_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
++    Cold = {{'$quod_symbol', Name}, x},
++    {ok, Before} = quod_wire_term:symbol_names(Cold),
++    ?assertEqual(lists:sort([Name, <<"x">>]), Before),
++    {ok, Warm} = quod_wire_term:materialize_symbols(Cold),
++    ?assertEqual({ok, Before}, quod_wire_term:symbol_names(Warm)),
++    ?assertEqual({ok, Before}, quod_wire_term:symbol_names(Cold)).
+ 
+ %% --- helpers ---------------------------------------------------------------
+ 
+--- a/test/quod_ct.erl
++++ b/test/quod_ct.erl
+@@ -36,6 +36,7 @@
+          wait_until/1, wait_until/2,
+          install_directory_generation/5]).
+ -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
++-export([material_limits/1, assert_material_admissible/1]).
+ -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
+ -export([proof_gate_row/3, https_request/4, https_request/5]).
+ -export([node_identity_options/3]).
+@@ -997,11 +998,19 @@
+ 
+ %% a committed MVCC kb (unknown=fail) holding `Facts`, published at height 1
+ committed_kb(Facts) ->
+-    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+-    State0 = element(3, Erl),
+-    {succeed, State1} =
+-        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
+-    commit_kb(assert_facts(Facts, State1)).
++    commit_kb(assert_facts(Facts, quod_committed_projection:new_est())).
++
++material_limits(Kind) ->
++    #est{db = #db{ref = Ref}} = Est = quod_committed_projection:new_est(),
++    try
++        {ok, Limits, _} = quod_material_admission:policy(Kind, Est),
++        Limits
++    after quod_erlog_db_mvcc:delete(Ref)
++    end.
++
++assert_material_admissible(Terms) ->
++    {ok, Usage} = quod_material_admission:usage(quod_prolog:terms_to_diff(Terms)),
++    ok = quod_material_admission:check(founding, Usage, material_limits(founding)).
+ 
+ %% assertz each erlog `Fact` into `Est`, failing loudly on the first refusal
+ assert_facts(Facts, Est) ->
+--- a/test/quod_dtx_tests.erl
++++ b/test/quod_dtx_tests.erl
+@@ -199,10 +199,11 @@
+         ?assertEqual(Identity, quod_dtx:origin(Plan)),
+         ?assertEqual(Binding, quod_dtx:request_binding(Plan)),
+         ?assertEqual([], quod_ct:plan_material(diff, Plan)),
+-        ?assertEqual(#{}, quod_ct:plan_material(read_check, Plan)),
++        ?assertMatch(#{{material_limit_override, 3} := never_present},
++                     quod_ct:plan_material(read_check, Plan)),
+         ?assert(quod_dtx:participates(Plan)),
+         ?assertNot(quod_dtx:writes(Plan)),
+-        ?assertNot(quod_dtx:reads_only(Plan))
++        ?assert(quod_dtx:reads_only(Plan))
+     after
+         quod_proof_session:stop(Session)
+     end.
+@@ -294,7 +295,7 @@
+          #{Origin => OriginRead, RemoteA => RemoteWriteA,
+            RemoteC => RemoteReadC}, Origin, true)),
+     ?assertMatch(
+-       {remote_claim, [RemoteA], []},
++       {remote_claim, [RemoteA], [{Origin, OriginClaim}]},
+        quod_prolog:test_route_plans(
+          #{Origin => OriginClaim, RemoteA => RemoteWriteA}, Origin, true)),
+     ?assertMatch(
+@@ -506,53 +507,23 @@
+           ?assertNot(quod_dtx:verify(Decoded))
+       end).
+ 
+-plan_material_has_one_aggregate_release_symbol_budget_test() ->
+-    with_identity(
+-      fun(_Pub) ->
+-          Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
+-          Prefix = <<"z", (integer_to_binary(
+-                                erlang:unique_integer([positive]), 36))/binary>>,
+-          DiffNames = [unique_symbol(Prefix, 1)],
+-          ReadNames = [unique_symbol(Prefix, 2)],
+-          GoalNames = [unique_symbol(Prefix, N)
+-                       || N <- lists:seq(3, Budget + 1)],
+-          AllNames = DiffNames ++ ReadNames ++ GoalNames,
+-          assert_symbols_absent(AllNames),
+-          Diff = [{assert, {{'$quod_symbol', Name}, true}}
+-                  || Name <- DiffNames],
+-          ReadPairs = [{{{'$quod_symbol', Name}, 0}, never_present}
+-                       || Name <- ReadNames],
+-
+-          %% The over-budget symbol lives only inside RequestedGoalBin. It is
+-          %% still charged with diff/read vocabulary, and rejection happens
+-          %% before any member of the aggregate is allocated.
+-          TooManyTranscript = symbol_transcript(GoalNames),
+-          TooMany = signed_material_plan(Diff, ReadPairs, TooManyTranscript),
+-          {ok, TooManyBlob} = quod_dtx:encode(TooMany),
+-          {ok, TooManyDecoded} = quod_dtx:decode(TooManyBlob),
+-          ?assert(quod_dtx:verify(TooManyDecoded)),
+-          ?assertEqual({error, too_many_new_atoms},
+-                       quod_dtx:material(TooManyDecoded)),
+-          assert_symbols_absent(AllNames),
+-
+-          AtLimitTranscript = symbol_transcript(lists:droplast(GoalNames)),
+-          AtLimit = signed_material_plan(Diff, ReadPairs, AtLimitTranscript),
+-          {ok, AtLimitBlob} = quod_dtx:encode(AtLimit),
+-          {ok, AtLimitDecoded} = quod_dtx:decode(AtLimitBlob),
+-          ?assert(quod_dtx:verify(AtLimitDecoded)),
+-          {ok, #{diff := MaterialDiff, read_check := MaterialRead,
+-                 transcript := MaterialTranscript}} =
+-              quod_dtx:material(AtLimitDecoded),
+-          ?assertEqual(1, length(MaterialDiff)),
+-          ?assertEqual(1, map_size(MaterialRead)),
+-          ?assertEqual(length(AtLimitTranscript), length(MaterialTranscript)),
+-          ?assertEqual(512, ?QUOD_MAX_NEW_MATERIAL_ATOMS),
+-          [?assert(is_atom(binary_to_existing_atom(Name, utf8)))
+-           || Name <- lists:droplast(AllNames)],
+-          ?assertException(
+-             error, badarg,
+-             binary_to_existing_atom(lists:last(AllNames), utf8))
+-      end).
++plan_material_replays_admitted_vocabulary_on_a_cold_vm_test() ->
++    with_identity(fun(_Pub) ->
++        Prefix = <<"z", (integer_to_binary(erlang:unique_integer([positive]), 36))/binary>>,
++        Names = [unique_symbol(Prefix, N) || N <- lists:seq(1, 600)],
++        assert_symbols_absent(Names),
++        [DiffName, ReadName | GoalNames] = Names,
++        Diff = [{assert, {{'$quod_symbol', DiffName}, true}}],
++        Reads = [{{{'$quod_symbol', ReadName}, 0}, never_present}],
++        Original = signed_material_plan(Diff, Reads, symbol_transcript(GoalNames)),
++        {ok, Blob} = quod_dtx:encode(Original),
++        {ok, Decoded} = quod_dtx:decode(Blob),
++        ?assert(quod_dtx:verify(Decoded)),
++        {ok, Material} = quod_dtx:material(Decoded),
++        ?assertEqual({ok, Material}, quod_dtx:material(Decoded)),
++        ?assertEqual({ok, Blob}, quod_dtx:encode(Decoded)),
++        [?assert(is_atom(binary_to_existing_atom(Name, utf8))) || Name <- Names]
++    end).
+ 
+ plan_material_rejects_invalid_diff_and_duplicate_reads_test() ->
+     with_identity(
+@@ -622,9 +593,13 @@
+         ok = quod_proof_session:absorb_read_set(Session,#{Key => Token}),
+         ?assertEqual(#{Key => Token},quod_proof_session:read_set(Session)),
+         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
+-        ?assertEqual(1,maps:get(read_functors,quod_dtx:core(Plan))),
+-        ?assertEqual(#{Key => Token},quod_ct:plan_material(read_check,Plan)),
+-        ?assertEqual(#{reads => [],writes => [],custody => []},
++        SealedReads = quod_ct:plan_material(read_check,Plan),
++        ?assertEqual(Token,maps:get(Key,SealedReads)),
++        ?assertEqual(never_present,maps:get({material_limit_override,3},SealedReads)),
++        ?assertEqual(map_size(SealedReads),maps:get(read_functors,quod_dtx:core(Plan))),
++        ?assertEqual(#{reads => [{<<"material_default_limit">>,3},
++                                {<<"material_limit">>,3},
++                                {<<"material_limit_override">>,3}],writes => [],custody => []},
+                      maps:get(conflict_descriptor,quod_dtx:core(Plan))),
+         ?assertEqual({error,invalid_read_dependency},
+                      quod_dtx:seal_session(Session,(bind())#{base_height => 0}))
+--- a/test/quod_foreign_log_tests.erl
++++ b/test/quod_foreign_log_tests.erl
+@@ -6052,9 +6052,9 @@
+             Tx
+         end,
+     Transactions =
+-        [MakeTx(1, 1, ?QUOD_MAX_PLAN_DIFF_OPS),
+-         MakeTx(2, ?QUOD_MAX_PLAN_DIFF_OPS + 1,
+-                ?QUOD_MAX_PLAN_DIFF_OPS + 1)],
++        [MakeTx(1, 1, ?QUOD_MAX_CHANGED_HEADS),
++         MakeTx(2, ?QUOD_MAX_CHANGED_HEADS + 1,
++                ?QUOD_MAX_CHANGED_HEADS + 1)],
+     Entry = content_entry(Ns, Anchor, Pub, Signer, 2, maps:get(protocol_root, maps:get(projection, Base)), Transactions),
+     Root = temp_dir("projection-large-change-set"),
+     CacheNs = <<"projection-cache:", Ns/binary>>,
+@@ -8125,11 +8125,15 @@
+     largest_payload(Ns, 0, ?MAX_BLOCK_BYTES).
+ 
+ largest_payload(Ns, Low, High) when Low + 1 >= High ->
+-    payload(Ns, Low);
++    {ok, Payload} = payload(Ns, Low),
++    Payload;
+ largest_payload(Ns, Low, High) ->
+     Mid = (Low + High) div 2,
+-    Candidate = payload(Ns, Mid),
+-    case quod_ledger:encoded_payload_size(Candidate) of
++    SizeResult = case payload(Ns, Mid) of
++        {ok, Candidate} -> quod_ledger:encoded_payload_size(Candidate);
++        {error,too_large} = Error -> Error
++    end,
++    case SizeResult of
+         {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
+             largest_payload(Ns, Mid, High);
+         _ ->
+@@ -8152,10 +8156,14 @@
+                      read_check = #{}, author = Author,
+                      author_seq = 1, submitted_at = 1,
+                      sig = none},
+-    Transaction = quod_transaction:bind_id(Target, Transaction0),
+-    {ok, Signed} = quod_transaction:sign(
+-                     {Ns, element(2, Target), Author}, Transaction, Signer),
+-    {batch, [Signed]}.
++    try quod_transaction:bind_id(Target, Transaction0) of
++        Transaction -> case quod_transaction:sign(
++                     {Ns, element(2, Target), Author}, Transaction, Signer) of
++            {ok, Signed} -> {ok, {batch, [Signed]}};
++            {error,too_large} = Error -> Error
++        end
++    catch error:bad_transaction_material -> {error,too_large}
++    end.
+ 
+ unique_ns() ->
+     <<"foreign:test:",
+--- a/test/quod_genesis_tests.erl
++++ b/test/quod_genesis_tests.erl
+@@ -56,19 +56,16 @@
+        {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
+        quod_simplex:test_valid_config(AboveLimit)).
+ 
+-genesis_initial_diff_boundary_test() ->
++genesis_configuration_does_not_readmit_retained_content_test() ->
+     Self = <<0:256>>,
+     Base = base_config(Self),
+-    AtLimit = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES),
+-    AboveLimit = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES + 1),
+-    ?assertEqual(
+-       ok,
+-       quod_simplex:test_valid_genesis_source(
+-         Base#{genesis_diff => AtLimit})),
+-    ?assertEqual(
+-       {error, initial_content_too_large},
+-       quod_simplex:test_valid_genesis_source(
+-         Base#{genesis_diff => AboveLimit})).
++    %% Configuration is also inspected on resume, where the source is ignored.
++    %% Only a fresh founding's complete encoded envelope determines capacity.
++    AboveEnvelope = sized_diff(?MAX_BLOCK_BYTES + 1),
++    ?assertEqual(ok, quod_simplex:test_valid_genesis_source(
++                       Base#{genesis_diff => AboveEnvelope})),
++    ?assertMatch({error, _}, quod_simplex:prepare_genesis(
++                   Base#{genesis_diff => AboveEnvelope}, <<"genesis:oversized">>, Self)).
+ 
+ generated_genesis_source_equivalence_test() ->
+     Self = <<0:256>>,
+@@ -132,8 +129,8 @@
+     Self = <<0:256>>,
+     Ns = <<"genesis:complete-bound">>,
+     Incarnation = <<16#6b:256>>,
+-    InitialDiff = sized_diff(?MAX_GENESIS_INITIAL_DIFF_BYTES),
+-    %% Initial content is independently within its limit. The generated
++    InitialDiff = sized_diff(?MAX_BLOCK_BYTES - 64 * 1024),
++    %% Initial content alone fits the carrier. The generated
+     %% committee fact pushes the complete transaction above the block limit.
+     OversizedHost = binary:copy(<<"h">>, 70 * 1024),
+     Config =
+--- a/test/quod_gui_examples_tests.erl
++++ b/test/quod_gui_examples_tests.erl
+@@ -28,7 +28,7 @@
+         Files = ["space.pl","agent_instance.pl","quod_physics.pl","space_view.pl","lobby_instance.pl",
+                  "voxel_world.pl","voxel_world_view.pl","gui_instance.pl","gui_question.pl",
+                  "voxel_world_gui.pl","lobby_worlds.pl"],
+-        {Application,_} = quod_lobby_tests:start_namespace(Ns,Base#{
++        {Application,WorldConfig} = quod_lobby_tests:start_namespace(Ns,Base#{
+             data_dir => filename:join(Dir,"worlds"),
+             genesis_diff => quod_prolog:terms_to_diff(lists:append([source(F) || F <- Files]) ++ Facts)}),
+         Anchor = quod_simplex:genesis_hash(Ns),Actor = {agent_instance_ref,Ns,Anchor,world_responder},
+@@ -46,13 +46,16 @@
+             commit(Ctx,scope(Ns,{world_library_initialize,Node,Key})),
+             receive {agent_installed,_,_,#{reference := Actor},_} -> ok
+             after 10000 -> error(world_responder_not_installed) end,
+-            NamesBefore = quod_prolog:applied(<<"quod:names">>),
++            NamesTarget = {ontology_ref,<<"quod:names">>,quod_simplex:genesis_hash(<<"quod:names">>)},
++            NamesBefore = quod_lobby_tests:complete_source(Ctx,NamesTarget),
+             quod_gui_question_tests:with_receiver(Ctx,HumanNs,fun(Open) ->
+-                Create = fun(Name) ->
++                Create = fun(Name,Preset) ->
+                     Form = world_creation,
+                     {ok,[#{<<"V0">> := Revision}],_} = read(Ctx,Ns,{gui_schema,Form,{0},{1}}),
+                     {ok,[#{<<"V1">> := Defaults}],_} = read(Ctx,Ns,{gui_values,Form,{0},{1}}),
+-                    Fields = lists:keyreplace(world_creation_name,2,Defaults,{field,world_creation_name,Name}),
++                    Named = lists:keyreplace(world_creation_name,2,Defaults,{field,world_creation_name,Name}),
++                    Fields = lists:keyreplace({voxel_setting,world_creation,preset},2,Named,
++                        {field,{voxel_setting,world_creation,preset},Preset}),
+                     {question_ref,Ns,Anchor,Q} = Open(Ns,Form),
+                     Before = quod_prolog:applied(Ns),
+                     commit(Ctx,scope(Ns,{gui_submit,Q,Revision,create_world,Fields})),
+@@ -65,28 +68,67 @@
+                         scope(Ns,{gui_submit,Q,Revision,create_world,Fields}))),
+                     {ok,[#{<<"V0">> := Rows}],_} = read(Ctx,Ns,{world_library,{0}}),Rows
+                 end,
+-                [{world,{entity_ref,Ns,Anchor,W1},Generated}] = Create(<<>>),
++                [{world,{entity_ref,Ns,Anchor,W1},Generated}] = Create(<<>>,meadow),
+                 ?assert(is_binary(Generated)),
+                 ?assertMatch({ok,[_],_},read(Ctx,<<"quod:names">>,
+                     {name,Generated,<<"landscape">>,<<"world">>,<<"neutral">>})),
+-                ?assertEqual(NamesBefore,quod_prolog:applied(<<"quod:names">>)),
+-                Two = Create(Generated),
++                ?assertEqual(NamesBefore,quod_lobby_tests:complete_source(Ctx,NamesTarget)),
++                Two = Create(Generated,highlands),
+                 ?assertEqual([Generated,Generated],[Name || {world,_,Name} <- Two]),
+                 [W2] = [W || {world,{entity_ref,_,_,W},_} <- Two,W =/= W1],
+                 ?assertMatch({ok,[_],_},read(Ctx,Ns,{voxel_world_owner,W2,Human})),
++                Worlds = Create(<<"Badlands">>,badlands),
++                ?assertEqual(3,length(Worlds)),
+                 ?assertEqual(#{},gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds)),
+                 quod_lobby_tests:assert_read_has_no_io(fun() ->
+                     ?assertEqual(read(Ctx,Ns,{world_library,{0}}),read(Ctx,Ns,{world_library,{0}}))
+                 end),
+-                {ok,[#{<<"V0">> := {prepared,Node,PhysicsKey}}],_} = read(Ctx,Ns,{physics_preparation,W1,{0}}),
+-                commit(Ctx,scope(Ns,{physics_initialize,W1,Node,PhysicsKey})),
++                Owners = [begin
++                    {ok,[#{<<"V0">> := {prepared,Node,PhysicsKey}}],_} = read(Ctx,Ns,{physics_preparation,W,{0}}),
++                    commit(Ctx,scope(Ns,{physics_initialize,W,Node,PhysicsKey})),
++                    Owner = world_entry_ready({world_ref,Ns,Anchor,W},quod_time:mono_ms()+15000),
++                    ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Owner,status)),
++                    %% Body IDs deliberately overlap; the exact world and pilot
++                    %% remain distinct in control and presentation selection.
++                    ?assertMatch({ok,[_],_},read(Ctx,Ns,{physics_control,W,Human,1,{controlled,{world_pilot,W},eye}})),
++                    {ok,[#{<<"V0">> := {world_view,_,Visible,_}}],_} =
++                        read(Ctx,Ns,{client_world_view,W,playing,[],{0}}),
++                    ?assert(lists:any(fun({mark,_,<<"terrain">>,_,_,_,_,_}) -> true;
++                                        (_) -> false end,Visible)),
++                    {W,Owner}
++                end || {world,{entity_ref,_,_,W},_} <- Worlds],
+                 World = {world_ref,Ns,Anchor,W1},
+-                Pid = world_entry_ready(World,quod_time:mono_ms()+15000),
+-                ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status)),
+-                ?assertMatch({ok,[_],_},read(Ctx,Ns,{physics_control,W1,Human,1,{controlled,{world_pilot,W1},eye}})),
++                {W1,Pid} = lists:keyfind(W1,1,Owners),
+                 ?assertMatch({ok,[#{<<"V0">> := ready}],_},read(Ctx,Ns,{physics_preparation,W1,{0}})),
+                 #{World := #{pid := Pid}} = gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds),
+-                ?assertMatch({ok,[#{<<"V0">> := Two}],_},read(Ctx,Ns,{world_library,{0}}))
++                %% Enter, release the visual consumer, then reenter a settled
++                %% world with a larger view. Delivery cannot depend on motion.
++                [?assertEqual(ok,world_terrain_delivery(Ns,World,Pid,Distance)) || Distance <- [8000,16000]],
++                %% This recipe's wider window exceeds the authored renderer
++                %% vertex allowance. Refuse the view promptly, keep the world
++                %% alive, and permit a smaller view to enter again.
++                ?assertEqual({error,<<"Terrain vertices: required 264522, allowance 250000. Reduce viewing distance.">>},
++                    world_terrain_delivery(Ns,World,Pid,24000)),
++                ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status)),
++                ?assertEqual(ok,world_terrain_delivery(Ns,World,Pid,16000)),
++                ?assertMatch({ok,[#{<<"V0">> := Worlds}],_},read(Ctx,Ns,{world_library,{0}})),
++                %% Rebuild from the same durable history, without redrawing
++                %% names, replaying GUI completion or initializing again.
++                quod_lobby_tests:stop_process(Application),
++                {Recovered,_} = quod_lobby_tests:start_namespace(Ns,
++                    WorldConfig#{mode => join,genesis_hash => Anchor}),
++                try
++                    ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns)),
++                    ?assertMatch({ok,[#{<<"V0">> := Worlds}],_},read(Ctx,Ns,{world_library,{0}})),
++                    NewPid = world_entry_ready(World,quod_time:mono_ms()+15000),
++                    ?assertNotEqual(Pid,NewPid),
++                    ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(NewPid,status)),
++                    ?assertMatch({ok,[#{<<"V0">> := ready}],_},read(Ctx,Ns,{physics_preparation,W1,{0}})),
++                    ?assertEqual(NamesBefore,quod_lobby_tests:complete_source(Ctx,NamesTarget)),
++                    quod_lobby_tests:assert_read_has_no_io(fun() ->
++                        ?assertMatch({ok,[#{<<"V0">> := Worlds}],_},read(Ctx,Ns,{world_library,{0}}))
++                    end)
++                after quod_lobby_tests:stop_process(Recovered) end
+             end)
+         after
+             quod_reg:unsubscribe({agent,Actor}),quod_reg:unsubscribe({agent_hosting,Ns}),
+@@ -99,12 +141,59 @@
+ 
+ world_entry_ready(World,Deadline) ->
+     receive {physics_status,_,Pid,World,_,_} ->
+-        case gen_server:call(Pid,status) of
+-            #{phase := active,navigation_ready := true} -> Pid;
+-            #{phase := {failed,Reason}} -> error({world_entry_failed,Reason});
+-            _ -> world_entry_ready(World,Deadline)
++        case is_process_alive(Pid) of
++            false -> world_entry_ready(World,Deadline);
++            true -> case gen_server:call(Pid,status) of
++                #{phase := active,navigation_ready := true} -> Pid;
++                #{phase := {failed,Reason}} -> error({world_entry_failed,Reason});
++                _ -> world_entry_ready(World,Deadline)
++            end
+         end
+     after max(0,Deadline-quod_time:mono_ms()) -> error(world_entry_not_ready) end.
++
++world_terrain_delivery(Ns,World,Pid,Distance) ->
++    Runtime = quod_reg:via({quod_runtime,Ns}),
++    #{World := #{spec := Spec}} = gen_server:call(Runtime,physics_worlds),
++    [{Id,Revision}] = [{B,R} || {B,R,fixed,_,{terrain,_,_},_} <- maps:get(bodies,Spec)],
++    [Control] = maps:get(agent_controls,Spec),
++    Expected = #{fence => quod_physics:fence(Spec),structure => maps:get(structure,Spec),
++        incarnation => maps:get(run_token,Spec),control => Control,
++        terrain => [{Id,Revision,{view_distance,Distance,4000,8000},
++                     [8388608,16777216,250000,250000,1024]}]},
++    {ok,Ref,Frame} = quod_physics:watch(Pid,Expected,none),
++    try
++        quod_physics:view_interest(Pid,Ref,1,{0,1535,2817}),
++        quod_physics:ack(Pid,Ref,maps:get(tick,Frame),maps:get(origin_sequence,Frame)),
++        consume_world_terrain(Runtime,World,Pid,Ref,none,quod_time:mono_ms()+15000)
++    after quod_physics:unwatch(Pid,Ref),gen_server:call(Pid,status) end.
++
++consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline) ->
++    receive
++        {physics_resource,Pid,Ref,{terrain_unavailable,Reason}} -> {error,Reason};
++        {physics_refresh,Pid,Ref} -> error(terrain_projection_changed);
++        {physics_resource,Pid,Ref,{terrain_manifest,Token,Interest,Rows}} ->
++            quod_physics:resource_ack(Pid,Ref,Token,{want,[maps:get(index,R) || R <- Rows]}),
++            consume_world_terrain(Runtime,World,Pid,Ref,{Token,Interest},Deadline);
++        {physics_resource,Pid,Ref,{terrain_chunk,Token,Index,_}} ->
++            quod_physics:resource_ack(Pid,Ref,Token,{chunk,Index}),
++            consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline);
++        {physics_resource,Pid,Ref,{terrain_complete,Token}} ->
++            quod_physics:resource_ack(Pid,Ref,Token,complete),
++            case Current of
++                {Token,1} -> ok;
++                _ -> consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline)
++            end;
++        {physics_frame,Pid,Ref,Frame} ->
++            quod_physics:ack(Pid,Ref,maps:get(tick,Frame),maps:get(origin_sequence,Frame)),
++            consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline)
++    after max(0,Deadline-quod_time:mono_ms()) ->
++        #{World := Entry} = gen_server:call(Runtime,physics_worlds),
++        Spec = maps:get(spec,Entry),
++        error({world_terrain_delivery_missing,gen_server:call(Pid,status),
++               maps:with([terrain_demand,status,selection,needs_reconciliation],Entry),
++               maps:with([terrain_demand],Spec),
++               maps:with([runner_active,queue_len,resource_failures],gen_server:call(Runtime,get_stats))})
++    end.
+ 
+ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_() ->
+     {timeout,120,fun() ->
+--- a/test/quod_ingress_state_tests.erl
++++ b/test/quod_ingress_state_tests.erl
+@@ -229,7 +229,7 @@
+          entry, local, Membership, NonEmptyBatch)),
+     OversizedChange =
+         (tx(<<"oversized">>, B, 0, none))#transaction{
+-          goal = binary:copy(<<0>>, 262144)},
++          goal = binary:copy(<<0>>, ?MAX_BLOCK_BYTES)},
+     Oversized = quod_ingress_state:request(OversizedChange),
+     ?assertEqual(
+        {reject, too_large},
+--- a/test/quod_lens_tests.erl
++++ b/test/quod_lens_tests.erl
+@@ -319,8 +319,7 @@
+ 
+ vocabulary_fits_the_genesis_budget_test() ->
+     Terms = terms(lens_source()),
+-    New = quod_wire_term:cold_new_symbols(Terms),
+-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {New, length(New)}),
++    quod_ct:assert_material_admissible(Terms),
+     ?assertNot(lists:any(fun has_float/1, Terms)).
+ 
+ has_float(T) when is_float(T) -> true;
+--- a/test/quod_licence_tests.erl
++++ b/test/quod_licence_tests.erl
+@@ -162,9 +162,7 @@
+ %% The founding source must fit the vocabulary a cold node will admit.
+ vocabulary_fits_the_genesis_budget_test() ->
+     Terms = quod_committed_projection:read_terms(source()),
+-    New = quod_wire_term:cold_new_symbols(Terms),
+-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10,
+-            {New, length(New)}),
++    quod_ct:assert_material_admissible(Terms),
+     ?assert(lists:all(fun({licence, Id, Family, Strength}) ->
+                               is_binary(Id) andalso is_binary(Family)
+                                   andalso is_integer(Strength);
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -6,6 +6,84 @@
+ 
+ -define(ROOT_NS, <<"quod:root">>).
+ -define(NODE_NS, <<"quod:node">>).
++
++-export([preview_worlds/1]).
++
++material_admission_uses_committed_root_policy_test_() ->
++    {timeout,60,fun() ->
++        F = setup(),
++        Override = {material_limit_override,founding,canonical_bytes,0},
++        try
++            commit_root({assertz,Override}),
++            Read = fun() -> ?assertMatch({ok,[#{}],_},
++                quod_prolog:prove_ro(?ROOT_NS,{material_limit,founding,canonical_bytes,0})) end,
++            Read(),
++            quod_lobby_tests:assert_read_has_no_io(fun() -> Read(),Read() end),
++            Ns = unique_ns(<<"governed-material">>), Goal = create_goal(Ns,[]),
++            {fail,Reasons} = quod_prolog:execute(?ROOT_NS,Goal),
++            ?assert(lists:any(fun
++                ({ontology_creation_failed,{material_limit,founding,canonical_bytes,Actual,0}})
++                  when Actual > 0 -> true;
++                (_) -> false end,Reasons)),
++            ?assertEqual({ok,not_hosted},quod_ontology:local_state(Ns)),
++            ?assertEqual([], [R || R=#{target := {Target,_}} <- quod_effect_journal:rows(),Target =:= Ns]),
++            commit_root({retract,Override}),
++            ?assertMatch({ok,[#{}],_},quod_prolog:execute(?ROOT_NS,Goal)),
++            ok = wait_ready(Ns,300),
++            [ok = quod_effect_journal:await(Id,5000) || #{effect_id := Id} <- quod_effect_journal:rows()],
++            Before = maps:get(committed,quod_simplex:stats(?ROOT_NS)),
++            quod_lobby_tests:assert_read_has_no_io(fun() ->
++                ?assertMatch({ok,[#{}],_},quod_prolog:execute(?ROOT_NS,Goal))
++            end),
++            ?assertEqual(Before,maps:get(committed,quod_simplex:stats(?ROOT_NS)))
++        after cleanup(F) end
++    end}.
++
++%% Browser acceptance uses the same disposable factory and real signed owners.
++%% Metadata contains only this fixture's key, in an owner-only file.
++preview_worlds(MetadataPath) ->
++    F = setup(),
++    #{dir := Dir, actor_ns := ActorNs, actor_principal := Principal} = F,
++    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
++    {ok, Network} = quod_ontology:network_identity(),
++    {ok, NodeKey} = application:get_env(quod, node_pubkey),
++    Unlock = filename:join(Dir, "vault-unlock"),
++    ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
++    {ok, Vault} = quod_agent_vault:start_link(
++        #{directory => filename:join(Dir, "vault"), unlock_file => Unlock}),
++    unlink(Vault),
++    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
++    unlink(Auth),
++    {ok, Cursors} = quod_client_cursor:start_link(),
++    unlink(Cursors),
++    try
++        User = found_lobby_user(found_lobby_classes(), Network, Node),
++        #{reference := Owner = {agent_instance_ref, UserNs, UserAnchor, me},
++          lobby_name := Ns, keypair := {Public, Seed}} = User,
++        commit_root({assertz, {ontology_creator_agent, Owner}}),
++        {ok, _, _} = quod_prolog:execute(ActorNs,
++            {assertz, {can_host_ontology, Owner, Node, Ns, {'Anchor'}, discoverable}}),
++        {ok, _, {normalized, {committed, _, _}}} =
++            submit_lobby(User, execute, {provision_lobby, me}),
++        ok = wait_ready(Ns, 300),
++        {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
++        application:set_env(quod, client_enabled, true),
++        application:set_env(quod, client_ip, {127, 0, 0, 1}),
++        application:set_env(quod, client_port, 0),
++        {ok, _} = application:ensure_all_started(ssl),
++        {ok, _} = application:ensure_all_started(cowboy),
++        {ok, Client} = quod_client:start_link(),
++        unlink(Client),
++        Encode = fun(B) -> base64:encode(B, #{mode => urlsafe, padding => false}) end,
++        Metadata = #{port => ranch:get_port(quod_client_listener),
++            namespace => UserNs, anchor => Encode(UserAnchor), instanceText => <<"me.">>,
++            network => Encode(Network), public_key => Encode(Public), seed => Encode(Seed),
++            lobby_namespace => Ns, lobby_anchor => Encode(Anchor)},
++        ok = quod_file:write_atomic(MetadataPath, iolist_to_binary(json:encode(Metadata)), 8#600),
++        io:format("Isolated world-library endpoint ready.~n"),
++        try receive stop -> ok end
++        after stop_process(Client) end
++    after stop_process(Cursors), stop_process(Auth), cleanup(F), stop_process(Vault) end.
+ 
+ default_lobby_physics_startup_test_() ->
+     {timeout, 90, fun() ->
+@@ -32,6 +110,8 @@
+             ok = wait_ready(Ns, 300),
+             {ontology_ref, Ns, Anchor} = lobby_user_reference(User),
+             Scoped = fun(G) -> {'::', Ns, {',', {current_ontology_identity, Ns, Anchor}, G}} end,
++            ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}},
++                submit_lobby(User, read, Scoped({gui_schema,world_creation,{0},{1}}))),
+             [ok = quod_effect_journal:await(Id,5000)
+              || #{effect_id := Id} <- quod_effect_journal:rows()],
+             Manager = quod_reg:where({namespace_manager,node}),
+@@ -293,6 +373,10 @@
+           [{source_file, NodeSource},
+            {external_predicate_modules, [quod_ontology_predicates]}]),
+     ok = wait_ready(?NODE_NS, 300),
++    %% Authored GUI class references use the registered vocabulary identity.
++    %% Every factory in this isolated node shares that immutable vocabulary.
++    {<<"quod:gui">>, _} = found_lobby_named_sources(<<"quod:gui">>,
++        ["quod_gui.pl"], [], [quod_agent_predicates,quod_gui_predicates]),
+     ok = wait_effect_limits({64, unlimited}, 300),
+     Base = #{dir => Dir, saved => Saved, manager => Manager,
+              ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
+@@ -990,11 +1074,11 @@
+     unlink(Auth),
+     try
+         {ClassNs, ClassAnchor} = found_lobby_classes(),
+-        {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+-                                                     "ontologies/human_user_instance.pl")),
++        Sources = [{user_source_file, list_to_binary(filename:join(
++            [code:priv_dir(quod), "ontologies", File]))}
++            || File <- ["human_user_instance.pl", "gui_hud.pl"]],
+         {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
+-            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor},
+-             {signup_host, Node}]),
++            [{lobby_vocabulary, ClassNs, ClassAnchor}, {signup_host, Node} | Sources]),
+         {ok, _, _} = quod_prolog:execute(ActorNs,
+             {assertz, {ontology_hosting_policy, SignupNs, SignupAnchor}}),
+         Grants = [{ontology_creation_policy, ClassNs, ClassAnchor},
+@@ -1244,7 +1328,7 @@
+     {EnvironmentEidolonNs, EnvironmentEidolonAnchor} = found_lobby_source(
+         <<"environment-eidolons">>, "quod_environment_eidolons.pl",
+         [{environment_vocabulary, EnvironmentNs, EnvironmentAnchor}]),
+-    {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
++    GuiNs = <<"quod:gui">>, GuiAnchor = quod_simplex:genesis_hash(GuiNs),
+     Templates = [{lobby_source_file, list_to_binary(filename:join(
+         code:priv_dir(quod), "ontologies/" ++ File))}
+         || File <- ["lobby_instance.pl", "space.pl", "agent_instance.pl",
+@@ -1260,18 +1344,24 @@
+          {gui_vocabulary, GuiNs, GuiAnchor} | Templates]).
+ 
+ found_lobby_source(Prefix, File, Facts) ->
+-    Ns = unique_ns(Prefix),
+-    Source = list_to_binary(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
++    found_lobby_sources(Prefix, [File], Facts).
++
++found_lobby_sources(Prefix, Files, Facts) ->
++    found_lobby_named_sources(unique_ns(Prefix), Files, Facts, [quod_agent_predicates]).
++
++found_lobby_named_sources(Ns, Files, Facts, Modules) ->
++    Sources = [{source_file,list_to_binary(filename:join(
++        [code:priv_dir(quod), "ontologies", File]))} || File <- Files],
+     {ok, created, Ns, _} = quod_ontology:create(Ns,
+-        [{source_file, Source}, {terms, Facts},
+-         {external_predicate_modules, [quod_agent_predicates]}]),
++        Sources ++ [{terms, Facts},
++         {external_predicate_modules, Modules}]),
+     ok = wait_ready(Ns, 300),
+     {Ns, quod_simplex:genesis_hash(Ns)}.
+ 
+ found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
+     {Public, _} = Pair = quod_identity:generate(),
+     Name = unique_ns(<<"personal-lobby">>),
+-    {Ns, Anchor} = found_lobby_source(<<"human-user">>, "human_user_instance.pl",
++    {Ns, Anchor} = found_lobby_sources(<<"human-user">>, ["human_user_instance.pl","gui_hud.pl"],
+         [{instance_of, human_user, me}, {agent_key, me, Public, active},
+          {lobby_vocabulary, ClassNs, ClassAnchor},
+          {hosting_node, Node},
+@@ -2777,24 +2867,27 @@
+     end.
+ 
+ 
+-%% A genesis carrying more new symbols than a cold node admits per envelope
+-%% would found here and never join or replay anywhere else: refused at the
+-%% founding seam. A source inside the budget founds as before.
++%% Founding admission is authored policy, independent of current VM vocabulary.
++%% The exact compiled source consumes the allowance, including its syntax.
+ oversized_vocabulary_never_reaches_hosting(#{dir := Dir}) ->
+-    Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
++    Limits = quod_ct:material_limits(founding),
++    Budget = maps:get(symbols, Limits),
+     Novel = fun(N) ->
+                     [{list_to_atom("cold_vocabulary_" ++ integer_to_list(I)), I}
+                      || I <- lists:seq(1, N)]
+             end,
+     TooMany = unique_ns(<<"oversized-vocabulary">>),
+     Over = Novel(Budget + 1),
+-    ?assertEqual({error, {genesis_vocabulary, Budget + 1, Budget}},
++    ?assertEqual({error, {material_limit, founding, symbols, Budget + 1, Budget}},
+                  quod_ontology:create(TooMany, [{terms, Over}])),
+     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(TooMany)),
+     ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, TooMany))),
+     AtBudget = unique_ns(<<"budget-vocabulary">>),
++    {ok, #{symbols := BaseSymbols}} = quod_material_admission:usage(
++        quod_prolog:terms_to_diff(Novel(1))),
++    AtLimit = Novel(Budget - BaseSymbols + 1),
+     ?assertMatch({ok, created, AtBudget, _},
+-                 quod_ontology:create(AtBudget, [{terms, Novel(Budget)}])),
++                 quod_ontology:create(AtBudget, [{terms, AtLimit}])),
+     ok = wait_ready(AtBudget, 300),
+     ?assertMatch({ok, [#{}], _},
+                  quod_prolog:prove(AtBudget, {cold_vocabulary_1, 1})).
+--- a/test/quod_lobby_tests.erl
++++ b/test/quod_lobby_tests.erl
+@@ -1,7 +1,8 @@
+ -module(quod_lobby_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ -export([start/1, start/4, stop/1, preview/1, read/2, submit/3,
+-         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2]).
++         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2,
++         complete_source/2]).
+ 
+ cohosted_certified_progress_test_() ->
+     {timeout, 30, fun() ->
+--- a/test/quod_material_admission_tests.erl
++++ b/test/quod_material_admission_tests.erl
+@@ -0,0 +1,113 @@
++-module(quod_material_admission_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include_lib("erlog/src/erlog_int.hrl").
++
++policy_is_authored_and_ambiguous_values_fail_closed_test() ->
++    Est = quod_ct:committed_kb([
++        {material_limit_override, plan, symbols, 9}]),
++    {ok, Limits, Reads} = quod_material_admission:policy(plan, Est),
++    ?assertEqual(9, maps:get(symbols, Limits)),
++    ?assert(maps:is_key({material_limit_override, 3}, Reads)),
++    ?assertEqual({error, {material_limit, plan, symbols, 10, 9}},
++        quod_material_admission:check(plan, #{symbols => 10}, Limits)),
++    lists:foreach(fun(Override) ->
++        Bad = quod_ct:committed_kb(Override),
++        ?assertEqual({error, {invalid_material_policy, plan}},
++            quod_material_admission:policy(plan, Bad))
++    end, [[{material_limit_override, plan, symbols, 9},
++           {material_limit_override, plan, symbols, 10}],
++          [{material_limit_override, plan, symbols, -1}],
++          [{material_limit_override, plan, symbols, {'Unbound'}}]]).
++
++policy_cannot_write_during_selection_test() ->
++    Rule = {':-', {material_limit_override, plan, symbols, 1},
++                  {assertz, policy_changed}},
++    Est = quod_ct:committed_kb([Rule]),
++    ?assertEqual({error, {invalid_material_policy, plan}},
++        quod_material_admission:policy(plan, Est)),
++    ?assertMatch({fail, _}, erlog_int:prove_goal(policy_changed, Est)).
++
++source_symbol_refusal_precedes_allocation_and_storage_test() ->
++    Prefix = integer_to_binary(erlang:unique_integer([positive])),
++    Names = [<<"not_admitted_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
++             || N <- lists:seq(1, 3)],
++    Terms = [{{'$quod_symbol', Name}, 1} || Name <- Names],
++    {ok, Request} = quod_ontology:validate_action(
++        {create_ontology, <<"admission:refused">>, [{terms, Terms}]}),
++    Limits = (quod_ct:material_limits(founding))#{symbols => 2},
++    ?assertEqual({error, {material_limit, founding, symbols, 3, 2}},
++        quod_ontology:prepare_action(Request, Limits)),
++    [?assertException(error, badarg, binary_to_existing_atom(Name, utf8))
++     || Name <- Names].
++
++staged_policy_cannot_authorize_its_own_write_test() ->
++    with_session([{material_limit_override, plan, operations, 1}], fun(Session) ->
++        Goal = {',', {assertz, {material_limit_override, plan, operations, unlimited}},
++                      {assertz, payload}},
++        first(Session, Goal),
++        ?assertEqual({error, {material_limit, plan, operations, 2, 1}},
++            quod_proof_session:seal(Session, binding()))
++    end).
++
++sealed_plan_carries_policy_reads_and_reuses_exact_result_test() ->
++    with_session([], fun(Session) ->
++        first(Session, {assertz, payload}),
++        {ok, Plan} = quod_proof_session:seal(Session, binding()),
++        {ok, #{read_check := Reads}} = quod_dtx:material(Plan),
++        ?assertEqual(never_present, maps:get({material_limit_override, 3}, Reads)),
++        ?assertEqual({ok, Plan}, quod_proof_session:seal(Session, binding())),
++        ?assertEqual(Reads, quod_proof_session:read_set(Session))
++    end).
++
++canonical_byte_and_count_refusals_name_the_resource_test() ->
++    lists:foreach(fun({Resource, Limit}) ->
++        with_session([{material_limit_override, plan, Resource, Limit}], fun(Session) ->
++            first(Session, {assertz, payload}),
++            ?assertMatch({error, {material_limit, plan, Resource, Actual, Limit}}
++                         when Actual > Limit,
++                         quod_proof_session:seal(Session, binding()))
++        end)
++    end, [{canonical_bytes, 0}, {symbols, 0}, {reads, 0}]).
++
++committed_policy_change_invalidates_the_sealed_plan_test() ->
++    #est{db = #db{ref = Ref}} = Est = quod_ct:committed_kb([]),
++    Session = quod_proof_session:start(Est,
++        #{read_set => true, proof_context => {origin, test}, signer => none}),
++    try
++        first(Session, {assertz, payload}),
++        {ok, Plan} = quod_proof_session:seal(Session, binding()),
++        {ok, #{read_check := Reads}} = quod_dtx:material(Plan),
++        ?assertEqual(ok, quod_diff:validate(Reads, Ref)),
++        {ok, Changed} = quod_diff:apply_ops(Est,
++            quod_ct:diff_for({material_limit_override, plan, operations, 0})),
++        Published = quod_ct:commit_kb(Changed, 2, 1),
++        ?assertEqual({conflict, {material_limit_override, 3}},
++            quod_diff:validate(Reads, (Published#est.db)#db.ref)),
++        {ok, Limits, _} = quod_material_admission:policy(plan, Published),
++        ?assertEqual({error, {material_limit, plan, operations, 1, 0}},
++            quod_material_admission:check(plan, #{operations => 1}, Limits)),
++        %% Replaying already admitted history does not consult the new policy.
++        {ok, Bytes} = quod_dtx:encode(Plan),
++        ?assertEqual({ok, Plan}, quod_dtx:decode(Bytes))
++    after quod_proof_session:stop(Session), quod_erlog_db_mvcc:delete(Ref)
++    end.
++
++with_session(Facts, Fun) ->
++    #est{db = #db{ref = Ref}} = Est = quod_ct:committed_kb(Facts),
++    Session = quod_proof_session:start(Est,
++        #{read_set => true, proof_context => {origin, test}, signer => none}),
++    try Fun(Session)
++    after quod_proof_session:stop(Session), quod_erlog_db_mvcc:delete(Ref)
++    end.
++
++first(Session, Goal) ->
++    Id = crypto:strong_rand_bytes(16),
++    Context = quod_predicates:proof_context(<<"admission:test">>, 1, undefined, []),
++    ok = quod_proof_session:open(Session, Id, Goal, allowed, Context,
++                                quod_transaction_scope:empty_selection()),
++    ?assertMatch({solution, _}, quod_proof_session:next(Session, Id)).
++
++binding() ->
++    #{target => {<<"admission:test">>, <<1:256>>}, base_height => 1,
++      proof_id => <<2:256>>, origin => {<<"admission:test">>, <<1:256>>},
++      principal => anonymous, request_binding => none}.
+--- a/test/quod_measure_tests.erl
++++ b/test/quod_measure_tests.erl
+@@ -116,8 +116,7 @@
+ 
+ vocabulary_fits_the_genesis_budget_test() ->
+     Terms = quod_committed_projection:read_terms(source()),
+-    New = quod_wire_term:cold_new_symbols(Terms),
+-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {New, length(New)}),
++    quod_ct:assert_material_admissible(Terms),
+     %% no float reaches the committed content
+     ?assertNot(lists:any(fun has_float/1, Terms)).
+ 
+--- a/test/quod_names_tests.erl
++++ b/test/quod_names_tests.erl
+@@ -365,9 +365,7 @@
+ vocabulary_fits_the_genesis_budget_test() ->
+     File = filename:join(code:priv_dir(quod), "ontologies/quod_names.pl"),
+     Terms = quod_committed_projection:read_terms(File),
+-    New = quod_wire_term:cold_new_symbols(Terms),
+-    ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10,
+-            {new_symbols, length(New), New}),
++    quod_ct:assert_material_admissible(Terms),
+     ?assertEqual(?POOLS,
+                  length([T || {pool, _, _, _, _} = T <- Terms])),
+     ?assert(lists:all(fun({elements, Table, Fragments}) ->
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -1464,8 +1464,8 @@
+ lobby_rim_jump_test_() ->
+     [{lists:concat([Angle,"-",Start]),{timeout,60,fun() -> with_world(fun(F = #{namespace := Ns,node := Human}) ->
+         {Pid,World} = enable(F),
+-        [{':-',{physics_agent,personal_lobby,pilot,1,_,Motion},_}] =
+-            [T || T={':-',{physics_agent,personal_lobby,pilot,1,_,_},_} <-
++        [{':-',{physics_agent,_,_,1,_,Motion},_}] =
++            [T || T={':-',{physics_agent,_,_,1,_,_},_} <-
+                 quod_prolog:read_terms("priv/ontologies/lobby_instance.pl")],
+         {motion,_,_,_,_,_,Capabilities} = Motion,
+         {jump,Launch} = lists:keyfind(jump,1,Capabilities),
+--- a/test/quod_read_set_tests.erl
++++ b/test/quod_read_set_tests.erl
+@@ -115,13 +115,20 @@
+     ?assertEqual({error, malformed_ledger_transaction},
+       quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), materialized)),
+     {ok, PubSeed} = test_signer(),
+-    Session = quod_proof_session:start(quod_ct:committed_kb([]),
++    Est = quod_ct:committed_kb([]),
++    {ok, _, PolicyReads} = quod_material_admission:policy(plan, Est),
++    Session = quod_proof_session:start(Est,
+       #{read_set => true, signer => PubSeed, proof_context => {origin, golden174}}),
+     try
+         ok = quod_proof_session:absorb_read_set(Session, maps:get(read_check, Material)),
+         Core = element(2, Plan),
+-        ?assertEqual({ok, Plan}, quod_dtx:seal_session(Session,
+-          maps:with([target, base_height, proof_id, origin, principal, request_binding], Core)))
++        {ok, NewPlan} = quod_dtx:seal_session(Session,
++          maps:with([target, base_height, proof_id, origin, principal, request_binding], Core)),
++        %% New admission retains policy dependencies; historical golden bytes
++        %% below still decode and re-encode exactly without today's policy.
++        ?assertEqual(maps:merge(maps:get(read_check, Material), PolicyReads),
++                     quod_ct:plan_material(read_check, NewPlan)),
++        ?assert(quod_dtx:verify(NewPlan))
+     after quod_proof_session:stop(Session)
+     end,
+     ?assertEqual(maps:get(plan_digest, F), quod_dtx:digest(Plan)),
+--- a/test/quod_relay_tests.erl
++++ b/test/quod_relay_tests.erl
+@@ -2,6 +2,7 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -include("quod_ledger.hrl").
++-include("quod_ingress_limits.hrl").
+ 
+ frame_dispatch_test() ->
+     Ns = <<"relay:test">>,
+@@ -165,7 +166,7 @@
+          setelement(6, Submit,
+                     {submit, Author, <<4:504>>, <<5, 6, 7>>}),
+          setelement(6, Submit,
+-                    {submit, Author, Signature, <<0:(256 * 1024 + 1)/unit:8>>}),
++                    {submit, Author, Signature, <<0:(?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 1)/unit:8>>}),
+          setelement(7, Submit, [{<<"baggage">>, <<"not-accepted">>}])],
+     [?assertEqual(
+        error,
+--- a/test/quod_rendering_tests.erl
++++ b/test/quod_rendering_tests.erl
+@@ -197,8 +197,7 @@
+ vocabulary_fits_the_genesis_budget_test() ->
+     lists:foreach(fun(Name) ->
+         Terms = quod_committed_projection:read_terms(filename:join("priv/ontologies", Name)),
+-        New = quod_wire_term:cold_new_symbols(Terms),
+-        ?assert(length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS - 10, {Name, New, length(New)}),
++        quod_ct:assert_material_admissible(Terms),
+         ?assertNot(lists:any(fun has_float/1, Terms))
+     end, ["quod_rendering.pl", "quod_modelling.pl", "quod_material.pl",
+           "quod_material_eidolons.pl", "quod_environment.pl",
+--- a/test/quod_scope_wire_tests.erl
++++ b/test/quod_scope_wire_tests.erl
+@@ -279,6 +279,9 @@
+       [independent_requires_signed_request, independent_nesting,
+        independent_mixed_writes, independent_scope_required,
+        {too_large, transcript}, {too_large, plan}, {too_large, result},
++       {material_limit, plan, symbols, 2049, 2048},
++       {material_limit, founding, canonical_bytes, 10, 9},
++       {invalid_material_policy, plan},
+        {non_transactional_dependency, {directory_host, 5}},
+        {network_identity_unavailable, <<"quod:target">>}]),
+     ?assertEqual(
+--- a/test/quod_simplex_tests.erl
++++ b/test/quod_simplex_tests.erl
+@@ -5699,30 +5699,12 @@
+ %% rejected fast ({error, too_large}) so a block can never blow past the wire frame; a leader whose
+ %% depth-one pipeline is already full now PARKS the append in the bounded ingress queue instead of
+ %% rejecting {error, busy} — the caller waits for the pipeline's own events, not a retry timer.
+-batch_caps_reject_oversized_and_park_test() ->
++full_pipeline_parks_and_coalesces_test() ->
+     {Me, Id} = id(),
+     Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
+              history_head => {3, quod_simplex:block_hash(blk(3))},
+              eng => notarized_prefix([{Me, Id}], 3, 3)},   %% a caught-up sole leader
+     From = {self(), make_ref()},
+-    %% The transaction itself remains within its canonical envelope, while
+-    %% the enclosing signed-transaction and block bytes cross MAX_BLOCK_BYTES.
+-    %% That keeps this test on the Simplex block-cap seam now that R2 refuses
+-    %% an intrinsically oversized transaction before it can be signed.
+-    Big = bind_test_id(
+-            #transaction{tx_id = <<>>, origin = {<<"t">>, <<0:256>>},
+-                         proof_id = <<0:256>>, plan_digest = <<0:256>>,
+-                         goal = durable_goal({test, big}),
+-                         result = durable_result(),
+-                         author = Me, sig = none, read_check = #{},
+-                         diff = [{assert,
+-                                  {{blob,
+-                                    binary:copy(<<0>>, 255 * 1024 + 512)},
+-                                   true}}]}),
+-    {keep_state, _, A1} =
+-        quod_simplex:running(
+-          {call, From}, {append, Big, otel_ctx:new()}, st(Base)),
+-    ?assert(lists:member({reply, From, {error, too_large}}, A1)),
+     %% material pipeline full (height 3, two notarized writes pending): the append PARKS —
+     %% no reply action, no busy, one queued item under this author.
+     Small = bind_test_id(
+@@ -6139,11 +6121,11 @@
+         [P || {Pub, _} = P <- Committee, Pub =/= Me],
+     Filler = signed_tx(
+                <<"t">>, <<"batch-filler">>,
+-               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
++               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+                {FillerAuthor, FillerId}),
+     A1 = signed_tx_seq(
+            <<"t">>, <<"a-large">>, 10,
+-           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
++           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+            {AuthorA, IdA}),
+     A2 = signed_tx_seq(
+            <<"t">>, <<"a-small">>, 11,
+@@ -6196,11 +6178,11 @@
+         [P || {Pub, _} = P <- Committee, Pub =/= Me],
+     Filler = signed_tx(
+                <<"t">>, <<"multipass-filler">>,
+-               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
++               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+                {FillerAuthor, FillerId}),
+     A1 = signed_tx_seq(
+            <<"t">>, <<"multipass-a-large">>, 10,
+-           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
++           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+            {AuthorA, IdA}),
+     A2 = signed_tx_seq(
+            <<"t">>, <<"multipass-a-small">>, 11,
+@@ -7185,11 +7167,11 @@
+            author = Me, sig = none, read_check = #{},
+            diff =
+                [{assert,
+-                 {{blob, binary:copy(<<1>>, 120000)}, true}}]}),
++                 {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES div 2)}, true}}]}),
+     Filler =
+         signed_tx(
+           <<"t">>, <<"ready-order-filler">>,
+-          [{assert, {{blob, binary:copy(<<2>>, 220000)}, true}}],
++          [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+           {FillerAuthor, FillerId}),
+     Small = bind_test_id(
+         #transaction{
+--- a/test/quod_transaction_tests.erl
++++ b/test/quod_transaction_tests.erl
+@@ -735,39 +735,21 @@
+                  quod_transaction:decode_verified_submission(
+                    ?BINDING, AuthenticatedGarbage)).
+ 
+-authenticated_relay_etf_cannot_allocate_atoms_test() ->
++authenticated_relay_replays_admitted_vocabulary_on_a_cold_vm_test() ->
+     Prefix = integer_to_binary(erlang:unique_integer([positive])),
+-    AtomNames =
+-        [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
+-         || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
+-    [?assertException(
+-        error, badarg, binary_to_existing_atom(Name, utf8))
+-     || Name <- AtomNames],
+-    %% The signed envelope itself contains only fixed atoms. Agent vocabulary is
+-    %% represented by bounded wire symbols; exceeding the explicit allocation
+-    %% cap rejects the complete material before any symbol is interned.
+-    DiffWire = wire_list([{0, Name} || Name <- AtomNames]),
+-    MaterialWire = {4, [DiffWire, {5}]},
+-    EffectsWire = quod_wire_term:encode_canonical([]),
+-    {ok, CanonicalEffects} = EffectsWire,
++    Names = [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
++             || N <- lists:seq(1, 600)],
++    [?assertException(error, badarg, binary_to_existing_atom(Name, utf8)) || Name <- Names],
++    Diff = [{assert, {{{'$quod_symbol', Name}, 1}, true}} || Name <- Names],
+     {Author, Identity} = identity(),
+-    Canonical =
+-        term_to_binary(
+-          {quod_transaction, 15, ?NS, ?ANCHOR, ?ADMISSION,
+-           <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
+-           <<>>, <<>>, term_to_binary(MaterialWire, [deterministic]),
+-           CanonicalEffects,
+-           application, none, [], none, none, Author, 1, 0},
+-          [deterministic]),
+-    Signature = quod_identity:sign(Canonical, Identity),
+-    Submission = {submit, Author, Signature, Canonical},
++    Tx0 = (unsigned(Author))#transaction{diff = Diff},
++    Tx1 = quod_transaction:bind_id({?NS, ?ANCHOR}, Tx0),
++    {ok, Tx} = quod_transaction:sign(?BINDING, Tx1, Identity),
++    {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
+     ?assert(quod_transaction:verify_submission(Submission)),
+-    ?assertEqual(
+-       {error, too_many_new_atoms},
+-       quod_transaction:decode_verified_submission(?BINDING, Submission)),
+-    [?assertException(
+-        error, badarg, binary_to_existing_atom(Name, utf8))
+-     || Name <- AtomNames].
++    {ok, Materialized} = quod_transaction:decode_verified_submission(?BINDING, Submission),
++    ?assertEqual({ok, Submission}, quod_transaction:submission(?BINDING, Materialized)),
++    [?assert(is_atom(binary_to_existing_atom(Name, utf8))) || Name <- Names].
+ 
+ bounded_material_failure_is_total_test() ->
+     {Author, Identity} = identity(),
+@@ -813,9 +795,6 @@
+ 
+ deep_term(0, Term) -> Term;
+ deep_term(Depth, Term) -> deep_term(Depth - 1, {nested, Term}).
+-
+-wire_list([]) -> {5};
+-wire_list([Head | Tail]) -> {6, Head, wire_list(Tail)}.
+ 
+ flip_first(<<Byte, Rest/binary>>) -> <<(Byte bxor 1), Rest/binary>>.
+ 
+--- a/test/quod_voxel_world_tests.erl
++++ b/test/quod_voxel_world_tests.erl
+@@ -1,6 +1,35 @@
+ -module(quod_voxel_world_tests).
+ -include_lib("eunit/include/eunit.hrl").
+ -include_lib("erlog/src/erlog_int.hrl").
++
++composed_gui_world_membership_enumeration_terminates_test() ->
++    with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store0,_) ->
++        Query = {findall,{'W'},{instance_of,voxel_world,{'W'}},{'Worlds'}},
++        ?assertEqual([],value({'Worlds'},Query,Store0)),
++        {Store1,_} = commit({assertz,{instance_of,voxel_world,land}},Store0),
++        ?assertEqual([land],value({'Worlds'},Query,Store1))
++    end).
++
++sparse_chunk_inputs_preserve_absence_neighbors_and_ambiguity_test() ->
++    with_world(fun(Store0,_) ->
++        {Store1,_} = commit({voxel_create,land,0,spec()},Store0),
++        Chunk = {chunk_v1,-1,0,0},
++        Query = {voxel_chunk_inputs,land,Chunk,{'Field'},{'Rows'}},
++        St = view(Store1),
++        try
++            Final = prove(Query,St),
++            ?assertEqual([],erlog_int:dderef({'Rows'},Final#est.bs)),
++            ?assert(maps:is_key({voxel_chunk_override,4},
++                quod_erlog_db_local_prove:get_read_set(db_ref(Final))))
++        after quod_erlog_db_local_prove:cleanup_read_set(St) end,
++        Near = {chunk_v1,-2,1,1},Far = {chunk_v1,1,0,0},
++        Patch = {patch_v1,<<0:16,127:8,9:16>>},
++        {Store2,_} = commit({',',{assertz,{voxel_chunk_override,land,Near,1,Patch}},
++            {assertz,{voxel_chunk_override,land,Far,1,Patch}}},Store1),
++        ?assertEqual([{override,Near,Patch}],value({'Rows'},Query,Store2)),
++        {Ambiguous,_} = commit({assertz,{voxel_chunk_override,land,Near,2,Patch}},Store2),
++        assert_refused(Query,Ambiguous,ambiguous_voxel_patch)
++    end).
+ 
+ world_library_spawn_candidates_cover_supported_presets_test_() ->
+     {timeout,60,fun() -> with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store,_) ->
+@@ -9,6 +38,13 @@
+             Spec = value({'S'},{voxel_generation_spec,Recipe,{'S'}},Store),
+             {vector,0,Y,0} = value({'P'},{world_spawn_candidate,Spec,{'P'}},Store),
+             Field = value({'F'},{voxel_sampling_field,Spec,{'F'}},Store),
++            {view_distance,Distance,Prefetch,Retention} =
++                value({'View'},{world_initial_view,Spec,{'View'}},Store),
++            ?assertEqual({16*Spacing,4*Spacing,8*Spacing},{Distance,Prefetch,Retention}),
++            %% Even fine detail has a bounded initial chunk window at every
++            %% camera position; the renderer admits the generated mesh too.
++            Axis = (2*(Distance+Retention)+8*Spacing-1) div (8*Spacing)+1,
++            ?assert(Axis*Axis*Axis =< 1024),
+             %% Cover every lattice corner enclosing the capsule (half-height
+             %% 750 mm, radius 250 mm), not just the centre sample.
+             Low = (Y-750) div Spacing, High = (Y+750+Spacing-1) div Spacing,
+--- a/ui/src/GuiForm.tsx
++++ b/ui/src/GuiForm.tsx
+@@ -116,7 +116,7 @@
+     disabled={!enabled || !model.enabled[field.role]} onClick={() => model.invoke(field.role)}>
+     {field.image && <GuiImage digest={field.image} label="" resources={resources} />}{field.label}</button>
+ 
+-  const family = guiValueKind(field.kind)
++  const family = guiValueKind(field.kind) ?? (field.kind === 'catalogue_selection' ? 'choice' : null)
+   const numeric = family === 'number'
+   const range = numeric ? numericControlRange(field.range) : null
+   const number = range ? numericDraft(range, value) : null
+@@ -161,7 +161,7 @@
+             {option.label}
+           </label>)}
+         </div>
+-      : field.kind === 'selection' ? <select id={id} value={value} disabled={!editable}
++      : field.kind === 'selection' || field.kind === 'catalogue_selection' ? <select id={id} value={value} disabled={!editable}
+           aria-describedby={description} aria-invalid={!!error} onChange={event => edit(event.target.value)}>
+           {!knownSelection && <option value={value} disabled>Choose a value.</option>}
+           {options.map(option =>

@@ -1,0 +1,10 @@
+{
+  "previous": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-04/tree",
+  "tree": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-05/tree",
+  "changed": [
+    "doc/multiwrite-architecture.md",
+    "doc/voxel-world.md",
+    "src/quod_physics.erl",
+    "test/quod_physics_tests.erl"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "args": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T11:31:51.180721+00:00"
+}

@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "at": "2026-10-17T13:47:18.891315+00:00",
+  "url": "https://192.168.1.10:30519/",
+  "image": "192.168.1.11:5000/quod:0.7.275@sha256:91246f8aee2a938c3ab34f43d5cb981a686fc95613b0824f3846b679f6ccb073",
+  "job_version": 100,
+  "job_modify_index": 871626,
+  "new_network_root": "50EFD5FDC6C9A756A11C46AF7D1F5D1C2FA4E338C58C4541B90EA8362337AC7B",
+  "healthy_nodes": 8,
+  "system_ontologies_per_node": 18,
+  "old_test_volumes_deleted": 8,
+  "old_accounts_lobbies_worlds_removed": true,
+  "manual_appearance_update_required": false,
+  "fresh_signup_gui_creation_walking_reentry": {
+    "passed": true,
+    "desktop": true,
+    "physicalVR": false,
+    "worlds": [
+      {
+        "name": "Ancient Shores",
+        "key": "[\"human:w23Z2OzWH77m_-rPfiGZ4g_nduR4LqGoPKPajx9f5_g/lobby\",\"NozRUx494f32ShceHyUf9rHEde2tbMVN2uspaEjIS70\",\"world(<<\\\"\\\\xc9\\\\\\\\xc2\\\\F\\\\xd8\\\\\\\\xa5\\\\\\\\x9b\\\\\\\\xb7\\\\3]\\\\xba\\\\\\\\xfd\\\\FV\\\\x99\\\\r:\\\\xd4\\\\P\\\\xac\\\\\\\\x95\\\\\\\\x15\\\\\\\\xe3\\\\\\\\x08\\\\\\\\x15\\\\\\\\xe9\\\\\\\\x12\\\\{\\\\x0f\\\\\\\\xf7\\\\\\\\xf0\\\\\\\\xcf\\\\\\\\x05\\\\\\\">>)\"]",
+        "landscape": "meadow",
+        "spacing": "1000"
+      },
+      {
+        "name": "Highland Retreat",
+        "key": "[\"human:w23Z2OzWH77m_-rPfiGZ4g_nduR4LqGoPKPajx9f5_g/lobby\",\"NozRUx494f32ShceHyUf9rHEde2tbMVN2uspaEjIS70\",\"world(<<\\\"h\\\\xeb\\\\\\\\x11\\\\3\\\\xd1\\\\9T9\\\\xd7\\\\\\\\xdb\\\\&\\\\x94\\\\\\\\xe4\\\\\\\\xb9\\\\Lx\\\\xaa\\\\;\\\\x90\\\\|\\\\x10\\\\\\\\x18\\\\}b\\\\x80\\\\o\\\\xb9\\\\\\\\xf8\\\\#\\\\xc5\\\\\\\\x82\\\\\\\\xc4\\\\\\\">>)\"]",
+        "landscape": "highlands",
+        "spacing": "500"
+      }
+    ],
+    "walking": true,
+    "reentry": true,
+    "normalSignedGui": true,
+    "pending": 0,
+    "network": "UO_V_cbJp1ahHEavfR9dHC-k4zjFjEVBuQ6oNiM3rHs"
+  },
+  "sustained_walk": {
+    "passed": true,
+    "url": "https://192.168.1.10:30519/",
+    "world": "Ancient Shores",
+    "previewTree": null,
+    "created": null,
+    "excursion": 13.425663566653977,
+    "interests": 10,
+    "contentMessages": 13,
+    "maximumPoseGapMs": 1522,
+    "renderedFrames": 248,
+    "hiddenFrames": 0,
+    "appearance": {
+      "skies": 1,
+      "terrainMeshes": 147,
+      "texturedMaterials": 177,
+      "readyTexturedMaterials": 177
+    }
+  },
+  "application_code_changed": false,
+  "main_and_ingress_unchanged": true,
+  "fable_review": "fable-review.md",
+  "old_network_gui_diagnostic": "Retained historical GUI-question retirement/status-read evidence; no GUI lifecycle fix is claimed by this reset."
+}

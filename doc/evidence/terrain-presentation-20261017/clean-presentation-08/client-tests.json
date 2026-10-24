@@ -1,0 +1,17 @@
+{
+  "name": "client-tests",
+  "command": [
+    "npm",
+    "--prefix",
+    "client",
+    "test"
+  ],
+  "started": "2026-10-17T11:34:39.244753+00:00",
+  "exit": 0,
+  "seconds": 2.06,
+  "sources_unchanged": true,
+  "test_summary_complete": true,
+  "passed_tests": 228,
+  "minimum_test_cases": 217,
+  "stop_requested": false
+}

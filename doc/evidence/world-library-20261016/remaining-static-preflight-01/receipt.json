@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "do",
+    "xref,",
+    "dialyzer"
+  ],
+  "started": "2026-10-17T00:51:15.819244+00:00",
+  "exit": 0,
+  "seconds": 64.68
+}

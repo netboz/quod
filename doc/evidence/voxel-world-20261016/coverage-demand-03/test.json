@@ -1,0 +1,12 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:voxel_missing_coverage_wakes_existing_resource_worker_test_",
+    "--verbose"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:30:01.372516+00:00"
+}

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "escript",
+    "doc/evidence/world-library-20261016/preview-worlds.escript",
+    "/tmp/quod-world-library-browser-20261017-06.json"
+  ],
+  "started": "2026-10-16T23:44:46.174192+00:00",
+  "exit": 0,
+  "seconds": 7271.95
+}

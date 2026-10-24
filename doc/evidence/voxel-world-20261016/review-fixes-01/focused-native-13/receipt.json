@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "stacked_dynamic",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "seconds": 1.5
+}

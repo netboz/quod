@@ -1,0 +1,81 @@
+===> Verifying dependencies...
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `release` profile [optimized] target(s) in 4.23s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1061 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1061 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1061 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_physics_tests:-voxel_large_origin_rebases_pending_motion_without_restart_test_/0-fun-10-/0
+[0;31m     Failure/Error: ?assertEqual([], Calls)
+       expected: []
+            got: [#{call => {quod_physics_native,install,3},
+                    caller => {quod_physics,'-install_frame/8-fun-2-',5},
+                    pid => <0.989.0>,
+                    registered_keys =>
+                        [{n,l,
+                            {physics_world,
+                                {world_ref,<<"host-test-agent">>,
+                                    <<86,78,146,95,32,247,124,102,117,160,211,
+                                      94,174,186,5,145,43,7,40,178,107,229,84,
+                                      134,216,33,218,213,54,137,206,1>>,
+                                    room}}}]},
+                  #{call => {quod_physics_native,install_hinges,2},
+                    caller => {quod_physics,'-install_frame/8-fun-2-',5},
+                    pid => <0.989.0>,
+                    registered_keys =>
+                        [{n,l,
+                            {physics_world,
+                                {world_ref,<<"host-test-agent">>,
+                                    <<86,78,146,95,32,247,124,102,117,160,211,
+                                      94,174,186,5,145,43,7,40,178,107,229,84,
+                                      134,216,33,218,213,54,137,206,1>>,
+                                    room}}}]}][0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_FAAE87E5C4D9C599
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_FAAE87E5C4D9C599
+[0m
+
+Finished in 14.583 seconds
+[0;31m7 tests, 1 failures
+[0m===> Error running tests

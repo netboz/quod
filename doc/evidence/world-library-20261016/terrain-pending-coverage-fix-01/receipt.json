@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--generator=quod_physics_tests:voxel_query_gap_preserves_registered_input_and_its_expiry_test_+voxel_large_origin_rebases_pending_motion_without_restart_test_",
+    "--verbose"
+  ],
+  "started": "2026-10-16T23:41:05.091022+00:00",
+  "exit": 0,
+  "seconds": 11.54
+}

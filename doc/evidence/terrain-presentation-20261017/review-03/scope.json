@@ -1,0 +1,70 @@
+{
+  "tree": "/home/yan/src/quod/_build/terrain-presentation-20261017/review-03/tree",
+  "changed": [
+    "client/src/simulation.js",
+    "client/src/scene.js",
+    "client/src/world-scene.js",
+    "client/src/controlled-navigation.js",
+    "client/src/render-resources.js",
+    "client/test/terrain-delivery.test.js",
+    "client/test/scene.test.js",
+    "priv/ontologies/lobby_worlds.pl",
+    "priv/ontologies/quod_lobby.pl",
+    "doc/voxel-world.md",
+    "test/quod_gui_examples_tests.erl",
+    "client/test/controlled-navigation.test.js",
+    "src/quod_physics.erl",
+    "test/quod_physics_tests.erl",
+    "doc/physics-native.md",
+    "src/quod_client_view.erl"
+  ],
+  "entries": 1212,
+  "production_delta": {
+    "client/src/simulation.js": {
+      "added": 27,
+      "removed": 18,
+      "net": 9
+    },
+    "client/src/scene.js": {
+      "added": 25,
+      "removed": 3,
+      "net": 22
+    },
+    "client/src/world-scene.js": {
+      "added": 9,
+      "removed": 8,
+      "net": 1
+    },
+    "client/src/controlled-navigation.js": {
+      "added": 5,
+      "removed": 4,
+      "net": 1
+    },
+    "client/src/render-resources.js": {
+      "added": 2,
+      "removed": 2,
+      "net": 0
+    },
+    "priv/ontologies/lobby_worlds.pl": {
+      "added": 11,
+      "removed": 7,
+      "net": 4
+    },
+    "priv/ontologies/quod_lobby.pl": {
+      "added": 15,
+      "removed": 0,
+      "net": 15
+    },
+    "src/quod_physics.erl": {
+      "added": 20,
+      "removed": 14,
+      "net": 6
+    },
+    "src/quod_client_view.erl": {
+      "added": 3,
+      "removed": 4,
+      "net": -1
+    }
+  },
+  "net_production_lines": 57
+}

@@ -1,0 +1,62 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 17-Oct-2026::00:54:30.382506 ===
+Failed to start Ranch listener quod_client_listener in ranch_ssl:listen([{cacerts,'...'},{key,'...'},{cert,'...'},{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{port,52517},{ip,{127,0,0,1}}]) for reason eaddrinuse (address already in use)
+
+=CRASH REPORT==== 17-Oct-2026::00:54:30.382661 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.631.0>
+    registered_name: []
+    exception exit: {listen_error,quod_client_listener,eaddrinuse}
+      in function  ranch_acceptors_sup:listen_error/5 (/home/yan/src/quod/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:66)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.629.0>,ranch_sup,<0.550.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.629.0>]
+    dictionary: [{logger,error_logger}]
+    trap_exit: true
+    status: running
+    heap_size: 2586
+    stack_size: 29
+    reductions: 16159
+  neighbours:
+
+=SUPERVISOR REPORT==== 17-Oct-2026::00:54:30.385759 ===
+    supervisor: {<0.629.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_client_listener,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_client_listener,ranch_ssl]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=ERROR REPORT==== 17-Oct-2026::00:54:30.385919 ===
+quod: client bootstrap failed — listen on 127.0.0.1:52517 (eaddrinuse)
+[0;32m.[0m=WARNING REPORT==== 17-Oct-2026::00:54:30.460345 ===
+quod: replacing orphaned client listener
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 17-Oct-2026::00:54:53.617931 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 17-Oct-2026::00:54:55.672678 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 17-Oct-2026::00:54:56.962539 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 17-Oct-2026::00:54:58.076065 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 17-Oct-2026::00:55:06.652812 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 11
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 99.941 seconds
+[0;32m16 tests, 0 failures
+[0m

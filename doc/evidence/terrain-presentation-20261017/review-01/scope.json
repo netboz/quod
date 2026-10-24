@@ -1,0 +1,16 @@
+{
+  "tree": "/home/yan/src/quod/_build/terrain-presentation-20261017/review-01/tree",
+  "changed": [
+    "client/src/scene.js",
+    "client/src/world-scene.js",
+    "client/src/controlled-navigation.js",
+    "client/test/terrain-delivery.test.js",
+    "client/test/scene.test.js",
+    "priv/ontologies/lobby_worlds.pl",
+    "priv/ontologies/quod_lobby.pl",
+    "doc/voxel-world.md",
+    "test/quod_gui_examples_tests.erl",
+    "client/test/controlled-navigation.test.js"
+  ],
+  "entries": 1212
+}

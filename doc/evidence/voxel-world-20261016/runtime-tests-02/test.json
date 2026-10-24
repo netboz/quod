@@ -1,0 +1,12 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:voxel_runtime_retains_chunks_and_applies_committed_dig_test_",
+    "--verbose"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:17:59.718943+00:00"
+}

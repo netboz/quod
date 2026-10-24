@@ -1,0 +1,35 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (applied)...[0.944 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (expired)...[1.559 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (disconnected)...[0.497 s] ok
+quod_physics_tests: -voxel_viewer_removal_preserves_unfinished_physics_test_/0-fun-5- (restoration)...[0.001 s] ok
+quod_physics_tests: -voxel_viewer_removal_preserves_unfinished_physics_test_/0-fun-5- (body_coverage)...[0.001 s] ok
+quod_physics_tests: -voxel_pending_restore_keeps_its_original_insertion_test_/0-fun-10- (changed)...[0.011 s] ok
+quod_physics_tests: -voxel_pending_restore_keeps_its_original_insertion_test_/0-fun-10- (removed)...[0.016 s] ok
+quod_physics_tests: -voxel_large_origin_rebases_pending_motion_without_restart_test_/0-fun-11-...[0.604 s] ok
+=======================================================
+  All 8 tests passed.

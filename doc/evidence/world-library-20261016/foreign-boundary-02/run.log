@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_foreign_log_tests: maximal_material_and_compact_witness_fit_transfer_page_test...*failed*
+in function quod_catchup:encode_frame/2 (/home/yan/src/quod/src/quod_catchup.erl, line 204)
+in call from quod_foreign_log_tests:maximal_material_and_compact_witness_fit_transfer_page_test/0 (/home/yan/src/quod/test/quod_foreign_log_tests.erl, line 7309)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{badmatch,{error,bad_frame}}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

@@ -1,0 +1,11 @@
+{
+  "recorded": "2026-10-16T18:39:10.156670+00:00",
+  "transport": "Nimbalyst MCP create_session",
+  "session_id": "adfe378b-ec93-48f1-9d18-e938d963889e",
+  "parent_session_id": "31047ea6-3aa7-4bcb-acd1-7d2324435b6f",
+  "provider": "claude-code",
+  "model": "claude-code:fable",
+  "tool_scope": "read",
+  "queued_initial_prompt": true,
+  "review_request": "review-request.md"
+}

@@ -1,0 +1,11 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.83s
+     Running unittests src/lib.rs (native/quod_physics/target/debug/deps/quod_physics-5d12cd5f725a7cde)
+
+running 3 tests
+test voxel::cubic::tests::closed_cube_merges_to_six_outward_faces ... ok
+test voxel::cubic::tests::centered_plane_has_exact_shared_edges_and_categorical_materials ... ok
+test voxel::cubic::tests::halo_never_generates_duplicate_owned_cells ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 52 filtered out; finished in 0.02s
+

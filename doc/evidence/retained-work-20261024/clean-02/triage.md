@@ -1,0 +1,5 @@
+# Retained-work gate 02
+
+Native debug/release (57 each), clippy, 234 client cases, UI build and lint passed. EUnit completed with 4,108 passes and one failure, exit 1. The failed test was `quod_personal_agent_tests:authorization_does_not_reparse_retained_history_test_`. Its broad receive consumed `{trace, _, call, {quod_reg, subscribe, [directory_route...]}}` left in EUnit’s reused mailbox by an earlier lobby test. That MFA was not enabled by this measurement’s three trace patterns. This is cross-test instrumentation contamination, not evidence of history decoding. The complete log and STOP.json are retained unchanged.
+
+The correction gives this measurement its own tracer mailbox and waits for trace delivery before reading its result, following the existing outcome-result test pattern. A deterministic stale-message regression and a real decoding negative control verify both isolation and detection. No production code, authorization rule, deadline or expected work count changes. Fresh final gates use a separately labeled frozen scope.

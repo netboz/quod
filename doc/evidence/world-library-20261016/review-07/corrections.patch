@@ -1,0 +1,691 @@
+--- a/client/src/space-library.js
++++ b/client/src/space-library.js
+@@ -112,7 +112,10 @@
+       if (action === 'resolve') {
+         for (const operation of (await pendingSignedOperations(identity, options)).filter(applies)) {
+           if (!active) return
+-          await resolveSignedOperations(identity, { ...options, operationId: operation.id, onTerminal: terminal })
++          const [result] = await resolveSignedOperations(identity, { ...options, operationId: operation.id, onTerminal: terminal })
++          if (!active) return
++          if (!result || result.error) throw result?.error ?? new Error('Saved outcome unavailable.')
++          if (result.reply.terminal !== true) throw new Error('Outcome still unknown. Check again before continuing.')
+         }
+       } else {
+         const next = await load()
+--- a/client/test/space-library.test.js
++++ b/client/test/space-library.test.js
+@@ -143,6 +143,39 @@
+   assert.deepEqual(f.questions, [])
+ })
+ 
++for (const [label, outcome, message] of [
++  ['failed endpoint', () => { throw new Error('Outcome service unavailable.') }, /Outcome service unavailable/],
++  ['nonterminal reply', () => ({ result: 'operation_outcome', terminal: false, status: 'unknown' }), /Outcome still unknown/],
++  ['invalid committed form', () => ({ result: 'operation_outcome', terminal: true, status: 'committed', bindings: [{}] }), /Question|form|binding/i],
++]) {
++  test(`saved form resolution reports ${label} and retains its original journal identity`, async () => {
++    let submissions = 0
++    const f = await fixture(async url => {
++      assert.equal(url, '/api/goals/execute'); submissions++
++      throw Object.assign(new Error('reply lost'), { outcomeUnknown: true })
++    })
++    const controller = f.open()
++    await controller.ready
++    await controller.current.invoke('create')
++    const [saved] = await f.journal.list()
++    controller.close()
++    const recovered = f.open({ post: async (url, body) => {
++      if (url !== '/api/goals/outcomes') return f.options.post(url, body)
++      assert.equal(body.request, saved.request)
++      assert.equal(body.signature, saved.signature)
++      return outcome()
++    } })
++    await recovered.ready
++    await recovered.current.invoke('resolve')
++    assert.match(recovered.current.values.status, message)
++    assert.equal(recovered.current.enabled.resolve, true)
++    assert.equal(recovered.current.enabled.create, false)
++    assert.equal(submissions, 1)
++    assert.equal((await f.journal.list())[0].id, saved.id)
++    recovered.close()
++  })
++}
++
+ test('a returned foreign world or failed catalogue does not enable setup or creation', async () => {
+   const f = await fixture()
+   const controller = f.open({ post: async url => {
+--- a/doc/multiwrite-architecture.md
++++ b/doc/multiwrite-architecture.md
+@@ -84,16 +84,31 @@
+ conflicts normally. Overrides are ordinary ontology facts under its existing
+ authorization. Missing, ambiguous or invalid limits refuse new admission.
+ Refusals identify the material kind, resource, actual quantity and allowance.
++If a proposed diff changes a dependency of the selected plan policy, sealing
++checks that the final candidate still selects a valid policy. An atomic
++replacement is checked as one final state, including changes to helper
++predicates. This does not grant the candidate's larger allowance to its own
++write. Zero remains an explicit owner policy: it can permanently close the
++ordinary write lane. There is no implicit repair allowance or privileged
++recovery write that bypasses that policy.
+ 
+ Founding counts the authored source's distinct symbols before allocation and
+ checks its compiled canonical diff. Plans count their complete encoded
+ envelope, joint decoded vocabulary (including transcript goals), operations
+ and read entries. Counts do not depend on which atoms a VM already knows.
++Admission is enforced by the sealing proposer under the existing trusted
++validator execution boundary. Validators enforce the sealed policy reads and
++encoding bounds; material decoding retains VM headroom checks. This is not a
++new resource sandbox for arbitrary traffic from admitted committee members.
+ The full enclosing transaction, block and transport still have encoding
+ capacity checks. Their shared material capacity fits both the existing scope
+ carrier and the history page with a full-committee compact witness; accepted
+ canonical bytes are unchanged. Decoding accepted history does not reapply current admission
+ policy. It still validates the wire alphabet and real VM atom-table headroom.
++Retained vote selections distinguish read and write reservation changes.
++Shared policy readers do not invalidate each other's unchanged selections;
++an overlapping writer still invalidates readers and writers through the
++existing installed-change notification.
+ 
+ ## Exact terminal outcome reads
+ 
+--- a/doc/voxel-world.md
++++ b/doc/voxel-world.md
+@@ -234,6 +234,15 @@
+ processes the input. Disconnect and canonical invalidation retain their usual
+ cancellation rules. No retry timer discovers readiness, and elapsed waiting
+ time adds no catch-up motion.
++The pending input retains its canonical query coverage as a mechanical
++consumer until consumption or cancellation. The collision-index preparation
++step cannot evict that coverage before the query runs. An expired discrete
++input reports expiry and does not perform its requested movement.
++Removing the viewer cancels its pending query coverage. The owner rechecks
++native coverage once at a consumer or installed navigation-guard change;
++the refreshed sample carries the installed structure even when bodies sleep.
++Unfinished insertion and stale navigation sources keep their original waits. An unchanged collider selection
++cannot leave a cancelled query as the world's only reason to stay paused.
+ 
+ ## Retained native geometry
+ 
+--- a/priv/ontologies/lobby_worlds.pl
++++ b/priv/ontologies/lobby_worlds.pl
+@@ -167,7 +167,8 @@
+     lobby_terrain_world(W),voxel_world_state(W,_,Spec),
+     voxel_sampling_field(Spec,field_v1(_,Spacing,_,_)),
+     Step is 8*Spacing//1000,Maximum is 3*Step.
+-voxel_brush_controls(W,range(-1000000,1000000,100),range(600,2000,100)) :- lobby_terrain_world(W).
++voxel_brush_controls(W,range(Low,1000000,100),range(600,2000,100)) :-
++    lobby_terrain_world(W), Low is -1000000.
+ can_create_voxel_world(W,Actor) :- lobby_terrain_world(W),gui_question_policy(world_creation,_,Actor).
+ can_manage_voxel_world(W,Actor,view) :- gui_question_policy(voxel_view_settings(W),_,Actor).
+ can_edit_voxel_world(W,Actor,_) :- gui_question_policy(voxel_excavation(W),_,Actor).
+--- a/priv/ontologies/material_policy.pl
++++ b/priv/ontologies/material_policy.pl
+@@ -2,6 +2,8 @@
+ %% Root owns founding; each target owns its sealed plans. An override is an
+ %% ordinary ontology fact, governed by that ontology's existing write policy.
+ %% The engine selects from the pinned committed view and captures its reads.
++%% A policy-changing plan must leave a valid final policy. Zero is valid and
++%% can close the write lane; no implicit maintenance allowance overrides it.
+ material_limit(Kind, Resource, Limit) :-
+     material_limit_override(Kind, Resource, Limit).
+ material_limit(Kind, Resource, Limit) :-
+--- a/src/quod_dtx.erl
++++ b/src/quod_dtx.erl
+@@ -195,11 +195,17 @@
+                 case quod_material_admission:policy(
+                        plan, quod_proof_session:committed_state(Session)) of
+                     {ok, Limits, PolicyReads} ->
+-                        ok = quod_proof_session:absorb_read_set(Session, PolicyReads),
+-                        seal_material(
+-                          Session, Target, BaseHeight, ProofId, Origin, Principal,
+-                          RequestBinding, Diff, quod_proof_session:read_set(Session),
+-                          Effects, Limits);
++                        case quod_material_admission:validate_update(
++                               plan, quod_proof_session:committed_state(Session),
++                               Diff, PolicyReads) of
++                            ok ->
++                                ok = quod_proof_session:absorb_read_set(Session, PolicyReads),
++                                seal_material(
++                                  Session, Target, BaseHeight, ProofId, Origin, Principal,
++                                  RequestBinding, Diff, quod_proof_session:read_set(Session),
++                                  Effects, Limits);
++                            {error, _} = UpdateError -> UpdateError
++                        end;
+                     {error, _} = PolicyError -> PolicyError
+                 end
+         end,
+@@ -525,7 +531,7 @@
+                  live_bridges := [{atom(), arity()}],
+                  transcript := [transcript_entry()]}} |
+           {error, {protocol_error, bad_payload} |
+-                  too_many_new_atoms | atom_limit}.
++                  atom_limit}.
+ material(Plan) ->
+     Core = core(Plan),
+     case decode_material(Core) of
+--- a/src/quod_material_admission.erl
++++ b/src/quod_material_admission.erl
+@@ -7,7 +7,7 @@
+ decoding has no admission dependency and retains only encoding and VM checks.
+ """.
+ 
+--export([policy/2, check/3, usage/1]).
++-export([policy/2, validate_update/4, check/3, usage/1]).
+ -export_type([limits/0]).
+ 
+ -type limits() :: #{atom() => non_neg_integer() | unlimited}.
+@@ -15,6 +15,25 @@
+ -spec policy(founding | plan, tuple()) ->
+           {ok, limits(), map()} | {error, term()}.
+ policy(Kind, Committed) ->
++    select_policy(Kind, Committed, true).
++
++%% Validate a proposed policy with the same read-only selector. Its reads are
++%% not OCC tokens: admission still belongs to the published parent policy.
++-spec validate_update(founding | plan, tuple(), list(), map()) -> ok | {error, term()}.
++validate_update(Kind, Committed, Diff, PolicyReads) ->
++    case lists:any(fun(F) -> quod_read_set:kind(F) =:= predicate andalso
++                             quod_diff:touches_functor(Diff, F) end,
++                   maps:keys(PolicyReads)) of
++        false -> ok;
++        true ->
++            {ok, Candidate} = quod_diff:apply_ops(Committed, Diff),
++            case select_policy(Kind, Candidate, false) of
++                {ok, _, _} -> ok;
++                {error, _} = Error -> Error
++            end
++    end.
++
++select_policy(Kind, Committed, CaptureReads) ->
+     Context = quod_predicates:context(Committed),
+     Strict = quod_predicates:policy_verdict_context(
+                quod_predicates:ctx_ns(Context),
+@@ -26,7 +45,7 @@
+             {material_limit, Kind, {'Resource'}, {'Limit'}}, {'Limits'}},
+     case quod_proof_session:run_first(
+            Goal, quod_predicates:set_context(Committed, Strict),
+-           #{read_only => true, read_set => true}) of
++           #{read_only => true, read_set => CaptureReads}) of
+         {ok, #{'Limits' := Rows}, [], Reads} ->
+             case valid_limits(Kind, Rows) of
+                 {ok, Limits} -> {ok, Limits, Reads};
+--- a/src/quod_physics.erl
++++ b/src/quod_physics.erl
+@@ -191,9 +191,9 @@
+     end,
+     {noreply,deliver_frame(S#s{viewer = Next})};
+ handle_info({physics_unwatch, Pid, Ref}, S = #s{viewer = #{pid := Pid, ref := Ref}}) ->
+-    {noreply, clear_viewer(S)};
++    {noreply, remove_viewer(S)};
+ handle_info({'DOWN', M, process, _, _}, S = #s{viewer = #{monitor := M}}) ->
+-    {noreply, clear_viewer(S)};
++    {noreply, remove_viewer(S)};
+ handle_info({physics_source_pending,Owner,Notice},S = #s{owner = Owner,spec = Spec}) ->
+     Owner ! {physics_pause_seen,self(),maps:get(world,Spec),Notice},
+     %% Pause while a retained source verifies its next delta. An unrelated
+@@ -447,6 +447,7 @@
+     Guard = maps:get(navigation_guard,Spec),
+     GuardChanged = Guard =/= S#s.installed_guard,
+     Controlled = reconcile_controller(PhysicalControls#s{agent_controls = AgentControls,inputs = Inputs,installed_guard = Guard}),
++    ConsumersChanged = GuardChanged orelse ControlChanged orelse Inputs =/= S#s.inputs,
+     case {Waiting,Mode,Controlled#s.phase,Changes+ControlChanges,S#s.frame} of
+         {restore_pending,_,_,_,_} -> Controlled;
+         {{coverage,Ranges},_,_,_,_} -> hold_terrain(Ranges,Controlled);
+@@ -456,6 +457,7 @@
+                 {error,Reason} -> fail(Reason,Controlled)
+             end;
+         {_,_,{failed,_},_,_} -> Controlled;
++        {none,_,coverage,0,_} when ConsumersChanged -> recheck_coverage(Controlled);
+         {_,_,coverage,0,_} -> Controlled;
+         {none,selection,active,0,_} when element(1,S#s.phase) =:= blocked -> step_native(Controlled);
+         {_,_,_,0,none} -> notify(installed,schedule({false,[],[]},publish({false,[],[]},Controlled)));
+@@ -620,8 +622,9 @@
+ %% Validate the replacement visual window together with physical consumers
+ %% before asking the runtime to generate it. Absolute coordinates remain
+ %% unrestricted; the existing policy bounds one coherent local frame.
+-view_window(Visual,S = #s{spec = Spec,terrain_mechanical = Mechanical}) ->
++view_window(Visual,S = #s{spec = Spec}) ->
+     Bodies = maps:get(bodies,Spec),
++    Mechanical = mechanical_terrain(S),
+     Ranges = case Mechanical of initial -> Visual; _ -> Mechanical++Visual end,
+     Corners = lists:flatmap(fun({Id,Low,High}) ->
+         {Id,_,fixed,_,{terrain,Spacing,_},_} = lists:keyfind(Id,1,Bodies),
+@@ -646,7 +649,18 @@
+ inside_chunk_box(Chunk,Low,High) ->
+     lists:all(fun(K) -> N = element(K,Chunk),N >= element(K,Low) andalso N =< element(K,High) end,[1,2,3]).
+ 
+-emit_terrain(S = #s{owner = Owner,spec = Spec,terrain_mechanical = Mechanical}) ->
++%% A pending collision query owns its requested coverage until that input is
++%% consumed or cancelled. Preparing the collision index cannot reclaim it.
++mechanical_terrain(#s{terrain_mechanical = Mechanical,inputs = Inputs}) ->
++    Pending = lists:append([R || #{pending := true,terrain := R} <- maps:values(Inputs)]),
++    case {Mechanical,Pending} of
++        {initial,[]} -> initial;
++        {initial,_} -> lists:usort(Pending);
++        _ -> lists:usort(Mechanical++Pending)
++    end.
++
++emit_terrain(S = #s{owner = Owner,spec = Spec}) ->
++    Mechanical = mechanical_terrain(S),
+     Visual = case S#s.viewer of #{terrain_regions := Regions} -> Regions; _ -> [] end,
+     Ranges = case {Mechanical,Visual} of
+         {initial,[]} when S#s.terrain_sent =:= initial -> initial;
+@@ -670,6 +684,10 @@
+     %% Waiting changes neither the signed registration nor an input's original
+     %% expiry. A disconnect or canonical invalidation keeps its existing rules.
+     notify({unavailable,terrain_coverage},request_terrain(Ranges,pause_steps(S#s{phase = coverage}))).
++
++hold_input_terrain(Principal,Row,Ranges,S) ->
++    Pending = Row#{terrain => canonical_terrain_ranges(Ranges,S)},
++    hold_terrain(Ranges,S#s{inputs = (S#s.inputs)#{Principal => Pending}}).
+ 
+ pause_steps(S) ->
+     _ = case S#s.timer of none -> ok; Timer -> erlang:cancel_timer(Timer) end,
+@@ -705,7 +723,8 @@
+ 
+ retained_binding({control,Principal,Epoch,{controlled_agent,Agent,_,_,_,_,{viewpoint,View,_,_}}},Bindings) ->
+     lists:member({binding,Principal,Epoch,{controlled,Agent,View}},Bindings).
+-suspend_input(Row) -> Row#{expiry => 0,pending => false,result => suspended}.
++suspend_input(Row) -> cancel_input(Row,suspended).
++cancel_input(Row,Result) -> (maps:remove(terrain,Row))#{expiry => 0,pending => false,result => Result}.
+ 
+ advance_inputs(S = #s{phase = Phase}) when Phase =/= active -> S;
+ advance_inputs(S = #s{inputs = Inputs}) ->
+@@ -745,7 +764,7 @@
+     end,
+     case Attempt of
+         {error,Failure} -> fail(Failure,S);
+-        {{terrain_coverage,Ranges},_} -> hold_terrain(Ranges,S);
++        {{terrain_coverage,Ranges},Pending} -> hold_input_terrain(Principal,Pending,Ranges,S);
+         {Result,Ready} -> advance_discrete(Principal,Ready,Jump,Result,Limits,S)
+     end;
+ advance_input(Principal,Row = #{control := Control = {control,_,_,{controlled_agent,_,_,_,_,
+@@ -770,7 +789,8 @@
+                 {motion,Mode,_,_,_,Limits,Capabilities},_}},input := {Input,Limits},expiry := Expiry},
+               S = #s{spec = Spec,native = Resource,inputs = Inputs}) ->
+     Dt = maps:get(dt,Spec),
+-    Current = case Expiry > quod_time:now_ms() andalso
++    Unexpired = Expiry > quod_time:now_ms(),
++    Current = case Unexpired andalso
+                    (maps:get(pending,Row) orelse element(1,Input) =:= drive) of
+         true -> Input;
+         false -> {drive,{vector,0,0,0},{angular,0,0,0}}
+@@ -782,21 +802,22 @@
+     AnswerResult = case Query of invalid -> {ok,invalid};
+         _ -> native(fun() -> quod_physics_native:move_body(Resource,Body,Revision,Query,NativeLimits) end) end,
+     case AnswerResult of
+-        {ok,{terrain_coverage,Ranges}} -> hold_terrain(Ranges,S);
++        {ok,{terrain_coverage,Ranges}} -> hold_input_terrain(Principal,Row,Ranges,S);
+         {ok,Answer} ->
+             {Usable,Supported} = motion_progress(Answer,Mode),
+             Stopped = vertical_stopped(Answer,Current,Vertical,Body,S#s.frame),
+             Settled = Supported orelse (Vertical < 0 andalso Stopped),
+-            Result = case element(1,Input) =/= drive andalso not maps:get(pending,Row) of
+-                true -> maps:get(result,Row);
+-                false -> Answer
++            Result = case {element(1,Input) =/= drive,maps:get(pending,Row),Unexpired} of
++                {true,false,_} -> maps:get(result,Row);
++                {true,true,false} -> expired;
++                _ -> Answer
+             end,
+             RefusedDiscrete = element(1,Current) =/= drive andalso not Usable,
+             ResultOrigin = case element(1,Input) =/= drive andalso not maps:get(pending,Row) of
+                 true -> maps:get(result_origin,Row);
+                 false -> S#s.origin
+             end,
+-            Updated = Row#{pending => false,result => Result,result_origin => ResultOrigin,
++            Updated = (maps:remove(terrain,Row))#{pending => false,result => Result,result_origin => ResultOrigin,
+                 vertical => case {RefusedDiscrete,Settled orelse not Usable orelse Stopped} of
+                     {true,_} -> maps:get(vertical,Row);
+                     {false,true} -> 0.0;
+@@ -989,12 +1010,25 @@
+                    #{fence := F, structure := R, incarnation := I}) -> true;
+ current_projection(_, _) -> false.
+ 
++%% Removing a consumer can remove the query that parked the owner. Recheck
++%% actual native coverage once at that dependency change, after cancellation.
++%% An unfinished insertion or invalidated source still owns its original wait.
++remove_viewer(S) ->
++    recheck_coverage(clear_viewer(S)).
++
++recheck_coverage(S = #s{phase = coverage,restoring = Restores}) when map_size(Restores) =:= 0 ->
++    case navigation_current(S) of
++        true -> notify(installed,step_native(S#s{phase = active},true));
++        false -> S
++    end;
++recheck_coverage(S) -> S.
++
+ clear_viewer(S = #s{viewer = #{monitor := M,expected := Expected},inputs = Inputs}) ->
+     demonitor(M, [flush]),
+     Next = case maps:get(control,Expected,none) of
+         Control = {control,Principal,_,_} ->
+             case maps:get(Principal,Inputs,none) of
+-                Row = #{control := Control} -> Inputs#{Principal => Row#{expiry => 0,pending => false,result => disconnected}};
++                Row = #{control := Control} -> Inputs#{Principal => cancel_input(Row,disconnected)};
+                 _ -> Inputs
+             end;
+         none -> Inputs
+--- a/src/quod_selection_basis.erl
++++ b/src/quod_selection_basis.erl
+@@ -25,7 +25,7 @@
+ 
+ dependency_keys({fact, Functor}) -> [{fact, Functor}];
+ dependency_keys({request, Key}) -> [{request, Key}];
+-dependency_keys({reservations, Material}) -> reservation_keys(Material);
++dependency_keys({reservations, Material}) -> reservation_keys(Material, dependencies);
+ dependency_keys({flag_value, '$quod_ctx', _EscapedContext}) ->
+     %% The raw Prolog flag exposes the whole context, not just whichever
+     %% field a later goal happens to inspect. All components are observed.
+@@ -46,12 +46,22 @@
+ 
+ -doc "Reservation keys use the authenticated plan's existing conflict descriptor.".
+ -spec reservation_keys(quod_atomic:admission_material()) -> [term()].
+-reservation_keys({{quod_dtx_vote, _, _, Target, _, _}, _, #{plans := Plans}}) ->
++reservation_keys(Material) -> reservation_keys(Material, changes).
++
++%% Reading a reserved predicate conflicts only with a writer. Writing it
++%% depends on both readers and writers. Publication reports the acquired or
++%% released modes, matching the ordinary reservation conflict relation.
++reservation_keys({{quod_dtx_vote, _, _, Target, _, _}, _, #{plans := Plans}}, Mode) ->
+     case maps:find(Target, Plans) of
+         {ok, Plan} ->
+             #{reads := Reads, writes := Writes, custody := Custody} =
+                 maps:get(conflict_descriptor, quod_dtx:core(Plan)),
+-            [{reservation, F} || F <- ordsets:union(Reads, Writes)] ++
++            {Readers,Writers} = case Mode of
++                changes -> {Reads,Writes};
++                dependencies -> {Writes,ordsets:union(Reads,Writes)}
++            end,
++            [{reservation,read,F} || F <- Readers] ++
++                [{reservation,write,F} || F <- Writers] ++
+                 [{custody, Identity} || Identity <- Custody];
+         error -> []
+     end.
+--- a/test/quod_atomic_admission_tests.erl
++++ b/test/quod_atomic_admission_tests.erl
+@@ -272,7 +272,7 @@
+ installed_dependency_edges_rebase_without_another_validation_test() ->
+     M = material(), Id = group(M), P1 = {self(), {1, <<1:256>>}}, P2 = {self(), {2, <<2:256>>}},
+     Basis = #{{fact, {policy, 1}} => true, {request, request1} => true,
+-              {reservation, {<<"saved">>, 1}} => true},
++              {reservation, write, {<<"saved">>, 1}} => true},
+     Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
+     {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(P1, 1, Q),
+     {selected, _, Ready} = quod_atomic_admission:verdict(Tag, P1, {{vote, M}, Basis}, Checking),
+--- a/test/quod_atomic_projection_tests.erl
++++ b/test/quod_atomic_projection_tests.erl
+@@ -915,6 +915,33 @@
+           pattern => [{quod_commit_validation, prepare_vote, 3}]}),
+     ?assertEqual(4, lists:sum([N || {quod_commit_validation, prepare_vote, 3, Ps} <- Counts,
+                                   {_Pid, N, _} <- Ps])).
++
++reservation_notifications_match_real_reader_writer_conflicts_test() ->
++    Base = fixture(), Node = maps:get(node_identity,Base), KeyPair = maps:get(key_pair,Base),
++    Fs = [fixture(#{node_identity => Node,key_pair => KeyPair,operation_id => <<N:256>>,
++                    proof_id => <<N:256>>,goal_text => Goal}) || {N,Goal} <-
++        [{1,<<"assertz(first(ok)).">>},{2,<<"assertz(second(ok)).">>},
++         {3,<<"assertz(material_limit_override(plan,symbols,1024)).">>}]],
++    [First|_] = Fs,T = {Ns,_} = maps:get(origin,First),Member = maps:get(pubkey,Node),
++    I = publish_outcome(memory_outcome(T),1),
++    Est = #est{db = #db{ref = Kb}} = quod_ct:committed_kb(quod_ct:signed_agent_facts(First) ++
++        [{can_invoke,{'_'},{'_'},{'_'},Ns},{peer_admitted,Member,"validator",14567,Member}]),
++    try quod_ct:with_network_identity(maps:get(network,First),fun() ->
++        lists:foreach(fun(F) ->
++            #{control := C} = vote(F,T,own(F,T),prepared),
++            Material = quod_atomic:control_material(C),
++            {ok,{selection,{vote,Material},Basis},_} = quod_commit_validation:prepare_vote(
++                Material,1,quod_commit_validation:new(T,1,Est,I,none,none)),
++            lists:foreach(fun(Other) ->
++                OtherVote = #{control := OtherControl} = vote(Other,T,own(Other,T),prepared),
++                {_,Reserved} = fold(OtherVote,fresh(T)),
++                Changes = maps:from_keys(quod_selection_basis:role_changes(OtherControl,[]),true),
++                Conflicts = quod_atomic:reservation_readiness(Material,Reserved) =/= ready,
++                ?assertEqual(Conflicts,quod_selection_basis:affected(Basis,Changes))
++            end,[Other || Other <- Fs,Other =/= F])
++        end,Fs)
++    end)
++    after ok = quod_outcome:close(I),quod_erlog_db_mvcc:delete(Kb) end.
+ 
+ disjoint_selection_probe() ->
+     F0 = fixture(), Node = maps:get(node_identity, F0), KeyPair = maps:get(key_pair, F0),
+--- a/test/quod_gui_examples_tests.erl
++++ b/test/quod_gui_examples_tests.erl
+@@ -70,6 +70,9 @@
+                 end,
+                 [{world,{entity_ref,Ns,Anchor,W1},Generated}] = Create(<<>>,meadow),
+                 ?assert(is_binary(Generated)),
++                ?assertMatch({ok,[_],_},read(Ctx,Ns,{gui_schema,{voxel_excavation,W1},{0},{1}})),
++                {question_ref,Ns,Anchor,Tools} = Open(Ns,{voxel_excavation,W1}),
++                commit(Ctx,scope(Ns,{gui_cancel,Tools})),
+                 ?assertMatch({ok,[_],_},read(Ctx,<<"quod:names">>,
+                     {name,Generated,<<"landscape">>,<<"world">>,<<"neutral">>})),
+                 ?assertEqual(NamesBefore,quod_lobby_tests:complete_source(Ctx,NamesTarget)),
+--- a/test/quod_material_admission_tests.erl
++++ b/test/quod_material_admission_tests.erl
+@@ -42,11 +42,44 @@
+ 
+ staged_policy_cannot_authorize_its_own_write_test() ->
+     with_session([{material_limit_override, plan, operations, 1}], fun(Session) ->
+-        Goal = {',', {assertz, {material_limit_override, plan, operations, unlimited}},
+-                      {assertz, payload}},
++        Goal = {',', {retract, {material_limit_override, plan, operations, 1}},
++                {',', {assertz, {material_limit_override, plan, operations, unlimited}},
++                      {assertz, payload}}},
+         first(Session, Goal),
+-        ?assertEqual({error, {material_limit, plan, operations, 2, 1}},
++        ?assertEqual({error, {material_limit, plan, operations, 3, 1}},
+             quod_proof_session:seal(Session, binding()))
++    end).
++
++invalid_policy_updates_are_refused_before_sealing_test() ->
++    lists:foreach(fun(Fact) ->
++        with_session([], fun(Session) ->
++            first(Session, {assertz, Fact}),
++            ?assertEqual({error, {invalid_material_policy, plan}},
++                         quod_proof_session:seal(Session, binding()))
++        end)
++    end, [{material_limit_override, plan, symbols, -1},
++          {material_limit_override, plan, symbols, {'Any'}},
++          {material_limit_override, plan, unknown_resource, 12}]),
++    with_session([{material_limit_override, plan, symbols, 100}], fun(Session) ->
++        first(Session, {assertz, {material_limit_override, plan, symbols, 200}}),
++        ?assertEqual({error, {invalid_material_policy, plan}},
++                     quod_proof_session:seal(Session, binding()))
++    end).
++
++policy_replacement_uses_final_state_and_preserves_zero_allowance_test() ->
++    with_session([{material_limit_override, plan, operations, 10}], fun(Session) ->
++        first(Session, {',', {assertz, {material_limit_override, plan, operations, 0}},
++                             {retract, {material_limit_override, plan, operations, 10}}}),
++        ?assertMatch({ok, _}, quod_proof_session:seal(Session, binding()))
++    end).
++
++policy_helper_change_is_checked_through_captured_dependencies_test() ->
++    Rule = {':-', {material_limit_override, plan, symbols, {'Limit'}},
++                  {allocation, {'Limit'}}},
++    with_session([Rule,{allocation,100}], fun(Session) ->
++        first(Session, {assertz, {allocation,200}}),
++        ?assertEqual({error, {invalid_material_policy, plan}},
++                     quod_proof_session:seal(Session, binding()))
+     end).
+ 
+ sealed_plan_carries_policy_reads_and_reuses_exact_result_test() ->
+--- a/test/quod_names_SUITE.erl
++++ b/test/quod_names_SUITE.erl
+@@ -69,6 +69,7 @@
+     ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
+     ok = wait_ready(Target, ?AGENT_NS, true),
+     ok = wait_ready(Asker, ?ASKER_NS, true),
++    NamesCount = count(Target, ?NAMES_NS),
+     ok = peer:call(Asker, quod_quic, learn, [TargetPub, TargetAddr]),
+     {ok, _} = peer:call(
+                 Asker, quod_ct, install_directory_generation,
+@@ -78,7 +79,7 @@
+     [{target, Target}, {asker, Asker}, {target_pub, TargetPub},
+      {target_key, TargetKey}, {asker_pub, AskerPub}, {target_addr, TargetAddr},
+      {asker_addr, AskerAddr}, {names_anchor, NamesAnchor},
+-     {names_source, Names}, {agent_genesis, AgentGenesis} | Config].
++     {names_source, Names}, {names_count, NamesCount}, {agent_genesis, AgentGenesis} | Config].
+ 
+ end_per_suite(Config) ->
+     quod_ct:stop_all([?config(target, Config), ?config(asker, Config)]),
+@@ -354,8 +355,8 @@
+               end, 30000)).
+ 
+ %% The asker never loaded the naming source: joining quod:names makes it
+-%% decode the genesis over the wire as a cold receiver, within the symbol
+-%% budget of one envelope, and then answer draws itself.
++%% decode the genesis over the wire as a cold receiver and then answer draws
++%% itself.
+ cold_peer_joins_quod_names(Config) ->
+     Asker = ?config(asker, Config),
+     AskerPub = ?config(asker_pub, Config),
+@@ -391,7 +392,7 @@
+     ?assertEqual(Anchor, peer:call(Asker, quod_simplex, genesis_hash, [?NAMES_NS])),
+     ?assertMatch(#{role := observer, syncing := false},
+                  peer:call(Asker, quod_simplex, status, [?NAMES_NS])),
+-    ?assertEqual(1449227, count(Asker, ?NAMES_NS)),
++    ?assertEqual(?config(names_count, Config), count(Asker, ?NAMES_NS)),
+     {ok, [#{'N' := Name}], _} =
+         execute(Asker, ?ASKER_NS, {remote_label, cold_join, {'N'}}),
+     ?assert(is_binary(Name)),
+@@ -420,7 +421,7 @@
+     ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
+     ok = wait_ready(Target, ?AGENT_NS, true),
+     ?assertEqual(Anchor, peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS])),
+-    ?assertEqual(1449227, count(Target, ?NAMES_NS)),
++    ?assertEqual(?config(names_count, Config), count(Target, ?NAMES_NS)),
+     {ok, [#{'N' := Local}], _} =
+         execute(Target, ?AGENT_NS, {label_me, after_vm_restart, {'N'}}),
+     ?assertNotEqual([], classes(Target, ?NAMES_NS, Local)),
+--- a/test/quod_overlay_tests.erl
++++ b/test/quod_overlay_tests.erl
+@@ -44,7 +44,7 @@
+     %% with an exact mutation-version token for each dependency.
+     ?assertEqual([{no_follow, 1}, {parent, 2}], maps:keys(ReadSet)),
+     ?assertEqual({present, 1}, maps:get({parent, 2}, ReadSet)),
+-    ?assertEqual(never_present, maps:get({no_follow, 1}, ReadSet)),
++    ?assertEqual({present, 0}, maps:get({no_follow, 1}, ReadSet)),
+     %% the committed db was NOT touched — child(bob) is only staged
+     ?assertEqual(undefined, proc(C, {child, 1})),
+     %% applying the diff to a fresh db makes child(bob) provable
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -2650,7 +2650,7 @@
+     end) end}.
+ 
+ voxel_query_gap_preserves_registered_input_and_its_expiry_test_() ->
+-    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns,node := Human}) ->
++    [{atom_to_list(Outcome),{timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns,node := Human}) ->
+         Field = {field_v1,1,500,[{plane,1000}],9},
+         Created = door_action(Ns,{voxel_create,room,0,{terrain_v1,unbounded,smooth,Field}}),
+         ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created), await_source_receipt(Created),
+@@ -2669,7 +2669,7 @@
+             [Inputs] = [M || M <- tuple_to_list(sys:get_state(Pid)),is_map(M),is_map_key(Human,M)],
+             maps:get(Human,Inputs)
+         end,
+-        Expiry = quod_time:now_ms()+10000,
++        Expiry = quod_time:now_ms()+case Outcome of expired -> 1000; _ -> 10000 end,
+         ok = sys:install(Pid,{Seen,none}), ok = sys:suspend(Runtime),
+         try
+             ok = quod_physics:input(Pid,Installed,Control,1,
+@@ -2677,13 +2677,46 @@
+             receive {terrain_input_step,Tag} -> ok after 5000 -> error(input_step_missing) end,
+             ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
+             ?assertMatch(#{sequence := 1,pending := true,expiry := Expiry},Row()),
++            case Outcome of
++                applied -> ok;
++                disconnected ->
++                    quod_physics:unwatch(Pid,Ref),
++                    _ = gen_server:call(Pid,status);
++                source_changed ->
++                    commit(Ns,{',',{retract,{physics_structure,room,2}},
++                                   {assertz,{physics_structure,room,3}}});
++                expired ->
++                    Timer = erlang:start_timer(max(0,Expiry-quod_time:now_ms()+1),self(),input_expired),
++                    receive {timeout,Timer,input_expired} -> ok end
++            end,
+             ok = sys:resume(Runtime),
+-            {Frame,{clear,_,_}} = input_frame(Pid,Ref,Human,1),
+-            ?assertMatch({7,2,world,{18.0,2.0,2.0},_,_},lists:keyfind(7,1,maps:get(poses,Frame))),
+-            ?assertMatch(#{sequence := 1,pending := false,expiry := Expiry},Row()),
+-            ?assertEqual(maps:get(registration,Initial),maps:get(registration,Frame))
++            case Outcome of
++                Removed when Removed =:= disconnected; Removed =:= source_changed ->
++                    reconcile(Ns),
++                    case gen_server:call(Pid,status) of
++                        #{phase := active,navigation_ready := true} -> ok;
++                        _ -> ?assertEqual({Pid,World},installed(Ns))
++                    end,
++                    ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status)),
++                    ?assertMatch(#{pending := false},Row()),
++                    ?assertNot(maps:is_key(terrain,Row())),
++                    CurrentExpected = case Outcome of source_changed -> Expected#{structure => 3}; _ -> Expected end,
++                    ?assertMatch({ok,_,_,{7,2,world,{2.0,2.0,2.0},_,_}},
++                        quod_physics:body_state(Pid,CurrentExpected,{7,2},1000)),
++                    ?assertMatch({ok,_,_},quod_physics:watch(Pid,CurrentExpected,none));
++                _ ->
++                    {Frame,Result} = input_frame(Pid,Ref,Human,1),
++                    Position = case Outcome of
++                        applied -> ?assertMatch({clear,_,_},Result),{18.0,2.0,2.0};
++                        expired -> ?assertEqual(expired,Result),{2.0,2.0,2.0}
++                    end,
++                    ?assertMatch({7,2,world,Position,_,_},lists:keyfind(7,1,maps:get(poses,Frame))),
++                    ?assertMatch(#{sequence := 1,pending := false,expiry := Expiry},Row()),
++                    ?assertNot(maps:is_key(terrain,Row())),
++                    ?assertEqual(maps:get(registration,Initial),maps:get(registration,Frame))
++            end
+         after catch sys:resume(Runtime),sys:remove(Pid,Seen) end
+-    end) end}.
++    end) end}} || Outcome <- [applied,expired,disconnected,source_changed]].
+ 
+ with_voxel_world(Fun) -> with_voxel_world(Fun,[]).
+ with_voxel_world(Fun,Extra) ->
+@@ -5526,6 +5559,47 @@
+         end)
+     end} || Change <- [changed,removed]].
+ 
++voxel_viewer_removal_preserves_unfinished_physics_test_() ->
++    [{atom_to_list(Wait),fun() ->
++        Field = {field_v1,1,500,[{plane,-1000}],9},
++        Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
++                  {surface_limits,512,10000,10000},69120,500000},
++        {ok,{#{handle := Handle},generated}} = quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
++        with_simulator(none,fun(Pid,Spec) ->
++            {Activation,Token} = receive
++                {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
++            after 5000 -> error(activation_missing) end,
++            Terrain = {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
++                       {terrain,500,[{{0,0,0},Handle}]},1.0},
++            Actor = {1,1,dynamic,{world_mm,{2000,2000,2000},{0.0,0.0,0.0}},{solid,{ball,0.25}},1.0},
++            Current = Spec#{generation => 1,run_token => Token,
++                custody => {request,Token,0,<<2>>,<<0:512>>},
++                limits => {2,2,1,1000.0,2,10000,10000},dt => 0.001,gravity => 0.0,structure => 1,
++                activities => #{},bodies => [Terrain,Actor],restores => []},
++            Pid ! {physics_selected,self(),make_ref(),Current},
++            Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
++            receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(initial_install_missing) end,
++            Expected = #{fence => quod_physics:fence(Current),structure => 1,incarnation => Token},
++            {ok,View,_} = quod_physics:watch(Pid,Expected,none),
++            Waiting = case Wait of
++                restoration -> Current#{structure => 2,bodies => [Terrain,setelement(2,Actor,2)],
++                    restores => [{1,2,{{18000,2000,2000},{0.0,0.0,0.0,1.0}},0.005,128}]};
++                body_coverage -> Current#{structure => 2,bodies => [setelement(5,Terrain,{terrain,500,[]}),Actor]}
++            end,
++            Pid ! {physics_selected,self(),make_ref(),Waiting},
++            ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
++            quod_physics:unwatch(Pid,View),
++            ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
++            Resident = case Wait of
++                restoration -> setelement(5,Terrain,{terrain,500,[{{16000,0,0},Handle}]});
++                body_coverage -> Terrain
++            end,
++            [_OldTerrain,RetainedActor] = maps:get(bodies,Waiting),
++            Pid ! {physics_selected,self(),make_ref(),Waiting#{bodies => [Resident,RetainedActor]}},
++            ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status))
++        end)
++    end} || Wait <- [restoration,body_coverage]].
++
+ voxel_checkpoint_recovery_loads_missing_terrain_test_() ->
+     {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
+         Allowance = {physics_allowances,room,

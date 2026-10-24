@@ -1,0 +1,99 @@
+--- a/doc/voxel-world.md
++++ b/doc/voxel-world.md
+@@ -239,8 +239,9 @@
+ step cannot evict that coverage before the query runs. An expired discrete
+ input reports expiry and does not perform its requested movement.
+ Removing the viewer cancels its pending query coverage. The owner rechecks
+-native coverage once at that consumer change; unfinished insertion and stale
+-navigation sources keep their original waits. An unchanged collider selection
++native coverage once at a consumer or installed navigation-guard change;
++the refreshed sample carries the installed structure even when bodies sleep.
++Unfinished insertion and stale navigation sources keep their original waits. An unchanged collider selection
+ cannot leave a cancelled query as the world's only reason to stay paused.
+ 
+ ## Retained native geometry
+--- a/src/quod_physics.erl
++++ b/src/quod_physics.erl
+@@ -447,6 +447,7 @@
+     Guard = maps:get(navigation_guard,Spec),
+     GuardChanged = Guard =/= S#s.installed_guard,
+     Controlled = reconcile_controller(PhysicalControls#s{agent_controls = AgentControls,inputs = Inputs,installed_guard = Guard}),
++    ConsumersChanged = GuardChanged orelse ControlChanged orelse Inputs =/= S#s.inputs,
+     case {Waiting,Mode,Controlled#s.phase,Changes+ControlChanges,S#s.frame} of
+         {restore_pending,_,_,_,_} -> Controlled;
+         {{coverage,Ranges},_,_,_,_} -> hold_terrain(Ranges,Controlled);
+@@ -456,6 +457,7 @@
+                 {error,Reason} -> fail(Reason,Controlled)
+             end;
+         {_,_,{failed,_},_,_} -> Controlled;
++        {none,_,coverage,0,_} when ConsumersChanged -> recheck_coverage(Controlled);
+         {_,_,coverage,0,_} -> Controlled;
+         {none,selection,active,0,_} when element(1,S#s.phase) =:= blocked -> step_native(Controlled);
+         {_,_,_,0,none} -> notify(installed,schedule({false,[],[]},publish({false,[],[]},Controlled)));
+@@ -1012,15 +1014,14 @@
+ %% actual native coverage once at that dependency change, after cancellation.
+ %% An unfinished insertion or invalidated source still owns its original wait.
+ remove_viewer(S) ->
+-    Cleared = clear_viewer(S),
+-    case Cleared of
+-        #s{phase = coverage,restoring = Restores} when map_size(Restores) =:= 0 ->
+-            case navigation_current(Cleared) of
+-                true -> notify(installed,step_native(Cleared#s{phase = active}));
+-                false -> Cleared
+-            end;
+-        _ -> Cleared
+-    end.
++    recheck_coverage(clear_viewer(S)).
++
++recheck_coverage(S = #s{phase = coverage,restoring = Restores}) when map_size(Restores) =:= 0 ->
++    case navigation_current(S) of
++        true -> notify(installed,step_native(S#s{phase = active},true));
++        false -> S
++    end;
++recheck_coverage(S) -> S.
+ 
+ clear_viewer(S = #s{viewer = #{monitor := M,expected := Expected},inputs = Inputs}) ->
+     demonitor(M, [flush]),
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -2682,22 +2682,28 @@
+                 disconnected ->
+                     quod_physics:unwatch(Pid,Ref),
+                     _ = gen_server:call(Pid,status);
++                source_changed ->
++                    commit(Ns,{',',{retract,{physics_structure,room,2}},
++                                   {assertz,{physics_structure,room,3}}});
+                 expired ->
+                     Timer = erlang:start_timer(max(0,Expiry-quod_time:now_ms()+1),self(),input_expired),
+                     receive {timeout,Timer,input_expired} -> ok end
+             end,
+             ok = sys:resume(Runtime),
+             case Outcome of
+-                disconnected ->
++                Removed when Removed =:= disconnected; Removed =:= source_changed ->
+                     reconcile(Ns),
+                     case gen_server:call(Pid,status) of
+                         #{phase := active,navigation_ready := true} -> ok;
+                         _ -> ?assertEqual({Pid,World},installed(Ns))
+                     end,
+                     ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status)),
+-                    ?assertMatch(#{pending := false,result := disconnected},Row()),
++                    ?assertMatch(#{pending := false},Row()),
+                     ?assertNot(maps:is_key(terrain,Row())),
+-                    ?assertMatch({ok,_,_},quod_physics:watch(Pid,Expected,none));
++                    CurrentExpected = case Outcome of source_changed -> Expected#{structure => 3}; _ -> Expected end,
++                    ?assertMatch({ok,_,_,{7,2,world,{2.0,2.0,2.0},_,_}},
++                        quod_physics:body_state(Pid,CurrentExpected,{7,2},1000)),
++                    ?assertMatch({ok,_,_},quod_physics:watch(Pid,CurrentExpected,none));
+                 _ ->
+                     {Frame,Result} = input_frame(Pid,Ref,Human,1),
+                     Position = case Outcome of
+@@ -2710,7 +2716,7 @@
+                     ?assertEqual(maps:get(registration,Initial),maps:get(registration,Frame))
+             end
+         after catch sys:resume(Runtime),sys:remove(Pid,Seen) end
+-    end) end}} || Outcome <- [applied,expired,disconnected]].
++    end) end}} || Outcome <- [applied,expired,disconnected,source_changed]].
+ 
+ with_voxel_world(Fun) -> with_voxel_world(Fun,[]).
+ with_voxel_world(Fun,Extra) ->

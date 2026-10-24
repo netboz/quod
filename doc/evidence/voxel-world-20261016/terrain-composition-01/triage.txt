@@ -1,0 +1,1 @@
+Test selection failed before compilation or execution. The rebar3 generator option separates modules with commas, and functions within one module with +. Corrected selection is retained in terrain-composition-02; this run is not a test pass.

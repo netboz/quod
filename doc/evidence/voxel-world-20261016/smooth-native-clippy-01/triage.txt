@@ -1,0 +1,1 @@
+Clippy refused four new-code style findings: two manual is_multiple_of checks, a map iterator discarding keys, and the range helper placed below tests. Apply the suggested idioms and move the helper above the test module; do not suppress warnings.

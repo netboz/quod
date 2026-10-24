@@ -1,0 +1,1 @@
+The coordinate and nonfatal-refusal assertions passed; cleanup used the wrong fixture expectation for the existing retire/1 API, which returns ok. Correct only that cleanup assertion. The failure remains recorded.

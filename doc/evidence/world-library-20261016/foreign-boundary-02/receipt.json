@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--verbose",
+    "--test=quod_foreign_log_tests:maximal_material_and_compact_witness_fit_transfer_page_test"
+  ],
+  "started": "2026-10-16T23:17:22.386475+00:00",
+  "exit": 1,
+  "seconds": 8.08
+}

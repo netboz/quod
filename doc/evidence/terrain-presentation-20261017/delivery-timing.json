@@ -1,0 +1,16 @@
+{
+  "scope": "Live 0.7.273 server with initial visibility client corrections; agent-owned Distant Heights; 20 s walking out and back. Browser event timestamps have millisecond resolution. Network time includes websocket endpoint and owner processing; not a raw packet RTT.",
+  "receive_to_render_ack_ms": {
+    "count": 315,
+    "mean": 0.13333333333333333,
+    "median": 0,
+    "max": 7
+  },
+  "ack_to_next_resource_ms": {
+    "count": 315,
+    "mean": 71.34603174603174,
+    "median": 58,
+    "max": 224
+  },
+  "observations": "315 complete chunk exchanges; no terrain root hidden in 392 rendered frames. Most measured delay is after acknowledgement, not geometry verification/installation. This motivates removing per-chunk stop-and-wait, without claiming to isolate every network/owner contribution."
+}

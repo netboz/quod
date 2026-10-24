@@ -1,0 +1,14 @@
+{
+  "name": "ui-lint",
+  "command": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "lint"
+  ],
+  "started": "2026-10-16T20:16:17.596291+00:00",
+  "exit": 0,
+  "seconds": 0.23,
+  "sources_unchanged": true
+}

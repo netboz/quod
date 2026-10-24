@@ -1,0 +1,62 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 17-Oct-2026::00:53:51.180836 ===
+Failed to start Ranch listener quod_client_listener in ranch_ssl:listen([{cacerts,'...'},{key,'...'},{cert,'...'},{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{port,44939},{ip,{127,0,0,1}}]) for reason eaddrinuse (address already in use)
+
+=CRASH REPORT==== 17-Oct-2026::00:53:51.180956 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.647.0>
+    registered_name: []
+    exception exit: {listen_error,quod_client_listener,eaddrinuse}
+      in function  ranch_acceptors_sup:listen_error/5 (/home/yan/src/quod/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:66)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.645.0>,ranch_sup,<0.566.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.645.0>]
+    dictionary: [{logger,error_logger}]
+    trap_exit: true
+    status: running
+    heap_size: 2586
+    stack_size: 29
+    reductions: 16159
+  neighbours:
+
+=SUPERVISOR REPORT==== 17-Oct-2026::00:53:51.183383 ===
+    supervisor: {<0.645.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_client_listener,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_client_listener,ranch_ssl]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=ERROR REPORT==== 17-Oct-2026::00:53:51.183570 ===
+quod: client bootstrap failed — listen on 127.0.0.1:44939 (eaddrinuse)
+[0;32m.[0m=WARNING REPORT==== 17-Oct-2026::00:53:51.253780 ===
+quod: replacing orphaned client listener
+[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_client_tests:gui_resource_call_crosses_the_real_cowboy_loop_test/0
+[0;31m     Failure/Error: ?assertEqual({ok,expired}, quod_client_view : activate_gui ( Agent , Connection , << 1 : 256 >> , << 2 : 256 >> , quod_time : mono_ms ( ) + 1000 ))
+       expected: {ok,expired}
+            got: {error,not_found}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 0.689 seconds
+[0;31m7 tests, 1 failures
+[0m===> Error running tests

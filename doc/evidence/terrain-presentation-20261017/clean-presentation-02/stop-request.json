@@ -1,0 +1,4 @@
+{
+  "reason": "Measured receiver work averages 0.133 ms, versus 71.35 ms acknowledgement-to-next-resource. Refactor the same bounded resource stream to transfer requested chunks together and eliminate per-chunk stop-and-wait. Freeze a new scope after tests; do not deploy this partial scope.",
+  "at": "2026-10-17T08:48:01.193417+00:00"
+}

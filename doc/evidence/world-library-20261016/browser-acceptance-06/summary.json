@@ -1,0 +1,110 @@
+{
+  "passed": true,
+  "url": "http://127.0.0.1:5128/world.html",
+  "pending": 0,
+  "errors": [],
+  "samples": [
+    {
+      "step": "personal lobby ready",
+      "pose": [
+        0,
+        0.8365408747923203,
+        2.8119086284347756
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,personal_lobby)",
+      "sequence": "6"
+    },
+    {
+      "step": "entered Distant Expanse",
+      "pose": [
+        -0.00389795345426378,
+        9.463744479992721,
+        -1.4377238363055125e-10
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"\\xA5\\\\xE4\\\\xDC\\R\\x8C\\<!_\\x93\\M\\xC\\|\\xC7\\\\xD0\\\\xCB\\\\xB4\\\\xC2\\\\xD8\\\\x1A\\g\\xD3\\r\\xD\\\\x1D\\'F3\\xB0\\\\xCA\\\\xD8\\,\\x8\\\">>))",
+      "sequence": "1"
+    },
+    {
+      "step": "walked across meadow terrain",
+      "pose": [
+        -0.011331074944330166,
+        9.462881601706208,
+        -1.2083577277209585
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"\\xA5\\\\xE4\\\\xDC\\R\\x8C\\<!_\\x93\\M\\xC\\|\\xC7\\\\xD0\\\\xCB\\\\xB4\\\\xC2\\\\xD8\\\\x1A\\g\\xD3\\r\\xD\\\\x1D\\'F3\\xB0\\\\xCA\\\\xD8\\,\\x8\\\">>))",
+      "sequence": "5"
+    },
+    {
+      "step": "returned to lobby",
+      "pose": [
+        0,
+        0.835586092200335,
+        2.8145342809479703
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,personal_lobby)",
+      "sequence": "9"
+    },
+    {
+      "step": "entered Highland Retreat",
+      "pose": [
+        -0.005877128411511844,
+        19.12425198076601,
+        -5.787065405036552e-12
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"|\\xD6\\\\x90\\\\x8F\\\\xD5\\\\x8D\\\\xBE\\\\xC3\\\\xB4\\\\xE4\\-(#9?>\\xDB\\\\xF1\\-\\xCF\\|\\xB5\\%\\x1B\\\\xA9\\Z\\xA5\\\\xCC\\1+\\xDE\\4\">>))",
+      "sequence": "1"
+    },
+    {
+      "step": "walked across highland terrain",
+      "pose": [
+        1.3527474097855827,
+        19.577716020651295,
+        -5.319381041646884e-06
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"|\\xD6\\\\x90\\\\x8F\\\\xD5\\\\x8D\\\\xBE\\\\xC3\\\\xB4\\\\xE4\\-(#9?>\\xDB\\\\xF1\\-\\xCF\\|\\xB5\\%\\x1B\\\\xA9\\Z\\xA5\\\\xCC\\1+\\xDE\\4\">>))",
+      "sequence": "6"
+    },
+    {
+      "step": "returned to lobby",
+      "pose": [
+        0,
+        0.8346313096083496,
+        2.817159933461165
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,personal_lobby)",
+      "sequence": "12"
+    },
+    {
+      "step": "reentered saved generated-name world",
+      "pose": [
+        -0.012444529005636503,
+        9.462833141484127,
+        -1.541697727720895
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"\\xA5\\\\xE4\\\\xDC\\R\\x8C\\<!_\\x93\\M\\xC\\|\\xC7\\\\xD0\\\\xCB\\\\xB4\\\\xC2\\\\xD8\\\\x1A\\g\\xD3\\r\\xD\\\\x1D\\'F3\\xB0\\\\xCA\\\\xD8\\,\\x8\\\">>))",
+      "sequence": "8"
+    },
+    {
+      "step": "walked after reentry",
+      "pose": [
+        -1.472107332808224,
+        9.418213224830822,
+        -1.5416977228098965
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,world(<<\"\\xA5\\\\xE4\\\\xDC\\R\\x8C\\<!_\\x93\\M\\xC\\|\\xC7\\\\xD0\\\\xCB\\\\xB4\\\\xC2\\\\xD8\\\\x1A\\g\\xD3\\r\\xD\\\\x1D\\'F3\\xB0\\\\xCA\\\\xD8\\,\\x8\\\">>))",
+      "sequence": "14"
+    },
+    {
+      "step": "returned to lobby",
+      "pose": [
+        0,
+        0.8343130487443545,
+        2.8180351509655632
+      ],
+      "world": "world_ref(<<\"personal-lobby-130\">>,<<\"\\x95\\l\\xE5\\r\\xC7\\\\x86\\\\xEA\\:\\\"m\\x2\\\\x89\\\\xAE\\=p\\xC3\\\\xA7\\\\xF7\\$\\x3\\\\x1D\\b\\x1B\\\\x3\\4 \\xBD\\\\xA9\\\\xA1\\\\x13\\r\\xF6\\\">>,personal_lobby)",
+      "sequence": "13"
+    }
+  ],
+  "evidence": "_build/world-library-20261016/desktop-local-04",
+  "scope": "Headless desktop through real signed GUI; fixture identity provisioned by existing APIs. Live tree before final form/controller/policy corrections; no physical VR or deployed acceptance claimed."
+}

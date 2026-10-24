@@ -1,0 +1,25 @@
+{
+  "updated": "2026-10-16T18:11:47.375949+00:00",
+  "failure": "The exec-owned preview process no longer existed and port 5127 had no listener after the previous turn.",
+  "fix": "Temporary systemd user service, independent of the chat execution session; loopback only; no boot enablement or restart policy.",
+  "unit": "quod-voxel-preview-5127.service",
+  "url": "http://127.0.0.1:5127/tools/voxel-preview.html",
+  "verified": {
+    "service": "active/running in user service cgroup",
+    "page_http": 200,
+    "fixture_http": 200,
+    "browser_ready": {
+      "triangles": 12672,
+      "chunks": 192,
+      "edited": false
+    },
+    "textures_decoded_bytes": [
+      471886,
+      699241
+    ]
+  },
+  "observations": [
+    "First browser readiness evaluation exceeded the tool 30-second limit; later evaluation confirmed full rendering and texture loads. No application source changed."
+  ],
+  "stop_command": "systemctl --user stop quod-voxel-preview-5127.service"
+}

@@ -1,0 +1,39 @@
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+error[E0599]: the method `encode` exists for tuple `(rustler::Atom, (rustler::Atom, &Vec<(DVec3, DVec3)>))`, but its trait bounds were not satisfied
+  --> src/lib.rs:72:98
+   |
+72 |             Self::Frame(bounds) => (atoms::unavailable(),(atoms::coordinate_allowance(),bounds)).encode(env),
+   |                                                                                                  ^^^^^^ method cannot be called due to unsatisfied trait bounds
+   |
+   = note: the following trait bounds were not satisfied:
+           `(rustler::Atom, &Vec<(DVec3, DVec3)>): Encoder`
+           which is required by `(rustler::Atom, (rustler::Atom, &Vec<(DVec3, DVec3)>)): Encoder`
+
+error[E0277]: a value of type `Vec<(DVec3, DVec3)>` cannot be built from an iterator over elements of type `((f64, f64, f64), (f64, f64, f64))`
+   --> src/lib.rs:526:78
+    |
+526 |                 ((r.mins.x,r.mins.y,r.mins.z),(r.maxs.x,r.maxs.y,r.maxs.z))).collect()));
+    |                                                                              ^^^^^^^ value of type `Vec<(DVec3, DVec3)>` cannot be built from `std::iter::Iterator<Item=((f64, f64, f64), (f64, f64, f64))>`
+    |
+help: the trait `FromIterator<((f64, f64, f64), (f64, f64, f64))>` is not implemented for `Vec<(DVec3, DVec3)>`
+      but trait `FromIterator<(DVec3, DVec3)>` is implemented for it
+   --> library/alloc/src/vec/mod.rs:3993:0
+    = help: for that trait implementation, expected `DVec3`, found `(f64, f64, f64)`
+note: the method call chain might not have had the expected associated types
+   --> src/lib.rs:525:50
+    |
+523 |           let regions = self.step_regions(&parameters).map_err(|_| atoms::non_finite_state())?;
+    |                         ---------------------------------------------------------------------- this expression has type `Vec<Aabb>`
+524 |           if regions.iter().any(|r| r.mins.abs().max(r.maxs.abs()).max_element() > self.limits.3) {
+525 |               return Ok(Step::Frame(regions.iter().map(|r|
+    |  ___________________________________________------_^
+    | |                                           |
+    | |                                           `Iterator::Item` is `&Aabb` here
+526 | |                 ((r.mins.x,r.mins.y,r.mins.z),(r.maxs.x,r.maxs.y,r.maxs.z))).collect()));
+    | |____________________________________________________________________________^ `Iterator::Item` changed to `((f64, f64, f64), (f64, f64, f64))` here
+note: required by a bound in `collect`
+   --> library/core/src/iter/traits/iterator.rs:2073:4
+
+Some errors have detailed explanations: E0277, E0599.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `quod_physics` (lib test) due to 2 previous errors

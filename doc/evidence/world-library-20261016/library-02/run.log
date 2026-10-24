@@ -1,0 +1,18 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.04s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+
+Pending:
+[0;33m  undefined
+[0m[0;36m    %% Unknown error: {abort,
+                   {no_such_function,
+                       {quod_gui_examples_tests,
+                           'world_library_creation_names_ownership_and_entry_test_/0',
+                           0}}}
+[0m
+
+Finished in ? seconds
+[0;33m1 tests, 0 failures, 1 cancelled
+[0m===> Error running tests

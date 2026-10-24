@@ -1,0 +1,19 @@
+BJS - [16:21:37]: Babylon.js v9.18.1 - Null engine
+✖ generated terrain uses shared verified model resources and real engine disposal (11.186095ms)
+ℹ Error: Test "generated terrain uses shared verified model resources and real engine disposal" at client/test/render-resources.test.js:14:1 generated asynchronous activity after the test ended. This activity created the error "ReferenceError: acquire is not defined" and would have caused the test to fail, but instead triggered an unhandledRejection event.
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 289.101069
+
+✖ failing tests:
+
+test at client/test/render-resources.test.js:14:1
+✖ generated terrain uses shared verified model resources and real engine disposal (11.186095ms)
+  ReferenceError: acquire is not defined
+      at decodeTerrain (file:///home/yan/src/quod/client/src/render-resources.js:24:59)
+      at file:///home/yan/src/quod/client/src/render-resources.js:168:27

@@ -1,0 +1,6 @@
+{
+  "status": "candidate_rejected",
+  "reason": "Unbounded density magnitude followed by nearest-mm output creates invalid zero-area triangles in an ordinary steep height fixture. Do not install this candidate.",
+  "time": "2026-10-16T11:22:18.389783+00:00",
+  "results": "results.json"
+}

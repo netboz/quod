@@ -1,0 +1,74 @@
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ terrain descriptors bind generated resources to an anchored physical body (4.165441ms)
+✔ multiple ontology mark occurrences retain one exact instance and no body identity (0.757978ms)
+✔ a reply becomes drawable marks (0.389424ms)
+✔ a mark may show nothing and carry no label (0.216272ms)
+✔ several marks may depict one entity (0.373811ms)
+✔ an unreadable descriptor fails closed (1.34025ms)
+✔ capsules and tori keep their neutral dimensions (0.432884ms)
+✔ a sky sphere keeps its renderer-neutral diameter (0.177611ms)
+✔ a binary that did not survive the reply is refused (0.523598ms)
+✔ the reader accepts what the renderer writes and nothing more (0.559254ms)
+✔ the reader enforces the shared structural-depth boundary (0.228737ms)
+✔ the lens is asked by its flat binary name, with the dot the grammar needs (0.372103ms)
+✔ binary identities and UTF-8 text survive lossless signed bindings (0.44706ms)
+✔ texture slots carry digest identity and explicit sampling; invalid bindings fail (1.142783ms)
+✔ mesh marks carry typed digest, local frame, scale and asset surfaces (0.912617ms)
+✔ generated terrain uses shared verified model resources and real engine disposal (26.80087ms)
+✔ terrain verification and cancellation precede engine allocation (4.116317ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ terrain and ordinary surfaces share texture custody and preserve independent optical properties (23.276475ms)
+✔ shared bindings retain textures until their last consumer leaves (0.541482ms)
+✔ different bindings share verified bytes and keep independent sampling (0.49619ms)
+✔ corrupted bytes fail before image decoding (0.463118ms)
+✔ last release cancels fetch; a late fetch response cannot create a texture (0.405947ms)
+✔ release during decode disposes immediately and ignores late completion (0.414064ms)
+✔ two model occurrences share verified bytes and one decoded template (2.023702ms)
+✔ measured costs deny decode and a stricter occurrence independently (1.279526ms)
+✔ a declared frame must match bounds measured from the verified asset (0.636533ms)
+✔ a late model decode cannot restore a released template (0.575201ms)
+✔ a model digest mismatch stops before GLB parse and Babylon decode (0.346737ms)
+✔ model transfer allowance stops the stream before GLB parsing or decode (0.313858ms)
+✔ GUI image leases share verified texture bytes and revoke only at last release (4.066658ms)
+✔ retired GUI image completion never creates a URL and corruption is rejected (0.553836ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ hierarchy composes transforms and unchanged snapshots retain engine resources (3.829457ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ the Babylon adapter builds capsule and torus geometry from neutral dimensions (6.157924ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ the Babylon adapter draws an unlit inward sky which cannot intercept selection (12.114622ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ a sky panorama drives the adapter emissive texture (5.359666ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ reparented children survive removed parents; geometry replacement retires only old resources (3.224551ms)
+✔ malformed hierarchy and material never reach the renderer (0.419539ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ the world adapter registers ray picking for rendered geometry (1.29764ms)
+✔ radial selection starts at the top, proceeds clockwise, and preserves its dead zone (0.134067ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ the neutral transform applies X then Y then Z before translation (1.160934ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ textured scene reconciliation retains leases and retires stale completions (1.980262ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ two mesh occurrences keep separate transforms and subjects with one template (2.165563ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ model replacement acquires first and ignores a retired late completion (0.623129ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ a changed declared mesh bound acquires a fresh verification lease (0.51876ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ signed terrain stream waits for rendering, retains unchanged chunks and evicts before replacement (8.353422ms)
+✔ an unauthorized aggregate is rejected before bytes or renderer allocations (0.89401ms)
+BJS - [16:23:03]: Babylon.js v9.18.1 - Null engine
+✔ large canonical terrain keeps the same model across a local frame shift (4.027632ms)
+✔ native surface positions, winding and material survive decoding (1.775309ms)
+✔ complete framing, palette and allocation are mandatory (1.008146ms)
+✔ empty and full chunks can carry an empty surface (0.097387ms)
+✔ adjacent negative-coordinate chunks preserve texture phase and vertical walls have nondegenerate UVs (2.675393ms)
+ℹ tests 51
+ℹ suites 0
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 455.589792

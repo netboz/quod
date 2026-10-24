@@ -1,0 +1,54 @@
+{
+  "runner-result.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/DEPLOYED.json",
+    "sha256": "766319f61182c3ea9da35e1de64de35d2f95a543e4fd164bfbd54527ecabe871"
+  },
+  "verified-image.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/verified-image.json",
+    "sha256": "7d8aaaf2227ee5e07b15f847dbcdba8bded0e237ef7da12bbf7577b14e0eb4a4"
+  },
+  "fleet.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/refound/fleet-probe-after-desktop.json",
+    "sha256": "c74c5b7ad09947018cd721a09357d0775aa6ff7846c14144f2df5fd3c7a3b1e7"
+  },
+  "retired-volumes.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/refound/old-volumes-deleted.json",
+    "sha256": "2a763e2ff0c3d21006c828c71cba965c9f582b1a2ac79d5a1e4744e32ab20e80"
+  },
+  "browser.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/desktop-deployed-04/PASSED.json",
+    "sha256": "fe863fcc32e5fdaf767bdc70907b64a5593142ac8bdb2265622ab598e894a53e"
+  },
+  "browser-observation.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/desktop-deployed-04/observation.json",
+    "sha256": "232e2459cdd5a4a3ca63ddfc408e6589b54163326a68bc025a3201262c392bc1"
+  },
+  "desktop-exit.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/acceptance-desktop-deployed-04/desktop.exit.json",
+    "sha256": "3252fa5c81a60f36d3c0c7c4ee0455229aed053718075e2da9131b5884495c76"
+  },
+  "fleet-exit.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/acceptance-desktop-deployed-04/fleet-after-desktop.exit.json",
+    "sha256": "714f431015b7c5e298a55ca020a29d353f38066efc352f6cbe5dee8e9a0f2f94"
+  },
+  "cleanup-exit.json": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/deployment-02/acceptance-desktop-deployed-04/purge-old-volumes.exit.json",
+    "sha256": "904845aa1862f4ff50bfe61ca63932a9f351e8f3db271e860e3eebad997920a6"
+  },
+  "harness.mjs": {
+    "source": "/home/yan/src/quod/doc/evidence/world-library-20261016/desktop-acceptance.mjs",
+    "sha256": "326318633959faab8a2fb56979925f929e4fa1d9cb20ccca04daa1c56279ca10"
+  },
+  "meadow.png": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/desktop-deployed-04/meadow.png",
+    "sha256": "fe9198c5a3a7bb108a72489f2f16e416e8c8b2db2754261d5a28181c233ec4be"
+  },
+  "highlands.png": {
+    "source": "/home/yan/src/quod/_build/world-library-20261016/desktop-deployed-04/highlands.png",
+    "sha256": "e4c54596a6112e6bc4cccbbefd39ac6d8e6186d1d07d17a2ce9144372aa6b4a5"
+  },
+  "production-delta.json": {
+    "source": "/home/yan/src/quod/doc/evidence/world-library-20261016/review-07/production-delta-baseline.json",
+    "sha256": "4169080d892ab4cb7542e58255766dbd34efccccb339728f149440e2609a6f4c"
+  }
+}

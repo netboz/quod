@@ -1,0 +1,127 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.04s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (applied)...[1.620 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (expired)...[1.823 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (disconnected)...[0.557 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19- (source_changed)...*failed*
+in function quod_physics_tests:installed/2 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2793)
+in call from quod_physics_tests:'-voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-18-'/2 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2698)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2742)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod/test/quod_agent_hosting_tests.erl, line 1632)
+in call from quod_physics_tests:with_world/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2745)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{physics_not_installed,
+    #{{world_ref,<<"host-test-agent">>,
+          <<216,67,31,95,182,136,85,120,112,63,25,242,152,...>>,
+          room} =>
+          #{monitor => #Ref<0.2649301266.3831496705.45558>,pid => <0.1261.0>,
+            status => {unavailable,terrain_coverage},
+            stopping => false,
+            spec =>
+                #{key =>
+                      <<237,153,115,111,211,244,5,108,9,233,249,87,187,190,...>>,
+                  gravity => -9.81,
+                  bodies =>
+                      [{4,2,fixed,
+                        {world_mm,{0,0,0},{0.0,0.0,0.0}},
+                        {terrain,500,
+                            [{{0,0,0},#Ref<0.2649301266.3831627782.19432>}]},
+                        1.0},
+                       {7,2,controlled,
+                        {world_mm,{2000,2000,2000},{0.0,0.0,0.0}},
+                        {solid,{ball,0.25}},
+                        1.0}],
+                  limits => {64,64,256,1.0e3,256,4096,4096},
+                  authority =>
+                      {agent_instance_ref,<<"host-test-agent">>,
+                          <<216,67,31,95,182,136,85,120,112,63,25,...>>,
+                          actor},
+                  generation => 1,structure => 3,
+                  run_token =>
+                      <<0,68,196,182,146,100,86,218,110,22,241,24,43,62,...>>,
+                  world =>
+                      {world_ref,<<"host-test-agent">>,
+                          <<216,67,31,95,182,136,85,120,112,63,25,...>>,
+                          room},
+                  epoch => 1,
+                  navigation_guard => {#Ref<0.2649301266.3831627778.22131>,4},
+                  agent_controls =>
+                      [{control,
+                           {agent_instance_ref,<<"host-test-node">>,
+                               <<121,14,183,58,156,109,255,51,...>>,
+                               physical_node},
+                           1,
+                           {controlled_agent,pilot,1,7,2,
+                               {motion,free,2000,...},
+                               {viewpoint,eye,...}}}],
+                  voxel_resources =>
+                      #{{4,{chunk_v1,0,0,0}} =>
+                            #{handle => #Ref<0.2649301266.3831627782.19432>,
+                              vertices => 81,
+                              input_digest =>
+                                  <<18,1,205,70,32,69,255,228,154,82,239,84,...>>,
+                              output_digest =>
+                                  <<1,67,176,9,121,29,196,183,53,192,181,191,
+                                    ...>>,
+                              payload =>
+                                  <<81,86,84,49,0,0,1,244,0,0,0,128,...>>,
+                              triangles => 128}},
+                  terrain_demand =>
+                      {<0.1261.0>,
+                       <<0,68,196,182,146,100,86,218,110,22,241,24,...>>,
+                       2,
+                       [{4,{0,0,0},{0,0,0}}],
+                       #{}},
+                  custody =>
+                      {request,
+                          <<0,68,196,182,146,100,86,218,110,22,241,24,...>>,
+                          0,<<"quod.agent.goal.v1"...>>,
+                          <<82,179,199,149,125,219,15,224,85,...>>},...},
+            terrain_demand =>
+                {<0.1261.0>,
+                 <<0,68,196,182,146,100,86,218,110,22,241,24,43,...>>,
+                 2,
+                 [{4,{0,0,0},{0,0,0}}],
+                 #{}},
+            token =>
+                <<0,68,196,182,146,100,86,218,110,22,241,24,43,62,247,...>>,
+            selection => none,capacity_wait => false,
+            needs_reconciliation => false,source_waits => #{},
+            local_invalidated => false,navigation_invalidated => false}},
+    #{height => 10,agent_observation_bytes => 0,dropped_events => 0,
+      agent_capacity_status => ready,source_interests_active => 0,
+      source_targets_active => 0,agent_pending_bytes => 0,collapses => 0,
+      mode => live,hosted_agents => 1,queue_len => 0,resource_failures => #{},
+      hosted_agent_instances => 1,p_height => 10,e_frontier => 10,
+      physics_worlds => 1,...}}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_4E9125E616196C5B
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 3.
+===> Error running tests

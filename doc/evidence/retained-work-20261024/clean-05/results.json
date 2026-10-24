@@ -1,0 +1,50 @@
+[
+  {
+    "name": "agent-eunit",
+    "command": [
+      "rebar3",
+      "as",
+      "test",
+      "eunit",
+      "--module=quod_personal_agent_tests,quod_agent_custody_tests,quod_agent_hosting_tests",
+      "--verbose"
+    ],
+    "exit": 0,
+    "seconds": 109.06,
+    "sources_unchanged": true,
+    "test_summary_complete": true,
+    "passed_tests": 62
+  },
+  {
+    "name": "xref",
+    "command": [
+      "rebar3",
+      "xref"
+    ],
+    "exit": 0,
+    "seconds": 10.07,
+    "sources_unchanged": true
+  },
+  {
+    "name": "dialyzer",
+    "command": [
+      "rebar3",
+      "dialyzer"
+    ],
+    "exit": 0,
+    "seconds": 90.86,
+    "sources_unchanged": true
+  },
+  {
+    "name": "release",
+    "command": [
+      "rebar3",
+      "as",
+      "prod",
+      "release"
+    ],
+    "exit": 0,
+    "seconds": 11.1,
+    "sources_unchanged": true
+  }
+]

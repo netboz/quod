@@ -1,0 +1,46 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 994 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1619 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1619 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -voxel_signed_view_delivers_only_bound_resident_chunks_test_/0-fun-13-...=WARNING REPORT==== 16-Oct-2026::14:55:39.980493 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 8
+*failed*
+in function quod_physics_tests:simulation_reply/2 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2450)
+in call from quod_physics_tests:'-voxel_signed_view_delivers_only_bound_resident_chunks_test_/0-fun-12-'/1 (/home/yan/src/quod/test/quod_physics_tests.erl, line 5065)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2630)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod/test/quod_agent_hosting_tests.erl, line 1632)
+in call from quod_physics_tests:with_world/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2633)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:{unexpected_simulation_reply,<<"projection">>,
+                             #{<<"reason">> =>
+                                   <<"view_not_authorized_or_ready">>,
+                               <<"type">> => <<"unavailable">>}}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_91EB6CF5FDDC087F
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

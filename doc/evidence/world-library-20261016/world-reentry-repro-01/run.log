@@ -1,0 +1,57 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_gui_examples_tests: world_library...*failed*
+in function quod_gui_examples_tests:consume_world_terrain/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 182)
+in call from quod_gui_examples_tests:world_terrain_delivery/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 160)
+in call from quod_gui_examples_tests:'-world_library/0-lc$^27/1-5-'/3 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_examples_tests:'-world_library/0-fun-37-'/11 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 106)
+in call from quod_gui_question_tests:with_receiver/3 (/home/yan/src/quod/test/quod_gui_question_tests.erl, line 377)
+in call from quod_gui_examples_tests:'-world_library/0-fun-38-'/6 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 51)
+in call from quod_gui_examples_tests:with_responder/4 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 443)
+in call from quod_gui_examples_tests:world_library/0 (/home/yan/src/quod/test/quod_gui_examples_tests.erl, line 19)
+**error:{world_terrain_delivery_missing,#{tick => 2,phase => active,
+                                  navigation_ready => true,
+                                  incarnation =>
+                                      <<221,197,162,70,235,82,114,25,67,2,237,
+                                        183,225,15,145,100,...>>,
+                                  observations => #{},steps => 2,
+                                  inputs => #{},
+                                  terrain_chunks =>
+                                      [{0,{chunk_v1,-3,-3,-3}},
+                                       {0,{chunk_v1,-3,-3,-2}},
+                                       {0,{chunk_v1,-3,-3,-1}},
+                                       {0,{chunk_v1,-3,-3,0}},
+                                       {0,{chunk_v1,-3,-3,1}},
+                                       {0,{chunk_v1,-3,-3,2}},
+                                       {0,{chunk_v1,-3,-2,-3}},
+                                       {0,{chunk_v1,-3,-2,-2}},
+                                       {0,{chunk_v1,-3,-2,-1}},
+                                       {0,{chunk_v1,-3,-2,0}},
+                                       {0,{chunk_v1,-3,-2,...}},
+                                       {0,{chunk_v1,-3,...}},
+                                       {0,{chunk_v1,...}},
+                                       {0,{...}},
+                                       {0,...},
+                                       {...}|...],
+                                  installs => 3,queries => 0},
+                                #{status => installed,
+                                  terrain_demand =>
+                                      {<0.2765.0>,
+                                       <<221,197,162,70,235,82,114,25,67,2,237,
+                                         183,225,...>>,
+                                       3,
+                                       [{0,{-4,-4,-4},{3,3,3}},
+                                        {0,{-1,1,-1},{0,1,0}}],
+                                       #{0 => {{0,1535,2817},{0,0,0}}}},
+                                  selection => none,
+                                  needs_reconciliation => false}}
+  output:<<"World library fixture retained at /tmp/quod-world-library-854866F1557449E7593B9EEC
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

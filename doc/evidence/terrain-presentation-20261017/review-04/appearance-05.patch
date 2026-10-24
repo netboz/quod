@@ -1,0 +1,97 @@
+--- shared_appearance.py
++++ shared_appearance_05.py
+@@ -1,39 +1,65 @@
+-"""Compile, inspect, or submit one existing guarded source-edit transaction."""
++"""Use named variables at the existing trusted operator API; one guarded submission."""
+ from pathlib import Path
+ import base64,hashlib,json,subprocess,sys,urllib.request
+ b=Path(__file__).resolve().parent;phase=sys.argv[1]
+ assert phase in ('prepare','execute','verify')
+-out=b/('shared-appearance-'+phase+'-03');out.mkdir()
++out=b/('shared-appearance-'+phase+'-05');out.mkdir()
+ address='http://192.168.1.10:4646';job='quod-finality-candidate-v6-20260926'
+ with urllib.request.urlopen(address+'/v1/job/'+job+'/allocations',timeout=30) as r:rows=json.load(r)
+ alloc=[a for a in rows if a['DesiredStatus']=='run' and a['ClientStatus']=='running' and a['Name'].endswith('[0]')]
+ assert len(alloc)==1
+-text=(b/'shared-appearance-prepare.pl').read_bytes()
+-parse='{ok,#{goal:=Parsed,variables:=Variables}}=quod_client_goal_parser:parse(base64:decode(<<"'+base64.b64encode(text).decode()+'">>),3),{ok,Goal}=quod_wire_term:materialize_symbols(Parsed),'
++original=json.loads((b/'shared-appearance-prepare-03/result.json').read_text())
++compiled_setup='Edit=binary_to_term(base64:decode(<<"'+original['goal_base64']+'">>),[safe]),'+r'''
++SourceChecks=fun C({'$quod_predicate_source',I,S}) when is_binary(S)->[{I,S}];
++                C([H|T])->C(H)++C(T);
++                C(T) when is_tuple(T)->lists:append([C(X)||X<-tuple_to_list(T)]); C(_)->[] end,
++[{{'/',lobby_query,1},Before0},{{'/',lobby_query,1},After0},
++ {{'/',lobby_options,3},Before1},{{'/',lobby_options,3},After1},
++ {{'/',world_palette,1},Before2},{{'/',world_palette,1},After2}]=SourceChecks(Edit),
++Before=[{'$quod_predicate_source',{'/',lobby_query,1},Before0},
++        {'$quod_predicate_source',{'/',lobby_options,3},Before1},
++        {'$quod_predicate_source',{'/',world_palette,1},Before2}],
++After=[{'$quod_predicate_source',{'/',lobby_query,1},After0},
++       {'$quod_predicate_source',{'/',lobby_options,3},After1},
++       {'$quod_predicate_source',{'/',world_palette,1},After2}],
++'''
+ if phase=='prepare':
+-    expression=parse+'''{ok,[Bindings],_}=quod_prolog:prove_ro(<<"quod:root">>,Goal),
+-{_,Index}=lists:keyfind(<<"Edit">>,1,Variables),Edit=maps:get(Index,Bindings),
+-#{compiled=>true,goal_base64=>base64:encode(term_to_binary(Edit)),
+-  goal=>iolist_to_binary(erlog_io:writeq1(Edit))}'''
++    expression=compiled_setup+r'''
++Collect=fun C({N}) when is_integer(N),N>=0->[N]; C([H|T])->C(H)++C(T);
++            C(T) when is_tuple(T)->lists:append([C(X)||X<-tuple_to_list(T)]); C(_)->[] end,
++Ids=lists:usort(Collect(Edit)),true=(Ids=/=[]),
++lists:foreach(fun(Check)->{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,Check) end,Before),
++Names=maps:from_list([{N,list_to_atom("OperatorVariable"++integer_to_list(N))}||N<-Ids]),
++Rename=fun R({N}) when is_integer(N)->{maps:get(N,Names)};
++           R([H|T])->[R(H)|R(T)]; R(T) when is_tuple(T)->list_to_tuple([R(X)||X<-tuple_to_list(T)]); R(T)->T end,
++Named=Rename(Edit),
++Reverse=maps:from_list([{Name,N}||{N,Name}<-maps:to_list(Names)]),
++Restore=fun R({Name}) when is_atom(Name)->{maps:get(Name,Reverse)};
++            R([H|T])->[R(H)|R(T)]; R(T) when is_tuple(T)->list_to_tuple([R(X)||X<-tuple_to_list(T)]); R(T)->T end,
++Edit=Restore(Named),
++{error,invalid_result}=quod_durable_term:encode_result(maps:from_list([{N,{N}}||N<-Ids])),
++{ok,_}=quod_durable_term:encode_result(maps:from_list([{Name,{N}}||{N,Name}<-maps:to_list(Names)])),
++#{compiled=>true,goal_base64=>base64:encode(term_to_binary(Named)),
++  variable_count=>length(Ids),variable_ids=>Ids,reversible_variable_rename=>true,
++  integer_result_refused=>true,named_result_accepted=>true,before_sources_match=>true}
++'''
+ elif phase=='execute':
+     assert json.loads((b/'release/PASSED.json').read_text())['passed']
+     assert json.loads((b/'fleet-probe.json').read_text())['passed']
+     clearance=json.loads((b/'review-clearance.json').read_text())
+     assert clearance['approved'] and clearance['mutation_manifest_sha256']==hashlib.sha256((b/'mutation-inputs.json').read_bytes()).hexdigest()
+     for n,h in json.loads((b/'mutation-inputs.json').read_text()).items():assert hashlib.sha256((b/n).read_bytes()).hexdigest()==h,n
+-    prepared=json.loads((b/'shared-appearance-prepare-03/result.json').read_text())
++    named_clearance=json.loads((b/'appearance-clearance-05.json').read_text())
++    assert named_clearance['approved'] and named_clearance['manifest_sha256']==hashlib.sha256((b/'appearance-inputs-05.json').read_bytes()).hexdigest()
++    for n,h in json.loads((b/'appearance-inputs-05.json').read_text()).items():assert hashlib.sha256((b/n).read_bytes()).hexdigest()==h,n
++    prepared=json.loads((b/'shared-appearance-prepare-05/result.json').read_text())
++    assert prepared['reversible_variable_rename'] and prepared['integer_result_refused'] and prepared['named_result_accepted'] and prepared['before_sources_match']
+     expression='{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{material_eidolons,{\'MaterialNs\'},{\'MaterialAnchor\'}}),Edit=binary_to_term(base64:decode(<<"'+prepared['goal_base64']+'">>),[safe]),Result=quod_prolog:execute(<<"quod:root">>,Edit),#{result=>iolist_to_binary(io_lib:format("~0p",[Result])),success=>case Result of {ok,[_],_}->true;_->false end}'
+ else:
+-    checks=[]
+-    for row in json.loads((b/'shared-appearance-delta.json').read_text()):
+-        name,arity=row['predicate'].split('/')
+-        source='base64:decode(<<"'+base64.b64encode(row['after'].encode()).decode()+'">>)'
+-        checks.append("{'$quod_program_source',{'Clauses'},"+source+"}")
+-        checks[-1]="{',',"+checks[-1]+",{',',{'$quod_program_source',{'Clauses'},{'Canonical'}},{'$quod_predicate_source',{'/',"+name+","+arity+"},{'Canonical'}}}}"
+-    expression='''{ok,[#{'Palette':=Palette}],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{world_palette,{'Palette'}}),
++    expression=compiled_setup+'''{ok,[#{'Palette':=Palette}],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{world_palette,{'Palette'}}),
+ {ok,[#{'Source':=Source}],_}=quod_prolog:prove_ro(<<"quod:lobby">>,{'$quod_predicate_source',{'/',lobby_options,3},{'Source'}}),
+-lists:foreach(fun(Check)->{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,Check) end,[CHECKS]),
+-#{verified=>true,palette=>iolist_to_binary(erlog_io:writeq1(Palette)),lobby_options=>Source}'''.replace('CHECKS',','.join(checks))
++lists:foreach(fun(Check)->{ok,[_],_}=quod_prolog:prove_ro(<<"quod:lobby">>,Check) end,After),
++#{verified=>true,palette=>iolist_to_binary(erlog_io:writeq1(Palette)),lobby_options=>Source}'''
+ encoded='binary_to_list(base64:encode(iolist_to_binary(json:encode(begin '+expression+' end)))).'
+ command=['nomad','alloc','exec','-i=false','-t=false','-address='+address,'-task','quod',alloc[0]['ID'],'/opt/quod/bin/quod','eval',encoded]
+ (out/'intent.json').write_text(json.dumps({'phase':phase,'allocation':alloc[0]['ID'],'expression':expression,'read_only':phase!='execute'},indent=2)+'\n')
+--- owner-appearance-acceptance.mjs
++++ owner-appearance-acceptance-05.mjs
+@@ -10,7 +10,7 @@
+ const out = resolve('_build/terrain-presentation-20261017', label)
+ mkdirSync(out)
+ const deployment = '_build/terrain-presentation-20261017/deployment-274-rolling'
+-assert.equal(JSON.parse(readFileSync(join(deployment, 'shared-appearance-verify-03/result.json'), 'utf8')).verified, true)
++assert.equal(JSON.parse(readFileSync(join(deployment, 'shared-appearance-verify-05/result.json'), 'utf8')).verified, true)
+ const source = readFileSync(join(deployment, 'acceptance-owner-update.pl'), 'utf8').trim()
+ const context = await chromium.launchPersistentContext(resolve('_build/world-library-20261016/desktop-deployed-04/browser'), {
+   executablePath: '/home/yan/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome', headless: true, ignoreHTTPSErrors: true,

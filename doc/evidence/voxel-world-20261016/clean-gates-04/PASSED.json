@@ -1,0 +1,171 @@
+{
+  "passed": true,
+  "sources_unchanged": true,
+  "results": [
+    {
+      "name": "native-clean",
+      "command": [
+        "cargo",
+        "clean",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "-p",
+        "quod_physics"
+      ],
+      "started": "2026-10-16T16:48:00.595678+00:00",
+      "exit": 0,
+      "seconds": 0.32,
+      "sources_unchanged": true
+    },
+    {
+      "name": "native-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml"
+      ],
+      "started": "2026-10-16T16:48:01.274669+00:00",
+      "exit": 0,
+      "seconds": 26.57,
+      "sources_unchanged": true
+    },
+    {
+      "name": "native-release-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml"
+      ],
+      "started": "2026-10-16T16:48:28.354595+00:00",
+      "exit": 0,
+      "seconds": 25.82,
+      "sources_unchanged": true
+    },
+    {
+      "name": "native-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started": "2026-10-16T16:48:54.442598+00:00",
+      "exit": 0,
+      "seconds": 1.31,
+      "sources_unchanged": true
+    },
+    {
+      "name": "client-tests",
+      "command": [
+        "npm",
+        "--prefix",
+        "client",
+        "test"
+      ],
+      "started": "2026-10-16T16:48:56.142928+00:00",
+      "exit": 0,
+      "seconds": 1.32,
+      "sources_unchanged": true
+    },
+    {
+      "name": "ui-build",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "run",
+        "build"
+      ],
+      "started": "2026-10-16T16:48:57.828028+00:00",
+      "exit": 0,
+      "seconds": 8.72,
+      "sources_unchanged": true,
+      "public_assets_preserved": true
+    },
+    {
+      "name": "ui-lint",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "run",
+        "lint"
+      ],
+      "started": "2026-10-16T16:49:07.026260+00:00",
+      "exit": 0,
+      "seconds": 0.26,
+      "sources_unchanged": true
+    },
+    {
+      "name": "eunit",
+      "command": [
+        "rebar3",
+        "as",
+        "test",
+        "eunit"
+      ],
+      "started": "2026-10-16T16:49:07.782110+00:00",
+      "exit": 0,
+      "seconds": 1057.73,
+      "sources_unchanged": true
+    },
+    {
+      "name": "ct",
+      "command": [
+        "rebar3",
+        "as",
+        "test",
+        "ct"
+      ],
+      "started": "2026-10-16T17:06:46.008788+00:00",
+      "exit": 0,
+      "seconds": 628.39,
+      "sources_unchanged": true
+    },
+    {
+      "name": "xref",
+      "command": [
+        "rebar3",
+        "xref"
+      ],
+      "started": "2026-10-16T17:17:14.899524+00:00",
+      "exit": 0,
+      "seconds": 17.93,
+      "sources_unchanged": true
+    },
+    {
+      "name": "dialyzer",
+      "command": [
+        "rebar3",
+        "dialyzer"
+      ],
+      "started": "2026-10-16T17:17:33.142204+00:00",
+      "exit": 0,
+      "seconds": 90.47,
+      "sources_unchanged": true
+    },
+    {
+      "name": "release",
+      "command": [
+        "rebar3",
+        "as",
+        "prod",
+        "release"
+      ],
+      "started": "2026-10-16T17:19:03.913954+00:00",
+      "exit": 0,
+      "seconds": 13.38,
+      "sources_unchanged": true
+    }
+  ]
+}

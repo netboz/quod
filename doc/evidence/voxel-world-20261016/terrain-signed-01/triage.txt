@@ -1,0 +1,1 @@
+The signed-view fixture omitted the viewer's ordinary can_invoke grant. The authenticated read was correctly refused before projection. Add the same exact anchored read grant used by the shared signed-view fixture; keep production authorization unchanged. The failing test and retained fixture remain evidence.

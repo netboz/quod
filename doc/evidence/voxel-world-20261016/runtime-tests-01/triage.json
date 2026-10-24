@@ -1,0 +1,4 @@
+{
+  "status": "partial_validation",
+  "reason": "--test invokes a function as a test; it does not execute the returned EUnit generator. 14 numerical/domain tests passed; runtime generator was not executed."
+}

@@ -1,0 +1,68 @@
+    Checking glam v0.33.12
+    Checking nalgebra v0.35.0
+    Checking glamx v0.3.1
+    Checking parry3d-f64 v0.31.1 (/home/yan/src/quod/native/quod_physics/vendor/parry3d-f64)
+    Checking rapier3d-f64 v0.36.0
+    Checking quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+error: manual implementation of `.is_multiple_of()`
+  --> src/voxel/mod.rs:45:39
+   |
+45 |     if cells == 0 || spacing < 256 || spacing % 2 != 0 { return Err(Error::InvalidVoxelField); }
+   |                                       ^^^^^^^^^^^^^^^^ help: replace with: `!spacing.is_multiple_of(2)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_is_multiple_of
+   = note: `-D clippy::manual-is-multiple-of` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::manual_is_multiple_of)]`
+
+error: manual implementation of `.is_multiple_of()`
+  --> src/terrain.rs:17:74
+   |
+17 |     if kind != Kind::Fixed || pose != Pose::IDENTITY || spacing < 256 || spacing%2 != 0
+   |                                                                          ^^^^^^^^^^^^^^ help: replace with: `!spacing.is_multiple_of(2)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_is_multiple_of
+
+error: iterating on a map's values
+  --> src/origin.rs:53:23
+   |
+53 |               *chunks = std::mem::take(chunks).into_iter().map(|(_,mut installed)| {
+   |  _______________________^
+54 | |                 installed.chunk.origin = shifted(installed.chunk.origin,shift).unwrap();
+55 | |                 if let Some(handle) = installed.collider {
+56 | |                     self.colliders[handle].set_translation_wrt_parent(metres(installed.chunk.origin));
+57 | |                 }
+58 | |                 (installed.chunk.origin,installed)
+59 | |             }).collect();
+   | |______________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#iter_kv_map
+   = note: `-D clippy::iter-kv-map` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::iter_kv_map)]`
+help: try
+   |
+53 ~             *chunks = std::mem::take(chunks).into_values().map(|mut installed| {
+54 +                 installed.chunk.origin = shifted(installed.chunk.origin,shift).unwrap();
+55 +                 if let Some(handle) = installed.collider {
+56 +                     self.colliders[handle].set_translation_wrt_parent(metres(installed.chunk.origin));
+57 +                 }
+58 +                 (installed.chunk.origin,installed)
+59 ~             }).collect();
+   |
+
+error: could not compile `quod_physics` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: items after a test module
+   --> src/terrain.rs:211:1
+    |
+211 | mod tests {
+    | ^^^^^^^^^
+...
+340 | fn range(bounds:Aabb,side:i64) -> Option<([i64;3],[i64;3])> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#items_after_test_module
+    = note: `-D clippy::items-after-test-module` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::items_after_test_module)]`
+    = help: move the items to before the test module was defined
+
+error: could not compile `quod_physics` (lib test) due to 4 previous errors

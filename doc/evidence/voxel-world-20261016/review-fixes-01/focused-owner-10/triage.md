@@ -1,0 +1,1 @@
+Confirmed owner readiness regression: pending checkpoint restore, coordinate-refused selection, then the original unchanged selection falsely returned active/navigation_ready true. No step occurred. Installation phase now derives from pending coverage before control installation; focused-owner-11 passes both unchanged and corrected-selection paths without replacing demand.

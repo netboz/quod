@@ -1,0 +1,13 @@
+# Independent plan audit
+
+These checks were made against live source while Fable reviewed its frozen inputs. They are not Fable findings or executed tests.
+
+- `native/quod_physics/src/lib.rs:118` already retains identical body rows and charges their geometry allowance without rebuilding. The proposed derived terrain implementation must preserve this behavior and retain unchanged chunk shapes across terrain-body revision changes.
+- `client/src/simulation.js:14` accepts schema 1 world-space frames without an origin. `client/src/locomotion.js:87` binds control/run fences but no coordinate origin; teleport targets are ordinary numeric vectors. Origin-safe rendering alone is insufficient: placement commands must name exact absolute coordinates or carry the origin under which their local target was expressed. Existing absolute deadlines and sequence semantics must survive rebasing.
+- `priv/ontologies/quod_physics.pl:615` validates authored body positions and local shape coordinates against the same coordinate allowance; `:830` validates checkpoint positions similarly. `src/quod_physics.erl:722` converts global integer vectors directly to floats. Define exact canonical position versus bounded local displacement validation in the shared interface, and bind signed samples to the exact frame used during conversion. Rebasing cannot bypass Prolog validation or expand numerical limits silently.
+- `native/quod_physics/src/motion.rs:61` checks placement by contacts with installed colliders. A uniform solid chunk has no internal surface triangles. Known empty, known solid, mixed with installed surface, and unavailable must remain distinct. Initial placement and restored bodies need volume-clearance evidence under the canonical terrain semantics; absence of triangle contacts alone is insufficient. Implement this within the accepted existing physics coverage/placement owner, not a second movement engine.
+- `doc/physics-native.md:111` already preserves input expiry across source pauses. Terrain coverage waits must follow the same rule, and must not accumulate a later physics catch-up step that crosses the checked sweep. Unknown coverage emits no negative sample.
+
+- A rebase must be a shared native coordinate translation, not a call that changes authored body rows and reinstalls them. Keep exact terrain lattice identity separate from the transient native body/chunk transforms, and never pass a distant global terrain anchor through float conversion merely to subtract it afterward. Test retained handles, velocities, joints and checkpoint identity across the shift.
+
+Implementation has not started. These observations require plan clarification and later real-owner verification, not production test claims.

@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-17T00:31:09.804625+00:00",
+  "reason": "Reclaim reproducible build caches before packaging; preserve every frozen source and failure receipt",
+  "campaigns": [
+    {
+      "label": "clean-integration-01",
+      "removed": "native/quod_physics/target",
+      "manifest_unchanged": true,
+      "logs_preserved": true
+    },
+    {
+      "label": "clean-integration-02",
+      "removed": "native/quod_physics/target",
+      "manifest_unchanged": true,
+      "logs_preserved": true
+    },
+    {
+      "label": "clean-integration-03",
+      "removed": "native/quod_physics/target",
+      "manifest_unchanged": true,
+      "logs_preserved": true
+    },
+    {
+      "label": "clean-integration-04",
+      "removed": "native/quod_physics/target",
+      "manifest_unchanged": true,
+      "logs_preserved": true
+    },
+    {
+      "label": "clean-integration-05",
+      "removed": "native/quod_physics/target",
+      "manifest_unchanged": true,
+      "logs_preserved": true
+    }
+  ],
+  "free_before": 16545128448,
+  "free_after": 26472554496
+}

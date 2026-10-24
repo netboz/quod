@@ -1,0 +1,14 @@
+{
+  "name": "native-tests",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml"
+  ],
+  "started": "2026-10-16T20:52:51.545725+00:00",
+  "exit": 0,
+  "seconds": 28.93,
+  "sources_unchanged": true
+}

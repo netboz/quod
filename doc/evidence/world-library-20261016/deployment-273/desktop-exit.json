@@ -1,0 +1,13 @@
+{
+  "exit": 0,
+  "seconds": 96.82306434586644,
+  "command": [
+    "node",
+    "doc/evidence/world-library-20261016/desktop-acceptance.mjs",
+    "desktop-deployed-04",
+    "https://192.168.1.10:30519/",
+    "none",
+    "/home/yan/src/quod/_build/world-library-20261016/clean-integration-07/tree",
+    "EAFE717C9894C99D25D50D92853A65A1D7E9B66CF756E2F7583F562685F37CCB"
+  ]
+}

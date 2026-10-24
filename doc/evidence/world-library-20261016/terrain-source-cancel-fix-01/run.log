@@ -1,0 +1,72 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1201 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ test/quod_physics_tests.erl:
+     │
+ 996 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+     │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1621 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-20- (applied)...[0.832 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-20- (expired)...[1.507 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-20- (disconnected)...[0.495 s] ok
+quod_physics_tests: -voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-20- (source_changed)...*failed*
+in function quod_physics_tests:'-voxel_query_gap_preserves_registered_input_and_its_expiry_test_/0-fun-19-'/2 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2704)
+in call from quod_physics_tests:'-with_world/3-fun-0-'/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2744)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod/test/quod_agent_hosting_tests.erl, line 1632)
+in call from quod_physics_tests:with_world/3 (/home/yan/src/quod/test/quod_physics_tests.erl, line 2747)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{assertMatch,[{module,quod_physics_tests},
+              {line,2704},
+              {expression,"quod_physics : body_state ( Pid , CurrentExpected , { 7 , 2 } , 1000 )"},
+              {pattern,"{ ok , _ , _ , { 7 , 2 , world , { 2.0 , 2.0 , 2.0 } , _ , _ } }"},
+              {value,{error,unavailable}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_AC991FEC2D51D5DC
+">>
+
+quod_physics_tests: -voxel_viewer_removal_preserves_unfinished_physics_test_/0-fun-5- (restoration)...[0.001 s] ok
+quod_physics_tests: -voxel_viewer_removal_preserves_unfinished_physics_test_/0-fun-5- (body_coverage)...[0.001 s] ok
+quod_physics_tests: -voxel_pending_restore_keeps_its_original_insertion_test_/0-fun-10- (changed)...[0.010 s] ok
+quod_physics_tests: -voxel_pending_restore_keeps_its_original_insertion_test_/0-fun-10- (removed)...[0.010 s] ok
+quod_physics_tests: -voxel_large_origin_rebases_pending_motion_without_restart_test_/0-fun-11-...[0.593 s] ok
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 8.
+===> Error running tests

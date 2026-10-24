@@ -1,0 +1,9 @@
+{
+  "created": "2026-10-16T18:33:58.788114+00:00",
+  "head": "6404ec95b4703203b5bd08a82b0b4d4b5f98961f",
+  "frozen_tree": "/home/yan/src/quod/_build/voxel-world-20261016/clean-gates-04/tree",
+  "source_files": 1198,
+  "patch_sha256": "6a41dac1c8ffea01c535730113a5401075a929176ee1a1377b8e9bfe474dfaa8",
+  "source_unchanged": true,
+  "authority": "Yan explicitly requested Fable review of the implemented smooth voxel core; read-only consultation, no fixes, deployment, live mutations or additional reviewers."
+}

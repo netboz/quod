@@ -1,0 +1,8 @@
+{
+  "experiment": "corrected MC33 double output, nearest integer mm; no welding",
+  "seam_equal": true,
+  "unchanged_repeat_equal": true,
+  "chunks_with_quantized_degeneracy": 2,
+  "total_triangles": 49138,
+  "quantized_degenerate": 3
+}

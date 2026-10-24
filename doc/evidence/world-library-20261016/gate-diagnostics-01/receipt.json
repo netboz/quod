@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "eunit",
+    "--verbose",
+    "--module=quod_client_goal_ingress_tests,quod_commit_validation_tests,quod_ingress_state_tests,quod_prolog_tests,quod_read_set_tests,quod_relay_tests,quod_simplex_tests,quod_atomic_origin_tests"
+  ],
+  "started": "2026-10-16T23:14:29.705266+00:00",
+  "exit": 1,
+  "seconds": 18.92
+}

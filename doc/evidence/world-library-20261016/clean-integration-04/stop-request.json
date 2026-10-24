@@ -1,0 +1,5 @@
+{
+  "reason": "A new real-owner cancellation regression reproduces a persistent coverage wait after unwatch, despite installed body coverage and no pending runtime work. Preserve this campaign and finish its current gate; corrected source needs a separate freeze.",
+  "evidence": ["terrain-disconnect-diagnostic-01", "terrain-disconnect-diagnostic-02"],
+  "source_unchanged": true
+}

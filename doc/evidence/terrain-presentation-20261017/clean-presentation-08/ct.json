@@ -1,0 +1,17 @@
+{
+  "name": "ct",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "ct"
+  ],
+  "started": "2026-10-17T11:48:46.135456+00:00",
+  "exit": 0,
+  "seconds": 573.18,
+  "sources_unchanged": true,
+  "test_summary_complete": true,
+  "passed_tests": 148,
+  "minimum_test_cases": 148,
+  "stop_requested": false
+}

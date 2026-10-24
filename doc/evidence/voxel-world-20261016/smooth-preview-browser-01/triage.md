@@ -1,0 +1,5 @@
+Initial Vite preview failed: sandbox listen EPERM; authorized loopback hosting succeeded, then ENOSPC watchers while scanning client/_build/webxr-linux/chromium. The replacement server excludes **/_build/**. Initial fixture used lowercase colours, rejected by the existing uppercase colour contract; generation-02 corrects the authored fixture. Browser evaluation requires promise expressions, not top-level await.
+
+Visual inspection found inverted culling: Babylon defaults to clockwise procedural mesh winding in right-handed scenes, whereas QVT1 triangles use outward counter-clockwise winding. The shared terrain resource owner now declares its mesh orientation explicitly; the actual source and cloned model orientations are covered in render-02. The corrected overview was visually inspected and displayed through MCP.
+
+Offscreen browser captures sometimes retain an earlier compositor image although DOM inspection and voxelReady confirm completion. A requestAnimationFrame-based capture wait timed out (no polling). Capture the actual rendered canvas synchronously for further static evidence.

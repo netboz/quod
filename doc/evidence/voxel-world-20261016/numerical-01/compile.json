@@ -1,0 +1,18 @@
+{
+  "args": [
+    "cc",
+    "-std=c99",
+    "-fgnu89-inline",
+    "-O2",
+    "-fno-fast-math",
+    "-ffp-contract=off",
+    "-fPIC",
+    "-shared",
+    "doc/evidence/voxel-world-20261016/numerical-01/probe.c",
+    "-lm",
+    "-o",
+    "/tmp/quod-voxel-mc33-probe-01.so"
+  ],
+  "exit": 0,
+  "time": "2026-10-16T11:19:38.626993+00:00"
+}

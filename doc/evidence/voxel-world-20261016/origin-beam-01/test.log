@@ -1,0 +1,44 @@
+===> Verifying dependencies...
+   Compiling quod_physics v0.1.0 (/home/yan/src/quod/native/quod_physics)
+    Finished `release` profile [optimized] target(s) in 4.99s
+===> Analyzing applications...
+===> Compiling quod
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_physics_coordinates_tests'
+  quod_physics_coordinates_tests: large_signed_origins_preserve_exact_world_positions_test...[0.001 s] ok
+  quod_physics_coordinates_tests: native_shift_refusal_preserves_live_resource_test...*failed*
+in function quod_physics_coordinates_tests:native_shift_refusal_preserves_live_resource_test/0 (/home/yan/src/quod/test/quod_physics_coordinates_tests.erl, line 29)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,ok}
+  output:<<"">>
+
+  [done in 0.008 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 1.
+===> Error running tests

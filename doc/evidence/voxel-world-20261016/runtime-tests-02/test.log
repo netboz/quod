@@ -1,0 +1,9 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.14s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -voxel_runtime_retains_chunks_and_applies_committed_dig_test_/0-fun-15-...[3.804 s] ok
+=======================================================
+  Test passed.

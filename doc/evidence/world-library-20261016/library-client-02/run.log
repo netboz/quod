@@ -1,0 +1,16 @@
+✔ catalogue identities include anchors and instances; duplicate labels are allowed (3.368901ms)
+✔ entry rechecks navigation and reuses an already initialized world without a write (20.153361ms)
+✔ an authored agent term stays in the signed parser grammar rather than the binding reader (2.818056ms)
+✔ closing during preparation prevents initialization and a late navigation callback (6.582001ms)
+✔ a HUD refresh shares current work; a lost initializer is resolved without resubmission (11.544768ms)
+✔ closing while a form request is being signed prevents its journal and network submission (2.362875ms)
+✔ a returned foreign world or failed catalogue does not enable setup or creation (1.554891ms)
+✔ revoking a listed world before entry prevents initialization (1.665765ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60.190085

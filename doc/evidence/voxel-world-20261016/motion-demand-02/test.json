@@ -1,0 +1,14 @@
+{
+  "args": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_voxel_tests,quod_voxel_world_tests",
+    "--generator=quod_physics_tests:voxel_runtime_retains_chunks_and_applies_committed_dig_test_+voxel_missing_coverage_wakes_existing_resource_worker_test_+voxel_query_gap_preserves_registered_input_and_its_expiry_test_",
+    "--test=quod_physics_tests:terrain_coverage_wait_retains_incarnation_and_unchanged_selection_test",
+    "--verbose"
+  ],
+  "exit": 0,
+  "finished": "2026-10-16T12:34:07.264918+00:00"
+}

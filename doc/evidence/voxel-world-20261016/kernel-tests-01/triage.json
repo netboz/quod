@@ -1,0 +1,6 @@
+{
+  "failure": "resource-basis test used quod_ct:committed_kb bare engine without common primitives; call was treated as an undefined predicate",
+  "correction": "Use the production quod_committed_projection:new_est base for this test, retaining the same dependency assertions",
+  "next_campaign": "kernel-tests-02",
+  "time": "2026-10-16T11:31:05.817770+00:00"
+}

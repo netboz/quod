@@ -1,0 +1,991 @@
+--- a/src/quod_physics.erl
++++ b/src/quod_physics.erl
+@@ -162,7 +162,7 @@
+        is_integer(element(1,Centre)),is_integer(element(2,Centre)),is_integer(element(3,Centre)) ->
+     case navigation_current(S) andalso current_projection(S#s.frame,Expected) of
+         true ->
+-            case view_regions(Centre,maps:get(terrain,Expected,[]),S#s.spec) of
++            case view_regions(Centre,maps:get(terrain,Expected,[]),S) of
+                 {ok,Regions} ->
+                     Direction = quod_physics_coordinates:subtract(Centre,maps:get(terrain_centre,V,Centre)),
+                     {noreply,deliver_frame(refresh_terrain(S#s{viewer = V#{terrain_interest => Sequence,
+@@ -213,7 +213,7 @@
+         _ -> false
+     end,
+     case same_run(Old, Spec) andalso not ChangedRun andalso not ChangedFailed andalso not Cancelled of
+-        true when S#s.phase =:= coordinate, Old =:= Spec -> {noreply,S};
++        true when element(1,S#s.phase) =:= blocked, Old =:= Spec -> {noreply,S};
+         true ->
+             Phase = case S#s.phase =:= unresolved andalso Old =/= Spec of
+                 true -> activating;
+@@ -278,11 +278,9 @@
+ 
+ advance_current(S = #s{phase = {failed, _}}) -> S;
+ advance_current(S = #s{pending = P}) when P =/= none -> S;
+-advance_current(S = #s{phase = coordinate, spec = Spec}) ->
++advance_current(S = #s{phase = Phase, spec = Spec})
++  when Phase =:= active; Phase =:= coverage; element(1,Phase) =:= blocked ->
+     resume_observations(install(Spec,S));
+-advance_current(S = #s{phase = coverage, spec = Spec}) ->
+-    resume_observations(install(Spec,S));
+-advance_current(S = #s{phase = active, spec = Spec}) -> resume_observations(install(Spec, S));
+ %% The vault owns retained outer requests across incarnations. A selection
+ %% change can wake resolution; an unchanged unavailable owner does no work.
+ advance_current(S = #s{phase = unresolved}) -> S;
+@@ -359,9 +357,9 @@
+         {ok,Origin,Delta,Native,Cache} ->
+             try
+                 install_frame(Spec,Origin,Delta,Native,Cache,Restores,S,Mode)
+-            catch throw:{coordinate_error,Reason} -> coordinate_wait(Reason,S) end;
++            catch throw:{coordinate_error,Reason} -> block(Reason,S) end;
+         {error,_} when Mode =:= rebase, Targets =/= [] -> S;
+-        {error,Reason} -> coordinate_wait(Reason,S)
++        {error,Reason} -> block(Reason,S)
+     end.
+ 
+ %% A missing-terrain wait continues the original insertion input. Later
+@@ -373,7 +371,7 @@
+                      case lists:keyfind(Id,1,Bodies) of {Id,Rev,_,_,_,_} -> true; _ -> false end],
+     lists:ukeysort(1,Fresh++Pending).
+ 
+-coordinate_wait(Reason,S) -> notify({unavailable,Reason},pause_steps(S#s{phase = coordinate})).
++block(Reason,S) -> notify({unavailable,Reason},pause_steps(S#s{phase = {blocked,Reason}})).
+ coordinate_limit(#s{spec = #{limits := {_,_,_,Limit,_,_,_}}}) -> round(Limit*1000).
+ local_restore({Id,Rev,{Position,Q},Tolerance,Checks},Origin,Limit) ->
+     {Id,Rev,{local_position(Position,Origin,Limit),Q},Tolerance,Checks}.
+@@ -390,7 +388,7 @@
+     %% rebuild or reposition a retained body/joint with the same revision.
+     Geometry = {Bodies,[Row || {Row,_Restore} <- Hinges]},
+     Result = case S#s.installed_geometry =:= Geometry andalso Delta =:= {0,0,0} of
+-        true when map_size(S#s.restoring) > 0 -> {ok,{restore_coverage,0,[]}};
++        true when map_size(S#s.restoring) > 0 -> {ok,restore_pending};
+         true -> {ok,0};
+         false -> native(fun() ->
+         case quod_physics_native:install(Resource,Delta,Native) of
+@@ -406,7 +404,9 @@
+         end)
+     end,
+     case Result of
+-        {ok,{unavailable,Reason}} -> coordinate_wait(Reason,S);
++        {ok,{unavailable,Reason}} -> block(Reason,S);
++        {ok,restore_pending} ->
++            installed_frame(Spec,Origin,Cache,Restores,S,Mode,Geometry,0,restore_pending);
+         {ok,{restore_coverage,Changes,Ranges}} ->
+             installed_frame(Spec,Origin,Cache,Restores,S,Mode,Geometry,Changes,{coverage,Ranges});
+         {ok,Changes} -> installed_frame(Spec,Origin,Cache,Restores,S,Mode,Geometry,Changes,none);
+@@ -420,7 +420,11 @@
+         native_rows = Cache,restoring = case Waiting of
+             none -> #{};
+             _ -> maps:from_list([{Id,Row} || Row = {Id,_,_,_,_} <- Restores])
+-        end,phase = case S#s.phase of coordinate -> active; Phase -> Phase end,
++        end,phase = case {Waiting,S#s.phase} of
++            {none,{blocked,_}} -> active;
++            {none,Phase} -> Phase;
++            _ -> coverage
++        end,
+         revisions = maps:from_list([{Id,Rev} || {Id,Rev,_,_,_,_} <- Bodies])}),
+     AgentControls = maps:get(agent_controls, Spec, []),
+     ControlChanged = S#s.agent_controls =/= AgentControls,
+@@ -444,6 +448,7 @@
+     GuardChanged = Guard =/= S#s.installed_guard,
+     Controlled = reconcile_controller(PhysicalControls#s{agent_controls = AgentControls,inputs = Inputs,installed_guard = Guard}),
+     case {Waiting,Mode,Controlled#s.phase,Changes+ControlChanges,S#s.frame} of
++        {restore_pending,_,_,_,_} -> Controlled;
+         {{coverage,Ranges},_,_,_,_} -> hold_terrain(Ranges,Controlled);
+         {none,Reframe,active,_,_} when Reframe =:= rebase; Reframe =:= step_envelope ->
+             case native(fun() -> quod_physics_native:sample(Resource) end) of
+@@ -452,7 +457,7 @@
+             end;
+         {_,_,{failed,_},_,_} -> Controlled;
+         {_,_,coverage,0,_} -> Controlled;
+-        {none,selection,active,0,_} when S#s.phase =:= coordinate -> step_native(Controlled);
++        {none,selection,active,0,_} when element(1,S#s.phase) =:= blocked -> step_native(Controlled);
+         {_,_,_,0,none} -> notify(installed,schedule({false,[],[]},publish({false,[],[]},Controlled)));
+         {_,_,_,0,Frame} ->
+             Updated = Controlled#s{frame = Frame#{structure => maps:get(structure,Spec)}},
+@@ -552,14 +557,14 @@
+             case Next#s.phase of
+                 active when Next#s.origin =/= S#s.origin -> step_current_native(Next,Refresh);
+                 {failed,_} -> Next;
+-                coordinate -> Next;
+-                _ -> coordinate_wait(coordinate_allowance,Next)
++                {blocked,_} -> Next;
++                _ -> block(coordinate_allowance,Next)
+             end;
++        {ok,{unavailable,Reason}} -> block(Reason,S);
+         {ok, Sample} -> sample_rests(sample_hinges(schedule(Sample, publish(Sample, S#s{tick = S#s.tick + 1, steps = S#s.steps + 1, moving = element(1,Sample)}))));
+         {error, Reason} -> fail(Reason, S)
+     end.
+ 
+-request_terrain([],S) -> S;
+ request_terrain(Ranges,S) ->
+     emit_terrain(S#s{terrain_mechanical = canonical_terrain_ranges(Ranges,S)}).
+ 
+@@ -590,23 +595,53 @@
+   when Radius > 0 -> [{Body,Revision,physical_vector(Position),Radius/1000}];
+ view_consumers(_) -> [].
+ 
+-view_regions(Centre,Requests,Spec) ->
++view_regions(Centre,Requests,S = #s{spec = Spec}) ->
+     Source = maps:get(voxel_resources,Spec,#{}),
+-    try {ok,lists:usort(lists:flatmap(fun({Id,Revision,{view_distance,Distance,Prefetch,Retention},[_,_,_,_,Maximum]}) ->
++    try
++        Regions = lists:usort(lists:flatmap(fun({Id,Revision,{view_distance,Distance,Prefetch,Retention},[_,_,_,_,Maximum]}) ->
+         {Id,Revision,fixed,_,{terrain,Spacing,_},_} = lists:keyfind(Id,1,maps:get(bodies,Spec)),
+         Width = Spacing*8,
+         {Low,High} = quod_physics_coordinates:chunk_box(Centre,Distance+Prefetch,Width),
+         {KeepLow,KeepHigh} = quod_physics_coordinates:chunk_box(Centre,Distance+Retention,Width),
+         Kept = [{Id,{X,Y,Z},{X,Y,Z}} || {B,{chunk_v1,X,Y,Z}} <- maps:keys(Source),B =:= Id,
+             inside_chunk_box({X,Y,Z},KeepLow,KeepHigh),not inside_chunk_box({X,Y,Z},Low,High)],
+-        Regions = [{Id,Low,High}|Kept],
+-        Boxes = [{chunk_box,{chunk_v1,A,B,C},{chunk_v1,X,Y,Z}} || {_,{A,B,C},{X,Y,Z}} <- Regions],
++        Requested = [{Id,Low,High}|Kept],
++        Boxes = [{chunk_box,{chunk_v1,A,B,C},{chunk_v1,X,Y,Z}} || {_,{A,B,C},{X,Y,Z}} <- Requested],
+         case quod_voxel:resident_chunks([],Boxes,{chunk_limits,Maximum}) of
+-            {ok,_} -> Regions;
++            {ok,_} -> Requested;
+             {error,_} -> throw(terrain_chunk_allowance_exceeded)
+         end
+-    end,Requests))}
+-    catch throw:Reason -> {error,Reason} end.
++        end,Requests)),
++        ok = view_window(Regions,S),
++        {ok,Regions}
++    catch throw:Reason -> {error,Reason};
++          error:_ -> {error,invalid_terrain_binding} end.
++
++%% Validate the replacement visual window together with physical consumers
++%% before asking the runtime to generate it. Absolute coordinates remain
++%% unrestricted; the existing policy bounds one coherent local frame.
++view_window(Visual,S = #s{spec = Spec,terrain_mechanical = Mechanical}) ->
++    Bodies = maps:get(bodies,Spec),
++    Ranges = case Mechanical of initial -> Visual; _ -> Mechanical++Visual end,
++    Corners = lists:flatmap(fun({Id,Low,High}) ->
++        {Id,_,fixed,_,{terrain,Spacing,_},_} = lists:keyfind(Id,1,Bodies),
++        Width = Spacing*8,
++        Min = list_to_tuple([N*Width || N <- tuple_to_list(Low)]),
++        Max = list_to_tuple([(N+1)*Width || N <- tuple_to_list(High)]),
++        [Min,Max]
++    end,Ranges),
++    Widths = [Spacing*8 || {_,_,_,_,{terrain,Spacing,_},_} <- Bodies],
++    Saved = maps:from_list([{Id,P} || {Id,_,{P,_},_,_} <- restoration_inputs(Spec,S)]),
++    Points = quod_physics_coordinates:body_points(Bodies,Saved,S#s.native_rows,S#s.frame,S#s.origin),
++    Limit = coordinate_limit(S),
++    case quod_physics_coordinates:origin(Points++Corners,Widths,S#s.origin,Limit) of
++        {ok,Origin} ->
++            case quod_physics_coordinates:local(Origin,S#s.origin,2*Limit) of
++                {ok,_} -> ok;
++                {error,Reason} -> throw(Reason)
++            end;
++        {error,Reason} -> throw(Reason)
++    end.
+ 
+ inside_chunk_box(Chunk,Low,High) ->
+     lists:all(fun(K) -> N = element(K,Chunk),N >= element(K,Low) andalso N =< element(K,High) end,[1,2,3]).
+@@ -820,7 +855,7 @@
+ 
+ %% One retained sample and one outstanding delivery, with no motion queue.
+ %% A structural/run change revokes the projection even while credit is held.
+-deliver_frame(S = #s{phase = Phase}) when Phase =:= coverage; Phase =:= coordinate -> S;
++deliver_frame(S = #s{phase = Phase}) when Phase =:= coverage; element(1,Phase) =:= blocked -> S;
+ deliver_frame(S) ->
+     case navigation_current(S) of true -> deliver_current_frame(S); false -> S end.
+ deliver_current_frame(S = #s{viewer = none}) -> S;
+@@ -964,7 +999,7 @@
+ 
+ fence(#{world := W, authority := A, epoch := E, generation := G}) -> {W, A, E, G}.
+ notify(installed, S = #s{phase = {failed, _}}) -> S;
+-notify(installed, S = #s{phase = Phase}) when Phase =:= coverage; Phase =:= coordinate -> S;
++notify(installed, S = #s{phase = Phase}) when Phase =:= coverage; element(1,Phase) =:= blocked -> S;
+ notify(installed,S) ->
+     case navigation_current(S) of true -> publish_status(installed,S); false -> S end;
+ notify(Status,S) -> publish_status(Status,S).
+--- a/src/quod_physics_coordinates.erl
++++ b/src/quod_physics_coordinates.erl
+@@ -1,6 +1,6 @@
+ -module(quod_physics_coordinates).
+ -moduledoc "Exact world millimetres and bounded local simulation coordinates.".
+--export([origin/4,local/3,canonical/2,subtract/2,add/2,plan/7,regions/1,shape/3,chunk_box/3]).
++-export([origin/4,local/3,canonical/2,subtract/2,add/2,plan/7,body_points/5,regions/1,shape/3,chunk_box/3]).
+ 
+ chunk_box(Centre,Radius,Width) ->
+     {list_to_tuple([floor_div(N-Radius,Width) || N <- tuple_to_list(Centre)]),
+@@ -63,23 +63,8 @@
+ plan(Bodies,Restores,Previous,Frame,Current,Limit,Targets) ->
+     try
+         Saved = maps:from_list([{Id,Position} || {Id,_,{Position,_},_,_} <- Restores]),
+-        Poses = case Frame of none -> #{};
+-            #{poses := Rows} -> maps:from_list([{Id,P} || {Id,_,world,P,_,_} <- Rows]) end,
+-        {Points,Widths} = lists:foldl(fun(Row = {Id,_,_,{world_mm,P,_},Shape,_},{Ps,Ws}) ->
+-            case Shape of
+-                {terrain,Spacing,Chunks} ->
+-                    Width = Spacing*8,
+-                    Corners = lists:flatmap(fun({C,_}) -> [C,add(C,{Width,Width,Width})] end,Chunks),
+-                    {Corners++Ps,[Width|Ws]};
+-                _ ->
+-                    Point = case {maps:get(Id,Previous,none),maps:find(Id,Poses)} of
+-                        {{Row,_},{ok,Local}} -> canonical(Local,Current);
+-                        {{Row,_},error} -> maps:get(Id,Saved,P);
+-                        _ -> maps:get(Id,Saved,P)
+-                    end,
+-                    {[add(Point,{-1,-1,-1}),add(Point,{1,1,1})|Ps],Ws}
+-            end
+-        end,{[],[]},Bodies),
++        {TerrainPoints,Widths} = regions([Shape || {_,_,_,_,Shape,_} <- Bodies]),
++        Points = body_points(Bodies,Saved,Previous,Frame,Current)++TerrainPoints,
+         %% The old lattice alignment is also needed while translating retained
+         %% pieces, even when this installation replaces their specification.
+         OldWidths = [S*8 || {_,{_,_,_,_,{terrain,S,_},_}} <- maps:values(Previous)],
+@@ -103,6 +88,21 @@
+ checked({error,Reason}) -> throw({coordinate_error,Reason});
+ checked(Result) -> Result.
+ 
++%% Both installation and prospective viewer demand use current retained poses;
++%% an authored insertion baseline cannot move the numerical window backwards.
++body_points(Bodies,Saved,Previous,Frame,Current) ->
++    Poses = case Frame of none -> #{};
++        #{poses := Rows} -> maps:from_list([{Id,P} || {Id,_,world,P,_,_} <- Rows]) end,
++    lists:flatmap(fun
++        ({_,_,_,_,{terrain,_,_},_}) -> [];
++        (Row = {Id,_,_,{world_mm,P,_},_,_}) ->
++            Point = case {maps:get(Id,Previous,none),maps:find(Id,Poses)} of
++                {{Row,_},{ok,Local}} -> canonical(Local,Current);
++                _ -> maps:get(Id,Saved,P)
++            end,
++            [add(Point,{-1,-1,-1}),add(Point,{1,1,1})]
++    end,Bodies).
++
+ 
+ regions(Shapes) ->
+     lists:foldl(fun
+--- a/native/quod_physics/src/lib.rs
++++ b/native/quod_physics/src/lib.rs
+@@ -7,7 +7,7 @@
+ mod origin;
+ use geometry::{Geometry, Kind, Transform};
+ use rustler::{Atom, Encoder, Env, LocalPid, NifResult, ResourceArc, Term};
+-use std::collections::{BTreeMap, BTreeSet};
++use std::collections::{BTreeMap, BTreeSet, HashSet};
+ use std::panic::{catch_unwind, AssertUnwindSafe};
+ use std::sync::{Mutex, TryLockError};
+ 
+@@ -48,7 +48,7 @@
+ mod atoms {
+     rustler::atoms! { ok, busy, retired, wrong_owner, native_failure, invalid_body,
+     body_allowance, pose_allowance, contact_allowance, invalid_allowance,
+-    coordinate_allowance, invalid_step, invalid_gravity, non_finite_state, stale_revision, invalid_hinge, geometry_allowance, invalid_checkpoint, unavailable, terrain_coverage }
++    coordinate_allowance, invalid_step, invalid_gravity, non_finite_state, stale_revision, invalid_hinge, geometry_allowance, invalid_checkpoint, unavailable, terrain_coverage, terrain_occupied, terrain_unavailable }
+ }
+ 
+ #[derive(Debug,PartialEq)]
+@@ -65,13 +65,18 @@
+ type Rest = (u64, u64, (geometry::V3, (f64,f64,f64,f64)), f64, usize);
+ type Sample = (bool, Vec<Pose>, Vec<(u64, u64)>);
+ #[derive(Debug,PartialEq)]
+-enum Step { Sample(Sample), Coverage(Vec<terrain::Requirement>), Frame(Vec<(geometry::V3,geometry::V3)>) }
++enum Step {
++    Sample(Sample), Coverage(Vec<terrain::Requirement>), Frame(Vec<(geometry::V3,geometry::V3)>),
++    Occupied(u64,u64), Indeterminate(u64),
++}
+ impl Encoder for Step {
+     fn encode<'a>(&self,env:Env<'a>) -> Term<'a> {
+         match self {
+             Self::Sample(sample) => sample.encode(env),
+             Self::Coverage(ranges) => (atoms::unavailable(),(atoms::terrain_coverage(),ranges)).encode(env),
+             Self::Frame(bounds) => (atoms::unavailable(),(atoms::coordinate_allowance(),bounds)).encode(env),
++            Self::Occupied(body,terrain) => (atoms::unavailable(),(atoms::terrain_occupied(),body,terrain)).encode(env),
++            Self::Indeterminate(body) => (atoms::unavailable(),(atoms::terrain_unavailable(),body)).encode(env),
+         }
+     }
+ }
+@@ -131,6 +136,8 @@
+     soft: SoftBodySet,
+     rows: BTreeMap<u64, (Body, RigidBodyHandle)>,
+     terrain: BTreeMap<u64,BTreeMap<voxel::Point,terrain::Installed>>,
++    // New body geometry and authored pose changes awaiting terrain admission.
++    body_admission: HashSet<ColliderHandle>,
+     hinges: BTreeMap<u64, InstalledHinge>,
+     limits: Limits,
+     dt: f64,
+@@ -171,6 +178,7 @@
+             soft: SoftBodySet::new(),
+             rows: BTreeMap::new(),
+             terrain: BTreeMap::new(),
++            body_admission: HashSet::new(),
+             hinges: BTreeMap::new(),
+             limits,
+             dt,
+@@ -219,7 +227,7 @@
+         for id in removed { self.remove(id); }
+         for (row,pose,shape) in prepared {
+             let id = row.0;
+-            if shape.is_none() { geometry_changed |= self.install_terrain(row); continue; }
++            if shape.is_none() { geometry_changed |= self.install_terrain(row)?; continue; }
+             geometry_changed = true;
+             self.remove(id);
+             let builder = match row.2 {
+@@ -228,8 +236,9 @@
+                 Kind::Controlled => RigidBodyBuilder::kinematic_position_based(),
+             };
+             let body = self.bodies.insert(builder.pose(pose));
+-            self.colliders.insert_with_parent(ColliderBuilder::new(shape.unwrap())
++            let collider = self.colliders.insert_with_parent(ColliderBuilder::new(shape.unwrap())
+                 .density(row.5).user_data(id as u128),body,&mut self.bodies);
++            self.body_admission.insert(collider);
+             self.rows.insert(id,(row,body));
+         }
+         self.changed |= changes != 0;
+@@ -261,7 +270,7 @@
+         let mut ranges = Vec::new();
+         for (handle,pose) in &prepared {
+             let shape = self.colliders[self.bodies[*handle].colliders()[0]].shape();
+-            if let Some(required) = self.terrain_query_coverage(shape.compute_aabb(pose)) {
++            if let Some(required) = self.terrain_query_coverage(shape.compute_aabb(pose))? {
+                 missing = true; ranges.extend(required);
+             }
+         }
+@@ -396,6 +405,7 @@
+             self.bodies[moving].set_rotation(rotation, true);
+             self.bodies[moving].set_linvel(Vector::ZERO, true);
+             self.bodies[moving].set_angvel(Vector::ZERO, true);
++            self.body_admission.extend(self.bodies[moving].colliders());
+             let handle = self.impulse.insert(fixed, moving, joint, true);
+             self.hinges.insert(row.moving.0, InstalledHinge {
+                 row, handle, moving, fixed, command: JointCommand::Hold,
+@@ -492,6 +502,7 @@
+     fn remove(&mut self, id: u64) {
+         self.terrain.remove(&id);
+         if let Some((_, handle)) = self.rows.remove(&id) {
++            for c in self.bodies[handle].colliders() { self.body_admission.remove(c); }
+             self.bodies.remove(
+                 handle,
+                 &mut self.islands,
+@@ -527,7 +538,7 @@
+             return Ok(Step::Frame(regions.iter().map(|r|
+                 ((r.mins.x,r.mins.y,r.mins.z),(r.maxs.x,r.maxs.y,r.maxs.z))).collect()));
+         }
+-        if let Err(ranges) = self.terrain_step_coverage(&parameters,&regions) { return Ok(Step::Coverage(ranges)); }
++        if let Some(blocked) = self.terrain_step(&parameters,&regions)? { return Ok(blocked); }
+         self.pipeline.step(
+             Vector::new(0.0, self.gravity, 0.0),
+             &parameters,
+@@ -549,6 +560,10 @@
+             return Err(atoms::non_finite_state());
+         }
+         self.changed = false;
++        self.body_admission.clear();
++        for chunks in self.terrain.values_mut() {
++            for chunk in chunks.values_mut() { chunk.admission = None; }
++        }
+         self.query_ready = true;
+         self.brake_hinges()?;
+         self.sample().map(Step::Sample)
+--- a/native/quod_physics/src/terrain.rs
++++ b/native/quod_physics/src/terrain.rs
+@@ -1,5 +1,5 @@
+ //! Chunk retention and coverage inside the existing physical-world owner.
+-use crate::{atoms,geometry::{Geometry,Kind,TerrainChunk},Body,World};
++use crate::{atoms,geometry::{Geometry,Kind,TerrainChunk},voxel::{chunk::Shared,Mesh,Point,Triangle},Body,Step,World};
+ use rapier3d::{math::Pose,parry::{bounding_volume::{Aabb,BoundingVolume},query},prelude::*};
+ use rustler::Atom;
+ use std::collections::{BTreeMap,BTreeSet};
+@@ -7,6 +7,39 @@
+ pub(super) struct Installed {
+     pub chunk: TerrainChunk,
+     pub collider: Option<ColliderHandle>,
++    pub admission: Option<Admission>,
++}
++
++pub(super) enum Admission {
++    Whole,
++    Changed { baseline: Shared, surface: Option<SharedShape> },
++}
++
++// Compare exact oriented faces, not collider identity. Rebuilding a chunk
++// cannot turn its unchanged contact surfaces into new authored obstruction.
++// The baseline survives replacements until the next successful integration.
++fn triangle_key(mesh:&Mesh,(a,b,c):Triangle) -> [Point;3] {
++    let (a,b,c) = (mesh.0[a as usize],mesh.0[b as usize],mesh.0[c as usize]);
++    [a,b,c].min([b,c,a]).min([c,a,b])
++}
++
++fn admission(old:Option<&Installed>,new:&Shared) -> Result<Admission,Atom> {
++    let baseline = old.and_then(|old| match &old.admission {
++        Some(Admission::Whole) => None,
++        Some(Admission::Changed {baseline,..}) => Some(baseline.clone()),
++        None => Some(old.chunk.prepared.clone()),
++    });
++    let Some(baseline) = baseline else { return Ok(Admission::Whole); };
++    let before = &baseline.generated.mesh;
++    let after = &new.generated.mesh;
++    let kept:BTreeSet<_> = before.1.iter().map(|t| triangle_key(before,*t)).collect();
++    let faces:Vec<_> = after.1.iter().filter(|t| !kept.contains(&triangle_key(after,**t)))
++        .map(|&(a,b,c)| [a,b,c]).collect();
++    let surface = if faces.is_empty() { None } else {
++        let points = after.0.iter().map(|&(x,y,z)| Vector::new(x as f64/1000.0,y as f64/1000.0,z as f64/1000.0)).collect();
++        Some(SharedShape::trimesh(points,faces).map_err(|_| atoms::invalid_body())?)
++    };
++    Ok(Admission::Changed {baseline,surface})
+ }
+ 
+ // Inclusive cell-chunk ranges. The ontology owns enumeration/allocation;
+@@ -32,7 +65,7 @@
+ }
+ 
+ impl World {
+-    pub(super) fn install_terrain(&mut self,row:Body) -> bool {
++    pub(super) fn install_terrain(&mut self,row:Body) -> Result<bool,Atom> {
+         let mut geometry_changed = false;
+         let id = row.0;
+         if !self.terrain.contains_key(&id) { self.remove(id); }
+@@ -49,13 +82,14 @@
+                 continue;
+             }
+             geometry_changed = true;
++            let admission = Some(admission(previous.get(&c.origin),&c.prepared)?);
+             let collider = c.prepared.shape.as_ref().map(|shape| {
+                 let (x,y,z) = c.origin;
+                 self.colliders.insert_with_parent(ColliderBuilder::new(shape.clone())
+                     .translation(Vector::new(x as f64/1000.0,y as f64/1000.0,z as f64/1000.0))
+                     .density(row.5).user_data(id as u128),handle,&mut self.bodies)
+             });
+-            installed.insert(c.origin,Installed { chunk:c.clone(),collider });
++            installed.insert(c.origin,Installed { chunk:c.clone(),collider,admission });
+         }
+         geometry_changed |= !previous.is_empty();
+         for (_,old) in previous {
+@@ -65,7 +99,7 @@
+         }
+         self.terrain.insert(id,installed);
+         self.rows.insert(id,(row,handle));
+-        geometry_changed
++        Ok(geometry_changed)
+     }
+ 
+     /// A queried/swept box needs every intersected cell chunk, including known
+@@ -138,17 +172,17 @@
+         Ok(regions)
+     }
+ 
+-    fn terrain_requests(&self,regions:&[Aabb]) -> Vec<Requirement> {
++    fn terrain_requests(&self,regions:&[Aabb]) -> Result<Vec<Requirement>,Atom> {
+         let mut requests = Vec::new();
+         for id in self.terrain.keys() {
+-            let Geometry::Terrain(spacing,_) = self.rows[id].0.4 else { return vec![]; };
++            let Geometry::Terrain(spacing,_) = self.rows[id].0.4 else { return Err(atoms::invalid_body()); };
+             for bounds in regions {
+-                let Some((low,high)) = range(*bounds,spacing as i64*8) else { return vec![]; };
++                let (low,high) = range(*bounds,spacing as i64*8).ok_or_else(atoms::non_finite_state)?;
+                 requests.push((*id,(low[0],low[1],low[2]),(high[0],high[1],high[2])));
+             }
+         }
+         requests.sort_unstable(); requests.dedup();
+-        requests
++        Ok(requests)
+     }
+ 
+     pub(super) fn terrain_requirements(&self,views:Vec<(u64,u64,crate::geometry::V3,f64)>) -> Result<Vec<Requirement>,Atom> {
+@@ -163,47 +197,60 @@
+                 crate::geometry::vector(local,self.limits.3).map_err(|_| atoms::invalid_body())?);
+             regions.push(Aabb::from_half_extents(point,Vector::splat(radius)));
+         }
+-        Ok(self.terrain_requests(&regions))
+-    }
+-
+-    pub(super) fn terrain_query_coverage(&self,bounds:Aabb) -> Option<Vec<Requirement>> {
+-        if self.terrain_coverage(bounds) { return None; }
++        self.terrain_requests(&regions)
++    }
++
++    pub(super) fn terrain_query_coverage(&self,bounds:Aabb) -> Result<Option<Vec<Requirement>>,Atom> {
++        if self.terrain_coverage(bounds) { return Ok(None); }
+         let parameters = IntegrationParameters { dt:self.dt,..Default::default() };
+-        let Ok(mut regions) = self.step_regions(&parameters) else { return Some(vec![]); };
++        let mut regions = self.step_regions(&parameters).map_err(|_| atoms::non_finite_state())?;
+         regions.push(bounds);
+-        Some(self.terrain_requests(&regions))
+-    }
+-
+-    pub(super) fn terrain_step_coverage(&self,parameters:&IntegrationParameters,regions:&[Aabb]) -> Result<(),Vec<Requirement>> {
+-        if self.terrain.is_empty() { return Ok(()); }
++        self.terrain_requests(&regions).map(Some)
++    }
++
++    pub(super) fn terrain_step(&self,parameters:&IntegrationParameters,regions:&[Aabb]) -> Result<Option<Step>,Atom> {
++        if self.terrain.is_empty() { return Ok(None); }
+         if regions.iter().any(|bounds| !self.terrain_coverage(*bounds)) {
+-            return Err(self.terrain_requests(regions));
+-        }
+-        for (_,handle) in self.rows.values().filter(|(row,_)| row.2 != Kind::Fixed) {
++            return Ok(Some(Step::Coverage(self.terrain_requests(regions)?)));
++        }
++        for (row,handle) in self.rows.values().filter(|(row,_)| row.2 != Kind::Fixed) {
+             let body = &self.bodies[*handle];
+-            let shape = self.colliders[body.colliders()[0]].shape();
+-            if self.terrain_occupied(shape,body.position()) != Ok(None) { return Err(vec![]); }
+-            // A point outside rock does not prove that the body's volume is
+-            // clear. Use the installed surface, with the same numerical contact
+-            // tolerance the existing solver admits. Signed placement queries
+-            // still apply their separately authored, possibly tighter tolerance.
++            let collider = body.colliders()[0];
++            let shape = self.colliders[collider].shape();
++            match self.terrain_occupied(shape,body.position()) {
++                Ok(Some(id)) => return Ok(Some(Step::Occupied(row.0,id))),
++                Err(()) => return Ok(Some(Step::Indeterminate(row.0))),
++                Ok(None) => (),
++            }
++            // Admit authored geometry/pose changes against the surface before
++            // integration. Unchanged surfaces are already under the solver: its
++            // contact error is a correction target, not a hard penetration cap.
++            // Interior classification above remains required on every step.
+             let bounds = shape.compute_aabb(body.position());
+-            for chunks in self.terrain.values() {
++            for (terrain,chunks) in &self.terrain {
+                 for chunk in chunks.values() {
+                     let Some(handle) = chunk.collider else { continue; };
+                     let other = &self.colliders[handle];
++                    let surface = if self.body_admission.contains(&collider) { other.shape() } else {
++                        match &chunk.admission {
++                            Some(Admission::Whole) => other.shape(),
++                            Some(Admission::Changed {surface:Some(surface),..}) => surface.as_ref(),
++                            _ => continue,
++                        }
++                    };
+                     let parent = other.parent().unwrap();
+                     let pose = *self.bodies[parent].position()*other.position_wrt_parent().copied().unwrap_or_default();
+-                    if !bounds.intersects(&other.shape().compute_aabb(&pose)) { continue; }
+-                    match query::contact(body.position(),shape,&pose,other.shape(),0.0) {
+-                        Ok(Some(contact)) if contact.dist < -parameters.allowed_linear_error() => return Err(vec![]),
+-                        Err(_) => return Err(vec![]),
++                    if !bounds.intersects(&surface.compute_aabb(&pose)) { continue; }
++                    match query::contact(body.position(),shape,&pose,surface,0.0) {
++                        Ok(Some(contact)) if contact.dist < -parameters.allowed_linear_error() =>
++                            return Ok(Some(Step::Occupied(row.0,*terrain))),
++                        Err(_) => return Ok(Some(Step::Indeterminate(row.0))),
+                         _ => (),
+                     }
+                 }
+             }
+         }
+-        Ok(())
++        Ok(None)
+     }
+ }
+ 
+@@ -287,7 +334,7 @@
+         assert_eq!(w.terrain_point(Vector::new(2.0,1.0,2.0)),Ok(None));
+         let handle = w.rows[&1].1;
+         let pose = *w.bodies[handle].position();
+-        assert_eq!(w.step(),Ok(crate::Step::Coverage(vec![])));
++        assert_eq!(w.step(),Ok(crate::Step::Occupied(1,0)));
+         assert_eq!(*w.bodies[handle].position(),pose);
+         assert!(!w.query_ready);
+     }
+@@ -305,6 +352,103 @@
+         let actor = &w.bodies[w.rows[&1].1];
+         assert!(actor.translation().y > 0.99 && actor.translation().y < 1.01);
+         assert!(actor.is_sleeping());
++    }
++
++    #[test]
++    fn stacked_dynamic_bodies_keep_stepping_over_terrain() {
++        let mut w = world();
++        let mut chunks = Vec::new();
++        for z in -2..=2 { for y in -2..=2 { for x in -2..=2 {
++            let field = prepared(|i| if (i/11%11) as i64-1+y*8 < 2 {-127} else {127});
++            chunks.push(piece((x*4000,y*4000,z*4000),&field));
++        } } }
++        let mut lower = body(Kind::Dynamic,(2.0,1.5,2.0));
++        lower.4 = Geometry::Solid(Primitive::Box(0.4,0.4,0.4));
++        let mut upper = lower.clone(); upper.0 = 2; upper.3.0.1 = 3.0; upper.5 = 100.0;
++        w.install(vec![terrain(1,chunks),lower,upper],(0,0,0)).unwrap();
++        for tick in 0..600 {
++            if tick == 17 || tick == 400 {
++                let field = prepared(|i| if i/11%11 < 3 &&
++                    !(i/11%11 == 2 && i/121 == 8 && (i%11 == 8 || tick == 400 && i%11 == 7)) {-127} else {127});
++                let mut rows:Vec<Body> = w.rows.values().map(|(r,_)| r.clone()).collect();
++                rows[0].1 += 1;
++                let Geometry::Terrain(_,chunks) = &mut rows[0].4 else { unreachable!() };
++                *chunks.iter_mut().find(|c| c.origin == (0,0,0)).unwrap() = piece((0,0,0),&field);
++                w.install(rows,(0,0,0)).unwrap();
++                let actor = &w.bodies[w.rows[&1].1];
++                let ground = &w.colliders[w.terrain[&0][&(0,0,0)].collider.unwrap()];
++                let contact = query::contact(actor.position(),w.colliders[actor.colliders()[0]].shape(),
++                    ground.position(),ground.shape(),0.02).unwrap().unwrap();
++                eprintln!("same-chunk edit at tick {tick}: penetration {} mm",(-contact.dist*1000.0).max(0.0));
++                if tick == 17 { assert!(contact.dist < -IntegrationParameters::default().allowed_linear_error()); }
++            }
++            if tick == 20 {
++                // Residency changing elsewhere must not re-admit established
++                // solver contacts as though the bodies had just been inserted.
++                let mut rows:Vec<Body> = w.rows.values().map(|(r,_)| r.clone()).collect();
++                let Geometry::Terrain(_,chunks) = &mut rows[0].4 else { unreachable!() };
++                chunks.push(piece((12000,0,0),&prepared(|i| if i/11%11 < 3 {-127} else {127})));
++                w.install(rows,(0,0,0)).unwrap();
++            }
++            if tick == 200 { assert!(w.push_body(2,1,(1.0,0.0,0.0),10.0)); }
++            let result = w.step();
++            assert!(matches!(result,Ok(crate::Step::Sample(_))),"tick {tick}: {result:?}; lower {:?}; upper {:?}",
++                w.bodies[w.rows[&1].1].translation(),w.bodies[w.rows[&2].1].translation());
++        }
++        for id in [1,2] {
++            let actor = &w.bodies[w.rows[&id].1];
++            let bottom = w.colliders[actor.colliders()[0]].shape().compute_aabb(actor.position()).mins.y;
++            eprintln!("settled body {id}: centre {:?}, lowest point {bottom}",actor.translation());
++            assert!(bottom >= 0.75-IntegrationParameters::default().allowed_linear_error());
++            assert!(actor.is_sleeping());
++        }
++        // Existing contact with this chunk cannot exempt newly added rock.
++        let filled = prepared(|i| if i/11%11 < 3 {-127}
++            else if i/11%11 == 3 && (3..=7).contains(&(i%11)) && (3..=7).contains(&(i/121)) {1}
++            else {127});
++        let mut rows:Vec<Body> = w.rows.values().map(|(r,_)| r.clone()).collect();
++        rows[0].1 += 1;
++        let Geometry::Terrain(_,chunks) = &mut rows[0].4 else { unreachable!() };
++        *chunks.iter_mut().find(|c| c.origin == (0,0,0)).unwrap() = piece((0,0,0),&filled);
++        let handle = w.rows[&1].1;
++        let before = *w.bodies[handle].position();
++        w.install(rows,(0,0,0)).unwrap();
++        assert_eq!(w.terrain_point(w.bodies[handle].center_of_mass()),Ok(None));
++        assert_eq!(w.step(),Ok(crate::Step::Occupied(1,0)));
++        assert_eq!(*w.bodies[handle].position(),before);
++    }
++
++    #[test]
++    fn new_terrain_checks_a_retained_body_before_integration() {
++        let air = prepared(|_| 127);
++        let ground = prepared(|i| if i/11%11 < 5 {-127} else {127});
++        let mut w = world();
++        let mut actor = body(Kind::Controlled,(2.0,2.0,2.0));
++        actor.4 = Geometry::Solid(Primitive::Ball(0.5));
++        w.install(vec![terrain(1,vec![piece((0,0,0),&air)]),actor.clone()],(0,0,0)).unwrap();
++        w.step().unwrap();
++        let handle = w.rows[&1].1;
++        let pose = *w.bodies[handle].position();
++        // Centre remains air, but the sphere crosses the newly installed face.
++        w.install(vec![terrain(2,vec![piece((0,0,0),&ground)]),actor.clone()],(0,0,0)).unwrap();
++        assert_eq!(w.rows[&1].1,handle);
++        assert_eq!(w.terrain_point(Vector::new(2.0,2.0,2.0)),Ok(None));
++        assert_eq!(w.step(),Ok(crate::Step::Occupied(1,0)));
++        assert_eq!(*w.bodies[w.rows[&1].1].position(),pose);
++        let edited = prepared(|i| if i/11%11 < 5 && !(i%11 == 8 && i/121 == 8 && i/11%11 == 2) {-127} else {127});
++        w.install(vec![terrain(3,vec![piece((0,0,0),&edited)]),actor.clone()],(0,0,0)).unwrap();
++        // An unintegrated replacement cannot become the admission baseline.
++        assert_eq!(w.step(),Ok(crate::Step::Occupied(1,0)));
++        w.install(vec![terrain(4,vec![piece((0,0,0),&air)]),actor.clone()],(0,0,0)).unwrap();
++        assert!(matches!(w.step(),Ok(crate::Step::Sample(_))));
++        assert_eq!(w.rows[&1].1,handle);
++        let floor = terrain(5,vec![piece((0,0,0),&prepared(|i| if i/11%11 < 3 {-127} else {127}))]);
++        w.install(vec![floor.clone(),actor.clone()],(0,0,0)).unwrap();
++        assert!(matches!(w.step(),Ok(crate::Step::Sample(_))));
++        actor.1 = 2; actor.3.0.1 = 1.0;
++        w.install(vec![floor,actor],(0,0,0)).unwrap();
++        // New bodies/poses still check the complete unchanged terrain surface.
++        assert_eq!(w.step(),Ok(crate::Step::Occupied(1,0)));
+     }
+ 
+     #[test]
+--- a/native/quod_physics/src/motion.rs
++++ b/native/quod_physics/src/motion.rs
+@@ -61,7 +61,7 @@
+     }
+ 
+     fn occupied(&mut self, pose: Pose) -> Result<Option<u64>,Answer> {
+-        if let Some(ranges) = self.world.terrain_query_coverage(self.shape.compute_aabb(&pose)) {
++        if let Some(ranges) = self.world.terrain_query_coverage(self.shape.compute_aabb(&pose)).map_err(|_| Answer::Unavailable)? {
+             return Err(Answer::TerrainCoverage(ranges));
+         }
+         let parts = self.shape.as_compound().map_or(1,|c| c.shapes().len());
+@@ -94,7 +94,7 @@
+             Aabb::from_half_extents(pose.translation,Vector::splat(radius))
+                 .merged(&Aabb::from_half_extents(pose.translation+travel,Vector::splat(radius)))
+         }.loosened(skin);
+-        if let Some(ranges) = self.world.terrain_query_coverage(bounds) {
++        if let Some(ranges) = self.world.terrain_query_coverage(bounds).map_err(|_| Answer::Unavailable)? {
+             return Err(Answer::TerrainCoverage(ranges));
+         }
+         let pipeline = self.query;
+@@ -173,7 +173,7 @@
+             if !radius.is_finite() || radius <= 0.0 || radius > world.limits.3 { return Err(Answer::Invalid); }
+             let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
+             let point = pose.transform_point(local);
+-            if let Some(ranges) = world.terrain_query_coverage(Aabb::from_half_extents(point,Vector::splat(radius))) {
++            if let Some(ranges) = world.terrain_query_coverage(Aabb::from_half_extents(point,Vector::splat(radius))).map_err(|_| Answer::Unavailable)? {
+                 return Err(Answer::TerrainCoverage(ranges));
+             }
+             for _ in 0..world.terrain.len() { space.charge()?; }
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -3550,14 +3550,14 @@
+                 receive {physics_status,Pid,_,Token,{unavailable,coordinate_allowance}} -> ok
+                 after 5000 -> error(coordinate_refusal_missing) end,
+                 Before = gen_server:call(Pid,status),
+-                ?assertMatch(#{phase := coordinate,incarnation := Token,steps := 0},Before),
++                ?assertMatch(#{phase := {blocked,coordinate_allowance},incarnation := Token,steps := 0},Before),
+                 lists:foreach(fun(Next) ->
+                     Selection = make_ref(), Pid ! {physics_selected,self(),Selection,Next},
+                     receive {physics_selection_applied,Pid,_,Selection} -> ok after 5000 -> error(selection_missing) end,
+                     ?assertEqual(Before,gen_server:call(Pid,status))
+                 end,[Current,Current#{budget => 6000}])
+         end,
+-        receive {physics_work,Pid,_,_,activate,_,_} -> error(coordinate_wait_restarted_world)
++        receive {physics_work,Pid,_,_,activate,_,_} -> error(coordinate_refusal_restarted_world)
+         after 0 -> ok end
+     end) end} || Outcome <- [rebase,refuse]].
+ 
+@@ -5299,6 +5299,111 @@
+         ?assertEqual(Height,quod_prolog:applied(Ns))
+     end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,1},[]) end}.
+ 
++voxel_camera_interest_refuses_an_incoherent_window_before_generation_test_() ->
++    Occupant = {physics_body_definition,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}},
++    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,
++                                            socket := Socket,projection := Projection}) ->
++        Height = quod_prolog:applied(Ns),
++        Before = gen_server:call(Pid,status),
++        ?assertMatch(#{phase := active,navigation_ready := true},Before),
++        assert_no_physics_io(fun() ->
++            socket_command(Socket,#{type => terrain_interest,view => maps:get(<<"view">>,Projection),
++                sequence => <<"1">>,centre_mm => [<<"4000000">>,<<"2000">>,<<"2000">>]}),
++            Refused = simulation_reply(Socket,<<"unavailable">>),
++            ?assertEqual(<<"coordinate_allowance">>,maps:get(<<"reason">>,Refused)),
++            ?assertEqual(Before,gen_server:call(Pid,status)),reconcile(Ns)
++        end),
++        ?assertEqual(Height,quod_prolog:applied(Ns))
++    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,64},[Occupant]) end}.
++
++voxel_camera_interest_admits_a_coherent_rebase_test_() ->
++    Occupant = {physics_body_definition,room,7,2,controlled,{vector,2000,2000,2000},{owned,{ball,250},1}},
++    {timeout,90,fun() -> with_voxel_view(fun(#{namespace := Ns,physics := Pid,world := World,
++                                            socket := Socket,projection := Projection}) ->
++        View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
++        Height = quod_prolog:applied(Ns), Before = gen_server:call(Pid,status),
++        %% Outside the current local allowance, but inside a valid joint window
++        %% after rebasing. The observer need not have its own controlled body.
++        socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
++            centre_mm => [<<"1500000">>,<<"2000">>,<<"2000">>]}),
++        socket_command(Socket,#{type => ack,view => View,tick => maps:get(<<"tick">>,Frame),
++            origin_seq => maps:get(<<"origin_seq">>,Frame)}),
++        Manifest = consume_terrain_manifest(Socket,View,1),
++        ?assertEqual(8,length(maps:get(<<"chunks">>,Manifest))),
++        After = gen_server:call(Pid,status),
++        ?assertMatch(#{phase := active,navigation_ready := true},After),
++        ?assertEqual(maps:get(incarnation,Before),maps:get(incarnation,After)),
++        #{World := #{spec := Spec}} = worlds(Ns),
++        Expected = #{fence => quod_physics:fence(Spec),structure => maps:get(structure,Spec),
++                     incarnation => maps:get(incarnation,After)},
++        {ok,_,Origin,{7,2,world,Local,_,_}} = quod_physics:body_state(Pid,Expected,{7,2},1000),
++        ?assert(element(1,Origin) > 0),
++        ?assertEqual({2000,2000,2000},quod_physics_coordinates:canonical(Local,Origin)),
++        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end),
++        ?assertEqual(Height,quod_prolog:applied(Ns))
++    end,{view_distance,1000,1000,2000},{resources,1000000,2000000,20000,10000,64},[Occupant]) end}.
++
++voxel_obstruction_reports_the_body_and_recovers_in_place_test_() ->
++    [{atom_to_list(Correction),{timeout,30,fun() ->
++        Limits = {prepare_limits,{sampling_limits,1331,100000,100000,3993},
++                  {surface_limits,512,10000,10000},69120,500000},
++        Field = {field_v1,1,500,[{plane,1000}],9},
++        {ok,{Artifact = #{handle := Handle},generated}} =
++            quod_voxel:prepare(Field,{chunk_v1,0,0,0},[],Limits,none),
++        with_simulator(none,fun(Pid,Spec) ->
++            {Activation,Token} = receive
++                {physics_work,Pid,_,Act,activate,{{physics_activate,room,0,T},_,_},_} -> {Act,T}
++            after 5000 -> error(activation_missing) end,
++            Terrain = {0,1,fixed,{world_mm,{0,0,0},{0.0,0.0,0.0}},
++                       {terrain,500,[{{0,0,0},Handle}]},1.0},
++            Body = {1,1,controlled,{world_mm,{2000,500,2000},{0.0,0.0,0.0}},
++                    {solid,{ball,0.25}},1.0},
++            Current = Spec#{generation => 1,run_token => Token,
++                custody => {request,Token,0,<<2>>,<<0:512>>},
++                limits => {2,2,8,1000.0,2,10000,10000},dt => 1/60,gravity => 0.0,
++                structure => 1,activities => #{},bodies => [Terrain,Body],
++                voxel_resources => #{{0,{chunk_v1,0,0,0}} => Artifact}},
++            Pid ! {physics_selected,self(),make_ref(),Current},
++            Pid ! {physics_result,self(),Activation,{ok,ignored,{normalized,{committed,ignored,ignored}}}},
++            receive {physics_status,Pid,_,Token,{unavailable,{terrain_occupied,1,0}}} -> ok
++            after 5000 -> error(obstruction_notice_missing) end,
++            Before = gen_server:call(Pid,status),
++            ?assertMatch(#{phase := {blocked,{terrain_occupied,1,0}},steps := 0,
++                          navigation_ready := false},Before),
++            assert_no_physics_io(fun() ->
++                Pid ! {physics_selected,self(),make_ref(),Current},
++                ?assertEqual(Before,gen_server:call(Pid,status))
++            end),
++            {Updated,Position} = case Correction of
++                body ->
++                    Clear = setelement(4,setelement(2,Body,2),{world_mm,{2000,2000,2000},{0.0,0.0,0.0}}),
++                    {Current#{bodies => [Terrain,Clear]},{2000,2000,2000}};
++                terrain ->
++                    {ok,{Air = #{handle := AirHandle},generated}} =
++                        quod_voxel:prepare({field_v1,1,500,[{plane,-1000}],9},{chunk_v1,0,0,0},[],Limits,none),
++                    Dug = setelement(5,setelement(2,Terrain,2),{terrain,500,[{{0,0,0},AirHandle}]}),
++                    {Current#{bodies => [Dug,Body],voxel_resources => #{{0,{chunk_v1,0,0,0}} => Air}},
++                     {2000,500,2000}}
++            end,
++            Pid ! {physics_selected,self(),make_ref(),Updated},
++            receive {physics_status,Pid,_,Token,installed} -> ok after 5000 -> error(corrected_install_missing) end,
++            ?assertMatch(#{phase := active,incarnation := Token,navigation_ready := true},gen_server:call(Pid,status)),
++            Revision = case Correction of body -> 2; terrain -> 1 end,
++            Expected = #{fence => quod_physics:fence(Updated),structure => 1,incarnation => Token},
++            {ok,_,Origin,{1,Revision,world,Local,_,_}} = quod_physics:body_state(Pid,Expected,{1,Revision},1000),
++            ?assertEqual(Position,quod_physics_coordinates:canonical(Local,Origin)),
++            BadBinding = Expected#{terrain => [{99,1,{view_distance,1000,1000,2000},
++                                               [1000000,2000000,20000,10000,64]}]},
++            {ok,ViewRef,_} = quod_physics:watch(Pid,BadBinding,none),
++            assert_no_physics_io(fun() ->
++                quod_physics:view_interest(Pid,ViewRef,1,Position),
++                receive {physics_resource,Pid,ViewRef,{terrain_unavailable,invalid_terrain_binding}} -> ok
++                after 5000 -> error(invalid_binding_not_refused) end,
++                ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Pid,status))
++            end)
++        end)
++    end}} || Correction <- [body,terrain]].
++
+ socket_command(Socket,Message) -> Socket ! {client,iolist_to_binary(json:encode(Message))}.
+ 
+ consume_terrain_manifest(Socket,View,Target) ->
+@@ -5319,6 +5424,51 @@
+             end;
+         {simulation,Socket,Other} -> error({terrain_view_unavailable,Other})
+     after 10000 -> error({terrain_manifest_missing,Target}) end.
++
++voxel_dig_preserves_a_loaded_resting_body_in_the_same_chunk_test_() ->
++    {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
++        %% The fixture authors enough resident chunks for Rapier's conservative
++        %% dynamic-body envelope; this is ordinary Prolog resource policy.
++        Policy = {voxel_allowances,room,{voxel_limits,{sampling_limits,1331,10648,85184,3993},
++                    {surface_limits,512,10000,10000},64,69120,1048576}},
++        commit(Ns,{',',{retract,Policy},{assertz,setelement(3,Policy,setelement(4,element(3,Policy),128))}}),
++        Created = door_action(Ns,{voxel_create,room,0,
++            {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Created),await_source_receipt(Created),
++        commit(Ns,{',',
++            {assertz,{physics_body_definition,room,7,2,dynamic,{vector,2000,1500,2000},{owned,{box,600,400,600},1}}},
++            {assertz,{physics_body_definition,room,8,2,dynamic,{vector,2000,3000,2000},{owned,{box,400,400,400},100}}}}),
++        {Pid,World} = enable(F),
++        receive {physics_status,_,Pid,World,_,sleeping} -> ok after 15000 -> error(stack_did_not_settle) end,
++        Before = gen_server:call(Pid,status),flush_sleeping(Pid),
++        #{World := #{spec := Spec}} = worlds(Ns),
++        assert_loaded_stack(Pid,Spec),
++        Brush = {dig_sphere,{vector,3500,750,3500},300},
++        Dig = door_action(Ns,{',',{voxel_edit_basis,room,Brush,{'R'},{'Cs'}},
++                                  {voxel_edit,room,{'R'},{'Cs'},Brush}}),
++        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Dig),await_source_receipt(Dig),
++        {Pid,World} = installed_structure(Ns,3),
++        receive {physics_status,_,Pid,World,_,sleeping} -> ok after 15000 -> error(stack_stopped_after_dig) end,
++        After = gen_server:call(Pid,status),
++        ?assertMatch(#{phase := active,navigation_ready := true},After),
++        ?assertEqual(maps:get(incarnation,Before),maps:get(incarnation,After)),
++        ?assert(maps:get(steps,After) > maps:get(steps,Before)),
++        #{World := #{spec := NewSpec}} = worlds(Ns),
++        assert_loaded_stack(Pid,NewSpec),
++        [Terrain] = lists:usort([Id || {Id,_} <- maps:keys(maps:get(voxel_resources,Spec))]),
++        Key = {Terrain,{chunk_v1,0,0,0}},
++        ?assertNotEqual(maps:get(input_digest,maps:get(Key,maps:get(voxel_resources,Spec))),
++                        maps:get(input_digest,maps:get(Key,maps:get(voxel_resources,NewSpec)))),
++        assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
++    end) end}.
++
++assert_loaded_stack(Pid,Spec) ->
++    {ok,Frame,_} = quod_physics:snapshot(Pid,#{fence => quod_physics:fence(Spec),
++                                            structure => maps:get(structure,Spec),tick => -1}),
++    ?assert(lists:any(fun({A,_,B,_}) -> lists:sort([A,B]) =:= [7,8] end,maps:get(contacts,Frame))),
++    {7,_,world,{_,Lower,_},_,_} = lists:keyfind(7,1,maps:get(poses,Frame)),
++    {8,_,world,{_,Upper,_},_,_} = lists:keyfind(8,1,maps:get(poses,Frame)),
++    ?assert(Upper-Lower > 0.7).
+ 
+ voxel_pending_restore_keeps_its_original_insertion_test_() ->
+     [{atom_to_list(Change),fun() ->
+@@ -5344,6 +5494,23 @@
+                 ?assert(lists:member({0,{4,0,0},{4,0,0}},Required))
+             after 5000 -> error(restore_demand_missing) end,
+             ?assertMatch(#{phase := coverage},gen_server:call(Pid,status)),
++            assert_no_physics_io(fun() ->
++                Pid ! {physics_selected,self(),make_ref(),Current},
++                _ = gen_server:call(Pid,status),
++                Pid ! {physics_selected,self(),make_ref(),Current#{agent_controls => [],agent_bindings => []}},
++                Pid ! advance,
++                ?assertMatch(#{phase := coverage},gen_server:call(Pid,status)),
++                %% A refused frame must not make an unfinished restore ready
++                %% when the original selection is restored unchanged.
++                Far = setelement(5,Terrain,{terrain,500,[{{4000000,0,0},Handle}]}),
++                Pid ! {physics_selected,self(),make_ref(),Current#{bodies => [Far,Actor]}},
++                ?assertMatch(#{phase := {blocked,coordinate_allowance}},gen_server:call(Pid,status)),
++                Pid ! {physics_selected,self(),make_ref(),Current},
++                ?assertMatch(#{phase := coverage,navigation_ready := false},gen_server:call(Pid,status)),
++                receive {physics_terrain_demand,Pid,_,Token,_,Unexpected,_} ->
++                    error({pending_restore_demand_replaced,Unexpected})
++                after 0 -> ok end
++            end),
+             Updated = Current#{restores => case Change of
+                 removed -> [];
+                 changed -> [setelement(3,CP,{{22000,2000,2000},{0.0,0.0,0.0,1.0}})]
+--- a/doc/voxel-world.md
++++ b/doc/voxel-world.md
+@@ -268,13 +268,28 @@
+ can shift its local frame and retry the unperformed step; an envelope that
+ cannot fit remains unavailable without altering motion or incarnation.
+ Controlled movement already uses
+-the existing translation/rotation sweeps. The pre-step gate also checks whole-body
+-surface penetration using the existing solver's numerical contact tolerance;
+-signed placement queries retain their separately authored tolerance.
+-Missing coverage is a waiting step
+-outcome, preserving the simulation; fatal native errors keep their ordinary
+-retirement semantics. Coverage installation wakes work through the existing
+-owner lifecycle, without a retry timer.
++the existing translation/rotation sweeps. New geometry and authored pose changes
++are admitted against whole-body surface penetration before integration, using
++the solver's numerical contact tolerance. Retained bodies are checked against
++new or changed oriented faces; exact unchanged faces remain under the solver
++even when their chunk collider is rebuilt. The comparison keeps the last
++integrated surface as its baseline until a step succeeds, so a blocked edit
++cannot certify its own geometry through another edit. New bodies and authored
++pose changes still check the complete surface. The solver's correction target
++is not a hard penetration limit on later steps. Interior-point classification
++still runs before every active step.
++Signed placement queries retain their separately authored tolerance.
++
++Missing coverage waits for concrete required chunks. Known obstruction reports
++`terrain_occupied(Body,Terrain)`; ambiguous classification/contact reports
++`terrain_unavailable(Body)`. These block integration while retaining the native
++world and its motion, without emitting an empty coverage demand. An unchanged
++selection does no installation work; a governed body or terrain correction
++rechecks admission in the same incarnation. Fatal native errors keep their
++ordinary retirement semantics. Coverage installation and corrective selection
++changes wake work through the existing owner lifecycle, without a retry timer.
++An unchanged checkpoint insertion that is already waiting retains its previous
++terrain demand explicitly; it does not emit an empty replacement request.
+ 
+ ## Authorized terrain rendering
+ 
+@@ -314,8 +329,12 @@
+ canonical decimal integer millimetres. Distance, prefetch and retention come
+ from the signed mark, never the request. The owner selects the distance plus
+ prefetch box, retaining already-resident chunks within the larger retention
+-box. It refuses the signed chunk allowance before numerical generation. Visual
+-and physical consumers share materialization; delivery includes only that
++box. Before numerical generation, it checks the signed chunk allowance and
++whether the proposed visual regions, current body poses and physical terrain
++consumers fit one admissible local frame. This permits ordinary rebasing at
++arbitrary absolute coordinates. An incoherent request is refused for that
++viewer without invalidating the shared world. Malformed terrain bindings also
++return an explicit refusal. Visual and physical consumers share materialization; delivery includes only that
+ view's regions, while distant bodies retain their collision support.
+ 
+ Camera movement requests another window after crossing the prefetch margin;
+--- a/doc/physics-native.md
++++ b/doc/physics-native.md
+@@ -154,6 +154,12 @@
+ retains immutable chunk surfaces and volume classifications; loading chunks
+ allocates no durable body IDs. Missing physical coverage pauses relevant work
+ until installation, rather than treating unknown terrain as empty.
++Known terrain obstruction and ambiguous geometry are distinct blocked outcomes
++identifying the affected body. They retain the native state and wait for a
++governed correction, without an unsatisfiable coverage request. Authored
++geometry/pose changes receive surface admission checks; ongoing unchanged
++contacts remain under the normal solver. The [terrain contract](voxel-world.md)
++defines these outcomes and prospective viewer-window admission.
+ 
+ Governed body edits share the Prolog `physics_valid_body/6` schema for body
+ identity, kind, authored pose, geometry, density and coordinate allowance.

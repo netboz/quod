@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml",
+    "terrain::tests",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 101,
+  "seconds": 3.23
+}

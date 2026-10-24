@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "child_started": false,
+  "reason": "/usr/bin/time is not installed; no measurements produced."
+}

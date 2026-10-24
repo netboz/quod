@@ -1,0 +1,11 @@
+{
+  "method": "Production before Rust cfg(test), test modules excluded",
+  "files": {
+    "src/quod_physics.erl": 35,
+    "src/quod_physics_coordinates.erl": 0,
+    "native/quod_physics/src/lib.rs": 15,
+    "native/quod_physics/src/terrain.rs": 47,
+    "native/quod_physics/src/motion.rs": 0
+  },
+  "net": 97
+}

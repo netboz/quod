@@ -1,0 +1,34 @@
+--- before/mutate_once.py
++++ after/mutate_once.py
+@@ -4,15 +4,15 @@
+ b=Path(__file__).resolve().parent
+ address='http://192.168.1.10:4646'; candidate='quod-finality-candidate-v6-20260926'
+ phase='release'
+-name='candidate-release.json';predecessor='candidate-before.json';expected_updates={'quod-node':{'DestructiveUpdate':1}}
++expected_updates={'quod-node':{'DestructiveUpdate':1}}
+ clearance=json.loads((b/'review-clearance.json').read_text())
+ assert clearance['approved'] and clearance['mutation_manifest_sha256']==hashlib.sha256((b/'mutation-inputs.json').read_bytes()).hexdigest()
+-for name,digest in json.loads((b/'mutation-inputs.json').read_text()).items():
+- assert hashlib.sha256((b/name).read_bytes()).hexdigest()==digest,name
++for input_name,digest in json.loads((b/'mutation-inputs.json').read_text()).items():
++ assert hashlib.sha256((b/input_name).read_bytes()).hexdigest()==digest,input_name
+ assert json.loads(Path('/home/yan/src/quod/doc/evidence/terrain-presentation-20261017/clean-presentation-05/PASSED.json').read_text())['passed']
+ assert json.loads((b/'verified-image.json').read_text())['registry_digest_matches']
+-desired=json.loads((b/name).read_text()); jobid=desired['ID']
+-expected=json.loads((b/predecessor).read_text())
++desired=json.loads((b/'candidate-release.json').read_text()); jobid=desired['ID']
++expected=json.loads((b/'candidate-before.json').read_text())
+ out=b/phase;out.mkdir()
+ def save(name,value):
+  with (out/name).open('x') as f:json.dump(value,f,indent=2);f.write('\n')
+--- before/walk-acceptance.mjs
++++ after/walk-acceptance.mjs
+@@ -118,7 +118,7 @@
+       readyTexturedMaterials: scene.materials.filter(m => m.albedoTexture && !m.unlit && m.albedoTexture.isReady()).length }
+   }, store)
+   const walking = result.poses.filter(p => p.at >= result.walkStarted && p.position)
+-  const distance = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2])
++  const distance = (a, b) => Math.hypot(a[0]-b[0], a[2]-b[2])
+   const excursion = Math.max(0, ...walking.map(p => distance(p.position, result.before)))
+   const interests = result.events.filter(e => e.type === 'terrain_interest' && e.at >= result.walkStarted).length
+   const content = result.events.filter(e => e.type === 'terrain_chunks')

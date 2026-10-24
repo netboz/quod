@@ -1,0 +1,11 @@
+{
+  "image": "192.168.1.11:5000/quod:0.7.273",
+  "pinned_image": "192.168.1.11:5000/quod:0.7.273@sha256:4fa80d816a4d7583b988d63b6ff4d530c74b3df2ef0379d5bb7b40ff763a33c5",
+  "image_id": "sha256:69dee0620a0983c7700fe0a51211413a5e968a7f8d03cc598f8ce316a8d656c7",
+  "source_manifest_sha256": "1b444453681573daddd0d996a7ab56989cbca30a4cfaae02809477f734e89821",
+  "priv_matches": true,
+  "profile": "prod",
+  "explorer_matches": true,
+  "registry_digest_matches": true,
+  "committed": false
+}

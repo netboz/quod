@@ -1,0 +1,19 @@
+{
+  "name": "native-release-tests",
+  "command": [
+    "cargo",
+    "test",
+    "--release",
+    "--locked",
+    "--manifest-path",
+    "native/quod_physics/Cargo.toml"
+  ],
+  "started": "2026-10-17T09:06:24.845646+00:00",
+  "exit": 0,
+  "seconds": 37.07,
+  "sources_unchanged": true,
+  "test_summary_complete": true,
+  "passed_tests": 57,
+  "minimum_test_cases": 57,
+  "stop_requested": false
+}

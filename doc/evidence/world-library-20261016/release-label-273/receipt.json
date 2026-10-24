@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-17T01:18:43.645277+00:00",
+  "from": "0.7.272",
+  "to": "0.7.273",
+  "files": {
+    "rebar.config": {
+      "before": "5c48ac07c04c01fe56f02b29755eb3ea1431faa57a50e965c06a18e97c1c1dc1",
+      "after": "a320ecee0e77033c4892af0f47e329e9371014b0abe703c6f314f3a67ff68af4"
+    },
+    "src/quod.app.src": {
+      "before": "f4c12ead1f6f17ffabfdcddb63b6ee4214d3fb162602dd0fb3db54d6e82c2b87",
+      "after": "91f9e3842baa15a680881a9c1e9d2198b2999928aa82f269b268713265272af0"
+    }
+  },
+  "frozen_tree": "/home/yan/src/quod/_build/world-library-20261016/clean-integration-07/tree",
+  "source_committed": false
+}

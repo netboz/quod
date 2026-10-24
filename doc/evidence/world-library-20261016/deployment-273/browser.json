@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "desktop": true,
+  "physicalVR": false,
+  "worlds": [
+    {
+      "name": "Distant Heights",
+      "key": "[\"human:ch_T3EeaJ2RudT0UElzXP4qgALch57EZrHLrxx3bLFY/lobby\",\"ADh1lb3sy7rkP72cmZH26nTiLqixmG-yZ5n5sQtyRpY\",\"world(<<\\\"\\\\x84\\\\\\\\xce\\\\\\\\xf2\\\\z\\\\x19\\\\D\\\\x19\\\\\\\\xfd\\\\\\\\x0b\\\\\\\\x8f\\\\\\\\x0f\\\\\\\\x81\\\\i\\\\xae\\\\\\\\r\\\\xf8\\\\W\\\\x97\\\\!\\\\xbd\\\\l\\\\xb5\\\\\\\\x96\\\\\\\\xf4\\\\k\\\\x16\\\\rST\\\\xeb\\\\ \\\\xa0\\\\\\\">>)\"]",
+      "landscape": "meadow",
+      "spacing": "1000"
+    },
+    {
+      "name": "Highland Retreat",
+      "key": "[\"human:ch_T3EeaJ2RudT0UElzXP4qgALch57EZrHLrxx3bLFY/lobby\",\"ADh1lb3sy7rkP72cmZH26nTiLqixmG-yZ5n5sQtyRpY\",\"world(<<\\\"(\\\\r\\\\x8d\\\\\\\\xb3\\\\\\\\xe2\\\\L\\\\x83\\\\\\\\x06\\\\\\\\x0f\\\\Gt\\\\xf8\\\\\\\\x99\\\\\\\\xd2\\\\\\\\n\\\\xa0\\\\\\\\x95\\\\\\\\\\\\QWd\\\\xe8\\\\\\\\x10\\\\S\\\\xe7\\\\\\\\xef\\\\\\\\x9d\\\\\\\\xdc\\\\7\\\\xed\\\\\\\\xce\\\\\\\\x0e\\\\\\\">>)\"]",
+      "landscape": "highlands",
+      "spacing": "500"
+    }
+  ],
+  "walking": true,
+  "reentry": true,
+  "normalSignedGui": true,
+  "pending": 0,
+  "network": "6v5xfJiUyZ0l1Q2ShTplodfptmz3VuL3WD9WJoXzfMs"
+}

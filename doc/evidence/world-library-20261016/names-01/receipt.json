@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_names_tests"
+  ],
+  "started": "2026-10-16T21:37:54.904963+00:00",
+  "exit": 1,
+  "seconds": 25.43
+}

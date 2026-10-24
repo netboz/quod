@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_voxel_world_tests,quod_lobby_tests"
+  ],
+  "started": "2026-10-16T21:48:22.248771+00:00",
+  "exit": 0,
+  "seconds": 58.07
+}

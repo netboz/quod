@@ -1,0 +1,18 @@
+===> Verifying dependencies...
+warning: function `generate` is never used
+ --> src/voxel/cubic.rs:7:15
+  |
+7 | pub(super) fn generate(density:&[u8],materials:&[u8],spacing:u32,
+  |               ^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `quod_physics` (lib) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 0.05s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 0.626 seconds
+[0;32m5 tests, 0 failures
+[0m

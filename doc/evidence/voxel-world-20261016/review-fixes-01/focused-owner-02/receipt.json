@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_physics_tests:voxel_camera_interest_admits_a_coherent_rebase_test_+voxel_obstruction_reports_the_body_and_recovers_in_place_test_"
+  ],
+  "exit": 0,
+  "seconds": 16.57
+}

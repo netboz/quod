@@ -144,7 +144,7 @@ authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = 
     {succeed, PrincipalState} = erlog_int:prove_goal({current_principal, {Vn}}, St),
     Caller = erlog_int:dderef({Vn}, PrincipalState#est.bs),
     Policy = {agent_key_preparation, Caller, Instance, Host, Epoch, Node},
-    case custody_policy(Policy, St) of
+    case quod_ask:committed_authorization_result(Policy, St) of
         allowed ->
             Deadline = case quod_scope_session:remaining_ms() of
                 {ok, Remaining} -> quod_time:mono_ms() + Remaining;
@@ -162,20 +162,6 @@ authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = 
             end;
         denied -> erlog_int:fail(St);
         invalid -> erlog_int:erlog_error(invalid_custody_policy, St)
-    end.
-
-custody_policy(Policy, St) ->
-    Context = quod_predicates:context(St),
-    Strict = quod_predicates:with_chain(quod_predicates:policy_verdict_context(
-        quod_predicates:ctx_ns(Context), quod_predicates:ctx_height(Context)),
-        quod_predicates:ctx_chain(Context)),
-    Committed = quod_predicates:set_context(quod_erlog_db_local_prove:committed_state(St), Strict),
-    Wrapped = #est{db = #db{ref = Overlay}} = quod_erlog_db_local_prove:wrap_state(Committed,
-        #{read_only => true, read_set => true, access_guard => quod_erlog_db_local_prove:access_guard(St)}),
-    try quod_ask:authorization_result(Policy, Wrapped)
-    after
-        try quod_erlog_db_local_prove:absorb_read_set(St, quod_erlog_db_local_prove:get_read_set(Overlay))
-        after quod_erlog_db_local_prove:cleanup_read_set(Wrapped) end
     end.
 
 -doc "Authorize one canonical request in a committed read-only session before releasing its signature.".

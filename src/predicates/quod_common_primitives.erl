@@ -17,6 +17,11 @@ that used them stays sealable.
   divisor, wrong divisor type/domain, or nonportable salt raises an error. Ontologies reach it through
   `proof_draw/3` in `common_predicates.pl`. It is deterministic selection:
   neither secure randomness nor a uniqueness guarantee.
+- `'$quod_committed_check'(+Goal)` — a boolean, strictly local read-only
+  policy check over the pinned committed base. Reuses custody authorization's
+  evaluator and absorbs its read dependencies even on denial; never exports
+  bindings or consults staged policy. The shared Prolog operation guard binds
+  the authenticated actor before calling it.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
@@ -58,7 +63,7 @@ that used them stays sealable.
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
-         authored_clauses/2, voxel_compute_3/3]).
+         authored_clauses/2, voxel_compute_3/3, committed_check_1/3]).
 
 -define(DRAW, '$quod_draw').
 -define(BINARY_CODES, binary_codes).
@@ -90,8 +95,23 @@ load(#est{db = Db0} = Est) ->
         {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db11),
     Db13 = erlog_int:add_compiled_proc(
         {signed_agent_request, 3}, ?MODULE, signed_agent_request_3, Db12),
+    Db14 = erlog_int:add_compiled_proc(
+        {'$quod_committed_check', 1}, ?MODULE, committed_check_1, Db13),
     Est#est{db = erlog_int:add_compiled_proc(
-        {'$quod_voxel', 3}, ?MODULE, voxel_compute_3, Db13)}.
+        {'$quod_voxel', 3}, ?MODULE, voxel_compute_3, Db14)}.
+
+%% Boolean only: policy bindings and staged mutations cannot escape this check.
+committed_check_1({'$quod_committed_check', Goal0}, Next, #est{bs = Bs} = St) ->
+    Goal = erlog_int:dderef(Goal0, Bs),
+    case quod_wire_term:is_ground(Goal) of
+        false -> erlog_int:instantiation_error(St);
+        true ->
+            case quod_ask:committed_authorization_result(Goal, St) of
+                allowed -> erlog_int:prove_body(Next, St);
+                denied -> erlog_int:fail(St);
+                invalid -> erlog_int:erlog_error(invalid_committed_policy, St)
+            end
+    end.
 
 %% Numerical data only: domain selection, permission and allocation remain in
 %% the calling ontology. The same implementation serves retained consumers.

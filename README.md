@@ -30,7 +30,10 @@ DispersedSimplex ordering, signed agent goals, cross-ontology proofs and
 writes, committed event reactions, hosted agents, internal FIPA Request
 transitions, a TLS client endpoint and Explorer. `quod:root` supplies a
 committed catalogue of exact system ontologies. An agent is a classed
-instance in one ontology; its hosted process is rebuildable.
+instance in one ontology; its hosted process is rebuildable. Shared
+[operation permissions](doc/proofs.md#class-and-instance-operation-permissions)
+combine compulsory class requirements, inherited defaults and governed instance
+overrides using committed Prolog policy and existing conflict detection.
 
 The browser and ontology sources also include early rendering, modelling,
 material, environment and lobby work. The full shared-world simulation,

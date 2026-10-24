@@ -534,6 +534,24 @@ authorization_subproof_retains_the_parent_guard_test() ->
           end
       end).
 
+committed_authorization_preserves_infrastructure_fences_test() ->
+    with_proof_gate(fun(_Tab, AccessGuard) ->
+        Base = #est{db = #db{ref = BaseRef}} =
+            with_gate_predicate(committed([{choice, first}])),
+        St = quod_predicates:set_context(
+            quod_erlog_db_local_prove:wrap_state(Base,
+                #{read_set => true, access_guard => AccessGuard}), context()),
+        GroupId = <<104:256>>,
+        try
+            ?assertThrow({quod_ask_error, {transaction_pending, GroupId}},
+                quod_ask:committed_authorization_result(
+                    {',', {close_proof_gate, GroupId}, {choice, first}}, St))
+        after
+            quod_erlog_db_local_prove:cleanup_read_set(St),
+            quod_erlog_db_mvcc:delete(BaseRef)
+        end
+    end).
+
 close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
     {close_proof_gate, <<_:256>> = GroupId} = erlog_int:dderef(Goal, Bs),
     true = ets:insert(

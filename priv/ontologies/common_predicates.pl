@@ -74,6 +74,94 @@ entity_classes(Entity, Classes) :-
                    (Class = Direct; isa(Direct,Class))), Raw),
     sort(Raw,Classes).
 
+%% The same guard belongs at each operation's mutation boundary, including
+%% direct calls. Discovery may ask it with complete inputs, but never executes
+%% the operation. Identity comes from the proof; all policy comes from its
+%% committed base. Creation uses class(Class), create(BuildPlan).
+operation_authorized(Subject, Operation) :-
+    term_variables(Subject-Operation, []),
+    current_principal(Actor),
+    '$quod_committed_check'(operation_policy(Actor, Subject, Operation)).
+
+operation_policy(Actor, Subject, Operation) :-
+    term_variables(Actor-Subject-Operation, []),
+    functor(Operation, Name, _), atom(Name),
+    operation_classes(Subject, Classes), Classes \== [], term_variables(Classes, []),
+    findall(Check, (member(Class, Classes),
+                   class_requirement(Class, Name, Check)), Checks),
+    operation_requirements(Checks, Actor, Subject, Operation),
+    operation_grant(Actor, Subject, Operation, Name, Classes).
+
+operation_classes(class(Class), Classes) :-
+    findall(C, (C = Class; isa(Class, C)), Raw), sort(Raw, Classes).
+operation_classes(instance(Instance), Classes) :-
+    findall(C, (instance_of(Direct, Instance), (C = Direct; isa(Direct, C))), Raw),
+    sort(Raw, Classes).
+
+operation_requirements([], _, _, _).
+operation_requirements([Check | Rest], Actor, Subject, Operation) :-
+    operation_check(Check, Actor, Subject, Operation),
+    operation_requirements(Rest, Actor, Subject, Operation).
+
+%% Checks are named Prolog predicates of arity three, receiving the exact
+%% actor, subject and operation (including parameters). Missing checks fail.
+operation_check(Check, Actor, Subject, Operation) :-
+    atom(Check), Goal =.. [Check, Actor, Subject, Operation], call(Goal).
+
+%% Editing grants is an owner/administrator operation, never a grant that can
+%% delegate itself. Requirements for set_permission still apply above.
+operation_grant(Actor, Subject, set_permission(Name, Grant),
+                set_permission, _) :-
+    !, Subject = instance(Instance), atom(Name), Name \== set_permission,
+    (Grant == inherit; permission_grant(Grant)),
+    (findall(Owner, attribute(Instance, owner, Owner), Owners),
+     term_variables(Owners, []), sort(Owners, [Actor]);
+     permission_administrator(Instance, Actor)).
+operation_grant(Actor, Subject, Operation, Name, Classes) :-
+    operation_override(Subject, Name, Overrides),
+    (Overrides == [] ->
+        findall(candidate(Class, Grant),
+                (member(Class, Classes), class_permission(Class, Name, Grant)), Candidates),
+        findall(Class, member(candidate(Class, _), Candidates), Declaring),
+        findall(Grant, (member(candidate(Class, Grant), Candidates),
+                       \+ '$quod_stricter_class'(Class, Declaring)), Grants)
+    ; Grants = Overrides),
+    term_variables(Grants, []), sort(Grants, [Grant]), permission_grant(Grant),
+    permission_allows(Grant, Actor, Subject, Operation).
+
+operation_override(class(_), _, []).
+operation_override(instance(Instance), Name, Grants) :-
+    findall(Grant, instance_permission(Instance, Name, Grant), Grants).
+
+permission_grant(allow).
+permission_grant(deny).
+permission_grant(check(Check)) :- atom(Check).
+permission_allows(allow, _, _, _).
+permission_allows(check(Check), Actor, Subject, Operation) :-
+    operation_check(Check, Actor, Subject, Operation).
+
+set_instance_permission(Instance, Name, Grant) :-
+    operation_authorized(instance(Instance), set_permission(Name, Grant)),
+    findall(Previous, retract(instance_permission(Instance, Name, Previous)), _),
+    (Grant == inherit -> true; assertz(instance_permission(Instance, Name, Grant))).
+
+%% Policy data is local to the target. Argument-following must not turn a
+%% denied/missing local grant into a foreign alternative.
+no_follow(operation_authorized/2).
+no_follow(operation_policy/3).
+no_follow(operation_classes/2).
+no_follow(operation_requirements/4).
+no_follow(operation_check/4).
+no_follow(operation_grant/5).
+no_follow(operation_override/3).
+no_follow(permission_grant/1).
+no_follow(permission_allows/4).
+no_follow(set_instance_permission/3).
+no_follow(class_requirement/3).
+no_follow(class_permission/3).
+no_follow(instance_permission/3).
+no_follow(permission_administrator/2).
+
 %% Discovery grants no invocation or mutation authority.
 %% Ontologies opting into public source discovery also expose their identity;
 %% this permits an anchored dependency read without granting source access.

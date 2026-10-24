@@ -119,6 +119,88 @@ identity atoms. This pure predicate supplies authenticated data, including in
 committed-policy proofs; it does not authorize the signing key, hosting, goal,
 network or expiry. Those checks remain in the ordinary Prolog and ingress rules.
 
+## Class and instance operation permissions
+
+`operation_authorized(Subject, Operation)` is the shared Prolog guard for a
+class creation or an existing instance operation. `Subject` is `class(Class)`
+or `instance(LocalId)` in the executing ontology; `Operation` is a ground term
+containing the exact proposed parameters. Creation uses `create(BuildPlan)`.
+The guard gets the authenticated actor from the proof, checks the pinned
+committed policy read-only and retains every consulted predicate in the normal
+OCC read set, including absent grants and failed checks. A staged ownership,
+class, requirement or grant edit cannot authorize itself or the next operation
+in that proof. Concurrent changes to those dependencies conflict normally.
+
+Classes author these local declarations:
+
+```prolog
+class_requirement(document, edit, document_edit_requirement).
+class_permission(document, edit, check(document_editor)).
+class_permission(public_document, edit, allow).
+
+document_edit_requirement(_Actor, instance(Document), edit(Value)) :-
+    attribute(Document, maximum, Maximum), integer(Value), Value < Maximum.
+document_editor(Actor, instance(Document), _Operation) :-
+    attribute(Document, owner, Actor).
+
+edit_document(Document, Value) :-
+    operation_authorized(instance(Document), edit(Value)),
+    assertz(document_value(Document, Value)).
+```
+
+Declare the usual `isa/2` edges and `instance_of/2` memberships as well. Every
+applicable class's `class_requirement(Class, OperationName, Check)` is compulsory;
+`Check` names a local predicate receiving `(Actor, Subject, Operation)`. Checks
+must be pure committed Prolog: they cannot write, consult live services or open
+foreign scopes. Derived memberships and the entire ancestry consulted by the
+guard follow the same rule: a foreign-qualified parent is refused, not partially
+evaluated. Compose class policy into its target ontology, as for other local
+authorization. Missing or failing checks deny; attempted mutations or forbidden
+bridges raise `invalid_committed_policy`. Actual owner fences retain their typed
+pending/rebuilding errors.
+
+The built-in ontology self-membership uses `current_ontology_identity/2`, which
+the strict policy context refuses. Consequently this guard does not yet support
+`instance(ontology_ref(Namespace, Anchor))`; ontology-operation integration must
+supply committed membership without weakening that boundary. Ordinary ontology
+membership queries and cross-ontology class queries keep their existing behavior.
+
+`class_permission(Class, OperationName, Grant)` supplies a default: `allow`,
+`deny`, or `check(Predicate)` with the same three callback arguments. The most
+specific applicable declarations win. Equivalent cyclic classes and unrelated
+parents remain alternatives; differing grants deny unless a subclass or instance
+resolves them. Identical grants agree. Constructor order and source order have
+no precedence. Missing, malformed or nonground grants deny access.
+
+`instance_permission(LocalId, OperationName, Grant)` replaces defaults for that
+instance only. `set_instance_permission(LocalId, OperationName, Grant)` changes
+it; `inherit` removes the override, while `deny` explicitly withdraws access.
+Only the unique `attribute(LocalId, owner, Actor)` or an authored
+`permission_administrator(LocalId, Actor)` grant authorizes the edit. An owner's
+acting agent needs an explicit administrator rule/grant; ownership is not an
+implicit delegation. Administrator policy receives the ground instance and actor;
+it need not enumerate administrators. A wildcard administrator rule explicitly
+authorizes every matching actor. This differs from a data-valued default/override
+whose grant must be ground. The reserved `set_permission(Name, Grant)` operation
+requires an instance subject, passes all applicable compulsory requirements and
+cannot be delegated through a class default or instance override. Editing a grant
+never removes requirements on its later use.
+
+Place the guard inside the operation before mutations, so offered operations,
+`goal/1` actions and directly submitted goals reach the same check. Calling a
+policy query with a supplied actor is only inspection, never execution authority.
+Discovery may call the public guard with complete inputs; it performs no operation
+and grants no authority to a later submission. Incomplete inputs fail without
+binding choices. Actual execution checks the exact actor, target and parameters
+again. Ontology `can_invoke/4` admission remains a separate prerequisite.
+
+This supplies the policy seam for constructor and GUI integration; it installs
+neither constructor hooks nor a menu executor. Terrain/helper and placement
+checks retain their existing callers and protections. Authorized arbitrary source
+rewrites remain outside the narrower operation contract. There is no generic
+final-state validator. Packaged common rules do not rewrite founded ontologies;
+activation requires the existing authorized compatible-artifact/source procedure.
+
 ## Failure, reasoned failure and error
 
 Every refusal a proof can produce belongs to exactly one of three classes.

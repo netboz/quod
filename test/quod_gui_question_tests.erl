@@ -1,6 +1,6 @@
 -module(quod_gui_question_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_receiver/3,commit/2]).
+-export([with_receiver/3,commit/2,await_commit/1,await_operation/1]).
 -export([gui_socket/3,gui_session/1,gui_open_message/7]).
 
 %% Focused transition fixtures seed accepted rows. The live-opening fixture
@@ -702,8 +702,12 @@ source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontol
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
 commit(Ctx, Goal) ->
-    {ok, #{operation_ref := Operation}, {normalized, {committed, _, _}}} =
-        quod_lobby_tests:submit(Ctx, execute, Goal),
+    await_commit(quod_lobby_tests:submit(Ctx, execute, Goal)).
+
+await_commit({ok, #{operation_ref := Operation}, {normalized, {committed, _, _}}}) ->
+    await_operation(Operation).
+
+await_operation(Operation) ->
     %% Complete publication can outlive the client result. Join that existing
     %% owner before measuring a later read's disk work.
     Row = quod_ct:await_operation_complete(element(2, Operation), Operation, 10000),

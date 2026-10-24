@@ -89,7 +89,7 @@ state_check_1({?STATE_CHECK, Inner}, Next,
 -spec state_check_yield_1(term(), list(), tuple()) -> term().
 state_check_yield_1({?STATE_CHECK_YIELD, Ref}, _InternalNext,
                     #est{cps = Cps, bs = Bs, vn = Vn} = St) ->
-    case take_boundary(Ref, Cps, []) of
+    case quod_proof_continuation:take_boundary({?MODULE, Ref}, Cps) of
         {ok, InnerRev, Boundary,
          #read_scope{frame = Frame, caller_next = CallerNext} = Scope,
          OuterCps} ->
@@ -135,18 +135,6 @@ read_only_error(throw, {erlog_error, Error}, _, {Frame, Active}) ->
       Error, quod_erlog_db_local_prove:leave_read_only(Active, Frame));
 read_only_error(Class, Reason, Stacktrace, _) ->
     erlang:raise(Class, Reason, Stacktrace).
-
-take_boundary(Ref,
-              [#cp{type = compiled, label = {?MODULE, Ref},
-                   next = #read_scope{ref = Ref} = Scope} = Boundary | Rest],
-              InnerRev) ->
-    {ok, InnerRev, Boundary, Scope, Rest};
-take_boundary(Ref, [#cp{} = Cp | Rest], InnerRev) ->
-    take_boundary(Ref, Rest, [Cp | InnerRev]);
-take_boundary(Ref, [#cut{} = Cut | Rest], InnerRev) ->
-    take_boundary(Ref, Rest, [Cut | InnerRev]);
-take_boundary(_Ref, [], _InnerRev) ->
-    error.
 
 transition_shape(Transition0, Bs) ->
     case erlog_int:deref(Transition0, Bs) of

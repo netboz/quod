@@ -201,6 +201,105 @@ rewrites remain outside the narrower operation contract. There is no generic
 final-state validator. Packaged common rules do not rewrite founded ontologies;
 activation requires the existing authorized compatible-artifact/source procedure.
 
+## Constructor inputs, defaults and inheritance
+
+The shared [construction rules](../priv/ontologies/construction.pl) use
+`constructor(Class, Instance, BuildPlan)` for every class. Classes author their
+own bodies and required parts. These rules are internal building blocks: live
+`instance_of/2` assertion dispatch, generated IDs, authorization integration and
+whole-attempt rollback remain S1.5. No public creation executor or assertion hook
+is installed by S1.4. Calling the input wrapper alone does not create anything.
+
+`with_build_plan(Inputs, Goal)` supplies temporary inputs during `Goal`. Inputs
+are a ground list of `attribute(Key, Value)` and `part(Role, PartInputs)` entries;
+keys and roles are atoms, unique within their respective categories. Nested
+wrappers replace the current inputs, restore the enclosing scope on exit and
+preserve ordinary Prolog alternatives and cut. Inputs are private proof bindings,
+never stored facts, authority or a second knowledge base. They do not implicitly
+cross ontology calls. Each constructor body receives its original BuildPlan,
+while the ambient inputs are empty: nested parts receive only what their owning
+class explicitly passes through a new wrapper. `build_plan_part/3` selects one
+role's overrides, returning `[]` when absent. Classes declare supported override
+roles with `have_part(Class, Role)`; preflight accepts roles declared anywhere in
+the constructor ancestry and refuses unknown roles before bodies run. Each part's
+own preflight validates its nested inputs. The declaration does not create a part:
+class code still constructs its required parts and explicitly passes overrides;
+the caller does not repeat the internal tree.
+
+The internal `'$quod_constructor_plan'(Class, Instance, Inputs, Order, Attributes)`
+requires a bound identity and performs read-only preflight through the existing
+state-check machinery. It validates the full constructor order and resolves all
+initial attributes before writes or bodies. It reuses `isa/2` declarations,
+most-specific selection and `have_attribute(Class, Key, Type[, Default])`.
+Class definitions and constructors are composed locally, like shared permission
+policy; a foreign-qualified parent is refused rather than silently skipped.
+Ordinary cross-ontology ancestry queries retain their existing behavior.
+
+A supplied value wins over class defaults. Otherwise most-specific default
+providers win over inherited providers; equal unrelated defaults agree, while
+conflicting defaults require a caller or subclass choice. `required` and an
+unrelated parent's `default(Value)` also conflict: neither silently wins.
+A type-only declaration
+does not erase an inherited default. Supplied values must satisfy **all**
+applicable type declarations; an invalid supplied value never falls back.
+Unknown supplied attributes and duplicate entries fail. A three-argument
+attribute declaration is optional; the fourth argument can be `required`,
+`default(Value)` or `default_from(Provider)`. The latter calls
+`Provider(Instance, Value)` once, only after selection. Providers and unary type
+checks run read-only. `attribute_value(Type, Value)` checks ground data using
+ordinary unary Prolog predicates, with `term` accepting any ground value.
+Type names must be atoms naming executable unary checks visible in the owning
+ontology. Descriptive metadata such as `quantity(Unit)` or an undefined `degrees`
+is not an executable validator; classes using it must supply validation when
+adopting construction. Such supplied/default values fail validation, not fall
+back to an unchecked value. Refusals identify unknown attributes/parts, missing
+required keys, invalid resolved values and failed default providers. Malformed
+input lists report `invalid_build_inputs`.
+GUI property validation uses these same declared types; GUI-specific selection
+and field constraints retain their existing behavior.
+
+```prolog
+isa(chair, thing).
+have_attribute(chair, name, binary, default(<<"Chair">>)).
+have_attribute(chair, legs, positive_integer, default(4)).
+constructor(chair, Chair, _Inputs) :- attribute(Chair, legs, _).
+
+isa(place, thing).
+have_attribute(place, name, binary, default_from(place_name)).
+place_name(Instance, Name) :-
+    quod:names::draw(<<"landscape">>, <<"world">>, <<"neutral">>, Instance, Name).
+```
+
+Shared metadata declares the standard binary `name` attribute for every class,
+including classes without parents. Public `have_attribute/3` reflection therefore
+reports `name/binary` for any bound class term; it is not evidence that the term
+has an authored class declaration or membership. Classes choose their own
+ordinary or computed default; no universal personal-name draw is installed.
+A supplied name bypasses the computed provider. A selected naming pool must
+support the requested kind; absence fails instead of drawing another kind.
+Resolved values are stored once by `'$quod_initial_attribute_writes'/2`, then
+read normally by every constructor and view. Changing defaults does not rewrite
+instances. Names are mutable and nonunique; renaming changes neither identity
+nor other instance facts. Terrain's `display_name` migration remains stage 3.
+
+`constructor_order(Class, Parents)` lists every direct parent exactly once.
+Zero or one parent needs no declaration; multiple parents require one ground
+proper list. Duplicate, missing or extra parents, multiple declarations,
+inheritance cycles and contradictory order constraints fail before bodies run.
+The order combines all ancestor-before-descendant and declared parent constraints;
+a stable topological traversal uses the authored branch order for independent
+choices. Shared ancestors run once per attempt, on the same instance as their
+descendants. Constructor order never chooses attribute defaults or permissions.
+
+`'$quod_run_constructors'/3` invokes that prepared order. Declaration inspection
+is separate from execution: absent own code succeeds without skipping parents;
+declared code that fails, including an explicitly called required part, fails
+the construction. These helpers do not supply savepoints or commit intent.
+The assertion lifecycle must compose them with S1.3's committed guard and the
+existing proof savepoint. Tests compose the seams with bound fixture identities
+and existing transactions; they do not claim ULID allocation or live assertion,
+loading, recovery or caught-failure integration. No final-state validator is added.
+
 ## Failure, reasoned failure and error
 
 Every refusal a proof can produce belongs to exactly one of three classes.

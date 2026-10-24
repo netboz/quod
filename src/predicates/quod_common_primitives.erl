@@ -22,6 +22,10 @@ that used them stays sealable.
   evaluator and absorbs its read dependencies even on denial; never exports
   bindings or consults staged policy. The shared Prolog operation guard binds
   the authenticated actor before calling it.
+- `'$quod_with_build_plan'(+Inputs, Goal)` and `'$quod_build_plan'(-Inputs)`
+  carry temporary constructor inputs through private logical bindings. Prolog
+  owns shape checks, inheritance and defaults. Scope release restores inputs on
+  success, failure, redo and error; no facts, transaction mode or authority change.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
@@ -63,10 +67,13 @@ that used them stays sealable.
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
-         authored_clauses/2, voxel_compute_3/3, committed_check_1/3]).
+         authored_clauses/2, voxel_compute_3/3, committed_check_1/3,
+         with_build_plan_2/3, build_plan_1/3, build_plan_return_1/3]).
 
 -define(DRAW, '$quod_draw').
 -define(BINARY_CODES, binary_codes).
+-define(BUILD_INPUTS, {{?MODULE, build_inputs}}).
+-record(build_scope, {ref, previous, next}).
 
 -doc "Install the common primitives into a base engine state.".
 -spec load(tuple()) -> tuple().
@@ -97,8 +104,64 @@ load(#est{db = Db0} = Est) ->
         {signed_agent_request, 3}, ?MODULE, signed_agent_request_3, Db12),
     Db14 = erlog_int:add_compiled_proc(
         {'$quod_committed_check', 1}, ?MODULE, committed_check_1, Db13),
+    Db15 = erlog_int:add_compiled_proc(
+        {'$quod_voxel', 3}, ?MODULE, voxel_compute_3, Db14),
+    Db16 = erlog_int:add_compiled_proc(
+        {'$quod_with_build_plan', 2}, ?MODULE, with_build_plan_2, Db15),
+    Db17 = erlog_int:add_compiled_proc(
+        {'$quod_build_plan', 1}, ?MODULE, build_plan_1, Db16),
     Est#est{db = erlog_int:add_compiled_proc(
-        {'$quod_voxel', 3}, ?MODULE, voxel_compute_3, Db14)}.
+        {'$quod_build_plan_return', 1}, ?MODULE, build_plan_return_1, Db17)}.
+
+%% Inputs are ordinary proof-local bindings, never facts, flags or authority.
+%% Choice points restore them on redo/cut. Only the scope's continuation and
+%% error boundary need restoration; this control neither stages nor rolls back
+%% writes and does not choose a transaction lane.
+with_build_plan_2({'$quod_with_build_plan', Plan0, Goal}, Next,
+                  #est{bs = Bs, vn = Vn, cps = Cps} = St) ->
+    Plan = erlog_int:dderef(Plan0, Bs),
+    Scope = #build_scope{ref = make_ref(), previous = build_inputs(Bs), next = Next},
+    Boundary = #cp{type = compiled, label = {?MODULE, Scope#build_scope.ref},
+                  next = Scope, bs = Bs, vn = Vn,
+                  data = fun build_plan_failed/3},
+    Active = set_build_inputs(Plan, St#est{cps = [Boundary | Cps]}),
+    build_plan_step(fun() -> erlog_int:prove_body(
+        [{call, Goal}, {'$quod_build_plan_return', Scope#build_scope.ref}], Active) end, Scope).
+
+build_plan_1({'$quod_build_plan', Plan}, Next, #est{bs = Bs} = St) ->
+    erlog_int:unify_prove_body(Plan, build_inputs(Bs), Next, St).
+
+build_plan_return_1({'$quod_build_plan_return', Ref}, _,
+                    #est{cps = Cps, bs = Bs, vn = Vn} = St) when is_reference(Ref) ->
+    {ok, _, _, #build_scope{previous = Previous, next = Next} = Scope, _} =
+        quod_proof_continuation:take_boundary({?MODULE, Ref}, Cps),
+    Redo = #cp{type = compiled, next = Scope, bs = Bs, vn = Vn,
+               data = fun build_plan_redo/3},
+    Released = set_build_inputs(Previous, erlog_int:push_choicepoint(Redo, St)),
+    quod_proof_continuation:prove(Ref, Next, Released).
+
+build_plan_redo(#cp{next = Scope, bs = Bs, vn = Vn}, Cps, St) ->
+    build_plan_step(fun() -> erlog_int:fail(St#est{bs = Bs, vn = Vn, cps = Cps}) end,
+                    Scope).
+
+build_plan_failed(#cp{next = #build_scope{ref = Ref}, bs = Bs, vn = Vn}, Cps, St) ->
+    quod_proof_continuation:prove(Ref, [fail], St#est{bs = Bs, vn = Vn, cps = Cps}).
+
+build_plan_step(Fun, #build_scope{ref = Ref, previous = Previous}) ->
+    quod_proof_continuation:run(Ref, Fun, fun
+        (throw, {erlog_error, Error, ErrorSt}, _, _) ->
+            erlog_int:erlog_error(Error, set_build_inputs(Previous, ErrorSt));
+        (Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack)
+    end, none).
+
+build_inputs(Bs) ->
+    case erlog_int:get_binding(?BUILD_INPUTS, Bs) of
+        {ok, Plan} -> Plan;
+        error -> []
+    end.
+
+set_build_inputs(Plan, #est{bs = Bs} = St) ->
+    St#est{bs = erlog_int:add_binding(?BUILD_INPUTS, Plan, Bs)}.
 
 %% Boolean only: policy bindings and staged mutations cannot escape this check.
 committed_check_1({'$quod_committed_check', Goal0}, Next, #est{bs = Bs} = St) ->

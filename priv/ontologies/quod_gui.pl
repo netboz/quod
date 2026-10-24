@@ -14,7 +14,6 @@ no_follow(gui_initial_value/3).
 no_follow(gui_default_value/3).
 no_follow(gui_options/2).
 no_follow(gui_text/1).
-no_follow(gui_boolean/1).
 no_follow(gui_workspace/3).
 no_follow(gui_workspace_fields/2).
 
@@ -88,8 +87,9 @@ isa(code_workspace, form).
 %% Attribute reflection and executable defaults share this declaration.
 %% Other domain attributes on a component remain the application's property.
 have_attribute(Class, Key, Type) :- gui_attribute(Class, Key, Type, _).
+have_attribute(Class, Key, Type, Default) :- gui_attribute(Class, Key, Type, Default).
 
-gui_attribute(gui_component, label, binary, required).
+gui_attribute(gui_component, label, nonempty_binary, required).
 gui_attribute(gui_component, help, binary, default(<<"">>)).
 gui_attribute(gui_component, enabled, boolean, default(true)).
 gui_attribute(input, required, boolean, default(false)).
@@ -211,25 +211,28 @@ gui_properties([property(Key, Default) | Contract], Attributes, [property(Key, V
     gui_property_value(Key, Value),
     gui_properties(Contract, Attributes, Properties).
 
-gui_property_value(label, Text) :- gui_text(Text), Text \= <<"">>.
-gui_property_value(help, Text) :- gui_text(Text).
-gui_property_value(unit, Text) :- (atom(Text) -> true; gui_text(Text)).
-gui_property_value(enabled, Value) :- gui_boolean(Value).
-gui_property_value(required, Value) :- gui_boolean(Value).
-gui_property_value(multiple, Value) :- gui_boolean(Value).
-gui_property_value(readonly, Value) :- gui_boolean(Value).
-gui_property_value(layout, Value) :- member(Value, [column, row, grid]).
-gui_property_value(columns, Value) :- integer(Value), Value > 0.
-gui_property_value(visible_rows, Value) :- integer(Value), Value > 0.
-gui_property_value(percent, Value) :- integer(Value), Value >= 0, Value =< 100.
-gui_property_value(max_bytes, Value) :- integer(Value), Value >= 0.
-gui_property_value(range, range(Min, Max, Step)) :-
+gui_property_value(Key, Value) :-
+    once((gui_attribute(_, Key, Type, _), attribute_value(Type, Value))).
+
+%% The same declared types validate constructor inputs and GUI projections.
+no_follow(text_or_atom/1).
+no_follow(layout/1).
+no_follow(percentage/1).
+no_follow(integer_range/1).
+no_follow(labelled_values/1).
+no_follow(text_list/1).
+no_follow(optional_image_asset/1).
+no_follow(image_asset/1).
+text_or_atom(Text) :- (atom(Text) -> true; gui_text(Text)).
+layout(Value) :- member(Value, [column, row, grid]).
+percentage(Value) :- integer(Value), Value >= 0, Value =< 100.
+integer_range(range(Min, Max, Step)) :-
     integer(Min), integer(Max), integer(Step), Min =< Max, Step > 0.
-gui_property_value(options, Options) :-
-    Options = [_ | _], gui_options(Options, []).
-gui_property_value(headings, Headings) :- Headings = [_ | _], gui_texts(Headings).
-gui_property_value(image, none).
-gui_property_value(image, asset(Digest, <<"image/jpeg">>)) :-
+labelled_values(Options) :- Options = [_ | _], gui_options(Options, []).
+text_list(Headings) :- Headings = [_ | _], gui_texts(Headings).
+optional_image_asset(none).
+optional_image_asset(Value) :- image_asset(Value).
+image_asset(asset(Digest, <<"image/jpeg">>)) :-
     binary(Digest), binary_codes(Digest, Bytes), length(Bytes, 64), gui_digest(Bytes).
 
 no_follow(gui_texts/1).
@@ -240,8 +243,6 @@ gui_digest([]).
 gui_digest([C | Rest]) :-
     (C >= 48, C =< 57 -> true; C >= 97, C =< 102), gui_digest(Rest).
 
-gui_boolean(true).
-gui_boolean(false).
 gui_text(Text) :- binary(Text).
 
 gui_options([], _).
@@ -264,7 +265,7 @@ gui_value(Kind, Properties, Value) :-
         (member(property(required, true), Properties) -> Value = [_ | _]; true)
     ; member(option(Value, _), Options)).
 gui_value(Kind, Properties, Value) :-
-    once(isa(Kind, boolean_input)), gui_boolean(Value),
+    once(isa(Kind, boolean_input)), boolean(Value),
     (member(property(required, true), Properties) -> Value = true; true).
 
 no_follow(gui_selected_values/3).

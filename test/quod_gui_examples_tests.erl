@@ -62,7 +62,7 @@ world_library() ->
                     Before = quod_prolog:applied(Ns),
                     commit(Ctx,scope(Ns,{gui_submit,Q,Revision,create_world,Fields})),
                     receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
-                        ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result)
+                        quod_gui_question_tests:await_commit(Result)
                     after 30000 -> error(world_creation_completion_missing) end,
                     ?assert(quod_prolog:applied(Ns) >= Before+2),
                     ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,{gui_pending_questions,{0}})),
@@ -133,9 +133,20 @@ world_library() ->
                 try
                     ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns)),
                     ?assertMatch({ok,[#{<<"V0">> := Worlds}],_},read(Ctx,Ns,{world_library,{0}})),
-                    NewPid = world_entry_ready(World,quod_time:mono_ms()+15000),
-                    ?assertNotEqual(Pid,NewPid),
-                    ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(NewPid,status)),
+                    %% Every restarted world commits its own activation. Join
+                    %% all installed actors and their publication before the
+                    %% global no-I/O measurement, not only the first world.
+                    Deadline = quod_time:mono_ms()+15000,
+                    lists:foreach(fun({W,OldPid}) ->
+                        Ref = {world_ref,Ns,Anchor,W},
+                        NewPid = world_entry_ready(Ref,Deadline),
+                        ?assertNotEqual(OldPid,NewPid),
+                        ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(NewPid,status)),
+                        #{Ref := #{spec := #{custody := {request,_,_,Bytes,Signature}}}} =
+                            gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds),
+                        {ok,#{operation_ref := Operation}} = quod_client_goal:verify(Bytes,Signature),
+                        quod_gui_question_tests:await_operation(Operation)
+                    end,Owners),
                     ?assertMatch({ok,[#{<<"V0">> := ready}],_},read(Ctx,Ns,{physics_preparation,W1,{0}})),
                     ?assertEqual(NamesBefore,quod_lobby_tests:complete_source(Ctx,NamesTarget)),
                     quod_lobby_tests:assert_read_has_no_io(fun() ->

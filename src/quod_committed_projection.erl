@@ -614,7 +614,7 @@ load_common_predicates(#est{db = Db0} = Est) ->
     Terms =
         try lists:append(
               [read_terms(filename:join([code:priv_dir(quod), "ontologies", File]))
-               || File <- ["common_predicates.pl", "material_policy.pl"]])
+               || File <- ["common_predicates.pl", "construction.pl", "material_policy.pl"]])
         catch
             throw:{genesis_failed, ReadReason} ->
                 throw({common_predicates_failed, ReadReason})

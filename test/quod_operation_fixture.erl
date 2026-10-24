@@ -1,6 +1,6 @@
 -module(quod_operation_fixture).
 -include("quod_ledger.hrl").
--export([with/2, with/3, with/4, view/3, entry/5]).
+-export([with/2, with/3, with/4, with/5, view/3, entry/5]).
 
 %% One real signed/certified history constructor for owner-interface controls.
 %% These genesis-derived projections are trusted owner inputs, not a witness
@@ -8,7 +8,8 @@
 %% Callers own their process stubs and decide which production callbacks run.
 with(N, Fun) -> with(N, [], Fun).
 with(N, GenesisDiff, Fun) -> with(N, GenesisDiff, applied, Fun).
-with(N, GenesisDiff, Result, Fun) ->
+with(N, GenesisDiff, Result, Fun) -> with(N, GenesisDiff, Result, #{}, Fun).
+with(N, GenesisDiff, Result, Overrides, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Ns = <<"quod:operation-result-source-", Suffix/binary>>,
@@ -21,7 +22,7 @@ with(N, GenesisDiff, Result, Fun) ->
       <<"quod:operation-result-target-", Suffix/binary, "-", (integer_to_binary(I))/binary>>, Signer, GenesisDiff)
       || I <- lists:seq(1, N)],
     Targets = [Target || {Target, _, _} <- TargetGenesis],
-    F0 = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets),
+    F0 = quod_ct:signed_plan_fixture(Overrides#{target => Origin, participant_target => hd(Targets),
       node_identity => Signer, admission => Admission,
       provenance => case N of 1 -> 1; _ -> 2 end}, Targets),
     Claim0 = quod_transaction:remote_claim(Origin, maps:get(manifest, F0),

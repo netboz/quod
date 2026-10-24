@@ -118,6 +118,7 @@ Historical open-work and hardware acceptance records are in `doc/outdated/deferr
          dtx_endpoint_request/7, dtx_endpoint_local/4,
          history_view/3, history_view_at/3, history_view_live/1,
          operation_claim_evidence/4,
+         application_result_evidence/4,
          operation_completion_evidence/4,
          dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
@@ -2803,15 +2804,27 @@ history_owner_live(Owner, Ns) when is_pid(Owner) ->
 history_owner_live(_, _) -> false.
 
 -doc "Return the exact certified claim at its projected first slot.".
--spec operation_claim_evidence(binary(), pos_integer(), term(), integer()) ->
+-spec operation_claim_evidence(binary() | history_view(), pos_integer(), term(), integer()) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} |
           {error, timeout | not_ready | not_found | invalid_request}.
 operation_claim_evidence(Ns, Slot, OperationRef, Deadline)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, is_integer(Deadline) ->
     case history_view(Ns, any, Deadline) of
-        {ok, View} -> evidence_at(View, Slot, {claim, OperationRef});
+        {ok, View} -> operation_claim_evidence(View, Slot, OperationRef, Deadline);
         {error, _} = Error -> Error
+    end;
+operation_claim_evidence(#{identity := {Ns, Anchor}} = View, Slot,
+                         {operation, Ns, Anchor, _, _} = OperationRef, Deadline)
+  when is_integer(Slot), Slot > 0, is_integer(Deadline) ->
+    case history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+        true ->
+            Result = evidence_at(View, Slot, {claim, OperationRef}),
+            case history_view_live(View) andalso Deadline > quod_time:mono_ms() of
+                true -> Result;
+                false -> {error, not_ready}
+            end;
+        false -> {error, not_ready}
     end;
 operation_claim_evidence(_Ns, _Slot, _OperationRef, _Deadline) ->
     {error, invalid_request}.
@@ -6349,8 +6362,15 @@ execute_dtx_endpoint_request(
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome, _RequestId, OutcomeRef, _CommitteeId,
-       _MinimumSlot}, TimeoutMs, _Deadline, _Evidence) ->
-    execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs);
+       _MinimumSlot}, TimeoutMs, Deadline, _Evidence) ->
+    case execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs) of
+        {outcome_state, #{outcome := Status} = Snapshot} ->
+            case quod_outcome:result(Status, Deadline) of
+                {ok, Result} -> {outcome_state, Snapshot#{outcome := Result}};
+                {error, _} -> {error, not_ready}
+            end;
+        Error -> Error
+    end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs, _Deadline, _Evidence) ->
     case quod_dtx:decode(PlanBlob) of
@@ -6556,8 +6576,8 @@ claimed_application_evidence(Ns, Slot, TxId, Result, Deadline) ->
             {error, not_ready}
     end.
 
-%% Read the application once. The same checked selection supplies the
-%% discovery bytes, exact-history acceleration and this member's AM3 vote.
+%% Read the transaction once. The same checked selection supplies the
+%% selected answer, discovery bytes, exact history and this member's AM3 vote.
 %% It never leaves as authority: the receiver runs the ordinary exact verifier.
 application_result_evidence(Ns, Slot, <<_:256>> = TxId, Deadline) ->
     case history_view(Ns, any, Deadline) of

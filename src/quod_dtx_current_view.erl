@@ -410,16 +410,24 @@ certify_matching_operation_evidence(
 %% receipt exists, a remote reconnect remains uncertain; it submits nothing.
 -doc "Resolve one complete certified operation vector under an absolute observation deadline.".
 -spec operation_result(binary(), term(), binary(), map(), integer()) ->
-          {ok, list()} | {error, term()}.
+          {ok, list(), binary()} | {error, term()}.
 operation_result(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
   #{ref := Op, request_digest := Digest, height := ClaimHeight} = Projection, Deadline) ->
     case quod_simplex:history_view_at({Ns, Anchor}, ClaimHeight, Deadline) of
-        {ok, _View} ->
+        {ok, View} ->
             case remaining(Deadline) of
                 0 -> {error, retry};
                 Remaining ->
                     case quod_simplex:await_operation_result(Ns, Op, Remaining) of
-                        {operation_results, Rows} -> {ok, Rows};
+                        {operation_results, Rows} ->
+                            case quod_simplex:operation_claim_evidence(View, ClaimHeight, Op, Deadline) of
+                                {ok, _, #transaction{result = Result} = Claim} ->
+                                    case quod_transaction:request_claim(Claim) of
+                                        {ok, #{operation_ref := Op, digest := Digest}} -> {ok, Rows, Result};
+                                        _ -> {error, invalid_operation_claim}
+                                    end;
+                                {error, _} -> {error, retry}
+                            end;
                         {error, _} -> {error, retry}
                     end
             end;
@@ -479,7 +487,9 @@ resolve_receipt_results(_, _, _, _, _) -> {error, invalid_completion}.
 certify_receipt_rows(_OwnerNs, [], Model, Deadline) ->
     case {remaining(Deadline), quod_operation:results(Model)} of
         {0, _} -> {error, retry};
-        {_, {ok, Rows}} -> {ok, Rows};
+        {_, {ok, Rows}} ->
+            #transaction{result = Result} = quod_operation:claim(Model),
+            {ok, Rows, Result};
         _ -> {error, retry}
     end;
 certify_receipt_rows(OwnerNs, [{Target, #{reference := Ref, evidence := Discovery} = Row} | Rows],

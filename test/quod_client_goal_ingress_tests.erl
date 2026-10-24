@@ -181,7 +181,7 @@ signed_local_read_test_() ->
           ?_test(missing_target_wait_ends_at_signed_deadline(Ctx)),
           ?_test(operation_absence_remains_unresolved(Ctx)),
           ?_test(local_operation_resolution_preserves_evidence_and_expiry(Ctx)),
-          ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
+          ?_test(operation_resolution_requires_retained_result(Ctx))]
      end}.
 
 local_process_uses_signed_ingress_without_a_session(
@@ -576,7 +576,7 @@ local_operation_resolution_preserves_evidence_and_expiry(
             maps:get(request_bytes, Wrong), maps:get(signature, Wrong)))
     after restore_env(node_pubkey, Previous) end.
 
-operation_resolution_follows_the_existing_claim(
+operation_resolution_requires_retained_result(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
     Deadline = min(maps:get(expires_ms, Session),
                    quod_time:now_ms() + 30000),
@@ -588,11 +588,15 @@ operation_resolution_follows_the_existing_claim(
     Transaction = maps:get(transaction, Fixture),
     ok = quod_prolog:apply_entry(
            Ns, quod_ct:committed_entry(Ns, 2, {batch, [Transaction]}), live),
+    %% This fixture has an applied index but no retained Simplex history.
+    %% A status alone cannot recover the original selected result. Full
+    %% committed resolution is covered through real owners in
+    %% quod_outcome_result_tests, including selector precedence.
+    ?assertMatch({ok, #{outcome := #{status := committed, height := 2}}},
+        quod_prolog:outcome_snapshot(Ns,
+            {transaction, Ns, ?ANCHOR, Transaction#transaction.tx_id}, 1000)),
     ?assertMatch(
-       {ok, _Evidence,
-        {operation_outcome,
-         #{status := claimed, request_digest := _},
-         #{status := committed, height := 2}}},
+       {ok, _Evidence, {operation_pending, _}},
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), maps:get(request_bytes, Fixture),
          maps:get(signature, Fixture), ?PEER)),
@@ -604,15 +608,13 @@ operation_resolution_follows_the_existing_claim(
     ?assertEqual(maps:get(request_bytes, Fixture), maps:get(request_bytes, Duplicate)),
     {ok, DuplicateRef} = quod_atomic:source_group_ref(
         quod_atomic:control_material(maps:get(vote_control, Duplicate))),
-    ?assertMatch({ok, _, {operation_outcome, #{status := claimed},
-                         #{status := committed, height := 2}}},
+    ?assertMatch({ok, _, {operation_pending, _}},
         quod_client_goal_ingress:resolve_operation(maps:get(session_id, Session),
             maps:get(request_bytes, Duplicate), maps:get(signature, Duplicate), ?PEER, DuplicateRef)),
     Previous = application:get_env(quod, node_pubkey),
     application:set_env(quod, node_pubkey, <<16#73:256>>),
     try
-        ?assertMatch({ok, _, {operation_outcome, #{status := claimed},
-                             #{status := committed, height := 2}}},
+        ?assertMatch({ok, _, {operation_pending, _}},
           quod_client_goal_ingress:resolve_operation(
             maps:get(request_bytes, Fixture), maps:get(signature, Fixture)))
     after restore_env(node_pubkey, Previous) end,

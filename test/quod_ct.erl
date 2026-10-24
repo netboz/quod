@@ -374,7 +374,7 @@ signed_plan_fixture(Overrides, ParticipantTargets0) ->
                                   Request, NodeIdentity),
              {Participant, Plan, PlanBlob}
          end || Participant <- ParticipantTargets],
-    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(maps:get(bindings, Overrides, #{})),
     {ok, Manifest} =
         quod_dtx:new_manifest(
           #{proof_id => ProofId,

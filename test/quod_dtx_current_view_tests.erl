@@ -1173,7 +1173,7 @@ one_byzantine_outcome_reply_never_decides_test() ->
     F = fixture(4),
     [Byzantine | _] = maps:get(committee, F),
     Ref = outcome_transaction_ref(F),
-    Forged = #{status => committed, height => 99, ref => Ref},
+    Forged = #{status => committed, height => 99, ref => Ref, bindings => [{<<"X">>, linked}]},
     Deps = outcome_dependencies(
              maps:get(view, F),
              fun(Key, Request, Target, CommitteeId, Slot) ->
@@ -1185,6 +1185,26 @@ one_byzantine_outcome_reply_never_decides_test() ->
                      end
              end),
     ?assertEqual({error, retry}, lookup(F, Ref, Deps)).
+
+ordinary_outcome_quorum_must_agree_on_selected_bindings_test() ->
+    F = fixture(4),
+    [A, B, C, _] = maps:get(committee, F),
+    Ref = outcome_transaction_ref(F),
+    Good = #{status => committed, height => 9, ref => Ref,
+             bindings => [{<<"Ref">>, original}]},
+    Divergent = Good#{bindings := [{<<"Ref">>, replacement}]},
+    lists:foreach(fun({Second, Expected}) ->
+        Deps = outcome_dependencies(maps:get(view, F),
+          fun(Key, Request, Target, CommitteeId, Slot) ->
+              case Key of
+                  A -> outcome_reply(Request, Target, CommitteeId, Slot, Good);
+                  B -> outcome_reply(Request, Target, CommitteeId, Slot, Second);
+                  C -> outcome_reply(Request, Target, CommitteeId, Slot, maps:remove(bindings, Good));
+                  _ -> {error, not_ready}
+              end
+          end),
+        ?assertEqual(Expected, lookup(F, Ref, Deps))
+    end, [{Divergent, {error, retry}}, {Good, {ok, Good}}]).
 
 operation_outcome_requires_f_plus_one_current_validators_test() ->
     F = fixture(4),
@@ -1211,7 +1231,7 @@ view_mismatch_lag_and_split_valid_statuses_are_retryable_test() ->
     F = fixture(4),
     [A, B, C, D] = maps:get(committee, F),
     Ref = outcome_transaction_ref(F),
-    Committed = #{status => committed, height => 9, ref => Ref},
+    Committed = #{status => committed, height => 9, ref => Ref, bindings => [{<<"X">>, linked}]},
     Pending = #{status => pending, ref => Ref},
     Deps = outcome_dependencies(
              maps:get(view, F),

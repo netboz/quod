@@ -549,15 +549,18 @@ valid_phase_response(_) -> false.
 valid_outcome_snapshot(not_found) -> true;
 valid_outcome_snapshot(Status) -> valid_public_outcome_status(Status).
 
-%% These are the exact bounded maps exposed by quod_outcome:public/1.
+%% Public answers include selected bindings; internal apply snapshots retain
+%% only the compact classification and do not travel through this response.
 valid_public_outcome_status(
   #{status := pending, ref := TransactionRef} = Status)
   when map_size(Status) =:= 2 ->
     valid_transaction_ref(TransactionRef);
 valid_public_outcome_status(
-  #{status := committed, height := Height, ref := TransactionRef} = Status)
-  when map_size(Status) =:= 3 ->
-    valid_slot(Height) andalso valid_transaction_ref(TransactionRef);
+  #{status := committed, height := Height, ref := TransactionRef,
+    bindings := Bindings} = Status)
+  when map_size(Status) =:= 4 ->
+    valid_slot(Height) andalso valid_transaction_ref(TransactionRef) andalso
+        valid_bindings(Bindings);
 valid_public_outcome_status(
   #{status := rejected, reason := Reason, height := Height,
     ref := TransactionRef} = Status)

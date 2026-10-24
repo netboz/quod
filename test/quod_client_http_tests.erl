@@ -134,12 +134,21 @@ signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
     ?assertEqual(
        {200, #{result => operation_outcome, status => committed,
                terminal => true, claim_height => 3, height => 4,
+               bindings => [#{}],
                request_digest => b64url(<<1:256>>),
                operation_id => b64url(<<2:256>>)}},
        quod_client_http:signed_goal_result(
          {ok, Evidence,
           {operation_outcome, #{height => 3},
-           #{status => committed, height => 4}}})),
+           #{status => committed, height => 4, bindings => []}}})),
+    ?assertEqual({503, #{error => outcome_index_corrupt}},
+       quod_client_http:signed_goal_result(
+         {ok, Evidence, {operation_outcome, #{height => 3},
+                        #{status => committed, height => 4}}})),
+    ?assertEqual({503, #{error => outcome_index_corrupt}},
+       quod_client_http:signed_goal_result(
+         {ok, Evidence, {operation_outcome, #{height => 3},
+                        #{status => completed, ref => ignored, targets => []}}})),
     ?assertEqual(
        {409, #{error => operation_conflict}},
        quod_client_http:signed_goal_result({error, operation_conflict})).

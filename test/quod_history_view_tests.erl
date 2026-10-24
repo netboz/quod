@@ -164,7 +164,7 @@ evidence_reads_borrow_one_view_without_scanning_test() ->
 
 captured_view_is_bounded_and_cannot_recapture_from_replacement_test() ->
     with_owner(
-      fun(Owner, Ns, Identity, Entry, _Claim, _OperationRef) ->
+      fun(Owner, Ns, Identity, Entry, _Claim, OperationRef) ->
           Deadline = quod_time:mono_ms() + 3000,
           {ok, View = #{snapshot := Snapshot, slot := Height}} =
               quod_simplex:history_view(Identity, committed, Deadline),
@@ -184,6 +184,8 @@ captured_view_is_bounded_and_cannot_recapture_from_replacement_test() ->
           end,
           stop_owner(Owner),
           ?assertNot(quod_simplex:history_view_live(View)),
+          ?assertEqual({error, not_ready}, quod_simplex:operation_claim_evidence(
+              View, Height, OperationRef, quod_time:mono_ms() + 1000)),
           ?assertEqual({error, not_ready}, quod_simplex:history_view(Identity, committed, Deadline)),
           Parent = self(),
           Replacement = spawn(fun() ->

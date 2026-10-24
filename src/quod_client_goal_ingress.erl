@@ -244,7 +244,8 @@ read_outcome(Ref, Deadline) ->
                 undefined -> quod_simplex:dtx_outcome_lookup(Ref, Remaining);
                 _ ->
                     case quod_prolog:outcome_snapshot(Ns, Ref, Remaining) of
-                        {ok, #{outcome := Outcome}} when is_map(Outcome) -> {ok, Outcome};
+                        {ok, #{outcome := Outcome}} when is_map(Outcome) ->
+                            quod_outcome:result(Outcome, Deadline);
                         {ok, #{outcome := not_found}} -> {error, not_found};
                         _ -> {error, retry}
                     end
@@ -279,10 +280,14 @@ resolve_claim_outcome({applications, Refs}, #{request_digest := Digest} = Claim,
     case lists:sort(quod_simplex:namespaces()) of
         [OwnerNs | _] ->
             case quod_dtx_current_view:operation_result(OwnerNs, Op, Digest, Claim, Deadline) of
-                {ok, Rows} ->
+                {ok, Rows, Result} ->
                     case quod_operation_vector:result_rows(Rows) of
                         {ok, Refs} ->
-                            {ok, #{status => completed, ref => Op, targets => Rows}};
+                            case quod_outcome:result_bindings(
+                                   #{status => completed, ref => Op, targets => Rows}, Result) of
+                                {ok, _} = Found -> Found;
+                                {error, _} -> pending
+                            end;
                         _ -> pending
                     end;
                 {error, _} -> pending

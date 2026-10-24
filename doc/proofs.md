@@ -51,11 +51,36 @@ in browser clients. These whole-ontology dependencies support view invalidation;
 they do not replace per-predicate transaction read checks or certify native
 installation.
 
-A single writer uses its ordinary transaction. The [multiwrite contract](multiwrite-architecture.md)
-covers several writers and explicit independent intent. An expired caller
+A single writer uses its ordinary transaction; a signed foreign-only writer
+also retains a source claim under the existing operation lifecycle. The
+[multiwrite contract](multiwrite-architecture.md) covers these routes, several
+writers and explicit independent intent. An expired caller
 may receive `outcome_unknown` with an anchored operation reference. Resolution
 observes installed and certified evidence; it does not re-prove the goal or
 resubmit an uncertain write.
+
+Signed operation resolution returns the original selected named bindings for
+ordinary transactions (including foreign-only writes) and atomic groups. Anonymous variables and internal
+proof variables are excluded by the same signed-name projection as the initial
+reply. The compact outcome index retains the ordinary transaction's identity
+and terminal slot; the lookup worker reads and verifies that exact transaction
+through the existing retained history index. A completed target vector recovers
+the same sealed result from its exact source claim, or from the claim embedded
+in a certified remote receipt after checking every target. All routes share the
+durable result decoder and preserve the original target verdicts.
+Certification still consumes the compact applied-status snapshot. No result
+archive, ledger-prefix scan or proof rerun is introduced. Repeated unchanged
+lookups perform no storage writes or syncs.
+
+Results survive outcome-owner restart and later deletion of the created
+instance while the original history remains retained. Missing or unavailable
+transaction evidence leaves the signed operation unresolved, even when a compact
+committed classification exists. The original request digest, scope, genesis
+anchor and signing-key/session checks still apply; lookup grants no execution
+authority. Remote outcome replies require the selected bindings on ordinary
+committed results, under the existing current-committee corroboration. Older
+status-only replies do not satisfy that result contract; validators serving
+these replies need compatible code. No persisted format or history changes.
 
 `current_request_operation(Operation)` exposes the original authenticated
 `operation(SourceNamespace, SourceAnchor, AgentBytes, OperationId)` reference.

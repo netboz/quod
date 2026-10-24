@@ -387,11 +387,13 @@ signed_goal_result({error, Reason}) ->
     end.
 
 signed_operation_outcome(
-  Evidence, #{height := ClaimHeight}, #{status := completed, ref := Ref, targets := Rows}) ->
-    {200, Result} = quod_client_result:http_normalized(
-                     Evidence, {committed, [], {operation_outcome, Ref, Rows}}),
-    {200, Result#{result := operation_outcome, status => completed,
-                  terminal => true, claim_height => ClaimHeight}};
+  Evidence, #{height := ClaimHeight},
+  #{status := completed, ref := Ref, targets := Rows, bindings := Bindings}) ->
+    Result = quod_client_result:committed_json({operation_outcome, Ref, Rows}),
+    {200, evidence_json(Evidence,
+      Result#{result => operation_outcome, status => completed,
+              bindings => [quod_client_result:binding_json(Bindings)],
+              terminal => true, claim_height => ClaimHeight})};
 signed_operation_outcome(
   Evidence, #{height := ClaimHeight}, Outcome)
   when is_integer(ClaimHeight), ClaimHeight > 0 ->
@@ -400,7 +402,9 @@ signed_operation_outcome(
 signed_operation_outcome(_Evidence, _Claim, _Outcome) ->
     {503, #{error => outcome_index_corrupt}}.
 
-signed_outcome(Evidence, Header, #{status := Status} = Outcome) ->
+signed_outcome(Evidence, Header, #{status := Status} = Outcome)
+  when (Status =:= committed andalso is_map_key(bindings, Outcome)) orelse
+       Status =:= pending orelse Status =:= rejected orelse Status =:= aborted ->
     Terminal = Status =:= committed orelse Status =:= rejected orelse
                    Status =:= aborted,
     Code = case Terminal of true -> 200; false -> 202 end,

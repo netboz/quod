@@ -43,7 +43,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          classify/2, terminal/4, flush/1,
          check_operation/3, claim_operation/4,
          check_completion/4, complete_operation/5, unresolved_operations/1,
-         ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
+         ref_identity/1, lookup_ref/2, lookup_live/3, public/1, result/2, result_bindings/2,
          operation_dependency/3, validate_dependency/4,
          request_dependency/4, validate_expiry_dependency/4,
          project_pending_votes/2, dtx_state/1,
@@ -1125,6 +1125,26 @@ public_status({rejected, Reason, Slot})
     {ok, #{status => rejected, reason => Reason, height => Slot}};
 public_status(_Other) -> error.
 
+%% The compact classification is sufficient for apply certificates. Returning
+%% the selected answer additionally requires its exact retained transaction.
+%% Run this in the existing lookup caller/endpoint worker, never a state owner.
+-spec result(not_found | map(), integer()) -> {ok, not_found | map()} | {error, term()}.
+result(#{status := committed, height := Slot,
+         ref := {transaction, Ns, Anchor, TxId}} = Status, Deadline) ->
+    case quod_simplex:application_result_evidence({Ns, Anchor}, Slot, TxId, Deadline) of
+        {ok, _, _, #{transaction := #transaction{result = Result}}} ->
+            result_bindings(Status, Result);
+        {error, _} = Error -> Error
+    end;
+result(Status, _Deadline) -> {ok, Status}.
+
+-spec result_bindings(map(), binary()) -> {ok, map()} | {error, outcome_index_corrupt}.
+result_bindings(Status, Result) ->
+    case quod_durable_term:decode_result(Result) of
+        {ok, Bindings} -> {ok, Status#{bindings => Bindings}};
+        {error, _} -> {error, outcome_index_corrupt}
+    end.
+
 public_group_status({pending, Phase}, Ref)
   when Phase =:= pending_vote; Phase =:= voted;
        Phase =:= resolving_commit; Phase =:= resolving_abort;
@@ -1132,12 +1152,11 @@ public_group_status({pending, Phase}, Ref)
     {ok, #{status => pending, phase => Phase, ref => Ref}};
 public_group_status({committed, Slot, Result, Slots}, Ref)
   when is_integer(Slot), Slot > 0 ->
-    case {quod_durable_term:decode_result(Result),
-          valid_participant_slots(Slots)} of
-        {{ok, Bindings}, true} ->
-            {ok, #{status => committed, height => Slot, ref => Ref,
-                   bindings => Bindings, participant_slots => Slots}};
-        _ ->
+    case valid_participant_slots(Slots) of
+        true ->
+            result_bindings(#{status => committed, height => Slot, ref => Ref,
+                              participant_slots => Slots}, Result);
+        false ->
             {error, outcome_index_corrupt}
     end;
 public_group_status(

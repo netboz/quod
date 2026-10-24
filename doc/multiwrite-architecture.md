@@ -15,13 +15,16 @@ selects a lane:
 
 | Shape | Commit path | Result |
 | --- | --- | --- |
-| One writer | That ontology's ordinary signed transaction and consensus | Its applied outcome |
+| One writer in the signed origin | That ontology's ordinary signed transaction and consensus | Its applied outcome |
+| One foreign writer | Durable source claim and that target's application, without requiring independent intent | Its applied outcome; recovery resolves the target vector and original claim bindings |
 | Several ordinary writers | One atomic source-and-role group | Commit or abort together |
 | Explicit independent intent | One durable source claim and separate target applications | Complete vector of certified target outcomes |
 
-The independent lane requires intent proved from the original signed request
-and sealed plans. A peer flag or coordinator assertion cannot grant it. The
-source role is retained for an ordinary atomic multiwriter even if the
+Several independent writers require intent proved from the original signed
+request and sealed plans. A peer flag or coordinator assertion cannot grant
+that intent. A lone foreign writer uses the same source-claim lifecycle
+without independent intent. The source role is retained for an ordinary
+atomic multiwriter even if the
 source's own diff is empty. Each target receives only its own sealed material
 plus bounded shared evidence; no participant receives another ontology's KB.
 
@@ -43,7 +46,7 @@ readiness dips pause obligations rather than retiring them. No timer grants
 permission to resubmit an uncertain write or extends the caller's original
 deadline.
 
-## Independent operation
+## Source claims and target applications
 
 A source claim fixes the exact target set. Target applications progress
 independently through the same owners. A committed inclusion still needs an

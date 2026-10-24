@@ -45,6 +45,10 @@ handle_info({timeout, Timer, {agent_deadline, Ref}},
 handle_info({'DOWN', Monitor, process, Owner, _},
             S = #s{owner = Owner, owner_monitor = Monitor}) ->
     {stop, shutdown, S};
+handle_info({'DOWN', Monitor, process, _, _},
+            S = #s{worker = #{report_binding := #{reply_to := {_, Monitor}}, pid := Worker} = Job}) ->
+    exit(Worker, kill),
+    {noreply, S#s{worker = Job#{expired => true}}};
 handle_info({'DOWN', Monitor, process, Worker, Reason},
             S = #s{worker = #{pid := Worker, monitor := Monitor, ref := Ref,
                               timer := Timer, expired := Expired, timeout_result := Result,
@@ -67,7 +71,11 @@ pump(S = #s{worker = none, pending = Pending, released = Released}) ->
         {{Ref, _Height, Request, QueuedAt}, Rest} ->
             {Mode, _, _, Deadline} = Request,
             Ready = S#s{pending = queue:from_list(Rest)},
-            case Deadline > quod_time:mono_ms() of
+            CallerAlive = case Mode of
+                {instruction, Caller, _, _, _, _} -> is_process_alive(Caller);
+                _ -> true
+            end,
+            case CallerAlive andalso Deadline > quod_time:mono_ms() of
                 false -> pump(complete(Ref, unsent_expiry(Mode),
                                        report_binding(Mode, S#s.binding), Ready));
                 true -> start_request(Ref, Request, Deadline, QueuedAt, Ready)
@@ -87,6 +95,12 @@ take_ready([Item | Rest], Released, Before) ->
     take_ready(Rest, Released, [Item | Before]).
 
 complete(Ref, Result, Binding, S = #s{owner = Owner, slot = Slot}) ->
+    case maps:get(reply_to, Binding, none) of
+        {Caller, Monitor} ->
+            demonitor(Monitor, [flush]),
+            Caller ! {agent_instruction_result, Ref, Result};
+        none -> ok
+    end,
     Owner ! {agent_completed, Slot, self(), Ref},
     Owner ! {agent_owned_result, Slot, self(), Ref, Result},
     quod_reg:publish({agent, maps:get(reference, Binding)},
@@ -98,6 +112,8 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
     Parent = self(),
     Operation = case Mode of
         {retained, Bytes} ->
+            {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes), Id;
+        {instruction, _, _, _, Bytes, _} ->
             {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes), Id;
         _ -> crypto:strong_rand_bytes(32)
     end,
@@ -136,12 +152,15 @@ start_request(Ref, {Mode, Goal, Expires, _Deadline}, Deadline, QueuedAt,
                    report_binding => ReportBinding}}.
 
 request_mode({custodied, _, _, _, _}) -> execute;
+request_mode({instruction, _, _, _, _, _}) -> execute;
 request_mode({retained, _}) -> execute;
 request_mode(resolve) -> read;
 request_mode({node, _, Mode}) -> Mode;
 request_mode(Mode) -> Mode.
 
 report_binding({node, NodeRef, _}, Binding) -> Binding#{reference => NodeRef};
+report_binding({instruction, Caller, _, _, _, _}, Binding) ->
+    Binding#{reply_to => {Caller, monitor(process, Caller)}};
 report_binding(_, Binding) -> Binding.
 
 %% The result variable belongs to this one queued continuation. Binding it
@@ -227,6 +246,11 @@ current_node(NodeRef, Key) ->
 
 invoke_live(_Slot, _Binding, {resolve, {Bytes, Signature}, _Expires}, _Operation) ->
     quod_client_goal_ingress:resolve_operation(Bytes, Signature);
+invoke_live(Slot, Binding, {{instruction, _, UBytes, USig, Bytes, Signature}, _, Expires}, Operation) ->
+    Store = {retain_personal_instruction, UBytes, USig, {'Signature'}},
+    Result = establish_custody(Slot, Binding, none, {'Bytes'}, {'Signature'}, Store,
+                               {exact_request, Bytes, Signature}, Expires, Operation),
+    instruction_result(Result, Binding, Bytes, Expires);
 invoke_live(Slot, Binding, {{custodied, Retention, BytesVar, SignatureVar, Template}, Goal, Expires}, Operation) ->
     case custody_scope(Retention) of
         none -> establish_custody(Slot, Binding, none, BytesVar, SignatureVar, Template, Goal, Expires, Operation);
@@ -247,6 +271,23 @@ invoke_live(Slot, Binding, Request, Operation) ->
                         fun() -> quod_client_goal_ingress:submit(Bytes, Signature) end);
         {error, _} = Error -> Error
     end.
+
+%% A refusal describes this attempt only. Before declaring the original
+%% operation unsent, consult its existing committed association under node ACL.
+instruction_result({error, {request_not_submitted, _}} = Refused,
+                   #{reference := {agent_instance_ref, Ns, Anchor, _}}, Bytes, Expires) ->
+    Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
+                      {personal_instruction_retained, Bytes, false}}},
+    case quod_node_actor:signed_goal(read, Goal, crypto:strong_rand_bytes(32), Expires) of
+        {ok, B, S} ->
+            case quod_client_goal_ingress:submit(B, S) of
+                {ok, _, {normalized, {read, _, {answers, _, [_]}}}} ->
+                    {error, {instruction_not_submitted, instruction_refused}};
+                _ -> Refused
+            end;
+        _ -> Refused
+    end;
+instruction_result(Result, _, _, _) -> Result.
 
 custody_scope(none) -> none;
 custody_scope({Scope, Fence}) ->
@@ -330,6 +371,16 @@ sign_request(node, #{reference := NodeRef, public_key := Key},
     %% The goal was chosen in the node's own behavior scope. Its handler uses
     %% node_authorized_goal/3 for permitted foreign work within the same proof.
     quod_node_actor:signed_goal(Mode, Goal, Operation, Expires, {NodeRef, Key});
+sign_request({agent, _}, #{reference := Agent, public_key := Key},
+             {execute, {exact_request, Bytes, Signature}, _Expires}, _Operation) ->
+    case quod_client_goal:verify(Bytes, Signature) of
+        {ok, #{request := #{signing_public_key := Key}, agent_ref_blob := Blob}} ->
+            case quod_wire_term:encode_canonical(Agent) of
+                {ok, Blob} -> {ok, Bytes, Signature};
+                _ -> {error, retained_request_mismatch}
+            end;
+        _ -> {error, retained_request_mismatch}
+    end;
 sign_request({agent, _}, #{reference := Agent, public_key := Key} = Binding,
              {{retained, Bytes}, Goal, Expires}, _Operation) ->
     case retained_request(Agent, Bytes, Goal) of
@@ -342,7 +393,7 @@ sign_request({agent, _}, #{reference := {agent_instance_ref, Ns, Anchor, Instanc
     {ok, Network} = quod_ontology:network_identity(),
     {ok, InstanceText} = quod_client_goal_parser:format(Instance),
     {CanonicalGoal, _Variables, _NextVn} = erlog_int:term_instance(Goal, 0),
-    {ok, GoalText} = quod_client_goal_parser:format(CanonicalGoal),
+    {ok, GoalText} = quod_client_goal_parser:format_clause(CanonicalGoal),
     Request = #{network_identity => Network, agent_namespace => Ns,
       agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
       signing_public_key => Key, operation_id => Operation,

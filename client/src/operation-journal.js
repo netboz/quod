@@ -106,6 +106,8 @@ function validRow(row) {
     row.request.length <= SIGNED_GOAL_LIMITS.requestBase64urlChars &&
     typeof row.signature === 'string' && row.signature.length === 86 &&
     Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0 &&
+    (row.instruction === undefined ||
+      (typeof row.instruction === 'string' && /^[A-Za-z0-9_-]{43}$/.test(row.instruction))) &&
     (row.outcome_ref === undefined || validGroupReference(row.outcome_ref, row.agent))
 }
 

@@ -53,17 +53,21 @@ export async function readTextProjection(identity, agent, reference, goal, bindi
   }
 }
 
-export async function readPersonalLobby(identity, agent, options = {}) {
+export async function readSpaceNavigation(identity, agent, reference = null, options = {}) {
   const reply = await signedGoal(identity, {
-    mode: 'read', agent, goal: 'lobby_navigation(Lobby,Modes).',
+    mode: 'read', agent, goal: reference
+      ? anchoredGoal(reference, compound('space_navigation', [reference.instance, variable('Modes')]))
+      : 'lobby_navigation(Lobby,Modes).',
   }, options)
   if (reply.result === 'fail') return null
-  const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Lobby')), 'entity_ref', 3)
-  const reference = { namespace: textValue(ns), anchor: anchor.value, instance }
-  anchoredGoal(reference, instance)
+  if (!reference) {
+    const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Lobby')), 'entity_ref', 3)
+    reference = { namespace: textValue(ns), anchor: anchor.value, instance }
+  }
+  anchoredGoal(reference, reference.instance)
   const modes = readTerm(singleBinding(reply, 'Modes'))
   if (modes.type !== 'list' || modes.tail !== null || modes.items.some(item => item.type !== 'atom')) {
-    throw new Error('invalid lobby eidolons')
+    throw new Error('invalid space representations')
   }
   // Keep every navigation dependency, including foreign policy. The next
   // signed view visits and fences this exact set before installing anything.

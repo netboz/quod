@@ -30,6 +30,17 @@ unsigned_selector_does_not_parse_or_authorize_the_goal_test() ->
     {ok, InvalidActor} = quod_client_goal:encode(Request#{agent_instance_text => <<"X.">>}),
     ?assertMatch({error, _}, quod_client_goal:request_identity(InvalidActor)).
 
+typed_request_decode_preserves_bytes_without_allocating_atoms_test() ->
+    Name = <<"personal_cold_", (binary:encode_hex(crypto:strong_rand_bytes(12)))/binary>>,
+    ?assertError(badarg, binary_to_existing_atom(Name)),
+    R = (request(<<9:256>>, execute, <<"unparsed syntax !">>))#{
+          parser_version => 3, agent_instance_text => <<Name/binary, ".">>},
+    {ok, Bytes} = quod_client_goal:encode(R),
+    {ok, Typed} = quod_client_goal:decode_typed(Bytes),
+    ?assertEqual({ok, R, Bytes}, quod_client_goal:encode_typed(Typed)),
+    ?assertError(badarg, binary_to_existing_atom(Name)),
+    ?assertMatch({error, _}, quod_client_goal:decode_typed(<<Bytes/binary, 0>>)).
+
 wire_bytes_are_browser_reproducible_test() ->
     PublicKey = <<16#40:256>>,
     Goal = <<"capital(france, X).">>,

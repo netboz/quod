@@ -15,7 +15,7 @@ when they need the complete validator check.
 -include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([encode/1, encode_typed/1, decode/1, request_identity/1, verify/2, verify_for/5,
+-export([encode/1, encode_typed/1, decode_typed/1, decode/1, request_identity/1, verify/2, verify_for/5,
          operation_ref/1, operation_ref/4,
          request_auth/1, request_binding/1,
          named_bindings/2, durable_bindings/2,
@@ -88,6 +88,22 @@ encode_typed({agent_goal_v1, Network,
         {error, _} = Error -> Error
     end;
 encode_typed(_) -> {error, invalid_request}.
+
+%% Inverse of the authored intent codec. Reuse existing symbols without
+%% allocating atoms; the validated identity and goal text remain data.
+decode_typed(Bytes) ->
+    case request_identity(Bytes) of
+        {ok, #{agent_ref_blob := Blob, request := R}} ->
+            case quod_agent_ref:decode(Blob) of
+                {ok, #{reference := Ref}} ->
+                    {ok, {agent_goal_v1, maps:get(network_identity, R), Ref,
+                          maps:get(agent_instance_text, R), maps:get(signing_public_key, R),
+                          maps:get(operation_id, R), maps:get(not_after_ms, R),
+                          maps:get(mode, R), maps:get(parser_version, R), maps:get(goal_text, R)}};
+                Error -> Error
+            end;
+        Error -> Error
+    end.
 
 -doc "Decode one exact signed-goal request without parsing or allocating goal symbols.".
 -spec decode(term()) -> {ok, request()} | {error, error_reason()}.

@@ -10,7 +10,7 @@ import { atom, compound, renderTerm, variable } from '../../client/src/prolog-te
 import { signedGoal, readSystemOntologies } from '../../client/src/signed-client.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
 import { readLensView } from '../../client/src/lens.js'
-import { anchoredGoal, readPersonalLobby, readDeviceMenu, readGuiView, proofForm, codeForm,
+import { anchoredGoal, readSpaceNavigation, readDeviceMenu, readGuiView, proofForm, codeForm,
   readEntityEidolons, readEidolon, ontologySubject, singleBinding, GoalFailure } from '../../client/src/world.js'
 import type { EidolonChoice, EidolonWorkspace, EidolonRepresentation, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
 import type { WorldScene } from '../../client/src/world-scene.js'
@@ -202,7 +202,7 @@ export default function World() {
     const load = async () => {
       try {
         if (view === 'lobby') {
-          const result = await readPersonalLobby(identity, agent)
+          const result = await readSpaceNavigation(identity, agent)
           if (!active) return
           setModes(result?.modes ?? [])
           setMissingLobby(result === null)

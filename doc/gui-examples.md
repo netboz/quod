@@ -188,3 +188,15 @@ ordinary button with that image attribute and a verb label; it uses exactly the
 same activation and submission path. There are no image URLs or client
 callbacks in the ontology. Both adapters reuse verified asset bytes and show
 loading/error feedback; resource leases end when their controls are retired.
+
+Fresh human creation lists [human_user_instance.pl](../priv/ontologies/human_user_instance.pl),
+[agent_instance.pl](../priv/ontologies/agent_instance.pl),
+[personal_agent.pl](../priv/ontologies/personal_agent.pl) and
+[gui_hud.pl](../priv/ontologies/gui_hud.pl) as `user_source_file/1` components
+in the signup ontology. The ordinary creation path freezes their complete
+contents into one genesis. The human behavior supplies the HUD allowance;
+the shared HUD owns receiving and pending references. The personal actor uses
+its own vault key and the existing hosting lifecycle, independently of U's
+browser key. Existing human and lobby
+ontologies need explicit authorized source composition; opening the workspace
+never installs or repairs source.

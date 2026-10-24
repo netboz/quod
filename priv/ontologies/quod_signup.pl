@@ -103,19 +103,19 @@ ontology_creation_allowed(Principal, Name, Options) :-
     signup_options(Principal, Name, _, Options).
 
 %% Both the action and root's independent permission proof use this exact
-%% recipe. Founding pins the reviewed user source and lobby vocabulary.
-signup_options(Principal, Name, Token,
-    [source(Source),
-     terms([instance_of(human_user, me), agent_key(me, Key, active),
-            lobby_vocabulary(LobbyNamespace, LobbyAnchor),
-            lobby_provisioning(me, pending(LobbyName)),
-            hosting_node(Node),
-            signup_origin(Namespace, Anchor, Token)]),
-     external_predicate_modules([quod_agent_predicates])]) :-
+%% recipe. Ordinary creation freezes the reviewed source components into the
+%% genesis. The human's identity behavior and question HUD remain shared files.
+signup_options(Principal, Name, Token, Options) :-
+    findall(source_file(Path), user_source_file(Path), Sources), Sources = [_ | _],
+    append(Sources,
+        [terms([instance_of(human_user, me), agent_key(me, Key, active),
+                lobby_vocabulary(LobbyNamespace, LobbyAnchor),
+                lobby_provisioning(me, pending(LobbyName)), hosting_node(Node),
+                signup_origin(Namespace, Anchor, Token)]),
+         external_predicate_modules([quod_agent_predicates])], Options),
     signup_principal(Principal, Key),
     signup_name(Token, Name),
     signup_lobby_name(Name, LobbyName),
     current_ontology_identity(Namespace, Anchor),
-    user_template(Source),
     signup_host(Node),
     lobby_vocabulary(LobbyNamespace, LobbyAnchor).

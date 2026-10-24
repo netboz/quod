@@ -95,6 +95,63 @@ domain configuration. A lost assignment race may leave inert encrypted custody;
 it grants no authority and is not automatically deleted during an uncertain
 operation.
 
+## Immediate personal instructions
+
+[personal_agent.pl](../priv/ontologies/personal_agent.pl) composes with the human
+instance and shared agent hosting rules. The human U and hosted instance
+`personal` (A) have distinct references and keys in the same containing ontology.
+`personal_agent/2` discovers A and its current public key. Preparation and initial
+assignment use `prepare_agent_key_custody/6` and the existing `agent_hosted/4`
+action; account enrollment uses the shared resource initializer and operation
+journal to finish those steps. Existing ontologies require authorized source
+composition; opening an account never rewrites its ontology.
+
+`personalGoal` takes an explicit target ontology reference and goal. U signs a
+read request `personal_instruction_accept(Bytes, Signature)` enclosing A's exact
+unsigned execute request, including its operation ID, goal, key and expiry. The
+committed Prolog policy checks the U-to-A relationship; `sign_agent_request/2`
+uses the existing governed vault to produce A's signature. A normal read only
+returns that signature. The explicit `POST /api/agents/instructions` transport
+then attempts the work through the installed local runtime and its existing
+actor. An unavailable, busy or reconciling actor refuses unsubmitted work.
+There is no instruction queue or readiness retry. Queue time, authorization,
+custody and submission share the original absolute expiry; caller cancellation
+and host withdrawal cancel the live worker.
+
+Before dispatch, the actor uses its existing custody step to commit
+`personal_instruction(Owner, Id, Authority, UBytes, USignature, Bytes, Signature)`. The pure
+policy verifies U's instruction and A's exact signature against current keys and
+hosting. `Authority` retains the verified U/A keys and requested-goal digest in
+that same association. Admission matches the goal digest and checks current U
+key and A hosting policy; it does not reparse or reverify historical signatures.
+This is an authenticated association, not a status or pending-work
+record. A duplicate association cannot dispatch again. No reaction or recovery
+selector executes it. The target request then enters normal signed ingress as
+A, with the target's own authorization and ordinary atomic transaction rules.
+Acceptance or an association commit is not a domain commit. Once the transaction
+protocol has admitted work, its existing recovery may finish it after the caller
+or actor stops. A lost reply never authorizes another submission.
+
+A definite custody refusal describes the current attempt, which might be a
+duplicate. While still holding its actor slot, the worker uses an ordinary
+node-signed read of the source's association under hosting policy. Only a
+confirmed absence produces HTTP 409 with `submitted: false`; a retained
+association or an unavailable check preserves the original pending operation.
+This read shares the original deadline and creates no recovery state.
+
+`personal_instructions/1` lets an authorized U discover associations without a
+browser journal. `POST /api/agents/instructions/outcomes` takes a fresh U-signed
+read `personal_instruction_lookup(Id, Bytes, Signature)` and resolves the exact
+stored A request through the existing outcome owner, including original named
+bindings. Lookup still requires current U authority, but does not require A's
+key to remain active or the write expiry to remain valid. A missing transaction
+claim stays uncertain, including an association interrupted before submission;
+lookup never dispatches it. The existing history-retention requirements apply.
+Browser recovery sends only these lookups, preserving the original identity.
+An authorized lookup with no association returns `instruction_not_found` (404),
+distinct from an unauthorized lookup (403). Missing association alone is not a
+definitive outcome and does not retire uncertain browser recovery evidence.
+
 The bundled internal FIPA Request rules in `priv/ontologies/fipa_request.pl`
 use two ordinary atomic transitions: the initiator's waiting state and
 receiver's pending state commit together; later the receiver's domain goal

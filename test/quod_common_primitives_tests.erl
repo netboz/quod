@@ -24,6 +24,7 @@ agent_request_bytes_are_inert_exact_intent_test() ->
                        signing_public_key := <<3:256>>, operation_id := <<4:256>>,
                        not_after_ms := 123456, mode := execute, goal_text := <<"save(42).">>}, Request),
         ?assertEqual(Bytes, value({'B'}, {agent_request_bytes, Intent, {'B'}}, St)),
+        ?assertEqual(Intent, value({'T'}, {agent_request_bytes, {'T'}, Bytes}, St)),
         ?assertMatch({fail, _}, erlog_int:prove_goal({agent_request_bytes, Intent, <<>>}, St)),
         ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St))),
         lists:foreach(fun(Bad) ->
@@ -36,6 +37,23 @@ agent_request_bytes_are_inert_exact_intent_test() ->
         ?assertMatch({erlog_error, instantiation_error, _},
             catch erlog_int:prove_goal(
                 {agent_request_bytes, setelement(6, Intent, {'Id'}), {'B'}}, St))
+    end).
+
+signed_request_verification_is_data_not_authority_test() ->
+    {Key, _} = Pair = quod_identity:generate(),
+    Intent = {agent_goal_v1, <<1:256>>, {agent_instance_ref, ?NS, <<2:256>>, actor},
+              <<"actor.">>, Key, <<4:256>>, 123456, execute, 3, <<"save(42).">>},
+    {ok, _, Bytes} = quod_client_goal:encode_typed(Intent),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(Pair)),
+    with_authored([], fun(St) ->
+        %% No key or policy facts are installed, and the signed expiry is past.
+        %% This pure verifier establishes only the exact authenticated data.
+        ?assertEqual(Intent, value({'T'}, {signed_agent_request, Bytes, Signature, {'T'}}, St)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+            {signed_agent_request, Bytes, <<0:512>>, {'T'}}, St)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+            {signed_agent_request, Bytes, Signature, setelement(6, Intent, <<5:256>>)}, St)),
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St)))
     end).
 
 binary_type_test() ->

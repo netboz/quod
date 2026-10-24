@@ -4,7 +4,7 @@ import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import { Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector.js'
 import { worldProjection, advanceSimulation, connectWorldView } from '../src/simulation.js'
-import { readPersonalLobby, viewDependencies } from '../src/world.js'
+import { readSpaceNavigation, viewDependencies } from '../src/world.js'
 import { atom, renderTerm } from '../src/prolog-term.js'
 import { driveInput, snapInput, pushInput } from '../src/locomotion.js'
 import { paintMarks, paintBodyPoses } from '../src/scene.js'
@@ -411,7 +411,7 @@ test('navigation returns an exact space and every signed dependency without chan
   }, session: { session_id: 'session', expires_ms: Date.now() + 60000 } }
   const agent = { namespace: 'human', anchor: new Uint8Array(32), instanceText: 'human.' }
   const seen = []
-  const result = await readPersonalLobby(identity, agent, { post: async (url, body) => {
+  const result = await readSpaceNavigation(identity, agent, null, { post: async (url, body) => {
     seen.push({ url, request: Buffer.from(body.request, 'base64url').toString() })
     return { result: 'ok', dependencies: [{ ns: 'foreign-policy', genesis_anchor: Buffer.alloc(32).toString('base64url'), height: '9007199254740993' }],
       bindings: [{ Lobby: `entity_ref(<<"room">>,<<"${anchor}">>,gallery)`, Modes: '[playing,edition]' }] }

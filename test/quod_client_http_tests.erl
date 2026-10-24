@@ -62,6 +62,14 @@ invalid_action_is_a_bad_request_test() ->
        {400, #{error => invalid_action}},
        signed_proof_reply({error, invalid_action})).
 
+unsubmitted_instruction_is_explicit_test() ->
+    ?assertEqual({409, #{error => agent_unavailable, submitted => false}},
+        quod_client_http:signed_goal_result({error, {request_not_submitted, agent_unavailable}})),
+    ?assertEqual({403, #{error => instruction_not_authorized, submitted => false}},
+        quod_client_http:signed_goal_result({error, instruction_not_authorized})),
+    ?assertEqual({404, #{error => instruction_not_found}},
+        quod_client_http:signed_goal_result({error, instruction_not_found})).
+
 foreign_commit_is_json_safe_test() ->
     Ns = <<"quod:target">>,
     Anchor = <<12:256>>,
@@ -301,6 +309,8 @@ api_reply_is_clean(Port) ->
                  quod_ct:https_request(Connection, post, "/api/user/register", <<"{}">>)),
     ?assertMatch({400, _, _},
                  quod_ct:https_request(Connection, post, "/api/goals/read", <<"{}">>)),
+    [?assertMatch({400, _, _}, quod_ct:https_request(Connection, post, Path, <<"{}">>))
+     || Path <- ["/api/agents/instructions", "/api/agents/instructions/outcomes"]],
     %% Still usable, so none of those replies killed the stream.
     ?assertMatch({200, _, _}, quod_ct:https_request(Connection, get, "/health", <<>>)),
     close(Connection).
@@ -319,6 +329,8 @@ routes_are_crash_free(Port) ->
                     _ = quod_ct:https_request(Connection, post, "/api/goals/read", <<"{}">>),
                     _ = quod_ct:https_request(Connection, post, "/api/goals/execute", <<"{}">>),
                     _ = quod_ct:https_request(Connection, post, "/api/goals/outcomes", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/agents/instructions", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/agents/instructions/outcomes", <<"{}">>),
                     _ = quod_ct:https_request(Connection, post, "/api/goals/cursors", <<"{}">>),
                     _ = quod_ct:https_request(Connection, get, "/api/auth/challenge", <<>>),
                     _ = quod_ct:https_request(Connection, post, "/api/auth/challenge",
@@ -432,7 +444,7 @@ setup() ->
                 #{network_id => <<16#10:256>>, node_key => <<16#11:256>>}),
     {ok, started} =
         quod_http_listener:start(
-          #{name => ?MODULE, ip => ?PEER, port => 0, routes => routes(),
+          #{name => ?MODULE, ip => ?PEER, port => 0, routes => quod_client:routes(),
             stream_handlers => [quod_http_headers_h], tls => Tls}),
     ranch:get_port(?MODULE).
 
@@ -446,22 +458,6 @@ cleanup(_Port) ->
             exit(Pid, shutdown),
             receive {'DOWN', MRef, process, Pid, _} -> ok after 5000 -> ok end
     end.
-
-routes() ->
-    [{'_', [{"/health", quod_client_http, health},
-            {"/assets/[...]", cowboy_static, {priv_dir, quod, "explorer/assets"}},
-            {"/api/auth/challenge", quod_client_http, auth_challenge},
-            {"/api/auth/complete", quod_client_http, auth_complete},
-            {"/api/goals/read", quod_client_http, signed_goal_read},
-            {"/api/goals/execute", quod_client_http, signed_goal_execute},
-            {"/api/goals/outcomes", quod_client_http, signed_goal_outcome},
-            {"/api/goals/cursors", quod_client_http, signed_goal_cursor},
-            {"/api/goals/cursors/:id/next", quod_client_http,
-             signed_cursor_next},
-            {"/api/goals/cursors/:id/accept", quod_client_http,
-             signed_cursor_accept},
-            {"/api/goals/cursors/:id", quod_client_http,
-             signed_cursor_stop}]}].
 
 tls_dir() ->
     Dir = filename:join(["/tmp", "quod-client-http-tests",

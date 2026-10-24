@@ -52,7 +52,7 @@ that used them stays sealable.
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
-         ontology_name_2/3, binary_1/3, agent_request_bytes_2/3,
+         ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2]).
 
@@ -82,17 +82,34 @@ load(#est{db = Db0} = Est) ->
     Db10 = erlog_int:add_compiled_proc({binary, 1}, ?MODULE, binary_1, Db9),
     Db11 = erlog_int:add_compiled_proc(
         {'$quod_source_indicator', 2}, ?MODULE, source_indicator_2, Db10),
+    Db12 = erlog_int:add_compiled_proc(
+        {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db11),
     Est#est{db = erlog_int:add_compiled_proc(
-        {agent_request_bytes, 2}, ?MODULE, agent_request_bytes_2, Db11)}.
+        {signed_agent_request, 3}, ?MODULE, signed_agent_request_3, Db12)}.
+
 
 agent_request_bytes_2({agent_request_bytes, Intent0, Bytes}, Next, #est{bs = Bs} = St) ->
     Intent = erlog_int:dderef(Intent0, Bs),
-    case quod_wire_term:is_ground(Intent) of
-        false -> erlog_int:instantiation_error(St);
-        true -> case quod_client_goal:encode_typed(Intent) of
+    case {quod_wire_term:is_ground(Intent), erlog_int:deref(Bytes, Bs)} of
+        {false, Encoded} when is_binary(Encoded) ->
+            case quod_client_goal:decode_typed(Encoded) of
+                {ok, Typed} -> erlog_int:unify_prove_body(Intent0, Typed, Next, St);
+                {error, _} -> erlog_int:domain_error(agent_request, Encoded, St)
+            end;
+        {false, _} -> erlog_int:instantiation_error(St);
+        {true, _} -> case quod_client_goal:encode_typed(Intent) of
             {ok, _, Encoded} -> erlog_int:unify_prove_body(Bytes, Encoded, Next, St);
             {error, _} -> erlog_int:domain_error(agent_request, Intent, St)
         end
+    end.
+
+%% Cryptographic data verification only. Current keys, scope, delegation,
+%% deadlines and allowed work remain the caller's Prolog policy.
+signed_agent_request_3({signed_agent_request, Bytes0, Sig0, Typed}, Next, #est{bs = Bs} = St) ->
+    [Bytes, Signature] = erlog_int:dderef([Bytes0, Sig0], Bs),
+    case quod_client_goal:verify(Bytes, Signature) of
+        {ok, _} -> agent_request_bytes_2({agent_request_bytes, Typed, Bytes}, Next, St);
+        {error, _} -> erlog_int:fail(St)
     end.
 
 binary_1({binary, Value}, Next, #est{bs = Bs} = St) ->

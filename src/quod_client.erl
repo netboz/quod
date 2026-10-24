@@ -5,7 +5,8 @@ Dedicated browser client endpoint.
 The listener is disabled by default. It provides static client assets, fixed
 Ed25519 authentication messages, and the single signed-goal API used for
 reads, writes and retained backtracking cursors. Agent enrollment uses
-ordinary signed goals; this boundary has no predicate-specific command.
+ordinary signed goals. Immediate instructions bind a human's signed request
+to an existing hosted actor under its ontology policy.
 
 **It is served over TLS.** Not for confidentiality alone: a browser withholds
 Web Crypto entirely outside a secure context, so over plain HTTP the client
@@ -20,6 +21,9 @@ client's own health endpoint is simply unavailable.
 -behaviour(gen_server).
 
 -export([start_link/0]).
+-ifdef(TEST).
+-export([routes/0]).
+-endif.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(LISTENER, quod_client_listener).
@@ -109,6 +113,8 @@ routes() ->
         {"/api/goals/read", quod_client_http, signed_goal_read},
         {"/api/goals/control", quod_client_http, signed_goal_control},
         {"/api/goals/execute", quod_client_http, signed_goal_execute},
+        {"/api/agents/instructions", quod_client_http, {signed_instruction, submit}},
+        {"/api/agents/instructions/outcomes", quod_client_http, {signed_instruction, resolve}},
         {"/api/goals/outcomes", quod_client_http, signed_goal_outcome},
         {"/api/goals/cursors", quod_client_http, signed_goal_cursor},
         {"/api/goals/cursors/:id/next", quod_client_http,

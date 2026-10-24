@@ -1,4 +1,4 @@
-%% Human-user instance behaviour. Founding supplies the local instance/key,
+%% Human-user instance behaviour, composed with gui_hud.pl. Founding supplies the local instance/key,
 %% exact lobby vocabulary and one pending personal-lobby requirement.
 %% Found with quod_agent_predicates; identity is the signed ontology instance.
 %% The signed boundary verifies the principal's exact anchor. Admission must
@@ -56,3 +56,6 @@ acknowledge_user_signup(Owner) :-
                     acknowledge_signup(Token, Owner)),
         retract(signup_origin(Namespace, Anchor, Token))
     ; true).
+
+%% Authored capacity for the human's composed question HUD.
+gui_pending_allowance(Instance,8) :- instance_of(human_user,Instance).

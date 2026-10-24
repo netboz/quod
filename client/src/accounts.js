@@ -1,12 +1,13 @@
 // Browser enrollment is a sequence of ordinary signed Prolog actions. The
 // existing operation journal retains the exact operation through each handoff;
 // login only resolves an uncertain request, never sends it for proof again.
-import { b64url, storeActiveKeyProvider } from './key-provider.js'
+import { b64url, fromB64url, storeActiveKeyProvider } from './key-provider.js'
 import { saveAgentReference } from './agent-references.js'
 import { binary, compound, renderTerm, variable } from './prolog-term.js'
-import { readTerm } from './prolog-read.js'
-import { anchoredGoal, readAgentReference, readReference, singleBinding } from './world.js'
+import { readTerm, readList } from './prolog-read.js'
+import { readAgentReference, readReference, readSpaceNavigation, singleBinding } from './world.js'
 import { signedGoal, resolveSignedOperations, pendingSignedOperations, readSystemOntologies } from './signed-client.js'
+import { initializeSpace, initializeResource, committed } from './space-entry.js'
 import { signedOperationJournal } from './operation-journal.js'
 
 export function accountReference(identity) {
@@ -61,18 +62,58 @@ function accountResult(identity, options) {
       // The exact parent is replaced before sending; an unknown child outcome
       // remains in the existing operation journal.
       await provisionLobby(identity, reference, { ...options, replaceOperation: operation.id })
-    } else if (operation.context.step === 'lobby') {
-      const lobby = readReference(singleBinding(reply, 'Lobby'))
+    } else if (['lobby', 'personal-agent'].includes(operation.context.step)) {
       const reference = await rememberAccount(identity, { namespace: operation.agent.namespace,
         anchor: operation.agent.anchor, instanceText: operation.agent.instance_text }, options)
-      await initializePhysics(identity, reference, lobby,
-        { ...options, replaceOperation: operation.id })
+      if (operation.context.step === 'lobby') {
+        const prepared = await initializeResource(identity, reference,
+          { ...reference, anchor: fromB64url(reference.anchor) }, 'personal_agent', [],
+          JSON.stringify([reference.namespace, reference.anchor, 'personal-agent']),
+          { ...options, replaceOperation: operation.id,
+            context: { flow: 'account', step: 'personal-agent' },
+            onTerminal: accountResult(identity, options) })
+        if (!prepared.ready) return
+      }
+      const navigation = await readSpaceNavigation(identity, reference, null, options)
+      if (operation.context.step === 'lobby') {
+        const lobby = readReference(singleBinding(reply, 'Lobby'))
+        if (!navigation || navigation.reference.namespace !== lobby.namespace ||
+            b64url(navigation.reference.anchor) !== b64url(lobby.anchor)) {
+          throw new Error('The account did not return its exact lobby space.')
+        }
+      }
+      if (!navigation) throw new Error('The account did not return its lobby space.')
+      await initializeSpace(identity, reference, navigation.reference,
+        { ...options, replaceOperation: operation.id, context: { flow: 'account', step: 'physical' },
+          onTerminal: accountResult(identity, options) })
     } else if (operation.context.step === 'physical') {
       return
     } else {
       throw new Error('Unknown account operation; its recovery record has been retained.')
     }
   }
+}
+
+export async function readPersonalAgent(identity, human, options = {}) {
+  const reply = await signedGoal(identity, { mode: 'read', agent: human,
+    goal: 'personal_agent(Agent, Key).' }, options)
+  const key = readTerm(singleBinding(reply, 'Key'))
+  if (key.type !== 'binary' || key.value.length !== 32) throw new Error('The personal agent key is unavailable.')
+  return { agent: readAgentReference(singleBinding(reply, 'Agent')), key: key.value }
+}
+
+// Authoritative discovery also works after all browser operation records have
+// been cleared. Enumeration grants no dispatch permission.
+export async function readPersonalInstructions(identity, human, options = {}) {
+  const reply = await signedGoal(identity, { mode: 'read', agent: human,
+    goal: 'personal_instructions(Instructions).' }, options)
+  return readList(singleBinding(reply, 'Instructions')).map(row => {
+    if (row.type !== 'compound' || row.functor !== 'instruction' || row.args.length !== 3 ||
+        row.args.some(value => value.type !== 'binary') || row.args[0].value.length !== 32) {
+      throw new Error('The personal instruction association is invalid.')
+    }
+    return { id: b64url(row.args[0].value), request: row.args[1].value, signature: row.args[2].value }
+  })
 }
 
 // Explicit user action for an account whose setup was refused before admission.
@@ -101,32 +142,6 @@ async function provisionLobby(identity, reference, options) {
   return reply
 }
 
-async function initializePhysics(identity, reference, lobby, options) {
-  const space = variable('Space'), state = variable('State')
-  const goal = compound(',', [compound('lobby_space', [space, variable('_Modes')]),
-    compound(',', [compound('physics_preparation', [space, state]),
-      compound('=', [variable('Preparation'), compound('setup', [space, state])])])])
-  const prepared = readTerm(singleBinding(await signedGoal(identity, {
-    mode: 'read', agent: reference, goal: anchoredGoal(lobby, goal),
-  }, options), 'Preparation'))
-  if (prepared.type !== 'compound' || prepared.functor !== 'setup' || prepared.args.length !== 2) {
-    throw new Error('The space did not supply a valid setup result.')
-  }
-  const [world, preparation] = prepared.args
-  if (preparation.type === 'atom' && ['ready', 'disabled'].includes(preparation.value)) return
-  if (preparation.type !== 'compound' || preparation.functor !== 'prepared' || preparation.args.length !== 2) {
-    throw new Error('The space did not supply a valid authority preparation.')
-  }
-  const reply = await signedGoal(identity, {
-    mode: 'execute', agent: reference,
-    goal: anchoredGoal(lobby, compound('physics_initialize', [world, ...preparation.args])),
-  }, { ...options, context: { flow: 'account', step: 'physical' },
-    onTerminal: accountResult(identity, options) })
-  if (!committed(reply) && reply.result !== 'pending') {
-    throw new Error('Your space exists, but its physical setup was refused.')
-  }
-}
-
 async function rememberAccount(identity, reference, options) {
   const account = { ...reference, network: b64url(identity.networkId) }
   identity.provider.accounts = [
@@ -136,9 +151,4 @@ async function rememberAccount(identity, reference, options) {
   const saved = (options.saveReference || saveAgentReference)(account)
   options.onAccount?.(saved)
   return saved
-}
-
-function committed(reply) {
-  return reply.result === 'ok' || (['operation_outcome', 'group_outcome'].includes(reply.result) &&
-    reply.status === 'committed' && reply.terminal === true)
 }

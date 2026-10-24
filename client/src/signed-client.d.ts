@@ -39,6 +39,7 @@ export function authenticateKey(provider: KeyProvider): Promise<SignedIdentity>
 export function readSystemOntologies(identity: SignedIdentity): Promise<Array<{ namespace: string; anchor: string }>>
 export function pendingSignedOperations(identity: SignedIdentity, options?: SignedGoalOptions): Promise<Array<Record<string, unknown>>>
 export type SignedGoalOptions = {
+  signal?: AbortSignal
   journal?: SignedOperationJournal
   operationId?: string
   context?: Record<string, unknown>
@@ -54,6 +55,16 @@ export function signedCursorCommand(
   identity: SignedIdentity,
   cursor: string,
   command: 'next' | 'accept' | 'stop',
+): Promise<Record<string, unknown>>
+export function personalGoal(
+  identity: SignedIdentity,
+  request: { human: AgentReference; agent: AgentReference; key: Uint8Array;
+    target: { namespace: string; anchor: string | Uint8Array }; goal: string },
+  options?: SignedGoalOptions,
+): Promise<Record<string, unknown>>
+export function resolvePersonalInstruction(
+  identity: SignedIdentity, human: AgentReference, id: string | Uint8Array,
+  options?: SignedGoalOptions,
 ): Promise<Record<string, unknown>>
 export function resolveSignedOperations(
   identity: SignedIdentity,

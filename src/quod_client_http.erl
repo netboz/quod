@@ -105,6 +105,14 @@ dispatch(Req0, signed_goal_control) ->
 dispatch(Req0, signed_goal_execute) ->
     post_json(Req0, signed_goal_execute, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(execute, Body, Req) end);
+dispatch(Req0, {signed_instruction, Action} = State) ->
+    post_json(Req0, State, ?MAX_SIGNED_GOAL_BODY,
+      fun(Body, Req) ->
+          with_signed_request(Body, fun(Session, Bytes, Signature) ->
+              signed_goal_result(quod_client_goal_ingress:instruction(
+                  Action, Session, Bytes, Signature, peer_ip(Req)))
+          end)
+      end);
 dispatch(Req0, signed_goal_cursor) ->
     post_json(Req0, signed_goal_cursor, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(cursor, Body, Req) end);
@@ -337,6 +345,14 @@ signed_goal_result({ok, Evidence, Result}) ->
     signed_proof_result(Evidence, Result);
 signed_goal_result({error, invalid_session}) ->
     {401, #{error => authentication_failed}};
+signed_goal_result({error, {request_not_submitted, Reason}}) when is_atom(Reason) ->
+    {409, #{error => Reason, submitted => false}};
+signed_goal_result({error, instruction_not_authorized}) ->
+    {403, #{error => instruction_not_authorized, submitted => false}};
+signed_goal_result({error, instruction_not_found}) ->
+    {404, #{error => instruction_not_found}};
+signed_goal_result({error, invalid_instruction}) ->
+    {400, #{error => invalid_instruction, submitted => false}};
 signed_goal_result({error, session_principal_mismatch}) ->
     {401, #{error => session_principal_mismatch}};
 signed_goal_result({error, invalid_signature}) ->

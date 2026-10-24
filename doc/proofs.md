@@ -105,13 +105,19 @@ the exact intent it accepted.
 
 `agent_request_bytes(Intent, Bytes)` is a pure conversion of the existing
 `agent_goal_v1(Network, AgentReference, InstanceText, PublicKey, OperationId,
-Expiry, Mode, Parser, GoalText)` term into the canonical signed-request bytes.
+Expiry, Mode, Parser, GoalText)` term to and from the canonical signed-request bytes.
 The instance text must describe the same exact agent reference. This operation
 can retain future intent in an ordinary transaction; it accesses no key,
 clock or live owner and grants no authority. `sign_agent_request/2` uses the
 same conversion, then independently requires its existing read-only scope,
 committed hosting/key policy and governed vault. Constructing or retaining
 bytes neither submits them nor permits replay after an uncertain outcome.
+
+`signed_agent_request(Bytes, Signature, Intent)` verifies the exact request's
+cryptographic signature and performs that same conversion. It allocates no new
+identity atoms. This pure predicate supplies authenticated data, including in
+committed-policy proofs; it does not authorize the signing key, hosting, goal,
+network or expiry. Those checks remain in the ordinary Prolog and ingress rules.
 
 ## Failure, reasoned failure and error
 

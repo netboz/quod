@@ -14,7 +14,7 @@ Foreign scopes carry the same verified request evidence and agent principal;
 each target applies its ordinary `can_invoke/4` policy to that principal.
 """.
 
--export([submit/2, submit/3, submit/5, resolve_operation/2, resolve_operation/4,
+-export([submit/2, submit/3, submit/5, instruction/5, resolve_operation/2, resolve_operation/4,
          resolve_operation/5, cursor_command/4]).
 -ifdef(TEST).
 -export([test_forward_routes/3, group_request_matches/3]).
@@ -29,6 +29,65 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 -type mode() :: read | execute | cursor | control.
 -type result() ::
         {ok, quod_client_goal:evidence(), term()} | {error, term()}.
+
+%% The signed human request authorizes a read-only Prolog admission or lookup.
+%% Only this explicit transport operation dispatches immediate actor work.
+%% Ordinary read proofs never execute the admitted domain request.
+instruction(Action, Session, Bytes, Signature, Peer) ->
+    Started = quod_time:mono_ms(),
+    Budget = case Action of resolve -> ?OPERATION_RESOLVE_BUDGET_MS;
+                            submit -> ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS end,
+    case submit(read, Session, Bytes, Signature, Peer) of
+        {ok, Evidence = #{request := #{not_after_ms := Expires}},
+             {normalized, {read, _, {answers, _, [Answer]}}}} ->
+            Deadline = min(Started + Budget,
+                           quod_time:mono_ms() + Expires - quod_time:now_ms()),
+            {ok, Pairs} = quod_client_result:decode_binding(Answer),
+            Values = [proplists:get_value(Name, Pairs) || {Name, _} <-
+                       lists:keysort(2, maps:get(variables, Evidence))],
+            instructed(Action, Evidence, Values, Deadline);
+        {ok, _, _} -> {error, instruction_not_authorized};
+        Error -> Error
+    end.
+
+instructed(submit, Evidence = #{goal := {{'$quod_symbol', <<"personal_instruction_accept">>}, TargetBytes, {0}},
+                                request := #{agent_namespace := Ns}}, [Signature], Deadline)
+  when is_binary(TargetBytes) ->
+    case quod_runtime:agent_request_now(Ns, Evidence, {TargetBytes, Signature}, Deadline) of
+        {ok, Ref, Actor} ->
+            Monitor = monitor(process, Actor),
+            try
+                receive
+                    {agent_instruction_result, Ref, {ok, _, _} = Result} -> Result;
+                    {agent_instruction_result, Ref, {error, {instruction_not_submitted, Reason}}} ->
+                        {error, {request_not_submitted, Reason}};
+                    {agent_instruction_result, Ref, {error, _}} -> instruction_pending(TargetBytes);
+                    {'DOWN', Monitor, process, Actor, _} -> instruction_pending(TargetBytes)
+                after max(0, Deadline - quod_time:mono_ms()) -> instruction_pending(TargetBytes)
+                end
+            after demonitor(Monitor, [flush]) end;
+        {error, instruction_unknown} -> instruction_pending(TargetBytes);
+        {error, Reason} -> {error, {request_not_submitted, Reason}}
+    end;
+instructed(resolve, #{goal := {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}}},
+           [none, none], _) -> {error, instruction_not_found};
+instructed(resolve, #{goal := {{'$quod_symbol', <<"personal_instruction_lookup">>}, <<_:256>>, {0}, {1}},
+                      request := #{agent_namespace := Ns, agent_genesis_anchor := Anchor}},
+            [Bytes, Signature], Deadline) ->
+    case quod_client_goal:verify(Bytes, Signature) of
+        {ok, #{request := #{agent_namespace := Ns, agent_genesis_anchor := Anchor}} = Evidence} ->
+            resolve_operation_evidence(Evidence, Deadline);
+        {ok, _} -> {error, invalid_instruction};
+        Error -> Error
+    end;
+instructed(_, _, _, _) -> {error, invalid_instruction}.
+
+instruction_pending(Bytes) ->
+    case quod_client_goal:request_identity(Bytes) of
+        {ok, Evidence = #{operation_ref := Ref}} ->
+            {ok, Evidence, {operation_pending, Ref}};
+        Error -> Error
+    end.
 
 -doc "Admit and run or route one signed goal request.".
 -spec submit(mode(), binary(), binary(), binary(), term()) -> result().

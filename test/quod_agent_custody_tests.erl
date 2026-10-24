@@ -88,9 +88,10 @@ worker_refuses_custody_for_wrong_target_anchor_test_() ->
                     {agent_request_finished, _, Child, _, Ref, Result} ->
                         ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
                         {ok, #{request := Request}, _} = Result,
-                        ?assertEqual({ok, maps:get(goal_text, Request)},
-                                     quod_client_goal_parser:format(
-                                       {probe, {unavailable, preparation_not_authorized}})),
+                        {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(maps:get(goal_text, Request), 3),
+                        ?assertEqual(quod_wire_term:encode_canonical(
+                            {probe, {unavailable, preparation_not_authorized}}),
+                            quod_wire_term:encode_canonical(Parsed)),
                         ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
                             {agent_hosted, actor, Node, 2, {'_'}}))
                 after 5000 -> error(prepared_worker_did_not_finish) end

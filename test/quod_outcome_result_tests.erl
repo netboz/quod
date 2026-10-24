@@ -1,5 +1,6 @@
 -module(quod_outcome_result_tests).
 -include_lib("eunit/include/eunit.hrl").
+-export([assert_unchanged_reads/3]).
 
 lost_reply_recovers_selected_bindings_test_() ->
     [{atom_to_list(Lane), {timeout, 60, fun() -> recover_bindings(Lane) end}}
@@ -176,8 +177,17 @@ restart_outcome_owner(Ns) ->
     after quod_reg:unsubscribe({runtime, Ns}) end,
     ?assertNotEqual(Old, quod_reg:where({quod_prolog, Ns})).
 
-assert_unchanged_reads(F, Outcome, Lane) ->
+assert_unchanged_reads(F, Outcome, Lane) when is_map(F) ->
     {Ns, _} = maps:get(target, F),
+    Owners = case Lane of ordinary -> [Ns]; _ -> [Ns, <<"outcome-result-target">>] end,
+    %% Trace descendants too: foreign result verification reads its source
+    %% claim and target evidence in workers (three exact reads per lookup).
+    Reads = case Lane of atomic -> 0; foreign -> 9; ordinary -> 3 end,
+    assert_unchanged_reads(Owners, fun() ->
+        ?assertMatch({ok, _, {operation_outcome, _, Outcome}}, resolve(F))
+    end, Reads);
+
+assert_unchanged_reads(Owners, Resolve, Reads) when is_list(Owners), is_function(Resolve, 0) ->
     Parent = self(), Tag = make_ref(),
     Collector = spawn(fun() -> count_reads(Parent, Tag, #{}) end),
     Trace = trace:session_create(outcome_result_reads, Collector, []),
@@ -187,23 +197,20 @@ assert_unchanged_reads(F, Outcome, Lane) ->
         {quod_ledger_store, fold_groups, 3}, {quod_prolog, apply_entry, 3},
         {dets, insert, 2}, {dets, sync, 1}, {file, write, 2}, {file, pwrite, 3},
         {file, sync, 1}, {file, datasync, 1}],
-    Owners = case Lane of ordinary -> [Ns]; _ -> [Ns, <<"outcome-result-target">>] end,
     Pids = [self() | [quod_reg:where({Kind, Owner}) || Owner <- Owners,
                      Kind <- [quod_prolog, quod_simplex]]],
     try
         [trace:function(Trace, MFA, true, [local]) || MFA <- Patterns],
-        [trace:process(Trace, P, true, [call, arity]) || P <- Pids],
-        [?assertMatch({ok, _, {operation_outcome, _, Outcome}}, resolve(F)) || _ <- lists:seq(1, 3)],
-        [begin
-            Barrier = trace:delivered(Trace, P),
-            receive {trace_delivered, P, Barrier} -> ok after 1000 -> error(trace_not_delivered) end
-         end || P <- Pids],
+        [trace:process(Trace, P, true, [call, arity, set_on_spawn]) || P <- Pids],
+        [Resolve() || _ <- lists:seq(1, 3)],
+        Barrier = trace:delivered(Trace, all),
+        receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_not_delivered) end,
         Collector ! {finish, self()},
         Counts = receive {Tag, C} -> C after 1000 -> error(no_work_counts) end,
-        Expected = case Lane of
-            atomic -> #{};
-            _ -> #{{quod_ledger_store, read_at, 3} => 3,
-                   {quod_ledger_store, open_ro_snapshot, 1} => 3}
+        Expected = case Reads of
+            0 -> #{};
+            _ -> #{{quod_ledger_store, read_at, 3} => Reads,
+                   {quod_ledger_store, open_ro_snapshot, 1} => Reads}
         end,
         ?assertEqual(Expected, Counts)
     after trace:session_destroy(Trace), Collector ! stop end.

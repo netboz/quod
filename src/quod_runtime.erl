@@ -22,7 +22,7 @@ or of every local resource. Consumers wait for their actual resource owner.
 
 -export([start_link/2, stats/1, effect_frontier/1,
          reconcile_now/1, reconcile_resource/5,
-         project_agents/3, project_agent_observers/3, agent_request/6,
+         project_agents/3, project_agent_observers/3, agent_request/6, agent_request_now/4,
          agents/1, installed_agent_reaction/6, reaction_agents/2, catalog_after/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
@@ -142,6 +142,18 @@ agent_request(Ns, Height, Executor, Mode, Goal, Budget) ->
     end,
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
       {agent_request, Height, Executor, Mode, Goal, {Expires, Deadline}}, infinity).
+
+%% An immediate instruction reserves the existing actor only while it is idle.
+%% No state selector or replay path can reconstruct this caller-owned request.
+agent_request_now(Ns, Evidence, Signed, Deadline) ->
+    case quod_reg:where({quod_runtime, Ns}) of
+        undefined -> {error, agent_unavailable};
+        Owner ->
+            try gen_server:call(Owner, {agent_request_now, Evidence, Signed, Deadline},
+                                max(1, Deadline - quod_time:mono_ms()))
+            catch exit:_ -> {error, instruction_unknown}
+            end
+    end.
 
 project_agent_work(Ns, Height, Instance, Step) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
@@ -404,6 +416,34 @@ handle_call({project_agents, Scope, Hosts}, From = {Caller, _},
     end;
 handle_call({project_agents, _, _}, _From, S) ->
     {reply, {error, stale_resource_owner}, S};
+handle_call({agent_request_now, #{request_bytes := UBytes, signature := USig}, {Bytes, Signature}, Deadline},
+            {Caller, _}, S) ->
+    case quod_client_goal:decode_typed(Bytes) of
+        {ok, {agent_goal_v1, _, Ref = {agent_instance_ref, _, _, Instance}, _, Key,
+              _, Expires, execute, _, _}} ->
+            Slot = {agent, Instance},
+            RequestDeadline = min(Deadline, quod_time:mono_ms() + Expires - quod_time:now_ms()),
+            case maps:get(Slot, S#s.agents, none) of
+                Agent = #{pid := Pid, stopping := false, pending := Pending,
+                          binding := #{reference := Ref, public_key := Key}}
+                  when map_size(Pending) =:= 0 ->
+                    case RequestDeadline > quod_time:mono_ms() andalso S#s.mode =:= live
+                         andalso S#s.runner =:= none andalso S#s.e_frontier >= S#s.height
+                         andalso is_process_alive(Pid) of
+                        true ->
+                            Mode = {instruction, Caller, UBytes, USig, Bytes, Signature},
+                            Request = {Mode, none, Expires, RequestDeadline},
+                            case enqueue_agent_request(Slot, Agent, S#s.height, Request, S) of
+                                {ok, RequestRef, Next} ->
+                                    {reply, {ok, RequestRef, Pid}, release_hosting(Next)};
+                                {error, Reason} -> {reply, {error, Reason}, S}
+                            end;
+                        false -> {reply, {error, agent_unavailable}, S}
+                    end;
+                _ -> {reply, {error, agent_unavailable}, S}
+            end;
+        _ -> {reply, {error, invalid_instruction}, S}
+    end;
 handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
             {Caller, _}, S = #s{runner = {events, Caller, _, _, _}}) ->
     case request_executor(Executor, S) of

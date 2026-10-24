@@ -1,6 +1,7 @@
 import { b64url, fromB64url } from './key-provider.js'
 import { signedOperationJournal } from './operation-journal.js'
 import { SIGNED_GOAL_LIMITS } from './protocol-limits.js'
+import { binary, compound, renderTerm, variable } from './prolog-term.js'
 
 const encoder = new TextEncoder()
 const GOAL_DOMAIN = encoder.encode('quod.agent.goal.v1\0')
@@ -46,15 +47,18 @@ export async function readSystemOntologies(identity, options = {}) {
 // Sign and submit one ordinary Prolog goal. Modes select proof behaviour only;
 // they do not classify predicates or create a second authorization path.
 export async function signedGoal(identity, { mode, agent, goal }, options = {}) {
+  options.signal?.throwIfAborted()
   const post = options.post || postJson
   const request = goalRequestBytes(identity, { mode, agent, goal })
   const signature = new Uint8Array(await identity.provider.sign(request))
+  options.signal?.throwIfAborted()
   const body = signedBody(identity, request, signature)
   if (mode === 'read') return post('/api/goals/read', body)
   // Lossy commands are never journaled or automatically replayed.
   if (mode === 'control') return post('/api/goals/control', body)
 
   const operation = await operationRow(identity, request, signature)
+  options.signal?.throwIfAborted()
   if (options.context) operation.context = options.context
   if (mode === 'execute') {
     const journal = options.journal || signedOperationJournal()
@@ -68,6 +72,44 @@ export async function signedGoal(identity, { mode, agent, goal }, options = {}) 
     )
   }
   return reply
+}
+
+// The human signs an attempt-now instruction. Only the hosted actor can sign
+// the exact enclosed operation; neither this client nor recovery dispatches it.
+export async function personalGoal(identity, { human, agent, key, target, goal }, options = {}) {
+  options.signal?.throwIfAborted()
+  if (!target?.namespace || !target.anchor) throw new Error('Select an exact target ontology.')
+  const operationId = crypto.getRandomValues(new Uint8Array(32))
+  const expires = Math.min(identity.session.expires_ms, Date.now() + REQUEST_TTL_MS)
+  const targetName = renderTerm(binary(encoder.encode(target.namespace)))
+  const anchor = typeof target.anchor === 'string' ? fromB64url(target.anchor) : target.anchor
+  const anchored = `${targetName}::(current_ontology_identity(${targetName}, ${renderTerm(binary(anchor))}), (${goal.replace(/\.\s*$/, '')})).`
+  const targetBytes = encodeGoalRequest({ networkIdentity: identity.networkId,
+    signingPublicKey: key, operationId, agentNamespace: agent.namespace,
+    agentAnchor: typeof agent.anchor === 'string' ? fromB64url(agent.anchor) : agent.anchor,
+    agentInstanceText: agent.instanceText, mode: 'execute', notAfterMs: expires, goal: anchored })
+  const request = goalRequestBytes(identity, { mode: 'read', agent: human,
+    goal: `${renderTerm(compound('personal_instruction_accept', [binary(targetBytes), variable('Signature')]))}.` })
+  const signature = new Uint8Array(await identity.provider.sign(request))
+  options.signal?.throwIfAborted()
+  const row = await operationRow(identity, request, signature)
+  row.instruction = b64url(operationId)
+  if (options.context) row.context = options.context
+  return submitDurable(options.journal || signedOperationJournal(), row,
+    '/api/agents/instructions', signedBody(identity, request, signature),
+    (url, body) => (options.post || postJson)(url, body, 'POST', { signal: options.signal }), options)
+}
+
+export async function resolvePersonalInstruction(identity, human, id, options = {}) {
+  options.signal?.throwIfAborted()
+  const request = goalRequestBytes(identity, { mode: 'read', agent: human,
+    goal: `${renderTerm(compound('personal_instruction_lookup', [
+      binary(typeof id === 'string' ? fromB64url(id) : id), variable('Bytes'), variable('Signature'),
+    ]))}.` })
+  const signature = new Uint8Array(await identity.provider.sign(request))
+  options.signal?.throwIfAborted()
+  return (options.post || postJson)('/api/agents/instructions/outcomes',
+    signedBody(identity, request, signature), 'POST', { signal: options.signal })
 }
 
 export async function signedCursorCommand(identity, cursor, command) {
@@ -112,7 +154,10 @@ export async function resolveSignedOperations(identity, options = {}) {
   for (const row of rows) {
     if (options.operationId && options.operationId !== row.id) continue
     try {
-      const reply = await (options.post || postJson)('/api/goals/outcomes', {
+      const reply = row.instruction
+        ? await resolvePersonalInstruction(identity, { ...row.agent,
+            instanceText: row.agent.instance_text }, row.instruction, options)
+        : await (options.post || postJson)('/api/goals/outcomes', {
         session_id: identity.session.session_id,
         request: row.request,
         signature: row.signature,
@@ -156,6 +201,7 @@ async function submitDurable(journal, operation, url, body, post, options) {
   else await journal.put(operation)
   let reply
   try {
+    options.signal?.throwIfAborted()
     reply = writeReply(await post(url, body))
   } catch (error) {
     if (!error.outcomeUnknown) await journal.delete(operation.id)
@@ -293,11 +339,12 @@ export function assertCrypto() {
 // Exported for non-browser callers that need to supply an absolute URL while
 // retaining the client's one HTTP error/uncertain-outcome boundary.
 // Optional traceparent is transport metadata, never part of the signed body.
-export async function postJson(url, body, method = 'POST', { traceparent } = {}) {
+export async function postJson(url, body, method = 'POST', { traceparent, signal } = {}) {
   let response, payload
   try {
     response = await fetch(url, {
       method,
+      signal,
       headers: {
         'content-type': 'application/json',
         ...(traceparent ? { traceparent } : {}),
@@ -327,6 +374,9 @@ export async function postJson(url, body, method = 'POST', { traceparent } = {})
 }
 
 function writeReply(reply) {
+  if (reply?.result === 'operation_outcome' && reply.status === 'pending' && reply.terminal === false) {
+    return { ...reply, result: 'pending' }
+  }
   // Only a complete, recognized write result may retire recovery evidence.
   if (!reply || !['ok', 'fail', 'pending'].includes(reply.result)) {
     throw unknownOutcome(new Error('invalid signed write response'))

@@ -427,7 +427,7 @@ sign_identity_goal(Ref, Goal, Network, Key, Window) ->
 
 sign_goal({agent_instance_ref, Ns, Anchor, Instance}, Goal, Network, Key,
           Signer, Mode, Operation, Expiry) ->
-    case {quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
+    case {quod_client_goal_parser:format(Instance), quod_client_goal_parser:format_clause(Goal)} of
         {{ok, InstanceText}, {ok, GoalText}} ->
             Request = #{network_identity => Network, agent_namespace => Ns,
                         agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,

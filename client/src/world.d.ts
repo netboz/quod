@@ -57,7 +57,8 @@ export type WorldMark = { id: string; depicts: Subject | null }
 export type MenuEntry = { id: string; label: string; view: string }
 export type SpaceReference = OntologyReference & { instance: PrologTerm }
 export type ViewDependency = { ns: string; genesis_anchor: string; height: string }
-export function readPersonalLobby(identity: SignedIdentity, agent: AgentReference): Promise<{
+export function readSpaceNavigation(identity: SignedIdentity, agent: AgentReference,
+  reference?: SpaceReference | null, options?: SignedGoalOptions): Promise<{
   reference: SpaceReference; dependencies: ViewDependency[]; modes: string[]
 } | null>
 export function readDeviceMenu(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<MenuEntry[]>

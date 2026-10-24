@@ -990,11 +990,11 @@ open_signup_uses_policy_and_ordinary_signed_goals(
     unlink(Auth),
     try
         {ClassNs, ClassAnchor} = found_lobby_classes(),
-        {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
-                                                     "ontologies/human_user_instance.pl")),
+        Sources = [{user_source_file, list_to_binary(filename:join(
+            [code:priv_dir(quod), "ontologies", File]))}
+            || File <- ["human_user_instance.pl", "agent_instance.pl", "personal_agent.pl", "gui_hud.pl"]],
         {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
-            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor},
-             {signup_host, Node}]),
+            [{lobby_vocabulary, ClassNs, ClassAnchor}, {signup_host, Node} | Sources]),
         {ok, _, _} = quod_prolog:execute(ActorNs,
             {assertz, {ontology_hosting_policy, SignupNs, SignupAnchor}}),
         Grants = [{ontology_creation_policy, ClassNs, ClassAnchor},
@@ -1257,18 +1257,24 @@ found_lobby_classes() ->
          {gui_vocabulary, GuiNs, GuiAnchor} | Templates]).
 
 found_lobby_source(Prefix, File, Facts) ->
-    Ns = unique_ns(Prefix),
-    Source = list_to_binary(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
+    found_lobby_sources(Prefix, [File], Facts).
+
+found_lobby_sources(Prefix, Files, Facts) ->
+    found_lobby_named_sources(unique_ns(Prefix), Files, Facts, [quod_agent_predicates]).
+
+found_lobby_named_sources(Ns, Files, Facts, Modules) ->
+    Sources = [{source_file,list_to_binary(filename:join(
+        [code:priv_dir(quod), "ontologies", File]))} || File <- Files],
     {ok, created, Ns, _} = quod_ontology:create(Ns,
-        [{source_file, Source}, {terms, Facts},
-         {external_predicate_modules, [quod_agent_predicates]}]),
+        Sources ++ [{terms, Facts},
+         {external_predicate_modules, Modules}]),
     ok = wait_ready(Ns, 300),
     {Ns, quod_simplex:genesis_hash(Ns)}.
 
 found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
     {Public, _} = Pair = quod_identity:generate(),
     Name = unique_ns(<<"personal-lobby">>),
-    {Ns, Anchor} = found_lobby_source(<<"human-user">>, "human_user_instance.pl",
+    {Ns, Anchor} = found_lobby_sources(<<"human-user">>, ["human_user_instance.pl","agent_instance.pl","personal_agent.pl","gui_hud.pl"],
         [{instance_of, human_user, me}, {agent_key, me, Public, active},
          {lobby_vocabulary, ClassNs, ClassAnchor},
          {hosting_node, Node},

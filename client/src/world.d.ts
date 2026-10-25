@@ -16,7 +16,7 @@ export type GuiView = { title: string; enabled?: boolean; layout?: 'column' | 'r
 export type OntologyReference = { namespace: string; anchor: Uint8Array }
 export type EidolonChoice = { purpose: string; style: string; recipe: OntologyReference & { name: string } }
 export type EidolonWorkspace = { target: OntologyReference; tools: OntologyReference; view: GuiView }
-export type EidolonRepresentation = { kind: 'workspace'; workspace: EidolonWorkspace }
+export type EidolonRepresentation = { kind: 'workspace'; controller: 'prolog_editor' | 'proof_console' | 'space_library'; workspace: EidolonWorkspace }
   | { kind: 'lens'; target: OntologyReference; lens: OntologyReference; view: string; parameters: PrologTerm }
 export function ontologyTerm(reference: OntologyReference): PrologTerm
 export function ontologySubject(reference: OntologyReference): Subject
@@ -61,7 +61,10 @@ export function readSpaceNavigation(identity: SignedIdentity, agent: AgentRefere
   reference?: SpaceReference | null, options?: SignedGoalOptions): Promise<{
   reference: SpaceReference; dependencies: ViewDependency[]; modes: string[]
 } | null>
-export function readDeviceMenu(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<MenuEntry[]>
 export function readEntityEidolons(identity: SignedIdentity, agent: AgentReference, subject: Subject): Promise<EidolonChoice[]>
 export function readEidolon(identity: SignedIdentity, agent: AgentReference, subject: Subject, choice: EidolonChoice): Promise<EidolonRepresentation>
 export function readEidolonRepresentation(binding: string, subject: Subject): EidolonRepresentation
+
+export function guiDigest(term: PrologTerm): string
+export function guiDraftFields(view: GuiView, draft: Record<string,string>): PrologTerm
+export function readGuiForm(tree: PrologTerm, fields: PrologTerm, control: PrologTerm): { view: GuiView; values: Record<string,string>; submit: string }

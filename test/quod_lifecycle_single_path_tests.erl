@@ -1333,7 +1333,7 @@ found_lobby_classes() ->
         code:priv_dir(quod), "ontologies/" ++ File))}
         || File <- ["lobby_instance.pl", "space.pl", "agent_instance.pl",
                     "quod_physics.pl", "space_view.pl", "voxel_world.pl", "voxel_world_view.pl",
-                    "gui_instance.pl", "gui_question.pl", "voxel_world_gui.pl", "lobby_worlds.pl"]],
+                    "gui_instance.pl", "gui_operation.pl", "space_gui.pl", "gui_question.pl", "voxel_world_gui.pl", "lobby_worlds.pl"]],
     found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
         [{names_vocabulary, NamesNs, NamesAnchor},
          {rendering_vocabulary, RenderNs, RenderAnchor},

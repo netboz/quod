@@ -1,0 +1,1 @@
+import{i as e,t}from"./standardMaterial.pure-BYKtadzs.js";e(),t();

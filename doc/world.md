@@ -109,6 +109,15 @@ prepared source-file path. It declares `isa(lobby, physical_space)` and
 physical definitions, admission, allowances, host intent and owner policy.
 Class membership alone still grants no authority or runtime resources.
 
+The normal **Create / operations** entry opens the shared class/instance form
+panel. Storage selection pins both namespace and genesis anchor. A composed
+`space_gui.pl` provides finite/infinite Create-space forms; the distinct personal
+agent signs the bound operation and the panel shows committed identity/location
+or refusal/uncertainty. Desktop and spatial adapters use one controller model.
+Console, source editing, inspection, terrain questions and physical setup keep
+their existing owners. Same-agent space entry and recursive views remain later
+work; creating a space does not automatically enter it.
+
 The default floor includes a transparent downward-curved glass porthole and
 collision coverage for both its centre and raised outer coping. The ordinary
 grounded controller walks at 2.5 m/s and permits a 3 m/s support-checked jump

@@ -78,7 +78,7 @@ permission. See [construction authorization](proofs.md#class-and-instance-operat
 An optional `attribute(placement, at(DestinationRef, transform(X,Y,Z,RX,RY,RZ)))`
 chooses an exact destination and exterior transform, using existing integer
 millimetres/degrees. The constructor consumes this input; it stores no second
-location record. Otherwise it reads A's `space_location/2`. A successful
+location record. Omission or explicit `near_agent` reads A's `space_location/2`. A successful
 `unplaced` result creates an unplaced space; `placed(Destination, Transform)`
 places it one metre along that frame's X axis from A. This is one-time placement,
 not following A. A denied, unavailable, ambiguous or incomplete location read
@@ -93,8 +93,22 @@ destinations retain their mandatory physical hook and checks. Creation does not
 prepare a simulation, terrain, sky or walls. The defined solid Eidolon uses a
 half-metre cube independently of finite or infinite interior extent, through the
 existing scene/model/rendering path. Contents remain empty. The landscape/terrain
-creation route is unchanged; offered operation descriptions and client GUI
-integration are separate work.
+creation route is unchanged.
+
+Compose `space_gui.pl`, `gui_instance.pl` and `gui_operation.pl` in the storage
+owner to offer **Create space** and **Create infinite space**. The existing
+`gui_vocabulary/2` must pin the component vocabulary. The forms initialize name
+and finite dimensions from class defaults; leaving those fields unchanged uses
+the defaults, while edits supply explicit values. Finite controls accept positive
+integers in mm, cm, m or km (1–1,000,000 per axis); the domain model still accepts
+the wider exact measurement contract above. The placement selector supplies
+`near_agent` and authored exact destinations. Storage authors may replace its
+options with permitted local or foreign references. Submission returns both
+`result(space, entity_ref(...))` and the committed `result(location, ...)`.
+The [shared operation panel](gui-implementation-plan.md#offered-class-and-instance-operations)
+displays these bindings and can open the returned subject's offered operations.
+Source composition in an already founded ontology requires its existing owner
+authority; installing client files does not rewrite ontology data.
 
 ## Relations and owners
 

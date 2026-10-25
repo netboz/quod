@@ -9,7 +9,6 @@ can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
 can_join(_, _, Key) :- peer_ready(Key).
 
 lobby_query(lobby_modes(_)).
-lobby_query(device_menu(_, _)).
 lobby_query(isa(_, _)).
 lobby_query(class_eidolon(_, _, _, _)).
 lobby_query(eidolon(_, _, _)).
@@ -136,18 +135,6 @@ device_eidolon(lobby_roof, edition, solid, lobby_roof).
 
 lobby_modes(Modes) :-
     findall(Mode, device_eidolon(_, Mode, solid, _), Offered), sort(Offered, Modes).
-
-device_menu(Classes, Entries) :-
-    findall(candidate(Class, Menu), class_device_menu(Class, Menu), Candidates),
-    findall(Class, member(candidate(Class, _), Candidates), Owners),
-    most_specific_classes(Classes, Owners, Selected),
-    findall(Entry, (member(candidate(Class, Menu), Candidates),
-                   member(Class, Selected), member(Entry, Menu)), Raw),
-    sort(Raw, Entries).
-
-class_device_menu(prolog_console,
-    [menu_entry(prove_goal, <<"Prove a goal">>, open_view(proof_console)),
-     menu_entry(my_worlds, <<"My worlds">>, open_view(space_library))]).
 
 eidolon(lobby_floor,device(_),[
     part(<<"model">>,

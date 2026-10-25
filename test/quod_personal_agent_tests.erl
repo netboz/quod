@@ -1,7 +1,7 @@
 -module(quod_personal_agent_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([with_personal/2, instruction/2, instruct/3, lookup/2, session/1,
-         request/3, await_result/3]).
+         request/3, await_result/3, await_runtime_ready/1]).
 
 immediate_instruction_uses_distinct_actor_test_() ->
     {timeout, 60, fun() -> with_personal(fun exercise/1) end}.
@@ -328,16 +328,19 @@ await_runtime_ready(Ns) ->
     Runtime = quod_reg:where({quod_runtime, Ns}), Parent = self(), Tag = make_ref(),
     Observe = fun(State, {in, {'$gen_cast', {runner_done, _, _}}}, _) ->
                       Parent ! {runtime_processed, Tag}, State;
+                 (State, {in, {agent_completed, _, _, _}}, _) ->
+                      Parent ! {runtime_processed, Tag}, State;
                  (State, _, _) -> State end,
     ok = sys:install(Runtime, {Observe, none}),
-    try await_runtime_ready(Ns, quod_prolog:applied(Ns), Tag)
+    try await_runtime_ready(Ns, quod_prolog:applied(Ns), Tag, quod_time:mono_ms()+5000)
     after sys:remove(Runtime, Observe) end.
 
-await_runtime_ready(Ns, Height, Tag) ->
+await_runtime_ready(Ns, Height, Tag, Deadline) ->
     case quod_runtime:stats(Ns) of
-        #{mode := live, runner_active := false, e_frontier := H} when H >= Height -> ok;
-        _ -> receive {runtime_processed, Tag} -> await_runtime_ready(Ns, Height, Tag)
-             after 5000 -> error(runtime_not_ready) end
+        #{mode := live, runner_active := false, agent_pending_bytes := 0,
+          height := Current, e_frontier := H} when H >= Height, H >= Current -> ok;
+        State -> receive {runtime_processed, Tag} -> await_runtime_ready(Ns, Height, Tag, Deadline)
+             after max(0,Deadline-quod_time:mono_ms()) -> error({runtime_not_ready,State}) end
     end.
 
 with_personal(Fun) -> with_personal(Fun, []).

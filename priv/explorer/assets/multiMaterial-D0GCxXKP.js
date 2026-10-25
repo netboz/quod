@@ -1,1 +1,0 @@
-import{a as e}from"./mesh.pure-BVP87l_v.js";e();

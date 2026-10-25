@@ -1,1 +1,0 @@
-import{n as e}from"./pbrMaterial.pure-DR830HeE.js";e();

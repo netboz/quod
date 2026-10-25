@@ -1,1 +1,0 @@
-import{i as e,n as t,r as n,t as r}from"./WebXRNearInteraction.pure-BlONSaPv.js";r();export{r as RegisterWebXRNearInteraction,t as WebXRNearControllerMode,n as WebXRNearInteraction,e as WebXRNearInteractionPickMeshWithSphere};

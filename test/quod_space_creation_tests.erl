@@ -1,6 +1,6 @@
 -module(quod_space_creation_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_spaces/2]).
+-export([with_spaces/2, with_models/2]).
 
 signed_empty_space_results_and_recovery_test_() ->
     [{atom_to_list(Lane), {timeout, 90, fun() -> with_spaces(fun(C) ->
@@ -188,6 +188,7 @@ at_target(_, Ns, Goal) -> scoped(Ns, Goal).
 scoped(Ns, Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal}}.
 
 create(C, Target, Inputs) ->
+    quod_personal_agent_tests:await_runtime_ready(maps:get(namespace,C)),
     %% Anonymous locals leave only the anchored reference and name as outputs.
     Goal = at_target(C, Target, {creation_result, Inputs, {'Ref'}, {'Name'}}),
     %% The fixture helper is authored Prolog composition, not another executor.
@@ -209,6 +210,9 @@ create(C, Target, Inputs) ->
     {Bindings,Bytes,Outcome}.
 
 signed_result(C,Goal) ->
+    %% A reply precedes release of the attempt-now slot and reaction processing.
+    %% Wait for the real owner before a new, independent fixture instruction.
+    quod_personal_agent_tests:await_runtime_ready(maps:get(namespace,C)),
     {Instruction,_} = quod_personal_agent_tests:instruction(C,Goal),
     quod_personal_agent_tests:instruct(C,submit,Instruction).
 signed(C,Goal) ->

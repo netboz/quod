@@ -17,6 +17,8 @@ export default defineConfig({
     proxy: {
       '/api/auth': { target: 'https://127.0.0.1:14570', secure: false },
       '/api/goals': { target: 'https://127.0.0.1:14570', secure: false },
+      '/api/agents': { target: 'https://127.0.0.1:14570', secure: false },
+      '/api/views': { target: 'https://127.0.0.1:14570', secure: false, ws: true },
       '/api/ontologies/system': { target: 'https://127.0.0.1:14570', secure: false },
       '/api': 'http://127.0.0.1:14569',
       '/ws': { target: 'ws://127.0.0.1:14569', ws: true },

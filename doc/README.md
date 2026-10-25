@@ -33,7 +33,9 @@ exercise implemented components, field bindings and question completion. Live
 opening and headset acceptance remain unfinished.
 The shared [offered-operation contract](gui-implementation-plan.md#offered-class-and-instance-operations)
 reuses those controls for class creation and exact-instance operations without
-requiring a deferred question. Client presentation and dispatch remain separate.
+requiring a deferred question. The normal World screen and spatial panel share
+its bound forms, personal-agent submission and original-result recovery.
+Physical-headset acceptance remains separate.
 
 [World generation brainstorming](world-generation-brainstorm.md) explores RPG
 world-building sources, ontology-based generation, composable roleplaying rules,

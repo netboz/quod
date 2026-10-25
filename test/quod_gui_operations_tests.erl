@@ -217,6 +217,12 @@ malformed_outputs_and_ambiguous_offers_are_refused_test_() ->
 
 discovery_is_read_only_even_in_execute_test_() ->
     {timeout, 90, fun() -> with_operations(fun(C = #{storage := Ns}) ->
+        %% Class listing selects an exact recipe but does not compile its form.
+        BadForm = {':-',{gui_form,space_create,{'_'},{'_'}},{assertz,discovery_mutated}},
+        edit(Ns,{assertz,BadForm}),
+        {ok,[#{'Classes':=Classes}],_} = quod_prolog:prove_ro(Ns,{gui_operation_classes,{'Classes'}}),
+        ?assert(lists:member(space,Classes)), fails(Ns,discovery_mutated),
+        edit(Ns,{retract,BadForm}),
         %% Authored recipe discovery cannot smuggle a mutation through an
         %% execute request; the existing read-only proof boundary rejects it.
         Head = {eidolon,space_create,{subject,{'Target'},{class,space}},{operation,space_create}},

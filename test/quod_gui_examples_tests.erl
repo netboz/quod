@@ -28,7 +28,7 @@ world_library() ->
             {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
             {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)}],
         Files = ["space.pl","agent_instance.pl","quod_physics.pl","space_view.pl","lobby_instance.pl",
-                 "voxel_world.pl","voxel_world_view.pl","gui_instance.pl","gui_question.pl",
+                 "voxel_world.pl","voxel_world_view.pl","gui_instance.pl","gui_operation.pl","space_gui.pl","gui_question.pl",
                  "voxel_world_gui.pl","lobby_worlds.pl"],
         {Application,WorldConfig} = quod_lobby_tests:start_namespace(Ns,Base#{
             data_dir => filename:join(Dir,"worlds"),

@@ -238,10 +238,40 @@ validation-sensitive domain revisions in the goal or `gui_validation_context/2`,
 as for question forms; this is not a hash of every helper predicate's source.
 Broad authorized source rewriting retains its existing authority.
 
-The signed operation fixture demonstrates real empty-space creation with a
-named reference and an existing space withdrawal through this same contract.
-S1.9 owns production client presentation, dispatch and the complete Create-space
-flow; this contract does not install a lobby menu or replace terrain questions.
+`gui_operation_classes(Classes)` enumerates classes with explicit class offers
+in the selected storage ontology. The World screen's **Create / operations**
+entry selects storage explicitly, then the class and authored form. Exact-instance
+operation recipes open from the same Eidolon choices as workspaces and inspection.
+Returned entity references can open their own operations with the original anchor.
+Workspace recipes return `workspace(Controller, Target, Entity, Tools, View)`;
+the supported existing controllers are `prolog_editor`, `proof_console` and
+`space_library`. This replaces lobby-specific menu/workspace discovery.
+
+The shared operation controller supplies the existing ordinary `GuiForm` and
+spatial workspace panel. It observes `gui_operations/2` through the existing
+signed view owner. The ordinary Prolog `gui_operation/6` composition binds
+typed fields with `gui_operation_bind/7` and calls that guarded goal through
+the personal agent's signed route, returning only the named results. Discovery is a
+human read; advisory availability for that reader does not substitute for A's
+committed authorization on execution. Revoking the human sign-in key blocks new instructions; already accepted A-signed work may finish under A's current key and target permissions. No form-specific helper, question or
+second executor participates.
+
+Local unsent drafts survive panel close/reopen and adapter switches. An updated
+schema preserves but disables the old draft until the user explicitly adopts
+current fields, retaining input in compatible editable roles. Changed choices
+and ranges still require valid input; adoption grants no authority. Explicit
+defaults reset a current form. Closing aborts active client work; an uncertain signed
+write remains in the existing journal and can only be resolved. Successful
+submission settles that draft; another creation requires explicit defaults.
+No draft autosave is introduced. After reload, authoritative personal-instruction
+associations allow recovery even with an empty local journal; unresolved originals
+block new submissions. The panel distinguishes refusal, uncertainty and committed
+bindings. Terminal observations are reused for that controller's lifetime;
+a new identity consumer recovers its authoritative history once. The retained
+instruction route can remain uncertain without a terminal receipt, including
+after expiry; the client never treats elapsed time as permission to resubmit.
+Terrain questions and the existing My worlds library shortcut keep their
+continuation/setup owners until stage 3; neither creates an empty space.
 
 ## 3. Class composition and the portable descriptor
 
@@ -599,7 +629,7 @@ submission only. No duplicate source editor or ontology editing application.
 The same migration replaces the ground `gui_view/2` forms in
 [the GUI vocabulary](../priv/ontologies/quod_gui.pl), the workspace descriptors
 in [Prolog Eidolons](../priv/ontologies/quod_prolog_eidolons.pl),
-`lobby_workspace/3` and their consumers/tests. Keep one view process type with
+class-selected workspace recipes and their consumers/tests. Keep one view process type with
 explicit admitted world/GUI read goals, not a parallel GUI subscription owner.
 
 Extract shared signed-view dependency/subscription lifecycle only where both

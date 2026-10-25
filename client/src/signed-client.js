@@ -83,7 +83,11 @@ export async function personalGoal(identity, { human, agent, key, target, goal }
   const expires = Math.min(identity.session.expires_ms, Date.now() + REQUEST_TTL_MS)
   const targetName = renderTerm(binary(encoder.encode(target.namespace)))
   const anchor = typeof target.anchor === 'string' ? fromB64url(target.anchor) : target.anchor
-  const anchored = `${targetName}::(current_ontology_identity(${targetName}, ${renderTerm(binary(anchor))}), (${goal.replace(/\.\s*$/, '')})).`
+  const atTarget = `current_ontology_identity(${targetName}, ${renderTerm(binary(anchor))}), (${goal.replace(/\.\s*$/, '')})`
+  // Admission of the retained instruction covers this exact source goal.
+  // A self-hop would ask admission again for a different inner goal.
+  const anchored = target.namespace === agent.namespace
+    ? `${atTarget}.` : `${targetName}::(${atTarget}).`
   const targetBytes = encodeGoalRequest({ networkIdentity: identity.networkId,
     signingPublicKey: key, operationId, agentNamespace: agent.namespace,
     agentAnchor: typeof agent.anchor === 'string' ? fromB64url(agent.anchor) : agent.anchor,

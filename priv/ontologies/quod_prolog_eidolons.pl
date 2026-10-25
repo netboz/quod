@@ -16,7 +16,7 @@ isa(prolog_editor, eidolon).
 isa(eidolon, thing).
 
 eidolon(prolog_editor, subject(Target, Entity),
-        workspace(Target, Entity, ontology_ref(Tools, ToolsAnchor), View)) :-
+        workspace(prolog_editor, Target, Entity, ontology_ref(Tools, ToolsAnchor), View)) :-
     Target = ontology_ref(_, _), term_variables(Target-Entity, []),
     Tools = <<"quod:prolog">>, Gui = <<"quod:gui">>,
     quod:root::system_ontology(Tools, ToolsAnchor),

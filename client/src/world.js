@@ -94,24 +94,6 @@ export function viewDependencies(dependencies) {
   }))
 }
 
-export async function readDeviceMenu(identity, agent, subject, options = {}) {
-  const reply = await signedGoal(identity, {
-    mode: 'read', agent,
-    goal: anchoredGoal({ namespace: subject.ontology, anchor: subject.anchor },
-      compound('lobby_menu', [subject.entity, variable('Entries')])),
-  }, options)
-  const entries = readTerm(singleBinding(reply, 'Entries'))
-  if (entries.type !== 'list' || entries.tail !== null) throw new Error('invalid action menu')
-  return entries.items.map(entry => {
-    const [id, label, action] = args(entry, 'menu_entry', 3)
-    const [view] = args(action, 'open_view', 1)
-    if (id.type !== 'atom' || view.type !== 'atom') {
-      throw new Error('invalid workspace reference')
-    }
-    return { id: id.value, label: textValue(label), view: view.value }
-  })
-}
-
 export function readReference(binding) {
   const [ns, anchor] = args(readTerm(binding), 'ontology_ref', 2)
   if (anchor.type !== 'binary' || anchor.value.length !== 32) throw new Error('invalid lobby anchor')
@@ -258,14 +240,19 @@ export async function readGuiQuestionStatus(identity, agent, reference, options 
 // source ontology rechecks its current schema and policy on submission.
 export function guiQuestionSubmission(reference, form, draft) {
   if (form.interaction !== 'editable' || form.view.enabled === false) throw new Error('This question is not editable.')
+  return anchoredGoal(reference, compound('gui_submit', [reference.question,
+    binary(fromB64url(form.openedRevision)), readTerm(form.submit), guiDraftFields(form.view, draft)]))
+}
+
+export function guiDraftFields(view, draft) {
   const leaves = nodes => nodes.flatMap(node => node.children ? leaves(node.children) : [node])
-  const inputs = leaves(form.view.fields).filter(field => guiValueKind(field.kind))
+  const inputs = leaves(view.fields).filter(field => guiValueKind(field.kind))
   if (Object.keys(draft).length !== inputs.length || inputs.some(field => !Object.hasOwn(draft, field.role))) {
-    throw new Error('Incomplete question fields.')
+    throw new Error('Incomplete form fields.')
   }
   const fields = inputs.map(field => {
     const value = draft[field.role]
-    if (typeof value !== 'string') throw new Error('Invalid question draft.')
+    if (typeof value !== 'string') throw new Error('Invalid form draft.')
     let parsed
     if (guiValueKind(field.kind) === 'text') {
       const error = textFeedback(field, value)
@@ -282,11 +269,10 @@ export function guiQuestionSubmission(reference, form, draft) {
     } else if (guiValueKind(field.kind) === 'boolean') {
       if (!['true', 'false'].includes(value) || (field.required && value !== 'true')) throw new Error('Confirm this field.')
       parsed = atom(value)
-    } else throw new Error('Unsupported question field.')
+    } else throw new Error('Unsupported form field.')
     return compound('field', [readTerm(field.role), parsed])
   })
-  return anchoredGoal(reference, compound('gui_submit', [reference.question,
-    binary(fromB64url(form.openedRevision)), readTerm(form.submit), list(fields)]))
+  return list(fields)
 }
 
 export function guiQuestionCancellation(reference) {
@@ -299,43 +285,10 @@ export function readGuiQuestionForm(binding) {
   const [source, actor, opened, state, projection] = args(term, 'question_form', 5)
   const [ns, anchor, form] = args(source, 'form_ref', 3)
   const [revision, tree, token, fields, control] = args(projection, 'form_view', 5)
-  const digest = term => {
-    if (term.type !== 'binary' || term.value.length !== 32) throw new Error('invalid GUI identity digest')
-    return b64url(term.value)
-  }
-  const sourceRef = { namespace: textValue(ns), anchor: digest(anchor), form: renderTerm(form) }
+  const sourceRef = { namespace: textValue(ns), anchor: guiDigest(anchor), form: renderTerm(form) }
   const responsible = readAgentReference(renderTerm(actor))
   if (renderTerm(args(tree, 'component', 4)[0]) !== sourceRef.form) throw new Error('question form identity changed')
-  const view = readGuiView(renderTerm(tree))
-  const leaves = nodes => nodes.flatMap(node => node.children ? leaves(node.children) : [node])
-  const controls = leaves(view.fields)
-  if (controls.some(field => field.kind !== 'button' && !guiValueKind(field.kind) && !guiDisplay(field.kind))) {
-    throw new Error('unsupported question control')
-  }
-  const submit = renderTerm(control)
-  if (!controls.some(field => field.role === submit && field.kind === 'button')) throw new Error('missing question submit control')
-  const inputs = new Map(controls.filter(field => guiValueKind(field.kind)).map(field => [field.role, field]))
-  if (fields.type !== 'list') throw new Error('invalid question fields')
-  const values = Object.create(null)
-  for (const row of fields.items) {
-    const [id, value] = args(row, 'field', 2)
-    const role = renderTerm(id), field = inputs.get(role)
-    if (!field || Object.hasOwn(values, role)) throw new Error('invalid question field identity')
-    if (guiValueKind(field.kind) === 'text') {
-      if (value.type !== 'binary') throw new Error('invalid question text')
-      values[role] = decoder.decode(value.value)
-    } else if (guiValueKind(field.kind) === 'choice') {
-      values[role] = renderTerm(value)
-      if (!choiceValues(field, values[role])) throw new Error('invalid question selection')
-    } else if (guiValueKind(field.kind) === 'boolean') {
-      if (value.type !== 'atom' || !['true', 'false'].includes(value.value)) throw new Error('invalid question boolean')
-      values[role] = value.value
-    } else {
-      if (value.type !== 'number' || value.literal || !Number.isSafeInteger(value.value)) throw new Error('unsupported GUI integer')
-      values[role] = String(value.value)
-    }
-  }
-  if (Object.keys(values).length !== inputs.size) throw new Error('incomplete question fields')
+  const { view, values, submit } = readGuiForm(tree, fields, control)
   if (state.type !== 'atom' || state.value !== 'awaiting') {
     const [, , acceptedFields] = args(state, 'submitted', 3)
     if (acceptedFields.type !== 'list') throw new Error('invalid accepted fields')
@@ -343,15 +296,54 @@ export function readGuiQuestionForm(binding) {
     // never reinterpret them as the current schema's editable defaults.
     for (const field of acceptedFields.items) args(field, 'field', 2)
   }
-  const openedRevision = digest(opened), currentRevision = digest(revision)
+  const openedRevision = guiDigest(opened), currentRevision = guiDigest(revision)
   const interaction = state.type === 'atom'
     ? (openedRevision === currentRevision ? 'editable' : 'stale') : 'submitted'
   return { source: sourceRef, responsible, openedRevision,
-    revision: currentRevision, valuesToken: digest(token), view, values, submit, state, interaction }
+    revision: currentRevision, valuesToken: guiDigest(token), view, values, submit, state, interaction }
 }
 
 // Component roles identify a supported capability. Ontologies choose the view
 // name and labels; a new form cannot call arbitrary client code through them.
+export function guiDigest(term) {
+  if (term.type !== 'binary' || term.value.length !== 32) throw new Error('invalid GUI identity digest')
+  return b64url(term.value)
+}
+
+export function readGuiForm(tree, fields, control) {
+  const view = readGuiView(renderTerm(tree))
+  const leaves = nodes => nodes.flatMap(node => node.children ? leaves(node.children) : [node])
+  const controls = leaves(view.fields)
+  if (controls.some(field => field.kind !== 'button' && !guiValueKind(field.kind) && !guiDisplay(field.kind))) {
+    throw new Error('unsupported form control')
+  }
+  const submit = renderTerm(control)
+  if (!controls.some(field => field.role === submit && field.kind === 'button')) throw new Error('missing form submit control')
+  const inputs = new Map(controls.filter(field => guiValueKind(field.kind)).map(field => [field.role, field]))
+  if (fields.type !== 'list') throw new Error('invalid form fields')
+  const values = Object.create(null)
+  for (const row of fields.items) {
+    const [id, value] = args(row, 'field', 2)
+    const role = renderTerm(id), field = inputs.get(role)
+    if (!field || Object.hasOwn(values, role)) throw new Error('invalid form field identity')
+    if (guiValueKind(field.kind) === 'text') {
+      if (value.type !== 'binary') throw new Error('invalid form text')
+      values[role] = decoder.decode(value.value)
+    } else if (guiValueKind(field.kind) === 'choice') {
+      values[role] = renderTerm(value)
+      if (!choiceValues(field, values[role])) throw new Error('invalid form selection')
+    } else if (guiValueKind(field.kind) === 'boolean') {
+      if (value.type !== 'atom' || !['true', 'false'].includes(value.value)) throw new Error('invalid form boolean')
+      values[role] = value.value
+    } else {
+      if (value.type !== 'number' || value.literal || !Number.isSafeInteger(value.value)) throw new Error('unsupported GUI integer')
+      values[role] = String(value.value)
+    }
+  }
+  if (Object.keys(values).length !== inputs.size) throw new Error('incomplete form fields')
+  return { view, values, submit }
+}
+
 export function formLabels(form, expected) {
   const labels = { title: form.title }
   const leaves = fields => fields.flatMap(field => field.children ? leaves(field.children) : [field])
@@ -392,9 +384,9 @@ export async function readEntityEidolons(identity, agent, subject, options = {})
   return choices.items.map(choice => {
     const [purpose, style, recipe] = args(choice, 'eidolon', 3)
     const [ns, anchor, name] = args(recipe, 'recipe', 3)
-    if (purpose.type !== 'atom' || style.type !== 'atom' || name.type !== 'atom' ||
+    if (!(purpose.type === 'atom' || (purpose.type === 'compound' && purpose.functor === 'operation' && purpose.args.length === 1 && ['class', 'instance'].includes(purpose.args[0].value))) || style.type !== 'atom' || name.type !== 'atom' ||
         anchor.type !== 'binary' || anchor.value.length !== 32) throw new Error('invalid eidolon recipe')
-    return { purpose: purpose.value, style: style.value,
+    return { purpose: renderTerm(purpose), style: style.value,
       recipe: { namespace: textValue(ns), anchor: anchor.value, name: name.value } }
   })
 }
@@ -412,12 +404,14 @@ export function readEidolonRepresentation(binding, subject) {
   const result = readTerm(binding)
   requireProjection(result)
   const lens = result.functor === 'lens_view'
-  const [ref, entity, tools, view, parameters] = args(result, lens ? 'lens_view' : 'workspace', lens ? 5 : 4)
+  const [controller, ...content] = lens ? [null, ...args(result, 'lens_view', 5)] : args(result, 'workspace', 5)
+  const [ref, entity, tools, view, parameters] = content
+  if (!lens && (controller.type !== 'atom' || !['prolog_editor', 'proof_console', 'space_library'].includes(controller.value))) throw new Error('unsupported workspace controller')
   const reference = readReference(renderTerm(ref))
   if (reference.namespace !== subject.ontology || b64url(reference.anchor) !== b64url(subject.anchor) ||
       renderTerm(entity) !== renderTerm(subject.entity)) throw new Error('representation target changed')
   const owner = readReference(renderTerm(tools))
-  if (!lens) return { kind: 'workspace', workspace: { target: reference, tools: owner, view: readGuiView(renderTerm(view)) } }
+  if (!lens) return { kind: 'workspace', controller: controller.value, workspace: { target: reference, tools: owner, view: readGuiView(renderTerm(view)) } }
   if (view.type !== 'binary' || parameters.type !== 'list' || parameters.items.length !== 1 ||
       renderTerm(parameters.items[0]) !== renderTerm(ref)) throw new Error('invalid target lens')
   return { kind: 'lens', target: reference, lens: owner, view: textValue(view), parameters }

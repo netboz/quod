@@ -48,8 +48,9 @@ extent, optional atomic placement and recovery of the original reference/name.
 Empty creation allocates no terrain or simulation.
 Shared [offered operations](doc/gui-implementation-plan.md#offered-class-and-instance-operations)
 bind explicit class recipes to exact subjects, typed inputs and named results.
-They reuse GUI controls and committed permissions; client presentation remains
-separate from this Prolog description/binding contract.
+The normal World screen opens those forms with explicit storage selection,
+personal-agent submission and original-result recovery. Desktop and spatial
+panels share the same controller and committed Prolog permission checks.
 
 The browser and ontology sources also include early rendering, modelling,
 material, environment and lobby work. The full shared-world simulation,

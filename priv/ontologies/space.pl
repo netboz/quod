@@ -28,15 +28,16 @@ space_creator_owner(_, Owner) :-
     current_principal(agent_instance_ref(Ns, Anchor, _)),
     Ns::(current_ontology_identity(Ns, Anchor), personal_agent_owner(Owner)).
 
+space_initial_placement(near_agent).
 space_initial_placement(at(entity_ref(Ns, Anchor, Entity), Transform)) :-
     binary(Ns), binary(Anchor), term_variables(Entity, []), space_transform(Transform).
 space_transform(transform(X, Y, Z, RX, RY, RZ)) :-
     integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ).
 
 constructor(space, Space, _) :-
-    (retract(attribute(Space, placement, at(Destination, Pose))) ->
-        Placement = placed(Destination, Pose)
-    ; current_principal(agent_instance_ref(Ns, Anchor, Agent)),
+    (retract(attribute(Space, placement, Requested)) -> true; Requested = near_agent),
+    (Requested = at(Destination, Pose) -> Placement = placed(Destination, Pose)
+    ; Requested = near_agent, current_principal(agent_instance_ref(Ns, Anchor, Agent)),
       Ns::(current_ontology_identity(Ns, Anchor), space_location(Agent, Location)),
       space_near_location(Location, Placement)),
     (Placement = unplaced -> Pose = transform(0,0,0,0,0,0)

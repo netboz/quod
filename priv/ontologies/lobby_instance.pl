@@ -2,6 +2,22 @@
 %% references and device class memberships; no user registry here.
 %% Found with quod_agent_predicates for proof-bound identity checks.
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
+can_invoke(_, Principal, _, _) :- lobby_personal_agent(Principal).
+
+%% The account template owns the distinct personal identity in U's history.
+%% This local owner grant does not authorize arbitrary hosted agents.
+lobby_personal_agent(agent_instance_ref(Ns,A,personal)) :-
+    lobby_owner(agent_instance_ref(Ns,A,_)).
+class_permission(space,create,check(lobby_space_creation)).
+class_permission(space,space_enter,check(lobby_space_permission)).
+lobby_space_creation(Actor,class(space),create(Inputs)) :-
+    lobby_personal_agent(Actor), lobby_owner(Owner),
+    (member(attribute(owner,Requested),Inputs) -> Requested = Owner; true).
+lobby_space_permission(Actor,construction(space,_,_),space_enter(_,_,placement)) :-
+    lobby_personal_agent(Actor).
+lobby_space_permission(Actor,instance(Space),space_admit(_,_,placement)) :-
+    lobby_personal_agent(Actor), instance_of(space,Space),
+    \+ space_instance(Space,physical_space), lobby_owner(Owner), attribute(Space,owner,Owner).
 
 ontology_source_mode(editable) :- current_principal(Principal), lobby_owner(Principal).
 
@@ -136,16 +152,12 @@ vocabulary_class(Reference, Namespace, Class) :-
     '$quod_owner_name'(Reference, Owner, Class), ontology_name(Owner, Namespace).
 vocabulary_class(Class, _, Class).
 
-lobby_menu(Device, Entries) :-
-    entity_classes(Device, Raw), lobby_vocabulary(Vocabulary,_),
-    findall(Class,(member(C,Raw),vocabulary_class(C,Vocabulary,Class)),Classes),
-    lobby_vocabulary(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-                device_menu(Classes, Entries)).
-
-lobby_workspace(Device, ViewId, View) :-
-    lobby_menu(Device, Entries),
-    member(menu_entry(_, _, open_view(ViewId)), Entries),
-    gui_vocabulary(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor),
-                gui_view(ViewId, View)).
+%% Built-in tools are ordinary class-selected, exact-subject representations.
+class_eidolon(prolog_console, workspace, Kind, recipe(Ns,A,Kind)) :-
+    member(Kind,[proof_console,space_library]), current_ontology_identity(Ns,A).
+eidolon(Kind, subject(Target, Entity), workspace(Kind,Target,Entity,Target,View)) :-
+    member(Kind,[proof_console,space_library]), Target = ontology_ref(Ns,A),
+    current_ontology_identity(Ns,A),
+    entity_eidolons(Entity,workspace,Kind,[eidolon(workspace,Kind,recipe(Ns,A,Kind))]),
+    current_principal(Owner), lobby_owner(Owner), gui_vocabulary(Gui,Anchor),
+    Gui::(current_ontology_identity(Gui,Anchor), gui_view(Kind,View)).

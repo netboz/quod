@@ -1,1 +1,0 @@
-import{n as e}from"./mesh.pure-BVP87l_v.js";import{t}from"./texture.pure-DGgSB6FT.js";t(),e();

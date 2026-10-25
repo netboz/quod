@@ -2,10 +2,23 @@
 %% No ACL, mutable state or executor is installed by this vocabulary.
 ontology_interface(gui_operations/2, <<"explicit class or instance operations">>).
 ontology_interface(gui_operation_bind/7, <<"bind typed inputs to an authored goal and named results">>).
+ontology_interface(gui_operation/6, <<"call the bound operation and return only its named results">>).
+ontology_interface(gui_operation_classes/1, <<"classes offering creation in this storage ontology">>).
+
+gui_operation_classes(Classes) :-
+    '$quod_state_check'((
+        current_ontology_identity(Ns, Anchor),
+        findall(Class, (isa(Class, Class),
+            class_eidolons([Class], operation(class), _, Choices),
+            member(eidolon(_,Name,_),Choices),
+            gui_operation_form(class_ref(Ns,Anchor,Class), Name, _, _, _)), Raw),
+        sort(Raw, Classes))).
 
 no_follow(gui_operations/2).
+no_follow(gui_operation/6).
 no_follow(gui_operation_view/3).
 no_follow(gui_operation_definition/8).
+no_follow(gui_operation_form/5).
 no_follow(gui_operation_subject/4).
 no_follow(gui_operation_bind/7).
 no_follow(gui_operation_binding/7).
@@ -33,15 +46,17 @@ gui_operation_view(Subject, Name,
 %% Existing recipe selection retains most-specific/ambiguous-class semantics.
 gui_operation_definition(Subject, Name, Revision, Form, Tree, Fields, Submit,
                          operation(Local, Permission, Results)) :-
+    gui_operation_form(Subject, Name, Local, Recipe, Form),
+    gui_definition(Form, Schema, Tree, Fields, Submit, operation(Permission, Results)),
+    variant_digest(offered_operation(Subject, Name, Recipe, Form, Schema), Revision).
+
+gui_operation_form(Subject, Name, Local, recipe(Ns,Anchor,Recipe), Form) :-
     gui_operation_subject(Subject, Local, Classes, Mode),
     class_eidolons(Classes, operation(Mode), Name,
                    [eidolon(operation(Mode), Name, recipe(Ns, Anchor, Recipe))]),
     current_ontology_identity(Here, History), Target = ontology_ref(Here, History),
     findall(F, Ns::(current_ontology_identity(Ns, Anchor),
-                    eidolon(Recipe, subject(Target, Local), operation(F))), [Form]),
-    gui_definition(Form, Schema, Tree, Fields, Submit, operation(Permission, Results)),
-    variant_digest(offered_operation(Subject, Name, recipe(Ns, Anchor, Recipe),
-                                     Form, Schema), Revision).
+                    eidolon(Recipe, subject(Target, Local), operation(F))), [Form]).
 
 gui_operation_subject(class_ref(Ns, Anchor, Class), class(Class), [Class], class) :-
     current_ontology_identity(Ns, Anchor), isa(Class, Class).
@@ -55,6 +70,11 @@ gui_operation_bind(Subject, Name, Revision, Control, Values, Goal, Results) :-
     var(Goal), var(Results),
     gui_operation_binding(Subject, Name, Revision, Control, Values, Authored, Results),
     Goal = (gui_operation_guard(Subject, Name, Revision, Control, Values, Authored, Results), Authored).
+
+%% Ordinary Prolog composition keeps the executable binding local. The same
+%% binder and guard remain authoritative for callers transporting a bound goal.
+gui_operation(Subject, Name, Revision, Control, Values, Results) :-
+    gui_operation_bind(Subject, Name, Revision, Control, Values, Goal, Results), call(Goal).
 
 gui_operation_binding(Subject, Name, Revision, Control, Values, Goal, Results) :-
     term_variables([Subject, Name, Revision, Control, Values], []),

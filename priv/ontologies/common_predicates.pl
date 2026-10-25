@@ -56,7 +56,13 @@ class_eidolon(ontology, inspection, Style, recipe(Namespace, Anchor, Style)) :-
 entity_eidolons(Entity,Eidolons) :- entity_eidolons(Entity,_,_,Eidolons).
 entity_eidolons(Entity,Purpose,Style,Eidolons) :-
     findall(Direct,(instance_of(Direct,Entity); Direct = Entity, isa(Direct,Direct)),Raw),
-    sort(Raw,Classes), class_eidolons(Classes,Purpose,Style,Eidolons).
+    sort(Raw,Classes), class_eidolons(Classes,Purpose,Style,Offered),
+    findall(eidolon(Mode,Kind,Recipe),
+        (member(eidolon(Mode,Kind,Recipe),Offered), entity_eidolon_mode(Entity,Mode)), Eidolons).
+
+entity_eidolon_mode(Entity,operation(class)) :- !, once(isa(Entity,Entity)).
+entity_eidolon_mode(Entity,operation(instance)) :- !, once(instance_of(_,Entity)).
+entity_eidolon_mode(_,_).
 
 class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
 class_eidolons(Classes,Purpose,Style,Eidolons) :-

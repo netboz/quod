@@ -1141,7 +1141,8 @@ gui_open_message(Ctx, Session, Kind, Ns, Anchor, Q, ExtraExpiry) ->
     {Source, SourceAnchor} = maps:get(agent, Ctx),
     {Pub, _} = Pair = maps:get(key_pair, Ctx),
     Inner = case Kind of gui_hud -> <<"gui_pending_questions(View)">>;
-        gui_question -> [<<"gui_question_form(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,
+        gui_question -> [<<"gui_question_form(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
+        gui_operations -> [<<"gui_operations(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,
     Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns), " :: (current_ontology_identity(",
         quod_client_goal_parser:value_text(Ns), ",", quod_client_goal_parser:value_text(Anchor), "),", Inner, ")."]),
     {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx),

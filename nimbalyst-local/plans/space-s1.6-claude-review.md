@@ -54,7 +54,8 @@ The original reviewed tree and patch remain intact; the correction is frozen
 separately in `/tmp/quod-s1.6-regression-05-tree.json` and its matching directory.
 Production delta after correction: **+68/−58, net +10 lines**, in five existing
 Prolog files, including the physics comment correction. No Erlang production
-code was added. Changes are uncommitted; the stage and plan remain incomplete.
+code was added. Yan authorized the commit and completion. S1.6 is committed as `1f759530` and
+completed; the stage and plan remain incomplete.
 
 ## Original review
 

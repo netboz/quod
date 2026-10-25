@@ -1,5 +1,15 @@
 %% Pure space depiction, composed with the space vocabulary and ordinary
 %% entity Eidolons. Membership and physical bindings stay with their owners.
+entity_scene(Space, Mode, appearance(Space, solid, Space, Transform, Eidolons)) :-
+    space_instance(Space, space), attribute(Space, transform, Transform),
+    member(Mode, [playing, edition]), entity_eidolons(Space, Mode, solid, Eidolons).
+class_eidolon(space, Mode, solid, recipe(Ns, Anchor, space)) :-
+    member(Mode, [playing, edition]), current_ontology_identity(Ns, Anchor).
+%% A half-metre exterior depicts even an infinite interior with finite geometry.
+eidolon(space, _,
+    [part(<<"space">>, box(500,500,500), transform(0,0,0,0,0,0),
+          surface(<<"#6A90D9">>, 0, 700, 0, []), unlabelled, depicts_nothing)]).
+
 world_view(Space, Mode, Marks) :-
     space_instance(Space,space),
     findall(Subject,space_contains(Space,Subject),Raw), sort(Raw,Subjects),

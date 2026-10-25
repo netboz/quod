@@ -278,31 +278,7 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 
   **Scope and review:** Production delta **+68/−58, net +10 lines**, all in existing Prolog files; no new owner, registry, executor or Erlang production code. Claude Fable's confirmed physical cleanup finding is corrected and tested; all seven additional shared-helper caller modules were exercised with the baseline failure retained. [Review and parent disposition](/home/yan/src/quod/nimbalyst-local/plans/space-s1.6-claude-review.md). S1.7 still owns creation-time class consent and explicit/near-agent/unplaced pose selection; later stages own entry and recursive views. Existing founded-source adoption is not performed. S1.7 and later tickets remain unstarted; the stage and plan remain incomplete. Yan authorized commit and completion; implementation commit `1f759530`. No deployment, migration or user-data deletion.
 
-- S1.7 — Create one empty space with explicit storage and optional placement #task[id:tsk_01M5Q1YXC2X7DBYHA09GX2BK0Y status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
-  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.
-  
-  Dependencies: S1.2 [tsk_01M5Q1YXC2ZWGX69MZGQH2YQZS](nimbalyst://tsk_01M5Q1YXC2ZWGX69MZGQH2YQZS); S1.5 [tsk_01M5Q1YXC2AWGSJT9CJ86R13W8](nimbalyst://tsk_01M5Q1YXC2AWGSJT9CJ86R13W8); S1.6 [tsk_01M5Q1YXC2AQK9YP4GRXM4FYBV](nimbalyst://tsk_01M5Q1YXC2AQK9YP4GRXM4FYBV). These are implementation dependencies, not additional design approvals.
-  
-  **Scope and ownership**
-  
-  Supply the space class defaults/constructor as the first domain consumer of shared construction. The instruction chooses an existing target ontology; normally U owns the new space while A signs. Default dimensions are a 100-metre cube centered at the origin; accept infinite or three strictly positive unit-bearing lengths through existing exact measurement rules. Compose optional placement and instance facts atomically. An explicit destination is authorized; otherwise place the defined 3D-model Eidolon near placed A or create unplaced when A is actually unplaced. Extent and exterior model size remain distinct.
-  
-  **Inspected code and verification seams**
-  
-  [priv/ontologies/space.pl:3](/home/yan/src/quod/priv/ontologies/space.pl:3) · [priv/ontologies/quod_measure.pl:114](/home/yan/src/quod/priv/ontologies/quod_measure.pl:114) · [priv/ontologies/common_predicates.pl:46](/home/yan/src/quod/priv/ontologies/common_predicates.pl:46) · [priv/ontologies/space_view.pl:3](/home/yan/src/quod/priv/ontologies/space_view.pl:3) · [test/quod_space_tests.erl:1](/home/yan/src/quod/test/quod_space_tests.erl:1) · [test/quod_gui_examples_tests.erl:12](/home/yan/src/quod/test/quod_gui_examples_tests.erl:12)
-  
-  **Acceptance checks**
-  
-  - [ ] Through A's signed production route, create an empty space in the selected existing ontology with correct U ownership, full anchored reference, stable name and default/overridden dimensions.
-  - [ ] Exercise explicit placement, near-A placement and unplaced A. Failed location lookup is not proof of absence; denied explicit placement rolls back creation rather than silently falling back.
-  - [ ] Reject non-length, zero/negative or malformed dimensions; exact compatible-unit conversion works. Infinite extent does not allocate infinite resources.
-  - [ ] Space creation allocates no terrain, sky, walls or simulation. Ownership, storage and containing space remain independent; replay preserves reference/name/state.
-  
-  **Replacement and documentation:** Reuse shared space and naming primitives; do not add a special create_space executor or make empty creation call the landscape helper. Preserve the existing terrain creation route until stage 3 replaces it. Update ordinary-space behavior documentation.
-  
-  **Existing-ticket boundary:** [QUD.33](nimbalyst://QUD.33) stays completed for the old foundation; [QUD.31](nimbalyst://QUD.31) remains the broader terminology reconciliation task, not a stage-1 prerequisite.
-  
-  Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md). Keep domain state/policy in Prolog and reuse existing transaction, recovery and runtime owners. Verification is required during implementation, not claimed here. No deployment, commit, data deletion or agent spawning is authorized by ticket creation.
+- S1.7 — Create one empty space with explicit storage and optional placement: [QUO-43](nimbalyst://QUO-43). Status: completed and committed with this change. Scope, acceptance checks, verification and dependencies are in the full tracker item.
 
 - S1.8 — Describe and bind class operations through the shared Prolog GUI model #task[id:tsk_01M5Q1YXC2YVTBAC8RRBK73RXY status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
   Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.
@@ -333,7 +309,7 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 - S1.9 — Deliver the bound Create-space interface and verify the complete stage-1 flow #task[id:tsk_01M5Q1YXC21Z70NX4DJXSZHD1X status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
   Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.
   
-  Dependencies: S1.7 [tsk_01M5Q1YXC2X7DBYHA09GX2BK0Y](nimbalyst://tsk_01M5Q1YXC2X7DBYHA09GX2BK0Y); S1.8 [tsk_01M5Q1YXC2YVTBAC8RRBK73RXY](nimbalyst://tsk_01M5Q1YXC2YVTBAC8RRBK73RXY). These are implementation dependencies, not additional design approvals.
+  Dependencies: S1.7 [QUO-43](nimbalyst://QUO-43); S1.8 [tsk_01M5Q1YXC2YVTBAC8RRBK73RXY](nimbalyst://tsk_01M5Q1YXC2YVTBAC8RRBK73RXY). These are implementation dependencies, not additional design approvals.
   
   **Scope and ownership**
   

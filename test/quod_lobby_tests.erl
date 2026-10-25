@@ -50,6 +50,7 @@ authored_space_composition_preserves_world_test_() ->
             data_dir => filename:join(Dir, "gallery"),
             genesis_diff => quod_prolog:terms_to_diff([
                 {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
+                authored_source_clause(),
                 {world_view, gallery, playing, Scene}])}),
         try
             lists:foreach(fun({Ns, Space}) ->
@@ -64,7 +65,7 @@ authored_space_composition_preserves_world_test_() ->
                 ?assertMatch({ok, [#{<<"V0">> := {world_view, _, [], unavailable}}], _},
                              read(Ctx, View)),
                 Before = quod_prolog:applied(Ns),
-                Edit = editor_scope(Ns, authored_space_composition_goal()),
+                Edit = editor_scope(Ns, authored_space_composition_goal(Ctx, Ns)),
                 commit_editor_goal(Ctx, Edit),
                 Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
                 ?assertMatch({ok, [#{<<"V0">> := Expected}], _}, read(Ctx, View)),
@@ -77,16 +78,27 @@ authored_space_composition_preserves_world_test_() ->
         after stop_process(element(1, Other)), stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
-authored_space_composition_goal() ->
+authored_space_composition_goal(Ctx, Ns) ->
     Terms = quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/space.pl")),
     Heads = [case T of {':-', H, _} -> H; H -> H end || T <- Terms],
     Indicators = lists:usort([erlog_int:functor(H) || H <- Heads]),
-    Checks = [{'$quod_predicate_source', {'/', F, A}, <<>>}
-              || {F, A} <- Indicators, F =/= isa],
-    Edges = [{'\\+', {clause, {isa, space, thing}, true}},
-             {'\\+', {clause, {isa, physical_space, space}, true}}],
-    Assertions = quod_ct:source_assertions(Terms),
-    {transaction, balanced_space_goals(Checks ++ Edges ++ Assertions)}.
+    Target = {ontology_ref, Ns, quod_simplex:genesis_hash(Ns)},
+    Checks = [{'$quod_predicate_source', {'/', F, A},
+               editor_source(Ctx, Target, {'/', F, A})} || {F, A} <- Indicators],
+    %% Keep source as source through the existing parser, instead of expanding
+    %% every clause into signed-goal tokens. All assertions still commit once.
+    Assertions = [begin
+        {assertz, Clause} = quod_ct:source_assertion(Term),
+        {Numbered, _, _} = erlog_int:term_instance(Clause, 0),
+        {ok, Source} = quod_client_goal_parser:format_clause(Numbered),
+        {authored_source_clause, Source}
+    end || Term <- Terms],
+    {transaction, balanced_space_goals(Checks ++ Assertions)}.
+
+%% Clause-local parsing variables are not creation results or client outputs.
+authored_source_clause() ->
+    {':-', {authored_source_clause, {'Source'}},
+     {',', {'$quod_program_source', [{'Clause'}], {'Source'}}, {assertz, {'Clause'}}}}.
 
 balanced_space_goals([G]) -> G;
 balanced_space_goals(Gs) ->
@@ -109,6 +121,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
             data_dir => filename:join(Dir, "gallery"),
             genesis_diff => quod_prolog:terms_to_diff([
                 {can_invoke, {'_'}, Owner, {'_'}, {'_'}},
+                authored_source_clause(),
                 {world_view, gallery, playing, Scene}])}),
         ColdName = <<"authored_physics_", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
         ?assertError(badarg, binary_to_existing_atom(ColdName, utf8)),
@@ -128,7 +141,7 @@ inactive_physics_source_authoring_preserves_world_test_() ->
                                quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
                     case Ns of LobbyNs -> [quod_ct:source_assertion({instance_of, lobby, Space})]; _ -> [] end),
                 commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
-                commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal())),
+                commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal(Ctx, Ns))),
                 View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
                 Expected = {world_view, {entity_ref, Ns, Anchor, Space}, Scene, nonphysical},
                 Before = quod_prolog:applied(Ns),
@@ -1264,13 +1277,13 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
                      {attribute, console_b, layout, {transform, 3000, 0, 0, 0, 0, 0}}],
             commit_editor_goal(Ctx, editor_scope(Ns, editor_conjunction(quod_ct:source_assertions(Added)))),
             ?assertEqual([<<"PROLOG CONSOLE">>, <<"PROLOG CONSOLE">>], shared_editor_titles(Ctx, Ns)),
+            LocalRecipes = editor_source(Ctx, Lobby, {'/', eidolon, 3}),
             edit_shared_source(Ctx, ClassNs, {'/', eidolon, 3}, fun(Source) ->
                 ?assertNotEqual(nomatch, binary:match(Source, <<"PROLOG CONSOLE">>)),
                 binary:replace(Source, <<"PROLOG CONSOLE">>, <<"SHARED REVISION">>, [global])
             end),
             ?assertEqual([<<"SHARED REVISION">>, <<"SHARED REVISION">>], shared_editor_titles(Ctx, Ns)),
-            ?assertMatch({ok, [#{<<"V0">> := <<>>}], _},
-                read(Ctx, editor_scope(Ns, {'$quod_predicate_source', {'/', eidolon, 3}, {0}}))),
+            ?assertEqual(LocalRecipes, editor_source(Ctx, Lobby, {'/', eidolon, 3})),
             edit_shared_source(Ctx, ClassNs, {'/', isa, 2}, fun(Source) ->
                 <<Source/binary, "isa(smart_console, prolog_console).\n">>
             end),

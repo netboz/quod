@@ -3,6 +3,58 @@
 isa(space, thing).
 isa(physical_space, space).
 
+%% Interior lengths are independent of the exterior model and resource policy.
+have_attribute(space, name, binary, default(<<"Space">>)).
+have_attribute(space, dimensions, space_dimensions,
+    default(box(q(100, <<"m">>), q(100, <<"m">>), q(100, <<"m">>)))).
+have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
+%% Consumed by construction; the assignment remains the sole location record.
+have_attribute(space, placement, space_initial_placement).
+
+space_dimensions(infinite).
+space_dimensions(box(Width, Height, Depth)) :-
+    findall(measure(N, A), measure_vocabulary(N, A), [measure(Ns, Anchor)]),
+    space_length(Ns, Anchor, Width), space_length(Ns, Anchor, Height),
+    space_length(Ns, Anchor, Depth).
+space_length(Ns, Anchor, q(Value, Unit)) :-
+    binary(Unit),
+    Ns::(current_ontology_identity(Ns, Anchor), convert(Value, Unit, <<"m">>, Metres)),
+    (integer(Metres) -> Metres > 0
+    ; Metres = N / D, integer(N), integer(D), N > 0, D > 0).
+
+space_owner(agent_instance_ref(Ns, Anchor, Entity)) :-
+    binary(Ns), binary(Anchor), term_variables(Entity, []).
+space_creator_owner(_, Owner) :-
+    current_principal(agent_instance_ref(Ns, Anchor, _)),
+    Ns::(current_ontology_identity(Ns, Anchor), personal_agent_owner(Owner)).
+
+space_initial_placement(at(entity_ref(Ns, Anchor, Entity), Transform)) :-
+    binary(Ns), binary(Anchor), term_variables(Entity, []), space_transform(Transform).
+space_transform(transform(X, Y, Z, RX, RY, RZ)) :-
+    integer(X), integer(Y), integer(Z), integer(RX), integer(RY), integer(RZ).
+
+constructor(space, Space, _) :-
+    (retract(attribute(Space, placement, at(Destination, Pose))) ->
+        Placement = placed(Destination, Pose)
+    ; current_principal(agent_instance_ref(Ns, Anchor, Agent)),
+      Ns::(current_ontology_identity(Ns, Anchor), space_location(Agent, Location)),
+      space_near_location(Location, Placement)),
+    (Placement = unplaced -> Pose = transform(0,0,0,0,0,0)
+    ; Placement = placed(Destination, Pose), space_place(Space, 0, Destination)),
+    assertz(attribute(Space, transform, Pose)).
+
+%% A successful owner read explicitly distinguishes absence from failure.
+%% Missing/ambiguous pose on a placed agent refuses creation, never unplaces it.
+space_location(Entity, Location) :-
+    instance_of(_, Entity), space_assignment(Entity, _, Destination),
+    (Destination == none -> Location = unplaced
+    ; findall(Pose, attribute(Entity, transform, Pose), [Transform]),
+      space_transform(Transform), Location = placed(Destination, Transform)).
+space_near_location(unplaced, unplaced).
+space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)),
+                   placed(Destination, transform(NearX,Y,Z,RX,RY,RZ))) :-
+    NearX is X + 1000.
+
 space_instance(Space, Class) :-
     once((instance_of(Direct, Space), isa(Direct, Class))).
 

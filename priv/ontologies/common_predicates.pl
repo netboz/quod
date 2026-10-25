@@ -78,8 +78,12 @@ entity_classes(Entity, Classes) :-
 %% direct calls. Discovery may ask it with complete inputs, but never executes
 %% the operation. Identity comes from the proof; all policy comes from its
 %% committed base. Creation uses class(Class), create(BuildPlan).
-operation_authorized(Subject, Operation) :-
-    term_variables(Subject-Operation, []),
+operation_authorized(Requested, Operation) :-
+    term_variables(Requested-Operation, []),
+    (Requested = class(_); Requested = instance(_)),
+    (Requested = instance(Instance), '$quod_construction'(Instance, Class, Inputs) ->
+        Subject = construction(Class, Instance, Inputs)
+    ; Subject = Requested),
     current_principal(Actor),
     '$quod_committed_check'(operation_policy(Actor, Subject, Operation)).
 
@@ -94,6 +98,8 @@ operation_policy(Actor, Subject, Operation) :-
 
 operation_classes(class(Class), Classes) :-
     findall(C, (C = Class; isa(Class, C)), Raw), sort(Raw, Classes).
+operation_classes(construction(Class, Instance, _), Classes) :-
+    \+ instance_of(_, Instance), operation_classes(class(Class), Classes).
 operation_classes(instance(Instance), Classes) :-
     findall(C, (instance_of(Direct, Instance), (C = Direct; isa(Direct, C))), Raw),
     sort(Raw, Classes).
@@ -130,6 +136,7 @@ operation_grant(Actor, Subject, Operation, Name, Classes) :-
     permission_allows(Grant, Actor, Subject, Operation).
 
 operation_override(class(_), _, []).
+operation_override(construction(_, _, _), _, []).
 operation_override(instance(Instance), Name, Grants) :-
     findall(Grant, instance_permission(Instance, Name, Grant), Grants).
 

@@ -132,6 +132,40 @@ authorization_uses_committed_requirements_and_inputs_test() ->
         ?assertEqual(changes(S), changes(F))
     end).
 
+construction_operations_use_committed_class_policy_and_scoped_inputs_test() ->
+    {ok, Terms} = erlog_io:read_string_terms(
+      "isa(guarded,car). class_permission(vehicle,inspect,check(construction_check)). "
+      "class_requirement(vehicle,inspect,construction_required). required_enabled. "
+      "construction_required(_,_,_) :- required_enabled. "
+      "construction_check(_,construction(guarded,I,Inputs),inspect(I)) :- "
+      "member(attribute(name,<<\"Chosen\">>),Inputs). "
+      "constructor(guarded,I,Inputs) :- "
+      "operation_authorized(instance(I),inspect(I)), "
+      "assert(instance_of(eye,Part)), "
+      "'$quod_construction'(I,guarded,Inputs), "
+      "\\+ '$quod_construction'(Part,_,_), assertz(guarded(I))."),
+    with_state(Terms, fun(St) ->
+        Inputs = [{attribute,name,<<"Chosen">>}],
+        Goal = {with_build_plan,Inputs,{assert,{instance_of,guarded,{'Id'}}}},
+        S = prove(Goal,St), Id = binding('Id',S),
+        holds({guarded,Id},S),
+        fails({'$quod_construction',Id,{'_'},{'_'}},S),
+        fails({operation_authorized,{instance,Id},{inspect,Id}},S),
+        fails({operation_authorized,{construction,guarded,Id,Inputs},{inspect,Id}},S),
+        %% The public input scope cannot forge the hook's construction context.
+        fails({'$quod_with_build_plan',{construction,guarded,Id,Inputs},
+               {'$quod_construction',Id,{'_'},{'_'}}},S),
+        F = refused({assert,{instance_of,guarded,{'Other'}}},St),
+        ?assertEqual([],changes(F)),
+        fails({'$quod_construction',Id,{'_'},{'_'}},F)
+    end),
+    with_state(Terms -- [required_enabled], fun(St) ->
+        Staged = prove({assertz,required_enabled},St),
+        F = refused({with_build_plan,[{attribute,name,<<"Chosen">>}],
+                     {assert,{instance_of,guarded,{'Id'}}}},Staged),
+        ?assertEqual(changes(Staged),changes(F))
+    end).
+
 strict_readonly_assertions_remain_forbidden_test_() ->
     [?_test(with_state([{instance_of, car, old}], fun(St) ->
         {_, R} = quod_erlog_db_local_prove:enter_read_only(St),

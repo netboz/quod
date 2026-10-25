@@ -42,6 +42,10 @@ decided facts without reconstructing instances.
 space, with both owners' committed permission and atomic admission. Ordinary
 spaces reuse the existing depiction path without physics; independent display
 references can show the same instance in multiple spaces.
+[Empty spaces](doc/spaces.md#empty-creation) use those constructors through the
+personal agent's signed route, with explicit storage, exact finite or infinite
+extent, optional atomic placement and recovery of the original reference/name.
+Empty creation allocates no terrain or simulation.
 
 The browser and ontology sources also include early rendering, modelling,
 material, environment and lobby work. The full shared-world simulation,

@@ -30,6 +30,9 @@ validation consumes that material under the existing trusted execution boundary.
   carry temporary constructor inputs through private logical bindings. Prolog
   owns shape checks, inheritance and defaults. Scope release restores inputs on
   success, failure, redo and error; no facts, transaction mode or authority change.
+- `'$quod_construction'(+Id, -Class, -Inputs)` observes only an active assertion
+  scope. The operation guard checks that class's committed policy for work on
+  its new identity. The input wrapper cannot establish construction context.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
@@ -73,11 +76,11 @@ validation consumes that material under the existing trusted execution boundary.
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2, voxel_compute_3/3, committed_check_1/3,
          with_build_plan_2/3, build_plan_1/3, build_plan_return_1/3,
-         assert_instance/4, instance_id_1/3]).
+         assert_instance/4, instance_id_1/3, construction_3/3]).
 
 -define(DRAW, '$quod_draw').
 -define(BINARY_CODES, binary_codes).
--define(BUILD_INPUTS, {{?MODULE, build_inputs}}).
+-define(BUILD_CONTEXT, {{?MODULE, build_context}}).
 -record(build_scope, {ref, previous, next}).
 
 -doc "Install the common primitives into a base engine state.".
@@ -117,8 +120,10 @@ load(#est{db = Db0} = Est) ->
         {'$quod_build_plan', 1}, ?MODULE, build_plan_1, Db16),
     Db18 = erlog_int:add_compiled_proc(
         {'$quod_build_plan_return', 1}, ?MODULE, build_plan_return_1, Db17),
+    Db19 = erlog_int:add_compiled_proc(
+        {'$quod_instance_id', 1}, ?MODULE, instance_id_1, Db18),
     Est#est{db = erlog_int:add_compiled_proc(
-        {'$quod_instance_id', 1}, ?MODULE, instance_id_1, Db18)}.
+        {'$quod_construction', 3}, ?MODULE, construction_3, Db19)}.
 
 %% Explicit clauses are authored source, including fact clauses (Head :- true).
 %% Only bare membership assertions request the Prolog-owned live lifecycle.
@@ -128,10 +133,29 @@ assert_instance(Method, {':-', _, _} = Clause, Next, #est{db = Db} = St) ->
         _ -> erlog_int:assertz_clause(Clause, Db)
     end,
     erlog_int:prove_body(Next, St#est{db = Inserted});
-assert_instance(Method, {instance_of, Class, Instance}, Next, St) ->
-    quod_proof_savepoint:run(
-        {'$quod_assert_instance', Method, Class, Instance}, Next, St,
-        quod_erlog_db_local_prove:write_intent(St)).
+assert_instance(Method, {instance_of, Class, Instance}, Next, #est{bs = Bs} = St) ->
+    {Inputs, Parents} = build_context(Bs),
+    Constructing = case erlog_int:deref(Instance, Bs) of
+        {_} -> [{Class, Instance, Inputs} | Parents];
+        _ -> Parents
+    end,
+    with_build_context({Inputs, Constructing}, Next, St, fun(Return, Active) ->
+        quod_proof_savepoint:run(
+            {'$quod_assert_instance', Method, Class, Instance}, Return, Active,
+            quod_erlog_db_local_prove:write_intent(Active))
+    end).
+
+%% Only the assertion hook establishes this context. Build-plan input data
+%% cannot impersonate an active construction or authorize an existing instance.
+construction_3({'$quod_construction', Instance, Class, Inputs}, Next, #est{bs = Bs} = St) ->
+    {_, Active} = build_context(Bs),
+    Id = erlog_int:deref(Instance, Bs),
+    case [{C, P} || {C, I, P} <- Active, erlog_int:deref(I, Bs) =:= Id,
+                    quod_wire_term:is_ground(Id)] of
+        [{C, P} | _] -> erlog_int:unify_prove_body(
+            {construction, Class, Inputs}, {construction, C, P}, Next, St);
+        [] -> erlog_int:fail(St)
+    end.
 
 %% Full ULID: 48-bit Unix milliseconds and 80 independently secure random bits.
 %% The selected value travels as ordinary bindings/facts in the sealed result;
@@ -156,19 +180,25 @@ instance_id_1({'$quod_instance_id', Instance}, Next,
 %% Choice points restore them on redo/cut. Only the scope's continuation and
 %% error boundary need restoration; this control neither stages nor rolls back
 %% writes and does not choose a transaction lane.
-with_build_plan_2({'$quod_with_build_plan', Plan0, Goal}, Next,
-                  #est{bs = Bs, vn = Vn, cps = Cps} = St) ->
+with_build_plan_2({'$quod_with_build_plan', Plan0, Goal}, Next, #est{bs = Bs} = St) ->
     Plan = erlog_int:dderef(Plan0, Bs),
-    Scope = #build_scope{ref = make_ref(), previous = build_inputs(Bs), next = Next},
+    {_, Constructing} = build_context(Bs),
+    with_build_context({Plan, Constructing}, Next, St, fun(Return, Active) ->
+        erlog_int:prove_body([{call, Goal} | Return], Active)
+    end).
+
+with_build_context(Context, Next, #est{bs = Bs, vn = Vn, cps = Cps} = St, Run) ->
+    Scope = #build_scope{ref = make_ref(), previous = build_context(Bs), next = Next},
     Boundary = #cp{type = compiled, label = {?MODULE, Scope#build_scope.ref},
                   next = Scope, bs = Bs, vn = Vn,
                   data = fun build_plan_failed/3},
-    Active = set_build_inputs(Plan, St#est{cps = [Boundary | Cps]}),
-    build_plan_step(fun() -> erlog_int:prove_body(
-        [{call, Goal}, {'$quod_build_plan_return', Scope#build_scope.ref}], Active) end, Scope).
+    Active = set_build_context(Context, St#est{cps = [Boundary | Cps]}),
+    build_plan_step(fun() -> Run(
+        [{'$quod_build_plan_return', Scope#build_scope.ref}], Active) end, Scope).
 
 build_plan_1({'$quod_build_plan', Plan}, Next, #est{bs = Bs} = St) ->
-    erlog_int:unify_prove_body(Plan, build_inputs(Bs), Next, St).
+    {Inputs, _} = build_context(Bs),
+    erlog_int:unify_prove_body(Plan, Inputs, Next, St).
 
 build_plan_return_1({'$quod_build_plan_return', Ref}, _,
                     #est{cps = Cps, bs = Bs, vn = Vn} = St) when is_reference(Ref) ->
@@ -176,7 +206,7 @@ build_plan_return_1({'$quod_build_plan_return', Ref}, _,
         quod_proof_continuation:take_boundary({?MODULE, Ref}, Cps),
     Redo = #cp{type = compiled, next = Scope, bs = Bs, vn = Vn,
                data = fun build_plan_redo/3},
-    Released = set_build_inputs(Previous, erlog_int:push_choicepoint(Redo, St)),
+    Released = set_build_context(Previous, erlog_int:push_choicepoint(Redo, St)),
     quod_proof_continuation:prove(Ref, Next, Released).
 
 build_plan_redo(#cp{next = Scope, bs = Bs, vn = Vn}, Cps, St) ->
@@ -189,18 +219,18 @@ build_plan_failed(#cp{next = #build_scope{ref = Ref}, bs = Bs, vn = Vn}, Cps, St
 build_plan_step(Fun, #build_scope{ref = Ref, previous = Previous}) ->
     quod_proof_continuation:run(Ref, Fun, fun
         (throw, {erlog_error, Error, ErrorSt}, _, _) ->
-            erlog_int:erlog_error(Error, set_build_inputs(Previous, ErrorSt));
+            erlog_int:erlog_error(Error, set_build_context(Previous, ErrorSt));
         (Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack)
     end, none).
 
-build_inputs(Bs) ->
-    case erlog_int:get_binding(?BUILD_INPUTS, Bs) of
-        {ok, Plan} -> Plan;
-        error -> []
+build_context(Bs) ->
+    case erlog_int:get_binding(?BUILD_CONTEXT, Bs) of
+        {ok, Context} -> Context;
+        error -> {[], []}
     end.
 
-set_build_inputs(Plan, #est{bs = Bs} = St) ->
-    St#est{bs = erlog_int:add_binding(?BUILD_INPUTS, Plan, Bs)}.
+set_build_context(Context, #est{bs = Bs} = St) ->
+    St#est{bs = erlog_int:add_binding(?BUILD_CONTEXT, Context, Bs)}.
 
 %% Boolean only: policy bindings and staged mutations cannot escape this check.
 committed_check_1({'$quod_committed_check', Goal0}, Next, #est{bs = Bs} = St) ->

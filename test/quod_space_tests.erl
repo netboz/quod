@@ -1,5 +1,6 @@
 -module(quod_space_tests).
 -include_lib("eunit/include/eunit.hrl").
+-export([await_runtime/1]).
 
 space_semantics_and_recovery_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C) ->

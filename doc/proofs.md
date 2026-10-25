@@ -195,7 +195,18 @@ binding choices. Actual execution checks the exact actor, target and parameters
 again. Ontology `can_invoke/4` admission remains a separate prerequisite.
 
 The assertion hook uses this guard for creation; offered GUI operations use it
-at their own mutation boundary. The authenticated-principal bridge is installed
+at their own mutation boundary. During an active constructor, an operation on
+its new `instance(Id)` is checked as `construction(Class, Id, Inputs)`. The
+assertion hook alone supplies this scoped context; callers cannot supply that
+subject to the public guard or forge it with build inputs. Policy still runs
+over committed state, requires absence of that identity there, expands every
+parent of the original class, and uses class grants without staged instance
+overrides. Callbacks receive the original inputs, not staged attributes. This
+allows atomic initial placement before the membership commits. Nested parts
+have their own contexts; completion, rollback and errors restore the enclosing
+context. Existing-instance operations continue to use committed memberships.
+The reserved grant-edit operation still requires a committed instance.
+The authenticated-principal bridge is installed
 once by the common runtime vocabulary. Terrain/helper and placement
 checks retain their existing callers and protections. Authorized arbitrary source
 rewrites remain outside the narrower operation contract. There is no generic

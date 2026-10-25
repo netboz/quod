@@ -30,6 +30,72 @@ class. The owner establishes class or instance identity using existing `isa/2`
 and `instance_of/2`. Every cross-owner call checks the exact history. Moving
 membership changes neither the entity reference, code, ACL nor history.
 
+## Empty creation
+
+U instructs the distinct personal agent A through the existing immediate signed
+route, selecting an **existing** ontology explicitly. Compose `space.pl` into
+that storage owner and A's ontology, and `space_view.pl` where space exteriors
+or contents are projected. Finite dimensions use the storage owner's exact
+`measure_vocabulary(Namespace, Anchor)` reference to the measurement ontology.
+No automatic lobby storage selection or ontology founding occurs.
+
+The shared assertion mechanism creates the instance. A goal inside the selected
+anchored scope can return both durable outputs:
+
+```prolog
+with_build_plan([attribute(name, <<"Workshop">>)],
+                assert(instance_of(space, Space))),
+current_ontology_identity(Ns, Anchor),
+Ref = entity_ref(Ns, Anchor, Space),
+attribute(Space, name, Name).
+```
+
+The default name is `<<"Space">>`; supplied names override it. Names are stored,
+mutable and nonunique. The generated ULID and anchor form the identity. Named
+outputs `Ref` and `Name` use the ordinary selected-result machinery: a lost
+reply is recovered from the original operation, including after restart or
+later instance deletion. Recovery does not run construction again.
+
+`dimensions` defaults to `box(q(100, <<"m">>), q(100, <<"m">>),
+q(100, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
+50 metres in each direction. It also accepts `infinite` or three strictly
+positive exact length quantities. Existing measurement conversion validates
+compatible units and rational values without floats or rounding. Malformed,
+unitless, non-length, zero and negative dimensions fail construction. Supplied
+quantities remain stored as supplied; interior extent does not impose a resource
+budget, allocate geometry or establish collision boundaries.
+
+The default `owner` is U, proved by A's anchored `personal_agent_owner/1` query.
+An explicit owner is a construction input subject to the storage/class policy.
+Ownership, storage and containing space remain independent. The bundle supplies
+no invocation or class permission grants: authors admit A's exact request and
+declare `create` and `space_enter` policy. The destination separately enforces
+`space_admit` and its invocation policy. During a constructor, the shared guard
+checks committed class policy using the scoped
+`construction(Class, Id, Inputs)` subject; staged instance grants cannot supply
+permission. See [construction authorization](proofs.md#class-and-instance-operation-permissions).
+
+An optional `attribute(placement, at(DestinationRef, transform(X,Y,Z,RX,RY,RZ)))`
+chooses an exact destination and exterior transform, using existing integer
+millimetres/degrees. The constructor consumes this input; it stores no second
+location record. Otherwise it reads A's `space_location/2`. A successful
+`unplaced` result creates an unplaced space; `placed(Destination, Transform)`
+places it one metre along that frame's X axis from A. This is one-time placement,
+not following A. A denied, unavailable, ambiguous or incomplete location read
+fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
+Transform)`; missing pose does not prove absence. Physical-pilot entry and live
+body poses remain the separate physical/entry integration.
+
+Creation and placement use the existing assertion savepoint and `space_place/3`
+transaction. Refused explicit placement rolls back the instance and all admission
+writes; it never tries another destination or unplaced creation. Physical
+destinations retain their mandatory physical hook and checks. Creation does not
+prepare a simulation, terrain, sky or walls. The defined solid Eidolon uses a
+half-metre cube independently of finite or infinite interior extent, through the
+existing scene/model/rendering path. Contents remain empty. The landscape/terrain
+creation route is unchanged; offered operation descriptions and client GUI
+integration are separate work.
+
 ## Relations and owners
 
 | Relation | Sole owner | Assertion |
@@ -134,8 +200,10 @@ subjects; display consent also accepts class subjects.
 
 Authors declare `class_permission/3`, `class_requirement/3` and governed
 `instance_permission/3` overrides. The bundle grants no default permission.
-Each owner checks its own committed memberships, ancestry and policy; staged
-grants cannot authorize the current transition. Compulsory requirements from
+Each owner checks its own committed memberships, ancestry and policy. A live
+constructor supplies its original class and inputs through the shared assertion
+scope before the new membership commits; this does not read staged grants or
+weaken destination checks. Staged grants cannot authorize the current transition. Compulsory requirements from
 every applicable parent survive overrides. Policy reads participate in the
 existing conflict checks. Scope invocation remains separately required.
 
@@ -200,10 +268,11 @@ an uncertain signed request resolves that exact operation through existing
 outcome resolution; absence or timeout is not rejection and must not trigger a
 fresh admission/withdrawal. Physical recovery additionally obeys current run
 fences, compatible checkpoints and custody described in [world.md](world.md).
-Creation destination selection (explicit, near-agent or unplaced), same-agent
-entry and recursive views are separate work. Placement here requires an existing
-committed instance. Creation-time consent must use committed class policy, and
-near-agent placement must choose a pose owner; those are S1.7 integration work.
+Creation destination selection uses the constructor and source-owned transform
+described under [Empty creation](#empty-creation). During construction, placement
+checks committed class policy through the shared construction scope; existing
+instances use committed instance policy. Same-agent entry and recursive views
+remain separate work.
 General transfer between independent simulations is outside this slice: atomic
 membership delete/add is insufficient and provides no authority-transfer claim.
 

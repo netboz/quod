@@ -1,5 +1,7 @@
 -module(quod_personal_agent_tests).
 -include_lib("eunit/include/eunit.hrl").
+-export([with_personal/2, instruction/2, instruct/3, lookup/2, session/1,
+         request/3, await_result/3]).
 
 immediate_instruction_uses_distinct_actor_test_() ->
     {timeout, 60, fun() -> with_personal(fun exercise/1) end}.
@@ -338,7 +340,9 @@ await_runtime_ready(Ns, Height, Tag) ->
              after 5000 -> error(runtime_not_ready) end
     end.
 
-with_personal(Fun) ->
+with_personal(Fun) -> with_personal(Fun, []).
+
+with_personal(Fun, Additional) ->
     Pair = {HumanKey, _} = quod_identity:generate(),
     Sources = lists:append([quod_prolog:read_terms(filename:join(
         [code:priv_dir(quod), "ontologies", File]))
@@ -360,7 +364,8 @@ with_personal(Fun) ->
             ?assertEqual({ok, [{<<"V0">>, ready}]}, quod_client_result:decode_binding(Ready)),
             Fun(Base#{key => Key, actor_pid => ActorPid, session => session(Pair)})
         end
-    end, Sources ++ [{instance_of, human_user, me}, {agent_key, me, HumanKey, active}]).
+    end, Sources ++ Additional ++
+        [{instance_of, human_user, me}, {agent_key, me, HumanKey, active}]).
 
 exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     %% A source-side target action admits only A, never a U request routed

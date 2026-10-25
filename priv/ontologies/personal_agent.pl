@@ -2,6 +2,18 @@
 %% personal actor share an ontology, never an identity or a private key.
 instance_of(agent, personal).
 
+%% A's constructor queries its existing account relationship and location;
+%% neither a target's proposed owner nor a failed lookup supplies this evidence.
+personal_agent_owner(Owner) :-
+    current_principal(agent_instance_ref(Ns, Anchor, personal)),
+    current_ontology_identity(Ns, Anchor),
+    findall(Human, human_user_owner(Human), [Owner]).
+personal_agent_query(personal_agent_owner(_)).
+personal_agent_query(space_location(personal, _)).
+can_invoke((current_ontology_identity(Ns, Anchor), Query),
+           agent_instance_ref(Ns, Anchor, personal), _, Ns) :-
+    personal_agent_query(Query).
+
 personal_agent(Agent, Key) :-
     current_principal(Owner), human_user_owner(Owner),
     current_ontology_identity(Ns, Anchor),

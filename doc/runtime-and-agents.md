@@ -106,6 +106,14 @@ action; account enrollment uses the shared resource initializer and operation
 journal to finish those steps. Existing ontologies require authorized source
 composition; opening an account never rewrites its ontology.
 
+For [empty-space construction](spaces.md#empty-creation), A can query its exact
+account's `personal_agent_owner/1` and `space_location(personal, Location)`.
+The owner is the unique existing human-user reference. Location reuses the
+composed space vocabulary and exclusive assignment; there is no copied personal
+location or ownership registry. Both are anchored reads admitted only for A
+(alongside U's existing account authority). A missing space composition or failed
+location query refuses creation rather than declaring A unplaced.
+
 `personalGoal` takes an explicit target ontology reference and goal. U signs a
 read request `personal_instruction_accept(Bytes, Signature)` enclosing A's exact
 unsigned execute request, including its operation ID, goal, key and expiry. The

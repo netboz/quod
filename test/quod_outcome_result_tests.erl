@@ -1,6 +1,6 @@
 -module(quod_outcome_result_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([assert_unchanged_reads/3]).
+-export([assert_unchanged_reads/3, assert_no_generation/1, restart_outcome_owner/1]).
 
 lost_reply_recovers_selected_bindings_test_() ->
     [{atom_to_list(Lane), {timeout, 60, fun() -> recover_bindings(Lane) end}}

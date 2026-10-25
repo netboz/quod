@@ -268,15 +268,6 @@ gui_types_and_defaults_are_shared_test() ->
         fails({test_initialize, grid, missing_required}, St)
     end).
 
-space_uses_generic_constructor_rules_test() ->
-    with_fixture(source("space.pl") ++ [
-        {have_attribute, space, name, binary, {default, <<"Room">>}},
-        {':-', {constructor, space, {'I'}, {'_'}},
-               {attribute, {'I'}, name, <<"Room">>}}], fun(St) ->
-        S = prove({test_initialize, space, id}, St),
-        holds({attribute, id, name, <<"Room">>}, S)
-    end).
-
 naming_pool_is_explicit_lazy_and_stored_test() ->
     Terms = source("quod_names.pl") ++ [
         {isa, <<"fixture">>, <<"thing">>},

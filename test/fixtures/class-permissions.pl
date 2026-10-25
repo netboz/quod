@@ -15,13 +15,11 @@ class_requirement(reviewed, create, reviewed_actor).
 editor(Actor, _, _) :- editor_actor(Actor).
 reviewed_actor(Actor, _, _) :- approved_actor(Actor).
 limited(_, instance(_), edit(Value)) :- integer(Value), Value > 0, Value < 10.
-valid_creation(_, class(_), create(Inputs)) :- Inputs == [valid].
+valid_creation(_, class(_), create(Inputs)) :- Inputs == [attribute(name, <<"Report">>)].
 edit_document(Instance, Value) :-
     operation_authorized(instance(Instance), edit(Value)),
     assertz(edited(Instance, Value)).
 %% Offered-operation binding is an authored caller here; S1.8 owns GUI metadata.
 offered_edit(Instance, Value) :- edit_document(Instance, Value).
-%% Only a construction boundary probe; S1.5 owns the actual assertion hook.
-construction_probe(Inputs) :-
-    operation_authorized(class(report), create(Inputs)),
-    assertz(constructor_ran).
+constructor_order(report, [secured, reviewed]).
+constructor(report, _, _) :- assertz(constructor_ran).

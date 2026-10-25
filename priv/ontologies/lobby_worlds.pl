@@ -75,6 +75,7 @@ gui_form(world_creation,[field(world_creation_name,Name)|Fields],
 
 %% Only the source's currently applying, accepted question can create a world.
 %% Its occurrence supplies identity; display names can be duplicated safely.
+%% This governed lifecycle stores its decided memberships as source clauses.
 world_creation_entered(EnteredName,Recipe) :-
     transaction((current_principal(Actor),
         gui_question_policy(world_creation,Human,Actor),
@@ -88,11 +89,12 @@ world_creation_entered(EnteredName,Recipe) :-
         voxel_generation_spec(Recipe,Spec),
         world_spawn_candidate(Spec,Pose),
         assertz(attribute(W,display_name,Name)),assertz(voxel_world_owner(W,Human)),
-        assertz(instance_of(voxel_world,W)),assertz(physics_structure(W,1)),
+        assertz((instance_of(voxel_world,W) :- true)),
+        assertz(physics_structure(W,1)),
         assertz(physics_next_body(W,0)),assertz(physics_run(W,0,none)),
         assertz(physics_definition(world_pilot(W),1,geometry(capsule(500,250),1))),
         assertz(world_arrival(W,Pose)),
-        assertz(instance_of(sky_sphere,world_sky(W))),
+        assertz((instance_of(sky_sphere,world_sky(W)) :- true)),
         assertz(attribute(world_sky(W),mark_id,<<"sky">>)),
         assertz(attribute(world_sky(W),panorama,belfast_sunset_puresky)),
         assertz(attribute(world_sky(W),diameter,80000)),

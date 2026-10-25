@@ -16,6 +16,26 @@ exact_edit_preserves_an_earlier_general_clause_test() ->
         ?assertEqual(source(Edited, Indicator), source(read_view(Applied), Indicator))
     end).
 
+membership_source_reorder_and_replacement_never_construct_test() ->
+    Facts = [{instance_of, room, first}, {instance_of, room, second},
+             {attribute, first, name, <<"Saved">>},
+             {':-', {constructor, room, {'_'}, {'_'}}, {assertz, must_not_run}}],
+    with_editor(Facts, fun(Compiler, Target, Committed) ->
+        Indicator = {'/', instance_of, 2},
+        Draft = <<"instance_of(room,second). instance_of(room,first). "
+                  "instance_of(room,authored). instance_of(derived,X) :- selected(X).">>,
+        Goal = edit(Compiler, Indicator, source(Target, Indicator), Draft),
+        {succeed, Edited} = erlog_int:prove_goal(Goal, Target),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(must_not_run, Edited)),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+            {attribute, first, name, <<"Saved">>}, Edited)),
+        {ok, Applied} = quod_diff:apply_ops(Committed, changes(Edited)),
+        ?assertEqual(source(Edited, Indicator), source(read_view(Applied), Indicator)),
+        Unchanged = edit(Compiler, Indicator, source(Edited, Indicator), Draft),
+        {succeed, Repeated} = erlog_int:prove_goal(Unchanged, Edited),
+        ?assertEqual(changes(Edited), changes(Repeated))
+    end).
+
 unchanged_source_produces_no_mutations_test() ->
     with_editor([{':-', {choice, {'X'}}, {selected, {'X'}}}],
       fun(Compiler, Target, _Committed) ->

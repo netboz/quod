@@ -792,7 +792,7 @@ node_actor_uses_ordinary_creation(
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:execute(
-         Ns, {assertz, {instance_of, node, OtherInstance}})),
+         Ns, quod_ct:source_assertion({instance_of, node, OtherInstance}))),
     ?assertEqual(
        {error, node_actor_instance_mismatch},
        quod_node_actor:verify(Blob, PublicKey)),

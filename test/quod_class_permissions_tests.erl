@@ -9,12 +9,12 @@ requirements_and_most_specific_grants_test() ->
         denied(alice, {instance, report1}, {edit, 12}, St),
         denied(alice, {instance, missing}, {edit, 3}, St),
         denied(alice, {instance, report1}, unknown, St),
-        allowed(alice, {class, report}, {create, [valid]}, St),
+        allowed(alice, {class, report}, {create, [{attribute, name, <<"Report">>}]}, St),
         denied(alice, {class, report}, {create, [invalid]}, St)
     end),
     with_policy([{editor_actor, alice}, {instance_permission, report1, edit, allow}], fun(St) ->
         denied(alice, {instance, report1}, {edit, 3}, St),
-        denied(alice, {class, report}, {create, [valid]}, St)
+        denied(alice, {class, report}, {create, [{attribute, name, <<"Report">>}]}, St)
     end).
 
 direct_memberships_and_derived_memberships_need_no_parent_edge_test() ->
@@ -204,7 +204,7 @@ policy_discovery_is_strictly_read_only_test() ->
                  {':-', {mutating, {'_'}, {'_'}, {'_'}}, {assertz, leaked}},
                  {approved_actor, alice}], fun(St) ->
         ?assertEqual(invalid, quod_ask:committed_authorization_result(
-            {operation_policy, alice, {class, report}, {create, [valid]}}, St)),
+            {operation_policy, alice, {class, report}, {create, [{attribute, name, <<"Report">>}]}}, St)),
         ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(ref(St))),
         ?assertMatch({fail, _}, erlog_int:prove_goal(leaked, St))
     end).
@@ -257,7 +257,7 @@ signed_boundaries() ->
         refuse(GuestCtx, Scope(conjunction([
             {retract, {class_permission, report, create, deny}},
             {assertz, {class_permission, report, create, allow}},
-            {construction_probe, [valid]}]))),
+            {with_build_plan, [{attribute, name, <<"Report">>}], {assert, {instance_of, report, {'_'}}}}]))),
         commit(Ctx, Scope({retract, {class_permission, report, create, deny}})),
         ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
             Scope({instance_permission, report1, edit, {'_'}}))),
@@ -274,7 +274,7 @@ signed_boundaries() ->
         refuse(GuestCtx, Scope({edit_document, report1, 3})),
         commit(Ctx, Scope({set_instance_permission, report2, edit, allow})),
         commit(GuestCtx, Scope({edit_document, report2, 3})),
-        commit(Ctx, Scope({construction_probe, [valid]})),
+        commit(Ctx, Scope({with_build_plan, [{attribute, name, <<"Report">>}], {assert, {instance_of, report, {'_'}}}})),
         %% Warm ordinary read path, then measure actual forbidden work.
         Advisory = Scope({operation_authorized, {instance, report1}, {edit, 3}}),
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx, Advisory)),

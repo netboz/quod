@@ -35,11 +35,8 @@ quod_predicate_module() -> true.
 
 -spec load(tuple()) -> tuple().
 load(Est0) ->
-    WithPrincipal = quod_predicates:register(
-      Est0, {current_principal, 1}, query, proof_bound,
-      ?MODULE, current_principal_predicate),
     WithExecutor = quod_predicates:register(
-      WithPrincipal, {current_executor_key, 1}, query, proof_bound,
+      Est0, {current_executor_key, 1}, query, proof_bound,
       ?MODULE, current_executor_key_predicate),
     Entries =
         [{{create_ontology, 3}, staging, lifecycle_request_predicate},

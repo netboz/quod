@@ -26,7 +26,10 @@ no native preparation or submission occurs while eligibility is being proved.
 quod_predicate_module() -> true.
 
 load(Est) ->
-    Actor = quod_predicates:register(Est, {me, 1}, query, proof_bound, ?MODULE, me),
+    Principal = quod_predicates:register(
+        Est, {current_principal, 1}, query, proof_bound,
+        quod_ontology_predicates, current_principal_predicate),
+    Actor = quod_predicates:register(Principal, {me, 1}, query, proof_bound, ?MODULE, me),
     Identity = quod_predicates:register(Actor, {current_ontology_identity, 2}, query,
                                         proof_bound, ?MODULE, current_ontology_identity),
     Routes = quod_predicates:register(Identity, {'$quod_ontology_routes', 1}, query,

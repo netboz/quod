@@ -185,7 +185,7 @@ principal_bridge_registration_is_independent_of_module_order_test() ->
                           current_principal_predicate},
                          quod_predicates:descriptor(Est, {current_principal, 1}))
         after delete_est(Est0) end
-    end, [[quod_agent_predicates, quod_ontology_predicates],
+    end, [[], [quod_agent_predicates, quod_ontology_predicates],
           [quod_ontology_predicates, quod_agent_predicates]]).
 
 conflicting_predicate_ownership_fails_loud_test() ->

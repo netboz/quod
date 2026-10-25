@@ -722,11 +722,7 @@ await_operation(Operation) ->
 fail(Ctx, Goal) ->
     ?assertMatch({ok, _, {normalized, {failed, _}}}, quod_lobby_tests:submit(Ctx, execute, Goal)).
 
-assertions(Terms) ->
-    {Goals, _} = lists:mapfoldl(fun(Term, Vn) ->
-        {Fresh, _, Next} = erlog_int:term_instance(Term, Vn), {{assertz, Fresh}, Next}
-    end, 0, Terms),
-    conjunction(Goals).
+assertions(Terms) -> conjunction(quod_ct:source_assertions(Terms)).
 conjunction([Goal]) -> Goal;
 conjunction(Goals) ->
     {Left, Right} = lists:split(length(Goals) div 2, Goals),

@@ -41,7 +41,7 @@ voxel_create(W,Expected,Spec) :-
         Revision is Expected+1, assertz(voxel_world_definition(W,Revision,Spec)),
         findall(Owner,voxel_world_owner(W,Owner),Owners),
         (Owners = [] -> assertz(voxel_world_owner(W,P)); Owners = [_]),
-        (instance_of(voxel_world,W) -> true ; assertz(instance_of(voxel_world,W))),
+        (instance_of(voxel_world,W) -> true ; assertz((instance_of(voxel_world,W) :- true))),
         voxel_validate_chunks(W,Chunks),
         physics_body_capacity(W,1), physics_allocate_body(W,Body),
         term_digest(Spec,Digest), Shape = voxel_field_v1(W,Revision,Digest),

@@ -137,7 +137,9 @@ wrap_state(#est{db = #db{mod = OutMod, ref = OutRef,
                 out_db = OutDb,
                 follow_disabled = quod_predicates:local_only(St)},
     St#est{db = #db{mod = ?MODULE, ref = Overlay, loc = [],
-                    assert_hooks = AH, retract_hooks = RH}}.
+                    assert_hooks = AH#{
+                        {instance_of, 2} => {quod_common_primitives, assert_instance}},
+                    retract_hooks = RH}}.
 
 -doc """
 As `wrap_state/1`, with private overlay options:

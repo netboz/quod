@@ -344,7 +344,7 @@ exercise(Ctx, Ns) ->
         commit(Ctx, Ns, conjunction([
             {retract, {gui_children, tuning, [level, angle]}},
             {assertz, {gui_children, tuning, [level, angle, presentation_only]}}
-            | [{assertz, Term} || Term <- Extra]])),
+            | quod_ct:source_assertions(Extra)])),
         ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
         commit(Ctx, Ns, conjunction([
             {retract, {gui_children, tuning, [level, angle, presentation_only]}},
@@ -375,7 +375,7 @@ exercise(Ctx, Ns) ->
     %% Parameterized forms and several instances can reuse the same controls.
     Parameterized = {settings, instrument},
     commit(Ctx, Ns, conjunction([
-        {assertz, {instance_of, {':', quod, {':', gui, form}}, Parameterized}},
+        quod_ct:source_assertion({instance_of, {':', quod, {':', gui, form}}, Parameterized}),
         {assertz, {attribute, Parameterized, label, <<"Instrument">>}},
         {assertz, {gui_children, Parameterized, [name, mode, tuning, apply]}},
         {assertz, {gui_form, Parameterized, DeclaredFields, {submit, apply, Callback}}}])),

@@ -22,10 +22,7 @@ quod_predicate_module() -> true.
 
 -spec load(tuple()) -> tuple().
 load(Est) ->
-    WithPrincipal = quod_predicates:register(
-                      Est, {current_principal, 1}, query, proof_bound,
-                      quod_ontology_predicates, current_principal_predicate),
-    WithLocalNode = quod_predicates:register(WithPrincipal, {local_node_agent, 1}, query,
+    WithLocalNode = quod_predicates:register(Est, {local_node_agent, 1}, query,
                                              ?MODULE, local_node_agent),
     WithCustody = quod_predicates:register(WithLocalNode, {prepare_agent_key_custody, 5}, query,
                                            ?MODULE, prepare_agent_key_custody),

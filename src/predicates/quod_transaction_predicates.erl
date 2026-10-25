@@ -7,7 +7,8 @@ savepoint for the conventional semidet search/rollback contract. The action
 evaluator reuses that savepoint without choosing public commit intent. Reads
 remain monotonic OCC dependencies. `trigger_event(Term)` stages an ordered
 occurrence in the same overlay. Checkpoint mode is enabled only within a
-transaction or action-candidate savepoint, not for ordinary backtracking.
+transaction, action-candidate or construction savepoint, not for ordinary
+backtracking after a successful boundary has returned.
 
 `independent(Goal)` preserves ordinary staging and search, and marks only the
 surviving successful proof for independent multi-ontology routing. It requires

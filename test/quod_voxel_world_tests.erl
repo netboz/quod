@@ -3,11 +3,18 @@
 -include_lib("erlog/src/erlog_int.hrl").
 
 composed_gui_world_membership_enumeration_terminates_test() ->
-    with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store0,_) ->
+    with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store0,Owner) ->
         Query = {findall,{'W'},{instance_of,voxel_world,{'W'}},{'Worlds'}},
         ?assertEqual([],value({'Worlds'},Query,Store0)),
-        {Store1,_} = commit({assertz,{instance_of,voxel_world,land}},Store0),
-        ?assertEqual([land],value({'Worlds'},Query,Store1))
+        Setup = quod_ct:source_assertions([{instance_of,voxel_world,land},
+            {voxel_world_owner,land,Owner},{lobby_owner,Owner},
+            {instance_of,sky_sphere,{world_sky,land}}]),
+        {Store1,_} = commit(lists:foldr(fun(G,Rest) -> {',',G,Rest} end,true,Setup),Store0),
+        ?assertEqual([land],value({'Worlds'},Query,Store1)),
+        ?assertEqual(1,value({'N'},{world_library_count,{'N'}},Store1)),
+        {Store2,_} = commit({retract,{lobby_owner,Owner}},Store1),
+        ?assertEqual([{world_sky,land}],value({'Skies'},
+            {findall,{'S'},{instance_of,sky_sphere,{'S'}},{'Skies'}},Store2))
     end).
 
 sparse_chunk_inputs_preserve_absence_neighbors_and_ambiguity_test() ->
@@ -62,6 +69,8 @@ creation_and_boundary_dig_use_one_existing_atomic_diff_test() ->
         {Store1,Created} = commit({voxel_create,land,0,spec()},Store0),
         ?assert(length(Created) > 0),
         ?assertEqual(Owner,value({'P'},{voxel_world_owner,land,{'P'}},Store1)),
+        ?assertEqual([land],value({'Worlds'},
+            {findall,{'W'},{clause,{instance_of,voxel_world,{'W'}},true},{'Worlds'}},Store1)),
         ?assertEqual([0],value({'L'},{findall,{'B'},
             {voxel_terrain_binding,land,{'B'},2},{'L'}},Store1)),
         Brush = {dig_sphere,{vector,4000,0,0},600},

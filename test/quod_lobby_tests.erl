@@ -55,10 +55,10 @@ authored_space_composition_preserves_world_test_() ->
             lists:foreach(fun({Ns, Space}) ->
                 Anchor = quod_simplex:genesis_hash(Ns),
                 Setup = editor_conjunction([
-                    {assertz, {instance_of, space, Space}},
+                    quod_ct:source_assertion({instance_of, space, Space}),
                     {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
                                quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
-                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
+                    case Ns of LobbyNs -> [quod_ct:source_assertion({instance_of, lobby, Space})]; _ -> [] end),
                 commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
                 View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
                 ?assertMatch({ok, [#{<<"V0">> := {world_view, _, [], unavailable}}], _},
@@ -85,10 +85,7 @@ authored_space_composition_goal() ->
               || {F, A} <- Indicators, F =/= isa],
     Edges = [{'\\+', {clause, {isa, space, thing}, true}},
              {'\\+', {clause, {isa, physical_space, space}, true}}],
-    {Assertions, _} = lists:mapfoldl(fun(T, Vn) ->
-        {Fresh, _, Next} = erlog_int:term_instance(T, Vn),
-        {{assertz, Fresh}, Next}
-    end, 0, Terms),
+    Assertions = quod_ct:source_assertions(Terms),
     {transaction, balanced_space_goals(Checks ++ Edges ++ Assertions)}.
 
 balanced_space_goals([G]) -> G;
@@ -126,10 +123,10 @@ inactive_physics_source_authoring_preserves_world_test_() ->
                 Anchor = quod_simplex:genesis_hash(Ns),
                 Target = {ontology_ref, Ns, Anchor},
                 Setup = editor_conjunction([
-                    {assertz, {instance_of, space, Space}},
+                    quod_ct:source_assertion({instance_of, space, Space}),
                     {assertz, {rendering_vocabulary, <<"lobby-test-rendering">>,
                                quod_simplex:genesis_hash(<<"lobby-test-rendering">>)}}] ++
-                    case Ns of LobbyNs -> [{assertz, {instance_of, lobby, Space}}]; _ -> [] end),
+                    case Ns of LobbyNs -> [quod_ct:source_assertion({instance_of, lobby, Space})]; _ -> [] end),
                 commit_editor_goal(Ctx, editor_scope(Ns, Setup)),
                 commit_editor_goal(Ctx, editor_scope(Ns, authored_space_composition_goal())),
                 View = editor_scope(Ns, {client_world_view, Space, playing, [], {0}}),
@@ -381,8 +378,8 @@ local_subclass_inherits_eidolons_controls_and_workspace_test_() ->
             {ok, [#{<<"V0">> := Menu}], _} = read(Ctx, Scope({lobby_menu, console, {0}})),
             {ok, [#{<<"V0">> := View}], _} = read(Ctx, Scope({lobby_workspace, console, proof_console, {0}})),
             Edit = {',', {retract, {instance_of, prolog_console, console}},
-                    {',', {assertz, {instance_of, smart_console, console}},
-                     {',', {assertz, {instance_of, device, console}},
+                    {',', quod_ct:source_assertion({instance_of, smart_console, console}),
+                     {',', quod_ct:source_assertion({instance_of, device, console}),
                            {assertz, {isa, smart_console, prolog_console}}}}},
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                          submit(Ctx, execute, Scope(Edit))),
@@ -1262,7 +1259,7 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
             Added = [{instance_of, prolog_console, console_b},
                      {attribute, console_b, mark_id, <<"console_b">>},
                      {attribute, console_b, layout, {transform, 3000, 0, 0, 0, 0, 0}}],
-            commit_editor_goal(Ctx, editor_scope(Ns, editor_conjunction([{assertz, T} || T <- Added]))),
+            commit_editor_goal(Ctx, editor_scope(Ns, editor_conjunction(quod_ct:source_assertions(Added)))),
             ?assertEqual([<<"PROLOG CONSOLE">>, <<"PROLOG CONSOLE">>], shared_editor_titles(Ctx, Ns)),
             edit_shared_source(Ctx, ClassNs, {'/', eidolon, 3}, fun(Source) ->
                 ?assertNotEqual(nomatch, binary:match(Source, <<"PROLOG CONSOLE">>)),
@@ -1278,7 +1275,7 @@ shared_class_edits_and_subclass_selection_use_live_definitions_test_() ->
                 <<Source/binary, "device_eidolon(smart_console, playing, solid, console_edition).\n">>
             end),
             commit_editor_goal(Ctx, editor_scope(Ns, {',', {retract, {instance_of, prolog_console, console_b}},
-                                       {assertz, {instance_of, smart_console, console_b}}})),
+                                       quod_ct:source_assertion({instance_of, smart_console, console_b})})),
             ?assertEqual([<<"SHARED REVISION">>, <<"CONSOLE PARTS">>], shared_editor_titles(Ctx, Ns)),
             {ok, [#{<<"V0">> := [{eidolon,playing,solid,Chosen}]}], _} = read(Ctx,
                 editor_scope(Ns, {entity_eidolons, console_b, playing, solid, {0}})),

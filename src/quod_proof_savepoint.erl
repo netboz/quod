@@ -1,7 +1,8 @@
 -module(quod_proof_savepoint).
 -moduledoc """
 Internal semidet proof savepoints shared by public transaction intent and the
-ordinary action evaluator. No Prolog savepoint control, process or second DB.
+ordinary action evaluator and assertion construction. No Prolog savepoint
+control, process or second DB.
 
 The existing immutable overlay and distributed checkpoint machinery own all
 rollback. Reads remain monotonic; facts, events, effects and provenance restore

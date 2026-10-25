@@ -9,34 +9,37 @@ lost_reply_recovers_selected_bindings_test_() ->
 recover_bindings(Lane) ->
     {Key, _} = Pair = quod_identity:generate(),
     Ns = <<"host-test-agent">>, Other = <<"outcome-result-target">>,
+    Creation = creation_terms(),
     Facts = [{agent_key, {human_user, test_agent}, Key, active},
-             {can_invoke, {'_'}, {agent_instance_ref, Ns, {'_'}, {human_user, test_agent}}, {'_'}, Ns},
-             {':-', {create_result, {'R'}},
-              {',', {result_seed, {'R'}},
-               {',', {'=', {'Private'}, hidden}, {assertz, {created, {'R'}}}}}}],
+             {can_invoke, {'_'}, {agent_instance_ref, Ns, {'_'}, {human_user, test_agent}}, {'_'}, Ns}
+             | Creation],
     quod_agent_hosting_tests:with_host(fun(#{directory := Dir, identity := Node}) ->
         Target = {Ns, Anchor} = {Ns, quod_simplex:genesis_hash(Ns)},
-        Reference = {entity_ref, Ns, Anchor, crypto:strong_rand_bytes(16)},
-        commit(Ns, {assertz, {result_seed, Reference}}),
         Sup = case Lane of
             ordinary -> none;
             _ -> quod_agent_hosting_tests:start_ontology(Other, Dir, Node, [],
-                         [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}}])
+                         [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}} | Creation])
         end,
         try
             Text = case Lane of
                 ordinary -> <<"create_result(Ref), _ = hidden.">>;
-                foreign -> <<"result_seed(Ref), _ = hidden, 'outcome-result-target'::assertz(created(Ref)).">>;
+                foreign -> <<"'outcome-result-target'::create_result(Ref), _ = hidden.">>;
                 atomic -> <<"create_result(Ref), _ = hidden, 'outcome-result-target'::assertz(touched).">>
             end,
             F = quod_ct:signed_goal_fixture(#{network => <<42:256>>, target => Target,
                 key_pair => Pair, goal_text => Text, operation_id => crypto:strong_rand_bytes(32),
                 deadline => quod_time:now_ms() + 30000}),
             Bytes = maps:get(request_bytes, F), Signature = maps:get(signature, F),
-            {ok, Evidence, {normalized, {committed, [Binding], LiveRef}}} =
-                quod_client_goal_ingress:submit(Bytes, Signature),
+            {{ok, Evidence, {normalized, {committed, [Binding], LiveRef}}}, Generated} =
+                observe_generation(fun() -> quod_client_goal_ingress:submit(Bytes, Signature) end),
+            ?assertEqual(#{{quod_common_primitives, instance_id_1, 3} => 1,
+                           {quod_common_primitives, draw_3, 3} => 1,
+                           {quod_common_primitives, assert_instance, 4} => 2}, Generated),
             {ok, Expected} = quod_client_result:decode_binding(Binding),
             ?assertEqual([<<"Ref">>], [Name || {Name, _} <- Expected]),
+            [{<<"Ref">>, Reference = {entity_ref, Writer, WriterAnchor, Id}}] = Expected,
+            ?assertEqual(26, byte_size(Id)),
+            ?assertEqual(quod_simplex:genesis_hash(Writer), WriterAnchor),
             case Lane of
                 ordinary -> ?assertMatch({transaction, Ns, Anchor, _}, LiveRef);
                 foreign -> ?assertMatch({transaction, Other, _, _}, LiveRef);
@@ -63,11 +66,18 @@ recover_bindings(Lane) ->
             %% that original write before measuring unchanged observations.
             case Lane of foreign -> await_receipt(F); _ -> ok end,
             assert_unchanged_reads(F, Outcome, Lane),
-            Writer = case Lane of foreign -> Other; _ -> Ns end,
-            commit(Writer, {retract, {created, Reference}}),
+            Saved = {',', {instance_of, artifact, Id},
+                     {',', {attribute, Id, name, <<"Harbor">>}, {initialized, Id}}},
+            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Writer, Saved)),
+            assert_no_generation(fun() -> restart_outcome_owner(Writer) end),
+            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Writer, Saved)),
+            commit(Writer, {',', {retract, {created, Reference}},
+                           {retract, {instance_of, artifact, Id}}}),
             ?assertMatch({fail, _}, quod_prolog:prove_ro(Writer, {created, Reference})),
-            restart_outcome_owner(Ns),
-            case Lane of foreign -> restart_outcome_owner(Other); _ -> ok end,
+            assert_no_generation(fun() ->
+                restart_outcome_owner(Ns),
+                case Lane of foreign -> restart_outcome_owner(Other); _ -> ok end
+            end),
             ?assertMatch({ok, _, {operation_outcome, _, Outcome}}, resolve(F)),
             assert_unchanged_reads(F, Outcome, Lane),
             %% A new committed result remains visible after unchanged reads.
@@ -82,6 +92,41 @@ recover_bindings(Lane) ->
             case Sup of none -> ok; _ -> quod_agent_hosting_tests:stop_ontology(Sup) end
         end
     end, Facts).
+
+creation_terms() ->
+    {ok, Terms} = erlog_io:read_string_terms(
+      "class_permission(artifact,create,allow). "
+      "have_attribute(artifact,name,binary,default_from(artifact_name)). "
+      "artifact_name(I,Name) :- draw(<<\"fixture\">>,<<\"place\">>,<<\"neutral\">>,I,Name). "
+      "isa(<<\"fixture\">>,<<\"thing\">>). "
+      "pool(<<\"fixture\">>,<<\"place\">>,<<\"neutral\">>,listed). "
+      "listed(<<\"fixture\">>,<<\"place\">>,<<\"neutral\">>,[<<\"Harbor\">>]). "
+      "constructor(artifact,I,_) :- assertz(initialized(I)), trigger_event(built(I)). "
+      "create_result(R) :- assert(instance_of(artifact,I)), "
+      "current_ontology_identity(N,A), R = entity_ref(N,A,I), assertz(created(R))."),
+    quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/quod_names.pl")) ++ Terms.
+
+assert_no_generation(Fun) ->
+    {_, Counts} = observe_generation(Fun),
+    ?assertEqual(#{}, Counts).
+
+observe_generation(Fun) ->
+    Parent = self(), Tag = make_ref(),
+    Collector = spawn(fun() -> count_reads(Parent, Tag, #{}) end),
+    Trace = trace:session_create(construction_recovery, Collector, []),
+    try
+        [trace:function(Trace, MFA, true, [local]) || MFA <-
+            [{quod_common_primitives, instance_id_1, 3},
+             {quod_common_primitives, draw_3, 3},
+             {quod_common_primitives, assert_instance, 4}]],
+        trace:process(Trace, all, true, [call, arity]),
+        Result = Fun(),
+        Barrier = trace:delivered(Trace, all),
+        receive {trace_delivered, all, Barrier} -> ok after 1000 -> error(trace_not_delivered) end,
+        Collector ! {finish, self()},
+        Counts = receive {Tag, C} -> C after 1000 -> error(no_work_counts) end,
+        {Result, Counts}
+    after trace:session_destroy(Trace), Collector ! stop end.
 
 commit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, Goal)).
 submit(F) -> quod_client_goal_ingress:submit(maps:get(request_bytes, F), maps:get(signature, F)).
@@ -196,7 +241,8 @@ assert_unchanged_reads(Owners, Resolve, Reads) when is_list(Owners), is_function
         {quod_ledger_store, open_ro, 3}, {quod_ledger_store, fold, 5},
         {quod_ledger_store, fold_groups, 3}, {quod_prolog, apply_entry, 3},
         {dets, insert, 2}, {dets, sync, 1}, {file, write, 2}, {file, pwrite, 3},
-        {file, sync, 1}, {file, datasync, 1}],
+        {file, sync, 1}, {file, datasync, 1},
+        {quod_common_primitives, instance_id_1, 3}, {quod_common_primitives, draw_3, 3}],
     Pids = [self() | [quod_reg:where({Kind, Owner}) || Owner <- Owners,
                      Kind <- [quod_prolog, quod_simplex]]],
     try

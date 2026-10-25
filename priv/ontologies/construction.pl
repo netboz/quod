@@ -1,7 +1,26 @@
-%% Shared constructor rules. The assertion lifecycle supplies a bound identity
-%% and its savepoint; these helpers neither allocate nor assert membership.
+%% Shared constructor rules. Bare assertions enter through the existing hook
+%% and proof savepoint. Explicit clauses are source, not creation requests.
 %% Class code is composed locally, as required by the shared permission guard.
 have_attribute(Class, name, binary) :- nonvar(Class).
+
+'$quod_assert_instance'(Method, Class, Instance) :-
+    term_variables(Class, []),
+    (var(Instance) ->
+        '$quod_build_plan'(Inputs),
+        operation_authorized(class(Class), create(Inputs)),
+        '$quod_instance_id'(Instance),
+        (instance_of(_, Instance) -> fail_with_reason(instance_identity_collision(Instance)); true),
+        '$quod_constructor_plan'(Class, Instance, Inputs, Order, Attributes),
+        '$quod_membership_clause'(Method, Class, Instance),
+        '$quod_initial_attribute_writes'(Instance, Attributes),
+        '$quod_run_constructors'(Order, Instance, Inputs)
+    ; term_variables(Instance, []),
+      (instance_of(_, Instance) -> '$quod_membership_clause'(Method, Class, Instance)
+      ; fail_with_reason(creation_requires_output_variable(Class)))).
+
+'$quod_membership_clause'(Method, Class, Instance) :-
+    Assertion =.. [Method, (instance_of(Class, Instance) :- true)],
+    call(Assertion).
 
 with_build_plan(Inputs, Goal) :-
     '$quod_build_inputs'(Inputs),
@@ -156,6 +175,8 @@ nonnegative_integer(Value) :- integer(Value), Value >= 0.
     '$quod_constructor_bodies'(Rest, Instance, Inputs).
 
 no_follow(with_build_plan/2).
+no_follow('$quod_assert_instance'/3).
+no_follow('$quod_membership_clause'/3).
 no_follow(build_plan_part/3).
 no_follow(attribute_value/2).
 no_follow(nonempty_binary/1).

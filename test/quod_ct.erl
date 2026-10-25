@@ -35,7 +35,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          with_network_identity/2,
          wait_until/1, wait_until/2,
          install_directory_generation/5]).
--export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
+-export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2,
+         source_assertion/1, source_assertions/1]).
 -export([material_limits/1, assert_material_admissible/1]).
 -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
 -export([proof_gate_row/3, https_request/4, https_request/5]).
@@ -48,6 +49,18 @@ node_identity_options(Namespace, Instance, Key) ->
     [{terms, [{node_ontology, Namespace}, {instance_of, node, Instance},
               {agent_key, Instance, Key, active}]},
      {source, Source}, {external_predicate_modules, [quod_ontology_predicates]}].
+
+%% Fixture source is authored as clauses; bare membership assertions are live
+%% construction requests. Freshen variables independently across source terms.
+source_assertions(Terms) ->
+    {Goals, _} = lists:mapfoldl(fun(Term, Vn) ->
+        {Fresh, _, Next} = erlog_int:term_instance(Term, Vn),
+        {source_assertion(Fresh), Next}
+    end, 0, Terms),
+    Goals.
+
+source_assertion({':-', _, _} = Clause) -> {assertz, Clause};
+source_assertion(Head) -> {assertz, {':-', Head, true}}.
 
 %% Deterministic canonical genesis, signed application and signer for protocol
 %% codec/consensus/archive tests. The caller chooses its namespace.
@@ -977,13 +990,8 @@ rp(Ns, Goal, N) ->
         R -> R
     end.
 
-%% a real content-diff asserting `Fact` (erlog term) — built via the overlay so the clause
-%% body form matches what quod_prolog produces. No read set: only the write-set matters.
-diff_for(Fact) ->
-    {ok, C} = erlog_int:new(erlog_db_dict, null),
-    W0 = quod_erlog_db_local_prove:wrap_state(C),
-    {succeed, W1} = erlog_int:prove_goal({assertz, Fact}, W0),
-    quod_erlog_db_local_prove:get_local_changes((W1#est.db)#db.ref).
+%% Fixture material is decided source, compiled by the production loader.
+diff_for(Fact) -> quod_prolog:terms_to_diff([Fact]).
 
 %% publish a staged MVCC kb at `Version` with pruning floor `Floor` — the
 %% committed state over which read-set overlays capture real version tokens.

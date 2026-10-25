@@ -866,8 +866,6 @@ compile_initial_terms(Terms) ->
     try quod_prolog:terms_to_diff(Terms) of
         Diff -> {ok, Diff}
     catch
-        throw:{genesis_failed, {assert, Term, _InterpreterState}} ->
-            invalid_initial_term(Term);
         _Class:_Reason ->
             {error, invalid_initial_terms}
     end.

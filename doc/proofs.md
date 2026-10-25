@@ -23,7 +23,7 @@ is bound to an exact target identity and a frozen committed base. Re-entrant
 calls share that scope's staged view. Backtracking and cut select Prolog
 alternatives, not ledger commits. Ordinary failed branches can retain staged
 events; `transaction/1` provides the explicit rollback boundary. Action
-candidates use the same internal savepoint machinery.
+candidates and assertion construction use the same internal savepoint machinery.
 
 The selected successful proof seals one plan per participating scope. Each
 plan carries its own diff, exact read checks, invocation transcript and
@@ -194,8 +194,9 @@ and grants no authority to a later submission. Incomplete inputs fail without
 binding choices. Actual execution checks the exact actor, target and parameters
 again. Ontology `can_invoke/4` admission remains a separate prerequisite.
 
-This supplies the policy seam for constructor and GUI integration; it installs
-neither constructor hooks nor a menu executor. Terrain/helper and placement
+The assertion hook uses this guard for creation; offered GUI operations use it
+at their own mutation boundary. The authenticated-principal bridge is installed
+once by the common runtime vocabulary. Terrain/helper and placement
 checks retain their existing callers and protections. Authorized arbitrary source
 rewrites remain outside the narrower operation contract. There is no generic
 final-state validator. Packaged common rules do not rewrite founded ontologies;
@@ -205,10 +206,22 @@ activation requires the existing authorized compatible-artifact/source procedure
 
 The shared [construction rules](../priv/ontologies/construction.pl) use
 `constructor(Class, Instance, BuildPlan)` for every class. Classes author their
-own bodies and required parts. These rules are internal building blocks: live
-`instance_of/2` assertion dispatch, generated IDs, authorization integration and
-whole-attempt rollback remain S1.5. No public creation executor or assertion hook
-is installed by S1.4. Calling the input wrapper alone does not create anything.
+own bodies and required parts. Bare `assert(instance_of(Class, Id))`, `asserta`
+and `assertz` request creation with an output variable. The existing assertion
+hook runs the committed class guard, allocates and binds the ID, resolves inputs,
+stages membership and initial attributes, then calls constructors in the original
+proof under the shared savepoint. It does not call `goal/1` to test the newly
+staged membership: that already-true shortcut would skip construction.
+Calling the input wrapper alone does not create anything.
+
+The ID is a full 26-byte Crockford ULID: 48-bit Unix milliseconds plus 80 bits
+from `crypto:strong_rand_bytes/1`. Every creation, including each required part,
+draws independently; all inherited constructors share their instance's ID. A
+collision with a live direct or derived membership refuses the attempt before
+constructors or attributes can overwrite it. Normal creation accepts no
+caller-chosen new ID. There is no counter or deleted-instance catalogue.
+The exact reference is `entity_ref(Namespace, GenesisAnchor, Id)`; a named output
+in the signed goal is retained by the ordinary selected-result machinery.
 
 `with_build_plan(Inputs, Goal)` supplies temporary inputs during `Goal`. Inputs
 are a ground list of `attribute(Key, Value)` and `part(Role, PartInputs)` entries;
@@ -260,6 +273,7 @@ and field constraints retain their existing behavior.
 
 ```prolog
 isa(chair, thing).
+class_permission(chair, create, allow).
 have_attribute(chair, name, binary, default(<<"Chair">>)).
 have_attribute(chair, legs, positive_integer, default(4)).
 constructor(chair, Chair, _Inputs) :- attribute(Chair, legs, _).
@@ -294,11 +308,39 @@ descendants. Constructor order never chooses attribute defaults or permissions.
 `'$quod_run_constructors'/3` invokes that prepared order. Declaration inspection
 is separate from execution: absent own code succeeds without skipping parents;
 declared code that fails, including an explicitly called required part, fails
-the construction. These helpers do not supply savepoints or commit intent.
-The assertion lifecycle must compose them with S1.3's committed guard and the
-existing proof savepoint. Tests compose the seams with bound fixture identities
-and existing transactions; they do not claim ULID allocation or live assertion,
-loading, recovery or caught-failure integration. No final-state validator is added.
+the construction. The assertion savepoint selects the first complete construction
+answer. Failed alternatives, required parts and caught constructor errors restore
+memberships, attributes, events, effects and bindings together; read dependencies
+remain monotonic. Commit intent is inherited. As with successful actions, a
+successful construction releases its own boundary before the caller continues.
+Use an enclosing `transaction/1` or action when later caller failure/backtracking
+must also discard that completed construction. Cuts and ordinary staging keep
+their existing meanings. There is no generic final-state validator.
+
+## Membership source and recovery
+
+Membership queries and derived memberships create nothing. A bare ground
+assertion can repeat or add a classification to an existing identity without
+running constructors; it refuses a new caller-selected identity. This is not
+live specialization and does not initialize the additional class's defaults.
+
+An explicit clause, including `instance_of(Class, Id) :- true`, authors source
+instead of requesting construction. It stores its variables as clause variables.
+The guarded source editor already emits this form, so replacing/reordering a
+suffix preserves surviving identities and attributes without a temporary identity
+registry. Its exact source round-trip check remains unchanged. Authorized source
+addition/removal edits facts as written; it does not promise constructor validity
+or prevent deliberate identity reuse by an author with broad source authority.
+Strict read-only overlays still reject both facts and explicit clauses.
+
+Founding compilation and common loading compile clauses directly. Commit apply,
+restart and projection rebuild restore decided facts and results through the
+existing materializer. Validators consume the sealed IDs/names and existing
+read dependencies; they do not rerun constructors or draw replacements. Historical
+reactions are not replayed. Ontology founding remains its own governed lifecycle,
+outside ordinary instance construction. Existing terrain actions store their
+decided terrain/sky memberships as explicit clauses. Their governed construction
+and identity scheme remain with the terrain integration stage.
 
 ## Failure, reasoned failure and error
 

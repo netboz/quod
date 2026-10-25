@@ -34,6 +34,10 @@ instance in one ontology; its hosted process is rebuildable. Shared
 [operation permissions](doc/proofs.md#class-and-instance-operation-permissions)
 combine compulsory class requirements, inherited defaults and governed instance
 overrides using committed Prolog policy and existing conflict detection.
+Shared [assertion construction](doc/proofs.md#constructor-inputs-defaults-and-inheritance)
+binds secure ULIDs, resolves inherited defaults and runs parent/part constructors
+inside the existing proof savepoints. Source loading and recovery restore the
+decided facts without reconstructing instances.
 
 The browser and ontology sources also include early rendering, modelling,
 material, environment and lobby work. The full shared-world simulation,

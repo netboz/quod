@@ -2,10 +2,14 @@
 -moduledoc """
 Common execution primitives available to every ontology's Prolog.
 
-Local proof helpers with no reality behind them, installed by
-`m:quod_committed_projection` next to the action mechanics. They are not
-governed bridges (`m:quod_predicates`): neither reads node state, so a plan
-that used them stays sealable.
+Proof mechanics installed by `m:quod_committed_projection` next to actions.
+The assertion hook enters Prolog construction under the shared savepoint.
+Generated identities are sealed as ordinary result data, like selected names;
+validation consumes that material under the existing trusted execution boundary.
+
+- `'$quod_instance_id'(-Id)` allocates a full ULID in a writable live proof:
+  Unix milliseconds and 80 secure random bits, encoded as 26 Crockford bytes.
+  Construction policy, collision refusal and dispatch remain Prolog rules.
 
 - `'$quod_draw'(+Salt, +N, -I)` — the proof-bound draw. `I` is
   `hmac_sha256(ProofId, canonical(Salt)) mod N`, where `ProofId` is the
@@ -68,7 +72,8 @@ that used them stays sealable.
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
          predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
          authored_clauses/2, voxel_compute_3/3, committed_check_1/3,
-         with_build_plan_2/3, build_plan_1/3, build_plan_return_1/3]).
+         with_build_plan_2/3, build_plan_1/3, build_plan_return_1/3,
+         assert_instance/4, instance_id_1/3]).
 
 -define(DRAW, '$quod_draw').
 -define(BINARY_CODES, binary_codes).
@@ -110,8 +115,42 @@ load(#est{db = Db0} = Est) ->
         {'$quod_with_build_plan', 2}, ?MODULE, with_build_plan_2, Db15),
     Db17 = erlog_int:add_compiled_proc(
         {'$quod_build_plan', 1}, ?MODULE, build_plan_1, Db16),
+    Db18 = erlog_int:add_compiled_proc(
+        {'$quod_build_plan_return', 1}, ?MODULE, build_plan_return_1, Db17),
     Est#est{db = erlog_int:add_compiled_proc(
-        {'$quod_build_plan_return', 1}, ?MODULE, build_plan_return_1, Db17)}.
+        {'$quod_instance_id', 1}, ?MODULE, instance_id_1, Db18)}.
+
+%% Explicit clauses are authored source, including fact clauses (Head :- true).
+%% Only bare membership assertions request the Prolog-owned live lifecycle.
+assert_instance(Method, {':-', _, _} = Clause, Next, #est{db = Db} = St) ->
+    Inserted = case Method of
+        asserta -> erlog_int:asserta_clause(Clause, Db);
+        _ -> erlog_int:assertz_clause(Clause, Db)
+    end,
+    erlog_int:prove_body(Next, St#est{db = Inserted});
+assert_instance(Method, {instance_of, Class, Instance}, Next, St) ->
+    quod_proof_savepoint:run(
+        {'$quod_assert_instance', Method, Class, Instance}, Next, St,
+        quod_erlog_db_local_prove:write_intent(St)).
+
+%% Full ULID: 48-bit Unix milliseconds and 80 independently secure random bits.
+%% The selected value travels as ordinary bindings/facts in the sealed result;
+%% validators and projections apply that material, never call this allocator.
+instance_id_1({'$quod_instance_id', Instance}, Next,
+              #est{bs = Bs, db = #db{assert_hooks = Hooks}} = St) ->
+    case {erlog_int:deref(Instance, Bs), proof_id(St),
+          maps:is_key({instance_of, 2}, Hooks)} of
+        {{_}, {ok, _}, true} ->
+            Time = quod_time:now_ms(),
+            true = Time >= 0 andalso Time < (1 bsl 48),
+            <<Random:80>> = crypto:strong_rand_bytes(10),
+            <<Value:128>> = <<Time:48, Random:80>>,
+            Alphabet = <<"0123456789ABCDEFGHJKMNPQRSTVWXYZ">>,
+            Id = << <<(binary:at(Alphabet, (Value bsr Shift) band 31))>>
+                    || Shift <- lists:seq(125, 0, -5) >>,
+            erlog_int:unify_prove_body(Instance, Id, Next, St);
+        _ -> erlog_int:fail(St)
+    end.
 
 %% Inputs are ordinary proof-local bindings, never facts, flags or authority.
 %% Choice points restore them on redo/cut. Only the scope's continuation and

@@ -82,6 +82,8 @@ world_library() ->
                 ?assertEqual([Generated,Generated],[Name || {world,_,Name} <- Two]),
                 [W2] = [W || {world,{entity_ref,_,_,W},_} <- Two,W =/= W1],
                 ?assertMatch({ok,[_],_},read(Ctx,Ns,{voxel_world_owner,W2,Human})),
+                ?assertMatch({ok,[_],_},read(Ctx,Ns,
+                    {clause,{instance_of,sky_sphere,{world_sky,W2}},true})),
                 Worlds = Create(<<"Badlands">>,badlands),
                 ?assertEqual(3,length(Worlds)),
                 ?assertEqual(#{},gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds)),
@@ -488,10 +490,7 @@ scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 commit(Ctx, Goal) ->
     quod_gui_question_tests:commit(Ctx,Goal).
-assertions(Terms) ->
-    {Goals, _} = lists:mapfoldl(fun(Term, N) ->
-        {Fresh, _, Next} = erlog_int:term_instance(Term, N), {{assertz, Fresh}, Next}
-    end, 0, Terms), conjunction(Goals).
+assertions(Terms) -> conjunction(quod_ct:source_assertions(Terms)).
 conjunction([Goal]) -> Goal;
 conjunction(Goals) ->
     {Left, Right} = lists:split(length(Goals) div 2, Goals),

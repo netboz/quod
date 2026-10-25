@@ -7586,10 +7586,10 @@ genesis_diff(File) -> terms_to_diff(read_terms(File)).
 Compile a list of Prolog terms (facts or rules) into a write-set of `op()`.
 
 Turns each term into a write-set `op()` in the SAME compiled form the live write path
-produces — so it commits and replays through the normal apply path. erlog's `assertz`
+produces — so it commits and replays through the normal apply path. erlog's clause insertion
 compiles the body (`well_form_body`, yielding `{Body, HasCut}`); we capture the result
-with the `m:quod_erlog_db_local_prove` overlay, exactly as `run_proof/2` does for a live
-write. Hand-building `{Head, true}` would store a malformed clause and crash on the first
+with the `m:quod_erlog_db_local_prove` overlay, without executing assertion hooks.
+Hand-building `{Head, true}` would store a malformed clause and crash on the first
 prove — the body must be the compiled form, not raw `true`. Used to build the genesis
 transaction (incarnation + committee facts + root content).
 """.
@@ -7598,14 +7598,13 @@ terms_to_diff(Terms) ->
     Base = quod_committed_projection:new_est(),
     W0 = quod_erlog_db_local_prove:wrap_state(Base, #{read_set => false}),
     try
-        WN = lists:foldl(
-               fun(T, W) ->
-                   case erlog_int:prove_goal({assertz, T}, W) of
-                       {succeed, W1} -> W1;
-                       Other         -> throw({genesis_failed, {assert, T, Other}})
-                   end
-               end, W0, Terms),
-        quod_erlog_db_local_prove:get_local_changes((WN#est.db)#db.ref)
+        %% Founding compiles decided source, just like common-source loading;
+        %% it is never a live construction proof over a partially loaded class.
+        Db = lists:foldl(fun(Term, Acc) ->
+            {Clause, _, _} = erlog_int:term_instance(Term, 0),
+            erlog_int:assertz_clause(Clause, Acc)
+        end, W0#est.db, Terms),
+        quod_erlog_db_local_prove:get_local_changes(Db#db.ref)
     after
         quod_erlog_db_local_prove:cleanup_read_set(W0),
         #est{db = #db{ref = Ref}} = Base,

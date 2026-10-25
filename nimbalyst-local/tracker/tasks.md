@@ -246,8 +246,8 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 
   **Requested review:** Yan explicitly authorized Claude review in this session; the review is complete. Confirmed founding/terrain corrections and dead-handler cleanup are verified. Added coverage pins transaction-internal rollback, asserta order, derived-only classification and founded/live clause equivalence. Optional diagnostic and overlay-query suggestions retain existing conventions; non-co-hosted CT remains unrun. [Review and parent disposition](/home/yan/src/quod/nimbalyst-local/plans/space-s1.5-claude-review.md). Stage 1 and the plan remain incomplete.
 
-- S1.6 — Generalize exclusive placement to ordinary nonphysical spaces #task[id:tsk_01M5Q1YXC2AQK9YP4GRXM4FYBV status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
-  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.
+- S1.6 — Generalize exclusive placement to ordinary nonphysical spaces #task[id:tsk_01M5Q1YXC2AQK9YP4GRXM4FYBV status:in-review priority:medium created:2026-10-24 tags:architecture,space,stage-1]
+  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: implemented and verified; requested Claude Fable review and corrections complete. The unrelated baseline source-editor failure is documented below. Uncommitted. Session: `2a83b30e-d5ad-4650-8831-95725a4615f9`.
   
   Dependencies: S1.3 [tsk_01M5Q1YXC2JDBWR3AKXAB7RPQN](nimbalyst://tsk_01M5Q1YXC2JDBWR3AKXAB7RPQN). These are implementation dependencies, not additional design approvals.
   
@@ -261,16 +261,22 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
   
   **Acceptance checks**
   
-  - [ ] Place an existing nonphysical instance into an ordinary space through both owners' authorized atomic transition, including different ontologies; refusal or conflict leaves no half-assignment.
-  - [ ] Competing destinations cannot create two containing spaces; withdrawal retains the existing revision protection. Preserve current physical consequence checks when a physical transition is used.
-  - [ ] Two display references can depict one instance without creating two locations or changing storage/ownership. Removing a display reference does not delete the instance.
-  - [ ] Ordinary placement supplies a usable local transform/depiction without physics allocation. Repeated unchanged projection does not copy state, replay history or rebuild retained resources.
+  - [x] Place an existing nonphysical instance into an ordinary space through both owners' authorized atomic transition, including different ontologies; refusal or conflict leaves no half-assignment.
+  - [x] Competing destinations cannot create two containing spaces; withdrawal retains the existing revision protection. Preserve current physical consequence checks when a physical transition is used.
+  - [x] Two display references can depict one instance without creating two locations or changing storage/ownership. Removing a display reference does not delete the instance.
+  - [x] Ordinary placement supplies a usable local transform/depiction without physics allocation. Repeated unchanged projection does not copy state, replay history or rebuild retained resources.
   
   **Replacement and documentation:** Generalize the designated assignment owner and its projection instead of adding a second ordinary-space registry. Remove physical-only assumptions only where replacement behavior is covered; retain physics setup and meaningful display membership.
   
   **Existing-ticket boundary:** Reuse the completed [QUD.33](nimbalyst://QUD.33) foundation. Do not reopen it or absorb [QUD.3](nimbalyst://QUD.3)/[QUD.26](nimbalyst://QUD.26) physical simulation and hardware work.
   
-  Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md). Keep domain state/policy in Prolog and reuse existing transaction, recovery and runtime owners. Verification is required during implementation, not claimed here. No deployment, commit, data deletion or agent spawning is authorized by ticket creation.
+  Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md). Keep domain state/policy in Prolog and reuse existing transaction, recovery and runtime owners. Implementation and verification evidence is recorded below. No deployment, commit, data deletion or agent spawning is authorized by ticket creation.
+
+  **Delivery:** Ordinary and physical placement share the existing instance-owned assignment, destination admission and atomic transaction. The four space operations call S1.3's unchanged committed authorization guard. Display references remain independent of assignment, storage and ownership. Existing Eidolons/transforms depict ordinary placement without physics resources; physical consequences and exact live body-pose checks remain required. Obsolete physical-only assignment naming and separate permission callbacks are removed.
+
+  **Verification:** The final corrected-tree run completed **647 EUnit tests across 22 modules: 646 passed, one unrelated source-editor heap-limit failure**. That HTTPS failure is independently reproduced on the starting revision and occurs before its no-I/O check; no assertion, budget or deadline was weakened. All S1.6 acceptance checks pass, and **production xref passed without warnings**. Signed checks cover both owners, distinct principals, same/foreign ontology placement, refusal, policy conflicts, competing destinations, revisions and recovery. Real retained views perform six unchanged renewals without history replay, projection rebuilding, writes/syncs or physics allocation; real source updates refresh both displays. Reclassification tests require physical cleanup, retain rollback on refusal, and verify later readmission. Outdated physics fixture assertions use S1.5's existing source-clause helper. [Full evidence, baseline reproduction and retained failures](/tmp/quod-s1.6-verification.md).
+
+  **Scope and review:** Production delta **+68/−58, net +10 lines**, all in existing Prolog files; no new owner, registry, executor or Erlang production code. Claude Fable's confirmed physical cleanup finding is corrected and tested; all seven additional shared-helper caller modules were exercised with the baseline failure retained. [Review and parent disposition](/home/yan/src/quod/nimbalyst-local/plans/space-s1.6-claude-review.md). S1.7 still owns creation-time class consent and explicit/near-agent/unplaced pose selection; later stages own entry and recursive views. Existing founded-source adoption is not performed. S1.7 and later tickets remain unstarted; the stage and plan remain incomplete. No commit, deployment, migration or user-data deletion.
 
 - S1.7 — Create one empty space with explicit storage and optional placement #task[id:tsk_01M5Q1YXC2X7DBYHA09GX2BK0Y status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
   Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.

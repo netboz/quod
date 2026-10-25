@@ -15,17 +15,17 @@ space_semantics_and_recovery_test_() ->
         holds(A, {space_instance, catalogue, space}),
         fails(A, {space_instance, catalogue, physical_space}),
         no_simulation([Owner, A, B]),
-        edit(Owner, {assertz, {physical_assignment, artifact, 7, none}}),
-        edit(Owner, {assertz, {physical_assignment, artifact, 8, none}}),
+        edit(Owner, {assertz, {space_assignment_state, artifact, 7, none}}),
+        edit(Owner, {assertz, {space_assignment_state, artifact, 8, none}}),
         denied(Owner, {space_place, artifact, 0, ARef}, {ambiguous_space_assignment, artifact}),
-        edit(Owner, {retract, {physical_assignment, artifact, 7, none}}),
-        edit(Owner, {retract, {physical_assignment, artifact, 8, none}}),
-        edit(A, {assertz, {can_enter_space, gallery, maps:get(node, C), ARef, physical}}),
+        edit(Owner, {retract, {space_assignment_state, artifact, 7, none}}),
+        edit(Owner, {retract, {space_assignment_state, artifact, 8, none}}),
+        edit(A, {assertz, {space_test_grant,{instance,gallery},maps:get(node, C),space_enter,ARef,placement}}),
         denied(A, {space_place, gallery, 0, ARef}),
         holds(A, {space_assignment, gallery, 0, none}),
         committed(A, {space_contain, catalogue, Subject}),
         holds(A, {space_contains, catalogue, Subject}),
-        fails(Owner, {physical_assignment, artifact, {'_'}, {'_'}}),
+        fails(Owner, {space_assignment_state, artifact, {'_'}, {'_'}}),
         %% Classes and nested spaces use their original anchored identities.
         committed(A, {space_contain, catalogue, ref(Owner, manuscript)}),
         committed(B, {space_contain, catalogue, ref(A, catalogue)}),
@@ -34,15 +34,21 @@ space_semantics_and_recovery_test_() ->
         denied(A, {space_contain, closed, Subject}),
         denied(A, {space_contain, catalogue, ref(Owner, private_artifact)}),
         denied(A, {space_contain, catalogue, setelement(3, Subject, <<99:256>>)}),
-        denied(Owner, {space_place, artifact, 0, ref(A, catalogue)},
-               {not_physical_space, catalogue}),
+        denied(Owner, {space_place, artifact, 0, ref(A, absent)},
+               {not_space, absent}),
         denied(Owner, {space_place, private_artifact, 0, ARef}),
         denied(Owner, {space_place, artifact, 0, ref(A, closed)}),
         holds(Owner, {space_assignment, artifact, 0, none}),
         %% Neither participant entry can commit a half admission or withdrawal.
         denied(A, {space_accept_placement, gallery, Subject, 1}),
+        edit(A, {retract, {space_uninstalled, gallery}}),
+        denied(Owner, {space_place, artifact, 0, ARef},
+               {space_physical_change_refused, gallery, admitted}),
+        holds(Owner, {space_assignment, artifact, 0, none}),
+        fails(A, {space_placement, gallery, Subject, {'_'}}),
+        edit(A, {assertz, {space_uninstalled, gallery}}),
         committed(Owner, {space_place, artifact, 0, ARef}),
-        holds(Owner, {physical_assignment, artifact, 1, ARef}),
+        holds(Owner, {space_assignment_state, artifact, 1, ARef}),
         holds(A, {space_placement, gallery, Subject, 1}),
         denied(A, {space_release_placement, gallery, Subject, 1, 2}),
         denied(A, {space_accept_placement, gallery, Subject, 1},
@@ -52,24 +58,24 @@ space_semantics_and_recovery_test_() ->
         edit(A, {retract, {space_uninstalled, gallery}}),
         denied(Owner, {space_withdraw, artifact, 1, ARef},
                {space_physical_change_refused, gallery, withdrawn}),
-        holds(Owner, {physical_assignment, artifact, 1, ARef}),
+        holds(Owner, {space_assignment_state, artifact, 1, ARef}),
         holds(A, {space_placement, gallery, Subject, 1}),
         edit(A, {assertz, {space_uninstalled, gallery}}),
         {Bytes, Signature, _} = committed(Owner, {space_withdraw, artifact, 1, ARef}),
-        holds(Owner, {physical_assignment, artifact, 2, none}),
+        holds(Owner, {space_assignment_state, artifact, 2, none}),
         denied(Owner, {space_withdraw, artifact, 1, ARef}, {space_revision_conflict, artifact, 2}),
         denied(Owner, {space_withdraw, artifact, 2, BRef}, {space_destination_conflict, artifact}),
         fails(A, {space_placement, gallery, Subject, {'_'}}),
-        %% Organizational membership survives withdrawal of physical admission.
+        %% Display membership survives withdrawal of physical admission.
         holds(A, {space_member, catalogue, Subject}),
         denied(A, {space_accept_placement, gallery, Subject, 2}),
         denied(A, {space_release_placement, gallery, Subject, 2, 3}),
         denied(Owner, {space_place, artifact, 0, BRef}, {space_revision_conflict, artifact, 2}),
         committed(Owner, {space_place, artifact, 2, BRef}),
         %% Revocation uses the same action even after the subject loses its grant.
-        edit(Owner, {retract, {can_leave_space, artifact, {'_'}, {'_'}, {'_'}}}),
+        edit(Owner, {retract, {space_test_grant,{instance,artifact},{'_'},space_leave,{'_'},{'_'}}}),
         denied(Owner, {space_withdraw, artifact, 3, BRef}),
-        edit(B, {assertz, {can_remove_space_member, gallery, maps:get(node, C), Subject, physical}}),
+        edit(B, {assertz, {space_test_grant,{instance,gallery},maps:get(node, C),space_remove,Subject,placement}}),
         committed(Owner, {space_withdraw, artifact, 3, BRef}),
         committed(A, {space_remove, catalogue, Subject}),
         fails(A, {space_member, catalogue, Subject}),
@@ -78,7 +84,7 @@ space_semantics_and_recovery_test_() ->
         restart(C, Owner), restart(C, A), restart(C, B),
         [?assertEqual({Anchor, Height}, {quod_simplex:genesis_hash(Ns), quod_prolog:applied(Ns)})
          || {Ns, Anchor, Height} <- History],
-        holds(Owner, {physical_assignment, artifact, 4, none}),
+        holds(Owner, {space_assignment_state, artifact, 4, none}),
         holds(Owner, {instance_of, manuscript, artifact}),
         holds(Owner, {attribute, artifact, title, <<"Original manuscript">>}),
         fails(A, {space_placement, gallery, Subject, {'_'}}),
@@ -89,12 +95,12 @@ space_semantics_and_recovery_test_() ->
     end) end}.
 
 competing_exclusive_admissions_test_() ->
-    {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, b := B,
+    [{atom_to_list(Space), {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, b := B,
                                            subject := Subject}) ->
         true = quod_reg:reg({host_test, local_proof}),
         Parent = self(),
         Jobs = [begin
-            Goal = {',', {space_place, artifact, 0, ref(Ns, gallery)}, test_local_wait},
+            Goal = {',', {space_place, artifact, 0, ref(Ns, Space)}, test_local_wait},
             {Bytes, Sig} = sign(Owner, Goal),
             {Pid, Mon} = spawn_monitor(fun() ->
                 Parent ! {result, Ns, quod_client_goal_ingress:submit(Bytes, Sig)}
@@ -116,9 +122,9 @@ competing_exclusive_admissions_test_() ->
             ?assertEqual(1, length(Winners)),
             ?assertEqual(1, length([R || {_, {ok, _, {normalized, {failed, _}}} = R} <- Results])),
             [Winner] = Winners, [Loser] = [Ns || Ns <- [A, B], Ns =/= Winner],
-            holds(Owner, {physical_assignment, artifact, 1, ref(Winner, gallery)}),
-            holds(Winner, {space_placement, gallery, Subject, 1}),
-            fails(Loser, {space_placement, gallery, Subject, {'_'}}),
+            holds(Owner, {space_assignment_state, artifact, 1, ref(Winner, Space)}),
+            holds(Winner, {space_placement, Space, Subject, 1}),
+            fails(Loser, {space_placement, Space, Subject, {'_'}}),
             [assert_denied(R, conflict_retry) || {Ns, R} <- Results, Ns =:= Loser]
             end)
         after
@@ -126,19 +132,22 @@ competing_exclusive_admissions_test_() ->
                                    after 5000 -> error(worker_survived) end end || {_, Pid, Mon} <- Jobs],
             gproc:unreg(quod_reg:name({host_test, local_proof}))
         end
-    end) end}.
+    end) end}} || Space <- [gallery, catalogue]].
 
-with_spaces(Fun) ->
+with_spaces(Fun) -> with_spaces(Fun, []).
+with_spaces(Fun, ExtraSource) ->
     Source = quod_prolog:read_terms("priv/ontologies/space.pl") ++
+             quod_prolog:read_terms("priv/ontologies/space_view.pl") ++
+             quod_prolog:read_terms("test/fixtures/space-permissions.pl") ++
              quod_prolog:read_terms("priv/ontologies/quod_physics.pl"),
     Node = {agent_instance_ref, <<"host-test-node">>, {'_'}, physical_node},
     Extra = Source ++ [
         {isa, manuscript, thing}, {isa, ontology, thing},
         {instance_of, manuscript, artifact}, {instance_of, manuscript, private_artifact},
         {attribute, artifact, title, <<"Original manuscript">>},
-        {can_enter_space, artifact, Node, {'_'}, {'_'}},
-        {can_enter_space, manuscript, Node, {'_'}, organizational},
-        {can_leave_space, artifact, {'_'}, {'_'}, {'_'}}],
+        {space_test_grant,{instance,artifact},Node,space_enter,{'_'},{'_'}},
+        {space_test_grant,{class,manuscript},Node,space_enter,{'_'},display},
+        {space_test_grant,{instance,artifact},{'_'},space_leave,{'_'},{'_'}}] ++ ExtraSource,
     quod_agent_hosting_tests:with_host(fun(C = #{namespace := Owner}) ->
         Names = [<<"space-archive">>, <<"space-exhibit">>],
         try
@@ -158,10 +167,11 @@ destination_rules(Node) ->
      {isa, reading_room, space}, {isa, ontology, thing},
      {instance_of, reading_room, catalogue}, {instance_of, physical_space, gallery},
      {instance_of, physical_space, closed},
-     {can_admit_space_member, catalogue, Node, {'_'}, organizational},
-     {can_admit_space_member, gallery, Node, {'_'}, physical},
-     {can_enter_space, catalogue, Node, {'_'}, organizational},
-     {can_remove_space_member, catalogue, Node, {'_'}, organizational},
+     {space_test_grant,{instance,catalogue},Node,space_admit,{'_'},display},
+     {space_test_grant,{instance,catalogue},Node,space_admit,{'_'},placement},
+     {space_test_grant,{instance,gallery},Node,space_admit,{'_'},placement},
+     {space_test_grant,{instance,catalogue},Node,space_enter,{'_'},display},
+     {space_test_grant,{instance,catalogue},Node,space_remove,{'_'},display},
      {space_uninstalled, gallery},
      {':-', {space_physical_change, S, E, M}, {space_uninstalled, S}}].
 
@@ -176,6 +186,7 @@ committed(Ns, Goal) ->
     {Bytes, Sig} = sign(Ns, Goal),
     Result = quod_client_goal_ingress:submit(Bytes, Sig),
     ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result),
+    complete(Result),
     {Bytes, Sig, Result}.
 
 denied(Ns, Goal) -> denied(Ns, Goal, none).
@@ -262,44 +273,42 @@ with_prepared(Count, Workers, Fun) ->
     after 10000 -> error(admission_not_prepared) end.
 
 distinct_owner_authorization_test_() ->
-    {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, subject := Subject}) ->
+    [{atom_to_list(Space), {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, subject := Subject}) ->
         Publisher = principal(Owner, publisher), Curator = principal(A, curator),
         PubRef = maps:get(ref, Publisher), CurRef = maps:get(ref, Curator),
-        Destination = ref(A, gallery),
+        Destination = ref(A, Space),
         Contain = {space_contain, catalogue, Subject},
-        Consent = {space_consent, artifact, CurRef, ref(A, catalogue), organizational},
+        Consent = {space_consent, artifact, CurRef, ref(A, catalogue), display},
         grant(A, CurRef, Contain),
-        edit(A, {assertz, {can_admit_space_member, catalogue, CurRef, Subject, organizational}}),
+        edit(A, {assertz, {space_test_grant,{instance,catalogue},CurRef,space_admit,Subject,display}}),
         %% Destination authorization does not grant a read at the instance owner.
         assert_denied(as(Curator, Contain), {not_allowed, Owner}),
         grant(Owner, CurRef, anchored(Owner, Consent)),
         %% Nor does permission to invoke the consent query itself supply delegation.
-        assert_denied(as(Curator, Contain),
-                      {can_enter_space, artifact, CurRef, ref(A, catalogue), organizational}),
-        edit(Owner, {assertz, {can_enter_space, artifact, CurRef, ref(A, catalogue), organizational}}),
+        assert_denied(as(Curator, Contain), none),
+        edit(Owner, {assertz, {space_test_grant,{instance,artifact},CurRef,space_enter,ref(A, catalogue),display}}),
         assert_committed(as(Curator, Contain)),
         holds(A, {space_member, catalogue, Subject}),
         Place = {space_place, artifact, 0, Destination},
-        Accept = {space_accept_placement, gallery, Subject, 1},
+        Accept = {space_accept_placement, Space, Subject, 1},
         Assignment = {space_assignment, artifact, {'_'}, {'_'}},
         grant(Owner, PubRef, Place),
         grant(Owner, PubRef, anchored(Owner, Assignment)),
         grant(A, PubRef, anchored(A, Accept)),
-        edit(Owner, {assertz, {can_enter_space, artifact, PubRef, Destination, physical}}),
+        edit(Owner, {assertz, {space_test_grant,{instance,artifact},PubRef,space_enter,Destination,placement}}),
         %% The instance owner cannot borrow the curator's destination policy.
-        assert_denied(as(Publisher, Place),
-                      {can_admit_space_member, gallery, PubRef, Subject, physical}),
-        edit(A, {assertz, {can_admit_space_member, gallery, PubRef, Subject, physical}}),
+        assert_denied(as(Publisher, Place), none),
+        edit(A, {assertz, {space_test_grant,{instance,Space},PubRef,space_admit,Subject,placement}}),
         assert_committed(as(Publisher, Place)),
-        holds(Owner, {physical_assignment, artifact, 1, Destination}),
+        holds(Owner, {space_assignment_state, artifact, 1, Destination}),
         %% Destination policy cannot authorize raw source writes or the removed helper.
         Attack = {space_assign, artifact, 1, Destination, none, 2},
         assert_denied(as(Publisher, Attack), {not_allowed, Owner}),
         ?assertEqual(fail, quod_prolog:prove_ro(Owner, {current_predicate, {'/', space_assign, 5}})),
-        Release = {space_release_placement, gallery, Subject, 1, 2},
+        Release = {space_release_placement, Space, Subject, 1, 2},
         grant(A, CurRef, Release),
         grant(Owner, CurRef, anchored(Owner, Assignment)),
-        edit(A, {assertz, {can_remove_space_member, gallery, CurRef, Subject, physical}}),
+        edit(A, {assertz, {space_test_grant,{instance,Space},CurRef,space_remove,Subject,placement}}),
         %% Even the authorized curator cannot commit just its half of withdrawal.
         assert_denied(as(Curator, Release), {space_assignment, artifact, 2, none}),
         Withdraw = {space_withdraw, artifact, 1, Destination},
@@ -308,13 +317,13 @@ distinct_owner_authorization_test_() ->
         assert_denied(as(Curator, CrossWithdraw), {not_allowed, Owner}),
         grant(Owner, CurRef, anchored(Owner, Withdraw)),
         grant(A, CurRef, anchored(A, Release)),
-        %% No can_leave_space for curator: destination revocation is independently governed.
-        edit(Owner, {retract, {can_leave_space, artifact, {'_'}, {'_'}, {'_'}}}),
+        %% No instance leave grant for curator: destination revocation is independently governed.
+        edit(Owner, {retract, {space_test_grant,{instance,artifact},{'_'},space_leave,{'_'},{'_'}}}),
         assert_committed(as(Curator, CrossWithdraw)),
-        holds(Owner, {physical_assignment, artifact, 2, none}),
-        fails(A, {space_placement, gallery, Subject, {'_'}}),
+        holds(Owner, {space_assignment_state, artifact, 2, none}),
+        fails(A, {space_placement, Space, Subject, {'_'}}),
         no_simulation([Owner, A])
-    end) end}.
+    end) end}} || Space <- [gallery, catalogue]].
 
 principal(Ns, Instance) ->
     {Pub, _} = Pair = quod_identity:generate(),
@@ -337,3 +346,223 @@ as(#{ref := {agent_instance_ref, Ns, Anchor, Instance}, pair := {Pub, _} = Pair}
     quod_client_goal_ingress:submit(Bytes, quod_identity:sign(Bytes, quod_identity:key_term(Pair))).
 
 assert_committed(Result) -> ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result).
+
+ordinary_placement_rollback_and_recovery_test_() ->
+    {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Owner, a := A,
+                                               b := B, subject := Subject}) ->
+        Destination = ref(A, catalogue),
+        %% A caught destination refusal restores the source's staged assignment.
+        committed(Owner, {';', {space_place, artifact, 0, ref(A, closed)},
+                               {assertz, refusal_observed}}),
+        holds(Owner, {space_assignment, artifact, 0, none}),
+        fails(A, {space_placement, closed, Subject, {'_'}}),
+        denied(A, {space_accept_placement, catalogue, Subject, 1}),
+        {Bytes, Signature, _} = committed(Owner, {space_place, artifact, 0, Destination}),
+        holds(Owner, {space_assignment_state, artifact, 1, Destination}),
+        holds(A, {space_placement, catalogue, Subject, 1}),
+        denied(Owner, {space_place, artifact, 1, ref(B, catalogue)},
+               {space_already_placed, artifact}),
+        denied(A, {space_release_placement, catalogue, Subject, 1, 2}),
+        %% Placement preserves storage and owner; destinations retain only references.
+        holds(Owner, {instance_of, manuscript, artifact}),
+        holds(Owner, {attribute, artifact, title, <<"Original manuscript">>}),
+        [fails(N, {instance_of, manuscript, artifact}) || N <- [A, B]],
+        [fails(N, {attribute, artifact, {'_'}, {'_'}}) || N <- [A, B]],
+        restart(C, Owner), restart(C, A),
+        holds(Owner, {space_assignment, artifact, 1, Destination}),
+        holds(A, {space_placement, catalogue, Subject, 1}),
+        ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}},
+                     quod_client_goal_ingress:resolve_operation(Bytes, Signature)),
+        committed(Owner, {space_withdraw, artifact, 1, Destination}),
+        holds(Owner, {space_assignment, artifact, 2, none}),
+        fails(A, {space_placement, catalogue, Subject, {'_'}}),
+        denied(Owner, {space_withdraw, artifact, 1, Destination},
+               {space_revision_conflict, artifact, 2}),
+        denied(Owner, {space_place, artifact, 0, ref(B, catalogue)},
+               {space_revision_conflict, artifact, 2}),
+        committed(Owner, {space_place, artifact, 2, ref(B, catalogue)}),
+        no_simulation([Owner, A, B])
+    end) end}.
+
+ordinary_placement_committed_permissions_test_() ->
+    {timeout, 90, fun() -> with_spaces(fun(#{namespace := Owner, a := A,
+                                           node := Node, subject := Subject}) ->
+        Destination = ref(A, catalogue), Place = {space_place, artifact, 0, Destination},
+        edit(Owner, {assertz, {attribute, artifact, owner, Node}}),
+        edit(A, {assertz, {attribute, catalogue, owner, Node}}),
+        %% Both owners use the same committed guard as advisory/direct operations.
+        lists:foreach(fun({Ns, Entity, Operation}) ->
+            committed(Ns, {set_instance_permission, Entity, Operation, deny}),
+            denied(Owner, Place),
+            Grant = {set_instance_permission, Entity, Operation, allow},
+            Staged = case Ns of Owner -> Grant; _ -> {'::', Ns, Grant} end,
+            denied(Owner, {transaction, {',', Staged, Place}}),
+            holds(Ns, {instance_permission, Entity, Operation, deny}),
+            committed(Ns, Grant),
+            %% An override cannot waive a compulsory inherited class requirement.
+            Requirement = {class_requirement, thing, Operation, missing_requirement},
+            edit(Ns, {assertz, Requirement}), denied(Owner, Place),
+            edit(Ns, {retract, Requirement}),
+            committed(Ns, {set_instance_permission, Entity, Operation, inherit}),
+            holds(Owner, {space_assignment, artifact, 0, none}),
+            fails(A, {space_placement, catalogue, Subject, {'_'}})
+        end, [{Owner, artifact, space_enter}, {A, catalogue, space_admit}]),
+        committed(Owner, Place),
+        %% Withdrawal grants also cannot authorize themselves within the write.
+        committed(Owner, {set_instance_permission, artifact, space_leave, deny}),
+        denied(Owner, {space_withdraw, artifact, 1, Destination}),
+        denied(Owner, {transaction, {',',
+            {set_instance_permission, artifact, space_leave, allow},
+            {space_withdraw, artifact, 1, Destination}}}),
+        holds(Owner, {space_assignment, artifact, 1, Destination}),
+        holds(A, {space_placement, catalogue, Subject, 1}),
+        committed(Owner, {set_instance_permission, artifact, space_leave, inherit}),
+        committed(Owner, {space_withdraw, artifact, 1, Destination})
+    end) end}.
+
+ordinary_placement_policy_conflicts_test_() ->
+    [{atom_to_list(Side), {timeout, 60, fun() -> with_spaces(fun(
+        #{namespace := Owner, a := A, subject := Subject}) ->
+        true = quod_reg:reg({host_test, local_proof}), Parent = self(),
+        {Bytes, Sig} = sign(Owner, {',', {space_place, artifact, 0, ref(A, catalogue)},
+                                       test_local_wait}),
+        {Caller, Monitor} = spawn_monitor(fun() ->
+            Parent ! {policy_result, quod_client_goal_ingress:submit(Bytes, Sig)} end),
+        try with_prepared(1, [], fun([{Proof, _}]) ->
+            {Ns, Entity, Operation} = case Side of
+                source -> {Owner, artifact, space_enter};
+                destination -> {A, catalogue, space_admit}
+            end,
+            edit(Ns, {assertz, {instance_permission, Entity, Operation, deny}}),
+            Proof ! release,
+            receive {policy_result, Result} -> assert_denied(Result, conflict_retry)
+            after 15000 -> error(policy_conflict_not_resolved) end,
+            holds(Owner, {space_assignment, artifact, 0, none}),
+            fails(A, {space_placement, catalogue, Subject, {'_'}})
+        end)
+        after
+            exit(Caller, kill),
+            receive {'DOWN', Monitor, process, Caller, _} -> ok
+            after 5000 -> error(policy_caller_survived) end,
+            gproc:unreg(quod_reg:name({host_test, local_proof}))
+        end
+    end) end}} || Side <- [source, destination]].
+
+same_ontology_ordinary_placement_test_() ->
+    {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner}) ->
+        Destination = ref(Owner, room), Subject = ref(Owner, artifact),
+        committed(Owner, {space_place, artifact, 0, Destination}),
+        holds(Owner, {space_assignment, artifact, 1, Destination}),
+        holds(Owner, {space_placement, room, Subject, 1}),
+        committed(Owner, {space_withdraw, artifact, 1, Destination}),
+        holds(Owner, {space_assignment, artifact, 2, none}),
+        fails(Owner, {space_placement, room, Subject, {'_'}}),
+        no_simulation([Owner])
+    end, [{instance_of, space, room},
+          {space_test_grant, {instance, room}, {'_'}, space_admit, {'_'}, placement}]) end}.
+
+complete({ok, Evidence, {normalized, {committed, _, _}}}) ->
+    Operation = quod_client_goal:operation_ref(Evidence),
+    ?assertMatch(#{operation_state := terminal},
+        quod_ct:await_operation_complete(element(2, Operation), Operation, 10000)).
+
+conjunction([Goal]) -> Goal;
+conjunction([Goal | Rest]) -> {',', Goal, conjunction(Rest)}.
+
+ordinary_placement_and_shared_display_projection_test_() ->
+    {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Owner, a := A,
+            b := B, node := Node, subject := Subject, identity := Identity}) ->
+        Model = <<"space-test-modelling">>, Rendering = <<"space-test-rendering">>,
+        RenderingSup = start(C, Rendering,
+            quod_prolog:read_terms("priv/ontologies/quod_rendering.pl"), #{}),
+        ModelSup = start(C, Model,
+            quod_prolog:read_terms("priv/ontologies/quod_modelling.pl") ++
+            [{rendering_vocabulary, Rendering, quod_simplex:genesis_hash(Rendering)}], #{}),
+        try
+            [edit(Ns, {transaction, conjunction([
+                {assertz, {modelling_vocabulary, Model, quod_simplex:genesis_hash(Model)}},
+                {assertz, {rendering_vocabulary, Rendering, quod_simplex:genesis_hash(Rendering)}}])})
+             || Ns <- [A, B]],
+            edit(Owner, {assertz, {attribute, artifact, owner, Node}}),
+            Destination = ref(A, catalogue),
+            committed(Owner, {space_place, artifact, 0, Destination}),
+            %% Two independent appearances neither move nor duplicate the subject.
+            committed(A, {space_contain, catalogue, Subject}),
+            committed(B, {space_contain, catalogue, Subject}),
+            no_simulation([Owner, A, B]),
+            Session = quod_physics_tests:simulation_session(Identity), Parent = self(),
+            Views = [begin
+                Socket = spawn_link(fun() -> quod_physics_tests:simulation_socket(
+                    Parent, #{peer => {127,0,0,1}}) end),
+                F = #{namespace => Ns, identity => Identity, space => catalogue,
+                      reference => {agent_instance_ref, Ns, element(3, ref(Ns, catalogue)), viewer}},
+                Open = fun() -> Socket ! {client,
+                    quod_physics_tests:simulation_open(F, Session, Node)} end,
+                {Ns, Socket, Open}
+            end || Ns <- [A, B]],
+            try
+                [begin Open(), assert_manuscript_projection(Socket, Subject,
+                    <<"Original manuscript">>) end || {_, Socket, Open} <- Views],
+                %% Real retained socket owners reuse dependencies and resources.
+                %% Trace actual work, including history/projection/I/O and physics.
+                quod_lobby_tests:assert_read_has_no_io(fun() ->
+                    [quod_physics_tests:renew_simulation(Socket, Open, 3)
+                     || {_, Socket, Open} <- Views]
+                end),
+                committed(Owner, {transaction, {',',
+                    {retract, {attribute, artifact, title, <<"Original manuscript">>}},
+                    {assertz, {attribute, artifact, title, <<"Revised manuscript">>}}}}),
+                [begin quod_physics_tests:simulation_reply(Socket, <<"refresh">>),
+                    Open(), assert_manuscript_projection(Socket, Subject,
+                        <<"Revised manuscript">>) end || {_, Socket, Open} <- Views],
+                [{A, SocketA, OpenA}, {B, SocketB, OpenB}] = Views,
+                committed(B, {space_remove, catalogue, Subject}),
+                quod_physics_tests:simulation_reply(SocketB, <<"refresh">>),
+                OpenB(), Empty = quod_physics_tests:simulation_reply(SocketB, <<"projection">>),
+                ?assertEqual([], projection_marks(Empty)),
+                %% Removing the colocated display also leaves the placed appearance.
+                committed(A, {space_remove, catalogue, Subject}),
+                quod_physics_tests:simulation_reply(SocketA, <<"refresh">>),
+                OpenA(), assert_manuscript_projection(SocketA, Subject, <<"Revised manuscript">>),
+                holds(Owner, {space_assignment, artifact, 1, Destination}),
+                holds(Owner, {attribute, artifact, owner, Node}),
+                holds(Owner, {instance_of, manuscript, artifact}),
+                [fails(N, {instance_of, manuscript, artifact}) || N <- [A, B]],
+                [fails(N, {attribute, artifact, {'_'}, {'_'}}) || N <- [A, B]],
+                no_simulation([Owner, A, B])
+            after [Socket ! stop || {_, Socket, _} <- Views] end
+        after stop(ModelSup), stop(RenderingSup) end
+    end, quod_prolog:read_terms("test/fixtures/space-view.pl")) end}.
+
+assert_manuscript_projection(Socket, {entity_ref, Ns, Anchor, Entity}, Title) ->
+    Projection = quod_physics_tests:simulation_reply(Socket, <<"projection">>),
+    ?assertEqual(<<"nonphysical">>, maps:get(<<"selection">>, Projection)),
+    ?assertMatch([
+        {mark, <<"manuscript">>, <<"group">>, [], {transform,100,200,300,0,45,0},
+         no_surface, unlabelled, {depicts, Ns, Anchor, Entity}},
+        {mark, <<"manuscript/title">>, <<"group">>, [],
+         {relative, <<"manuscript">>, {transform,0,0,0,0,0,0}},
+         no_surface, {label, Title, <<"above">>}, depicts_nothing}], projection_marks(Projection)).
+
+projection_marks(Projection) ->
+    {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(
+        <<(maps:get(<<"marks">>, Projection))/binary, ".">>, 3),
+    {ok, Marks} = quod_wire_term:materialize_symbols(Parsed), Marks.
+
+physical_placement_requires_its_body_pose_test_() ->
+    {timeout, 60, fun() -> with_spaces(fun(#{namespace := Owner, a := A, subject := Subject}) ->
+        Layout = {transform, 100, 200, 300, 0, 0, 0},
+        committed(Owner, {space_place, artifact, 0, ref(A, gallery)}),
+        Pose = {space_entity_pose, gallery, Subject, Layout, {'_'}},
+        fails(A, Pose),
+        Binding = {physics_body_definition, gallery, 42, 3, fixed, {vector,0,0,0},
+                   {live, Subject, 1, 1, <<0:256>>}},
+        edit(A, {assertz, Binding}),
+        holds(A, {space_entity_pose, gallery, Subject, Layout, {body_pose,42,3}}),
+        fails(A, {space_entity_pose, gallery, Subject, Layout, Layout}),
+        Duplicate = setelement(3, Binding, 43), edit(A, {assertz, Duplicate}),
+        fails(A, Pose),
+        edit(A, {retract, Duplicate}), edit(A, {retract, Binding}),
+        Stale = setelement(7, Binding, {live, Subject, 0, 1, <<0:256>>}),
+        edit(A, {assertz, Stale}), fails(A, Pose)
+    end) end}.

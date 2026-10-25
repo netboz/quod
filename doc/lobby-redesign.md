@@ -46,8 +46,8 @@ rim-containment experiment.
 
 ## Shared connections
 
-Use `space_member/2` for decorative organizational membership and
-`space_place/3` for physical admission. Derive the entity list from
+Use `space_member/2` for independent display references and
+`space_place/3` for exclusive placement, with physical admission in the lobby. Derive the entity list from
 `space_contains/2`, removing duplicates. Remove the parallel `lobby_device/2`
 inventory. The admitted body owns physical pose; remove duplicate
 `device_placement/3` physical transforms. Decorative layout remains presentation.

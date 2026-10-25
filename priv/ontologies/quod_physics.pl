@@ -103,8 +103,8 @@ physics_release_definition(Entity, World, Assignment) :-
         findall(A,physics_definition_delegate(Entity,World,A,Assignment),[Authority]),
         retract(physics_definition_delegate(Entity,World,Authority,Assignment)))).
 
-%% Simulated spaces compose this hook explicitly; ordinary unsimulated spaces
-%% retain their own space_physical_change/3 policy and allocate no native body.
+%% Simulated spaces compose this hook explicitly; unsimulated physical spaces
+%% supply their own no-effect space_physical_change/3 and allocate no native body.
 physics_space_change(W, Subject, admitted) :-
     physics_enabled(W,_), physics_world_authority(W,World,Authority),
     Subject = entity_ref(Ns,Anchor,Entity),

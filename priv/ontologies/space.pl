@@ -6,10 +6,18 @@ isa(physical_space, space).
 space_instance(Space, Class) :-
     once((instance_of(Direct, Space), isa(Direct, Class))).
 
-space_subject(Subject) :-
-    once((instance_of(_, Subject); isa(Subject, Subject))).
+space_subject(Entity, Subject) :-
+    (instance_of(_, Entity) -> Subject = instance(Entity)
+    ; isa(Entity, Entity), Subject = class(Entity)).
 
-%% Organizational membership is many-to-many. The destination owns this fact;
+%% Exact references are operation inputs, supplied by the executing owner.
+%% Policy stays strictly local and committed, including inherited requirements.
+space_authorized(Entity, Name, Other, Mode) :-
+    current_ontology_identity(Ns, Anchor), space_subject(Entity, Subject),
+    Operation =.. [Name, entity_ref(Ns, Anchor, Entity), Other, Mode],
+    operation_authorized(Subject, Operation).
+
+%% Display membership is many-to-many. The destination owns this fact;
 %% a class or a nested space is an anchored subject, never a copied definition.
 space_contains(Space, Subject) :- space_member(Space, Subject).
 space_contains(Space, Subject) :- space_placement(Space, Subject, _).
@@ -22,27 +30,27 @@ space_contain(Space, Subject) :-
         current_ontology_identity(Here, History),
         Destination = entity_ref(Here, History, Space),
         Subject \== Destination,
-        can_admit_space_member(Space, Principal, Subject, organizational),
+        space_authorized(Space, space_admit, Subject, display),
         Ns::(current_ontology_identity(Ns, Anchor),
-             space_consent(Entity, Principal, Destination, organizational)),
+             space_consent(Entity, Principal, Destination, display)),
         \+ space_member(Space, Subject),
         assertz(space_member(Space, Subject)))).
 
 space_consent(Entity, Principal, Destination, Mode) :-
-    current_principal(Principal), space_subject(Entity),
-    can_enter_space(Entity, Principal, Destination, Mode).
+    current_principal(Principal),
+    space_authorized(Entity, space_enter, Destination, Mode).
 
-%% Either owner can end organizational membership. Revoking a future-entry
+%% Either owner can end display membership. Revoking a future-entry
 %% grant alone does not erase an existing relation: use this same transition.
 space_remove(Space, Subject) :-
     term_variables([Space, Subject], []),
     transaction((
-        space_removal_allowed(Space, Subject, organizational),
+        space_removal_allowed(Space, Subject, display),
         retract(space_member(Space, Subject)))).
 
 space_removal_allowed(Space, Subject, Mode) :-
     current_principal(Principal),
-    (can_remove_space_member(Space, Principal, Subject, Mode) -> true
+    (space_authorized(Space, space_remove, Subject, Mode) -> true
     ; Subject = entity_ref(Ns, Anchor, Entity),
       current_ontology_identity(Here, History),
       Ns::(current_ontology_identity(Ns, Anchor),
@@ -51,12 +59,12 @@ space_removal_allowed(Space, Subject, Mode) :-
 
 space_withdrawal_consent(Entity, Principal, Destination, Mode) :-
     current_principal(Principal),
-    can_leave_space(Entity, Principal, Destination, Mode).
+    space_authorized(Entity, space_leave, Destination, Mode).
 
 %% The instance ontology is the designated exclusive-assignment owner. Keep
 %% the revision after withdrawal: a stale admission cannot reuse an empty slot.
 space_assignment(Entity, Revision, Destination) :-
-    findall(assignment(R, D), physical_assignment(Entity, R, D), Rows),
+    findall(assignment(R, D), space_assignment_state(Entity, R, D), Rows),
     (Rows = [] -> R0 = 0, D0 = none
     ; Rows = [assignment(R0, D0)] -> true
     ; fail_with_reason(ambiguous_space_assignment(Entity))),
@@ -66,16 +74,16 @@ space_place(Entity, ExpectedRevision, Destination) :-
     term_variables([Entity, ExpectedRevision, Destination], []),
     Destination = entity_ref(Ns, Anchor, Space),
     transaction((
-        current_principal(Principal), instance_of(_, Entity),
-        can_enter_space(Entity, Principal, Destination, physical),
+        instance_of(_, Entity),
+        space_authorized(Entity, space_enter, Destination, placement),
         space_expected_assignment(Entity, ExpectedRevision, Previous),
         (Previous = none -> true ; fail_with_reason(space_already_placed(Entity))),
         current_ontology_identity(Here, History),
         Destination \== entity_ref(Here, History, Entity),
         (ExpectedRevision = 0 -> true
-        ; retract(physical_assignment(Entity, ExpectedRevision, none))),
+        ; retract(space_assignment_state(Entity, ExpectedRevision, none))),
         Revision is ExpectedRevision + 1,
-        assertz(physical_assignment(Entity, Revision, Destination)),
+        assertz(space_assignment_state(Entity, Revision, Destination)),
         Ns::(current_ontology_identity(Ns, Anchor),
              space_accept_placement(Space, entity_ref(Here, History, Entity), Revision)))).
 
@@ -85,11 +93,10 @@ space_accept_placement(Space, Subject, Revision) :-
     term_variables([Space, Subject, Revision], []),
     Subject = entity_ref(Ns, Anchor, Entity),
     transaction((
-        (space_instance(Space, physical_space) -> true
-        ; fail_with_reason(not_physical_space(Space))),
-        current_principal(Principal),
+        (space_instance(Space, space) -> true
+        ; fail_with_reason(not_space(Space))),
         current_ontology_identity(Here, History),
-        can_admit_space_member(Space, Principal, Subject, physical),
+        space_authorized(Space, space_admit, Subject, placement),
         Ns::(current_ontology_identity(Ns, Anchor),
              space_assignment(Entity, Revision, entity_ref(Here, History, Space))),
         (\+ space_placement(Space, Subject, _) -> true
@@ -104,9 +111,9 @@ space_withdraw(Entity, ExpectedRevision, Destination) :-
     Destination = entity_ref(Ns, Anchor, Space),
     transaction((
         space_expected_assignment(Entity, ExpectedRevision, Destination),
-        retract(physical_assignment(Entity, ExpectedRevision, Destination)),
+        retract(space_assignment_state(Entity, ExpectedRevision, Destination)),
         Revision is ExpectedRevision + 1,
-        assertz(physical_assignment(Entity, Revision, none)),
+        assertz(space_assignment_state(Entity, Revision, none)),
         current_ontology_identity(Here, History),
         Ns::(current_ontology_identity(Ns, Anchor),
              space_release_placement(Space, entity_ref(Here, History, Entity),
@@ -116,7 +123,7 @@ space_release_placement(Space, Subject, Before, Revision) :-
     term_variables([Space, Subject, Before, Revision], []),
     Subject = entity_ref(Ns, Anchor, Entity), Revision is Before + 1,
     transaction((
-        space_removal_allowed(Space, Subject, physical),
+        space_removal_allowed(Space, Subject, placement),
         Ns::(current_ontology_identity(Ns, Anchor),
              space_assignment(Entity, Revision, none)),
         space_change_physics(Space, Subject, withdrawn),
@@ -131,13 +138,14 @@ space_expected_assignment(Entity, Expected, Destination) :-
     ; fail_with_reason(space_destination_conflict(Entity))).
 
 space_change_physics(Space, Subject, Change) :-
-    (space_physical_change(Space, Subject, Change) -> true
-    ; fail_with_reason(space_physical_change_refused(Space, Change))).
+    %% Retained live bindings still require cleanup after destination type edits.
+    ((space_instance(Space, physical_space)
+      ; Change == withdrawn,
+        physics_body_definition(Space,_,_,_,_,live(Subject,_,_,_))) ->
+        (space_physical_change(Space, Subject, Change) -> true
+        ; fail_with_reason(space_physical_change_refused(Space, Change)))
+    ; true).
 
 %% Composition supplies policy and the physical lifecycle consequence. No
 %% missing hook silently skips constraint/checkpoint or pending-work cleanup.
-can_admit_space_member(_, _, _, _) :- fail.
-can_remove_space_member(_, _, _, _) :- fail.
-can_enter_space(_, _, _, _) :- fail.
-can_leave_space(_, _, _, _) :- fail.
 space_physical_change(_, _, _) :- fail.

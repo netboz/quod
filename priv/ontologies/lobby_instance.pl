@@ -16,14 +16,12 @@ physics_allowances(personal_lobby,
     limits(16,16,128,1000000,geometry(32,384,512)),16667,Gravity,10000) :-
     Gravity is -9810.
 
-physics_admission(personal_lobby,entity_ref(Ns,A,floor),fixed,vector(0,0,0)) :-
-    current_ontology_identity(Ns,A).
-physics_admission(personal_lobby,entity_ref(Ns,A,personal_roof),fixed,vector(0,0,0)) :-
-    current_ontology_identity(Ns,A).
-physics_admission(personal_lobby,entity_ref(Ns,A,console),fixed,vector(0,0,3850)) :-
-    current_ontology_identity(Ns,A).
-physics_admission(personal_lobby,entity_ref(Ns,A,pilot),controlled,vector(0,1000,2800)) :-
-    current_ontology_identity(Ns,A).
+lobby_admission(personal_lobby,floor,fixed,vector(0,0,0)).
+lobby_admission(personal_lobby,personal_roof,fixed,vector(0,0,0)).
+lobby_admission(personal_lobby,console,fixed,vector(0,0,3850)).
+lobby_admission(personal_lobby,pilot,controlled,vector(0,1000,2800)).
+physics_admission(W,entity_ref(Ns,A,Entity),Kind,Pose) :-
+    current_ontology_identity(Ns,A),lobby_admission(W,Entity,Kind,Pose).
 physics_definition_allowance(Entity,1000000) :- physics_definition(Entity,_,_).
 
 %% The same admission, control and hosting policy serves every owned space.
@@ -34,7 +32,7 @@ lobby_hosted_actor(Authority) :- lobby_physical_space(_,Authority,_).
 physics_agent(W,Pilot,1,Body,
     motion(grounded(900),2500,1600,500,query_limits(2,0,8,128),[jump(3000)])) :-
     lobby_physical_space(W,Authority,Pilot),
-    physical_assignment(Pilot,Assignment,entity_ref(Ns,A,W)),
+    space_assignment_state(Pilot,Assignment,entity_ref(Ns,A,W)),
     physics_definition_delegate(Pilot,world_ref(Ns,A,W),
                                 agent_instance_ref(Ns,A,Authority),Assignment),
     physics_body_definition(W,Body,_,controlled,_,
@@ -52,14 +50,21 @@ can_cancel_physics_activation(W,Owner) :- can_edit_physics(W,Owner).
 can_edit_physics_definition(Entity,Owner) :- lobby_owner(Owner), physics_definition(Entity,_,_).
 can_refresh_physics_definition(W,Owner,_) :- can_edit_physics(W,Owner).
 
-can_enter_space(Entity,Owner,entity_ref(Ns,A,W),physical) :-
-    lobby_owner(Owner),lobby_physical_space(W,_,_),current_ontology_identity(Ns,A),
-    physics_admission(W,entity_ref(Ns,A,Entity),_,_).
-can_leave_space(Entity,Owner,Destination,physical) :-
-    can_enter_space(Entity,Owner,Destination,physical).
-can_admit_space_member(W,Owner,Subject,physical) :-
-    lobby_owner(Owner),lobby_physical_space(W,_,_),physics_admission(W,Subject,_,_).
-can_remove_space_member(W,Owner,_,physical) :- can_edit_physics(W,Owner).
+class_permission(Class,Operation,check(lobby_space_permission)) :-
+    member(Class,[agent,lobby_floor,lobby_roof,prolog_console]),
+    member(Operation,[space_enter,space_leave]).
+class_permission(space,space_admit,check(lobby_space_permission)).
+class_permission(space,space_remove,check(lobby_space_permission)).
+lobby_space_permission(Owner,instance(Entity),
+    space_enter(entity_ref(Ns,A,Entity),entity_ref(Ns,A,W),placement)) :-
+    lobby_owner(Owner),lobby_physical_space(W,_,_),lobby_admission(W,Entity,_,_).
+lobby_space_permission(Owner,Subject,space_leave(Origin,Destination,placement)) :-
+    lobby_space_permission(Owner,Subject,space_enter(Origin,Destination,placement)).
+lobby_space_permission(Owner,instance(W),
+    space_admit(entity_ref(Ns,A,W),entity_ref(Ns,A,Entity),placement)) :-
+    lobby_owner(Owner),lobby_physical_space(W,_,_),lobby_admission(W,Entity,_,_).
+lobby_space_permission(Owner,instance(W),space_remove(_,_,placement)) :-
+    can_edit_physics(W,Owner).
 can_delegate_physics_definition(Entity,Owner,World,Authority) :-
     lobby_owner(Owner),physics_definition(Entity,_,_),
     lobby_physical_space(W,_,_),physics_world_authority(W,World,Authority).

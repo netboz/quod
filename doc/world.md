@@ -14,8 +14,8 @@ measures interactions; ontology rules decide their domain meaning and
 durable consequences. Ordinary and immersive clients consume bounded
 projections of the same world state.
 
-The [governed space contract](spaces.md) defines organizational containment and
-optional exclusive physical admission independently of ontology ownership.
+The [governed space contract](spaces.md) defines independent display references
+and exclusive placement in ordinary or physical spaces, separate from ontology ownership.
 Class membership alone enables no simulation.
 
 An exact ontology is an ordinary `ontology` instance identified by

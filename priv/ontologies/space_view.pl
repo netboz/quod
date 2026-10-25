@@ -20,13 +20,11 @@ space_scene_parts([entity_ref(Ns,A,Entity)|Rest],Space,Mode,Parts) :-
             place_model(Id,Pose,depicts(Ns,A,Entity),Model,Placed))),
     space_scene_parts(Rest,Space,Mode,Tail), append(Placed,Tail,Parts).
 
-space_entity_pose(Space,Subject,_,body_pose(Body,Revision)) :-
-    space_placement(Space,Subject,Assignment),
-    findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
-            [binding(Body,Revision)]).
-space_entity_pose(Space,Subject,Layout,Layout) :-
-    \+ space_placement(Space,Subject,_), space_member(Space,Subject),
-    Layout = transform(_,_,_,_,_,_).
+space_entity_pose(Space,Subject,Layout,Pose) :-
+    (space_placement(Space,Subject,Assignment), space_instance(Space,physical_space) ->
+        findall(binding(B,R),physics_body_definition(Space,B,R,_,_,live(Subject,Assignment,_,_)),
+                [binding(Body,Revision)]), Pose = body_pose(Body,Revision)
+    ; Layout = transform(_,_,_,_,_,_), Pose = Layout).
 
 space_entity_model([recipe(Ns,A,Recipe)],Context,Model) :-
     Ns::(current_ontology_identity(Ns,A),eidolon(Recipe,Context,Model)).

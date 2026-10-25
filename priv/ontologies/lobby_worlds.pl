@@ -161,8 +161,7 @@ instance_of(agent,world_pilot(W)) :- lobby_terrain_world(W).
 physics_space(W,enabled,world_authority(W)) :- lobby_terrain_world(W).
 physics_initial_host(W,Node) :- lobby_terrain_world(W),physics_initial_host(personal_lobby,Node).
 physics_initial_control(W,world_pilot(W),eye) :- lobby_terrain_world(W).
-physics_admission(W,entity_ref(Ns,A,world_pilot(W)),controlled,Pose) :-
-    world_arrival(W,Pose),current_ontology_identity(Ns,A).
+lobby_admission(W,world_pilot(W),controlled,Pose) :- world_arrival(W,Pose).
 physics_allowances(W,limits(16,16,128,1000000,geometry(8192,8000000,2000000)),16667,Gravity,10000) :-
     lobby_terrain_world(W),Gravity is -9810.
 voxel_allowances(W,voxel_limits(sampling_limits(1331,20000,100000,3993),

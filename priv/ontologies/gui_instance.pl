@@ -2,7 +2,11 @@
 %% input value is never a request to follow that value into another ontology.
 no_follow(gui_schema/3).
 no_follow(gui_definition/5).
-no_follow(gui_compile/5).
+no_follow(gui_definition/6).
+no_follow(gui_compile/6).
+no_follow(gui_submission/4).
+no_follow(gui_results/3).
+no_follow(gui_bind_values/5).
 no_follow(gui_component_tree/5).
 no_follow(gui_class_basis/2).
 no_follow(gui_component_children/5).
@@ -35,13 +39,19 @@ gui_schema(Form, Revision, Tree) :-
     gui_definition(Form, Revision, Tree, _, _).
 
 gui_definition(Form, Revision, Tree, Fields, Submit) :-
-    once(gui_compile(Form, Current, Compiled, Bindings, Submission)),
-    Revision = Current, Tree = Compiled, Fields = Bindings, Submit = Submission.
+    gui_definition(Form, Revision, Tree, Fields, Submit, question).
 
-gui_compile(Form, Revision, Tree, Fields, Submit) :-
+gui_definition(Form, Revision, Tree, Fields, Submit, Contract) :-
+    once('$quod_state_check'(gui_compile(Form, Current, Compiled, Bindings,
+                                       Submission, Authored))),
+    Revision = Current, Tree = Compiled, Fields = Bindings,
+    Submit = Submission, Contract = Authored.
+
+gui_compile(Form, Revision, Tree, Fields, Submit, Contract) :-
     gui_local_id(Form),
     findall(ontology_ref(N, A), gui_vocabulary(N, A), [ontology_ref(Ns, Anchor)]),
-    findall(binding(F, S), gui_form(Form, F, S), [binding(Fields, Submit)]),
+    findall(binding(F, S), gui_form(Form, F, S), [binding(Fields, Declaration)]),
+    gui_submission(Declaration, Submit, Contract, Results),
     gui_component_tree(Form, Ns, [], _, RawTree),
     Ns::(current_ontology_identity(Ns, Anchor), gui_tree_schema(RawTree, Tree, Inputs)),
     Tree = component(Form, form, _, _),
@@ -54,15 +64,34 @@ gui_compile(Form, Revision, Tree, Fields, Submit) :-
     gui_tree_component(Tree, Control, button, _, _),
     gui_field_declarations(Fields, Inputs, [], FieldIds),
     sort(Inputs, Expected), sort(FieldIds, Expected),
-    %% Only declared field variables may remain unbound in the continuation.
-    term_variables(Fields, Variables), term_variables(Continuation, Used),
-    gui_variables_bound(Used, Variables),
+    %% Inputs and named outputs are separate. Questions declare no outputs.
+    gui_results(Results, [], _),
+    term_variables(Fields, InputsUsed), term_variables(Results, Outputs),
+    \+ (member(Output, Outputs), member_eq(Output, InputsUsed)),
+    term_variables(Continuation, Used),
+    term_variables(Fields-Results, Variables), gui_variables_bound(Used, Variables),
+    gui_variables_bound(Outputs, Used),
+    (Contract = operation(Permission, _) ->
+        '$quod_callable'(Permission), term_variables(Permission, Parameters),
+        gui_variables_bound(Parameters, InputsUsed)
+    ; true),
     '$quod_callable'(Continuation),
     gui_fixed_values(Fields, Form, Tree, Fixed),
     findall(C, gui_validation_context(Form, C), Contexts),
     term_variables(Contexts, []), sort(Contexts, Context),
     variant_digest(schema(1, ontology_ref(Ns, Anchor), Tree,
-                          binding(Fields, Submit), Fixed, Context), Revision).
+                          binding(Fields, Declaration), Fixed, Context), Revision).
+
+gui_submission(submit(Control, Goal), submit(Control, Goal), question, []).
+gui_submission(submit(Control, Goal, operation(Permission, Results)),
+               submit(Control, Goal), operation(Permission, Results), Results).
+
+gui_results(Results, Seen, Names) :-
+    nonvar(Results),
+    (Results = [] -> Names = []
+    ; Results = [Result | Rest], nonvar(Result), Result = result(Name, _),
+      atom(Name), \+ member_eq(Name, Seen), Names = [Name | Tail],
+      gui_results(Rest, [Name | Seen], Tail)).
 
 gui_component_tree(Id, Ns, Seen, All, component(Id, Classes, Attributes, Children)) :-
     gui_local_id(Id), \+ member_eq(Id, Seen),
@@ -146,13 +175,16 @@ gui_bind(Form, Revision, Control, Values, Continuation) :-
     term_variables(Form-Revision-Control-Values, []),
     gui_local_id(Form), gui_local_id(Control),
     gui_definition(Form, Revision, Tree, Fields, submit(Control, Continuation)),
+    gui_bind_values(Form, Tree, Fields, Control, Values),
+    term_variables(Continuation, []).
+
+gui_bind_values(Form, Tree, Fields, Control, Values) :-
     gui_tree_active(Tree, Control),
     gui_bind_fields(Fields, Values, Tree, Checks),
     gui_fixed_values(Fields, Form, Tree, Fixed),
     gui_match_fixed(Fixed, Values),
     gui_vocabulary(Ns, Anchor),
-    Ns::(current_ontology_identity(Ns, Anchor), gui_valid_values(Checks)),
-    term_variables(Continuation, []).
+    Ns::(current_ontology_identity(Ns, Anchor), gui_valid_values(Checks)).
 
 gui_bind_fields([], [], _, []).
 gui_bind_fields([field(Id, Value) | Rest], Values, Tree,

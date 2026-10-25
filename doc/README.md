@@ -31,6 +31,9 @@ verification. The current source is the final check for what is implemented.
 integration, event-based forms and VR appearance. [Application form examples](gui-examples.md)
 exercise implemented components, field bindings and question completion. Live
 opening and headset acceptance remain unfinished.
+The shared [offered-operation contract](gui-implementation-plan.md#offered-class-and-instance-operations)
+reuses those controls for class creation and exact-instance operations without
+requiring a deferred question. Client presentation and dispatch remain separate.
 
 [World generation brainstorming](world-generation-brainstorm.md) explores RPG
 world-building sources, ontology-based generation, composable roleplaying rules,

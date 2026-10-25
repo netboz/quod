@@ -171,6 +171,78 @@ validation are also batched. No clause database or mutable projection is
 copied. Schema, initial-value and binding queries are deterministic over their
 validated unique component identities.
 
+### Offered class and instance operations
+
+Compose `gui_operation.pl` alongside `gui_instance.pl` in the target ontology.
+The former adds description and binding only; existing signed goals, domain
+guards, transactions and result recovery remain the execution path. Composing
+these rules grants no entry ACL and publishes no `action/3` automatically.
+
+An author explicitly offers a recipe with
+`class_eidolon(Class, operation(class), Name, recipe(Ns, Anchor, Recipe))`
+or `operation(instance)`. Existing most-specific class selection chooses the
+recipe; ambiguous choices refuse that offer. The anchored recipe implements
+`eidolon(Recipe, subject(ontology_ref(Target, History), Subject), operation(Form))`,
+where `Subject` is `class(Class)` or `instance(Id)`. It selects a form owned by
+that target, including any instance parameters. Source and inspection recipes
+retain their existing purposes and contracts.
+
+The ordinary form declaration supplies the operation's semantics:
+
+```prolog
+gui_form(create_example, [field(name, Name)],
+    submit(create, with_build_plan(Inputs, assert(instance_of(example, Id))),
+           operation(create(Inputs), [result(created, entity_ref(Ns, Anchor, Id))]))) :-
+    Inputs = [attribute(name, Name)],
+    current_ontology_identity(Ns, Anchor).
+```
+
+Labels/help, controls, types, initial values and frozen parameters use the
+existing component declarations. `operation(Permission, Results)` distinguishes
+an offered operation from a deferred question. `Permission` is the exact S1.3
+operation term; its variables must come from inputs. Results have unique atom
+names and may share intentional output variables with the authored goal, but
+never with editable inputs. Every free goal variable must be an input or a
+declared result. A question still uses `submit(Control, Goal)` and must bind a
+fully ground continuation. Operation forms cannot enter question submission.
+
+`gui_operations(ExactSubject, Views)` accepts `class_ref(Ns, Anchor, Class)`
+or the existing `entity_ref(Ns, Anchor, Id)`. Class discovery needs no instance.
+Each view is `operation_view(Name, ExactSubject, Revision, Tree, ValuesToken,
+Values, Control, ResultNames, Availability)`. The tree carries labels/help and
+input metadata; editable defaults have their separate value token. Availability
+is `requires_input`, `available` or `unavailable`, always advisory for the
+current authenticated principal. Discovery runs inside the existing read-only
+proof boundary, even when called in an execute request.
+
+`gui_operation_bind(ExactSubject, Name, Revision, Control, Values, Goal, Results)`
+requires fresh output arguments. It validates the exact submitted field set,
+types, frozen values and revision, then checks committed permissions with the
+supplied parameters. It returns an ordinary conjunction of a current-definition
+guard and the authored goal, sharing output variables with `Results`. The guard
+rechecks identity, definition, fields and committed permission at execution,
+then compares the goal and results with a fresh authored variant without
+unifying them. Prebound outputs and new aliases are refused; intentional
+authored sharing is preserved. In particular, an offered creation cannot be
+changed into an existing-instance membership assertion by binding its result.
+Only named variables in the submitted request become durable result bindings;
+callers retain the result term through that existing mechanism. No client
+continuation is accepted as authority. Direct creation with a fresh output still
+encounters the constructor's S1.3 guard. Authorized source edits and additional
+classification of existing instances retain their separate existing semantics.
+
+The revision includes subject/history, selected recipe, form, compiled schema,
+authored goal, permission, result sharing, fixed values and explicit validation
+context. Ordinary editable initial values remain separate. Authors must include
+validation-sensitive domain revisions in the goal or `gui_validation_context/2`,
+as for question forms; this is not a hash of every helper predicate's source.
+Broad authorized source rewriting retains its existing authority.
+
+The signed operation fixture demonstrates real empty-space creation with a
+named reference and an existing space withdrawal through this same contract.
+S1.9 owns production client presentation, dispatch and the complete Create-space
+flow; this contract does not install a lobby menu or replace terrain questions.
+
 ## 3. Class composition and the portable descriptor
 
 One authoritative model consists of class membership, attributes, ordered

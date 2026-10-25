@@ -1,5 +1,6 @@
 -module(quod_space_creation_tests).
 -include_lib("eunit/include/eunit.hrl").
+-export([with_spaces/2]).
 
 signed_empty_space_results_and_recovery_test_() ->
     [{atom_to_list(Lane), {timeout, 90, fun() -> with_spaces(fun(C) ->
@@ -146,7 +147,10 @@ authorization_and_lookup_failures_never_fall_back_test_() ->
     end) end}.
 
 with_spaces(Fun) ->
-    Sources = source("space.pl") ++ source("space_view.pl") ++ fixture(),
+    with_spaces(Fun, []).
+
+with_spaces(Fun, Extra) ->
+    Sources = source("space.pl") ++ source("space_view.pl") ++ fixture() ++ Extra,
     quod_personal_agent_tests:with_personal(fun(C = #{namespace := Ns, agent := A,
                                                     directory := Dir, identity := Node}) ->
         {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir,"foreign")}),

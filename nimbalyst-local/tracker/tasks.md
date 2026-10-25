@@ -280,31 +280,7 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
 
 - S1.7 — Create one empty space with explicit storage and optional placement: [QUO-43](nimbalyst://QUO-43). Status: completed and committed with this change. Scope, acceptance checks, verification and dependencies are in the full tracker item.
 
-- S1.8 — Describe and bind class operations through the shared Prolog GUI model #task[id:tsk_01M5Q1YXC2YVTBAC8RRBK73RXY status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
-  Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.
-  
-  Dependencies: S1.3 [tsk_01M5Q1YXC2JDBWR3AKXAB7RPQN](nimbalyst://tsk_01M5Q1YXC2JDBWR3AKXAB7RPQN); S1.5 [tsk_01M5Q1YXC2AWGSJT9CJ86R13W8](nimbalyst://tsk_01M5Q1YXC2AWGSJT9CJ86R13W8). These are implementation dependencies, not additional design approvals.
-  
-  **Scope and ownership**
-  
-  Combine existing interface descriptions, class-selected recipes and typed form binding into the minimum shared offered-operation contract: labels/help, class or exact instance subject, input/default metadata, authored bound goal, named result and advisory availability. A class Create affordance prepares assertion-triggered construction without an existing space instance. Generalize binding to preserve intentional result variables while validating submitted fields; do not turn internal outputs or arbitrary client continuations into executable authority. S1.9 owns client presentation/dispatch.
-  
-  **Inspected code and verification seams**
-  
-  [priv/ontologies/quod_prolog.pl:18](/home/yan/src/quod/priv/ontologies/quod_prolog.pl:18) · [priv/ontologies/common_predicates.pl:46](/home/yan/src/quod/priv/ontologies/common_predicates.pl:46) · [priv/ontologies/gui_instance.pl:34](/home/yan/src/quod/priv/ontologies/gui_instance.pl:34) · [priv/ontologies/gui_instance.pl:145](/home/yan/src/quod/priv/ontologies/gui_instance.pl:145) · [priv/ontologies/quod_gui.pl:201](/home/yan/src/quod/priv/ontologies/quod_gui.pl:201) · [src/quod_client_goal.erl:520](/home/yan/src/quod/src/quod_client_goal.erl:520) · [test/quod_gui_components_tests.erl:1](/home/yan/src/quod/test/quod_gui_components_tests.erl:1)
-  
-  **Acceptance checks**
-  
-  - [ ] Describe class creation and an instance operation through the same contract, including inputs/defaults and a named creation output. No instance is required just to discover class creation.
-  - [ ] Wrong anchors/subjects, unexpected fields, stale definitions and altered fixed parameters are refused; direct invocation enforces S1.3 checks again.
-  - [ ] Discovery is read-only/advisory and cannot mutate state or grant access. Parameter-dependent permission is rechecked after input; not every action/3 becomes a public operation.
-  - [ ] Reuse authored GUI controls, type checks and recipes; retain genuine deferred-question validation and continuation tests.
-  
-  **Replacement and documentation:** Factor shared compilation/binding from question-specific admission without duplicating it or removing questions. Replace only operation-description special cases covered here; preserve source/inspection Eidolons.
-  
-  **Existing-ticket boundary:** [QUD.25](nimbalyst://QUD.25) retains delivered controls and outstanding headset acceptance. [QUD.32](nimbalyst://QUD.32) retains ontology reflection; [QUD.35](nimbalyst://QUD.35) remains the later graphical workbench.
-  
-  Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md). Keep domain state/policy in Prolog and reuse existing transaction, recovery and runtime owners. Verification is required during implementation, not claimed here. No deployment, commit, data deletion or agent spawning is authorized by ticket creation.
+- S1.8 — Describe and bind class operations through the shared Prolog GUI model: [QUO-44](nimbalyst://QUO-44). Status: completed and committed with this change; 342 tests and production xref pass, requested review findings addressed. Scope, acceptance checks and dependencies remain in the existing tracker item (original ID `tsk_01M5Q1YXC2YVTBAC8RRBK73RXY`).
 
 - S1.9 — Deliver the bound Create-space interface and verify the complete stage-1 flow #task[id:tsk_01M5Q1YXC21Z70NX4DJXSZHD1X status:to-do priority:medium created:2026-10-24 tags:architecture,space,stage-1]
   Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: unstarted.

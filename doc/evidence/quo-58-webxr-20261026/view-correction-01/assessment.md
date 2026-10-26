@@ -1,7 +1,10 @@
 # Unrestricted tracked viewing
 
-**All twelve release gates passed** on the frozen correction. Image packaging,
-rollout and fresh physical acceptance are next; no physical pass is claimed.
+**All twelve release gates passed** on the frozen correction. The verified image
+is deployed on eight healthy nodes, and the real HTTPS bundle matches. Fresh
+Vive entry, stereo rendering, exit and re-entry worked. Yan confirms the
+head-view correction but reports controller runaway/flicker; overall physical
+acceptance remains incomplete.
 
 Yan rejected the fixed head-movement bubble and its blackout after the real
 demo. He did not request that restriction. This correction removes it outright.
@@ -143,3 +146,45 @@ only in the thirteen head-view correction files. Dependencies, controller source
 and packaged controller assets are unchanged. Other changed build inputs are
 eight test files. The original user-owned working patch is still exactly
 `38f36875692d0044db4d5d86796c55ecc3f65f72423e167bbd6d292d3355ef04`.
+
+## Verified deployment
+
+Commit `79ad2cb4cef33056794fb6887a8bca18affc68de` records the release-fixture
+corrections and qualification evidence after head-view correction `de1e9af4`.
+The [verified image](verified-image.json) is pinned to digest
+`sha256:69881b0ee6c9a7676d4477f9ed9f53f344aed5e8bef8ba5515e3eed8facf1ca9`.
+Its provenance is the frozen gate-04 tree, including the preserved working
+patch; the image does not claim a clean HEAD build. Internal release 0.7.275
+preserves installed absolute ontology source paths.
+
+The image-only rollout reached job version 111 with eight healthy allocations
+and zero task restarts. [Read-only fleet verification](fleet-after-rollout.json)
+confirms the retained root and 18 system ontology anchors on every node, the
+expected catalogue, unchanged protected jobs and the existing demo02 volumes.
+No further reset or in-place ontology update occurred.
+
+[HTTPS verification](https-verified.json) validates the exact public certificate
+with normal hostname checking. The world HTML and all 195 served assets match
+the frozen build, and [security headers](served-bundle.json) match the existing
+strict policy. The fresh physical campaign uses an ordinary new account/lobby
+to receive the corrected founding source; old lobbies remain unchanged.
+
+## Fresh physical observation
+
+After Yan confirmed HDMI reconnection, green controllers and readiness, the
+ordinary browser permission flow reached a real immersive session. It recorded
+9,452 stereo/tracked frames before Quod's Exit VR control ended it once. Closing
+an open controller-settings panel allowed a fresh native entry. Yan confirmed
+that the lobby stays visible during head movement and both controllers are
+visible, then reported a right controller flying away and general flicker.
+
+The [controller diagnosis](vive-live-01/controller-stability.md) preserves these
+observations and proves that excessive right-controller displacement already
+exists in native WebXR poses. Native tracking investigation belongs to
+[QUO-38](nimbalyst://QUO-38); GUI acceptance remains with
+[QUO-24](nimbalyst://QUO-24). Yan then confirmed both controllers were held in
+view with green LEDs and requested stopping. The re-entry session reached
+11,263 tracked stereo frames out of 12,791 callbacks. The remaining callbacks
+did not establish tracked stereo and have not been attributed to a cause.
+[Final cleanup](vive-live-01/result.json) restored desktop geometry, prior
+headset display state and certificate trust, with no unexpected child exits.

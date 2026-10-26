@@ -1,0 +1,8 @@
+{
+  "source": "Nimbalyst interactive readiness response",
+  "responded_at_epoch_ms": 1793055115974,
+  "hdmi_reconnected_at_pc": true,
+  "both_controllers_green": true,
+  "ready_for_runtime_and_vr_entry": true,
+  "keep_demo_interactive": true
+}

@@ -15,7 +15,7 @@ planStatus:
 
 # Production WebXR startup correction
 
-Agreed source correction for [QUO-58](nimbalyst://QUO-58), committed and deployed with the completed [QUO-59](nimbalyst://QUO-59) controller implementation. The fresh-ledger demo reached real stereo frames, both controllers, app exit and re-entry. Yan rejected its head-movement blackout, so usable physical acceptance remains incomplete. The follow-up below removes that restriction; its release qualification is blocked by the repeated source-edit timeout recorded below. Bare-hand tracking remains excluded.
+Agreed source correction for [QUO-58](nimbalyst://QUO-58), committed and deployed with the completed [QUO-59](nimbalyst://QUO-59) controller implementation. The earlier fresh-ledger demo reached real stereo frames, both controllers, app exit and re-entry. Yan rejected its head-movement blackout. The follow-up removes that restriction, passed all twelve release gates and is deployed on eight healthy nodes with a verified HTTPS bundle. Fresh physical acceptance remains pending. Bare-hand tracking remains excluded.
 
 The initial launch authorized diagnosis and planning. After the requested Claude Fable plan review and the dependency-owner investigation, Yan explicitly approved implementation of the revised scope on 26 October 2026. At the initial software checkpoint, no commit, deployment, ontology update, ledger reset or hardware launch had occurred. Yan subsequently authorized committing the work and deleting/recreating the candidate ledgers for the demo, as recorded below. No additional coding session or worktree was started; failed evidence remains intact.
 
@@ -361,6 +361,18 @@ assessment; source behavior and the frozen gate inputs are unchanged.
 All twelve gate-04 checks passed sequentially, including 4,245 EUnit and 149 CT
 tests. Both previously blocking cases and the new held-Complete regression pass
 in the full run. The tested source stayed frozen, and the original user-owned
-patch is unchanged. The next authorized steps are scoped commit, verified image
-packaging and image-only rollout, then the fresh HTTPS demo after Yan is ready.
-No further ledger reset or in-place ontology update is part of those steps.
+patch is unchanged. Commit `79ad2cb4` records the fixture fixes and qualification.
+The verified frozen-source image is deployed at digest
+`sha256:69881b0ee6c9a7676d4477f9ed9f53f344aed5e8bef8ba5515e3eed8facf1ca9`:
+eight healthy nodes, zero restarts, retained ontology identities and protected
+jobs unchanged. Real HTTPS HTML and all 195 assets match with the strict policy
+intact. See the [deployment receipts](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/assessment.md).
+The fresh physical run reached real entry, 9,452 stereo/tracked frames, one
+native end on app exit and successful re-entry. Yan confirmed the head-view
+correction, then reported right-controller runaway and general flicker. Native
+WebXR samples already contain the runaway position. [The retained diagnosis](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/vive-live-01/controller-stability.md)
+keeps native tracking with [QUO-38](nimbalyst://QUO-38) and physical acceptance
+with [QUO-24](nimbalyst://QUO-24); it does not claim complete controller
+acceptance. Yan subsequently requested stopping. Owned processes were stopped
+and display state and temporary trust restored successfully. No further ledger
+reset or in-place ontology update occurred.

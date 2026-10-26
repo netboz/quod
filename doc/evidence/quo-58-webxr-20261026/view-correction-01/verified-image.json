@@ -1,0 +1,10 @@
+{
+  "revision": "de1e9af4ad230f021887faca27efc89e97b7189a",
+  "working_patch_sha256": "cc0a027a522725e9045b1b6d594f48033c6cca456c69ff3aa688b8b40dcbc634",
+  "image": "192.168.1.11:5000/quod:0.7.275-head-view-de1e9af4-cc0a027a-20261026-v01",
+  "pinned_image": "192.168.1.11:5000/quod:0.7.275-head-view-de1e9af4-cc0a027a-20261026-v01@sha256:69881b0ee6c9a7676d4477f9ed9f53f344aed5e8bef8ba5515e3eed8facf1ca9",
+  "image_id": "sha256:e3c3f3ab12c555298f58d31138fc690e6c963a06926e4f63a9b9107eb75be2ef",
+  "source_manifest_sha256": "b84bf9cda3575dcf4dc5e2b3c4b68634c8167687a39023fcc8fd3386dd0e2b19",
+  "packaged_priv_matches": true,
+  "registry_digest_matches": true
+}

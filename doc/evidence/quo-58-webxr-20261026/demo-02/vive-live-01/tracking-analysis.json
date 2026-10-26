@@ -1,0 +1,135 @@
+{
+  "basis": "Observed WebXR head position relative to the first sampled head position, not an exact capture of the app eye-clearance comparison. A reported pose shift is not proof of actual physical movement.",
+  "authored_maximum_offset_metres": 0.5,
+  "reentry_samples": [
+    {
+      "seconds_from_first_sample": 0.0,
+      "head_distance_from_first_metres": 0.0
+    },
+    {
+      "seconds_from_first_sample": 3.337,
+      "head_distance_from_first_metres": 0.08100570479614977
+    },
+    {
+      "seconds_from_first_sample": 5.154,
+      "head_distance_from_first_metres": 0.6057619309692425
+    },
+    {
+      "seconds_from_first_sample": 6.881,
+      "head_distance_from_first_metres": 0.5628262679788167
+    },
+    {
+      "seconds_from_first_sample": 8.855,
+      "head_distance_from_first_metres": 0.4056652259044771
+    },
+    {
+      "seconds_from_first_sample": 10.251,
+      "head_distance_from_first_metres": 0.33872436150408214
+    },
+    {
+      "seconds_from_first_sample": 11.78,
+      "head_distance_from_first_metres": 0.5677664854816453
+    },
+    {
+      "seconds_from_first_sample": 13.322,
+      "head_distance_from_first_metres": 0.47395935161954517
+    },
+    {
+      "seconds_from_first_sample": 14.861,
+      "head_distance_from_first_metres": 0.5089513517027546
+    },
+    {
+      "seconds_from_first_sample": 16.318,
+      "head_distance_from_first_metres": 0.29512060446871013
+    },
+    {
+      "seconds_from_first_sample": 17.87,
+      "head_distance_from_first_metres": 0.25764994296505506
+    },
+    {
+      "seconds_from_first_sample": 19.439,
+      "head_distance_from_first_metres": 0.14716188414936537
+    },
+    {
+      "seconds_from_first_sample": 21.049,
+      "head_distance_from_first_metres": 0.0466168215773217
+    },
+    {
+      "seconds_from_first_sample": 22.602,
+      "head_distance_from_first_metres": 0.15028764837334332
+    },
+    {
+      "seconds_from_first_sample": 24.212,
+      "head_distance_from_first_metres": 0.1519645307154349
+    },
+    {
+      "seconds_from_first_sample": 25.831,
+      "head_distance_from_first_metres": 0.27097556598832184
+    },
+    {
+      "seconds_from_first_sample": 27.463,
+      "head_distance_from_first_metres": 0.4638645438583044
+    },
+    {
+      "seconds_from_first_sample": 29.116,
+      "head_distance_from_first_metres": 0.4096914092240017
+    },
+    {
+      "seconds_from_first_sample": 30.66,
+      "head_distance_from_first_metres": 1.001834264256833
+    },
+    {
+      "seconds_from_first_sample": 31.856,
+      "head_distance_from_first_metres": 1.2293287637309604
+    },
+    {
+      "seconds_from_first_sample": 33.339,
+      "head_distance_from_first_metres": 1.2239704358696586
+    },
+    {
+      "seconds_from_first_sample": 34.847,
+      "head_distance_from_first_metres": 1.2423005330981955
+    },
+    {
+      "seconds_from_first_sample": 36.388,
+      "head_distance_from_first_metres": 1.2516754317713874
+    },
+    {
+      "seconds_from_first_sample": 37.908,
+      "head_distance_from_first_metres": 1.2497188678968103
+    },
+    {
+      "seconds_from_first_sample": 39.527,
+      "head_distance_from_first_metres": 1.246793444432939
+    },
+    {
+      "seconds_from_first_sample": 41.036,
+      "head_distance_from_first_metres": 1.2475073088464288
+    },
+    {
+      "seconds_from_first_sample": 42.556,
+      "head_distance_from_first_metres": 1.2469169407925051
+    }
+  ],
+  "reentry_samples_above_authored_maximum": 13,
+  "sessions": [
+    {
+      "frames": 23988,
+      "stereo_frames": 23842,
+      "tracked_frames": 23842,
+      "end_calls": 1,
+      "ended": 1793041738457,
+      "left_pose_samples": 57,
+      "right_pose_samples": 116
+    },
+    {
+      "frames": 1614,
+      "stereo_frames": 1614,
+      "tracked_frames": 1614,
+      "end_calls": 0,
+      "ended": null,
+      "left_pose_samples": 26,
+      "right_pose_samples": 23
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "xref",
+  "command": [
+    "rebar3",
+    "xref"
+  ],
+  "started_at": "2026-10-26T18:45:49.775255+00:00"
+}

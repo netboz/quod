@@ -1,0 +1,146 @@
+{
+  "job": "quod-finality-candidate-v6-20260926",
+  "old_family": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01",
+  "new_family": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02",
+  "volumes": [
+    {
+      "index": 0,
+      "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[0]",
+      "old_id": "c32ee1b2-ef0e-9d50-b440-19d9aa72986d",
+      "old_path": "/var/lib/nomad/host_volumes/c32ee1b2-ef0e-9d50-b440-19d9aa72986d",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[0]"
+    },
+    {
+      "index": 1,
+      "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[1]",
+      "old_id": "51da7c3a-aca1-ec73-7376-c32cb8a7bb74",
+      "old_path": "/var/lib/nomad/host_volumes/51da7c3a-aca1-ec73-7376-c32cb8a7bb74",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[1]"
+    },
+    {
+      "index": 2,
+      "node": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[2]",
+      "old_id": "bbd407d5-223d-2569-11a2-b53b31f4e4bc",
+      "old_path": "/var/lib/nomad/host_volumes/bbd407d5-223d-2569-11a2-b53b31f4e4bc",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[2]"
+    },
+    {
+      "index": 3,
+      "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[3]",
+      "old_id": "3db4a3af-511a-79ad-a111-0632e9856150",
+      "old_path": "/var/lib/nomad/host_volumes/3db4a3af-511a-79ad-a111-0632e9856150",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[3]"
+    },
+    {
+      "index": 4,
+      "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[4]",
+      "old_id": "fc85c2c8-4a3d-3c9d-0d1d-257782880727",
+      "old_path": "/var/lib/nomad/host_volumes/fc85c2c8-4a3d-3c9d-0d1d-257782880727",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[4]"
+    },
+    {
+      "index": 5,
+      "node": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[5]",
+      "old_id": "72926ca3-e582-f3e7-fcfb-481761abcd90",
+      "old_path": "/var/lib/nomad/host_volumes/72926ca3-e582-f3e7-fcfb-481761abcd90",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[5]"
+    },
+    {
+      "index": 6,
+      "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[6]",
+      "old_id": "adabcd22-6159-b671-6ade-c07b602b7f91",
+      "old_path": "/var/lib/nomad/host_volumes/adabcd22-6159-b671-6ade-c07b602b7f91",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[6]"
+    },
+    {
+      "index": 7,
+      "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+      "old_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo01[7]",
+      "old_id": "1d20f9aa-6fcc-2262-d10e-aea2470ae31c",
+      "old_path": "/var/lib/nomad/host_volumes/1d20f9aa-6fcc-2262-d10e-aea2470ae31c",
+      "new_name": "quod-finality-candidate-v6-20260926-refound-20261026-xr-demo02[7]"
+    }
+  ],
+  "protected_volume_ids": [
+    "059371f5-0cbd-62ca-86ef-4e177445bd55",
+    "06e8ac4e-6976-f1da-830f-b80612bdef51",
+    "130712f9-53a1-b67f-f96e-b45cabdab210",
+    "1a71aba6-4068-c0c0-6aee-84fb2521b807",
+    "21980603-2a5f-271c-fe49-efde09c329fa",
+    "283727a2-bb29-2296-70c4-599ad3776211",
+    "2ff4967d-d644-ab7a-d755-f26ba6460d17",
+    "3138d005-159e-c2e0-1022-ee9268388778",
+    "36cfea36-59a3-1649-f96c-ca1c17dcfd63",
+    "3f747ecc-53d0-3606-fdec-a63f91de5fe0",
+    "404a1923-586a-be85-ccac-50d6c25c76fb",
+    "4e6867d2-4a51-9a08-776e-f3c436ab25d7",
+    "50ab6009-4ce4-04d7-b166-1064cc88b894",
+    "5468fdd5-04ad-5cae-6886-2374b69cb6b1",
+    "61a86ff8-c5c7-8b2f-2919-26294dd0317e",
+    "74148ea7-25b5-010c-f0cb-dc84f366cec0",
+    "804f8672-6462-6a50-08c4-f981a64170f5",
+    "8bdf90cd-1b7d-ffc8-9fa0-4cfd26d7ca79",
+    "9cbaddc9-d918-f497-a9ab-68d7f64039ad",
+    "b1056453-5f99-93f5-8822-7bfd8260a6ea",
+    "c3de2e45-94a3-f53d-bcb6-d675817d4701",
+    "d2646eb5-42a8-bdb5-b32b-aabfc5c51d1c",
+    "f3e1dbd4-99a8-b2ba-e992-d53bc2d0d36a",
+    "ff4cd231-8d42-d5bf-da45-f5b232b31019"
+  ],
+  "old_version": 107,
+  "old_modify_index": 907581,
+  "delete_old_volumes": true,
+  "new_image": "192.168.1.11:5000/quod:0.7.275-xr-1daac001-38f36875-20261026-d02@sha256:6bb00abb0aee978433a8cffb90de6032c4169da8c2990b139c657243ae119243",
+  "candidate_version": 107,
+  "candidate_modify_index": 907581,
+  "old_root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+  "old_allocations": [
+    {
+      "id": "07d93529-8cb5-59f0-07ab-15627c61df7d",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297"
+    },
+    {
+      "id": "45ab29f4-dc4a-d06f-45c3-ab4961e4ef04",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061"
+    },
+    {
+      "id": "83f772ed-6ec3-4c87-19d0-c7370065e290",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0"
+    },
+    {
+      "id": "8e20dcda-a5b8-b90a-63b7-8bccb0f6e440",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297"
+    },
+    {
+      "id": "9d9551e2-8e13-d90e-02e2-6fce57bac20f",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0"
+    },
+    {
+      "id": "a60e93c0-6485-c050-75e9-19a6162dfbde",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "node_id": "3e390ebd-5557-a67c-b64e-07b728144297"
+    },
+    {
+      "id": "abf20e66-8cb4-acd7-53a4-acccd40e8d23",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "node_id": "c8f9edef-853b-fc43-e3fb-d884418f7061"
+    },
+    {
+      "id": "e77eb60b-a72f-8633-2bbc-f9fd4eb5bd55",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "node_id": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0"
+    }
+  ]
+}

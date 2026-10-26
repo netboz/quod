@@ -1,0 +1,14 @@
+[
+  {
+    "level": "INFO",
+    "message": "https://192.168.1.10:30519/assets/logger-CuBYPcDK.js 0:836 \"BJS - [19:53:00]: Babylon.js v9.18.1 - WebGL2 - Parallel shader compilation\"",
+    "source": "console-api",
+    "timestamp": 1793040786367
+  },
+  {
+    "level": "WARNING",
+    "message": "https://192.168.1.10:30519/assets/logger-CuBYPcDK.js 0:836 \"BJS - [19:53:01]: Error executing makeXRCompatible. This does not mean that the session will work incorrectly.\"",
+    "source": "console-api",
+    "timestamp": 1793040786367
+  }
+]

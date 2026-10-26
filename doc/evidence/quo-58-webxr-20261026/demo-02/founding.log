@@ -1,0 +1,367 @@
+{
+  "loaded": true
+}
+{
+  "node_pubkey": "C5356542EC49723DB5CA8F635C1C936A1064770722FD8B75456303538A50B93E",
+  "root_anchor": "F3372F1D729A21D911149EB8D91D8A1FB5C0E94FE5EB1880AA5F0D16DABD92C1"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "6228CCA218E7CE4967A06D643C397530EB0805026491B1157ED4D06192B5BD7F",
+  "namespace": "quod:node"
+}
+{
+  "anchor": "6228CCA218E7CE4967A06D643C397530EB0805026491B1157ED4D06192B5BD7F",
+  "namespace": "quod:node",
+  "published": "committed"
+}
+{
+  "creation_policies_committed": 1,
+  "creation_policies_present": 1
+}
+{
+  "desired_hosts": {
+    "private": 0,
+    "discoverable": 2
+  },
+  "hosting_revision": 2,
+  "node_enrollment": "complete",
+  "private_contacts": 0,
+  "route_waits": 0
+}
+{
+  "principal": "{agent_instance_ref,<<\"node:c5356542ec49723db5ca8f635c1c936a1064770722fd8b75456303538a50b93e\">>,\n                    <<140,240,61,33,35,75,82,28,49,69,254,13,237,240,129,125,\n                      10,171,190,109,149,238,152,88,24,171,150,143,22,226,172,\n                      90>>,\n                    me}"
+}
+{
+  "pointer": "stored",
+  "manager": {
+    "desired_hosts": {
+      "private": 0,
+      "discoverable": 2
+    },
+    "hosting_revision": 2,
+    "node_enrollment": "complete",
+    "private_contacts": 0,
+    "route_waits": 0
+  },
+  "hosting_height": 2,
+  "node_anchor": "8CF03D21234B521C3145FE0DEDF0817D0AABBE6D95EE985818AB968F16E2AC5A",
+  "node_namespace": "node:c5356542ec49723db5ca8f635c1c936a1064770722fd8b75456303538a50b93e",
+  "self_hosting": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "DB174AAC616B2D96A3EF9C59035BF3093CA810A6974A14EB0583AE5B3C8A8CD5",
+  "namespace": "quod:agent"
+}
+{
+  "anchor": "DB174AAC616B2D96A3EF9C59035BF3093CA810A6974A14EB0583AE5B3C8A8CD5",
+  "namespace": "quod:agent",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "62624C7053D971CCA91F96DDB1D90A42BFB9FFF098A4959FB2B878D728A50261",
+  "namespace": "quod:environment"
+}
+{
+  "anchor": "62624C7053D971CCA91F96DDB1D90A42BFB9FFF098A4959FB2B878D728A50261",
+  "namespace": "quod:environment",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "675F5AC72FF9FC8181537690AA18C96462CF1D4BF67EB768193351DB57D63350",
+  "namespace": "quod:environment:eidolons"
+}
+{
+  "anchor": "675F5AC72FF9FC8181537690AA18C96462CF1D4BF67EB768193351DB57D63350",
+  "namespace": "quod:environment:eidolons",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates",
+    "quod_gui_predicates"
+  ],
+  "anchor": "565B058A7A884DB7BFC8DE1796B66EAFFAFF794A9BE1503F6AF15E6E106CE332",
+  "namespace": "quod:gui"
+}
+{
+  "anchor": "565B058A7A884DB7BFC8DE1796B66EAFFAFF794A9BE1503F6AF15E6E106CE332",
+  "namespace": "quod:gui",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "727A3B3249FBDF303C18D19BAC1C19A7F66ECAB96762A98FA28CF4FB54D55509",
+  "namespace": "quod:human_user"
+}
+{
+  "anchor": "727A3B3249FBDF303C18D19BAC1C19A7F66ECAB96762A98FA28CF4FB54D55509",
+  "namespace": "quod:human_user",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "3CAEDBE8D9DA645A584C3EBF800BDE1564D610D147D9BFEE03ADB692581B07F2",
+  "namespace": "quod:lens"
+}
+{
+  "anchor": "3CAEDBE8D9DA645A584C3EBF800BDE1564D610D147D9BFEE03ADB692581B07F2",
+  "namespace": "quod:lens",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "FC8AAFB7847C1642526B17FCC60A15A12419111D865900ED352DF39E48620EF0",
+  "namespace": "quod:licence"
+}
+{
+  "anchor": "FC8AAFB7847C1642526B17FCC60A15A12419111D865900ED352DF39E48620EF0",
+  "namespace": "quod:licence",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "C57B03A369269DBACC60258275647DD96435B5C99F6ED2B719615B6E3AB332EF",
+  "namespace": "quod:measure"
+}
+{
+  "anchor": "C57B03A369269DBACC60258275647DD96435B5C99F6ED2B719615B6E3AB332EF",
+  "namespace": "quod:measure",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "0E6685F59128CD813DF0ACCBD902334F525CBF17175717493A65412185B5C184",
+  "namespace": "quod:material"
+}
+{
+  "anchor": "0E6685F59128CD813DF0ACCBD902334F525CBF17175717493A65412185B5C184",
+  "namespace": "quod:material",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "1726533C8CFA2E12E76CB2813210E2936286FEC1076C4D988BE801F2AF61A7B8",
+  "namespace": "quod:material:eidolons"
+}
+{
+  "anchor": "1726533C8CFA2E12E76CB2813210E2936286FEC1076C4D988BE801F2AF61A7B8",
+  "namespace": "quod:material:eidolons",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "F5D3CF7FBD80475B07906C97EE06786A8F7B54F0E7A315104A39EF93DD6968D5",
+  "namespace": "quod:names"
+}
+{
+  "anchor": "F5D3CF7FBD80475B07906C97EE06786A8F7B54F0E7A315104A39EF93DD6968D5",
+  "namespace": "quod:names",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "D3329C2ABDDEDE2DF7A52803E6FA95E94962844C9469BA12C3D7B008D71E1BE7",
+  "namespace": "quod:rendering"
+}
+{
+  "anchor": "D3329C2ABDDEDE2DF7A52803E6FA95E94962844C9469BA12C3D7B008D71E1BE7",
+  "namespace": "quod:rendering",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "7FB037A2DD8EF82C661BEBF44216B7252896B21D708FB0E02214819E36C006B0",
+  "namespace": "quod:modelling"
+}
+{
+  "anchor": "7FB037A2DD8EF82C661BEBF44216B7252896B21D708FB0E02214819E36C006B0",
+  "namespace": "quod:modelling",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "E2C76C43A92446EFE14653A3910CF40416714A4E35C0F9A2F8686AC203F1F019",
+  "namespace": "quod:prolog"
+}
+{
+  "anchor": "E2C76C43A92446EFE14653A3910CF40416714A4E35C0F9A2F8686AC203F1F019",
+  "namespace": "quod:prolog",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "54DBAFCD0354322FCAAEFBD5F1767A76984C9F241DBDE5918483CB8D0A2E1604",
+  "namespace": "quod:prolog:eidolons"
+}
+{
+  "anchor": "54DBAFCD0354322FCAAEFBD5F1767A76984C9F241DBDE5918483CB8D0A2E1604",
+  "namespace": "quod:prolog:eidolons",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "2858A9C41EDC76974D7B2BAA2EFD73649486593D413769F3D7A7201EC264E036",
+  "namespace": "quod:lobby"
+}
+{
+  "anchor": "2858A9C41EDC76974D7B2BAA2EFD73649486593D413769F3D7A7201EC264E036",
+  "namespace": "quod:lobby",
+  "published": "committed"
+}
+{
+  "modules": [
+    "quod_agent_predicates"
+  ],
+  "anchor": "B0AC3604DD3E1783562EE385CAD17A3B124ED9D515246FA999C6F207FE1F58F4",
+  "namespace": "quod:signup"
+}
+{
+  "anchor": "B0AC3604DD3E1783562EE385CAD17A3B124ED9D515246FA999C6F207FE1F58F4",
+  "namespace": "quod:signup",
+  "published": "committed"
+}
+{
+  "creation_policies_committed": 2,
+  "creation_policies_present": 2
+}
+{
+  "node_namespace": "node:c5356542ec49723db5ca8f635c1c936a1064770722fd8b75456303538a50b93e",
+  "delegated": "committed",
+  "signup_anchor": "B0AC3604DD3E1783562EE385CAD17A3B124ED9D515246FA999C6F207FE1F58F4"
+}
+{
+  "rejected": 0,
+  "system_ontologies": 18,
+  "height": 41,
+  "anchors": {
+    "quod:agent": "DB174AAC616B2D96A3EF9C59035BF3093CA810A6974A14EB0583AE5B3C8A8CD5",
+    "quod:environment": "62624C7053D971CCA91F96DDB1D90A42BFB9FFF098A4959FB2B878D728A50261",
+    "quod:environment:eidolons": "675F5AC72FF9FC8181537690AA18C96462CF1D4BF67EB768193351DB57D63350",
+    "quod:gui": "565B058A7A884DB7BFC8DE1796B66EAFFAFF794A9BE1503F6AF15E6E106CE332",
+    "quod:human_user": "727A3B3249FBDF303C18D19BAC1C19A7F66ECAB96762A98FA28CF4FB54D55509",
+    "quod:lens": "3CAEDBE8D9DA645A584C3EBF800BDE1564D610D147D9BFEE03ADB692581B07F2",
+    "quod:licence": "FC8AAFB7847C1642526B17FCC60A15A12419111D865900ED352DF39E48620EF0",
+    "quod:lobby": "2858A9C41EDC76974D7B2BAA2EFD73649486593D413769F3D7A7201EC264E036",
+    "quod:material": "0E6685F59128CD813DF0ACCBD902334F525CBF17175717493A65412185B5C184",
+    "quod:material:eidolons": "1726533C8CFA2E12E76CB2813210E2936286FEC1076C4D988BE801F2AF61A7B8",
+    "quod:measure": "C57B03A369269DBACC60258275647DD96435B5C99F6ED2B719615B6E3AB332EF",
+    "quod:modelling": "7FB037A2DD8EF82C661BEBF44216B7252896B21D708FB0E02214819E36C006B0",
+    "quod:names": "F5D3CF7FBD80475B07906C97EE06786A8F7B54F0E7A315104A39EF93DD6968D5",
+    "quod:node": "6228CCA218E7CE4967A06D643C397530EB0805026491B1157ED4D06192B5BD7F",
+    "quod:prolog": "E2C76C43A92446EFE14653A3910CF40416714A4E35C0F9A2F8686AC203F1F019",
+    "quod:prolog:eidolons": "54DBAFCD0354322FCAAEFBD5F1767A76984C9F241DBDE5918483CB8D0A2E1604",
+    "quod:rendering": "D3329C2ABDDEDE2DF7A52803E6FA95E94962844C9469BA12C3D7B008D71E1BE7",
+    "quod:signup": "B0AC3604DD3E1783562EE385CAD17A3B124ED9D515246FA999C6F207FE1F58F4"
+  },
+  "enrollment": {
+    "pointer": "stored",
+    "manager": {
+      "desired_hosts": {
+        "private": 0,
+        "discoverable": 19
+      },
+      "hosting_revision": 19,
+      "node_enrollment": "complete",
+      "private_contacts": 0,
+      "route_waits": 0
+    },
+    "hosting_height": 3,
+    "node_anchor": "8CF03D21234B521C3145FE0DEDF0817D0AABBE6D95EE985818AB968F16E2AC5A",
+    "node_namespace": "node:c5356542ec49723db5ca8f635c1c936a1064770722fd8b75456303538a50b93e",
+    "self_hosting": "committed"
+  },
+  "all_ready": true,
+  "module_profiles": {
+    "quod:agent": [
+      "quod_agent_predicates"
+    ],
+    "quod:environment": [
+      "quod_agent_predicates"
+    ],
+    "quod:environment:eidolons": [
+      "quod_agent_predicates"
+    ],
+    "quod:gui": [
+      "quod_agent_predicates",
+      "quod_gui_predicates"
+    ],
+    "quod:human_user": [
+      "quod_agent_predicates"
+    ],
+    "quod:lens": [
+      "quod_agent_predicates"
+    ],
+    "quod:licence": [
+      "quod_agent_predicates"
+    ],
+    "quod:lobby": [
+      "quod_agent_predicates"
+    ],
+    "quod:material": [
+      "quod_agent_predicates"
+    ],
+    "quod:material:eidolons": [
+      "quod_agent_predicates"
+    ],
+    "quod:measure": [
+      "quod_agent_predicates"
+    ],
+    "quod:modelling": [
+      "quod_agent_predicates"
+    ],
+    "quod:names": [
+      "quod_agent_predicates"
+    ],
+    "quod:node": [
+      "quod_agent_predicates"
+    ],
+    "quod:prolog": [
+      "quod_agent_predicates"
+    ],
+    "quod:prolog:eidolons": [
+      "quod_agent_predicates"
+    ],
+    "quod:rendering": [
+      "quod_agent_predicates"
+    ],
+    "quod:signup": [
+      "quod_agent_predicates"
+    ]
+  }
+}

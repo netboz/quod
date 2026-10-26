@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.25s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_controller_tests:-preferences_use_existing_instruction_and_form_test_/0-fun-13-/0
+[0;31m     Failure/Error: ?assertEqual({bounds,-59,-70,-117,59,23,106}, Bounds)
+       expected: {bounds,-59,-70,-117,59,23,106}
+            got: {bounds,{'-',59},{'-',70},{'-',117},59,23,106}[0m
+[0;36m     %% eunit_proc.erl:479:in `eunit_proc:tests_inorder/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_36CC75603BFCD3F3
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_36CC75603BFCD3F3
+[0m
+
+Finished in 4.581 seconds
+[0;31m6 tests, 1 failures
+[0m===> Error running tests

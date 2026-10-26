@@ -1,0 +1,967 @@
+{
+  "passed": true,
+  "image": "192.168.1.11:5000/quod:0.7.275-xr-480ba266-38f36875-20261026-d01@sha256:a8d0aa5cabda20cf185a9cdde9baa094fb4d5776a326c6e4e4dabab8f70449d8",
+  "job": "quod-finality-candidate-v6-20260926",
+  "job_version": 107,
+  "anchors": {
+    "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+    "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+    "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+    "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+    "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+    "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+    "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+    "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+    "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+    "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+    "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+    "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+    "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+    "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+    "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+    "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+    "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+    "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A",
+    "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7"
+  },
+  "allocations": [
+    {
+      "allocation": "8e20dcda-a5b8-b90a-63b7-8bccb0f6e440",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[0]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "3DFAE64F92F20E266B3F9D2D87292983D0BFBE85AFBA86BED2949F5424A3E60E",
+          "namespace": "node:00be1962a5bc4ff84eeb7f943facb628bb0488f33e774f3731d0733ad94cecab",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 27
+          },
+          "hosting_revision": 5,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "e77eb60b-a72f-8633-2bbc-f9fd4eb5bd55",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[1]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "1099E85B4135DE7B59BC05491F2DD1871C5697F9E1B7098163355639E683D92A",
+          "namespace": "node:70b052d30e1e402fed8cb280ebcff66eec18c38dd022f73f9dc257da7eff928f",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 4,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "abf20e66-8cb4-acd7-53a4-acccd40e8d23",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[2]",
+      "node": "caton",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "11AB72E1C593CCD36B497A4E99390EEC4AC884371FB96E6524723FEA1B75CF52",
+          "namespace": "node:52ba52a2b38175401379b63a572c6571f642a787653dab7613cbad53a1915401",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 16,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "a60e93c0-6485-c050-75e9-19a6162dfbde",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[3]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "100368AE026330A8AE4C34ABCE6DF151A04BEDB3C63068E97113A51A5450A099",
+          "namespace": "node:730f2b4a0f6a20da4c5499c38283b6ba329c3a12e97af30add88ae2c3df4167a",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 20,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "9d9551e2-8e13-d90e-02e2-6fce57bac20f",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[4]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "DC518AE542D0CEFB2B42F85F0EBF85498A3C633CE8C7B6231DD16E6E55510A8C",
+          "namespace": "node:98eae377f12db9acbf81d4313e04c0fcc010a5075026fffaa086c2a57b54e2a4",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 3,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "45ab29f4-dc4a-d06f-45c3-ab4961e4ef04",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[5]",
+      "node": "caton",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "186CAFCC2CECDE9A95B6AE0455A274C143EE663B8D3BB215C2291A0D47BCECB3",
+          "namespace": "node:bbcc2d275051fa820846a332e366b1f7ee4c28cbfeee73333ac5de422528e7d8",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 16,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "07d93529-8cb5-59f0-07ab-15627c61df7d",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[6]",
+      "node": "conrad",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "B9D679625E0A4145E60F26740EC3AC4D9D3F6D8457B496A98A645557A1F88926",
+          "namespace": "node:47aca7ffb4d67016d12597201ff3d715f04c0b046d3453e87e2f296386bea243",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 20,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    },
+    {
+      "allocation": "83f772ed-6ec3-4c87-19d0-c7370065e290",
+      "name": "quod-finality-candidate-v6-20260926.quod-node[7]",
+      "node": "corin",
+      "exit": 0,
+      "restarts": 0,
+      "probe": {
+        "version": "0.7.275",
+        "principal": {
+          "pointer": "stored",
+          "anchor": "0ED042B300A8669915EE5F0036CA18DD121275A84CD5026C4EC1CBA9DCFBE9D9",
+          "namespace": "node:396d9080deb26fd51621d90bfe7eb41ded35f425992394cf231ff695feefef88",
+          "self_hosting": "committed"
+        },
+        "anchors": {
+          "quod:agent": "C11090580170D2D20A80C5B27FC7064337359486F6B8DC4CB847886E004C5FEB",
+          "quod:environment": "EF40A97D0A68D913B5A250008CEF53C25140279EA1384732C32D5B24ECA4C5CB",
+          "quod:environment:eidolons": "3399DD593455BBF960CEDFF8C0905B732C440BA934E6907BA8CFFDD853390E53",
+          "quod:gui": "2B798384FEDA210D091357941A4BE764699156C9B3287FC464E34E1B3FA8A853",
+          "quod:human_user": "9A6DA6DCC02E8A60D1766443B186B87A9591E02186A70B9EEAE9C6B73974F4ED",
+          "quod:lens": "C1EDC2138C8CA78FF2E7BD1E68AF40BD1F9584D537076B1262C46C1256AC4274",
+          "quod:licence": "0D89C8AE1A69F0E16816CBD44E825DCACB93DF52839A0B7F8C93B67DF8ACCFC4",
+          "quod:lobby": "15BD5996CF574C74C7931361E8FB8C631AFCB6B48F105F741642D3F43709EEC0",
+          "quod:material": "9ABAFD522FA681158573386EC6FBD5139CD0621F537A1B4FD541AE86F677ADB7",
+          "quod:material:eidolons": "6017C39FA5C742B62C471430E9B1A75FE61BD77FFFE60E276B9AE3E36B3723FA",
+          "quod:measure": "C2FFEECC365A00E62C917CB099F9FA87E77683B4CF0D2C9D372B50727D7D2B58",
+          "quod:modelling": "F3CDAA88B8762CBEDB844739B75A33164F98F2D424E6B63ED2D0135D76311213",
+          "quod:names": "B78FDBB665A673919FEB2D7C34FB2514100D7BF5151F048AE8E4B81CA0B1F633",
+          "quod:node": "A7D473CA03D559E619E35223310DEA50E613303DFE723B2C7B4312C8B9391B74",
+          "quod:prolog": "91852717BD1702F3CB84E76DD90B0208117B122200B1AB803DB39618F6C226D7",
+          "quod:prolog:eidolons": "AA08BD2E53636176DB00E9CCB3D995E2672927D7EE2E3BACBA29EA3D0CA80A01",
+          "quod:rendering": "522197D6923CD321E1907FF033317CF682D87389B43B11638870331356FAFDD2",
+          "quod:root": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+          "quod:signup": "BB73FE698A8A3BF1F145ECA4BD3C3204C038F3BB4BBA77EBD5CA46DF2D11AC4A"
+        },
+        "all_ready": true,
+        "catalogue_count": 18,
+        "catalogue_height": 59,
+        "custody_limits": {
+          "count": 64,
+          "prepared_bytes": "unlimited"
+        },
+        "manager": {
+          "desired_hosts": {
+            "private": 0,
+            "discoverable": 20
+          },
+          "hosting_revision": 4,
+          "node_enrollment": "complete",
+          "private_contacts": 0,
+          "route_waits": 0
+        },
+        "module_profiles": {
+          "quod:agent": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment": [
+            "quod_agent_predicates"
+          ],
+          "quod:environment:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:gui": [
+            "quod_agent_predicates",
+            "quod_gui_predicates"
+          ],
+          "quod:human_user": [
+            "quod_agent_predicates"
+          ],
+          "quod:lens": [
+            "quod_agent_predicates"
+          ],
+          "quod:licence": [
+            "quod_agent_predicates"
+          ],
+          "quod:lobby": [
+            "quod_agent_predicates"
+          ],
+          "quod:material": [
+            "quod_agent_predicates"
+          ],
+          "quod:material:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:measure": [
+            "quod_agent_predicates"
+          ],
+          "quod:modelling": [
+            "quod_agent_predicates"
+          ],
+          "quod:names": [
+            "quod_agent_predicates"
+          ],
+          "quod:node": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog": [
+            "quod_agent_predicates"
+          ],
+          "quod:prolog:eidolons": [
+            "quod_agent_predicates"
+          ],
+          "quod:rendering": [
+            "quod_agent_predicates"
+          ],
+          "quod:signup": [
+            "quod_agent_predicates"
+          ]
+        },
+        "rejected_count": 0,
+        "root_applied": 59,
+        "root_committed": 59,
+        "root_committee_size": 1,
+        "vault_provider": "none",
+        "vault_ready": true
+      }
+    }
+  ],
+  "protected_jobs_unchanged": true,
+  "seconds": 2.41377535299398
+}

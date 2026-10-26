@@ -1,0 +1,414 @@
+===> Verifying dependencies...
+===> Fetching rebar3_hex v7.1.0
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/rebar3_hex-7.1.0.tar
+===> Fetching hex_core v0.12.2
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/hex_core-0.12.2.tar
+===> Fetching verl v1.1.1
+===> Download error, using cached file at /home/yan/.cache/rebar3/hex/hexpm/packages/verl-1.1.1.tar
+===> Analyzing applications...
+===> Compiling verl
+===> Compiling hex_core
+===> Compiling rebar3_hex
+===> Analyzing applications...
+===> Compiling accept
+===> Compiling ctx
+===> Compiling quic
+===> Compiling quantile_estimator
+    ┌─ _build/default/lib/quantile_estimator/src/quantile.erl:
+    │
+ 17 │  quantile(0.0, [First|_]) ->
+    │           ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ _build/default/lib/quantile_estimator/src/quantile.erl:
+    │
+ 54 │  			[ceil(Size * Quantile)]
+    │  			 ╰── Warning: ambiguous call of overridden auto-imported BIF ceil/1 --
+use erlang:ceil/1 or "-compile({no_auto_import,[ceil/1]})." to resolve name clash
+
+
+    ┌─ _build/default/lib/quantile_estimator/src/quantile_estimator.erl:
+    │
+ 97 │  				false -> #group{v = V, g = 1, delta = clamp(floor(Invariant(Ranki, N)) - 1), rank = RankLast +1}
+    │  				                                            ╰── Warning: ambiguous call of overridden auto-imported BIF floor/1 --
+use erlang:floor/1 or "-compile({no_auto_import,[floor/1]})." to resolve name clash
+
+
+===> Compiling prometheus
+===> Compiling prometheus_httpd
+===> Compiling ssl_verify_fun
+===> Compiling tls_certificate_check
+===> Compiling opentelemetry_api
+===> Compiling opentelemetry
+===> Compiling gproc
+===> Compiling hpack
+===> Compiling chatterbox
+===> Compiling acceptor_pool
+===> Compiling grpcbox
+===> Compiling opentelemetry_exporter
+===> Compiling erlang_qq
+===> Compiling typerefl
+===> Compiling getopt
+===> Compiling hocon
+===> Compiling erlog
+    ┌─ _build/default/lib/erlog/src/erlog_ets.erl:
+    │
+ 23 │  -compile(export_all).
+    │   ╰── Warning: export_all flag enabled - all functions will be exported
+
+
+     ┌─ _build/default/lib/erlog/src/erlog_io.erl:
+     │
+ 229 │  write_term1({'$VAR',N}, _, #ops{numbervars=true}=Ops)
+     │                                                   ╰── Warning: variable 'Ops' is unused
+
+
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+    Finished `release` profile [optimized] target(s) in 0.07s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1217 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1217 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1217 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1042 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1667 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1667 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+file "quod.app"
+  application 'quod'
+    module 'quod_action_predicates'
+      module 'quod_action_predicates_tests'
+        quod_action_predicates_tests: shape_validation_test...[0.048 s] ok
+        quod_action_predicates_tests: declared_transition_uses_common_candidate_rollback_test...[0.007 s] ok
+        quod_action_predicates_tests: state_check_preserves_alternatives_and_restores_write_mode_test...[0.004 s] ok
+        quod_action_predicates_tests: state_check_rejects_mutation_and_restores_after_error_test...[0.005 s] ok
+        quod_action_predicates_tests: goal_rolls_back_failed_candidate_then_selects_next_test...[0.004 s] ok
+        quod_action_predicates_tests: goal_backtracks_inside_read_only_prerequisite_test...[0.004 s] ok
+        quod_action_predicates_tests: goal_skips_transition_when_target_already_holds_test...[0.004 s] ok
+        quod_action_predicates_tests: goal_rolls_back_failed_postcondition_before_next_candidate_test...[0.005 s] ok
+        quod_action_predicates_tests: goal_runs_transition_list_in_order_test...[0.006 s] ok
+        quod_action_predicates_tests: invalid_action_shape_runs_nothing_test...[0.004 s] ok
+        quod_action_predicates_tests: recursive_goal_prerequisite_uses_visited_chain_test...[0.005 s] ok
+        quod_action_predicates_tests: failed_candidates_retain_explicit_failure_reasons_test...[0.004 s] ok
+        [done in 0.137 s]
+      [done in 0.137 s]
+    module 'quod_agent'
+    module 'quod_agent_identity'
+      module 'quod_agent_identity_tests'
+        quod_agent_identity_tests: quorum_certificate_verifies_distinct_current_members_test...[0.023 s] ok
+        quod_agent_identity_tests: duplicate_outsider_and_subquorum_signatures_do_not_authorize_test...[0.001 s] ok
+        quod_agent_identity_tests: certificate_is_bound_to_proof_request_committee_and_expiry_test...ok
+        quod_agent_identity_tests: fully_replaced_committee_cannot_authorize_fresh_request_test...[0.003 s] ok
+        quod_agent_identity_tests: request_and_response_wire_are_closed_and_correlated_test...ok
+        [done in 0.042 s]
+      [done in 0.042 s]
+    module 'quod_agent_observer'
+    module 'quod_agent_predicates'
+      module 'quod_agent_predicates_tests'
+        quod_agent_predicates_tests: reaction_me_is_selected_identity_without_signed_authority_test...ok
+        quod_agent_predicates_tests: ordinary_me_reuses_authenticated_principal_test...[0.018 s] ok
+        quod_agent_predicates_tests: exact_scope_identity_can_bind_a_durable_fact_test...ok
+        quod_agent_predicates_tests: missing_or_mismatched_scope_fails_closed_test...ok
+        quod_agent_predicates_tests: signed_expiry_is_proof_bound_not_a_live_clock_test...ok
+        quod_agent_predicates_tests: reaction_request_metadata_is_not_an_ordinary_goal_authority_test...ok
+        quod_agent_predicates_tests: resource_commands_cannot_run_in_reaction_eligibility_test...ok
+        quod_agent_predicates_tests: reaction_metadata_backtracks_and_performs_no_preparation_test...ok
+        quod_agent_predicates_tests: dependency_declaration_preserves_live_failure_reads_test...ok
+        [done in 0.045 s]
+      [done in 0.045 s]
+    module 'quod_agent_ref'
+      module 'quod_agent_ref_tests'
+        quod_agent_ref_tests: canonical_ground_reference_roundtrip_test...ok
+        quod_agent_ref_tests: variables_and_noncanonical_blobs_are_rejected_test...ok
+        quod_agent_ref_tests: symbol_budget_is_vm_independent_test...[0.001 s] ok
+        [done in 0.010 s]
+      [done in 0.010 s]
+    module 'quod_agent_vault'
+      module 'quod_agent_vault_tests'
+        quod_agent_vault_tests: empty_custody_paths_refused_at_boot_test...=CRASH REPORT==== 26-Oct-2026::18:42:19.457951 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.19244.0>
+    registered_name: []
+    exception exit: invalid_vault_configuration
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.19243.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.19243.0>]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 233
+    stack_size: 29
+    reductions: 110
+  neighbours:
+
+[0.019 s] ok
+        quod_agent_vault_tests: custody_survives_restart_and_binds_exact_request_test...[0.033 s] ok
+        quod_agent_vault_tests: pending_request_receipt_survives_restart_and_key_deletion_test...[0.013 s] ok
+        quod_agent_vault_tests: pending_receipt_storage_failure_never_authorizes_submission_test...[0.004 s] ok
+        quod_agent_vault_tests: corrupt_pending_receipt_prevents_vault_start_test...=CRASH REPORT==== 26-Oct-2026::18:42:19.528474 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.19260.0>
+    registered_name: []
+    exception exit: vault_receipts_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.19259.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.19259.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 2687
+  neighbours:
+
+[0.003 s] ok
+        quod_agent_vault_tests: preparation_is_stable_and_preserves_old_custody_test...[0.004 s] ok
+        quod_agent_vault_tests: initial_preparation_survives_restart_without_repeated_writes_test...[0.021 s] ok
+        quod_agent_vault_tests: unchanged_rejections_do_not_schedule_storage_test...[0.007 s] ok
+        quod_agent_vault_tests: failed_mutation_requires_successful_directory_sync_test...[0.012 s] ok
+        quod_agent_vault_tests: initial_preparation_requires_exact_committed_pure_policy_test...[0.130 s] ok
+        quod_agent_vault_tests: preparation_recovers_slot_only_crash_image_test...[0.002 s] ok
+        quod_agent_vault_tests: preparation_refuses_conflicting_alias_and_foreign_slot_test...[0.002 s] ok
+        quod_agent_vault_tests: wrong_unlock_and_corrupt_ciphertext_fail_closed_test...[0.001 s] ok
+        quod_agent_vault_tests: governed_signing_requires_committed_host_key_and_read_only_session_test...[0.081 s] ok
+        quod_agent_vault_tests: custody_and_signing_through_signed_ingress_and_foreign_scope_test...=ERROR REPORT==== 26-Oct-2026::18:42:20.000657 ===
+Failed to start Ranch listener quod_agent_vault_listener in ranch_ssl:listen([{cacerts,'...'},{key,'...'},{cert,'...'},{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{port,0},{ip,{127,0,0,1}},{certfile,"/tmp/quod_vault_8B230613A7BC6BEE/tls/server.crt.pem"},{keyfile,"/tmp/quod_vault_8B230613A7BC6BEE/tls/server.key.pem"},{cacertfile,"/tmp/quod_vault_8B230613A7BC6BEE/clients.pem"},{verify,verify_peer},{fail_if_no_peer_cert,true}]) for reason eperm (not owner)
+
+=CRASH REPORT==== 26-Oct-2026::18:42:20.000777 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.19445.0>
+    registered_name: []
+    exception exit: {listen_error,quod_agent_vault_listener,eperm}
+      in function  ranch_acceptors_sup:listen_error/5 (/home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:66)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.19443.0>,ranch_sup,<0.19434.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.19443.0>]
+    dictionary: [{logger,error_logger}]
+    trap_exit: true
+    status: running
+    heap_size: 2586
+    stack_size: 29
+    reductions: 18014
+  neighbours:
+
+=SUPERVISOR REPORT==== 26-Oct-2026::18:42:20.001010 ===
+    supervisor: {<0.19443.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_agent_vault_listener,eperm}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_agent_vault_listener,ranch_ssl]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=CRASH REPORT==== 26-Oct-2026::18:42:20.001277 ===
+  crasher:
+    initial call: quod_agent_vault:init/1
+    pid: <0.19442.0>
+    registered_name: []
+    exception exit: vault_provider_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [<0.19166.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.19166.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 2404
+  neighbours:
+    neighbour:
+      pid: <0.19395.0>
+      registered_name: []
+      initial_call: {eunit_proc,group_leader_process,1}
+      current_function: {eunit_proc,group_leader_loop,3}
+      ancestors: []
+      message_queue_len: 0
+      links: [<0.19166.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 233
+      stack_size: 5
+      reductions: 7
+      current_stacktrace: [{eunit_proc,group_leader_loop,3,
+                              [{file,"eunit_proc.erl"},{line,627}]}]
+    neighbour:
+      pid: <0.19398.0>
+      registered_name: quod_client_auth
+      initial call: quod_client_auth:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.19166.0>]
+      message_queue_len: 0
+      links: [<0.19166.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 376
+      stack_size: 9
+      reductions: 390
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.19413.0>
+      registered_name: []
+      initial call: quod_prolog:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.19166.0>]
+      message_queue_len: 0
+      links: [<0.19166.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 1598
+      stack_size: 9
+      reductions: 92609
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.19399.0>
+      registered_name: []
+      initial call: quod_prolog:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.19166.0>]
+      message_queue_len: 0
+      links: [<0.19166.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 2586
+      stack_size: 9
+      reductions: 47805
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.19397.0>
+      registered_name: []
+      initial call: quod_ask_router:init/1
+      current_function: {gen_server,loop,5}
+      ancestors: [<0.19166.0>]
+      message_queue_len: 0
+      links: [<0.19166.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 987
+      stack_size: 9
+      reductions: 848
+      current_stacktrace: [{gen_server,loop,5,[{file,"gen_server.erl"},{line,2311}]},
+                  {proc_lib,init_p_do_apply,3,
+                            [{file,"proc_lib.erl"},{line,333}]}]
+    neighbour:
+      pid: <0.19166.0>
+      registered_name: []
+      initial_call: {erlang,apply,2}
+      current_function: {proc_lib,sync_start,2}
+      ancestors: []
+      message_queue_len: 0
+      links: [<0.19397.0>,<0.19399.0>,<0.19413.0>,<0.19442.0>,<0.19398.0>,
+                  <0.19395.0>,<0.19165.0>]
+      trap_exit: false
+      status: waiting
+      heap_size: 6772
+      stack_size: 111
+      reductions: 6672800
+      current_stacktrace: [{proc_lib,sync_start,2,[{file,"proc_lib.erl"},{line,438}]},
+                  {quod_agent_vault_tests,with_provider,2,
+                      [{file,
+                           "/home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/test/quod_agent_vault_tests.erl"},
+                       {line,644}]},
+                  {quod_agent_vault_tests,
+                      '-custody_and_signing_through_signed_ingress_and_foreign_scope_test/0-fun-9-',
+                      3,
+                      [{file,
+                           "/home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/test/quod_agent_vault_tests.erl"},
+                       {line,514}]},
+                  {quod_agent_vault_tests,with_vault,1,
+                      [{file,
+                           "/home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/test/quod_agent_vault_tests.erl"},
+                       {line,673}]},
+                  {eunit_test,'-mf_wrapper/2-fun-0-',2,
+                      [{file,"eunit_test.erl"},{line,285}]},
+                  {eunit_test,run_testfun,1,
+                      [{file,"eunit_test.erl"},{line,83}]},
+                  {eunit_proc,run_test,1,[{file,"eunit_proc.erl"},{line,554}]},
+                  {eunit_proc,with_timeout,3,
+                      [{file,"eunit_proc.erl"},{line,379}]}]
+*skipped*
+undefined
+*unexpected termination of test process*
+::vault_provider_unavailable
+
+=======================================================
+  Failed: 0.  Skipped: 0.  Passed: 43.
+One or more tests were cancelled.
+===> Error running tests

@@ -397,3 +397,10 @@ Claude reviewed that focused delta as well and found no remaining functional def
 - Final cumulative task delta: production **+808/-83, net +725**; tests **+641/-6, net +635**. [Task-only delta](/tmp/quo-59-final-delta.patch), [hashes/counts](/tmp/quo-59-final-manifest.json). The recovery addition keeps the existing view alive for a disabled state; it adds no independent runtime owner.
 
 No source-architecture decision remains open. Deployment/source updates to founded ontologies and a separately authorized physical Vive campaign remain for Yan. Duplicate/malformed preference rows, true read denial and disconnected streams require explicit reload after the underlying condition is repaired; the automatic Reset recovery above applies to the authorized invalid single-row state. No commit, deployment, migration, production runtime/browser/headset launch, ledger reset or display change was performed.
+
+
+## Deployed controller-source correction — 26 October 2026
+
+After Yan authorized committing both tickets and deleting/recreating the candidate ledgers for the demo, commit `480ba266` passed the full twelve-gate release sequence and was deployed on a freshly founded eight-node candidate. HTTPS headers, world HTML and all 195 assets matched. The real signed controller read then exposed unevaluated unary-minus terms in the Vive model bounds; the existing client fixture had supplied evaluated numeric literals. Physical entry did not start.
+
+The existing Prolog class Eidolon now evaluates its three negative bounds before projection. Client validation and resource policy remain unchanged. The real source/mapping/signed-read regression fails before the correction and all six controller tests pass afterward. [Full deployed assessment and retained evidence](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-01/assessment.md). A corrected frozen release and a separately labelled fresh candidate founding remain required; the failed demo01 evidence is retained, and no live ontology update is planned. No new Claude review was requested or initiated.

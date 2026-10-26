@@ -1,0 +1,12 @@
+{
+  "name": "xref",
+  "command": [
+    "rebar3",
+    "xref"
+  ],
+  "started_at": "2026-10-26T18:07:38.385698+00:00",
+  "exit": 0,
+  "seconds": 8.53,
+  "sources_unchanged": true,
+  "stop_requested": false
+}

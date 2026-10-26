@@ -1,0 +1,23 @@
+{
+  "bindings": [
+    {
+      "View": "controller_view(0,<<\"6TE\\xF1\\$\\xF4\\\\xE0\\\\xE5\\\\x10\\\\xA5\\\\xF2\\\\x1C\\IR\\xB\\\\x9E\\\\xBF\\\\x8E\\ 'z\\x84\\8\\xB\\\\xF3\\\\xB0\\!:\\xEF\\\\x83\\\\xF8\\\\xA5\\\">>,mapping(1,[role(navigation,hand(left)),role(menu,hand(right))],[bind(select,any,trigger,press_release,local(select)),bind(menu,menu,pad,radial(240),local(menu)),bind(drive,navigation,pad,axes_while(grip),control(drive)),bind(snap,navigation,pad,sector(horizontal,500,grip),control(snap)),bind(teleport,navigation,pad,sector(forward,500,grip),control(teleport(500)))],[profile(htc_vive_controller,controller([<<\"htc-vive\">>],[component(trigger,<<\"xr-standard-trigger\">>,trigger,[press,value]),component(grip,<<\"xr-standard-squeeze\">>,squeeze,[press]),component(pad,<<\"xr-standard-touchpad\">>,touchpad,[press,touch,axes2])],[target_ray,grip],tracked_model(grip,asset(<<\"bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94\">>,<<\"gltf2-static-v1\">>,bounds('-'(59),'-'(70),'-'(117),59,23,106),resources(1114152,665696,17551,17344,37,1,4194304)))))]))"
+    }
+  ],
+  "result": "ok",
+  "request_digest": "E2YIvA0Vo90gpT4MqvZLFJQc9CIFF0n6tviAnaEhDgQ",
+  "operation_id": "0urUJqRuJ3xF13SsJ4TFhSN86FBWtCu1zQ3jm_75fNk",
+  "height": 7,
+  "dependencies": [
+    {
+      "ns": "human:7RkuIDQrHCQUxQmdSPXuJNV42_8QOaJZRLDtLdZSrtc",
+      "genesis_anchor": "1QyEYPLAoq-Lm80XXGlXgnkrL-plEGBDfyT7FnBFGhk",
+      "height": "7"
+    },
+    {
+      "ns": "quod:lobby",
+      "genesis_anchor": "Fb1Zls9XTHTHkxNh6PuMYxr8trSPEF90FkLT9DcJ7sA",
+      "height": "5"
+    }
+  ]
+}

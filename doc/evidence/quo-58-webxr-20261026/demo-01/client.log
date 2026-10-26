@@ -1,0 +1,12 @@
+file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/signed-client.js:373
+    const error = new Error(message)
+                  ^
+
+Error: invalid_goal
+    at postJson (file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/signed-client.js:373:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-01/cluster-client.mjs:55:27 {
+  status: 400
+}
+
+Node.js v26.10.0

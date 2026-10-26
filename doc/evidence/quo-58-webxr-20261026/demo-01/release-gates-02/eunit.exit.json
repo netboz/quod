@@ -1,0 +1,17 @@
+{
+  "name": "eunit",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--verbose"
+  ],
+  "started_at": "2026-10-26T17:43:24.609759+00:00",
+  "exit": 0,
+  "seconds": 920.09,
+  "sources_unchanged": true,
+  "test_summary_complete": true,
+  "passed_tests": 4241,
+  "stop_requested": false
+}

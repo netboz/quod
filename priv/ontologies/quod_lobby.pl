@@ -289,8 +289,9 @@ class_eidolon(htc_vive_controller,input,solid,recipe(Ns,A,vive_wand)) :-
     current_ontology_identity(Ns,A).
 eidolon(vive_wand,class(htc_vive_controller),
     tracked_model(grip,asset(<<"bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94">>,
-      <<"gltf2-static-v1">>,bounds(-59,-70,-117,59,23,106),
-      resources(1114152,665696,17551,17344,37,1,4194304)))).
+      <<"gltf2-static-v1">>,bounds(MinX,MinY,MinZ,59,23,106),
+      resources(1114152,665696,17551,17344,37,1,4194304)))) :-
+    MinX is -59, MinY is -70, MinZ is -117.
 
 controller_default(settings([role(navigation,hand(left)),role(menu,hand(right))],vive_default,[])).
 controller_bindings(vive_default,[

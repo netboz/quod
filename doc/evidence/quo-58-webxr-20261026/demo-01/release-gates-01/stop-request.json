@@ -1,0 +1,1 @@
+{"reason": "Pause between gates: remaining server tests require local socket permission outside the sandbox. No failed test is being rerun."}

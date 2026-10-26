@@ -1,0 +1,11 @@
+{
+  "command": [
+    "node",
+    "/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-01/cluster-client-02.mjs",
+    "https://192.168.1.10:30519",
+    "/home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/client-02"
+  ],
+  "normal_tls_checks": true,
+  "fixture": false,
+  "creation_submission": "once; preserve uncertain operation without resubmission"
+}

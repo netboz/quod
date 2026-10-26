@@ -1,0 +1,193 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "native-clean",
+      "command": [
+        "cargo",
+        "clean",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "-p",
+        "quod_physics"
+      ],
+      "started_at": "2026-10-26T17:42:55.860284+00:00",
+      "exit": 0,
+      "seconds": 0.05,
+      "sources_unchanged": true,
+      "stop_requested": false
+    },
+    {
+      "name": "native-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml"
+      ],
+      "started_at": "2026-10-26T17:42:56.095552+00:00",
+      "exit": 0,
+      "seconds": 16.53,
+      "sources_unchanged": true,
+      "test_summary_complete": true,
+      "passed_tests": 57,
+      "stop_requested": false
+    },
+    {
+      "name": "native-release-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml"
+      ],
+      "started_at": "2026-10-26T17:43:12.810499+00:00",
+      "exit": 0,
+      "seconds": 1.36,
+      "sources_unchanged": true,
+      "test_summary_complete": true,
+      "passed_tests": 57,
+      "stop_requested": false
+    },
+    {
+      "name": "native-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "native/quod_physics/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started_at": "2026-10-26T17:43:14.357779+00:00",
+      "exit": 0,
+      "seconds": 1.3,
+      "sources_unchanged": true,
+      "stop_requested": false
+    },
+    {
+      "name": "client-tests",
+      "command": [
+        "npm",
+        "--prefix",
+        "client",
+        "test"
+      ],
+      "started_at": "2026-10-26T17:43:15.869917+00:00",
+      "exit": 0,
+      "seconds": 2.52,
+      "sources_unchanged": true,
+      "test_summary_complete": true,
+      "passed_tests": 289,
+      "stop_requested": false
+    },
+    {
+      "name": "ui-build",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-26T17:43:18.603815+00:00",
+      "exit": 0,
+      "seconds": 5.42,
+      "sources_unchanged": true,
+      "public_assets_preserved": true,
+      "stop_requested": false
+    },
+    {
+      "name": "ui-lint",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "run",
+        "lint"
+      ],
+      "started_at": "2026-10-26T17:43:24.242873+00:00",
+      "exit": 0,
+      "seconds": 0.17,
+      "sources_unchanged": true,
+      "stop_requested": false
+    },
+    {
+      "name": "eunit",
+      "command": [
+        "rebar3",
+        "as",
+        "test",
+        "eunit",
+        "--verbose"
+      ],
+      "started_at": "2026-10-26T17:43:24.609759+00:00",
+      "exit": 0,
+      "seconds": 920.09,
+      "sources_unchanged": true,
+      "test_summary_complete": true,
+      "passed_tests": 4241,
+      "stop_requested": false
+    },
+    {
+      "name": "ct",
+      "command": [
+        "rebar3",
+        "as",
+        "test",
+        "ct"
+      ],
+      "started_at": "2026-10-26T17:58:44.888980+00:00",
+      "exit": 0,
+      "seconds": 533.33,
+      "sources_unchanged": true,
+      "test_summary_complete": true,
+      "passed_tests": 149,
+      "stop_requested": false
+    },
+    {
+      "name": "xref",
+      "command": [
+        "rebar3",
+        "xref"
+      ],
+      "started_at": "2026-10-26T18:07:38.385698+00:00",
+      "exit": 0,
+      "seconds": 8.53,
+      "sources_unchanged": true,
+      "stop_requested": false
+    },
+    {
+      "name": "dialyzer",
+      "command": [
+        "rebar3",
+        "dialyzer"
+      ],
+      "started_at": "2026-10-26T18:07:47.102595+00:00",
+      "exit": 0,
+      "seconds": 79.21,
+      "sources_unchanged": true,
+      "stop_requested": false
+    },
+    {
+      "name": "release",
+      "command": [
+        "rebar3",
+        "as",
+        "prod",
+        "release"
+      ],
+      "started_at": "2026-10-26T18:09:06.488524+00:00",
+      "exit": 0,
+      "seconds": 9.8,
+      "sources_unchanged": true,
+      "stop_requested": false
+    }
+  ]
+}

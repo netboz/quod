@@ -1,0 +1,15 @@
+file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/controller-view.js:7
+const fail = () => { throw new Error('Invalid controller description.') }
+                           ^
+
+Error: Invalid controller description.
+    at fail (file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/controller-view.js:7:28)
+    at integer (file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/controller-view.js:10:88)
+    at Array.map (<anonymous>)
+    at file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/controller-view.js:56:100
+    at Array.map (<anonymous>)
+    at readControllerView (file:///home/yan/src/quod/_build/quo-58-webxr-20261026/demo-01/release-tree-01/client/src/controller-view.js:51:37)
+    at file:///home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-01/cluster-client-02.mjs:57:19
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v26.10.0

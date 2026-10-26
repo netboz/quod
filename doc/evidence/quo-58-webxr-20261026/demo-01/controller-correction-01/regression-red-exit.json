@@ -1,0 +1,4 @@
+{
+  "exit": 1,
+  "expected_failure": "Real source returns unary minus compounds in bounds instead of integer values; one of six tests fails."
+}

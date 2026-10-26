@@ -7,6 +7,10 @@ preferences_use_existing_instruction_and_form_test_() ->
         Defaults = read(Gui,{controller_default,{'V'}}),
         Mapping = read(Gui,{controller_configuration,Defaults,{'V'}}),
         ?assertMatch({mapping,1,_,[_|_],[{profile,htc_vive_controller,_}]},Mapping),
+        {mapping,1,_,_,[{profile,htc_vive_controller,
+          {controller,_,_,_,{tracked_model,grip,{asset,_,_,Bounds,_}}}}]} = Mapping,
+        %% The real projection must carry numbers, not unevaluated unary terms.
+        ?assertEqual({bounds,-59,-70,-117,59,23,106},Bounds),
         Digest = read(Ns,{term_digest,Mapping,{'V'}}),
         Read = fun() ->
             Result = submit_read(C,{controller_preferences_view,me,{'V'}}),

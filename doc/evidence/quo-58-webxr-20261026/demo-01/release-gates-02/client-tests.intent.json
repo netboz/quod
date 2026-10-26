@@ -1,0 +1,10 @@
+{
+  "name": "client-tests",
+  "command": [
+    "npm",
+    "--prefix",
+    "client",
+    "test"
+  ],
+  "started_at": "2026-10-26T17:43:15.869917+00:00"
+}

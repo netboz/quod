@@ -1,0 +1,15 @@
+{
+  "url": "https://192.168.1.10:30519/",
+  "allocation": "8e20dcda-a5b8-b90a-63b7-8bccb0f6e440",
+  "root_anchor": "B4974B46713DD4EACFC933F6737BC8B8C77D1D132FD8E89766DA18D3BAC46EE7",
+  "status": 200,
+  "content_type": "text/html",
+  "certificate_sha256": "dcd2f849cc25762a00c43969333dd75471950349207b9719119d9ffd04c0b63f",
+  "body_sha256": "cb56f2c7477187d6dde9498ce7a37cb8587a792010cbce3762a9f5e0935e2bdd",
+  "bytes": 802,
+  "normal_hostname_verification": true,
+  "exact_public_certificate_match": true,
+  "security_headers_match": true,
+  "world_html_matches": true,
+  "verified_assets": 195
+}

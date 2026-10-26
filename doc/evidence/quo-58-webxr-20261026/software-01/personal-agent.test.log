@@ -1,0 +1,14 @@
+✔ human signs one exact instruction; a lost reply is only resolved (14.195687ms)
+✔ a second device discovers the actor and instruction without a browser journal (3.182844ms)
+✔ unavailable actor and cancellation before send do not retain unsent work (2.721793ms)
+✔ cancellation after send retains the original operation and target selection is required (1.3737ms)
+✔ a pending instruction reply is retained and recovered without a second submission (2.308396ms)
+✔ an explicit post-admission refusal retires the definitely unsent instruction (1.563288ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32.400274

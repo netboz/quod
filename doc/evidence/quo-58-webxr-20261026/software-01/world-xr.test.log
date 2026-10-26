@@ -1,0 +1,70 @@
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:37]: Error: permission refused
+BJS - [18:08:37]: permission refused
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Error: init
+BJS - [18:08:38]: init
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Error: before-capture
+BJS - [18:08:38]: before-capture
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: XR.requestReferenceSpace failed for the following reason: 
+BJS - [18:08:38]: Error: reference
+BJS - [18:08:38]: Defaulting to universally-supported "viewer" reference space type.
+BJS - [18:08:38]: Error: reference
+BJS - [18:08:38]: XR initialization failed: required "viewer" reference space type not supported.
+BJS - [18:08:38]: undefined
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Error: layer
+BJS - [18:08:38]: layer
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Error: render-state
+BJS - [18:08:38]: render-state
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Error: after-loop
+BJS - [18:08:38]: after-loop
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:38]: Babylon.js v9.18.1 - Null engine
+✔ prepares explicit owners without permissions, styles, profiles or optional features (46.981278ms)
+✔ failed preparation releases its partial helper and can be prepared again (14.939385ms)
+✔ disposal during preparation cannot install a late helper or request a session (6.966968ms)
+✔ permission refusal retires failed helper and permits deliberate retry (11.907062ms)
+✔ init failure ends actual session, restores desktop and permits retry (7.462343ms)
+✔ before-capture failure ends actual session, restores desktop and permits retry (7.587332ms)
+✔ reference failure ends actual session, restores desktop and permits retry (8.115002ms)
+✔ layer failure ends actual session, restores desktop and permits retry (7.728475ms)
+✔ render-state failure ends actual session, restores desktop and permits retry (8.20174ms)
+✔ after-loop failure ends actual session, restores desktop and permits retry (5.996516ms)
+✔ cancel and dispose during consent join the original entry and end its late session once (4.820643ms)
+✔ native end during pending layer setup waits for its continuation before retiring (5.178247ms)
+✔ end rejection blocks re-entry; later native end completes cleanup without another end request (5.477797ms)
+✔ native end racing explicit exit wins over an already-ended rejection (5.763392ms)
+✔ first frame callback failure stops the real session (5.170949ms)
+✔ later frame callback failure stops the real session (4.35639ms)
+✔ real Vive decoders and controller adapter detach sources across end and re-entry (9.00787ms)
+✔ real XRInput components drive scene picks and cancel on visibility loss or source departure (43.215709ms)
+✔ source callback exception is contained and releases its session (7.629677ms)
+✔ disposal retains dependencies after end rejection until native release arrives (6.814165ms)
+✔ successful end promise does not dispose ahead of native end dispatch (6.50253ms)
+✔ end refusal is visible while layer setup remains pending (6.850161ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 246.485669

@@ -1,0 +1,10 @@
+✔ Vive description uses the exact packaged model, admitted by the existing GLB validator (21.058618ms)
+✔ preferences reuse signed-view renewal, ignore old replies and stop at expiry with no write (9.240173ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35.288703

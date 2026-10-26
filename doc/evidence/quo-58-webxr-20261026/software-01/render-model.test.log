@@ -1,0 +1,12 @@
+BJS - [18:08:35]: Babylon.js v9.18.1 - Null engine
+✔ shared mesh without extensions: real decoder and occurrences share one verified template (99.534793ms)
+BJS - [18:08:35]: Babylon.js v9.18.1 - Null engine
+✔ pinned Vive appearance: real decoder and occurrences share one verified template (46.631297ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 153.813054

@@ -1,0 +1,371 @@
+[
+  {
+    "name": "dependencies",
+    "command": [
+      "node",
+      "client/tools/check-dependencies.mjs"
+    ],
+    "exit": 0,
+    "seconds": 0.045,
+    "sources_unchanged": true
+  },
+  {
+    "name": "accounts.test",
+    "command": [
+      "node",
+      "client/test/accounts.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.096,
+    "sources_unchanged": true,
+    "passed_tests": 10
+  },
+  {
+    "name": "agent-references.test",
+    "command": [
+      "node",
+      "client/test/agent-references.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.054,
+    "sources_unchanged": true,
+    "passed_tests": 6
+  },
+  {
+    "name": "controlled-navigation.test",
+    "command": [
+      "node",
+      "client/test/controlled-navigation.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.183,
+    "sources_unchanged": true,
+    "passed_tests": 7
+  },
+  {
+    "name": "controller-input.test",
+    "command": [
+      "node",
+      "client/test/controller-input.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.062,
+    "sources_unchanged": true,
+    "passed_tests": 12
+  },
+  {
+    "name": "controller-panel.test",
+    "command": [
+      "node",
+      "client/test/controller-panel.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.054,
+    "sources_unchanged": true,
+    "passed_tests": 1
+  },
+  {
+    "name": "controller-scene.test",
+    "command": [
+      "node",
+      "client/test/controller-scene.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.315,
+    "sources_unchanged": true,
+    "passed_tests": 4
+  },
+  {
+    "name": "controller-view.test",
+    "command": [
+      "node",
+      "client/test/controller-view.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.089,
+    "sources_unchanged": true,
+    "passed_tests": 2
+  },
+  {
+    "name": "glb-profile.test",
+    "command": [
+      "node",
+      "client/test/glb-profile.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.062,
+    "sources_unchanged": true,
+    "passed_tests": 5
+  },
+  {
+    "name": "gui-pointer.test",
+    "command": [
+      "node",
+      "client/test/gui-pointer.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.185,
+    "sources_unchanged": true,
+    "passed_tests": 1
+  },
+  {
+    "name": "gui-view.test",
+    "command": [
+      "node",
+      "client/test/gui-view.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.11,
+    "sources_unchanged": true,
+    "passed_tests": 20
+  },
+  {
+    "name": "key-provider.test",
+    "command": [
+      "node",
+      "client/test/key-provider.test.js"
+    ],
+    "exit": 0,
+    "seconds": 1.02,
+    "sources_unchanged": true,
+    "passed_tests": 3
+  },
+  {
+    "name": "locomotion.test",
+    "command": [
+      "node",
+      "client/test/locomotion.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.061,
+    "sources_unchanged": true,
+    "passed_tests": 3
+  },
+  {
+    "name": "marks.test",
+    "command": [
+      "node",
+      "client/test/marks.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.07,
+    "sources_unchanged": true,
+    "passed_tests": 15
+  },
+  {
+    "name": "navigation.test",
+    "command": [
+      "node",
+      "client/test/navigation.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.05,
+    "sources_unchanged": true,
+    "passed_tests": 3
+  },
+  {
+    "name": "operation-controller.test",
+    "command": [
+      "node",
+      "client/test/operation-controller.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.113,
+    "sources_unchanged": true,
+    "passed_tests": 10
+  },
+  {
+    "name": "personal-agent.test",
+    "command": [
+      "node",
+      "client/test/personal-agent.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.082,
+    "sources_unchanged": true,
+    "passed_tests": 6
+  },
+  {
+    "name": "prolog-edit.test",
+    "command": [
+      "node",
+      "client/test/prolog-edit.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.075,
+    "sources_unchanged": true,
+    "passed_tests": 5
+  },
+  {
+    "name": "prolog-highlight.test",
+    "command": [
+      "node",
+      "client/test/prolog-highlight.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.053,
+    "sources_unchanged": true,
+    "passed_tests": 3
+  },
+  {
+    "name": "prolog-term.test",
+    "command": [
+      "node",
+      "client/test/prolog-term.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.073,
+    "sources_unchanged": true,
+    "passed_tests": 13
+  },
+  {
+    "name": "question-controller.test",
+    "command": [
+      "node",
+      "client/test/question-controller.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.104,
+    "sources_unchanged": true,
+    "passed_tests": 13
+  },
+  {
+    "name": "render-model.test",
+    "command": [
+      "node",
+      "client/test/render-model.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.366,
+    "sources_unchanged": true,
+    "passed_tests": 2
+  },
+  {
+    "name": "render-resources.test",
+    "command": [
+      "node",
+      "client/test/render-resources.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.29,
+    "sources_unchanged": true,
+    "passed_tests": 16
+  },
+  {
+    "name": "scene.test",
+    "command": [
+      "node",
+      "client/test/scene.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.387,
+    "sources_unchanged": true,
+    "passed_tests": 16
+  },
+  {
+    "name": "signed-client.test",
+    "command": [
+      "node",
+      "client/test/signed-client.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.12,
+    "sources_unchanged": true,
+    "passed_tests": 25
+  },
+  {
+    "name": "simulation.test",
+    "command": [
+      "node",
+      "client/test/simulation.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.311,
+    "sources_unchanged": true,
+    "passed_tests": 20
+  },
+  {
+    "name": "space-library.test",
+    "command": [
+      "node",
+      "client/test/space-library.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.122,
+    "sources_unchanged": true,
+    "passed_tests": 11
+  },
+  {
+    "name": "terrain-delivery.test",
+    "command": [
+      "node",
+      "client/test/terrain-delivery.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.33,
+    "sources_unchanged": true,
+    "passed_tests": 15
+  },
+  {
+    "name": "voxel-profile.test",
+    "command": [
+      "node",
+      "client/test/voxel-profile.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.072,
+    "sources_unchanged": true,
+    "passed_tests": 4
+  },
+  {
+    "name": "world-xr.test",
+    "command": [
+      "node",
+      "client/test/world-xr.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.478,
+    "sources_unchanged": true,
+    "passed_tests": 22
+  },
+  {
+    "name": "world.test",
+    "command": [
+      "node",
+      "client/test/world.test.js"
+    ],
+    "exit": 0,
+    "seconds": 0.09,
+    "sources_unchanged": true,
+    "passed_tests": 16
+  },
+  {
+    "name": "ui-build",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build",
+      "--",
+      "--outDir",
+      "/tmp/quo-58-owner-cleanup-qZXJVcsT/ui-build-final"
+    ],
+    "exit": 0,
+    "seconds": 4.648,
+    "sources_unchanged": true
+  },
+  {
+    "name": "ui-lint",
+    "command": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "lint"
+    ],
+    "exit": 0,
+    "seconds": 0.162,
+    "sources_unchanged": true
+  }
+]

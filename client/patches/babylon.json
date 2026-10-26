@@ -1,0 +1,13 @@
+{
+  "version": "9.18.1",
+  "patch": "@babylonjs+core+9.18.1.patch",
+  "sha256": "91d9b18bea9666b713f7fbdfe2a44450c8709dfc26b6b18080d2a23292c61dfa",
+  "files": {
+    "XR/webXRExperienceHelper.js": "a76670bac12565a311785c4272c4859eb7bc228562e23f483b5bef3157d1d4e0",
+    "XR/webXRExperienceHelper.d.ts": "511ed3df507df4672a1dd51ee58df956bb62631f4f62f09a61b1b94692eed582",
+    "XR/webXRSessionManager.js": "4e941b57c90bafe40673f94e0b8574c3cf627a3941b89791c18ddea6d009e6bb",
+    "XR/webXRSessionManager.d.ts": "95f8ca1ceb7375626dd1210b0e4d513443926e7c36081232f64762ec748b08d0",
+    "XR/webXRManagedOutputCanvas.js": "195e279f07a79e2d712fb832a725e3c80f0dfe3aee0ecd486a69ae58ba4c70d4",
+    "XR/webXRManagedOutputCanvas.d.ts": "5cc808c999f38d157cc71d6763f8eae301927d312f2e37eccf659e551d9c571b"
+  }
+}

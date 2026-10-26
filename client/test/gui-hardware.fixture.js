@@ -2,8 +2,8 @@ import { remainingView, guiAssetFixture } from './gui-remaining.js'
 import { createWorld } from '../src/world-scene.js'
 import { EngineStore } from '@babylonjs/core/Engines/engineStore.js'
 
-// Exercise the production spatial adapter and XR entry. This fixture records
-// local control input; lifecycle/authority are covered by the signed-owner tests.
+// Legacy local GUI fixture, without the account's signed controller mapping.
+// It cannot establish production HTTPS/CSP, permissions or physical acceptance.
 const asset = await guiAssetFixture()
 const report = { immersive: false, entries: 0, edits: [], actions: [], submissions: [], errors: [], controls: [] }
 const status = document.querySelector('#status')
@@ -72,7 +72,9 @@ document.querySelector('#enter').onclick = () => world.immersive().catch(error =
 })
 window.addEventListener('error', event => report.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => report.errors.push(String(event.reason)))
-window.addEventListener('pagehide', () => { world.dispose(); asset.restore() }, { once: true })
+window.addEventListener('pagehide', () => {
+  void world.dispose().catch(error => report.errors.push(String(error))).finally(() => asset.restore())
+}, { once: true })
 window.guiHardwareReport = () => structuredClone(report)
 window.guiHardwareOpacity = value => {
   const texture = EngineStore.LastCreatedScene.getMeshByName('workspace')?.material.emissiveTexture

@@ -1,0 +1,13 @@
+✔ the code adapter only reads exact tools and target references; preparing an edit does not submit it (9.656995ms)
+✔ predicate selection and clause cards remain ordinary source data (0.812468ms)
+✔ a real thirty-clause compiled edit crosses the shared result reader (1.861637ms)
+✔ complete source uses one cursor, preserves split UTF-8, and stops at the explicit final chunk (3.911324ms)
+✔ a lost or exhausted source cursor never publishes a partial ontology (2.303054ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23.645347

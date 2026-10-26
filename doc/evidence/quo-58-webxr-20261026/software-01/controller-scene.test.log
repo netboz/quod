@@ -1,0 +1,16 @@
+BJS - [18:08:31]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:31]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:31]: Babylon.js v9.18.1 - Null engine
+BJS - [18:08:31]: Babylon.js v9.18.1 - Null engine
+✔ scene picking does not click a stale tracked mesh on loss, recovery or disposal while pressed (27.111541ms)
+✔ hidden cancels without an XR frame and cannot click on return (4.574477ms)
+✔ visible-blurred cancels without an XR frame and cannot click on return (4.257803ms)
+✔ refresh withdraws input but retains the verified appearance until its source leaves (7.377699ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 49.833707

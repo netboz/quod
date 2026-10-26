@@ -96,6 +96,11 @@ npm --prefix ui ci
 npm --prefix ui run build
 ```
 
+The client install applies its pinned Babylon XR lifecycle patch. Keep
+`client/patches/` with the lockfile in build inputs and dependency cache keys;
+do not skip install hooks. Tests and Vite verify the applied dependency before
+running. The release image consumes this built bundle without Node tooling.
+
 ## Repository map
 
 - [`priv/ontologies/`](priv/ontologies/) — shipped Prolog founding sources

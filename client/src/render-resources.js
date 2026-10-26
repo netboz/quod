@@ -16,6 +16,8 @@ export function createRenderResources(scene, {
   fetchAsset = (url, options) => fetch(url, options),
   decode = (bytes, identity) => decodeTexture(scene, bytes, identity),
   decodeModel = async bytes => {
+    // GLTF2 may instance a mesh shared by several nodes, without an extension.
+    await import('@babylonjs/core/Meshes/instancedMesh.js')
     await import('@babylonjs/loaders/glTF/2.0/glTFLoader.js')
     const { LoadAssetContainerAsync } = await import('@babylonjs/core/Loading/sceneLoader.js')
     return LoadAssetContainerAsync(new Uint8Array(bytes), scene,

@@ -106,10 +106,16 @@ ontology_creation_allowed(Principal, Name, Options) :-
 %% recipe. Ordinary creation freezes the reviewed source components into the
 %% genesis. The human's identity behavior and question HUD remain shared files.
 signup_options(Principal, Name, Token, Options) :-
-    findall(source_file(Path), user_source_file(Path), Sources), Sources = [_ | _],
+    findall(Directory, user_source_directory(Directory), [Directory]),
+    binary_codes(Directory, DirectoryBytes),
+    findall(source_file(Path),
+        (user_source_component(File), binary_codes(File, FileBytes),
+         append(DirectoryBytes, [47 | FileBytes], PathBytes),
+         binary_codes(Path, PathBytes)), Sources),
     append(Sources,
         [terms([instance_of(human_user, me), agent_key(me, Key, active),
                 lobby_vocabulary(LobbyNamespace, LobbyAnchor),
+                gui_vocabulary(GuiNamespace, GuiAnchor),
                 lobby_provisioning(me, pending(LobbyName)), hosting_node(Node),
                 signup_origin(Namespace, Anchor, Token)]),
          external_predicate_modules([quod_agent_predicates])], Options),
@@ -118,4 +124,18 @@ signup_options(Principal, Name, Token, Options) :-
     signup_lobby_name(Name, LobbyName),
     current_ontology_identity(Namespace, Anchor),
     signup_host(Node),
-    lobby_vocabulary(LobbyNamespace, LobbyAnchor).
+    lobby_vocabulary(LobbyNamespace, LobbyAnchor),
+    LobbyNamespace::(current_ontology_identity(LobbyNamespace, LobbyAnchor),
+                     gui_vocabulary(GuiNamespace, GuiAnchor)).
+
+%% Account composition belongs to the signup policy. Deployment supplies only
+%% the packaged directory; it cannot accidentally omit an actor dependency.
+user_source_component(<<"human_user_instance.pl">>).
+user_source_component(<<"agent_instance.pl">>).
+user_source_component(<<"personal_agent.pl">>).
+user_source_component(<<"space.pl">>).
+user_source_component(<<"gui_hud.pl">>).
+
+user_source_component(<<"gui_instance.pl">>).
+user_source_component(<<"gui_operation.pl">>).
+user_source_component(<<"controller_preferences.pl">>).

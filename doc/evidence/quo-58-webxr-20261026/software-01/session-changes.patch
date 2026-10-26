@@ -1,0 +1,2283 @@
+--- before/README.md
++++ after/README.md
+@@ -96,6 +96,11 @@
+ npm --prefix ui run build
+ ```
+ 
++The client install applies its pinned Babylon XR lifecycle patch. Keep
++`client/patches/` with the lockfile in build inputs and dependency cache keys;
++do not skip install hooks. Tests and Vite verify the applied dependency before
++running. The release image consumes this built bundle without Node tooling.
++
+ ## Repository map
+ 
+ - [`priv/ontologies/`](priv/ontologies/) — shipped Prolog founding sources
+--- before/client/package-lock.json
++++ after/client/package-lock.json
+@@ -7,10 +7,14 @@
+     "": {
+       "name": "quod-client",
+       "version": "0.1.0",
++      "hasInstallScript": true,
+       "dependencies": {
+         "@babylonjs/core": "9.18.1",
+         "@babylonjs/gui": "9.18.1",
+         "@babylonjs/loaders": "9.18.1"
++      },
++      "devDependencies": {
++        "patch-package": "8.0.1"
+       }
+     },
+     "node_modules/@babylonjs/core": {
+@@ -38,12 +42,750 @@
+         "babylonjs-gltf2interface": "^9.0.0"
+       }
+     },
++    "node_modules/@yarnpkg/lockfile": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/@yarnpkg/lockfile/-/lockfile-1.1.0.tgz",
++      "integrity": "sha512-GpSwvyXOcOOlV70vbnzjj4fW5xW/FdUF6nQEt1ENy7m4ZCczi1+/buVUPAqmGfqznsORNFzUMjctTIp8a9tuCQ==",
++      "dev": true,
++      "license": "BSD-2-Clause"
++    },
++    "node_modules/ansi-styles": {
++      "version": "4.3.0",
++      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz",
++      "integrity": "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "color-convert": "^2.0.1"
++      },
++      "engines": {
++        "node": ">=8"
++      },
++      "funding": {
++        "url": "https://github.com/chalk/ansi-styles?sponsor=1"
++      }
++    },
+     "node_modules/babylonjs-gltf2interface": {
+       "version": "9.29.0",
+       "resolved": "https://registry.npmjs.org/babylonjs-gltf2interface/-/babylonjs-gltf2interface-9.29.0.tgz",
+       "integrity": "sha512-DwC84cWAP8hJ/BdyOjczey2xz3ahIDcYWpf4lvoPop2oV089GdX0+F+qEG/Pe3xKe9w5lLaPmtakPj8leivyag==",
+       "license": "Apache-2.0",
+       "peer": true
++    },
++    "node_modules/braces": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/braces/-/braces-3.0.3.tgz",
++      "integrity": "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "fill-range": "^7.1.1"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/call-bind": {
++      "version": "1.0.9",
++      "resolved": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.9.tgz",
++      "integrity": "sha512-a/hy+pNsFUTR+Iz8TCJvXudKVLAnz/DyeSUo10I5yvFDQJBFU2s9uqQpoSrJlroHUKoKqzg+epxyP9lqFdzfBQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "es-define-property": "^1.0.1",
++        "get-intrinsic": "^1.3.0",
++        "set-function-length": "^1.2.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/call-bind-apply-helpers": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
++      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0",
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/call-bound": {
++      "version": "1.0.4",
++      "resolved": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
++      "integrity": "sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "get-intrinsic": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/chalk": {
++      "version": "4.1.2",
++      "resolved": "https://registry.npmjs.org/chalk/-/chalk-4.1.2.tgz",
++      "integrity": "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "ansi-styles": "^4.1.0",
++        "supports-color": "^7.1.0"
++      },
++      "engines": {
++        "node": ">=10"
++      },
++      "funding": {
++        "url": "https://github.com/chalk/chalk?sponsor=1"
++      }
++    },
++    "node_modules/ci-info": {
++      "version": "3.9.0",
++      "resolved": "https://registry.npmjs.org/ci-info/-/ci-info-3.9.0.tgz",
++      "integrity": "sha512-NIxF55hv4nSqQswkAeiOi1r83xy8JldOFDTWiug55KBu9Jnblncd2U6ViHmYgHf01TPZS77NJBhBMKdWj9HQMQ==",
++      "dev": true,
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/sibiraj-s"
++        }
++      ],
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/color-convert": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz",
++      "integrity": "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "color-name": "~1.1.4"
++      },
++      "engines": {
++        "node": ">=7.0.0"
++      }
++    },
++    "node_modules/color-name": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz",
++      "integrity": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/cross-spawn": {
++      "version": "7.0.6",
++      "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
++      "integrity": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "path-key": "^3.1.0",
++        "shebang-command": "^2.0.0",
++        "which": "^2.0.1"
++      },
++      "engines": {
++        "node": ">= 8"
++      }
++    },
++    "node_modules/define-data-property": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
++      "integrity": "sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "es-define-property": "^1.0.0",
++        "es-errors": "^1.3.0",
++        "gopd": "^1.0.1"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/dunder-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
++      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "gopd": "^1.2.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-define-property": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
++      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-errors": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
++      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/es-object-atoms": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz",
++      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "es-errors": "^1.3.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/fill-range": {
++      "version": "7.1.1",
++      "resolved": "https://registry.npmjs.org/fill-range/-/fill-range-7.1.1.tgz",
++      "integrity": "sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "to-regex-range": "^5.0.1"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/find-yarn-workspace-root": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/find-yarn-workspace-root/-/find-yarn-workspace-root-2.0.0.tgz",
++      "integrity": "sha512-1IMnbjt4KzsQfnhnzNd8wUEgXZ44IzZaZmnLYx7D5FZlaHt2gW20Cri8Q+E/t5tIj4+epTBub+2Zxu/vNILzqQ==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "micromatch": "^4.0.2"
++      }
++    },
++    "node_modules/fs-extra": {
++      "version": "10.1.0",
++      "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz",
++      "integrity": "sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "graceful-fs": "^4.2.0",
++        "jsonfile": "^6.0.1",
++        "universalify": "^2.0.0"
++      },
++      "engines": {
++        "node": ">=12"
++      }
++    },
++    "node_modules/function-bind": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
++      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
++      "dev": true,
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/get-intrinsic": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
++      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "call-bind-apply-helpers": "^1.0.2",
++        "es-define-property": "^1.0.1",
++        "es-errors": "^1.3.0",
++        "es-object-atoms": "^1.1.1",
++        "function-bind": "^1.1.2",
++        "get-proto": "^1.0.1",
++        "gopd": "^1.2.0",
++        "has-symbols": "^1.1.0",
++        "hasown": "^2.0.2",
++        "math-intrinsics": "^1.1.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/get-proto": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
++      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "dunder-proto": "^1.0.1",
++        "es-object-atoms": "^1.0.0"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/gopd": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
++      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/graceful-fs": {
++      "version": "4.2.11",
++      "resolved": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz",
++      "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==",
++      "dev": true,
++      "license": "ISC"
++    },
++    "node_modules/has-flag": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz",
++      "integrity": "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/has-property-descriptors": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
++      "integrity": "sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "es-define-property": "^1.0.0"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/has-symbols": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
++      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/hasown": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz",
++      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "function-bind": "^1.1.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/is-docker": {
++      "version": "2.2.1",
++      "resolved": "https://registry.npmjs.org/is-docker/-/is-docker-2.2.1.tgz",
++      "integrity": "sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==",
++      "dev": true,
++      "license": "MIT",
++      "bin": {
++        "is-docker": "cli.js"
++      },
++      "engines": {
++        "node": ">=8"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/is-number": {
++      "version": "7.0.0",
++      "resolved": "https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz",
++      "integrity": "sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.12.0"
++      }
++    },
++    "node_modules/is-wsl": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/is-wsl/-/is-wsl-2.2.0.tgz",
++      "integrity": "sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "is-docker": "^2.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/isarray": {
++      "version": "2.0.5",
++      "resolved": "https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz",
++      "integrity": "sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/isexe": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
++      "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
++      "dev": true,
++      "license": "ISC"
++    },
++    "node_modules/json-stable-stringify": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/json-stable-stringify/-/json-stable-stringify-1.3.0.tgz",
++      "integrity": "sha512-qtYiSSFlwot9XHtF9bD9c7rwKjr+RecWT//ZnPvSmEjpV5mmPOCN4j8UjY5hbjNkOwZ/jQv3J6R1/pL7RwgMsg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "call-bind": "^1.0.8",
++        "call-bound": "^1.0.4",
++        "isarray": "^2.0.5",
++        "jsonify": "^0.0.1",
++        "object-keys": "^1.1.1"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/jsonfile": {
++      "version": "6.2.1",
++      "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz",
++      "integrity": "sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "universalify": "^2.0.0"
++      },
++      "optionalDependencies": {
++        "graceful-fs": "^4.1.6"
++      }
++    },
++    "node_modules/jsonify": {
++      "version": "0.0.1",
++      "resolved": "https://registry.npmjs.org/jsonify/-/jsonify-0.0.1.tgz",
++      "integrity": "sha512-2/Ki0GcmuqSrgFyelQq9M05y7PS0mEwuIzrf3f1fPqkVDVRvZrPZtVSMHxdgo8Aq0sxAOb/cr2aqqA3LeWHVPg==",
++      "dev": true,
++      "license": "Public Domain",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/klaw-sync": {
++      "version": "6.0.0",
++      "resolved": "https://registry.npmjs.org/klaw-sync/-/klaw-sync-6.0.0.tgz",
++      "integrity": "sha512-nIeuVSzdCCs6TDPTqI8w1Yre34sSq7AkZ4B3sfOBbI2CgVSB4Du4aLQijFU2+lhAFCwt9+42Hel6lQNIv6AntQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "graceful-fs": "^4.1.11"
++      }
++    },
++    "node_modules/math-intrinsics": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
++      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/micromatch": {
++      "version": "4.0.8",
++      "resolved": "https://registry.npmjs.org/micromatch/-/micromatch-4.0.8.tgz",
++      "integrity": "sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "braces": "^3.0.3",
++        "picomatch": "^2.3.1"
++      },
++      "engines": {
++        "node": ">=8.6"
++      }
++    },
++    "node_modules/minimist": {
++      "version": "1.2.8",
++      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
++      "integrity": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
++      "dev": true,
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/object-keys": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz",
++      "integrity": "sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/open": {
++      "version": "7.4.2",
++      "resolved": "https://registry.npmjs.org/open/-/open-7.4.2.tgz",
++      "integrity": "sha512-MVHddDVweXZF3awtlAS+6pgKLlm/JgxZ90+/NBurBoQctVOOB/zDdVjcyPzQ+0laDGbsWgrRkflI65sQeOgT9Q==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "is-docker": "^2.0.0",
++        "is-wsl": "^2.1.1"
++      },
++      "engines": {
++        "node": ">=8"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/patch-package": {
++      "version": "8.0.1",
++      "resolved": "https://registry.npmjs.org/patch-package/-/patch-package-8.0.1.tgz",
++      "integrity": "sha512-VsKRIA8f5uqHQ7NGhwIna6Bx6D9s/1iXlA1hthBVBEbkq+t4kXD0HHt+rJhf/Z+Ci0F/HCB2hvn0qLdLG+Qxlw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@yarnpkg/lockfile": "^1.1.0",
++        "chalk": "^4.1.2",
++        "ci-info": "^3.7.0",
++        "cross-spawn": "^7.0.3",
++        "find-yarn-workspace-root": "^2.0.0",
++        "fs-extra": "^10.0.0",
++        "json-stable-stringify": "^1.0.2",
++        "klaw-sync": "^6.0.0",
++        "minimist": "^1.2.6",
++        "open": "^7.4.2",
++        "semver": "^7.5.3",
++        "slash": "^2.0.0",
++        "tmp": "^0.2.4",
++        "yaml": "^2.2.2"
++      },
++      "bin": {
++        "patch-package": "index.js"
++      },
++      "engines": {
++        "node": ">=14",
++        "npm": ">5"
++      }
++    },
++    "node_modules/path-key": {
++      "version": "3.1.1",
++      "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
++      "integrity": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/picomatch": {
++      "version": "2.3.2",
++      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-2.3.2.tgz",
++      "integrity": "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/jonschlinkert"
++      }
++    },
++    "node_modules/semver": {
++      "version": "7.8.5",
++      "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
++      "integrity": "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==",
++      "dev": true,
++      "license": "ISC",
++      "bin": {
++        "semver": "bin/semver.js"
++      },
++      "engines": {
++        "node": ">=10"
++      }
++    },
++    "node_modules/set-function-length": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
++      "integrity": "sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "define-data-property": "^1.1.4",
++        "es-errors": "^1.3.0",
++        "function-bind": "^1.1.2",
++        "get-intrinsic": "^1.2.4",
++        "gopd": "^1.0.1",
++        "has-property-descriptors": "^1.0.2"
++      },
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
++    "node_modules/shebang-command": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
++      "integrity": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "shebang-regex": "^3.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/shebang-regex": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
++      "integrity": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/slash": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/slash/-/slash-2.0.0.tgz",
++      "integrity": "sha512-ZYKh3Wh2z1PpEXWr0MpSBZ0V6mZHAQfYevttO11c51CaWjGTaadiKZ+wVt1PbMlDV5qhMFslpZCemhwOK7C89A==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
++    "node_modules/supports-color": {
++      "version": "7.2.0",
++      "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz",
++      "integrity": "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "has-flag": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=8"
++      }
++    },
++    "node_modules/tmp": {
++      "version": "0.2.7",
++      "resolved": "https://registry.npmjs.org/tmp/-/tmp-0.2.7.tgz",
++      "integrity": "sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=14.14"
++      }
++    },
++    "node_modules/to-regex-range": {
++      "version": "5.0.1",
++      "resolved": "https://registry.npmjs.org/to-regex-range/-/to-regex-range-5.0.1.tgz",
++      "integrity": "sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "is-number": "^7.0.0"
++      },
++      "engines": {
++        "node": ">=8.0"
++      }
++    },
++    "node_modules/universalify": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz",
++      "integrity": "sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">= 10.0.0"
++      }
++    },
++    "node_modules/which": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
++      "integrity": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
++      "dev": true,
++      "license": "ISC",
++      "dependencies": {
++        "isexe": "^2.0.0"
++      },
++      "bin": {
++        "node-which": "bin/node-which"
++      },
++      "engines": {
++        "node": ">= 8"
++      }
++    },
++    "node_modules/yaml": {
++      "version": "2.9.1",
++      "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
++      "integrity": "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==",
++      "dev": true,
++      "license": "ISC",
++      "bin": {
++        "yaml": "bin.mjs"
++      },
++      "engines": {
++        "node": ">= 14.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/eemeli"
++      }
+     }
+   }
+ }
+--- before/client/package.json
++++ after/client/package.json
+@@ -6,11 +6,16 @@
+   "scripts": {
+     "build": "npm --prefix ../ui run build",
+     "test": "node --test test/*.test.js",
+-    "test:import": "node test/import-eidolon.integration.mjs"
++    "test:import": "node test/import-eidolon.integration.mjs",
++    "postinstall": "patch-package --error-on-fail",
++    "pretest": "node tools/check-dependencies.mjs"
+   },
+   "dependencies": {
+     "@babylonjs/core": "9.18.1",
+     "@babylonjs/gui": "9.18.1",
+     "@babylonjs/loaders": "9.18.1"
++  },
++  "devDependencies": {
++    "patch-package": "8.0.1"
+   }
+ }
+--- before/client/patches/@babylonjs+core+9.18.1.patch
++++ after/client/patches/@babylonjs+core+9.18.1.patch
+@@ -0,0 +1,153 @@
++diff --git a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
++--- a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
+++++ b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
++@@ -46,7 +46,7 @@
++         this.sessionManager = new WebXRSessionManager(_scene);
++         this.camera = new WebXRCamera("webxr", _scene, this.sessionManager);
++         this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
++-        _scene.onDisposeObservable.addOnce(() => {
+++        this._onSceneDisposedObserver = _scene.onDisposeObservable.addOnce(() => {
++             this.dispose();
++         });
++     }
++@@ -75,6 +75,7 @@
++      * Disposes of the experience helper
++      */
++     dispose() {
+++        this._scene.onDisposeObservable.remove(this._onSceneDisposedObserver);
++         // eslint-disable-next-line @typescript-eslint/no-floating-promises
++         this.exitXRAsync();
++         this._clearSpectatorObservers();
++@@ -302,4 +303,3 @@
++         this.onStateChangedObservable.notifyObservers(this.state);
++     }
++ }
++-//# sourceMappingURL=webXRExperienceHelper.js.map
++\ No newline at end of file
++diff --git a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
++--- a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
+++++ b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
++@@ -22,6 +22,7 @@
++  * @see https://doc.babylonjs.com/features/featuresDeepDive/webXR/webXRExperienceHelpers
++  */
++ export declare class WebXRExperienceHelper implements IDisposable {
+++    private _onSceneDisposedObserver;
++     private _scene;
++     private _nonVRCamera;
++     private _attachedToElement;
++diff --git a/node_modules/@babylonjs/core/XR/webXRSessionManager.js b/node_modules/@babylonjs/core/XR/webXRSessionManager.js
++--- a/node_modules/@babylonjs/core/XR/webXRSessionManager.js
+++++ b/node_modules/@babylonjs/core/XR/webXRSessionManager.js
++@@ -80,7 +80,7 @@
++         this._onEngineDisposedObserver = this._engine.onDisposeObservable.addOnce(() => {
++             this._engine = null;
++         });
++-        scene.onDisposeObservable.addOnce(() => {
+++        this._onSceneDisposedObserver = scene.onDisposeObservable.addOnce(() => {
++             this.dispose();
++         });
++         this.onXRSessionEnded.add(() => {
++@@ -113,6 +113,7 @@
++      * This should be called explicitly by the dev, if required.
++      */
++     dispose() {
+++        this.scene.onDisposeObservable.remove(this._onSceneDisposedObserver);
++         // disposing without leaving XR? Exit XR first
++         if (this.inXRSession) {
++             // eslint-disable-next-line @typescript-eslint/no-floating-promises
++@@ -242,7 +243,6 @@
++         this.session = session;
++         this._sessionMode = xrSessionMode;
++         this.inXRSession = true;
++-        this.onXRSessionInit.notifyObservers(session);
++         // handle when the session is ended (By calling session.end or device ends its own session eg. pressing home button on phone)
++         this.session.addEventListener("end", () => {
++             this.inXRSession = false;
++@@ -268,6 +268,7 @@
++             this._baseLayerWrapper = null;
++             this._graphicsBinding = null;
++         }, { once: true });
+++        this.onXRSessionInit.notifyObservers(session);
++         return this.session;
++     }
++     /**
++@@ -493,4 +494,3 @@
++         return this.session?.enabledFeatures ?? null;
++     }
++ }
++-//# sourceMappingURL=webXRSessionManager.js.map
++\ No newline at end of file
++diff --git a/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts b/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
++--- a/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
+++++ b/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
++@@ -15,6 +15,7 @@
++ export declare class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextureProvider {
++     /** The scene which the session should be created for */
++     scene: Scene;
+++    private _onSceneDisposedObserver;
++     private _engine;
++     private _referenceSpace;
++     private _baseLayerWrapper;
++diff --git a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
++--- a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
+++++ b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
++@@ -34,6 +34,7 @@
++      */
++     constructor(_xrSessionManager, _options = WebXRManagedOutputCanvasOptions.GetDefaults()) {
++         this._options = _options;
+++        this._xrSessionManager = _xrSessionManager;
++         this._canvas = null;
++         this._engine = null;
++         /**
++@@ -46,7 +47,7 @@
++          */
++         this.onXRLayerInitObservable = new Observable();
++         this._engine = _xrSessionManager.scene.getEngine();
++-        this._engine.onDisposeObservable.addOnce(() => {
+++        this._onEngineDisposedObserver = this._engine.onDisposeObservable.addOnce(() => {
++             this._engine = null;
++         });
++         if (!_options.canvasElement) {
++@@ -57,10 +58,10 @@
++         else {
++             this._setManagedOutputCanvas(_options.canvasElement);
++         }
++-        _xrSessionManager.onXRSessionInit.add(() => {
+++        this._sessionInitObserver = _xrSessionManager.onXRSessionInit.add(() => {
++             this._addCanvas();
++         });
++-        _xrSessionManager.onXRSessionEnded.add(() => {
+++        this._sessionEndedObserver = _xrSessionManager.onXRSessionEnded.add(() => {
++             this._removeCanvas();
++         });
++         this._makeCanvasCompatible();
++@@ -69,6 +70,9 @@
++      * Disposes of the object
++      */
++     dispose() {
+++        this._engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
+++        this._xrSessionManager.onXRSessionInit.remove(this._sessionInitObserver);
+++        this._xrSessionManager.onXRSessionEnded.remove(this._sessionEndedObserver);
++         this._removeCanvas();
++         this._setManagedOutputCanvas(null);
++         this.onXRLayerInitObservable.clear();
++@@ -204,4 +208,3 @@
++         return context;
++     }
++ }
++-//# sourceMappingURL=webXRManagedOutputCanvas.js.map
++\ No newline at end of file
++diff --git a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
++--- a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
+++++ b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
++@@ -31,6 +31,10 @@
++  * Creates a canvas that is added/removed from the webpage when entering/exiting XR
++  */
++ export declare class WebXRManagedOutputCanvas implements WebXRRenderTarget {
+++    private _xrSessionManager;
+++    private _onEngineDisposedObserver;
+++    private _sessionInitObserver;
+++    private _sessionEndedObserver;
++     private _options;
++     private _canvas;
++     private _engine;
+--- before/client/patches/README.md
++++ after/client/patches/README.md
+@@ -0,0 +1,15 @@
++# Babylon XR lifecycle
++
++The 9.18.1 patch retains and removes the disposal observers owned by the XR
++helper, session manager and managed output canvas. The manager installs its
++native end handler before notifying fallible session-init observers.
++
++`npm ci` applies the patch using pinned patch-package. Client tests and the Vite
++configuration verify the installed module digests; they never modify dependencies.
++Include this directory and the lockfile in build inputs and dependency cache keys.
++The runtime image consumes the resulting bundle and needs no patching tool.
++
++The three modified generated JavaScript modules omit their original source-map
++links because those maps describe the unpatched sources. Private declarations
++match the patch; the public API is unchanged. Remove this patch only after a
++qualified upstream version supplies the fixes and passes the owner regressions.
+--- before/client/patches/babylon.json
++++ after/client/patches/babylon.json
+@@ -0,0 +1,13 @@
++{
++  "version": "9.18.1",
++  "patch": "@babylonjs+core+9.18.1.patch",
++  "sha256": "91d9b18bea9666b713f7fbdfe2a44450c8709dfc26b6b18080d2a23292c61dfa",
++  "files": {
++    "XR/webXRExperienceHelper.js": "a76670bac12565a311785c4272c4859eb7bc228562e23f483b5bef3157d1d4e0",
++    "XR/webXRExperienceHelper.d.ts": "511ed3df507df4672a1dd51ee58df956bb62631f4f62f09a61b1b94692eed582",
++    "XR/webXRSessionManager.js": "4e941b57c90bafe40673f94e0b8574c3cf627a3941b89791c18ddea6d009e6bb",
++    "XR/webXRSessionManager.d.ts": "95f8ca1ceb7375626dd1210b0e4d513443926e7c36081232f64762ec748b08d0",
++    "XR/webXRManagedOutputCanvas.js": "195e279f07a79e2d712fb832a725e3c80f0dfe3aee0ecd486a69ae58ba4c70d4",
++    "XR/webXRManagedOutputCanvas.d.ts": "5cc808c999f38d157cc71d6763f8eae301927d312f2e37eccf659e551d9c571b"
++  }
++}
+--- before/client/src/controller-input.js
++++ after/client/src/controller-input.js
+@@ -1,7 +1,7 @@
+ // Interprets the installed Prolog descriptor. Existing XR objects own all
+ // observations; this owner retains only captures, associations and rearming.
+ export function createControllerInput({ navigation, pointer, menu, blocked = () => false,
+-  appearance = () => {}, retireAppearance = () => {}, changed = () => {} }) {
++  appearance = () => {}, retireAppearance = () => {}, changed = () => {}, guard = fn => fn }) {
+   const sources = new Map(), choices = new Map()
+   let mapping = null, menuOwner = null, pointerOwner = null, nextId = 1
+   const neutral = c => !c?.pressed && (!c?.axes || Math.hypot(c.axes.x, c.axes.y) < 0.01)
+@@ -89,9 +89,9 @@
+     if (sources.has(controller)) return
+     const source = { controller, id: nextId++, bindings: [], tracked: false, reason: '' }
+     sources.set(controller, source)
+-    source.observer = controller.onMotionControllerInitObservable.add(() => {
++    source.observer = controller.onMotionControllerInitObservable.add(guard(() => {
+       if (sources.get(controller) === source) resolve()
+-    })
++    }))
+     resolve()
+   }
+   function remove(controller) {
+--- before/client/src/controller-scene.js
++++ after/client/src/controller-scene.js
+@@ -8,7 +8,7 @@
+ 
+ // Scene-owned glue only: XRInput retains sources/poses; existing render
+ // resources retain verified models; the normal scene/GUI owners receive picks.
+-export function createControllerScene(scene, resources, navigation, { menu, workspace, changed, error }) {
++export function createControllerScene(scene, resources, navigation, { menu, workspace, changed, error, guard = fn => fn }) {
+   const visuals = new Map(), pointers = new Map(), observers = []
+   let xr = null, session = null
+   const ray = controller => {
+@@ -70,8 +70,8 @@
+   }
+   const input = createControllerInput({ navigation: { axes: v => navigation.axes(v), snap: s => navigation.snap(s),
+     teleport: (controller, fraction) => navigation.teleport(ray(controller).direction, fraction) },
+-    pointer, menu, blocked: () => Boolean(workspace()), appearance, retireAppearance, changed })
+-  function observe(observable, handler) { const token = observable.add(handler); observers.push(() => observable.remove(token)) }
++    pointer, menu, blocked: () => Boolean(workspace()), appearance, retireAppearance, changed, guard })
++  function observe(observable, handler, retiring = false) { const token = observable.add(guard(handler, retiring)); observers.push(() => observable.remove(token)) }
+   function suspend() {
+     input.cancel()
+     input.frame(() => false, false)
+@@ -80,12 +80,19 @@
+       for (const { node } of visual.painted.values()) node.setEnabled(false)
+     }
+   }
+-  function visibilityChanged() { if (session?.visibilityState !== 'visible') suspend() }
++  const visibilityChanged = guard(() => { if (session?.visibilityState !== 'visible') suspend() })
+   function attachSession(next) {
+     session?.removeEventListener('visibilitychange', visibilityChanged)
+     session = next
+     session?.addEventListener('visibilitychange', visibilityChanged)
+     visibilityChanged()
++  }
++  function disconnect() {
++    for (const remove of observers.splice(0)) remove()
++    attachSession(null)
++    input.dispose()
++    pointers.clear()
++    xr = null
+   }
+   return {
+     install: input.install, cancel: input.cancel, cancelMenu: input.cancelMenu, choose: input.choose, menuSelected: input.menuSelected,
+@@ -95,7 +102,7 @@
+       xr = experience
+       for (const controller of xr.input.controllers) input.add(controller)
+       observe(xr.input.onControllerAddedObservable, input.add)
+-      observe(xr.input.onControllerRemovedObservable, input.remove)
++      observe(xr.input.onControllerRemovedObservable, input.remove, true)
+       const manager = xr.baseExperience.sessionManager
+       observe(manager.onXRSessionInit, attachSession)
+       attachSession(manager.session)
+@@ -111,8 +118,9 @@
+           return Boolean(grip && target)
+         }, active)
+       })
+-      observe(manager.onXRSessionEnded, () => { suspend(); attachSession(null) })
++      observe(manager.onXRSessionEnded, () => { suspend(); attachSession(null) }, true)
+     },
+-    dispose() { for (const remove of observers) remove(); attachSession(null); input.dispose(); pointers.clear(); xr = null },
++    disconnect,
++    dispose: disconnect,
+   }
+ }
+--- before/client/src/render-resources.js
++++ after/client/src/render-resources.js
+@@ -16,6 +16,8 @@
+   fetchAsset = (url, options) => fetch(url, options),
+   decode = (bytes, identity) => decodeTexture(scene, bytes, identity),
+   decodeModel = async bytes => {
++    // GLTF2 may instance a mesh shared by several nodes, without an extension.
++    await import('@babylonjs/core/Meshes/instancedMesh.js')
+     await import('@babylonjs/loaders/glTF/2.0/glTFLoader.js')
+     const { LoadAssetContainerAsync } = await import('@babylonjs/core/Loading/sceneLoader.js')
+     return LoadAssetContainerAsync(new Uint8Array(bytes), scene,
+--- before/client/src/world-scene.d.ts
++++ after/client/src/world-scene.d.ts
+@@ -23,6 +23,8 @@
+   setWorkspace(model: WorkspacePanelModel | null): void
+   releaseNavigation(): void
+   immersive(): Promise<void>
+-  dispose(): void
++  exitImmersive(): Promise<void>
++  dispose(): Promise<void>
+ }
+-export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void, onResourceError?: (error: Error) => void, onNavigationChanged?: (active: boolean) => void, onControllersChanged?: () => void): WorldScene
++export type XRState = 'preparing' | 'ready' | 'starting' | 'presenting' | 'stopping' | 'blocked' | 'unavailable' | 'disposed'
++export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void, onResourceError?: (error: Error) => void, onNavigationChanged?: (active: boolean) => void, onControllersChanged?: () => void, onXRStateChanged?: (state: XRState) => void): WorldScene
+--- before/client/src/world-scene.js
++++ after/client/src/world-scene.js
+@@ -17,7 +17,8 @@
+ import { createRenderResources } from './render-resources.js'
+ import { createWorkspacePanel } from './workspace-panel.js'
+ import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
+-import { WebXRState, WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
++import { WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
++import { createWorldXR } from './world-xr.js'
+ import { createControllerScene } from './controller-scene.js'
+ import { createControlledNavigation } from './controlled-navigation.js'
+ 
+@@ -36,7 +37,7 @@
+ // The camera and lighting belong to this viewing session. All visible model
+ // geometry comes from the ontology projection, including the lobby floor.
+ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
+-  onResourceError = () => {}, onNavigationChanged = () => {}, onControllersChanged = () => {}) {
++  onResourceError = () => {}, onNavigationChanged = () => {}, onControllersChanged = () => {}, onXRStateChanged = () => {}) {
+   const engine = new Engine(canvas, true, { stencil: true })
+   const scene = new Scene(engine)
+   scene.useRightHandedSystem = true
+@@ -60,6 +61,39 @@
+   let panel = null
+   const appearanceSettings = { opacity: 0.78, scale: 1, distance: 1.6 }
+   let immersive = false
++  let xr = null, workspaceObserver = null, disposal = null
++  const xrLifecycle = createWorldXR(scene, {
++    connect(experience) {
++      xr = experience
++      controllers.connect(experience)
++      experience.baseExperience.camera.onTrackingStateChanged.add(xrLifecycle.guard(state => {
++        if (state === WebXRTrackingState.TRACKING) {
++          // Tracking is announced before the pose update.
++          scene.onBeforeRenderObservable.remove(workspaceObserver)
++          workspaceObserver = scene.onBeforeRenderObservable.addOnce(xrLifecycle.guard(showWorkspace))
++        }
++      }))
++    },
++    disconnect() {
++      controllers.disconnect()
++      scene.onBeforeRenderObservable.remove(workspaceObserver)
++      workspaceObserver = null
++      xr = null
++    },
++    cancel() { navigation.release(); controllers.cancel(); closeMenu() },
++    changed(state, experience) {
++      const active = state === 'presenting'
++      if (active !== immersive) {
++        immersive = active
++        playerNavigation.xr(immersive ? experience.baseExperience.camera : null)
++        closeMenu()
++        showWorkspace()
++        onImmersiveChanged(immersive)
++      }
++      onXRStateChanged(state)
++    },
++    error: onResourceError,
++  })
+   const contactMask = new Layer('physical-view-contact', null, scene, false, new Color4(1, 1, 1, 1))
+   const contactText = new DynamicTexture('physical-view-contact-text', { width: 2048, height: 1024 }, scene, false)
+   contactMask.texture = contactText
+@@ -83,14 +117,15 @@
+     },
+   })
+   const controllers = createControllerScene(scene, resources, playerNavigation, {
++    guard: xrLifecycle.guard,
+     workspace: () => workspace ? panel : null, changed: onControllersChanged, error: onResourceError,
+     menu: { open: (axes, threshold) => { openMenu(axes, threshold); return Boolean(menu.root) },
+       move: (axes, threshold) => selectMenuEntry(menu, radialIndex(axes, menu.entries.length, threshold)),
+       cancel: closeMenu,
+       commit: () => { const entry = menu.entries[menu.selected]; closeMenu(); if (entry) menu.activate?.(entry) } },
+   })
+-  scene.onBeforeRenderObservable.add(() => playerNavigation.render())
+-  scene.onPointerObservable.add(info => {
++  scene.onBeforeRenderObservable.add(xrLifecycle.guard(() => playerNavigation.render()))
++  scene.onPointerObservable.add(xrLifecycle.guard(info => {
+     const pick = navigation.active()
+       ? scene.pick(engine.getRenderWidth() / 2, engine.getRenderHeight() / 2)
+       : info.pickInfo
+@@ -104,13 +139,12 @@
+     }
+     while (node && !node.metadata?.depicts) node = node.parent
+     if (node?.metadata?.depicts?.anchor) onPick(node.metadata.depicts)
+-  }, PointerEventTypes.POINTERPICK)
++  }), PointerEventTypes.POINTERPICK)
+   let painted = new Map()
+   let currentMarks = null
+   let coordinateFrame = null
+   let simulation = null, terrainCamera = null, terrainObserver = null
+-  let xr = null
+-  scene.onBeforeCameraRenderObservable.add(view => paintSkies(painted, view))
++  scene.onBeforeCameraRenderObservable.add(xrLifecycle.guard(view => paintSkies(painted, view)))
+ 
+   function cameraInterest() {
+     const active = scene.activeCamera
+@@ -132,11 +166,11 @@
+       terrainCamera.onViewMatrixChangedObservable.remove(terrainObserver)
+     }
+     terrainCamera = scene.activeCamera
+-    terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(cameraInterest) ?? null
++    terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(xrLifecycle.guard(cameraInterest)) ?? null
+     terrainHorizon()
+     cameraInterest()
+   }
+-  scene.onActiveCameraChanged.add(bindTerrainCamera)
++  scene.onActiveCameraChanged.add(xrLifecycle.guard(bindTerrainCamera, true))
+   bindTerrainCamera()
+ 
+   function closeMenu() {
+@@ -194,7 +228,8 @@
+     }
+   }
+   window.addEventListener('resize', resize)
+-  engine.runRenderLoop(() => scene.render())
++  engine.runRenderLoop(xrLifecycle.guard(() => scene.render()))
++  void xrLifecycle.prepare().catch(onResourceError)
+   return {
+     update(current) {
+       if (simulation?.physicalFrame?.registration !== current?.physicalFrame?.registration) controllers.cancel()
+@@ -243,46 +278,26 @@
+       showWorkspace()
+     },
+     releaseNavigation() { navigation.release() },
+-    async immersive() {
+-      navigation.release()
+-      if (!xr) {
+-        await import('@babylonjs/core/Loading/Plugins/babylonFileLoader.js')
+-        await import('@babylonjs/loaders/glTF/index.js')
+-        await import('@babylonjs/core/Materials/Node/Blocks/index.js')
+-        await import('@babylonjs/core/Materials/colorCurves.js')
+-        const { WebXRDefaultExperience } = await import('@babylonjs/core/XR/webXRDefaultExperience.js')
+-        xr = await WebXRDefaultExperience.CreateAsync(scene, { disableTeleportation: true,
+-          disablePointerSelection: true, disableNearInteraction: true,
+-          inputOptions: { doNotLoadControllerMeshes: true } })
+-        xr.baseExperience.camera.onTrackingStateChanged.add(state => {
+-          if (state === WebXRTrackingState.TRACKING) {
+-            // The notice precedes the camera pose update; place after that update.
+-            scene.onBeforeRenderObservable.addOnce(showWorkspace)
+-          }
+-        })
+-        xr.baseExperience.onStateChangedObservable.add(state => {
+-          immersive = state === WebXRState.IN_XR
+-          playerNavigation.xr(immersive ? xr.baseExperience.camera : null)
+-          closeMenu()
+-          showWorkspace()
+-          onImmersiveChanged(immersive)
+-        })
+-        controllers.connect(xr)
+-      }
+-      await xr.baseExperience.enterXRAsync('immersive-vr', 'local-floor')
+-    },
++    immersive: xrLifecycle.enter,
++    exitImmersive: () => xrLifecycle.exit(),
+     dispose() {
++      if (disposal) return disposal
+       window.removeEventListener('resize', resize)
+       navigation.dispose()
+       movementSpeed.dispose()
+-      controllers.dispose()
+-      playerNavigation.dispose()
+-      contactMask.dispose()
+-      panel?.dispose()
+-      painted = clearMarks(painted)
+-      resources.dispose()
+-      scene.dispose()
+-      engine.dispose()
++      simulation = null
++      workspace = null
++      disposal = xrLifecycle.dispose().then(() => {
++        controllers.dispose()
++        playerNavigation.dispose()
++        contactMask.dispose()
++        panel?.dispose()
++        painted = clearMarks(painted)
++        resources.dispose()
++        scene.dispose()
++        engine.dispose()
++      })
++      return disposal
+     },
+   }
+ }
+--- before/client/src/world-xr.js
++++ after/client/src/world-xr.js
+@@ -0,0 +1,188 @@
++import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
++
++const deferred = () => {
++  let resolve
++  const promise = new Promise(done => { resolve = done })
++  return { promise, resolve }
++}
++
++// Part of the world owner. Babylon retains the session/camera/input/layer;
++// this scope joins their asynchronous entry and termination before disposal.
++export function createWorldXR(scene, { connect, disconnect, cancel, changed, error }) {
++  let experience = null, preparing = null, attempt = null, disposed = false
++  let state = 'preparing', disposal = null
++  const publish = next => { state = next; changed(next, experience) }
++  const report = cause => error(cause instanceof Error ? cause : new Error(String(cause)))
++
++  function guard(callback, retiring = false) {
++    return (...args) => {
++      if (!retiring && (disposed || attempt?.stopped)) return
++      try { return callback(...args) } catch (cause) { fail(cause) }
++    }
++  }
++  function fail(cause) {
++    report(cause)
++    if (attempt) {
++      attempt.failed = true
++      void stop(attempt).catch(report)
++    }
++  }
++  function release() {
++    if (!experience) return
++    disconnect()
++    const current = experience
++    experience = null
++    current.input?.dispose()
++    current.renderTarget?.dispose()
++    current.baseExperience.featuresManager.dispose()
++    current.baseExperience.dispose()
++  }
++  function prepare() {
++    if (disposed) return Promise.resolve()
++    if (preparing) return preparing
++    if (experience) return Promise.resolve()
++    publish('preparing')
++    preparing = (async () => {
++      const [{ WebXRExperienceHelper }, { WebXRInput }] = await Promise.all([
++        import('@babylonjs/core/XR/webXRExperienceHelper.js'),
++        import('@babylonjs/core/XR/webXRInput.js'),
++        import('@babylonjs/core/XR/motionController/webXRHTCViveMotionController.js'),
++      ])
++      if (disposed) return
++      const baseExperience = await WebXRExperienceHelper.CreateAsync(scene)
++      experience = { baseExperience, input: null, renderTarget: null }
++      if (disposed) { release(); return }
++      const manager = baseExperience.sessionManager
++      // The pinned manager installs its native end handler before this notice.
++      manager.onXRSessionInit.add(session => {
++        const current = attempt
++        if (!current) throw new Error('XR session has no world entry owner.')
++        capture(current, session)
++      }, undefined, true)
++      manager.onXRSessionEnded.add(() => {
++        if (attempt) ended(attempt)
++      }, undefined, true)
++      baseExperience.onStateChangedObservable.add(guard(value => {
++        if (value === WebXRState.IN_XR && attempt && !attempt.stopped) {
++          attempt.presenting = true
++          publish('presenting')
++        }
++      }))
++      experience.input = new WebXRInput(manager, baseExperience.camera, {
++        disableOnlineControllerRepository: true, doNotLoadControllerMeshes: true,
++      })
++      experience.renderTarget = manager.getWebXRRenderTarget()
++      connect(experience)
++      publish('ready')
++    })().catch(cause => {
++      release()
++      if (!disposed) publish('unavailable')
++      throw cause
++    }).finally(() => { preparing = null })
++    return preparing
++  }
++  function capture(current, session) {
++    if (current.session === session) return
++    if (current.session) throw new Error('XR entry acquired more than one session.')
++    current.session = session
++    current.onEnd = () => ended(current)
++    session.addEventListener('end', current.onEnd, { once: true })
++    if (current.stopped) void requestEnd(current).catch(report)
++  }
++  function ended(current) {
++    current.ended = true
++    current.nativeEnd.resolve()
++    // Let all native end listeners finish, including Babylon's render restore.
++    void Promise.resolve().then(() => stop(current)).catch(report)
++  }
++  function requestEnd(current) {
++    if (!current.session || current.ended) return Promise.resolve()
++    if (!current.ending) {
++      const ending = Promise.resolve().then(() => {
++        if (!current.ended) return current.session.end()
++      }).catch(cause => {
++        if (!current.ended) throw new Error('VR release is unconfirmed. Use the headset or browser exit control.', { cause })
++      })
++      current.ending = Promise.race([ending, current.nativeEnd.promise])
++      // Surface refusal even if an unrelated entry continuation is still
++      // pending. Keep its dependencies alive until that continuation settles.
++      void current.ending.catch(cause => {
++        if (!current.ended && attempt === current) { publish('blocked'); report(cause) }
++      })
++    }
++    return current.ending
++  }
++  function stop(current = attempt) {
++    if (!current) return Promise.resolve()
++    if (current.cleanup) return current.cleanup
++    current.stopped = true
++    cancel()
++    publish('stopping')
++    // Begin release now, even when an entry continuation is still pending.
++    void requestEnd(current).catch(() => {})
++    current.cleanup = (async () => {
++      await current.entry.catch(() => {})
++      const session = experience?.baseExperience.sessionManager.session
++      if (!current.session && session && session !== current.previousSession) capture(current, session)
++      await requestEnd(current)
++      // A resolved end promise confirms release; its native end dispatch must
++      // also complete before we remove listeners or destroy render dependencies.
++      if (current.session) await current.nativeEnd.promise
++      current.session?.removeEventListener('end', current.onEnd)
++      const retire = disposed || current.failed || !current.presenting
++      if (retire) {
++        release()
++        scene.autoClear = current.desktop.autoClear
++        scene.activeCamera = current.desktop.camera
++        if (current.desktop.attached) current.desktop.camera.attachControl(current.desktop.noPreventDefault)
++      }
++      if (attempt === current) attempt = null
++      current.finished.resolve()
++      if (!disposed) {
++        if (retire) await prepare()
++        else publish('ready')
++      }
++    })().catch(cause => {
++      if (attempt === current) publish('blocked')
++      current.cleanup = null
++      throw cause
++    })
++    return current.cleanup
++  }
++  function enter() {
++    if (disposed || state !== 'ready' || attempt) return Promise.reject(new Error('VR is not ready to enter.'))
++    const camera = scene.activeCamera
++    const current = { session: null, previousSession: experience.baseExperience.sessionManager.session,
++      nativeEnd: deferred(), finished: deferred(), stopped: false, presenting: false, failed: false,
++      desktop: { camera, autoClear: scene.autoClear, attached: Boolean(camera?.inputs?.attachedToElement),
++        noPreventDefault: camera?.inputs?.noPreventDefault } }
++    attempt = current
++    cancel()
++    publish('starting')
++    // No network/import preparation between the click and this request path.
++    current.entry = experience.baseExperience.enterXRAsync('immersive-vr', 'local-floor', experience.renderTarget)
++    return current.entry.catch(async cause => {
++      current.failed = true
++      try { await stop(current) } catch (cleanupError) { report(cleanupError) }
++      throw cause
++    })
++  }
++  function dispose() {
++    if (disposal) return disposal
++    disposed = true
++    cancel()
++    disconnect()
++    disposal = (async () => {
++      const current = attempt
++      if (current) {
++        try { await stop(current) } catch (cause) { report(cause); await current.finished.promise }
++      }
++      await preparing?.catch(report)
++      release()
++      publish('disposed')
++    })()
++    return disposal
++  }
++  return { prepare, enter, exit: stop, dispose, guard, fail,
++    get state() { return state }, get experience() { return experience } }
++}
+--- before/client/test/gui-hardware.fixture.js
++++ after/client/test/gui-hardware.fixture.js
+@@ -2,8 +2,8 @@
+ import { createWorld } from '../src/world-scene.js'
+ import { EngineStore } from '@babylonjs/core/Engines/engineStore.js'
+ 
+-// Exercise the production spatial adapter and XR entry. This fixture records
+-// local control input; lifecycle/authority are covered by the signed-owner tests.
++// Legacy local GUI fixture, without the account's signed controller mapping.
++// It cannot establish production HTTPS/CSP, permissions or physical acceptance.
+ const asset = await guiAssetFixture()
+ const report = { immersive: false, entries: 0, edits: [], actions: [], submissions: [], errors: [], controls: [] }
+ const status = document.querySelector('#status')
+@@ -72,7 +72,9 @@
+ })
+ window.addEventListener('error', event => report.errors.push(event.message))
+ window.addEventListener('unhandledrejection', event => report.errors.push(String(event.reason)))
+-window.addEventListener('pagehide', () => { world.dispose(); asset.restore() }, { once: true })
++window.addEventListener('pagehide', () => {
++  void world.dispose().catch(error => report.errors.push(String(error))).finally(() => asset.restore())
++}, { once: true })
+ window.guiHardwareReport = () => structuredClone(report)
+ window.guiHardwareOpacity = value => {
+   const texture = EngineStore.LastCreatedScene.getMeshByName('workspace')?.material.emissiveTexture
+--- before/client/test/movement.browser.mjs
++++ after/client/test/movement.browser.mjs
+@@ -39,5 +39,5 @@
+       immersiveVR: await navigator.xr?.isSessionSupported('immersive-vr') ?? false,
+       checks: ['authored camera mount', 'accepted pose correction', 'disabled direct translation',
+         'unavailable world freezes travel', 'observer restoration', 'scene disposal'] }
+-  } finally { world.dispose() }
++  } finally { await world.dispose() }
+ }
+--- before/client/test/render-model.test.js
++++ after/client/test/render-model.test.js
+@@ -0,0 +1,56 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { readFileSync } from 'node:fs'
++import { createHash } from 'node:crypto'
++import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
++import { Scene } from '@babylonjs/core/scene.js'
++import { createRenderResources } from '../src/render-resources.js'
++import { validateGlb } from '../src/glb-profile.js'
++import { paintMarks, clearMarks } from '../src/scene.js'
++
++function sharedMesh() {
++  const doc = { asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0, 1] }],
++    nodes: [{ mesh: 0 }, { mesh: 0 }], meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
++    buffers: [{ byteLength: 36 }], bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 36 }],
++    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [0, 0, 0], max: [1, 1, 0] }] }
++  const json = Buffer.from(JSON.stringify(doc)), padded = Buffer.alloc(Math.ceil(json.length / 4) * 4, 32)
++  json.copy(padded)
++  const bin = Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer)
++  const bytes = Buffer.alloc(28 + padded.length + bin.length)
++  bytes.writeUInt32LE(0x46546c67, 0); bytes.writeUInt32LE(2, 4); bytes.writeUInt32LE(bytes.length, 8)
++  bytes.writeUInt32LE(padded.length, 12); bytes.writeUInt32LE(0x4e4f534a, 16); padded.copy(bytes, 20)
++  const at = 20 + padded.length
++  bytes.writeUInt32LE(bin.length, at); bytes.writeUInt32LE(0x004e4942, at + 4); bin.copy(bytes, at + 8)
++  return bytes
++}
++
++for (const [label, bytes] of [
++  ['shared mesh without extensions', sharedMesh()],
++  ['pinned Vive appearance', readFileSync(new URL('../../ui/public/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb', import.meta.url))],
++]) test(`${label}: real decoder and occurrences share one verified template`, async () => {
++  const engine = new NullEngine(), scene = new Scene(engine)
++  const { costs, boundsMm } = validateGlb(bytes)
++  const digest = createHash('sha256').update(bytes).digest('hex')
++  let requests = 0
++  const resources = createRenderResources(scene, { fetchAsset: async url => {
++    assert.equal(url, `/assets/models/${digest}.glb`); requests++; return new Response(bytes)
++  } })
++  const size = { digest, profile: 'gltf2-static-v1', allowed: costs.map(n => Math.max(1, n)), bounds: boundsMm,
++    scale: 1, pivot: [0, 0, 0], front: '-z' }
++  const errors = []
++  const marks = paintMarks(scene, ['left', 'right'].map(id => ({ id, kind: 'mesh', size,
++    transform: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }, parent: null, depicts: null })),
++    new Map(), resources, error => errors.push(error))
++  try {
++    await Promise.all([...marks.values()].map(entry => entry.ready))
++    assert.deepEqual(errors, [])
++    assert.equal(requests, 1)
++    const left = marks.get('left').node.getChildMeshes(), right = marks.get('right').node.getChildMeshes()
++    assert.ok(left.length > 0)
++    assert.equal(left.length, right.length)
++    assert.notEqual(left[0], right[0])
++    clearMarks(marks)
++    assert.ok(left.every(mesh => mesh.isDisposed()))
++    assert.ok(right.every(mesh => mesh.isDisposed()))
++  } finally { clearMarks(marks); resources.dispose(); scene.dispose(); engine.dispose() }
++})
+--- before/client/test/workspace-panel.fixture.js
++++ after/client/test/workspace-panel.fixture.js
+@@ -6,10 +6,7 @@
+ import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
+ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+ import { createWorkspacePanel } from '../src/workspace-panel.js'
+-import { createWorld } from '../src/world-scene.js'
+-import { EngineStore } from '@babylonjs/core/Engines/engineStore.js'
+-import { Observable } from '@babylonjs/core/Misc/observable.js'
+-import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
++import { createXRWorldFixture } from './xr-browser-boundary.js'
+ import { readGuiView } from '../src/world.js'
+ 
+ export async function exerciseWorkspacePanel() {
+@@ -430,47 +427,30 @@
+     // Feed controller and XR lifecycle notices into the real world adapter.
+     // This tests wiring; it does not claim physical-headset acceptance.
+     const modes = []
+-    const world = createWorld(document.querySelector('canvas'), () => {}, value => modes.push(value))
+-    const room = EngineStore.LastCreatedScene
+-    room.activeCamera.getViewMatrix(true)
+-    room.activeCamera.trackingState = 0
+-    room.activeCamera.onTrackingStateChanged = new Observable()
+-    const component = { pressed: false, onAxisValueChangedObservable: new Observable(),
+-      onButtonStateChangedObservable: new Observable() }
+-    const changes = new Observable()
+-    let exits = 0
+-    const { WebXRDefaultExperience } = await import('@babylonjs/core/XR/webXRDefaultExperience.js')
+-    const createXR = WebXRDefaultExperience.CreateAsync
+-    WebXRDefaultExperience.CreateAsync = async () => ({
+-      input: { controllers: [{ inputSource: { handedness: 'right' },
+-        motionController: { getComponentOfType: () => component } }],
+-        onControllerAddedObservable: new Observable(), onControllerRemovedObservable: new Observable() },
+-      baseExperience: { camera: room.activeCamera, onStateChangedObservable: changes,
+-        enterXRAsync: async () => changes.notifyObservers(WebXRState.IN_XR),
+-        exitXRAsync: async () => { exits++ },
+-      },
+-    })
++    const fixture = await createXRWorldFixture(document.querySelector('canvas'), modes)
++    const { world, room } = fixture
++    try {
+     let activations = 0
+     world.setActionMenu([{ id: 'prove', label: 'Prove a goal', view: 'proof_console' }], () => { activations++ })
+-    try { await world.immersive() }
+-    finally { WebXRDefaultExperience.CreateAsync = createXR }
+     world.setWorkspace(model)
+     const waitsForTracking = !room.getMeshByName('workspace')
+-    room.activeCamera.trackingState = 2
++    fixture.tracking(true)
+     room.activeCamera.onTrackingStateChanged.notifyObservers(2)
+     world.setWorkspace(null)
+     room.render()
+     const closedDuringTrackingWait = !room.getMeshByName('workspace')
+-    room.activeCamera.trackingState = 0
++    fixture.tracking(false)
++    fixture.frame()
+     world.setWorkspace(model)
+-    room.activeCamera.trackingState = 2
++    fixture.tracking(true)
+     room.activeCamera.onTrackingStateChanged.notifyObservers(2)
+-    room.activeCamera.position.set(4, 1.8, -2)
+-    room.render()
++    fixture.position(4, 1.8, -2)
++    fixture.frame()
+     const placedAfterPose = Math.abs(Vector3.Distance(room.getMeshByName('workspace').position,
+       room.activeCamera.globalPosition) - 1.6) < 0.001
+     world.setWorkspace(null)
+-    const press = (pressed, axes) => component.onButtonStateChangedObservable.notifyObservers({ pressed, axes })
++    const press = fixture.press
++    press(false, { x: 0, y: 0 })
+     press(true, { x: 0, y: -1 })
+     const facesViewer = node => {
+       node.computeWorldMatrix(true)
+@@ -482,45 +462,28 @@
+           room.activeCamera.getDirection(new Vector3(0, 1, 0))) > 0
+     }
+     const rightHandedMenu = facesViewer(room.getTransformNodeByName('action-menu'))
+-    component.onAxisValueChangedObservable.notifyObservers({ x: 0, y: 0 })
++    press(true, { x: 0, y: 0 })
+     press(false, { x: 0, y: 0 })
+     const cancelled = activations === 0
+     press(true, { x: 0, y: -1 }); press(false, { x: 0, y: -1 })
+     world.setWorkspace(model)
+-    const spatialOpen = !!room.getMeshByName('workspace') && exits === 0
++    const spatialOpen = !!room.getMeshByName('workspace') && fixture.exits() === 0
+     const rightHandedPanel = facesViewer(room.getMeshByName('workspace'))
+-    const { SceneLoader } = await import('@babylonjs/core/Loading/sceneLoader.js')
+-    const controllerLoader = SceneLoader.IsPluginForExtensionAvailable('.babylon')
+-    const gltfControllerLoader = SceneLoader.IsPluginForExtensionAvailable('.glb')
+-    const { WebXRFeaturesManager } = await import('@babylonjs/core/XR/webXRFeaturesManager.js')
+-    const xrFeatures = ['xr-controller-pointer-selection', 'xr-near-interaction', 'xr-hand-tracking']
+-      .every(name => WebXRFeaturesManager.GetAvailableFeatures().includes(name))
+-    // XR touch markers parse serialized node materials. Class availability
+-    // alone does not establish that their graph can be reconstructed and built.
+-    const { NodeMaterial } = await import('@babylonjs/core/Materials/Node/nodeMaterial.js')
+-    const originalMaterial = new NodeMaterial('xr-marker-original', room)
+-    originalMaterial.setToDefault()
+-    const restoredMaterial = new NodeMaterial('xr-marker-restored', room)
+-    restoredMaterial.parseSerializedObject(originalMaterial.serialize())
+-    const nodeMaterialRoundtrip = await new Promise((resolve, reject) => {
+-      restoredMaterial.onBuildObservable.addOnce(() => resolve(true))
+-      restoredMaterial.onBuildErrorObservable.addOnce(reject)
+-      restoredMaterial.build()
+-    })
+-    originalMaterial.dispose(); restoredMaterial.dispose()
++    // Optional-feature/model-loader registration assertions belonged to the
++    // retired default-helper path. Explicit startup and GLB obligations are
++    // exercised by world-xr.test.js and render-model.test.js.
+     room.getMeshByName('workspace').material.emissiveTexture
+       .getControlByName('workspace-text-larger').onPointerClickObservable.notifyObservers({})
+     world.setWorkspace(null)
+-    const spatialClosed = !room.getMeshByName('workspace') && exits === 0
++    const spatialClosed = !room.getMeshByName('workspace') && fixture.exits() === 0
+     world.setWorkspace(model)
+     const scaleSurvivesReopen = room.getMeshByName('workspace').scaling.x === 1.25
+     world.setWorkspace(null)
+-    changes.notifyObservers(WebXRState.NOT_IN_XR)
+-    world.dispose()
++    await world.exitImmersive()
++    if (fixture.errors.length) throw fixture.errors[0]
+     return { typed, calls, scrollable, resultText, locked, sameMesh, hidden, retired, frontFacing,
+       screenshot, cancelled, activations, spatialOpen, spatialClosed, modes,
+-      rightHandedMenu, rightHandedPanel, controllerLoader, gltfControllerLoader, xrFeatures,
+-      nodeMaterialRoundtrip, waitsForTracking, closedDuringTrackingWait, placedAfterPose,
++      rightHandedMenu, rightHandedPanel, waitsForTracking, closedDuringTrackingWait, placedAfterPose,
+       largerTextReflows, smallerTextRestoresRows, worldStable, recentered, farther,
+       placedStaysStill, movementStopsOnHide, scaleSurvivesReopen,
+       hiddenFocusNotRestored, verifiedImagesShared, unchangedImagesReused, tableSelection, tableBounded, transientInitiallyClosed, dialogDraftAndFocus, menuEscape, transientAction, tableLocked,
+@@ -529,4 +492,5 @@
+       steppedGain, clampedGain, invalidDraftRetained, numericEntry, rotatedAngle, steppedAngle,
+       frozenNumeric, lockedNumeric, numericBounds, semanticSelection, commonText, missingNumeric,
+       actionsScrollable, lastActionReachable, keyboardInsideTexture, requiredFeedback, byteFeedback, releasedOutside, outsideMesh }
++    } finally { await fixture.restore() }
+ }
+--- before/client/test/world-xr.test.js
++++ after/client/test/world-xr.test.js
+@@ -0,0 +1,358 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { readFileSync } from 'node:fs'
++import { createHash } from 'node:crypto'
++import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
++import { Scene } from '@babylonjs/core/scene.js'
++import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
++import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
++import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
++import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
++import { createWorldXR } from '../src/world-xr.js'
++import { createControllerScene } from '../src/controller-scene.js'
++import { createRenderResources } from '../src/render-resources.js'
++import { validateGlb } from '../src/glb-profile.js'
++
++const deferred = () => {
++  let resolve, reject
++  const promise = new Promise((yes, no) => { resolve = yes; reject = no })
++  return { promise, resolve, reject }
++}
++const live = observable => observable.observers.filter(o => !o._willBeUnregistered).length
++const transform = { position: { x: 0, y: 1.7, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }
++
++async function setup(t, { compatible = Promise.resolve(), prepare = true } = {}) {
++  const saved = new Map(['navigator', 'document', 'XRWebGLLayer', 'XRRigidTransform', 'fetch', 'PointerEvent'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]))
++  const sessions = [], states = [], errors = [], requested = deferred()
++  let request = async () => makeSession(), layerError = null
++  const global = (name, value) => Object.defineProperty(globalThis, name, { configurable: true, writable: true, value })
++  global('navigator', { xr: { requestSession: (...args) => { sessions.push(args); requested.resolve(); return request() } } })
++  global('document', Object.assign(new EventTarget(), { body: { contains: () => false } }))
++  global('fetch', () => { throw new Error('Unexpected XR network request') })
++  global('PointerEvent', class extends Event { constructor(type, options) { super(type); Object.assign(this, options) } })
++  global('XRWebGLLayer', class {
++    constructor() {
++      if (layerError) throw layerError
++      this.framebufferWidth = 800; this.framebufferHeight = 600; this.framebuffer = {}
++    }
++  })
++  global('XRRigidTransform', class { constructor(position, orientation) { this.position = position; this.orientation = orientation } })
++  const engine = new NullEngine(), scene = new Scene(engine)
++  scene.useRightHandedSystem = true
++  const camera = new FreeCamera('desktop', Vector3.Zero(), scene)
++  const context = { makeXRCompatible: () => compatible }
++  const canvas = { offsetWidth: 800, offsetHeight: 600, getContext: () => context,
++    style: new Proxy({}, { set() { throw new Error('Unexpected inline style') } }) }
++  engine.getRenderingCanvas = () => canvas
++  const bytes = readFileSync(new URL('../../ui/public/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb', import.meta.url))
++  const digest = createHash('sha256').update(bytes).digest('hex'), { costs, boundsMm } = validateGlb(bytes)
++  const resources = createRenderResources(scene, { fetchAsset: async url => {
++    assert.equal(url, `/assets/models/${digest}.glb`); return new Response(bytes)
++  } })
++  const model = { digest, profile: 'gltf2-static-v1', allowed: costs.map(n => Math.max(1, n)), bounds: boundsMm,
++    scale: 1, pivot: [0, 0, 0], front: '-z' }
++  let controllerScene
++  const waiters = new Map()
++  const lifecycle = createWorldXR(scene, {
++    connect: experience => controllerScene.connect(experience),
++    disconnect: () => controllerScene.disconnect(),
++    cancel: () => controllerScene.cancel(),
++    changed: state => { states.push(state); waiters.get(state)?.resolve(); waiters.delete(state) },
++    error: cause => errors.push(cause),
++  })
++  controllerScene = createControllerScene(scene, resources,
++    { axes() {}, snap() {}, teleport() {} }, { workspace: () => null, changed() {}, error: cause => errors.push(cause),
++      guard: lifecycle.guard, menu: { open() {}, move() {}, commit() {}, cancel() {} } })
++  const baseline = { scene: live(scene.onDisposeObservable), engine: live(engine.onDisposeObservable), cameras: scene.cameras.length }
++  t.after(async () => {
++    await lifecycle.dispose()
++    controllerScene.dispose()
++    resources.dispose()
++    assert.deepEqual({ scene: live(scene.onDisposeObservable), engine: live(engine.onDisposeObservable), cameras: scene.cameras.length }, baseline)
++    scene.dispose(); engine.dispose()
++    for (const [name, descriptor] of saved) {
++      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
++      else delete globalThis[name]
++    }
++  })
++  if (prepare) await lifecycle.prepare()
++  return { lifecycle, controllerScene, engine, scene, camera, errors, states, sessions, requested, context, model,
++    request(fn) { request = fn }, layerError(value) { layerError = value },
++    wait(state) { if (lifecycle.state === state) return Promise.resolve(); const d = deferred(); waiters.set(state, d); return d.promise },
++    frame() {
++      engine.customAnimationFrameRequester.renderFunction(1, { getViewerPose: () => ({ ...transform, transform, views: [] }),
++        getPose: () => ({ transform }) })
++    } }
++}
++function makeSession() {
++  const session = Object.assign(new EventTarget(), { visibilityState: 'visible', ends: 0, inputSources: [],
++    renderState: {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
++    requestReferenceSpace: async () => ({ getOffsetReferenceSpace() { return this } }),
++    updateRenderState(value) { Object.assign(this.renderState, value) },
++    async end() { this.ends++; this.dispatchEvent(new Event('end')) },
++  })
++  return session
++}
++
++test('prepares explicit owners without permissions, styles, profiles or optional features', async t => {
++  const f = await setup(t)
++  assert.equal(f.sessions.length, 0)
++  assert.deepEqual(f.lifecycle.experience.baseExperience.featuresManager.getEnabledFeatures(), [])
++  assert.equal(f.lifecycle.state, 'ready')
++})
++
++test('failed preparation releases its partial helper and can be prepared again', async t => {
++  const f = await setup(t, { prepare: false }), browserXR = navigator.xr
++  delete navigator.xr
++  await assert.rejects(f.lifecycle.prepare(), /WebXR not supported/)
++  assert.equal(f.lifecycle.experience, null)
++  assert.equal(f.lifecycle.state, 'unavailable')
++  navigator.xr = browserXR
++  await f.lifecycle.prepare()
++  assert.equal(f.lifecycle.state, 'ready')
++})
++
++test('disposal during preparation cannot install a late helper or request a session', async t => {
++  const f = await setup(t, { prepare: false })
++  const preparing = f.lifecycle.prepare()
++  await f.lifecycle.dispose()
++  await preparing
++  assert.equal(f.lifecycle.state, 'disposed')
++  assert.equal(f.lifecycle.experience, null)
++  assert.equal(f.sessions.length, 0)
++})
++
++test('permission refusal retires failed helper and permits deliberate retry', async t => {
++  const f = await setup(t), refused = new Error('permission refused')
++  const first = f.lifecycle.experience
++  f.request(async () => { throw refused })
++  await assert.rejects(f.lifecycle.enter(), error => error === refused)
++  assert.equal(f.lifecycle.state, 'ready')
++  assert.notEqual(f.lifecycle.experience, first)
++  f.request(async () => makeSession())
++  await f.lifecycle.enter(); assert.equal(f.lifecycle.state, 'starting')
++  assert.deepEqual(f.sessions.at(-1), ['immersive-vr', { optionalFeatures: ['local-floor'] }])
++  f.frame(); assert.equal(f.lifecycle.state, 'presenting')
++  await f.lifecycle.exit()
++  assert.equal(f.lifecycle.state, 'ready')
++})
++
++for (const stage of ['init', 'before-capture', 'reference', 'layer', 'render-state', 'after-loop']) {
++  test(`${stage} failure ends actual session, restores desktop and permits retry`, async t => {
++    const f = await setup(t), session = makeSession(), cause = new Error(stage)
++    f.request(async () => session)
++    const helper = f.lifecycle.experience.baseExperience
++    if (stage === 'init') helper.sessionManager.onXRSessionInit.add(() => { throw cause })
++    if (stage === 'before-capture') helper.sessionManager.onXRSessionInit.add(() => { throw cause }, undefined, true)
++    if (stage === 'reference') session.requestReferenceSpace = async () => { throw cause }
++    if (stage === 'layer') f.layerError(cause)
++    if (stage === 'render-state') session.updateRenderState = () => { throw cause }
++    if (stage === 'after-loop') helper.onInitialXRPoseSetObservable.add(() => { throw cause })
++    await assert.rejects(f.lifecycle.enter())
++    assert.equal(session.ends, 1)
++    assert.equal(helper.sessionManager.inXRSession, false)
++    assert.equal(f.scene.activeCamera, f.camera)
++    assert.equal(f.engine.customAnimationFrameRequester, null)
++    assert.equal(f.lifecycle.state, 'ready')
++    f.layerError(null); f.request(async () => makeSession())
++    await f.lifecycle.enter(); f.frame(); await f.lifecycle.exit()
++  })
++}
++
++test('cancel and dispose during consent join the original entry and end its late session once', async t => {
++  const f = await setup(t), consent = deferred(), session = makeSession()
++  f.request(() => consent.promise)
++  const entering = f.lifecycle.enter()
++  await f.requested.promise
++  await assert.rejects(f.lifecycle.enter(), /not ready/)
++  const exiting = f.lifecycle.exit(), disposing = f.lifecycle.dispose()
++  consent.resolve(session)
++  await Promise.all([entering.catch(() => {}), exiting, disposing])
++  assert.equal(session.ends, 1)
++  assert.equal(f.lifecycle.state, 'disposed')
++  assert.equal(f.sessions.length, 1)
++})
++
++test('native end during pending layer setup waits for its continuation before retiring', async t => {
++  const compatible = deferred(), session = makeSession()
++  const g = await setup(t, { compatible: compatible.promise })
++  const target = g.lifecycle.experience.renderTarget
++  const requested = deferred()
++  g.lifecycle.experience.baseExperience.sessionManager.onXRReferenceSpaceInitialized.addOnce(() => requested.resolve())
++  g.request(async () => session)
++  const entering = g.lifecycle.enter()
++  await requested.promise
++  session.dispatchEvent(new Event('end'))
++  const exiting = g.lifecycle.exit()
++  assert.equal(g.lifecycle.state, 'stopping')
++  assert.equal(g.lifecycle.experience.renderTarget, target)
++  compatible.resolve()
++  await Promise.all([entering, exiting])
++  assert.equal(session.ends, 0)
++  assert.equal(g.scene.activeCamera, g.camera)
++  assert.equal(g.lifecycle.state, 'ready')
++})
++
++test('end rejection blocks re-entry; later native end completes cleanup without another end request', async t => {
++  const f = await setup(t), session = makeSession()
++  session.end = async () => { session.ends++; throw new Error('device did not release') }
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  await assert.rejects(f.lifecycle.exit(), /release is unconfirmed/)
++  assert.equal(f.lifecycle.state, 'blocked')
++  await assert.rejects(f.lifecycle.enter(), /not ready/)
++  const ready = f.wait('ready')
++  session.dispatchEvent(new Event('end'))
++  await ready
++  assert.equal(session.ends, 1)
++})
++
++test('native end racing explicit exit wins over an already-ended rejection', async t => {
++  const f = await setup(t), session = makeSession()
++  session.end = async () => { session.ends++; session.dispatchEvent(new Event('end')); throw new Error('already ended') }
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  await Promise.all([f.lifecycle.exit(), f.lifecycle.exit()])
++  assert.equal(session.ends, 1)
++  assert.equal(f.lifecycle.state, 'ready')
++})
++
++for (const when of ['first', 'later']) test(`${when} frame callback failure stops the real session`, async t => {
++  const f = await setup(t), session = makeSession()
++  f.request(async () => session)
++  await f.lifecycle.enter()
++  if (when === 'later') f.frame()
++  f.lifecycle.experience.baseExperience.sessionManager.onXRFrameObservable.add(f.lifecycle.guard(() => { throw new Error('frame failure') }))
++  const ready = f.wait('ready')
++  f.frame(); await ready
++  assert.equal(session.ends, 1)
++  assert.match(f.errors[0].message, /frame failure/)
++})
++
++test('real Vive decoders and controller adapter detach sources across end and re-entry', async t => {
++  const f = await setup(t)
++  const prepared = f.lifecycle.experience
++  for (let cycle = 0; cycle < 3; cycle++) {
++    const session = makeSession()
++    f.request(async () => session)
++    await f.lifecycle.enter(); f.frame()
++    const controllers = []
++    const added = deferred()
++    prepared.input.onControllerAddedObservable.addOnce(controller => {
++      controller.onMotionControllerInitObservable.addOnce(() => added.resolve())
++    })
++    const sources = ['left', 'right'].map(handedness => ({ profiles: ['htc-vive'], handedness, targetRayMode: 'tracked-pointer',
++      gripSpace: {}, targetRaySpace: {}, gamepad: { buttons: Array.from({ length: 5 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0] } }))
++    session.dispatchEvent(Object.assign(new Event('inputsourceschange'), { added: sources, removed: [] }))
++    await added.promise
++    for (const controller of prepared.input.controllers) {
++      controllers.push(controller)
++      assert.equal(controller.motionController.profileId, 'htc-vive')
++      assert.deepEqual(controller.motionController.getComponentIds(), ['xr-standard-trigger', 'xr-standard-squeeze', 'xr-standard-touchpad', 'menu'])
++      assert.equal(Boolean(controller.motionController.rootMesh), false)
++    }
++    assert.equal(f.controllerScene.status.sources.length, 2)
++    await f.lifecycle.exit()
++    assert.equal(session.ends, 1)
++    assert.equal(prepared.input.controllers.length, 0)
++    assert.equal(f.controllerScene.status.sources.length, 0)
++    assert.equal(f.lifecycle.experience, prepared)
++    for (const controller of controllers) assert.equal(controller.onMotionControllerInitObservable.hasObservers(), false)
++  }
++})
++
++test('real XRInput components drive scene picks and cancel on visibility loss or source departure', async t => {
++  const f = await setup(t), session = makeSession()
++  f.controllerScene.install({ digest: 'verified-view-boundary', roles: { navigation: 'left', menu: 'right' },
++    profiles: [{ names: ['htc-vive'], model: f.model,
++      components: [{ name: 'trigger', id: 'xr-standard-trigger', type: 'trigger', features: ['press'] }] }],
++    bindings: [{ id: 'select', role: 'any', component: 'trigger', kind: 'press_release', action: 'select' }] })
++  const plane = MeshBuilder.CreatePlane('target', { size: 2, sideOrientation: 2 }, f.scene)
++  plane.position.set(0, 1.7, -1); plane.computeWorldMatrix(true)
++  let picks = 0
++  f.scene.onPointerObservable.add(() => picks++, PointerEventTypes.POINTERPICK)
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  const source = { profiles: ['htc-vive'], handedness: 'left', targetRayMode: 'tracked-pointer',
++    gripSpace: {}, targetRaySpace: {}, gamepad: { buttons: Array.from({ length: 5 }, () => ({ pressed: false, value: 0 })), axes: [0, 0] } }
++  const initialized = deferred()
++  f.lifecycle.experience.input.onControllerAddedObservable.addOnce(c => c.onMotionControllerInitObservable.addOnce(() => initialized.resolve()))
++  session.dispatchEvent(Object.assign(new Event('inputsourceschange'), { added: [source], removed: [] }))
++  await initialized.promise
++  const frame = pressed => { source.gamepad.buttons[0] = { pressed, value: Number(pressed) }; f.frame() }
++  frame(false); frame(true); frame(false)
++  assert.equal(picks, 1)
++  frame(true)
++  session.visibilityState = 'hidden'; session.dispatchEvent(new Event('visibilitychange'))
++  assert.equal(f.controllerScene.status.sources[0].tracked, false)
++  session.visibilityState = 'visible'; session.dispatchEvent(new Event('visibilitychange'))
++  frame(false)
++  assert.equal(picks, 1)
++  frame(true)
++  session.dispatchEvent(Object.assign(new Event('inputsourceschange'), { added: [], removed: [source] }))
++  assert.equal(f.controllerScene.status.sources.length, 0)
++  assert.equal(picks, 1)
++  await f.lifecycle.exit()
++  assert.deepEqual(f.errors, [])
++})
++
++test('source callback exception is contained and releases its session', async t => {
++  const f = await setup(t), session = makeSession()
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  const ready = f.wait('ready')
++  f.lifecycle.experience.input.onControllerAddedObservable.add(f.lifecycle.guard(() => { throw new Error('source failure') }))
++  session.dispatchEvent(Object.assign(new Event('inputsourceschange'), { added: [{ profiles: [], targetRayMode: 'gaze', targetRaySpace: {} }], removed: [] }))
++  await ready
++  assert.equal(session.ends, 1)
++  assert.match(f.errors[0].message, /source failure/)
++})
++
++test('disposal retains dependencies after end rejection until native release arrives', async t => {
++  const f = await setup(t), session = makeSession()
++  session.end = async () => { session.ends++; throw new Error('release refused') }
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  const blocked = f.wait('blocked'), disposal = f.lifecycle.dispose()
++  await blocked
++  assert.ok(f.lifecycle.experience)
++  session.dispatchEvent(new Event('end'))
++  await disposal
++  assert.equal(session.ends, 1)
++  assert.equal(f.lifecycle.experience, null)
++  assert.equal(f.lifecycle.state, 'disposed')
++})
++
++test('successful end promise does not dispose ahead of native end dispatch', async t => {
++  const f = await setup(t), session = makeSession(), called = deferred()
++  session.end = async () => { session.ends++; called.resolve() }
++  f.request(async () => session)
++  await f.lifecycle.enter(); f.frame()
++  const exiting = f.lifecycle.exit()
++  await called.promise
++  assert.equal(f.lifecycle.state, 'stopping')
++  assert.ok(f.lifecycle.experience)
++  session.dispatchEvent(new Event('end'))
++  await exiting
++  assert.equal(session.ends, 1)
++  assert.equal(f.lifecycle.state, 'ready')
++})
++
++test('end refusal is visible while layer setup remains pending', async t => {
++  const compatible = deferred(), f = await setup(t, { compatible: compatible.promise }), session = makeSession()
++  session.end = async () => { session.ends++; throw new Error('release refused during setup') }
++  f.request(async () => session)
++  const initialized = deferred()
++  f.lifecycle.experience.baseExperience.sessionManager.onXRReferenceSpaceInitialized.addOnce(() => initialized.resolve())
++  const entering = f.lifecycle.enter()
++  await initialized.promise
++  const blocked = f.wait('blocked'), exiting = f.lifecycle.exit()
++  await blocked
++  assert.match(f.errors[0].message, /release is unconfirmed/)
++  assert.ok(f.lifecycle.experience)
++  session.dispatchEvent(new Event('end'))
++  compatible.resolve()
++  await Promise.all([entering, exiting])
++  assert.equal(session.ends, 1)
++  assert.equal(f.lifecycle.state, 'ready')
++})
+--- before/client/test/xr-browser-boundary.js
++++ after/client/test/xr-browser-boundary.js
+@@ -0,0 +1,69 @@
++import { createWorld } from '../src/world-scene.js'
++import { EngineStore } from '@babylonjs/core/Engines/engineStore.js'
++import { validateGlb } from '../src/glb-profile.js'
++
++// Software fixture only: replace browser XR boundaries, never Babylon owners.
++// This does not establish permissions, production CSP, stereo or hardware support.
++export async function createXRWorldFixture(canvas, modes) {
++  const savedXR = Object.getOwnPropertyDescriptor(navigator, 'xr')
++  const savedLayer = Object.getOwnPropertyDescriptor(globalThis, 'XRWebGLLayer')
++  let world, room, compatible, ready, initialized, errors = []
++  let tracked = false, ends = 0
++  const pose = { position: { x: 0, y: 1.7, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }
++  const session = Object.assign(new EventTarget(), {
++    visibilityState: 'visible', renderState: {}, requestAnimationFrame: () => 1,
++    cancelAnimationFrame() {}, requestReferenceSpace: async () => ({ getOffsetReferenceSpace() { return this } }),
++    updateRenderState(value) { Object.assign(this.renderState, value) },
++    async end() { ends++; session.dispatchEvent(new Event('end')) },
++  })
++  const source = { profiles: ['htc-vive'], handedness: 'right', targetRayMode: 'tracked-pointer',
++    gripSpace: {}, targetRaySpace: {}, gamepad: { buttons: Array.from({ length: 5 }, () => ({ pressed: false, value: 0 })), axes: [0, 0] } }
++  const restore = async () => {
++    await world?.dispose()
++    if (compatible) delete compatible.makeXRCompatible
++    if (savedXR) Object.defineProperty(navigator, 'xr', savedXR)
++    else delete navigator.xr
++    if (savedLayer) Object.defineProperty(globalThis, 'XRWebGLLayer', savedLayer)
++    else delete globalThis.XRWebGLLayer
++  }
++  try {
++    Object.defineProperty(navigator, 'xr', { configurable: true, value: { requestSession: async () => session } })
++    Object.defineProperty(globalThis, 'XRWebGLLayer', { configurable: true, value: class {
++      constructor() { this.framebuffer = null; this.framebufferWidth = canvas.width; this.framebufferHeight = canvas.height }
++    } })
++    const prepared = new Promise(resolve => { ready = resolve })
++    world = createWorld(canvas, () => {}, value => modes.push(value), error => errors.push(error), () => {},
++      () => { if (world?.controllerStatus().sources.some(s => s.bindings.includes('menu'))) initialized?.() },
++      state => { if (state === 'ready' || state === 'unavailable') ready() })
++    room = EngineStore.LastCreatedScene
++    compatible = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
++    compatible.makeXRCompatible = async () => {}
++    await prepared
++    if (errors.length) throw errors[0]
++    const digest = 'bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94'
++    const bytes = await (await fetch(`/assets/models/${digest}.glb`)).arrayBuffer()
++    const { costs, boundsMm } = validateGlb(bytes)
++    world.setControllerMapping({ digest: 'fixture-view', roles: { navigation: 'left', menu: 'right' },
++      profiles: [{ names: ['htc-vive'], components: [{ name: 'pad', id: 'xr-standard-touchpad', type: 'touchpad', features: ['press', 'axes2'] }],
++        model: { digest, profile: 'gltf2-static-v1', allowed: costs.map(n => Math.max(1, n)), bounds: boundsMm,
++          scale: 1, pivot: [0, 0, 0], front: '-z' } }],
++      bindings: [{ id: 'menu', role: 'menu', component: 'pad', kind: 'radial', action: 'menu', threshold: 0.24 }] })
++    await world.immersive()
++    const frame = () => room.getEngine().customAnimationFrameRequester.renderFunction(1, {
++      getViewerPose: () => tracked ? { transform: pose, views: [] } : null,
++      getPose: () => tracked ? { transform: pose } : null,
++    })
++    frame()
++    const inputReady = new Promise(resolve => { initialized = resolve })
++    session.dispatchEvent(Object.assign(new Event('inputsourceschange'), { added: [source], removed: [] }))
++    await inputReady
++    return { world, room, frame, errors, restore, exits: () => ends,
++      tracking(value) { tracked = value },
++      position(x, y, z) { pose.position = { x, y, z } },
++      press(pressed, { x, y }) {
++        source.gamepad.buttons[2] = { pressed, value: Number(pressed) }
++        source.gamepad.axes = [x, y]
++        frame()
++      } }
++  } catch (error) { await restore(); throw error }
++}
+--- before/client/tools/check-dependencies.d.mts
++++ after/client/tools/check-dependencies.d.mts
+@@ -0,0 +1 @@
++export function checkDependencies(root?: URL): void
+--- before/client/tools/check-dependencies.mjs
++++ after/client/tools/check-dependencies.mjs
+@@ -0,0 +1,19 @@
++import { readFileSync } from 'node:fs'
++import { createHash } from 'node:crypto'
++import { fileURLToPath } from 'node:url'
++import { resolve } from 'node:path'
++
++// Build-time verification only. Installation owns applying dependency patches.
++export function checkDependencies(root = new URL('../', import.meta.url)) {
++  const read = path => readFileSync(new URL(path, root))
++  const hash = bytes => createHash('sha256').update(bytes).digest('hex')
++  const manifest = JSON.parse(read('patches/babylon.json'))
++  const prefix = 'node_modules/@babylonjs/core/'
++  const version = JSON.parse(read(prefix + 'package.json')).version
++  if (version !== manifest.version || hash(read('patches/' + manifest.patch)) !== manifest.sha256 ||
++      Object.entries(manifest.files).some(([path, digest]) => hash(read(prefix + path)) !== digest)) {
++    throw new Error('Babylon dependency patch does not match the pinned client. Run the documented client installation before building or testing.')
++  }
++}
++
++if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) checkDependencies()
+--- before/doc/world.md
++++ after/doc/world.md
+@@ -129,6 +129,16 @@
+ physical control owners; it grants no new abilities. The
+ [controller design and acceptance plan](../nimbalyst-local/plans/quo-59-controller-ontology-design.md)
+ records the source-only implementation and deployment/hardware boundary.
++
++The world prepares its XR helper, held-controller input and existing-canvas
++render target before enabling **Enter VR**. Optional hand/interaction plugins,
++Babylon's entry UI and its online controller repository are not enabled.
++**Cancel VR entry** and **Exit VR** use the same world-owned termination path.
++It joins pending entry and actual native session-end handling before releasing
++resources; unconfirmed release blocks re-entry. Interrupted input requires fresh
++poses and neutral controls. A failed helper is replaced without rebuilding the
++world or its signed projection. The pinned Babylon lifecycle patch removes its
++owned disposal callbacks; client installation and build checks enforce that patch.
+ 
+ The default floor includes a transparent downward-curved glass porthole and
+ collision coverage for both its centre and raised outer coping. The ordinary
+--- before/ui/src/World.tsx
++++ after/ui/src/World.tsx
+@@ -13,7 +13,7 @@
+ import { anchoredGoal, readSpaceNavigation, readGuiView, proofForm, codeForm,
+   readEntityEidolons, readEidolon, ontologySubject, singleBinding, GoalFailure } from '../../client/src/world.js'
+ import type { EidolonChoice, EidolonWorkspace, EidolonRepresentation, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
+-import type { WorldScene } from '../../client/src/world-scene.js'
++import type { WorldScene, XRState } from '../../client/src/world-scene.js'
+ import { GuiQuestion, GuiQuestionList } from './GuiQuestion'
+ import { connectGuiHud } from '../../client/src/gui-view.js'
+ import { questionController, questionKey } from '../../client/src/question-controller.js'
+@@ -42,7 +42,8 @@
+   const [navigationActive, setNavigationActive] = useState(false)
+   const [movementHint, setMovementHint] = useState('')
+   const [vr, setVr] = useState({ available: false, reason: 'Checking VR availability…' })
+-  const [enteringVR, setEnteringVR] = useState(false)
++  const [xrState, setXRState] = useState<XRState>('preparing')
++  const [xrError, setXRError] = useState<string | null>(null)
+   const [openingTool, setOpeningTool] = useState(false)
+   const [toolError, setToolError] = useState<string | null>(null)
+   const [inspectionRevision, setInspectionRevision] = useState(0)
+@@ -199,14 +200,18 @@
+     void import('../../client/src/world-scene.js').then(({ createWorld }) => {
+       if (!active || !canvas.current) return
+       try {
+-        world = createWorld(canvas.current, subject => pick.current(subject), setImmersive,
+-          error => { if (active) setStatus(error.message) },
++        world = createWorld(canvas.current, subject => pick.current(subject), value => { if (active) setImmersive(value) },
++          error => {
++            if (active) setStatus(error.message)
++            else console.error('World resource or XR cleanup failed', error)
++          },
+           captured => { if (active) setNavigationActive(captured) },
+-          () => { if (active) setControllerRevision(n => n + 1) })
++          () => { if (active) setControllerRevision(n => n + 1) },
++          state => { if (active) setXRState(state) })
+         setScene(world)
+       } catch (error) { setSceneError(String(error)) }
+     }).catch(error => { if (active) setSceneError(String(error)) })
+-    return () => { active = false; world?.dispose() }
++    return () => { active = false; void world?.dispose().catch(error => console.error('World teardown failed', error)) }
+   }, [])
+ 
+   useEffect(() => {
+@@ -455,7 +460,8 @@
+     setFocused(true)
+   }
+   activate.current = entry => {
+-    if (entry.id === '@controllers') openControllers()
++    if (entry.id === '@xr/exit') void scene?.exitImmersive().catch(error => setXRError(String(error)))
++    else if (entry.id === '@controllers') openControllers()
+     else if (entry.id === '@gui/questions') {
+       setWorkspace({ kind: 'questions', key: '@gui/questions' }); setFocused(true)
+     } else if (entry.id === '@space/library') void openLibrary()
+@@ -469,8 +475,9 @@
+     }, { id: '@controllers', label: 'VR controllers', view: 'controllers' }, { id: '@space/library', label: 'My worlds', view: 'space_library' },
+       { id: '@operations', label: 'Create / operations', view: 'operations' },
+       ...(space || view !== 'lobby' ? [{ id: '@space/return', label: 'Return to lobby', view: 'lobby' }] : [])] : [])]
++    if (xrState === 'presenting') entries.push({ id: '@xr/exit', label: 'Exit VR', view: 'xr_exit' })
+     scene?.setActionMenu(entries, entry => activate.current(entry))
+-  }, [scene, selected, selectedMenu, identity, agent, questions.length, spaceIdentity, view])
++  }, [scene, selected, selectedMenu, identity, agent, questions.length, spaceIdentity, view, xrState])
+ 
+   const selectedAccount = account && account.namespace === agent?.namespace &&
+     account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
+@@ -520,15 +527,19 @@
+           : <button className="world-primary" onClick={() => navigate(null)}>Return to lobby</button>}
+         <button disabled={!identity || !agent || openingTool} onClick={() => openOperations()}>Create / operations</button>
+         <button disabled={!identity || !agent || openingTool} onClick={() => void openLibrary()}>My worlds</button>
+-        <button disabled={!scene || !vr.available || enteringVR || immersive} aria-describedby="vr-availability" onClick={() => {
+-          setEnteringVR(true)
+-          void scene?.immersive().catch(error => setVr({ available: true, reason: `VR could not start: ${String(error)}` }))
+-            .finally(() => setEnteringVR(false))
+-        }}>{enteringVR ? 'Starting VR…' : immersive ? 'VR active' : 'Enter VR'}</button>
++        <button disabled={!scene || (xrState === 'ready' ? !vr.available : !['starting', 'presenting'].includes(xrState))}
++          aria-describedby="vr-availability" onClick={() => {
++            setXRError(null)
++            const operation = xrState === 'ready' ? scene?.immersive() : scene?.exitImmersive()
++            void operation?.catch(error => setXRError(String(error)))
++          }}>{xrState === 'starting' ? 'Cancel VR entry' : xrState === 'presenting' ? 'Exit VR'
++            : xrState === 'stopping' ? 'Ending VR…' : xrState === 'preparing' ? 'Preparing VR…' : 'Enter VR'}</button>
+         {missingLobby && selectedAccount &&
+           <button disabled={busy || unresolved > 0} onClick={() => void finishSetup()}>Finish account setup</button>}
+       </div>
+-      <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.' : vr.reason}</p>
++      <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.'
++        : xrState === 'blocked' ? 'VR release is unconfirmed. Use the headset or browser exit control.'
++        : xrError ?? vr.reason}</p>
+       {view === 'lobby' && !space && !consoleSubject && <p>The console is unavailable until its lobby view loads.</p>}
+       {toolError && <p role="alert">{toolError}</p>}
+       {selected && selectedMenu.length > 0 && <div className="world-menu" aria-label="Selected object actions">
+--- before/ui/vite.config.ts
++++ after/ui/vite.config.ts
+@@ -1,6 +1,9 @@
+ import { defineConfig } from 'vite'
+ import react from '@vitejs/plugin-react'
+ import tailwindcss from '@tailwindcss/vite'
++import { checkDependencies } from '../client/tools/check-dependencies.mjs'
++
++checkDependencies()
+ 
+ // The production bundle is committed into priv/explorer/, where the node's cowboy
+ // listener (quod_explorer) serves it — the Erlang release needs no node tooling.

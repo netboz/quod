@@ -39,5 +39,5 @@ export async function runMovementSmoke(canvas) {
       immersiveVR: await navigator.xr?.isSessionSupported('immersive-vr') ?? false,
       checks: ['authored camera mount', 'accepted pose correction', 'disabled direct translation',
         'unavailable world freezes travel', 'observer restoration', 'scene disposal'] }
-  } finally { world.dispose() }
+  } finally { await world.dispose() }
 }

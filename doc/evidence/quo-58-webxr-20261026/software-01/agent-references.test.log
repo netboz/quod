@@ -1,0 +1,16 @@
+✔ agent references are stored and selected independently of the signing key (1.977984ms)
+✔ agent references and active selection are isolated by root network (2.145891ms)
+✔ legacy global references are not loaded into a root network (0.231238ms)
+✔ removing an active reference chooses a replacement from the same network (0.400342ms)
+✔ malformed storage input is rejected before signing (0.307228ms)
+✔ agent-reference namespaces use the shared 255-byte protocol limit (0.284951ms)
+(node:83) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12.287115

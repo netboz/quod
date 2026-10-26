@@ -1,0 +1,11 @@
+✔ desktop camera uses familiar movement keys and measured controls (1.613854ms)
+✔ Shift accelerates movement and releasing focus restores walking speed (0.425859ms)
+✔ pointer capture follows the canvas lifecycle and releases cleanly (0.566434ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10.585018

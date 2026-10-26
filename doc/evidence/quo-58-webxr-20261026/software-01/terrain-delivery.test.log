@@ -1,0 +1,29 @@
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+✔ signed terrain stream waits for rendering, retains unchanged chunks and evicts before replacement (47.86388ms)
+✔ an unauthorized aggregate is rejected before bytes or renderer allocations (5.102341ms)
+✔ content batches retain visible progress and acknowledge exact prefixes before final readiness (3.260611ms)
+✔ a stale partial batch releases only its own ending without installing content (1.248068ms)
+✔ a missing chunk bundle cannot install partial content or release credit (1.424951ms)
+✔ a duplicate chunk bundle cannot install partial content or release credit (0.846844ms)
+✔ a unrequested chunk bundle cannot install partial content or release credit (0.820478ms)
+✔ a digest chunk bundle cannot install partial content or release credit (2.232822ms)
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+✔ a body revision keeps unchanged models dormant until its new signed manifest confirms them (7.80408ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ authorization renewal preserves terrain for unchanged bindings (7.315264ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ authorization renewal rechecks terrain for incarnation bindings (7.700311ms)
+BJS - [09:00:00]: Babylon.js v9.18.1 - Null engine
+✔ authorization renewal rechecks terrain for allowance bindings (6.136328ms)
+✔ camera interest is canonical, boundary driven, and stale completion cannot open the new horizon (1.67685ms)
+✔ camera movement during checksum verification releases credit without installing an old chunk (2.144584ms)
+BJS - [18:08:37]: Babylon.js v9.18.1 - Null engine
+✔ large canonical terrain keeps the same model across a local frame shift (5.303152ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 110.536815

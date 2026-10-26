@@ -6,10 +6,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { createWorkspacePanel } from '../src/workspace-panel.js'
-import { createWorld } from '../src/world-scene.js'
-import { EngineStore } from '@babylonjs/core/Engines/engineStore.js'
-import { Observable } from '@babylonjs/core/Misc/observable.js'
-import { WebXRState } from '@babylonjs/core/XR/webXRTypes.js'
+import { createXRWorldFixture } from './xr-browser-boundary.js'
 import { readGuiView } from '../src/world.js'
 
 export async function exerciseWorkspacePanel() {
@@ -430,47 +427,30 @@ async function exercisePanel() {
     // Feed controller and XR lifecycle notices into the real world adapter.
     // This tests wiring; it does not claim physical-headset acceptance.
     const modes = []
-    const world = createWorld(document.querySelector('canvas'), () => {}, value => modes.push(value))
-    const room = EngineStore.LastCreatedScene
-    room.activeCamera.getViewMatrix(true)
-    room.activeCamera.trackingState = 0
-    room.activeCamera.onTrackingStateChanged = new Observable()
-    const component = { pressed: false, onAxisValueChangedObservable: new Observable(),
-      onButtonStateChangedObservable: new Observable() }
-    const changes = new Observable()
-    let exits = 0
-    const { WebXRDefaultExperience } = await import('@babylonjs/core/XR/webXRDefaultExperience.js')
-    const createXR = WebXRDefaultExperience.CreateAsync
-    WebXRDefaultExperience.CreateAsync = async () => ({
-      input: { controllers: [{ inputSource: { handedness: 'right' },
-        motionController: { getComponentOfType: () => component } }],
-        onControllerAddedObservable: new Observable(), onControllerRemovedObservable: new Observable() },
-      baseExperience: { camera: room.activeCamera, onStateChangedObservable: changes,
-        enterXRAsync: async () => changes.notifyObservers(WebXRState.IN_XR),
-        exitXRAsync: async () => { exits++ },
-      },
-    })
+    const fixture = await createXRWorldFixture(document.querySelector('canvas'), modes)
+    const { world, room } = fixture
+    try {
     let activations = 0
     world.setActionMenu([{ id: 'prove', label: 'Prove a goal', view: 'proof_console' }], () => { activations++ })
-    try { await world.immersive() }
-    finally { WebXRDefaultExperience.CreateAsync = createXR }
     world.setWorkspace(model)
     const waitsForTracking = !room.getMeshByName('workspace')
-    room.activeCamera.trackingState = 2
+    fixture.tracking(true)
     room.activeCamera.onTrackingStateChanged.notifyObservers(2)
     world.setWorkspace(null)
     room.render()
     const closedDuringTrackingWait = !room.getMeshByName('workspace')
-    room.activeCamera.trackingState = 0
+    fixture.tracking(false)
+    fixture.frame()
     world.setWorkspace(model)
-    room.activeCamera.trackingState = 2
+    fixture.tracking(true)
     room.activeCamera.onTrackingStateChanged.notifyObservers(2)
-    room.activeCamera.position.set(4, 1.8, -2)
-    room.render()
+    fixture.position(4, 1.8, -2)
+    fixture.frame()
     const placedAfterPose = Math.abs(Vector3.Distance(room.getMeshByName('workspace').position,
       room.activeCamera.globalPosition) - 1.6) < 0.001
     world.setWorkspace(null)
-    const press = (pressed, axes) => component.onButtonStateChangedObservable.notifyObservers({ pressed, axes })
+    const press = fixture.press
+    press(false, { x: 0, y: 0 })
     press(true, { x: 0, y: -1 })
     const facesViewer = node => {
       node.computeWorldMatrix(true)
@@ -482,45 +462,28 @@ async function exercisePanel() {
           room.activeCamera.getDirection(new Vector3(0, 1, 0))) > 0
     }
     const rightHandedMenu = facesViewer(room.getTransformNodeByName('action-menu'))
-    component.onAxisValueChangedObservable.notifyObservers({ x: 0, y: 0 })
+    press(true, { x: 0, y: 0 })
     press(false, { x: 0, y: 0 })
     const cancelled = activations === 0
     press(true, { x: 0, y: -1 }); press(false, { x: 0, y: -1 })
     world.setWorkspace(model)
-    const spatialOpen = !!room.getMeshByName('workspace') && exits === 0
+    const spatialOpen = !!room.getMeshByName('workspace') && fixture.exits() === 0
     const rightHandedPanel = facesViewer(room.getMeshByName('workspace'))
-    const { SceneLoader } = await import('@babylonjs/core/Loading/sceneLoader.js')
-    const controllerLoader = SceneLoader.IsPluginForExtensionAvailable('.babylon')
-    const gltfControllerLoader = SceneLoader.IsPluginForExtensionAvailable('.glb')
-    const { WebXRFeaturesManager } = await import('@babylonjs/core/XR/webXRFeaturesManager.js')
-    const xrFeatures = ['xr-controller-pointer-selection', 'xr-near-interaction', 'xr-hand-tracking']
-      .every(name => WebXRFeaturesManager.GetAvailableFeatures().includes(name))
-    // XR touch markers parse serialized node materials. Class availability
-    // alone does not establish that their graph can be reconstructed and built.
-    const { NodeMaterial } = await import('@babylonjs/core/Materials/Node/nodeMaterial.js')
-    const originalMaterial = new NodeMaterial('xr-marker-original', room)
-    originalMaterial.setToDefault()
-    const restoredMaterial = new NodeMaterial('xr-marker-restored', room)
-    restoredMaterial.parseSerializedObject(originalMaterial.serialize())
-    const nodeMaterialRoundtrip = await new Promise((resolve, reject) => {
-      restoredMaterial.onBuildObservable.addOnce(() => resolve(true))
-      restoredMaterial.onBuildErrorObservable.addOnce(reject)
-      restoredMaterial.build()
-    })
-    originalMaterial.dispose(); restoredMaterial.dispose()
+    // Optional-feature/model-loader registration assertions belonged to the
+    // retired default-helper path. Explicit startup and GLB obligations are
+    // exercised by world-xr.test.js and render-model.test.js.
     room.getMeshByName('workspace').material.emissiveTexture
       .getControlByName('workspace-text-larger').onPointerClickObservable.notifyObservers({})
     world.setWorkspace(null)
-    const spatialClosed = !room.getMeshByName('workspace') && exits === 0
+    const spatialClosed = !room.getMeshByName('workspace') && fixture.exits() === 0
     world.setWorkspace(model)
     const scaleSurvivesReopen = room.getMeshByName('workspace').scaling.x === 1.25
     world.setWorkspace(null)
-    changes.notifyObservers(WebXRState.NOT_IN_XR)
-    world.dispose()
+    await world.exitImmersive()
+    if (fixture.errors.length) throw fixture.errors[0]
     return { typed, calls, scrollable, resultText, locked, sameMesh, hidden, retired, frontFacing,
       screenshot, cancelled, activations, spatialOpen, spatialClosed, modes,
-      rightHandedMenu, rightHandedPanel, controllerLoader, gltfControllerLoader, xrFeatures,
-      nodeMaterialRoundtrip, waitsForTracking, closedDuringTrackingWait, placedAfterPose,
+      rightHandedMenu, rightHandedPanel, waitsForTracking, closedDuringTrackingWait, placedAfterPose,
       largerTextReflows, smallerTextRestoresRows, worldStable, recentered, farther,
       placedStaysStill, movementStopsOnHide, scaleSurvivesReopen,
       hiddenFocusNotRestored, verifiedImagesShared, unchangedImagesReused, tableSelection, tableBounded, transientInitiallyClosed, dialogDraftAndFocus, menuEscape, transientAction, tableLocked,
@@ -529,4 +492,5 @@ async function exercisePanel() {
       steppedGain, clampedGain, invalidDraftRetained, numericEntry, rotatedAngle, steppedAngle,
       frozenNumeric, lockedNumeric, numericBounds, semanticSelection, commonText, missingNumeric,
       actionsScrollable, lastActionReachable, keyboardInsideTexture, requiredFeedback, byteFeedback, releasedOutside, outsideMesh }
+    } finally { await fixture.restore() }
 }

@@ -16,6 +16,7 @@ import { createRenderResources } from './render-resources.js'
 import { Slider } from '@babylonjs/gui/2D/controls/sliders/slider.js'
 import { createNumericControl } from './numeric-control.js'
 import { textFeedback, guiValueKind, choiceValues, choiceDraft, guiContainer, guiDisplay } from './gui-values.js'
+import { cancelGuiPointer } from './gui-pointer.js'
 import { WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
 
 // A spatial adapter for semantic GUI forms. The controller owns drafts and
@@ -500,6 +501,8 @@ export function createWorkspacePanel(scene, appearanceSettings = { opacity: 0.78
   }
 
   const panel = {
+    owns: node => node === mesh,
+    cancelPointer: id => cancelGuiPointer(texture, id),
     update(next, visible) {
       model = next
       if (lastView !== next.view) {

@@ -1,3 +1,4 @@
+import type { ControllerMapping } from './controller-view.js'
 import type { Subject } from './world.js'
 import type { MenuEntry } from './world.js'
 import type { GuiView } from './world.js'
@@ -16,9 +17,14 @@ export type WorkspacePanelModel = {
 export type WorldScene = {
   update(view: WorldView | { marks: unknown[]; selection: 'nonphysical' | 'unavailable' } | null): Promise<void>
   setActionMenu(entries: MenuEntry[], activate: (entry: MenuEntry) => void): void
+  setControllerMapping(mapping: ControllerMapping | null): void
+  chooseController(role: string, id: string): boolean | void
+  controllerStatus(): { available: boolean; choices: Record<string, string>; sources: { id: string; hand: string; profile: string; tracked: boolean; bindings: string[]; reason: string }[] }
   setWorkspace(model: WorkspacePanelModel | null): void
   releaseNavigation(): void
   immersive(): Promise<void>
-  dispose(): void
+  exitImmersive(): Promise<void>
+  dispose(): Promise<void>
 }
-export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void, onResourceError?: (error: Error) => void, onNavigationChanged?: (active: boolean) => void): WorldScene
+export type XRState = 'preparing' | 'ready' | 'starting' | 'presenting' | 'stopping' | 'blocked' | 'unavailable' | 'disposed'
+export function createWorld(canvas: HTMLCanvasElement, onPick: (subject: Subject) => void, onImmersiveChanged?: (active: boolean) => void, onResourceError?: (error: Error) => void, onNavigationChanged?: (active: boolean) => void, onControllersChanged?: () => void, onXRStateChanged?: (state: XRState) => void): WorldScene

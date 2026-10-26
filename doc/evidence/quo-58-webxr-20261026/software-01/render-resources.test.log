@@ -1,0 +1,26 @@
+BJS - [18:08:35]: Babylon.js v9.18.1 - Null engine
+✔ generated terrain uses shared verified model resources and real engine disposal (31.347908ms)
+✔ terrain verification and cancellation precede engine allocation (9.269315ms)
+BJS - [18:08:35]: Babylon.js v9.18.1 - Null engine
+✔ terrain and ordinary surfaces share texture custody and preserve independent optical properties (31.89656ms)
+✔ shared bindings retain textures until their last consumer leaves (2.202326ms)
+✔ different bindings share verified bytes and keep independent sampling (0.893068ms)
+✔ corrupted bytes fail before image decoding (0.68796ms)
+✔ last release cancels fetch; a late fetch response cannot create a texture (0.682421ms)
+✔ release during decode disposes immediately and ignores late completion (0.812033ms)
+✔ two model occurrences share verified bytes and one decoded template (2.648478ms)
+✔ measured costs deny decode and a stricter occurrence independently (2.002509ms)
+✔ a declared frame must match bounds measured from the verified asset (0.953593ms)
+✔ a late model decode cannot restore a released template (0.869133ms)
+✔ a model digest mismatch stops before GLB parse and Babylon decode (0.433306ms)
+✔ model transfer allowance stops the stream before GLB parsing or decode (0.504442ms)
+✔ GUI image leases share verified texture bytes and revoke only at last release (5.99241ms)
+✔ retired GUI image completion never creates a URL and corruption is rejected (1.001062ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 100.09671

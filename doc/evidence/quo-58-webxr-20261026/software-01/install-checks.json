@@ -1,0 +1,32 @@
+[
+  {
+    "name": "install-skipped-hooks",
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "name": "check-skipped-hooks",
+    "exit": 1,
+    "expected": 1
+  },
+  {
+    "name": "reapply",
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "name": "check-patched",
+    "exit": 0,
+    "expected": 0
+  },
+  {
+    "name": "wrong-version",
+    "exit": 1,
+    "expected": 1
+  },
+  {
+    "name": "wrong-content",
+    "exit": 1,
+    "expected": 1
+  }
+]

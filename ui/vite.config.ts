@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { checkDependencies } from '../client/tools/check-dependencies.mjs'
+
+checkDependencies()
 
 // The production bundle is committed into priv/explorer/, where the node's cowboy
 // listener (quod_explorer) serves it — the Erlang release needs no node tooling.

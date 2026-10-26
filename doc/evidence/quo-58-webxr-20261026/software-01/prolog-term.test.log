@@ -1,0 +1,21 @@
+✔ generic terms render ordinary inspectable Prolog text (2.025666ms)
+✔ namespace atoms use the same quoting rule as every other atom (0.189112ms)
+✔ builder text and direct text produce byte-identical signed requests (0.977153ms)
+✔ binary terms use explicit Erlang notation and preserve every byte (0.224459ms)
+✔ builders reject malformed variables, numbers, and structures (0.566938ms)
+✔ console scope construction handles terminators, quoted periods and trailing comments (0.513025ms)
+✔ canonical code terms retain variable sharing within one clause only (1.515097ms)
+✔ canonical partial lists preserve their tail instead of dropping it (0.365345ms)
+✔ code numbers keep float identity and integers beyond JavaScript precision (0.567477ms)
+✔ readable source preserves associativity, controls, cut and scoped goals (0.48907ms)
+✔ quoted code data retains literal dots, comment markers, quotes and bytes (0.666299ms)
+✔ current code source distinguishes numeric negatives from unary expressions (0.144393ms)
+✔ the result reader shares server depth without private list or rendered-text ceilings (5.494182ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21.750442

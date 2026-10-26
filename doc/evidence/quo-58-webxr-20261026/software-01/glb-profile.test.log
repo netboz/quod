@@ -1,0 +1,13 @@
+✔ asymmetric static GLB measures its actual geometry, hierarchy and PNG (7.082104ms)
+✔ each scene node referencing a mesh counts its drawn vertices and triangles (1.638201ms)
+✔ external resources, extensions and dynamic features fail before loading (3.981365ms)
+✔ reused accessors retain their measured costs and bounds (0.436087ms)
+✔ each measured resource is checked against its authorized allowance (1.181362ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20.9174

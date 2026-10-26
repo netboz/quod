@@ -1,0 +1,24 @@
+✔ ordinary ontology instances and lens recipes preserve exact identity across representations (4.896949ms)
+✔ ontology and ordinary instance selection submit the same signed query shape (6.359524ms)
+✔ question forms preserve accepted revisions and typed defaults across schema changes (6.393324ms)
+✔ a device projection binds the exact selected ontology before reading content (0.286135ms)
+✔ lobby references preserve identity bytes and refuse display abbreviations (0.251466ms)
+✔ the reusable proof form requires each supported semantic role exactly once (0.952612ms)
+✔ forms describe semantic components independently of their workspace name (0.826858ms)
+✔ portable components preserve nested identities, typed options and exact ranges (2.318072ms)
+✔ a partial or ambiguous projection is not a successful view (0.318482ms)
+✔ projection failures preserve explicit access denials without inventing them for other failures (0.600216ms)
+✔ HUD references are exact, ground and unique (0.703417ms)
+✔ draft submission carries fields as data and keeps the accepted revision (1.499198ms)
+✔ status uses signed reads and never turns unknown into cancellation permission (0.998209ms)
+✔ input variants preserve typed drafts and reject malformed selections (2.352779ms)
+✔ composition and display keep the input-only submission contract (0.920033ms)
+✔ tables, images and transient containers stay inside the common descriptor contract (2.195955ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39.869062

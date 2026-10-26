@@ -294,6 +294,17 @@ The requested adapters support continuous travel, teleportation and snap turn
 where the controlled agent offers those capabilities. Device features do not
 create domain abilities. Locomotion and menus must arbitrate input gestures.
 
+The controller mapping is authored in the existing lobby/device vocabulary.
+One Vive description serves both wands; saved settings in the human's ontology
+choose the movement/menu hands and supported bindings. The browser matches
+named components on current XR sources, cancels held input on tracking or
+mapping loss, and requires neutral input before reuse. Opening a menu or
+workspace suppresses travel. Selection and draft editing remain local;
+Save uses the existing personal-agent operation path. Movement keeps the
+existing signed control lane and world permissions. The
+[controller plan](../nimbalyst-local/plans/quo-59-controller-ontology-design.md)
+specifies the class Eidolon, source lifetimes and separate physical acceptance.
+
 Raw human head/controller tracking, the agent's physical configuration and the
 selected viewpoint remain distinct. Direct one-to-one tracking is one mapping,
 not a universal rule. A nonhumanoid agent does not acquire a physical human

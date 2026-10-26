@@ -1,0 +1,153 @@
+diff --git a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
+--- a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
++++ b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.js
+@@ -46,7 +46,7 @@
+         this.sessionManager = new WebXRSessionManager(_scene);
+         this.camera = new WebXRCamera("webxr", _scene, this.sessionManager);
+         this.featuresManager = new WebXRFeaturesManager(this.sessionManager);
+-        _scene.onDisposeObservable.addOnce(() => {
++        this._onSceneDisposedObserver = _scene.onDisposeObservable.addOnce(() => {
+             this.dispose();
+         });
+     }
+@@ -75,6 +75,7 @@
+      * Disposes of the experience helper
+      */
+     dispose() {
++        this._scene.onDisposeObservable.remove(this._onSceneDisposedObserver);
+         // eslint-disable-next-line @typescript-eslint/no-floating-promises
+         this.exitXRAsync();
+         this._clearSpectatorObservers();
+@@ -302,4 +303,3 @@
+         this.onStateChangedObservable.notifyObservers(this.state);
+     }
+ }
+-//# sourceMappingURL=webXRExperienceHelper.js.map
+\ No newline at end of file
+diff --git a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
+--- a/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
++++ b/node_modules/@babylonjs/core/XR/webXRExperienceHelper.d.ts
+@@ -22,6 +22,7 @@
+  * @see https://doc.babylonjs.com/features/featuresDeepDive/webXR/webXRExperienceHelpers
+  */
+ export declare class WebXRExperienceHelper implements IDisposable {
++    private _onSceneDisposedObserver;
+     private _scene;
+     private _nonVRCamera;
+     private _attachedToElement;
+diff --git a/node_modules/@babylonjs/core/XR/webXRSessionManager.js b/node_modules/@babylonjs/core/XR/webXRSessionManager.js
+--- a/node_modules/@babylonjs/core/XR/webXRSessionManager.js
++++ b/node_modules/@babylonjs/core/XR/webXRSessionManager.js
+@@ -80,7 +80,7 @@
+         this._onEngineDisposedObserver = this._engine.onDisposeObservable.addOnce(() => {
+             this._engine = null;
+         });
+-        scene.onDisposeObservable.addOnce(() => {
++        this._onSceneDisposedObserver = scene.onDisposeObservable.addOnce(() => {
+             this.dispose();
+         });
+         this.onXRSessionEnded.add(() => {
+@@ -113,6 +113,7 @@
+      * This should be called explicitly by the dev, if required.
+      */
+     dispose() {
++        this.scene.onDisposeObservable.remove(this._onSceneDisposedObserver);
+         // disposing without leaving XR? Exit XR first
+         if (this.inXRSession) {
+             // eslint-disable-next-line @typescript-eslint/no-floating-promises
+@@ -242,7 +243,6 @@
+         this.session = session;
+         this._sessionMode = xrSessionMode;
+         this.inXRSession = true;
+-        this.onXRSessionInit.notifyObservers(session);
+         // handle when the session is ended (By calling session.end or device ends its own session eg. pressing home button on phone)
+         this.session.addEventListener("end", () => {
+             this.inXRSession = false;
+@@ -268,6 +268,7 @@
+             this._baseLayerWrapper = null;
+             this._graphicsBinding = null;
+         }, { once: true });
++        this.onXRSessionInit.notifyObservers(session);
+         return this.session;
+     }
+     /**
+@@ -493,4 +494,3 @@
+         return this.session?.enabledFeatures ?? null;
+     }
+ }
+-//# sourceMappingURL=webXRSessionManager.js.map
+\ No newline at end of file
+diff --git a/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts b/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
+--- a/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
++++ b/node_modules/@babylonjs/core/XR/webXRSessionManager.d.ts
+@@ -15,6 +15,7 @@
+ export declare class WebXRSessionManager implements IDisposable, IWebXRRenderTargetTextureProvider {
+     /** The scene which the session should be created for */
+     scene: Scene;
++    private _onSceneDisposedObserver;
+     private _engine;
+     private _referenceSpace;
+     private _baseLayerWrapper;
+diff --git a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
+--- a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
++++ b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.js
+@@ -34,6 +34,7 @@
+      */
+     constructor(_xrSessionManager, _options = WebXRManagedOutputCanvasOptions.GetDefaults()) {
+         this._options = _options;
++        this._xrSessionManager = _xrSessionManager;
+         this._canvas = null;
+         this._engine = null;
+         /**
+@@ -46,7 +47,7 @@
+          */
+         this.onXRLayerInitObservable = new Observable();
+         this._engine = _xrSessionManager.scene.getEngine();
+-        this._engine.onDisposeObservable.addOnce(() => {
++        this._onEngineDisposedObserver = this._engine.onDisposeObservable.addOnce(() => {
+             this._engine = null;
+         });
+         if (!_options.canvasElement) {
+@@ -57,10 +58,10 @@
+         else {
+             this._setManagedOutputCanvas(_options.canvasElement);
+         }
+-        _xrSessionManager.onXRSessionInit.add(() => {
++        this._sessionInitObserver = _xrSessionManager.onXRSessionInit.add(() => {
+             this._addCanvas();
+         });
+-        _xrSessionManager.onXRSessionEnded.add(() => {
++        this._sessionEndedObserver = _xrSessionManager.onXRSessionEnded.add(() => {
+             this._removeCanvas();
+         });
+         this._makeCanvasCompatible();
+@@ -69,6 +70,9 @@
+      * Disposes of the object
+      */
+     dispose() {
++        this._engine?.onDisposeObservable.remove(this._onEngineDisposedObserver);
++        this._xrSessionManager.onXRSessionInit.remove(this._sessionInitObserver);
++        this._xrSessionManager.onXRSessionEnded.remove(this._sessionEndedObserver);
+         this._removeCanvas();
+         this._setManagedOutputCanvas(null);
+         this.onXRLayerInitObservable.clear();
+@@ -204,4 +208,3 @@
+         return context;
+     }
+ }
+-//# sourceMappingURL=webXRManagedOutputCanvas.js.map
+\ No newline at end of file
+diff --git a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
+--- a/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
++++ b/node_modules/@babylonjs/core/XR/webXRManagedOutputCanvas.d.ts
+@@ -31,6 +31,10 @@
+  * Creates a canvas that is added/removed from the webpage when entering/exiting XR
+  */
+ export declare class WebXRManagedOutputCanvas implements WebXRRenderTarget {
++    private _xrSessionManager;
++    private _onEngineDisposedObserver;
++    private _sessionInitObserver;
++    private _sessionEndedObserver;
+     private _options;
+     private _canvas;
+     private _engine;

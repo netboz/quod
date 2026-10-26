@@ -1,0 +1,20 @@
+✔ real Babylon component observations drive one permitted semantic request per edge (2.900453ms)
+✔ tracking loss cancels a pressed selection and a menu without activation; held recovery rearms only after release (0.764959ms)
+✔ unchanged renewal and unrelated disconnect preserve held navigation; a changed mapping retires it (0.609906ms)
+✔ unknown handedness never becomes the menu; duplicate hands disable roles without disabling selection (0.596971ms)
+✔ menu selection consumes radial release, and closing a workspace does not resume held travel (0.321864ms)
+✔ late initialization after removal and missing axes cannot resurrect a binding (1.643872ms)
+✔ changing the modifier while the pad is held cannot turn a snap into travel (0.342554ms)
+✔ loss of a temporary choice never routes menu and movement to the same remaining source (0.49312ms)
+✔ mapping withdrawal and owner cancellation retire captures without activation (0.455285ms)
+✔ pointer capture stops travel in the same frame, reverse sources=false (0.38286ms)
+✔ pointer capture stops travel in the same frame, reverse sources=true (0.179973ms)
+✔ changing menu entries retires only an active menu gesture and its selection (0.449988ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21.384902

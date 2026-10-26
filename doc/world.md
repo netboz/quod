@@ -118,6 +118,28 @@ Console, source editing, inspection, terrain questions and physical setup keep
 their existing owners. Same-agent space entry and recursive views remain later
 work; creating a space does not automatically enter it.
 
+The **VR controllers** workspace shows current source capabilities and temporary
+movement/menu choices. **Edit saved bindings** opens the human's ordinary
+Prolog-authored settings operation, independent of the selected world agent.
+Shared descriptions live with the existing device vocabulary; private settings
+live in the human ontology. The signed view carries descriptions and bindings,
+never raw poses or a persistent connected-device list. Each original Vive wand
+renders the same class-selected, digest-pinned model through the existing asset
+owner, attached to its current XR grip. Controller input uses existing GUI and
+physical control owners; it grants no new abilities. The
+[controller design and acceptance plan](../nimbalyst-local/plans/quo-59-controller-ontology-design.md)
+records the source-only implementation and deployment/hardware boundary.
+
+The world prepares its XR helper, held-controller input and existing-canvas
+render target before enabling **Enter VR**. Optional hand/interaction plugins,
+Babylon's entry UI and its online controller repository are not enabled.
+**Cancel VR entry** and **Exit VR** use the same world-owned termination path.
+It joins pending entry and actual native session-end handling before releasing
+resources; unconfirmed release blocks re-entry. Interrupted input requires fresh
+poses and neutral controls. A failed helper is replaced without rebuilding the
+world or its signed projection. The pinned Babylon lifecycle patch removes its
+owned disposal callbacks; client installation and build checks enforce that patch.
+
 The default floor includes a transparent downward-curved glass porthole and
 collision coverage for both its centre and raised outer coping. The ordinary
 grounded controller walks at 2.5 m/s and permits a 3 m/s support-checked jump

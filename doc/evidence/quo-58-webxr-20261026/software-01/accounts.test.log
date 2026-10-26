@@ -1,0 +1,18 @@
+✔ signup and lobby use two ordinary goals with one atomic journal handoff (14.574097ms)
+✔ lost lobby reply resolves the exact operation without another creation (3.947315ms)
+✔ failure to save a returned account retains signup recovery evidence (2.637591ms)
+✔ a consumed parent operation cannot be handed off twice (1.172555ms)
+✔ explicitly refused lobby setup can be finished without creating another account (3.476593ms)
+✔ explicit setup action cannot replace an unknown lobby operation (1.420749ms)
+✔ lost explicit setup reply resolves its exact request without another setup (3.924802ms)
+✔ fresh lobby prepares custody and journals atomic physics startup after founding (3.439717ms)
+✔ disconnect during custody preparation retains the committed founding handoff (2.127318ms)
+✔ an intentionally disabled space completes setup without a physics write (1.498148ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45.712954

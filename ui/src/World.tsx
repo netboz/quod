@@ -13,7 +13,7 @@ import { readLensView } from '../../client/src/lens.js'
 import { anchoredGoal, readSpaceNavigation, readGuiView, proofForm, codeForm,
   readEntityEidolons, readEidolon, ontologySubject, singleBinding, GoalFailure } from '../../client/src/world.js'
 import type { EidolonChoice, EidolonWorkspace, EidolonRepresentation, MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/world.js'
-import type { WorldScene } from '../../client/src/world-scene.js'
+import type { WorldScene, XRState } from '../../client/src/world-scene.js'
 import { GuiQuestion, GuiQuestionList } from './GuiQuestion'
 import { connectGuiHud } from '../../client/src/gui-view.js'
 import { questionController, questionKey } from '../../client/src/question-controller.js'
@@ -27,17 +27,23 @@ import { spaceLibraryController } from '../../client/src/space-library.js'
 import type { SpaceLibraryController } from '../../client/src/space-library.js'
 import { spaceKey } from '../../client/src/space-entry.js'
 import type { SpaceReference } from '../../client/src/world.js'
+import { readTerm } from '../../client/src/prolog-read.js'
+import { connectControllerView } from '../../client/src/controller-view.js'
+import { controllerPanel } from '../../client/src/controller-panel.js'
 import { connectWorldView } from '../../client/src/simulation.js'
 
 export default function World() {
   const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
+  const account = identity ? accountReference(identity) : null
+  const [controllerRevision, setControllerRevision] = useState(0)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [scene, setScene] = useState<WorldScene | null>(null)
   const [immersive, setImmersive] = useState(false)
   const [navigationActive, setNavigationActive] = useState(false)
   const [movementHint, setMovementHint] = useState('')
   const [vr, setVr] = useState({ available: false, reason: 'Checking VR availability…' })
-  const [enteringVR, setEnteringVR] = useState(false)
+  const [xrState, setXRState] = useState<XRState>('preparing')
+  const [xrError, setXRError] = useState<string | null>(null)
   const [openingTool, setOpeningTool] = useState(false)
   const [toolError, setToolError] = useState<string | null>(null)
   const [inspectionRevision, setInspectionRevision] = useState(0)
@@ -75,7 +81,7 @@ export default function World() {
   const [selected, setSelected] = useState<Subject | null>(null)
   const [eidolons, setEidolons] = useState<{ subject: Subject; choices: EidolonChoice[]; error?: string; accessDenied?: boolean } | null>(null)
   const [workspace, setWorkspace] = useState<
-    { kind: 'operation'; key: string; controller: OperationController } | { kind: 'library'; key: string; controller: SpaceLibraryController } | { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace; subject: Subject; choice: EidolonChoice } |
+    { kind: 'controllers'; key: string; controller: ReturnType<typeof controllerPanel> } | { kind: 'operation'; key: string; controller: OperationController } | { kind: 'library'; key: string; controller: SpaceLibraryController } | { kind: 'proof'; key: string; view: ProofView } | { kind: 'code'; key: string; code: EidolonWorkspace; subject: Subject; choice: EidolonChoice } |
     { kind: 'inspection'; key: string; representation: Extract<EidolonRepresentation, { kind: 'lens' }>; title: string } |
     { kind: 'question'; key: string; reference: GuiQuestionReference; controller: QuestionController } | { kind: 'questions'; key: string } | null>(null)
   const [focused, setFocused] = useState(false)
@@ -194,14 +200,30 @@ export default function World() {
     void import('../../client/src/world-scene.js').then(({ createWorld }) => {
       if (!active || !canvas.current) return
       try {
-        world = createWorld(canvas.current, subject => pick.current(subject), setImmersive,
-          error => { if (active) setStatus(error.message) },
-          captured => { if (active) setNavigationActive(captured) })
+        world = createWorld(canvas.current, subject => pick.current(subject), value => { if (active) setImmersive(value) },
+          error => {
+            if (active) setStatus(error.message)
+            else console.error('World resource or XR cleanup failed', error)
+          },
+          captured => { if (active) setNavigationActive(captured) },
+          () => { if (active) setControllerRevision(n => n + 1) },
+          state => { if (active) setXRState(state) })
         setScene(world)
       } catch (error) { setSceneError(String(error)) }
     }).catch(error => { if (active) setSceneError(String(error)) })
-    return () => { active = false; world?.dispose() }
+    return () => { active = false; void world?.dispose().catch(error => console.error('World teardown failed', error)) }
   }, [])
+
+  useEffect(() => {
+    scene?.setControllerMapping(null)
+    if (!identity || !account || !scene) return
+    const stream = connectControllerView(identity, account, {
+      projection: mapping => scene.setControllerMapping(mapping),
+      discard: () => scene.setControllerMapping(null),
+      unavailable: reason => setToolError(`VR controller settings: ${reason}`),
+    })
+    return () => { stream.close(); scene.setControllerMapping(null) }
+  }, [identity, account, scene])
 
   useEffect(() => {
     let active = true
@@ -399,6 +421,28 @@ export default function World() {
     }
   }
 
+  const controllerOperations = useMemo(() => ({ identity, account, current: null as OperationController | null }), [identity, account])
+  useEffect(() => () => controllerOperations.current?.close(), [controllerOperations])
+  const openControllerSettings = () => {
+    const { identity, account } = controllerOperations
+    if (!identity || !account) return
+    const target = { namespace: account.namespace, anchor: typeof account.anchor === 'string' ? fromB64url(account.anchor) : account.anchor }
+    const subject = operationSubject(target, 'entity', readTerm(account.instanceText.replace(/\.\s*$/, '')))
+    if (controllerOperations.current) {
+      if (!controllerOperations.current.open([target], subject)) return
+    } else controllerOperations.current = operationController(identity, account, [target],
+      { close: () => setFocused(false) }, { subject })
+    setWorkspace({ kind: 'operation', key: '@controller-settings', controller: controllerOperations.current }); setFocused(true)
+  }
+  const controllerActions = useRef({ settings: openControllerSettings })
+  controllerActions.current = { settings: openControllerSettings }
+  const controllerPresentation = useMemo(() => controllerPanel(() => scene,
+    { close: () => setFocused(false), settings: () => controllerActions.current.settings() }), [scene])
+  useEffect(() => controllerPresentation.refresh(), [controllerPresentation, controllerRevision])
+  const openControllers = () => {
+    setWorkspace({ kind: 'controllers', key: '@controllers', controller: controllerPresentation }); setFocused(true)
+  }
+
   const toolChoices = eidolons?.subject === selected ? eidolons.choices.filter(choice => choice.purpose === 'workspace' || choice.purpose.startsWith('operation(')) : []
   const selectedMenu = toolChoices.map((choice, index) => ({ id: `@eidolon/${index}`, label: choice.style, view: choice.style }))
   const activate = useRef<(entry: MenuEntry) => void>(() => {})
@@ -416,7 +460,9 @@ export default function World() {
     setFocused(true)
   }
   activate.current = entry => {
-    if (entry.id === '@gui/questions') {
+    if (entry.id === '@xr/exit') void scene?.exitImmersive().catch(error => setXRError(String(error)))
+    else if (entry.id === '@controllers') openControllers()
+    else if (entry.id === '@gui/questions') {
       setWorkspace({ kind: 'questions', key: '@gui/questions' }); setFocused(true)
     } else if (entry.id === '@space/library') void openLibrary()
     else if (entry.id === '@space/return') navigate(null)
@@ -426,14 +472,13 @@ export default function World() {
   useEffect(() => {
     const entries = [...(selectedMenu ?? []), ...(identity && agent ? [{
       id: '@gui/questions', label: `Questions (${questions.length})`, view: 'gui_questions',
-    }, { id: '@space/library', label: 'My worlds', view: 'space_library' },
+    }, { id: '@controllers', label: 'VR controllers', view: 'controllers' }, { id: '@space/library', label: 'My worlds', view: 'space_library' },
       { id: '@operations', label: 'Create / operations', view: 'operations' },
       ...(space || view !== 'lobby' ? [{ id: '@space/return', label: 'Return to lobby', view: 'lobby' }] : [])] : [])]
+    if (xrState === 'presenting') entries.push({ id: '@xr/exit', label: 'Exit VR', view: 'xr_exit' })
     scene?.setActionMenu(entries, entry => activate.current(entry))
-    return () => scene?.setActionMenu([], entry => activate.current(entry))
-  }, [scene, selected, selectedMenu, identity, agent, questions.length, spaceIdentity, view])
+  }, [scene, selected, selectedMenu, identity, agent, questions.length, spaceIdentity, view, xrState])
 
-  const account = identity ? accountReference(identity) : null
   const selectedAccount = account && account.namespace === agent?.namespace &&
     account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
   const devices = marks.filter(mark => mark.depicts?.anchor)
@@ -482,15 +527,19 @@ export default function World() {
           : <button className="world-primary" onClick={() => navigate(null)}>Return to lobby</button>}
         <button disabled={!identity || !agent || openingTool} onClick={() => openOperations()}>Create / operations</button>
         <button disabled={!identity || !agent || openingTool} onClick={() => void openLibrary()}>My worlds</button>
-        <button disabled={!scene || !vr.available || enteringVR || immersive} aria-describedby="vr-availability" onClick={() => {
-          setEnteringVR(true)
-          void scene?.immersive().catch(error => setVr({ available: true, reason: `VR could not start: ${String(error)}` }))
-            .finally(() => setEnteringVR(false))
-        }}>{enteringVR ? 'Starting VR…' : immersive ? 'VR active' : 'Enter VR'}</button>
+        <button disabled={!scene || (xrState === 'ready' ? !vr.available : !['starting', 'presenting'].includes(xrState))}
+          aria-describedby="vr-availability" onClick={() => {
+            setXRError(null)
+            const operation = xrState === 'ready' ? scene?.immersive() : scene?.exitImmersive()
+            void operation?.catch(error => setXRError(String(error)))
+          }}>{xrState === 'starting' ? 'Cancel VR entry' : xrState === 'presenting' ? 'Exit VR'
+            : xrState === 'stopping' ? 'Ending VR…' : xrState === 'preparing' ? 'Preparing VR…' : 'Enter VR'}</button>
         {missingLobby && selectedAccount &&
           <button disabled={busy || unresolved > 0} onClick={() => void finishSetup()}>Finish account setup</button>}
       </div>
-      <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.' : vr.reason}</p>
+      <p id="vr-availability" className="world-help">{sceneError ? 'VR requires a working 3D view.'
+        : xrState === 'blocked' ? 'VR release is unconfirmed. Use the headset or browser exit control.'
+        : xrError ?? vr.reason}</p>
       {view === 'lobby' && !space && !consoleSubject && <p>The console is unavailable until its lobby view loads.</p>}
       {toolError && <p role="alert">{toolError}</p>}
       {selected && selectedMenu.length > 0 && <div className="world-menu" aria-label="Selected object actions">
@@ -518,6 +567,7 @@ export default function World() {
             </option>)}
           </select></label>}
           <button onClick={() => setRevision(n => n + 1)} disabled={!identity || !agent}>Reload scene</button>
+          <button onClick={openControllers} disabled={!identity || !account}>VR controllers</button>
         </div>
         <p className="world-help">Structure changes the visual representation; it does not enable world editing.</p>
         {licenceUnavailable && <p>Software licences: {licenceUnavailable}</p>}
@@ -556,7 +606,7 @@ export default function World() {
       </details>
     </section>
     {workspace && <section className="world-workspace" hidden={!focused || immersive} aria-label="Focused console">
-      {workspace.kind === 'library' || workspace.kind === 'operation'
+      {workspace.kind === 'library' || workspace.kind === 'operation' || workspace.kind === 'controllers'
         ? <GuiWorkspace controller={workspace.controller} scene={scene} visible={focused} />
         : workspace.kind === 'questions'
         ? <GuiQuestionList references={questions} status={questionError} scene={scene} visible={focused}

@@ -1,0 +1,5 @@
+npm notice run quod-client@0.1.0 postinstall
+npm notice run patch-package --error-on-fail
+patch-package 8.0.1
+Applying patches...
+@babylonjs/core@9.18.1 ✔

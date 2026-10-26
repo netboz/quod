@@ -6,7 +6,8 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { readMarks } from '../src/marks.js'
-import { radialIndex } from '../src/world-scene.js'
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import { radialIndex, selectMenuEntry } from '../src/world-scene.js'
 import { Ray } from '@babylonjs/core/Culling/ray.js'
 import { paintMarks, clearMarks, paintSkies, compareOpaqueMarks } from '../src/scene.js'
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
@@ -181,11 +182,12 @@ test('the world adapter registers ray picking for rendered geometry', () => {
 })
 
 test('radial selection starts at the top, proceeds clockwise, and preserves its dead zone', () => {
-  assert.equal(radialIndex({ x: 0, y: 0 }, 4), null)
-  assert.equal(radialIndex({ x: 0, y: -1 }, 4), 0)
-  assert.equal(radialIndex({ x: 1, y: 0 }, 4), 1)
-  assert.equal(radialIndex({ x: 0, y: 1 }, 4), 2)
-  assert.equal(radialIndex({ x: -1, y: 0 }, 4), 3)
+  assert.equal(radialIndex({ x: 0, y: 0 }, 4, .24), null)
+  assert.equal(radialIndex({ x: 0, y: -1 }, 4, .24), 0)
+  assert.equal(radialIndex({ x: 1, y: 0 }, 4, .24), 1)
+  assert.equal(radialIndex({ x: 0, y: 1 }, 4, .24), 2)
+  assert.equal(radialIndex({ x: -1, y: 0 }, 4, .24), 3)
+  assert.equal(radialIndex({ x: 0, y: -.3 }, 4, .4), null)
 })
 
 
@@ -376,4 +378,24 @@ test('a changed declared mesh bound acquires a fresh verification lease', async 
     assert.deepEqual(acquired, [[-1, -1, -1, 1, 1, 1], [-2, -1, -1, 1, 1, 1]])
     assert.deepEqual(released, [[-1, -1, -1, 1, 1, 1]])
   } finally { clearMarks(painted); scene.dispose(); engine.dispose() }
+})
+
+test('radial menu uploads labels only when the selected sector changes', () => {
+  const engine = new NullEngine(), scene = new Scene(engine)
+  const counts = { clears: 0, draws: 0, uploads: 0 }
+  engine.createCanvas = (width, height) => ({ width, height, getContext: () => ({
+    clearRect() { counts.clears++ }, fillRect() {}, measureText: () => ({ width: 10 }),
+    fillText() { counts.draws++ },
+  }) })
+  engine.updateDynamicTexture = () => counts.uploads++
+  const textures = [0, 1].map(i => new DynamicTexture(`menu:${i}`, { width: 512, height: 192 }, scene, false))
+  try {
+    const menu = { selected: null, items: textures.map((texture, i) => ({ texture, entry: { label: `Action ${i}` } })) }
+    selectMenuEntry(menu, 0)
+    assert.deepEqual(counts, { clears: 2, draws: 2, uploads: 2 })
+    for (let i = 0; i < 100; i++) selectMenuEntry(menu, 0)
+    assert.deepEqual(counts, { clears: 2, draws: 2, uploads: 2 })
+    selectMenuEntry(menu, 1); selectMenuEntry(menu, null)
+    assert.deepEqual(counts, { clears: 6, draws: 6, uploads: 6 })
+  } finally { textures.forEach(texture => texture.dispose()); scene.dispose(); engine.dispose() }
 })

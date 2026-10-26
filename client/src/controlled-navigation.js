@@ -158,6 +158,7 @@ export function createControlledNavigation(scene, camera, canvas, {
 
   return {
     update, render,
+    binding: () => key,
     controlled: () => current !== undefined,
     xr(cameraOrNull) {
       if (xrCamera && !cameraOrNull) {

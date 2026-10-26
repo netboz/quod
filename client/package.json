@@ -6,11 +6,16 @@
   "scripts": {
     "build": "npm --prefix ../ui run build",
     "test": "node --test test/*.test.js",
-    "test:import": "node test/import-eidolon.integration.mjs"
+    "test:import": "node test/import-eidolon.integration.mjs",
+    "postinstall": "patch-package --error-on-fail",
+    "pretest": "node tools/check-dependencies.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "9.18.1",
     "@babylonjs/gui": "9.18.1",
     "@babylonjs/loaders": "9.18.1"
+  },
+  "devDependencies": {
+    "patch-package": "8.0.1"
   }
 }

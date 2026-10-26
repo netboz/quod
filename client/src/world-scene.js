@@ -5,7 +5,6 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
 import { Layer } from '@babylonjs/core/Layers/layer.js'
-import { Ray } from '@babylonjs/core/Culling/ray.js'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
@@ -18,16 +17,17 @@ import { paintMarks, clearMarks, paintBodyPoses, paintTerrain, paintSkies, compa
 import { createRenderResources } from './render-resources.js'
 import { createWorkspacePanel } from './workspace-panel.js'
 import { configureDesktopCamera, createMovementSpeed, createPointerLock } from './navigation.js'
-import { WebXRState, WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
+import { WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
+import { createWorldXR } from './world-xr.js'
+import { createControllerScene } from './controller-scene.js'
 import { createControlledNavigation } from './controlled-navigation.js'
 
 const MENU_RADIUS = 0.36
-const MENU_DEAD_ZONE = 0.24
 
 // Sector zero starts at the top and proceeds clockwise, matching the visual
 // layout. Returning null inside the dead zone lets a user press the pad before
 // committing to an action.
-export function radialIndex({ x, y }, count, deadZone = MENU_DEAD_ZONE) {
+export function radialIndex({ x, y }, count, deadZone) {
   if (!Number.isInteger(count) || count < 1 || Math.hypot(x, y) < deadZone) return null
   const sector = 2 * Math.PI / count
   const clockwiseFromTop = (Math.atan2(x, -y) + 2 * Math.PI) % (2 * Math.PI)
@@ -37,7 +37,7 @@ export function radialIndex({ x, y }, count, deadZone = MENU_DEAD_ZONE) {
 // The camera and lighting belong to this viewing session. All visible model
 // geometry comes from the ontology projection, including the lobby floor.
 export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
-  onResourceError = () => {}, onNavigationChanged = () => {}) {
+  onResourceError = () => {}, onNavigationChanged = () => {}, onControllersChanged = () => {}, onXRStateChanged = () => {}) {
   const engine = new Engine(canvas, true, { stencil: true })
   const scene = new Scene(engine)
   scene.useRightHandedSystem = true
@@ -57,10 +57,43 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
   const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
   light.intensity = 1.2
   let menu = { entries: [], activate: null, root: null, items: [], selected: null }
-  let workspace = null
+  let workspace = null, workspaceSchema = null
   let panel = null
   const appearanceSettings = { opacity: 0.78, scale: 1, distance: 1.6 }
   let immersive = false
+  let xr = null, workspaceObserver = null, disposal = null
+  const xrLifecycle = createWorldXR(scene, {
+    connect(experience) {
+      xr = experience
+      controllers.connect(experience)
+      experience.baseExperience.camera.onTrackingStateChanged.add(xrLifecycle.guard(state => {
+        if (state === WebXRTrackingState.TRACKING) {
+          // Tracking is announced before the pose update.
+          scene.onBeforeRenderObservable.remove(workspaceObserver)
+          workspaceObserver = scene.onBeforeRenderObservable.addOnce(xrLifecycle.guard(showWorkspace))
+        }
+      }))
+    },
+    disconnect() {
+      controllers.disconnect()
+      scene.onBeforeRenderObservable.remove(workspaceObserver)
+      workspaceObserver = null
+      xr = null
+    },
+    cancel() { navigation.release(); controllers.cancel(); closeMenu() },
+    changed(state, experience) {
+      const active = state === 'presenting'
+      if (active !== immersive) {
+        immersive = active
+        playerNavigation.xr(immersive ? experience.baseExperience.camera : null)
+        closeMenu()
+        showWorkspace()
+        onImmersiveChanged(immersive)
+      }
+      onXRStateChanged(state)
+    },
+    error: onResourceError,
+  })
   const contactMask = new Layer('physical-view-contact', null, scene, false, new Color4(1, 1, 1, 1))
   const contactText = new DynamicTexture('physical-view-contact-text', { width: 2048, height: 1024 }, scene, false)
   contactMask.texture = contactText
@@ -83,26 +116,35 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       }
     },
   })
-  scene.onBeforeRenderObservable.add(() => playerNavigation.render())
-  scene.onPointerObservable.add(info => {
+  const controllers = createControllerScene(scene, resources, playerNavigation, {
+    guard: xrLifecycle.guard,
+    workspace: () => workspace ? panel : null, changed: onControllersChanged, error: onResourceError,
+    menu: { open: (axes, threshold) => { openMenu(axes, threshold); return Boolean(menu.root) },
+      move: (axes, threshold) => selectMenuEntry(menu, radialIndex(axes, menu.entries.length, threshold)),
+      cancel: closeMenu,
+      commit: () => { const entry = menu.entries[menu.selected]; closeMenu(); if (entry) menu.activate?.(entry) } },
+  })
+  scene.onBeforeRenderObservable.add(xrLifecycle.guard(() => playerNavigation.render()))
+  scene.onPointerObservable.add(xrLifecycle.guard(info => {
     const pick = navigation.active()
       ? scene.pick(engine.getRenderWidth() / 2, engine.getRenderHeight() / 2)
       : info.pickInfo
     let node = pick?.pickedMesh
     if (node?.metadata?.menuEntry) {
-      menu.activate?.(node.metadata.menuEntry)
+      controllers.menuSelected()
+      const entry = node.metadata.menuEntry
       closeMenu()
+      menu.activate?.(entry)
       return
     }
     while (node && !node.metadata?.depicts) node = node.parent
     if (node?.metadata?.depicts?.anchor) onPick(node.metadata.depicts)
-  }, PointerEventTypes.POINTERPICK)
+  }), PointerEventTypes.POINTERPICK)
   let painted = new Map()
   let currentMarks = null
   let coordinateFrame = null
   let simulation = null, terrainCamera = null, terrainObserver = null
-  let xr = null
-  scene.onBeforeCameraRenderObservable.add(view => paintSkies(painted, view))
+  scene.onBeforeCameraRenderObservable.add(xrLifecycle.guard(view => paintSkies(painted, view)))
 
   function cameraInterest() {
     const active = scene.activeCamera
@@ -124,11 +166,11 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       terrainCamera.onViewMatrixChangedObservable.remove(terrainObserver)
     }
     terrainCamera = scene.activeCamera
-    terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(cameraInterest) ?? null
+    terrainObserver = terrainCamera?.onViewMatrixChangedObservable.add(xrLifecycle.guard(cameraInterest)) ?? null
     terrainHorizon()
     cameraInterest()
   }
-  scene.onActiveCameraChanged.add(bindTerrainCamera)
+  scene.onActiveCameraChanged.add(xrLifecycle.guard(bindTerrainCamera, true))
   bindTerrainCamera()
 
   function closeMenu() {
@@ -136,16 +178,8 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     menu = { ...menu, root: null, items: [], selected: null }
   }
 
-  function selectMenuEntry(index) {
-    if (index !== null && (index < 0 || index >= menu.items.length)) return
-    menu.selected = index
-    for (let position = 0; position < menu.items.length; position += 1) {
-      const { texture, entry } = menu.items[position]
-      drawMenuLabel(texture, entry.label, position === index)
-    }
-  }
 
-  function openMenu(axes = { x: 0, y: -1 }) {
+  function openMenu(axes, threshold) {
     closeMenu()
     if (workspace || menu.entries.length === 0 || !scene.activeCamera) return
     const root = new TransformNode('action-menu', scene)
@@ -176,58 +210,11 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       return { entry, texture }
     })
     menu = { ...menu, root, items, selected: null }
-    const initial = radialIndex(axes, count)
-    if (initial !== null) selectMenuEntry(initial)
+    const initial = radialIndex(axes, count, threshold)
+    if (initial !== null) selectMenuEntry(menu, initial)
     else for (const item of items) drawMenuLabel(item.texture, item.entry.label, false)
   }
 
-  function bindRadialControl(controller) {
-    const bind = motionController => {
-      const component = motionController.getComponentOfType('touchpad') ??
-        motionController.getComponentOfType('thumbstick')
-      if (!component) return
-      if (controller.inputSource.handedness === 'left') {
-        const squeeze = motionController.getComponentOfType('squeeze')
-        let down = component.pressed
-        const smooth = () => playerNavigation.axes(squeeze?.pressed ? component.axes : { x: 0, y: 0 })
-        component.onAxisValueChangedObservable.add(smooth)
-        squeeze?.onButtonStateChangedObservable.add(smooth)
-        component.onButtonStateChangedObservable.add(current => {
-          smooth()
-          const clicked = current.pressed && !down
-          down = current.pressed
-          if (!clicked || squeeze?.pressed || !playerNavigation.controlled()) return
-          const { x, y } = current.axes
-          if (Math.abs(x) > 0.5 && Math.abs(x) > Math.abs(y)) playerNavigation.snap(x)
-          else if (y < -0.5) {
-            const ray = new Ray(Vector3.Zero(), Vector3.Forward())
-            controller.getWorldPointerRayToRef(ray)
-            playerNavigation.teleport(ray.direction)
-          }
-        })
-        // Left-hand gestures belong to locomotion; the right-hand pad retains
-        // the action menu. A missing component never becomes a guessed button.
-        return
-      }
-      let pressed = component.pressed
-      component.onAxisValueChangedObservable.add(axes => {
-        if (menu.root) selectMenuEntry(radialIndex(axes, menu.entries.length))
-      })
-      component.onButtonStateChangedObservable.add(current => {
-        if (current.pressed === pressed) return
-        pressed = current.pressed
-        if (pressed) {
-          openMenu(current.axes)
-        } else if (menu.root) {
-          const entry = menu.entries[menu.selected]
-          closeMenu()
-          if (entry) menu.activate?.(entry)
-        }
-      })
-    }
-    if (controller.motionController) bind(controller.motionController)
-    else controller.onMotionControllerInitObservable.addOnce(bind)
-  }
 
   const resize = () => engine.resize()
   function showWorkspace() {
@@ -241,9 +228,11 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     }
   }
   window.addEventListener('resize', resize)
-  engine.runRenderLoop(() => scene.render())
+  engine.runRenderLoop(xrLifecycle.guard(() => scene.render()))
+  void xrLifecycle.prepare().catch(onResourceError)
   return {
     update(current) {
+      if (simulation?.physicalFrame?.registration !== current?.physicalFrame?.registration) controllers.cancel()
       simulation = null
       if (current?.selection === 'active') {
         if (coordinateFrame?.fence === current.fence && coordinateFrame.originSeq !== current.originSeq) {
@@ -254,7 +243,9 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       } else if (current) coordinateFrame = null
       const observer = current?.selection === 'nonphysical' ||
         (current?.selection === 'active' && current.control === null)
+      const previousBinding = playerNavigation.binding()
       playerNavigation.update(observer ? undefined : current?.selection === 'active' ? current : null)
+      if (previousBinding !== playerNavigation.binding()) controllers.cancel()
       if (current && current.marks !== currentMarks) {
         painted = paintMarks(scene, current.marks, painted, resources, onResourceError)
         currentMarks = current.marks
@@ -267,10 +258,18 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       return paintTerrain(scene, painted, current, resources, onResourceError)
     },
     setActionMenu(entries, activate) {
+      if (JSON.stringify(menu.entries) === JSON.stringify(entries)) { menu.activate = activate; return }
+      controllers.cancelMenu()
       closeMenu()
       menu = { ...menu, entries: [...entries], activate }
     },
+    setControllerMapping: controllers.install,
+    chooseController: controllers.choose,
+    controllerStatus: () => controllers.status,
     setWorkspace(model) {
+      const nextSchema = model ? JSON.stringify(model.view) : null
+      if (workspaceSchema !== nextSchema) controllers.cancel()
+      workspaceSchema = nextSchema
       workspace = model
       if (model) {
         navigation.release()
@@ -279,48 +278,26 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       showWorkspace()
     },
     releaseNavigation() { navigation.release() },
-    async immersive() {
-      navigation.release()
-      if (!xr) {
-        await import('@babylonjs/core/Loading/Plugins/babylonFileLoader.js')
-        await import('@babylonjs/loaders/glTF/index.js')
-        await import('@babylonjs/core/Materials/Node/Blocks/index.js')
-        await import('@babylonjs/core/Materials/colorCurves.js')
-        await import('@babylonjs/core/XR/features/WebXRControllerPointerSelection.js')
-        await import('@babylonjs/core/XR/features/WebXRNearInteraction.js')
-        await import('@babylonjs/core/XR/features/WebXRHandTracking.js')
-        const { WebXRDefaultExperience } = await import('@babylonjs/core/XR/webXRDefaultExperience.js')
-        xr = await WebXRDefaultExperience.CreateAsync(scene, { disableTeleportation: true })
-        xr.baseExperience.camera.onTrackingStateChanged.add(state => {
-          if (state === WebXRTrackingState.TRACKING) {
-            // The notice precedes the camera pose update; place after that update.
-            scene.onBeforeRenderObservable.addOnce(showWorkspace)
-          }
-        })
-        xr.baseExperience.onStateChangedObservable.add(state => {
-          immersive = state === WebXRState.IN_XR
-          playerNavigation.xr(immersive ? xr.baseExperience.camera : null)
-          closeMenu()
-          showWorkspace()
-          onImmersiveChanged(immersive)
-        })
-        for (const controller of xr.input.controllers) bindRadialControl(controller)
-        xr.input.onControllerAddedObservable.add(bindRadialControl)
-        xr.input.onControllerRemovedObservable.add(() => playerNavigation.axes({ x: 0, y: 0 }))
-      }
-      await xr.baseExperience.enterXRAsync('immersive-vr', 'local-floor')
-    },
+    immersive: xrLifecycle.enter,
+    exitImmersive: () => xrLifecycle.exit(),
     dispose() {
+      if (disposal) return disposal
       window.removeEventListener('resize', resize)
       navigation.dispose()
       movementSpeed.dispose()
-      playerNavigation.dispose()
-      contactMask.dispose()
-      panel?.dispose()
-      painted = clearMarks(painted)
-      resources.dispose()
-      scene.dispose()
-      engine.dispose()
+      simulation = null
+      workspace = null
+      disposal = xrLifecycle.dispose().then(() => {
+        controllers.dispose()
+        playerNavigation.dispose()
+        contactMask.dispose()
+        panel?.dispose()
+        painted = clearMarks(painted)
+        resources.dispose()
+        scene.dispose()
+        engine.dispose()
+      })
+      return disposal
     },
   }
 }
@@ -330,4 +307,14 @@ function drawMenuLabel(texture, label, selected) {
   texture.drawText(label, null, 122, 'bold 54px system-ui, sans-serif',
                    selected ? PALETTE.navy : '#F5F1EB',
                    selected ? PALETTE.gold : '#243744', true, true)
+}
+
+export function selectMenuEntry(menu, index) {
+  if (menu.selected === index) return
+  if (index !== null && (index < 0 || index >= menu.items.length)) return
+  menu.selected = index
+  for (let position = 0; position < menu.items.length; position += 1) {
+    const { texture, entry } = menu.items[position]
+    drawMenuLabel(texture, entry.label, position === index)
+  }
 }

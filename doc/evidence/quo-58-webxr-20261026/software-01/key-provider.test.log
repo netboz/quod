@@ -1,0 +1,11 @@
+✔ verified browser backup contains the exact active identity (258.944943ms)
+✔ verified browser backup fails when storage silently discards it (248.796796ms)
+✔ encrypted identity carries exact per-network account references (467.615436ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 980.530536

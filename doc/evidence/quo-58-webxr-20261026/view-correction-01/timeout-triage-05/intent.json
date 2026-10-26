@@ -1,0 +1,13 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_timeout_context_tests",
+    "--verbose"
+  ],
+  "purpose": "Find fixture message retention with a reduced ordered prefix; diagnostic only",
+  "phase_records": "../timeout-triage-03/editor-phases.term",
+  "run": "fast-prefix"
+}

@@ -53,7 +53,7 @@ def check_headers(headers):
     lower={k.lower():v for k,v in headers.items()}
     assert all(lower.get(k.lower())==v for k,v in expected_headers.items()), lower
 check_headers(actual_headers)
-bundle=json.loads((evidence/'release-gates-02/bundle-manifest.json').read_text())
+bundle=json.loads((evidence/'release-gates-04/bundle-manifest.json').read_text())
 assert hashlib.sha256(body).hexdigest()==bundle['priv/explorer/world.html']
 served=[]
 for name,digest in sorted(bundle.items()):

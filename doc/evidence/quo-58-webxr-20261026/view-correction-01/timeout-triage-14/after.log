@@ -1,0 +1,9 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_agent_hosting_tests: -hosted_fixture_releases_commit_observations_test_/0-fun-4-...[0.490 s] ok
+=======================================================
+  Test passed.

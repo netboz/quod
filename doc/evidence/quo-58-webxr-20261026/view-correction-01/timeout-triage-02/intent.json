@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_lobby_tests,quod_personal_agent_tests,quod_prolog_ontology_tests",
+    "--verbose"
+  ],
+  "purpose": "Reduce the full-suite timeout to immediately preceding lobby/personal-agent modules; diagnostic only, unchanged test deadlines"
+}

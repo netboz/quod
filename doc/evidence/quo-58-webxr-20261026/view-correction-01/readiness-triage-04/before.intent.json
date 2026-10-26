@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_space_creation_tests:atomic_completion_wait_includes_complete_record_test_",
+    "--verbose"
+  ],
+  "purpose": "Deterministic real-owner regression holding the existing terminal phase before Complete"
+}

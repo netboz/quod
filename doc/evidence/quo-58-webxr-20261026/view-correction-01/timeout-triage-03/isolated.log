@@ -1,0 +1,87 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1192 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1192 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1192 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1042 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1667 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1667 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 28 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_prolog_ontology_tests'
+  quod_prolog_ontology_tests: exact_edit_preserves_an_earlier_general_clause_test...[0.062 s] ok
+  quod_prolog_ontology_tests: membership_source_reorder_and_replacement_never_construct_test...[0.024 s] ok
+  quod_prolog_ontology_tests: unchanged_source_produces_no_mutations_test...[0.041 s] ok
+  quod_prolog_ontology_tests: changed_suffix_leaves_the_unchanged_prefix_alone_test...[0.045 s] ok
+  quod_prolog_ontology_tests: reordered_program_survives_canonical_apply_test...[0.043 s] ok
+  quod_prolog_ontology_tests: compiled_edit_composes_inside_an_existing_transaction_test...[0.042 s] ok
+  quod_prolog_ontology_tests: compiled_edit_cut_and_outer_rollback_preserve_reads_test...[0.043 s] ok
+  quod_prolog_ontology_tests: numeric_facts_roundtrip_through_current_signed_grammar_and_commit_test...[0.045 s] ok
+  quod_prolog_ontology_tests: many_clauses_keep_one_ordered_transaction_within_shared_term_depth_test...[0.098 s] ok
+  quod_prolog_ontology_tests: stale_baseline_refuses_before_mutating_test...[0.026 s] ok
+  quod_prolog_ontology_tests: wrong_predicate_rolls_back_the_entire_edit_test...[0.011 s] ok
+  quod_prolog_ontology_tests: duplicate_clauses_are_refused_before_a_goal_is_returned_test...[0.012 s] ok
+  quod_prolog_ontology_tests: new_clauses_keep_their_independent_variables_test...[0.011 s] ok
+  quod_prolog_ontology_tests: compiling_new_symbols_allocates_no_atoms_and_returns_explicit_assertions_test...[0.010 s] ok
+  quod_prolog_ontology_tests: complete_edit_groups_predicates_and_preserves_unchanged_contents_test...[1.494 s] ok
+  quod_prolog_ontology_tests: complete_edit_detects_changed_baseline_and_accept_time_phantoms_test...[0.665 s] ok
+  quod_prolog_ontology_tests: complete_edit_rejects_a_matching_final_chunk_of_stale_source_test...[1.073 s] ok
+  quod_prolog_ontology_tests: complete_edit_removes_predicates_and_renaming_variables_is_unchanged_test...[0.265 s] ok
+  quod_prolog_ontology_tests: complete_edit_compiles_new_zero_arity_symbols_without_atom_allocation_test...[0.477 s] ok
+  quod_prolog_ontology_tests: compiler_data_helpers_have_no_implicit_following_test...[0.008 s] ok
+  [done in 4.555 s]
+=======================================================
+  All 20 tests passed.

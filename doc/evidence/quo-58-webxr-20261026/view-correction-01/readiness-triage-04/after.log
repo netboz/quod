@@ -1,0 +1,22 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_space_creation_tests: -atomic_completion_wait_includes_complete_record_test_/0-fun-6-...*failed*
+in function quod_space_creation_tests:'-atomic_completion_wait_includes_complete_record_test_/0-fun-5-'/1 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-15/test/quod_space_creation_tests.erl, line 291)
+in call from quod_space_creation_tests:'-with_spaces/2-fun-1-'/3 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-15/test/quod_space_creation_tests.erl, line 169)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-15/test/quod_agent_hosting_tests.erl, line 1654)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:completion_wait_not_observed
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_C56B463FDC45EDCB
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

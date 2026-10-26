@@ -1,0 +1,59 @@
+{
+  "observed_at": "2026-10-26T21:26:18.405096+00:00",
+  "job": "quod-finality-candidate-v6-20260926",
+  "version": 110,
+  "live_allocations": 8,
+  "task_states": [
+    {
+      "allocation": "0445e248-d233-69e8-7225-39ddf17a58a0",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "19453eea-6550-f4d4-eedb-b0e768d2567b",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "2a9f48d7-b6e4-3cb9-88d2-5e7b32f27aa2",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "5b56b5d0-9cc1-d628-773b-09592f10750c",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "6c88d463-4eb0-a56b-dada-b17106833e32",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "a68560c9-fd2a-fa48-d4a2-43ff69213803",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "c3285f3f-0568-3eac-4fe6-0269a7372982",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    },
+    {
+      "allocation": "d42ae2aa-c039-b6d3-820d-3f7b9b02a594",
+      "version": 110,
+      "state": "running",
+      "restarts": 0
+    }
+  ],
+  "images": [
+    "192.168.1.11:5000/quod:0.7.275-xr-1daac001-38f36875-20261026-d02@sha256:6bb00abb0aee978433a8cffb90de6032c4169da8c2990b139c657243ae119243"
+  ]
+}

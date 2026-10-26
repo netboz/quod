@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_operation_recovery_tests,quod_outcome_endpoint_tests,quod_outcome_result_tests,quod_physics_control_tests,quod_prolog_ontology_tests",
+    "--verbose"
+  ],
+  "purpose": "Bisect the reproduced 149-test prefix to its latter modules",
+  "run": "late-half-prefix"
+}

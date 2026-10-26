@@ -1,0 +1,11 @@
+#{'DOWN' => {2,18,0},
+  trace => {34,4656,3282},
+  committed => {1,6996,376814},
+  quod_test_span => {54,3870,2284},
+  projection_advanced => {35,140,0},
+  replay_started => {29,290,0},
+  quod_foreign_follow => {6,173,288},
+  owner_capture_result => {1,416,630},
+  endpoint_result => {33,115436,2900083},
+  worker_wake => {8,280,1888},
+  history_capture => {17,8978,12011}}.

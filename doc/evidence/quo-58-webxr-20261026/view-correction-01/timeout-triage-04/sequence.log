@@ -1,0 +1,66 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_catchup_verify_tests'
+  quod_catchup_verify_tests: happy_test...[0.172 s] ok
+  quod_catchup_verify_tests: canonical_page_artifacts_survive_verify_and_forward_test...[0.035 s] ok
+  quod_catchup_verify_tests: validator_cap_history_boundary_test...[0.053 s] ok
+  quod_catchup_verify_tests: batch_hash_is_verified_test...[0.068 s] ok
+  quod_catchup_verify_tests: timestamped_test...[0.049 s] ok
+  quod_catchup_verify_tests: bad_cert_test...[0.032 s] ok
+  quod_catchup_verify_tests: missing_and_malformed_certificates_are_not_artifacts_test...[0.025 s] ok
+  quod_catchup_verify_tests: cert_mismatch_test...[0.035 s] ok
+  quod_catchup_verify_tests: noncontiguous_rejected_test...[0.053 s] ok
+  quod_catchup_verify_tests: malformed_entry_rejected_test...[0.050 s] ok
+  quod_catchup_verify_tests: committee_grows_test...[0.050 s] ok
+  quod_catchup_verify_tests: committee_grows_rejects_stale_test...[0.051 s] ok
+  quod_catchup_verify_tests: committee_shrinks_test...[0.052 s] ok
+  quod_catchup_verify_tests: explicit_cross_domain_rejected_test...[0.059 s] ok
+  quod_catchup_verify_tests: empty_namespace_is_rejected_test...ok
+  quod_catchup_verify_tests: phase_window_uses_retained_owner_index_test...[0.431 s] ok
+  quod_catchup_verify_tests: resumed_phase_window_uses_initial_owner_capture_test...[0.155 s] ok
+  quod_catchup_verify_tests: history_suffix_only_work_is_counted_test...[0.464 s] ok
+  quod_catchup_verify_tests: catch_up_happy_test...[0.045 s] ok
+  quod_catchup_verify_tests: catch_up_bad_anchor_test...[0.008 s] ok
+  quod_catchup_verify_tests: catch_up_forged_test...[0.028 s] ok
+  quod_catchup_verify_tests: catch_up_committee_change_across_windows_test...[0.059 s] ok
+  quod_catchup_verify_tests: catch_up_real_writer_current_era_view_preserves_verifier_history_test...[0.082 s] ok
+  quod_catchup_verify_tests: catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test...[0.032 s] ok
+  quod_catchup_verify_tests: catch_up_failed_append_leaves_retained_index_unchanged_test...[0.022 s] ok
+  quod_catchup_verify_tests: catch_up_index_install_failure_is_loud_before_any_publication_test...[0.023 s] ok
+  quod_catchup_verify_tests: phase_writer_mailbox_isolation_test...[0.022 s] ok
+  quod_catchup_verify_tests: catch_up_owner_death_during_empty_fetch_is_not_completion_test...[0.004 s] ok
+  quod_catchup_verify_tests: recovery_owner_death_cancels_worker_blocked_in_real_pull_test...[0.001 s] ok
+  quod_catchup_verify_tests: catch_up_height_regression_test...[0.028 s] ok
+  quod_catchup_verify_tests: catch_up_fetch_error_test...ok
+  quod_catchup_verify_tests: catch_up_malformed_height_test...[0.001 s] ok
+  quod_catchup_verify_tests: catch_up_sink_error_test...[0.028 s] ok
+  quod_catchup_verify_tests: catch_up_no_progress_test...ok
+  [done in 2.319 s]
+module 'quod_prolog_ontology_tests'
+  quod_prolog_ontology_tests: exact_edit_preserves_an_earlier_general_clause_test...[0.011 s] ok
+  quod_prolog_ontology_tests: membership_source_reorder_and_replacement_never_construct_test...[0.012 s] ok
+  quod_prolog_ontology_tests: unchanged_source_produces_no_mutations_test...[0.012 s] ok
+  quod_prolog_ontology_tests: changed_suffix_leaves_the_unchanged_prefix_alone_test...[0.014 s] ok
+  quod_prolog_ontology_tests: reordered_program_survives_canonical_apply_test...[0.020 s] ok
+  quod_prolog_ontology_tests: compiled_edit_composes_inside_an_existing_transaction_test...[0.028 s] ok
+  quod_prolog_ontology_tests: compiled_edit_cut_and_outer_rollback_preserve_reads_test...[0.027 s] ok
+  quod_prolog_ontology_tests: numeric_facts_roundtrip_through_current_signed_grammar_and_commit_test...[0.028 s] ok
+  quod_prolog_ontology_tests: many_clauses_keep_one_ordered_transaction_within_shared_term_depth_test...[0.118 s] ok
+  quod_prolog_ontology_tests: stale_baseline_refuses_before_mutating_test...[0.037 s] ok
+  quod_prolog_ontology_tests: wrong_predicate_rolls_back_the_entire_edit_test...[0.039 s] ok
+  quod_prolog_ontology_tests: duplicate_clauses_are_refused_before_a_goal_is_returned_test...[0.044 s] ok
+  quod_prolog_ontology_tests: new_clauses_keep_their_independent_variables_test...[0.042 s] ok
+  quod_prolog_ontology_tests: compiling_new_symbols_allocates_no_atoms_and_returns_explicit_assertions_test...[0.041 s] ok
+  quod_prolog_ontology_tests: complete_edit_groups_predicates_and_preserves_unchanged_contents_test...[0.807 s] ok
+  quod_prolog_ontology_tests: complete_edit_detects_changed_baseline_and_accept_time_phantoms_test...[0.262 s] ok
+  quod_prolog_ontology_tests: complete_edit_rejects_a_matching_final_chunk_of_stale_source_test...[0.592 s] ok
+  quod_prolog_ontology_tests: complete_edit_removes_predicates_and_renaming_variables_is_unchanged_test...[0.467 s] ok
+  quod_prolog_ontology_tests: complete_edit_compiles_new_zero_arity_symbols_without_atom_allocation_test...[0.770 s] ok
+  quod_prolog_ontology_tests: compiler_data_helpers_have_no_implicit_following_test...[0.008 s] ok
+  [done in 3.439 s]
+=======================================================
+  All 54 tests passed.

@@ -1,0 +1,11 @@
+{
+  "private_originals": "/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/raw-gates-04",
+  "files": [
+    {
+      "file": "eunit.log",
+      "redactions": 40,
+      "raw_sha256": "8ddc93e8a167dccc6eda7ee8829ade9a3ec45c356788931f7473aec565a9cc1f",
+      "public_sha256": "a2200047e09ebe51c97f2c2f97edeb553fb28e1ef2fc38bab70fbb1d8838b2bc"
+    }
+  ]
+}

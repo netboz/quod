@@ -1,0 +1,14 @@
+{
+  "name": "release",
+  "command": [
+    "rebar3",
+    "as",
+    "prod",
+    "release"
+  ],
+  "started_at": "2026-10-26T22:41:13.792343+00:00",
+  "exit": 0,
+  "seconds": 11.04,
+  "sources_unchanged": true,
+  "stop_requested": false
+}

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_catchup_verify_tests,quod_foreign_queue_observation_tests,quod_foreign_residency_tests,quod_history_view_tests,quod_node_context_tests,quod_prolog_ontology_tests",
+    "--verbose"
+  ],
+  "purpose": "Bisect the reproduced prefix to its first half",
+  "run": "early-half-prefix"
+}

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_retained_message_probe_tests",
+    "--verbose"
+  ],
+  "purpose": "Locate referenced binary retention after endpoint cleanup, grouped by fixture message identity; binary contents omitted"
+}

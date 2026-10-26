@@ -1,0 +1,11 @@
+{
+  "name": "eunit",
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--verbose"
+  ],
+  "started_at": "2026-10-26T22:05:21.634771+00:00"
+}

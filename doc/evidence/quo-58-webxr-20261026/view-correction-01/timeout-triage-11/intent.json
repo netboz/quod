@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_retained_message_probe_tests",
+    "--verbose"
+  ],
+  "purpose": "Count retained heap words and binary-byte occurrences by message owner/type; no payload contents exported"
+}

@@ -1,0 +1,37 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_agent_trace_tests'
+  quod_agent_trace_tests: -hosted_queue_trace_preserves_release_parenting_and_redaction_test_/0-fun-9-...[0.495 s] ok
+  quod_agent_trace_tests: -checkpointed_worker_loss_is_traced_as_pending_test_/0-fun-5-...=WARNING REPORT==== 26-Oct-2026::22:09:52.266794 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=transaction namespace=<<"host-test-agent">> id=134c819e4a75d0d23055538db5e1832216ff618f56bba6303211b72522c78d4a
+[0.383 s] ok
+  quod_agent_trace_tests: -custody_trace_uses_existing_node_worker_without_exporting_key_test_/0-fun-6-...[0.442 s] ok
+  [done in 1.334 s]
+module 'quod_prolog_ontology_tests'
+  quod_prolog_ontology_tests: exact_edit_preserves_an_earlier_general_clause_test...[0.010 s] ok
+  quod_prolog_ontology_tests: membership_source_reorder_and_replacement_never_construct_test...[0.011 s] ok
+  quod_prolog_ontology_tests: unchanged_source_produces_no_mutations_test...[0.009 s] ok
+  quod_prolog_ontology_tests: changed_suffix_leaves_the_unchanged_prefix_alone_test...[0.011 s] ok
+  quod_prolog_ontology_tests: reordered_program_survives_canonical_apply_test...[0.015 s] ok
+  quod_prolog_ontology_tests: compiled_edit_composes_inside_an_existing_transaction_test...[0.014 s] ok
+  quod_prolog_ontology_tests: compiled_edit_cut_and_outer_rollback_preserve_reads_test...[0.015 s] ok
+  quod_prolog_ontology_tests: numeric_facts_roundtrip_through_current_signed_grammar_and_commit_test...[0.015 s] ok
+  quod_prolog_ontology_tests: many_clauses_keep_one_ordered_transaction_within_shared_term_depth_test...[0.063 s] ok
+  quod_prolog_ontology_tests: stale_baseline_refuses_before_mutating_test...[0.021 s] ok
+  quod_prolog_ontology_tests: wrong_predicate_rolls_back_the_entire_edit_test...[0.015 s] ok
+  quod_prolog_ontology_tests: duplicate_clauses_are_refused_before_a_goal_is_returned_test...[0.016 s] ok
+  quod_prolog_ontology_tests: new_clauses_keep_their_independent_variables_test...[0.016 s] ok
+  quod_prolog_ontology_tests: compiling_new_symbols_allocates_no_atoms_and_returns_explicit_assertions_test...[0.015 s] ok
+  quod_prolog_ontology_tests: complete_edit_groups_predicates_and_preserves_unchanged_contents_test...[0.680 s] ok
+  quod_prolog_ontology_tests: complete_edit_detects_changed_baseline_and_accept_time_phantoms_test...[0.264 s] ok
+  quod_prolog_ontology_tests: complete_edit_rejects_a_matching_final_chunk_of_stale_source_test...[0.762 s] ok
+  quod_prolog_ontology_tests: complete_edit_removes_predicates_and_renaming_variables_is_unchanged_test...[1.255 s] ok
+  quod_prolog_ontology_tests: complete_edit_compiles_new_zero_arity_symbols_without_atom_allocation_test...[0.366 s] ok
+  quod_prolog_ontology_tests: compiler_data_helpers_have_no_implicit_following_test...[0.008 s] ok
+  [done in 3.642 s]
+=======================================================
+  All 23 tests passed.

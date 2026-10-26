@@ -1,0 +1,11 @@
+{
+  "revision": "de1e9af4ad230f021887faca27efc89e97b7189a",
+  "tree": "/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/release-tree-03",
+  "frozen_at": "2026-10-26T21:23:36.143957+00:00",
+  "scope": "QUO-58/QUO-24 unrestricted tracked-view correction; prior failed demo evidence is preserved. Includes the explicitly recorded pre-existing tracked server working changes. Committed controller assets and dependency patch are included. No ledger mutation in this runner.",
+  "working_patch_sha256": "49b37a67f99987ee149b4f4468daf97527075c115ac0a08a515c933201da53bb",
+  "production_edits_since_failed_gate": false,
+  "fixture_cleanup_regressions": true,
+  "user_untracked_files_excluded": true,
+  "controller_assets_committed": true
+}

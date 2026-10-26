@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--generator=quod_space_creation_tests:atomic_completion_wait_includes_complete_record_test_",
+    "--verbose"
+  ],
+  "purpose": "Verify the existing subscribed completion helper waits for actual Complete, then allows the independent refused instruction"
+}

@@ -1,5 +1,8 @@
 # Unrestricted tracked viewing
 
+**All twelve release gates passed** on the frozen correction. Image packaging,
+rollout and fresh physical acceptance are next; no physical pass is claimed.
+
 Yan rejected the fixed head-movement bubble and its blackout after the real
 demo. He did not request that restriction. This correction removes it outright.
 
@@ -25,9 +28,10 @@ adapter and packaged appearance remain intact. Existing controlled-body travel,
 placement and landing checks remain. Visual terrain interest still follows the
 camera through the existing signed view stream. No security policy changes.
 
-The exact production delta is **22 added / 131 removed / net −109 lines** across
-13 files, including declarations and the lobby recipe. This corrects the
-intermediate progress message's arithmetic. See [per-file counts](production-delta.json).
+The exact production delta is **22 added / 119 removed / net −97 lines** across
+13 files, including declarations and the lobby recipe. The previous source-file count
+of −109 included 12 lines from the retired embedded native test; those are now
+reported separately. See [per-file counts](production-delta.json).
 The initial source hashes match HEAD for the diagnosed files. Unrelated dirty
 server/test changes are preserved and excluded from the correction commit;
 their exact patch is included in the release freeze because it is present in
@@ -65,8 +69,28 @@ edit module comparisons passed; see the [retained triage](timeout-triage-01/asse
 The second complete sequence also stopped at the same test after 4,039 passing
 tests. Both sequences remain failed; their logs and STOP markers remain.
 No CT, xref, Dialyzer or release packaging followed these failures. Deployment
-is blocked; no corrected image has been built or deployed. The source fix and
-focused regressions are complete, but they are not a full release qualification.
+was blocked at that point; no corrected image had been built or deployed. The
+source fix and focused regressions alone were not a full release qualification.
+
+The [subsequent diagnosis](timeout-triage-14/assessment.md) reduced the timeout
+to a small test prefix and measured excess GC from retained fixture snapshots.
+Two test lifecycle owners now release only their own observations after their
+senders stop. Regressions fail before cleanup and pass afterward; the reduced
+sequence passes 157 tests with the editor case at 0.600 seconds. Production
+compiler code, assertions and deadlines are unchanged. A separately frozen
+[third qualification](release-gates-03/freeze.json) cleared the editor case in
+1.153 seconds and completed EUnit with 4,243 passing tests and one assertion
+failure. `authorization_and_lookup_failures_never_fall_back_test_` received
+`request_not_submitted, agent_unavailable` before its expected authorization
+refusal. The sequence stopped there; later gates did not run. A bounded
+[readiness diagnostic](readiness-triage-01/repeated.intent.json) reproduces the
+failure in fresh fixtures: the actor is alive and idle, but its runtime has an
+event runner active when the immediate request arrives. The [causal regression](readiness-triage-04/assessment.md) identifies that late
+work as the group Complete record. The test helper mistook a terminal local
+operation claim for completed group publication. Its correction waits for the
+group through the existing subscription and original absolute deadline;
+production semantics do not change. The subsequent gate 04 below supplies the
+required full frozen qualification.
 
 The desktop diagnosis's first two attempts failed before useful measurement;
 the third initially had a diagnostic JavaScript separator error. Each attempt,
@@ -94,3 +118,28 @@ record stereo frames, changing head poses and both controllers, and check
 leaning/standing, exit/re-entry and Yan's visible-output observations. Stop only
 owned processes. Native readiness belongs to QUO-38; GUI physical acceptance to
 QUO-24. No physical pass is claimed for this source correction yet.
+
+The final rebuilt, uninstrumented readiness check passes all 34 tests, including
+twenty fresh repetitions. The prior helper fails the deterministic held-Complete
+regression. Only `test/quod_ct.erl` and `test/quod_space_creation_tests.erl` change
+from gate 03. The fourth separately frozen twelve-gate sequence passed with
+these corrections; all earlier failures remain. No production change, deadline
+increase, operation resubmission, ontology update or further reset was made.
+
+## Completed release qualification
+
+[Gate 04](release-gates-04/PASSED.json) passed all twelve checks sequentially:
+56 native debug tests, 56 native release tests, Clippy, 289 client tests, UI build
+and lint, 4,245 EUnit tests, 149 CT tests, xref, Dialyzer and release packaging
+(the native clean step also passed). Every gate reports unchanged frozen source.
+The original source-edit case passes in 0.868 seconds; the space-creation case
+passes in 3.654 seconds; the held-Complete regression passes in 0.495 seconds.
+The old failures and STOP markers remain. Completed public logs redact only
+generated test private keys, with private originals and hash receipts retained.
+Full CT detail logs remain in the frozen tree with a public hash manifest.
+
+[Compared with the deployed demo](deployed-source-delta.json), production differs
+only in the thirteen head-view correction files. Dependencies, controller source
+and packaged controller assets are unchanged. Other changed build inputs are
+eight test files. The original user-owned working patch is still exactly
+`38f36875692d0044db4d5d86796c55ecc3f65f72423e167bbd6d292d3355ef04`.

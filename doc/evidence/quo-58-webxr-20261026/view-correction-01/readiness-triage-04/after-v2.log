@@ -1,0 +1,9 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_space_creation_tests: -atomic_completion_wait_includes_complete_record_test_/0-fun-6-...[1.217 s] ok
+=======================================================
+  Test passed.

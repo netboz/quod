@@ -311,3 +311,56 @@ The next investigation must isolate full-suite state/work behind this timeout;
 it must not raise the deadline, suppress the test or repeatedly rerun the whole
 release without a causal correction. The completed head-view fix is kept
 separate from that qualification blocker.
+
+The subsequent bounded diagnosis reproduced the timeout with a nine-module
+prefix and measured excess full garbage collection from retained fixture
+snapshots. Endpoint teardown left results/history carrying its stopped owner's
+PID; hosted-ontology teardown left full commit observations for its stopped
+namespaces. Both lifecycle owners now dispose only their scoped observations.
+Three regressions exercise real owners, repeated use, exception cleanup and
+preservation of unrelated messages. The corrected reduced sequence passes all
+157 tests, with the editor case taking 0.600 seconds under its unchanged limit.
+Production compiler code and test deadlines remain unchanged. See the
+[causal investigation and retained failures](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/timeout-triage-14/assessment.md).
+
+A third, separately frozen qualification ran after that concrete correction.
+Its build inputs differ from the failed second sequence only in the two test
+fixtures. Its retained failure is described below. No image packaging or rollout is authorized by a partial
+result; all twelve gates still have to pass. The original user-owned patch is
+unchanged, and the head-view production correction remains committed as
+`de1e9af4`.
+
+The third gate cleared the original editor timeout (1.153 seconds) but stopped
+after 4,243 EUnit passes and one space-creation readiness failure. The retained
+STOP and logs are under `view-correction-01/release-gates-03`. Bounded fresh
+fixtures reproduce an active runtime event runner at immediate-request admission,
+with a live actor and no pending actor request. This is a new release blocker;
+the cause is now established: an atomic operation receipt becomes terminal
+before its group Complete record. The fixture completion helper must observe
+that group publication through its existing subscribed owner and unchanged
+deadline before starting another independent instruction. A real signed-write
+regression holds the existing coordinator at its terminal-phase barrier, then
+releases Complete and checks the next refused instruction. Production semantics
+are unchanged. No image or rollout has been attempted, and no operation is
+resubmitted. The diagnostic build-cache mistakes and their failed runs are
+retained in the [readiness investigation](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/readiness-triage-04/assessment.md).
+
+The final rebuilt, uninstrumented readiness check passes all 34 tests, including
+twenty fresh repetitions. The prior helper fails the deterministic held-Complete
+regression. Only `test/quod_ct.erl` and `test/quod_space_creation_tests.erl` change
+from gate 03. The fourth separately frozen twelve-gate sequence passed with
+these corrections; all earlier failures remain. No production change, deadline
+increase, operation resubmission, ontology update or further reset was made.
+
+The line-count audit separates the 12 removed lines of the obsolete embedded
+native test from implementation code: production adds 22 and removes 119
+(net −97). The previous −109 source-file total included that test. Coverage
+retirement and its replacement obligations are documented in the correction
+assessment; source behavior and the frozen gate inputs are unchanged.
+
+All twelve gate-04 checks passed sequentially, including 4,245 EUnit and 149 CT
+tests. Both previously blocking cases and the new held-Complete regression pass
+in the full run. The tested source stayed frozen, and the original user-owned
+patch is unchanged. The next authorized steps are scoped commit, verified image
+packaging and image-only rollout, then the fresh HTTPS demo after Yan is ready.
+No further ledger reset or in-place ontology update is part of those steps.

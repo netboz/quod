@@ -1,0 +1,59 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_outcome_endpoint_tests'
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (normal)...*failed*
+in function quod_outcome_endpoint_tests:'-fixture_observations_end_with_owner_test_/0-fun-6-'/2 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-12/test/quod_outcome_endpoint_tests.erl, line 28)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from quod_outcome_endpoint_tests:'-fixture_observations_end_with_owner_test_/0-fun-7-'/1 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-12/test/quod_outcome_endpoint_tests.erl, line 12)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:retained_endpoint_snapshot
+  output:<<"">>
+
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (exception)...*failed*
+in function quod_outcome_endpoint_tests:'-fixture_observations_end_with_owner_test_/0-fun-6-'/2 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-12/test/quod_outcome_endpoint_tests.erl, line 28)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from quod_outcome_endpoint_tests:'-fixture_observations_end_with_owner_test_/0-fun-7-'/1 (/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/diagnostic-tree-12/test/quod_outcome_endpoint_tests.erl, line 12)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:retained_endpoint_snapshot
+  output:<<"">>
+
+  quod_outcome_endpoint_tests: replay_ready_at_unchanged_height_releases_the_same_request_test...[0.001 s] ok
+  quod_outcome_endpoint_tests: snapshot_result_racing_newer_head_is_resampled_test...[0.001 s] ok
+  quod_outcome_endpoint_tests: unchanged_stale_snapshot_parks_without_a_resampling_loop_test...[0.062 s] ok
+  quod_outcome_endpoint_tests: runtime_edge_queued_before_owner_decision_is_not_lost_test...[0.001 s] ok
+  quod_outcome_endpoint_tests: wrong_anchor_or_era_is_refused_without_a_worker_test...[0.031 s] ok
+  quod_outcome_endpoint_tests: parked_request_refuses_a_changed_committee_test...[0.001 s] ok
+  quod_outcome_endpoint_tests: parked_deadline_removes_worker_and_subscription_test...[0.101 s] ok
+  quod_outcome_endpoint_tests: owner_death_releases_parked_worker_and_subscription_test...ok
+  quod_outcome_endpoint_tests: operation_applied_pins_history_and_waits_for_durable_publication_test...[0.164 s] ok
+  quod_outcome_endpoint_tests: operation_applied_signs_historical_not_current_committee_test...[0.099 s] ok
+  quod_outcome_endpoint_tests: operation_applied_current_member_cannot_replace_historical_signer_test...[0.106 s] ok
+  quod_outcome_endpoint_tests: operation_applied_wrong_occurrence_is_not_signed_test...[0.114 s] ok
+  quod_outcome_endpoint_tests: operation_applied_deadline_does_not_restart_while_parked_test...[0.237 s] ok
+  quod_outcome_endpoint_tests: operation_applied_owner_death_releases_the_pinned_capture_test...[0.087 s] ok
+  quod_outcome_endpoint_tests: operation_collector_uses_the_real_endpoint_and_exact_result_test...[0.109 s] ok
+  quod_outcome_endpoint_tests: operation_collector_expiry_keeps_inclusion_but_invents_no_verdict_test...[0.326 s] ok
+  quod_outcome_endpoint_tests: target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test...[0.156 s] ok
+  quod_outcome_endpoint_tests: exact_claim_reuses_live_consensus_custody_test...[0.200 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (caller_expired)...[0.724 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (custody_expired)...[0.283 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (restarted)...[0.815 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed)...[0.067 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (rejected)...[0.045 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed_before_apply)...[0.050 s] ok
+  [done in 4.380 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 24.
+===> Error running tests

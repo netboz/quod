@@ -43,7 +43,7 @@ def protected():
         assert present[before['ID']]['Name'] == before['Name']
 
 def image():
-    passed = json.loads((EVIDENCE / 'release-gates-02/PASSED.json').read_text())
+    passed = json.loads((EVIDENCE / 'release-gates-04/PASSED.json').read_text())
     assert passed['passed'] and len(passed['results']) == 12
     assert all(r['exit'] == 0 and r['sources_unchanged'] for r in passed['results'])
     verified = read('verified-image.json')

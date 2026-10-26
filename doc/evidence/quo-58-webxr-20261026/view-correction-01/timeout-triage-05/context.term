@@ -1,0 +1,1805 @@
+#{process => [{memory,196992},{reductions,663391},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_action_predicates_tests,
+  dictionary_words => []}.
+#{process => [{memory,67928},{reductions,682255},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_agent_identity_tests,
+  dictionary_words => []}.
+#{process => [{memory,109408},{reductions,722934},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_agent_predicates_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',3}]}.
+#{process => [{memory,426608},{reductions,803074},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_agent_ref_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',3}]}.
+#{process => [{memory,122272},{reductions,6787594},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_agent_vault_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',3}]}.
+#{process => [{memory,88728},{reductions,6795568},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_applied_certificate_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',3}]}.
+#{process => [{memory,689640},{reductions,15487120},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_ask_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',3}]}.
+#{process => [{memory,142912},{reductions,15555428},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_ask_router_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',29}]}.
+#{process => [{memory,689640},{reductions,23318710},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_atomic_tests,
+  dictionary_words => [{'$__current_otel_ctx',0},{'$logger_metadata$',29}]}.
+#{process => [{memory,101520},{reductions,23342615},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_brahms_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,163608},{reductions,23450126},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_brahms_population_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,426624},{reductions,115967810},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_brahms_sampler_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,55248},{reductions,115973089},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_c4_attempt_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,110528},{reductions,115982763},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_c4_sampler_observation_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,692232},{reductions,140252831},{message_queue_len,28}],
+  mailbox => #{trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_catchup_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,179088},{reductions,140387381},{message_queue_len,28}],
+  mailbox => #{trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,199688},{reductions,140405489},{message_queue_len,28}],
+  mailbox => #{trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_auth_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,179696},{reductions,140433593},{message_queue_len,36}],
+  mailbox => #{'DOWN' => 8,trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_cursor_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,2921240},{reductions,140725234},{message_queue_len,36}],
+  mailbox => #{'DOWN' => 8,trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_goal_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,151096},{reductions,140736803},{message_queue_len,36}],
+  mailbox => #{'DOWN' => 8,trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_goal_endpoint_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,693152},{reductions,141334101},{message_queue_len,36}],
+  mailbox => #{'DOWN' => 8,trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_goal_ingress_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,29},{'$logger_metadata$',29}]}.
+#{process => [{memory,7642480},{reductions,142324753},{message_queue_len,36}],
+  mailbox => #{'DOWN' => 8,trace => 25,'$gen_cast' => 2,transport_event => 1},
+  after_module => quod_client_goal_parser_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,183832},{reductions,142555829},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_client_goal_router_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,697184},{reductions,142787811},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_client_goal_target_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,238136},{reductions,142817502},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_client_http_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,158248},{reductions,144622481},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_client_result_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,697072},{reductions,148747197},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_commit_validation_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,697072},{reductions,150447368},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_committed_projection_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,434056},{reductions,150675601},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_committee_predicates_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,697112},{reductions,153984215},{message_queue_len,83}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_common_primitives_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},{rand_seed,21},{'$logger_metadata$',29}]}.
+#{process => [{memory,697864},{reductions,157228940},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_consensus_trace_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,697864},{reductions,157942678},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_diff_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,752432},{reductions,157983417},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_directory_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,697864},{reductions,158880060},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_directory_generation_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,292992},{reductions,158940008},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_directory_predicates_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,434864},{reductions,172437928},{message_queue_len,92}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 49,'$gen_cast' => 2,quod_test_span => 9,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        transport_event => 1},
+  after_module => quod_dtx_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1133392},{reductions,184223600},{message_queue_len,205}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 2,
+        quod_test_span => 113,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_coordinator_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',23}]}.
+#{process => [{memory,1140960},{reductions,186645839},{message_queue_len,291}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 2,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_current_view_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1032592},{reductions,187331381},{message_queue_len,291}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 2,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_endpoint_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,14088240},{reductions,188274068},{message_queue_len,293}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_owner_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1829720},{reductions,189394899},{message_queue_len,293}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_phase_index_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1141136},{reductions,190473082},{message_queue_len,293}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_dtx_recovery_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,627904},{reductions,190489138},{message_queue_len,293}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 56,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,transport_event => 1},
+  after_module => quod_durable_term_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2944624},{reductions,194124225},{message_queue_len,295}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 57,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,
+        transport_event => 1},
+  after_module => quod_effect_journal_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1141312},{reductions,194251500},{message_queue_len,295}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 57,'$gen_cast' => 2,gproc => 4,
+        quod_test_span => 199,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,
+        transport_event => 1},
+  after_module => quod_erlog_db_mvcc_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,698416},{reductions,198170271},{message_queue_len,96}],
+  mailbox =>
+      #{'DOWN' => 8,trace => 57,'$gen_cast' => 2,gproc => 4,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,transport_event => 1},
+  after_module => quod_explorer_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1812808},{reductions,198774270},{message_queue_len,99}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_feed_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,435640},{reductions,198794298},{message_queue_len,99}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_file_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,199807924},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_foreign_projection_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,199948418},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_identity_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,415912},{reductions,199984725},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_ingress_state_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,200650870},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_ledger_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,237492108},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_ledger_store_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,436872},{reductions,237514245},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_link_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,436784},{reductions,237570271},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_log_formatter_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,239018476},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_material_admission_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1125192},{reductions,241488680},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_metrics_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,436608},{reductions,241561588},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_node_actor_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1125192},{reductions,242967375},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_operation_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2556544},{reductions,243060690},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_operation_vector_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699624},{reductions,250825840},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_outcome_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,382432},{reductions,250833656},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_peer_route_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,240576},{reductions,250844946},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_physics_coordinates_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,436608},{reductions,250876022},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_proof_context_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1125192},{reductions,251999208},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_proof_session_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,382432},{reductions,252011036},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_quorum_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,274056},{reductions,252054573},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_read_certificate_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,436608},{reductions,252132182},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_read_set_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,240504},{reductions,252139475},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_reg_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,253288},{reductions,252225796},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_relay_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,699552},{reductions,252988572},{message_queue_len,110}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 57,'$gen_cast' => 2,gproc => 4,
+        foreign_projection_building => 11,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_resource_basis_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1126600},{reductions,254608936},{message_queue_len,126}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        projection_advanced => 1,foreign_projection_building => 11,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_runtime_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1126600},{reductions,254664026},{message_queue_len,126}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        projection_advanced => 1,foreign_projection_building => 11,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_safe_term_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,701032},{reductions,255640188},{message_queue_len,126}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        projection_advanced => 1,foreign_projection_building => 11,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_schema_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1128976},{reductions,256655203},{message_queue_len,153}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        replay_started => 2,applied_live => 1,projection_advanced => 4,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        quod_test_span => 10,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_scope_session_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,440392},{reductions,256767263},{message_queue_len,153}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        replay_started => 2,applied_live => 1,projection_advanced => 4,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        quod_test_span => 10,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_scope_wire_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1128976},{reductions,257537605},{message_queue_len,153}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        replay_started => 2,applied_live => 1,projection_advanced => 4,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        quod_test_span => 10,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_selection_basis_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,615744},{reductions,270815396},{message_queue_len,153}],
+  mailbox =>
+      #{'DOWN' => 9,trace => 72,'$gen_cast' => 2,gproc => 4,
+        replay_started => 2,applied_live => 1,projection_advanced => 4,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        quod_test_span => 10,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_signing_journal_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1130560},{reductions,286091773},{message_queue_len,171}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 2,applied_live => 1,projection_advanced => 4,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_simplex_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1819496},{reductions,286578040},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_system_ontology_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,13345192},{reductions,289884966},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_terrain_wire_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,388264},{reductions,290003709},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_trace_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1819496},{reductions,291612673},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_transaction_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,705344},{reductions,291665686},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_transaction_predicates_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1819520},{reductions,293976824},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_voxel_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2933648},{reductions,295500484},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_wire_term_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1130912},{reductions,296314611},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_action_savepoint_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1731824},{reductions,296800635},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_admission_cleanup_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1130912},{reductions,339320080},{message_queue_len,175}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,applied_live => 1,projection_advanced => 6,
+        scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_agent_actions_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1133000},{reductions,341286415},{message_queue_len,177}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 6,scope_step_started => 5,
+        scope_step_finished => 4,foreign_projection_building => 11,
+        proof_ready => 2,dtx_endpoint_worker_result => 3,dtx_drive => 4,
+        quod_test_span => 12,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_attestation_readiness_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,705520},{reductions,342213410},{message_queue_len,177}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 4,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 6,scope_step_started => 5,
+        scope_step_finished => 4,foreign_projection_building => 11,
+        proof_ready => 2,dtx_endpoint_worker_result => 3,dtx_drive => 4,
+        quod_test_span => 12,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_config_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1133904},{reductions,343633864},{message_queue_len,209}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 16,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 18,agent_owned_result => 4,
+        agent_completed => 4,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,proof_ready => 2,
+        dtx_endpoint_worker_result => 3,dtx_drive => 4,quod_test_span => 12,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_agent_custody_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,993480},{reductions,344126735},{message_queue_len,223}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 20,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 22,agent_owned_result => 4,
+        agent_completed => 4,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        proof_ready => 2,dtx_endpoint_worker_result => 3,dtx_drive => 4,
+        quod_test_span => 12,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_observation_capacity_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,621952},{reductions,344142845},{message_queue_len,223}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 20,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 22,agent_owned_result => 4,
+        agent_completed => 4,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        proof_ready => 2,dtx_endpoint_worker_result => 3,dtx_drive => 4,
+        quod_test_span => 12,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_observation_drop_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2938928},{reductions,344849831},{message_queue_len,235}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 26,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 28,agent_owned_result => 4,
+        agent_completed => 4,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        proof_ready => 2,dtx_endpoint_worker_result => 3,dtx_drive => 4,
+        quod_test_span => 12,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_reaction_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,1696736},{reductions,345656221},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_agent_trace_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,7758872},{reductions,385221481},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_assertion_construction_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4841984},{reductions,386334125},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_atomic_delivery_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,2667872},{reductions,386465555},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_atomic_format_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,7758952},{reductions,388026156},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_atomic_origin_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4842064},{reductions,390787931},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_attested_context_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4842064},{reductions,397492689},{message_queue_len,1375}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 72,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_authenticated_flow_tests,
+  dictionary_words =>
+      [{'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,7759480},{reductions,413108595},{message_queue_len,1381}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 32,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 34,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_catchup_verify_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4845320},{reductions,476356368},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_class_permissions_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4845320},{reductions,481902825},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_class_semantics_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,3042584},{reductions,482035507},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_create_root_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,3042584},{reductions,482413256},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_cut_event_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4244408},{reductions,482538973},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dead_adapter_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4845320},{reductions,485255591},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_admission_material_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,9695960},{reductions,498389311},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_coordinator_evidence_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,1698912},{reductions,498464333},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_coordinator_trace_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,3042584},{reductions,498590080},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_coordinator_unwind_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,3042584},{reductions,498891722},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_deadline_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4845320},{reductions,500558006},{message_queue_len,1412}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 78,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1137,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_endpoint_fanout_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,2692936},{reductions,501318822},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_group_trace_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,1719504},{reductions,501379939},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_inclusion_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4865856},{reductions,501536815},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_parent_progress_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4865912},{reductions,501589744},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_dtx_readiness_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,4866304},{reductions,501657321},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_e2e_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,3063176},{reductions,521003328},{message_queue_len,1646}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 88,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_entry_selection_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process =>
+      [{memory,7808008},{reductions,526632597},{message_queue_len,1639}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 81,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 1361,transport_lease_owner => 12,
+        transport_lease_released => 11,effect_handoff => 1,feed_link => 2,
+        transport_event => 1},
+  after_module => quod_evidence_resolver_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,628576},{reductions,529327167},{message_queue_len,285}],
+  mailbox =>
+      #{'DOWN' => 17,trace => 81,'$gen_cast' => 3,gproc => 4,
+        replay_started => 48,runtime_snapshot_advanced => 1,applied_live => 2,
+        projection_advanced => 49,agent_owned_result => 5,
+        agent_completed => 5,scope_step_started => 5,scope_step_finished => 4,
+        foreign_projection_building => 11,agent_observation_installed => 6,
+        agent_installed => 1,proof_ready => 2,dtx_endpoint_worker_result => 3,
+        dtx_drive => 4,quod_test_span => 4,page_test_release => 3,
+        transport_lease_owner => 12,transport_lease_released => 11,
+        effect_handoff => 1,feed_link => 2,transport_event => 1},
+  after_module => quod_foreign_job_tracing_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1806376},{reductions,531869973},{message_queue_len,0}],
+  mailbox => #{},after_module => quod_foreign_lifecycle_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,991424},{reductions,532504822},{message_queue_len,188}],
+  mailbox => #{quod_test_span => 188},
+  after_module => quod_foreign_queue_observation_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1361760},{reductions,532539631},{message_queue_len,188}],
+  mailbox => #{quod_test_span => 188},
+  after_module => quod_foreign_registry_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,14666320},{reductions,583364612},{message_queue_len,41}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6},
+  after_module => quod_foreign_residency_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1720112},{reductions,583898561},{message_queue_len,41}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6},
+  after_module => quod_genesis_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1807872},{reductions,597635659},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_history_view_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,430704},{reductions,597679289},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_independent_predicates_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,32778680},{reductions,618903468},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_ledger_artifact_architecture_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1119472},{reductions,620016806},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_ledger_artifact_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,7641648},{reductions,641322224},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_ledger_view_architecture_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2922024},{reductions,666571124},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_lens_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1119288},{reductions,676684329},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_licence_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1807872},{reductions,789426858},{message_queue_len,42}],
+  mailbox => #{trace => 35,quod_foreign_follow => 6,owner_capture_result => 1},
+  after_module => quod_measure_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1808576},{reductions,790414857},{message_queue_len,50}],
+  mailbox =>
+      #{trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,owner_capture_result => 1},
+  after_module => quod_node_context_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1808576},{reductions,793361191},{message_queue_len,50}],
+  mailbox =>
+      #{trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,owner_capture_result => 1},
+  after_module => quod_operation_claim_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,606760},{reductions,793404337},{message_queue_len,50}],
+  mailbox =>
+      #{trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,owner_capture_result => 1},
+  after_module => quod_operation_format_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1119992},{reductions,796379722},{message_queue_len,50}],
+  mailbox =>
+      #{trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,owner_capture_result => 1},
+  after_module => quod_operation_identity_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1119992},{reductions,798085827},{message_queue_len,50}],
+  mailbox =>
+      #{trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,owner_capture_result => 1},
+  after_module => quod_operation_receipt_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,1125624},{reductions,800675527},{message_queue_len,114}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,quod_test_span => 54,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_operation_recovery_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,612440},{reductions,800687895},{message_queue_len,114}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,quod_foreign_follow => 6,replay_started => 4,
+        projection_advanced => 4,quod_test_span => 54,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_operation_trace_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2585096},{reductions,807647510},{message_queue_len,164}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 4,projection_advanced => 4,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_outcome_endpoint_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,4739688},{reductions,809344522},{message_queue_len,211}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,committed => 1,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 19,projection_advanced => 35,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_outcome_result_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2565520},{reductions,810450703},{message_queue_len,211}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,committed => 1,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 19,projection_advanced => 35,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_overlay_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2566880},{reductions,810543423},{message_queue_len,211}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,committed => 1,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 19,projection_advanced => 35,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_owner_trace_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,4741592},{reductions,812579611},{message_queue_len,231}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,committed => 1,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 29,projection_advanced => 45,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_physics_control_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.
+#{process => [{memory,2567280},{reductions,812937619},{message_queue_len,231}],
+  mailbox =>
+      #{'DOWN' => 2,trace => 35,committed => 1,quod_foreign_follow => 6,
+        endpoint_result => 33,replay_started => 29,projection_advanced => 45,
+        quod_test_span => 54,history_capture => 17,worker_wake => 8,
+        owner_capture_result => 1},
+  after_module => quod_predicate_failure_tests,
+  dictionary_words =>
+      [{sink_projection,735},
+       {'$__current_otel_ctx',0},
+       {rand_seed,21},
+       {quod_trace,11},
+       {sink,962},
+       {'$logger_metadata$',29}]}.

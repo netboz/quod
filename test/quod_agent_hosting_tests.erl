@@ -1553,6 +1553,28 @@ installed(Ref, Epoch) ->
 commit(Ns, Goal) ->
     ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).
 
+
+hosted_fixture_releases_commit_observations_test_() ->
+    {timeout, 60, fun() ->
+        Unrelated = {committed, <<"other-fixture">>, 0, retained},
+        self() ! Unrelated,
+        lists:foreach(fun(_) ->
+            Ns = with_host(fun(#{namespace := Namespace}) ->
+                true = quod_reg:subscribe({committed, Namespace}),
+                try
+                    commit(Namespace, {assertz, {cleanup_probe, value}}),
+                    {messages, Messages} = process_info(self(), messages),
+                    ?assert(lists:any(fun({committed, N, _, _}) when N =:= Namespace -> true;
+                                         (_) -> false end, Messages)),
+                    Namespace
+                after quod_reg:unsubscribe({committed, Namespace}) end
+            end),
+            receive {committed, Ns, _, _} -> error(retained_fixture_commit)
+            after 0 -> ok end
+        end, [first, repeat]),
+        receive Unrelated -> ok after 0 -> error(discarded_other_fixture_commit) end
+    end}.
+
 with_host(Fun) -> with_host(Fun, []).
 
 with_host(Fun, ExtraFacts) -> with_host(Fun, ExtraFacts, current).
@@ -1636,6 +1658,7 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
         quod_reg:unsubscribe({agent, Ref}),
         quod_reg:unsubscribe({agent_hosting, Ns}),
         stop_ontology(ActorOntology), stop_ontology(NodeOntology),
+        release_host_notifications(Ns), release_host_notifications(NodeNs),
         gen_server:stop(Vault), gen_server:stop(Auth), gen_server:stop(Router),
         ok = file:delete(BeamPath),
         lists:foreach(fun({K, undefined}) -> application:unset_env(quod, K);
@@ -1649,6 +1672,15 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
         {failed, FailureClass, FailureReason, FailureStack} ->
             io:format("Failed hosted-agent fixture retained at ~s~n", [Dir]),
             erlang:raise(FailureClass, FailureReason, FailureStack)
+    end.
+
+%% Namespace owners have stopped, so their test observations cannot be used
+%% again. Keep notifications belonging to every other fixture intact.
+release_host_notifications(Ns) ->
+    receive
+        {committed, Ns, _, _} -> release_host_notifications(Ns);
+        {certified_head, Ns, _} -> release_host_notifications(Ns)
+    after 0 -> ok
     end.
 
 owned_reaction(Instance, Event, Goal) -> owned_reaction(Instance, Event, Goal, true).

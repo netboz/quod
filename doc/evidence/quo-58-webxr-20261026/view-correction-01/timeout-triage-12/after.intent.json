@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_outcome_endpoint_tests",
+    "--verbose"
+  ],
+  "purpose": "Verify scoped endpoint observation cleanup; original assertions and deadlines preserved"
+}

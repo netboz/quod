@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_outcome_endpoint_tests",
+    "--verbose"
+  ],
+  "purpose": "Demonstrate new owner-cleanup regression fails with original fixture"
+}

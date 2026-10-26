@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_readiness_probe_tests",
+    "--verbose"
+  ],
+  "purpose": "Identify event kind at reproduced immediate-admission failure; ten fresh fixtures"
+}

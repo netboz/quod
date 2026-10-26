@@ -1,0 +1,1 @@
+The first corrected-helper run stayed blocked as required, but the regression did not observe its wait: the local trace was installed before `quod_ct` was loaded. The revised test explicitly loads that module and asserts that exactly one trace point is installed. The failed first run remains.

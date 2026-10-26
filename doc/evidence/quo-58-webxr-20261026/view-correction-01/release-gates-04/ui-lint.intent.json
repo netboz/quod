@@ -1,0 +1,11 @@
+{
+  "name": "ui-lint",
+  "command": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "lint"
+  ],
+  "started_at": "2026-10-26T22:05:21.129412+00:00"
+}

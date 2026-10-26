@@ -1,0 +1,13 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_catchup_verify_tests,quod_prolog_ontology_tests",
+    "--verbose"
+  ],
+  "purpose": "Determine whether the identified retained sink fixture reproduces full-suite compiler timeout; diagnostic only",
+  "phase_records": "../timeout-triage-03/editor-phases.term",
+  "run": "catchup-prefix"
+}

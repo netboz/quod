@@ -1,0 +1,10 @@
+{
+  "name": "release",
+  "command": [
+    "rebar3",
+    "as",
+    "prod",
+    "release"
+  ],
+  "started_at": "2026-10-26T22:41:13.792343+00:00"
+}

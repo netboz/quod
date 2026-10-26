@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_readiness_probe_tests",
+    "--verbose"
+  ],
+  "purpose": "Observe the exact unavailable state in bounded fresh-fixture repetitions; no request retry"
+}

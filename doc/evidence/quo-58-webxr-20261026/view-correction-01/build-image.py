@@ -6,16 +6,16 @@ for variable in ['DEBUG','LD_LIBRARY_PATH','LD_PRELOAD']: os.environ.pop(variabl
 
 root = Path('/home/yan/src/quod')
 evidence = Path(__file__).resolve().parent
-gate = Path('/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/release-gates-02')
+gate = Path('/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/release-gates-04')
 out = root/'_build/quo-58-webxr-20261026/view-correction-01/deployment'
-tree = Path('/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/release-tree-02')
+tree = Path('/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/release-tree-04')
 passed = json.loads((gate/'PASSED.json').read_text())
 assert passed['passed'] and len(passed['results']) == 12
 assert all(r['exit'] == 0 and r['sources_unchanged'] for r in passed['results'])
 freeze = json.loads((gate/'freeze.json').read_text())
 head = freeze['revision']
 patch_hash = freeze['working_patch_sha256']
-assert head == '5c1a90e604131aaa29adfb18ea176f5af8433eae'
+assert head == 'de1e9af4ad230f021887faca27efc89e97b7189a'
 manifest = json.loads((gate/'input-manifest.json').read_text())
 source = {n:h for n,h in manifest.items() if not n.startswith('priv/explorer/')}
 assert all(hashlib.sha256((tree/n).read_bytes()).hexdigest()==h for n,h in source.items())
@@ -34,7 +34,7 @@ for name,digest in files.items():
 record = {'revision':head,'working_patch_sha256':patch_hash,'internal_release_version':'0.7.275','label_changes':False,'files':files}
 with (out/'image-source-manifest.json').open('x') as f: json.dump(record,f,indent=2)
 source_hash = hashlib.sha256((out/'image-source-manifest.json').read_bytes()).hexdigest()
-tag = '0.7.275-head-view-5c1a90e6-'+patch_hash[:8]+'-20261026-v01'
+tag = '0.7.275-head-view-de1e9af4-'+patch_hash[:8]+'-20261026-v01'
 image = '192.168.1.11:5000/quod:'+tag
 url = 'http://192.168.1.11:5000/v2/quod/manifests/'+tag
 headers = {'Accept':'application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json'}

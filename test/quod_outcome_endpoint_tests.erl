@@ -3,6 +3,37 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+
+fixture_observations_end_with_owner_test_() ->
+    [{atom_to_list(Mode), fun() ->
+        UnrelatedResult = {endpoint_result, self(), retained},
+        UnrelatedHistory = {history_capture, self(), other, any, retained},
+        self() ! UnrelatedResult, self() ! UnrelatedHistory,
+        lists:foreach(fun(_) ->
+            Owner = try with_operation_endpoint(fun(F = #{owner := Pid}) ->
+                start_request(F, operation_applied, 3000),
+                {Worker, From} = snapshot_call(F),
+                gen_server:reply(From, operation_snapshot(F, 2, committed)),
+                assert_operation_vote(F, applied),
+                assert_worker_gone(F, Worker),
+                {messages, Messages} = process_info(self(), messages),
+                ?assert(lists:any(fun({endpoint_result, P, _}) when P =:= Pid -> true;
+                                     (_) -> false end, Messages)),
+                ?assert(lists:any(fun({history_capture, P, _, _, _}) when P =:= Pid -> true;
+                                     (_) -> false end, Messages)),
+                case Mode of normal -> Pid; exception -> error({fixture_failed, Pid}) end
+            end)
+            catch error:{fixture_failed, Pid} when Mode =:= exception -> Pid
+            end,
+            receive {endpoint_result, Owner, _} -> error(retained_endpoint_snapshot)
+            after 0 -> ok end,
+            receive {history_capture, Owner, _, _, _} -> error(retained_history_snapshot)
+            after 0 -> ok end
+        end, [first, repeat]),
+        receive UnrelatedResult -> ok after 0 -> error(discarded_unrelated_result) end,
+        receive UnrelatedHistory -> ok after 0 -> error(discarded_unrelated_history) end
+    end} || Mode <- [normal, exception]].
+
 %% Real endpoint workers and owner transitions, with only the Prolog snapshot
 %% reply held by a message-controlled fixture. No ledger timing is assumed.
 replay_ready_at_unchanged_height_releases_the_same_request_test() ->
@@ -599,7 +630,17 @@ with_endpoint_state(Ns, Anchor, Committee, S, Extra, Test) ->
     try Test(F)
     after
         stop_process(Owner),
-        stop_process(Stub)
+        stop_process(Stub),
+        release_endpoint_observations(Owner)
+    end.
+
+%% The stopped owner can no longer send observations. Dispose only its
+%% captured snapshots; unrelated owners' messages remain available.
+release_endpoint_observations(Owner) ->
+    receive
+        {endpoint_result, Owner, _} -> release_endpoint_observations(Owner);
+        {history_capture, Owner, _, _, _} -> release_endpoint_observations(Owner)
+    after 0 -> ok
     end.
 
 prolog_stub(Ns, Parent) ->

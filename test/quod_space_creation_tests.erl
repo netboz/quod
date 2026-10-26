@@ -255,3 +255,56 @@ with_models(#{namespace := Ns, directory := Dir, identity := Node}, Fun) ->
     edit(Ns,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}}),
     try Fun()
     after [quod_agent_hosting_tests:stop_ontology(S) || S <- [MSup,RSup]] end.
+
+atomic_completion_wait_includes_complete_record_test_() ->
+    {timeout, 30, fun() -> with_spaces(fun(C = #{namespace := Ns, destination := Dest}) ->
+        Parent = self(),
+        Trace = trace:session_create(atomic_completion_wait, Parent, []),
+        Previous = application:get_env(quod, dtx_test_phase_barrier),
+        trace:process(Trace, quod_reg:where({quod_simplex, Ns}), true, [call, set_on_spawn]),
+        trace:function(Trace, {application, set_env, 3}, true, []),
+        {module, quod_ct} = code:ensure_loaded(quod_ct),
+        1 = trace:function(Trace, {quod_ct, await_applied_event, 5}, true, [local]),
+        application:set_env(quod, dtx_test_phase_barrier, {hold, terminal}),
+        try
+            {ok, Evidence, {normalized, {committed, _, _}}} = signed_result(C,
+                conj([{space_place, personal, 0, ref(Dest, room)},
+                      {assertz, {attribute, personal, transform, {transform,0,0,0,0,0,0}}}])),
+            Op = quod_client_goal:operation_ref(Evidence),
+            {Coordinator, Barrier} = receive
+                {trace, Pid, call, {application, set_env,
+                    [quod, dtx_test_phase_barrier, {held, _, terminal, Ref}]}} -> {Pid, Ref}
+            after 5000 -> error(complete_barrier_not_reached) end,
+            try
+                {ok, #{operation_state := terminal, outcome_ref := Group}} = quod_prolog:outcome(Op),
+                ?assertMatch({ok, #{status := pending}}, quod_prolog:outcome(Group)),
+                {Waiter, Monitor} = spawn_monitor(fun() ->
+                    receive start -> ok end,
+                    Result = quod_ct:await_operation_complete(Ns, Op, 10000),
+                    Parent ! {atomic_wait_result, self(), Result}
+                end),
+                trace:process(Trace, Waiter, true, [call]), Waiter ! start,
+                try
+                    %% Observe the helper's actual pending wait, not a timed pause.
+                    receive
+                        {trace, Waiter, call, {quod_ct, await_applied_event, _}} -> ok;
+                        {atomic_wait_result, Waiter, _} -> error(completed_before_group_complete)
+                    after 5000 -> error(completion_wait_not_observed) end,
+                    ?assertMatch({ok, #{status := pending}}, quod_prolog:outcome(Group)),
+                    Coordinator ! {quod_dtx_test_release, Barrier},
+                    receive {atomic_wait_result, Waiter, Row} ->
+                        ?assertMatch(#{operation_state := terminal, ref := Op}, Row)
+                    after 5000 -> error(complete_did_not_release_waiter) end,
+                    ?assertMatch({ok, #{status := committed}}, quod_prolog:outcome(Group)),
+                    quod_personal_agent_tests:await_runtime_ready(Ns),
+                    denied_creation(C, maps:get(storage, C), [placement(ref(Dest, closed))])
+                after
+                    exit(Waiter, kill), demonitor(Monitor, [flush])
+                end
+            after Coordinator ! {quod_dtx_test_release, Barrier} end
+        after
+            trace:session_destroy(Trace),
+            case Previous of undefined -> application:unset_env(quod, dtx_test_phase_barrier);
+                             {ok, Old} -> application:set_env(quod, dtx_test_phase_barrier, Old) end
+        end
+    end) end}.

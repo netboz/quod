@@ -1,0 +1,11 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--verbose"
+  ],
+  "purpose": "Diagnostic-only phase measurements; not a release qualification",
+  "deadline_changed": false
+}

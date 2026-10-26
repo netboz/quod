@@ -1,0 +1,11 @@
+{
+  "name": "ui-build",
+  "command": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "build"
+  ],
+  "started_at": "2026-10-26T22:05:15.771139+00:00"
+}

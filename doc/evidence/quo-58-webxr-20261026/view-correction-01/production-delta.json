@@ -1,7 +1,7 @@
 {
   "added": 22,
-  "removed": 131,
-  "net": -109,
+  "removed": 119,
+  "net": -97,
   "files": {
     "client/src/controlled-navigation.js": {
       "added": 5,
@@ -33,7 +33,7 @@
     },
     "native/quod_physics/src/motion.rs": {
       "added": 0,
-      "removed": 38
+      "removed": 26
     },
     "native/quod_physics/src/terrain.rs": {
       "added": 2,
@@ -55,5 +55,18 @@
       "added": 2,
       "removed": 2
     }
-  }
+  },
+  "source_files_including_embedded_tests": {
+    "added": 22,
+    "removed": 131,
+    "net": -109
+  },
+  "embedded_test_delta": {
+    "added": 0,
+    "removed": 12,
+    "net": -12,
+    "file": "native/quod_physics/src/motion.rs",
+    "reason": "Retired sensory-clearance test; still-valid body-isolation obligation is covered by the head-motion regression."
+  },
+  "counting_note": "Production totals exclude the 12 removed lines of the embedded native test. The earlier source-file total of net -109 included those test lines."
 }

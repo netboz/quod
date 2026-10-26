@@ -899,7 +899,8 @@ await_applied(Ns, Height, TimeoutMs)
 
 %% Receipt publication is asynchronous after client results. Reuse the same
 %% subscribed, incarnation-pinned wait as applied-height tests, not a polling
-%% resolve loop or a new submission of an uncertain operation.
+%% resolve loop or a new submission of an uncertain operation. Atomic claims
+%% are terminal before Complete; await that group publication as well.
 await_operation_complete(Ns, {operation, Ns, _, _, _} = Ref, TimeoutMs)
   when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs > 0 ->
     await_projection(Ns, {operation, Ref}, TimeoutMs).
@@ -925,6 +926,7 @@ await_applied_read(Owner, Monitor, Ns, Height, Deadline) ->
     Remaining = applied_wait_budget(Ns, Height, Deadline),
     Request = case Height of
         {operation, Ref} -> {outcome, Ref};
+        {group_completion, Ref, _Row} -> {outcome, Ref};
         _ -> get_stats
     end,
     Stats = try gen_server:call(Owner, Request, Remaining)
@@ -934,12 +936,18 @@ await_applied_read(Owner, Monitor, Ns, Height, Deadline) ->
             end,
     _ = applied_wait_budget(Ns, Height, Deadline),
     case applied_wait_state(Height, Stats) of
+        {ready, #{outcome_ref := Group = {group, _, _, _, _, _}} = Row}
+          when element(1, Height) =:= operation ->
+            await_applied_read(Owner, Monitor, Ns, {group_completion, Group, Row}, Deadline);
         {ready, Result} -> Result;
         pending ->
             await_applied_event(Owner, Monitor, Ns, Height, Deadline);
         invalid -> error({await_applied_bad_stats, Ns, Stats})
     end.
 
+applied_wait_state({group_completion, Ref, Row}, {ok, #{ref := Ref, status := Status}})
+  when Status =:= committed; Status =:= aborted -> {ready, Row};
+applied_wait_state({group_completion, Ref, _}, {ok, #{ref := Ref, status := pending}}) -> pending;
 applied_wait_state({operation, Ref},
   {ok, #{ref := Ref, operation_state := terminal, receipt_height := Height} = Row})
   when is_integer(Height), Height > 0 -> {ready, Row};

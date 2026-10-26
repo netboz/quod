@@ -1,0 +1,36 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_outcome_endpoint_tests'
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (normal)...[0.197 s] ok
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (exception)...[0.036 s] ok
+  quod_outcome_endpoint_tests: replay_ready_at_unchanged_height_releases_the_same_request_test...ok
+  quod_outcome_endpoint_tests: snapshot_result_racing_newer_head_is_resampled_test...ok
+  quod_outcome_endpoint_tests: unchanged_stale_snapshot_parks_without_a_resampling_loop_test...[0.062 s] ok
+  quod_outcome_endpoint_tests: runtime_edge_queued_before_owner_decision_is_not_lost_test...ok
+  quod_outcome_endpoint_tests: wrong_anchor_or_era_is_refused_without_a_worker_test...[0.031 s] ok
+  quod_outcome_endpoint_tests: parked_request_refuses_a_changed_committee_test...ok
+  quod_outcome_endpoint_tests: parked_deadline_removes_worker_and_subscription_test...[0.101 s] ok
+  quod_outcome_endpoint_tests: owner_death_releases_parked_worker_and_subscription_test...ok
+  quod_outcome_endpoint_tests: operation_applied_pins_history_and_waits_for_durable_publication_test...[0.137 s] ok
+  quod_outcome_endpoint_tests: operation_applied_signs_historical_not_current_committee_test...[0.098 s] ok
+  quod_outcome_endpoint_tests: operation_applied_current_member_cannot_replace_historical_signer_test...[0.096 s] ok
+  quod_outcome_endpoint_tests: operation_applied_wrong_occurrence_is_not_signed_test...[0.060 s] ok
+  quod_outcome_endpoint_tests: operation_applied_deadline_does_not_restart_while_parked_test...[0.216 s] ok
+  quod_outcome_endpoint_tests: operation_applied_owner_death_releases_the_pinned_capture_test...[0.061 s] ok
+  quod_outcome_endpoint_tests: operation_collector_uses_the_real_endpoint_and_exact_result_test...[0.072 s] ok
+  quod_outcome_endpoint_tests: operation_collector_expiry_keeps_inclusion_but_invents_no_verdict_test...[0.265 s] ok
+  quod_outcome_endpoint_tests: target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test...[0.215 s] ok
+  quod_outcome_endpoint_tests: exact_claim_reuses_live_consensus_custody_test...[0.178 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (caller_expired)...[0.704 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (custody_expired)...[0.206 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (restarted)...[0.642 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed)...[0.231 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (rejected)...[0.110 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed_before_apply)...[0.130 s] ok
+  [done in 3.928 s]
+=======================================================
+  All 26 tests passed.

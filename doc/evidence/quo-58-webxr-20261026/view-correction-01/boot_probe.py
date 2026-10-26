@@ -5,7 +5,7 @@ out = Path(__file__).resolve().parent
 image, label = sys.argv[1:]
 evidence = out / label
 evidence.mkdir()
-template = Path('/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/release-tree-02/deploy/quod.nomad')
+template = Path('/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/release-tree-04/deploy/quod.nomad')
 assert template.read_bytes() == Path('/home/yan/src/quod/deploy/quod.nomad').read_bytes()
 rendered = subprocess.check_output([
     'nomad', 'job', 'run', '-output', '-var=bootstrap=true',

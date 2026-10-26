@@ -1,0 +1,4 @@
+[
+  "test/quod_agent_hosting_tests.erl",
+  "test/quod_outcome_endpoint_tests.erl"
+]

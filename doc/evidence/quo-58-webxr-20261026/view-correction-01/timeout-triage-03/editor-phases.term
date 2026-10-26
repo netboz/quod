@@ -1,0 +1,2774 @@
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,58}],
+        heap_size => 10958,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 689552,message_queue_len => 0,reductions => 7734970,
+        stack_size => 55,total_heap_size => 86071},
+  run => "isolated",phase => entered,detail => #{},at_us => -576460718082867,
+  dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,91}],
+        heap_size => 10958,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 689552,message_queue_len => 0,reductions => 7837897,
+        stack_size => 68,total_heap_size => 86071},
+  run => "isolated",phase => ready,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  at_us => -576460718072269,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 2586,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 21672,message_queue_len => 0,reductions => 8452461,
+        stack_size => 68,total_heap_size => 2586},
+  run => "isolated",phase => expected,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  at_us => -576460718058524,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,2}],
+        heap_size => 4185,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 68056,message_queue_len => 0,reductions => 8457454,
+        stack_size => 68,total_heap_size => 8384},
+  run => "isolated",phase => first_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460718058230,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,16}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998712,message_queue_len => 0,reductions => 48469432,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "isolated",phase => first_compiled,detail => #{},
+  at_us => -576460717021299,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,18}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998712,message_queue_len => 0,reductions => 49080376,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "isolated",phase => first_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  at_us => -576460717013837,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,18}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998712,message_queue_len => 0,reductions => 49085116,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "isolated",phase => read_view,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  at_us => -576460717013499,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,21}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998712,message_queue_len => 0,reductions => 50285431,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "isolated",phase => sources_equal,detail => #{},
+  at_us => -576460716995508,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,21}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998712,message_queue_len => 0,reductions => 50289314,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "isolated",phase => second_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460716994303,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,30}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41050976,message_queue_len => 0,reductions => 89557183,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "isolated",phase => second_compiled,detail => #{},
+  at_us => -576460716596161,dictionary_keys => []}.
+#{pid => <0.14004.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,31}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41050976,message_queue_len => 0,reductions => 90162992,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "isolated",phase => second_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  at_us => -576460716589334,dictionary_keys => []}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,68}],
+        heap_size => 196650,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 9748848,message_queue_len => 2013,reductions => 2315662773,
+        stack_size => 55,total_heap_size => 1196281},
+  run => "full-sequence",phase => entered,at_us => -576459473699815,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,69}],
+        heap_size => 196650,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 9749240,message_queue_len => 2013,reductions => 2315775850,
+        stack_size => 68,total_heap_size => 1196281},
+  run => "full-sequence",phase => ready,at_us => -576459473683007,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,74}],
+        heap_size => 196650,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 9749240,message_queue_len => 2013,reductions => 2316383258,
+        stack_size => 68,total_heap_size => 1196281},
+  run => "full-sequence",phase => expected,at_us => -576459473674136,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,74}],
+        heap_size => 196650,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 9749352,message_queue_len => 2013,reductions => 2316389445,
+        stack_size => 68,total_heap_size => 1196295},
+  run => "full-sequence",phase => first_compile_start,
+  at_us => -576459473673759,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32952520,message_queue_len => 2013,reductions => 2360720861,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "full-sequence",phase => first_compiled,at_us => -576459471648145,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2724488,message_queue_len => 2013,reductions => 2361391978,
+        stack_size => 68,total_heap_size => 318187},
+  run => "full-sequence",phase => first_applied,at_us => -576459471608246,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2724488,message_queue_len => 2013,reductions => 2361398312,
+        stack_size => 68,total_heap_size => 318187},
+  run => "full-sequence",phase => read_view,at_us => -576459471607227,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2724488,message_queue_len => 2013,reductions => 2362761744,
+        stack_size => 68,total_heap_size => 318187},
+  run => "full-sequence",phase => sources_equal,at_us => -576459471517914,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2724488,message_queue_len => 2013,reductions => 2362767137,
+        stack_size => 68,total_heap_size => 318187},
+  run => "full-sequence",phase => second_compile_start,
+  at_us => -576459471517046,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,112}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2918528,message_queue_len => 6,reductions => 22927548,
+        stack_size => 55,total_heap_size => 364609},
+  run => "catchup-prefix",phase => entered,at_us => -576460747760759,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,119}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2918920,message_queue_len => 6,reductions => 23027875,
+        stack_size => 68,total_heap_size => 364609},
+  run => "catchup-prefix",phase => ready,at_us => -576460747721244,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,140}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2918920,message_queue_len => 6,reductions => 23633246,
+        stack_size => 68,total_heap_size => 364609},
+  run => "catchup-prefix",phase => expected,at_us => -576460747700985,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,140}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2919032,message_queue_len => 6,reductions => 23638241,
+        stack_size => 68,total_heap_size => 364623},
+  run => "catchup-prefix",phase => first_compile_start,
+  at_us => -576460747700331,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,52}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22446736,message_queue_len => 6,reductions => 63081128,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "catchup-prefix",phase => first_compiled,at_us => -576460747247714,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,55}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22446736,message_queue_len => 6,reductions => 63693368,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "catchup-prefix",phase => first_applied,at_us => -576460747232575,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,55}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22446736,message_queue_len => 6,reductions => 63698509,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "catchup-prefix",phase => read_view,at_us => -576460747231758,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,61}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22446736,message_queue_len => 6,reductions => 64901089,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "catchup-prefix",phase => sources_equal,at_us => -576460747204534,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,61}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22446736,message_queue_len => 6,reductions => 64905379,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "catchup-prefix",phase => second_compile_start,
+  at_us => -576460747204196,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,63}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32775576,message_queue_len => 6,reductions => 104096721,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "catchup-prefix",phase => second_compiled,at_us => -576460746957654,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,65}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32775576,message_queue_len => 6,reductions => 104702771,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "catchup-prefix",phase => second_applied,at_us => -576460746953434,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',sink,sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4741392,message_queue_len => 231,reductions => 820638252,
+        stack_size => 66,total_heap_size => 589951},
+  run => "fast-prefix",phase => entered,detail => #{},
+  at_us => -576460528812729,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 820762998,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => ready,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  at_us => -576460528757026,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 821437728,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => expected,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  at_us => -576460528712824,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567784,message_queue_len => 231,reductions => 821443024,
+        stack_size => 79,total_heap_size => 318201},
+  run => "fast-prefix",phase => first_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460528711961,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32795704,message_queue_len => 231,reductions => 869715255,
+        stack_size => 79,total_heap_size => 4096691},
+  run => "fast-prefix",phase => first_compiled,detail => #{},
+  at_us => -576460525331891,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 870377747,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => first_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  at_us => -576460525294268,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 870383188,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => read_view,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  at_us => -576460525293531,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 871646727,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => sources_equal,detail => #{},
+  at_us => -576460525256186,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567672,message_queue_len => 231,reductions => 871651311,
+        stack_size => 79,total_heap_size => 318187},
+  run => "fast-prefix",phase => second_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460525255925,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 2487399,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 19921368,message_queue_len => 231,reductions => 913640674,
+        stack_size => 79,total_heap_size => 2487399},
+  run => "fast-prefix",phase => second_compiled,detail => #{},
+  at_us => -576460524228034,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14043.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7658672,message_queue_len => 231,reductions => 914253921,
+        stack_size => 79,total_heap_size => 954562},
+  run => "fast-prefix",phase => second_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  at_us => -576460524221443,
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_trace,rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,147}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4821216,message_queue_len => 1141,reductions => 8513649,
+        stack_size => 55,total_heap_size => 589951},
+  run => "agent-trace-prefix",phase => entered,at_us => -576460748432887,
+  detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,152}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4821608,message_queue_len => 1141,reductions => 8620908,
+        stack_size => 68,total_heap_size => 589951},
+  run => "agent-trace-prefix",phase => ready,at_us => -576460748418552,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,164}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4821608,message_queue_len => 1141,reductions => 9226925,
+        stack_size => 68,total_heap_size => 589951},
+  run => "agent-trace-prefix",phase => expected,at_us => -576460748411381,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,164}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4821720,message_queue_len => 1141,reductions => 9232415,
+        stack_size => 68,total_heap_size => 589965},
+  run => "agent-trace-prefix",phase => first_compile_start,
+  at_us => -576460748411090,
+  detail => #{bytes => 21031},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,81}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22546688,message_queue_len => 1141,reductions => 48624598,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "agent-trace-prefix",phase => first_compiled,
+  at_us => -576460748027418,detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,84}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22546688,message_queue_len => 1141,reductions => 49238621,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "agent-trace-prefix",phase => first_applied,
+  at_us => -576460748022690,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,84}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22546688,message_queue_len => 1141,reductions => 49244266,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "agent-trace-prefix",phase => read_view,at_us => -576460748022505,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,90}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22546688,message_queue_len => 1141,reductions => 50444935,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "agent-trace-prefix",phase => sources_equal,
+  at_us => -576460748014233,detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,90}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22546688,message_queue_len => 1141,reductions => 50449721,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "agent-trace-prefix",phase => second_compile_start,
+  at_us => -576460748014037,
+  detail => #{bytes => 21031},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,18}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28099728,message_queue_len => 1141,reductions => 89754140,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "agent-trace-prefix",phase => second_compiled,
+  at_us => -576460747757240,detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,20}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28099728,message_queue_len => 1141,reductions => 90363964,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "agent-trace-prefix",phase => second_applied,
+  at_us => -576460747752834,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2566776,message_queue_len => 228,reductions => 98698499,
+        stack_size => 55,total_heap_size => 318187},
+  run => "retained-tail-prefix",phase => entered,at_us => -576460725697846,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567168,message_queue_len => 228,reductions => 98807240,
+        stack_size => 68,total_heap_size => 318187},
+  run => "retained-tail-prefix",phase => ready,at_us => -576460725671721,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567168,message_queue_len => 228,reductions => 99445161,
+        stack_size => 68,total_heap_size => 318187},
+  run => "retained-tail-prefix",phase => expected,at_us => -576460725649687,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567280,message_queue_len => 228,reductions => 99450401,
+        stack_size => 68,total_heap_size => 318201},
+  run => "retained-tail-prefix",phase => first_compile_start,
+  at_us => -576460725649206,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32795200,message_queue_len => 228,reductions => 148540301,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "retained-tail-prefix",phase => first_compiled,
+  at_us => -576460722012023,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567168,message_queue_len => 228,reductions => 149193155,
+        stack_size => 68,total_heap_size => 318187},
+  run => "retained-tail-prefix",phase => first_applied,
+  at_us => -576460721975685,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567168,message_queue_len => 228,reductions => 149198546,
+        stack_size => 68,total_heap_size => 318187},
+  run => "retained-tail-prefix",phase => read_view,at_us => -576460721974595,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4741280,message_queue_len => 228,reductions => 150520032,
+        stack_size => 68,total_heap_size => 589951},
+  run => "retained-tail-prefix",phase => sources_equal,
+  at_us => -576460721894137,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4741280,message_queue_len => 228,reductions => 150524566,
+        stack_size => 68,total_heap_size => 589951},
+  run => "retained-tail-prefix",phase => second_compile_start,
+  at_us => -576460721893211,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7653272,message_queue_len => 177,reductions => 21013292,
+        stack_size => 55,total_heap_size => 954562},
+  run => "late-half-prefix",phase => entered,at_us => -576460742711808,
+  detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 21128757,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => ready,at_us => -576460742696207,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 75113,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 4736776,message_queue_len => 177,reductions => 21743576,
+        stack_size => 68,total_heap_size => 589951},
+  run => "late-half-prefix",phase => expected,at_us => -576460742686938,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562776,message_queue_len => 177,reductions => 21750028,
+        stack_size => 68,total_heap_size => 318201},
+  run => "late-half-prefix",phase => first_compile_start,
+  at_us => -576460742686269,
+  detail => #{bytes => 21031},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28014896,message_queue_len => 177,reductions => 63223938,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "late-half-prefix",phase => first_compiled,at_us => -576460741777233,
+  detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 63849303,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => first_applied,at_us => -576460741768416,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 63854449,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => read_view,at_us => -576460741768042,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 65088287,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => sources_equal,at_us => -576460741746842,
+  detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 65092582,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => second_compile_start,
+  at_us => -576460741746455,
+  detail => #{bytes => 21031},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 2487399,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 19916360,message_queue_len => 177,reductions => 106561034,
+        stack_size => 68,total_heap_size => 2487399},
+  run => "late-half-prefix",phase => second_compiled,
+  at_us => -576460740848946,detail => #{},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2562664,message_queue_len => 177,reductions => 107174225,
+        stack_size => 68,total_heap_size => 318187},
+  run => "late-half-prefix",phase => second_applied,at_us => -576460740841489,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys => ['$__current_otel_ctx','$logger_metadata$',rand_seed]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,86}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2922488,message_queue_len => 50,reductions => 86187109,
+        stack_size => 55,total_heap_size => 364609},
+  run => "early-half-prefix",phase => entered,at_us => -576460735059871,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,93}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2922880,message_queue_len => 50,reductions => 86287865,
+        stack_size => 68,total_heap_size => 364609},
+  run => "early-half-prefix",phase => ready,at_us => -576460735051616,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,114}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2922880,message_queue_len => 50,reductions => 86893606,
+        stack_size => 68,total_heap_size => 364609},
+  run => "early-half-prefix",phase => expected,at_us => -576460735047377,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,114}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2922992,message_queue_len => 50,reductions => 86898744,
+        stack_size => 68,total_heap_size => 364623},
+  run => "early-half-prefix",phase => first_compile_start,
+  at_us => -576460735047168,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,15}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28003736,message_queue_len => 50,reductions => 126220899,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "early-half-prefix",phase => first_compiled,
+  at_us => -576460734800287,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,17}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28003736,message_queue_len => 50,reductions => 126832577,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "early-half-prefix",phase => first_applied,at_us => -576460734795805,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,17}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28003736,message_queue_len => 50,reductions => 126837861,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "early-half-prefix",phase => read_view,at_us => -576460734795541,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,21}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28003736,message_queue_len => 50,reductions => 128037986,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "early-half-prefix",phase => sources_equal,at_us => -576460734787235,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,21}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28003736,message_queue_len => 50,reductions => 128042419,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "early-half-prefix",phase => second_compile_start,
+  at_us => -576460734787043,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,29}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41056000,message_queue_len => 50,reductions => 167201550,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "early-half-prefix",phase => second_compiled,
+  at_us => -576460734573458,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,31}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41056000,message_queue_len => 50,reductions => 167810156,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "early-half-prefix",phase => second_applied,
+  at_us => -576460734569076,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 1598,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 13928,message_queue_len => 0,reductions => 7756049,
+        stack_size => 55,total_heap_size => 1598},
+  run => "gc-isolated",phase => entered,detail => #{},
+  at_us => -576460719074547,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,34}],
+        heap_size => 6772,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 426696,message_queue_len => 0,reductions => 7862549,
+        stack_size => 68,total_heap_size => 53194},
+  run => "gc-isolated",phase => ready,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  at_us => -576460719023717,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 2586,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 21832,message_queue_len => 0,reductions => 8477458,
+        stack_size => 68,total_heap_size => 2586},
+  run => "gc-isolated",phase => expected,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  at_us => -576460718970053,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 4185,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 68216,message_queue_len => 0,reductions => 8482370,
+        stack_size => 68,total_heap_size => 8384},
+  run => "gc-isolated",phase => first_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460718969317,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,15}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998872,message_queue_len => 0,reductions => 48409547,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-isolated",phase => first_compiled,detail => #{},
+  at_us => -576460718019625,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,17}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998872,message_queue_len => 0,reductions => 49023243,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-isolated",phase => first_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  at_us => -576460718013106,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,17}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998872,message_queue_len => 0,reductions => 49028098,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-isolated",phase => read_view,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  at_us => -576460718012864,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,20}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998872,message_queue_len => 0,reductions => 50228007,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-isolated",phase => sources_equal,detail => #{},
+  at_us => -576460717998643,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,20}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 27998872,message_queue_len => 0,reductions => 50232003,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-isolated",phase => second_compile_start,
+  detail => #{bytes => 21031},
+  at_us => -576460717998404,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,30}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41051136,message_queue_len => 0,reductions => 89652448,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "gc-isolated",phase => second_compiled,detail => #{},
+  at_us => -576460717266031,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.14009.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,31}],
+        heap_size => 833026,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 41051136,message_queue_len => 0,reductions => 90258244,
+        stack_size => 68,total_heap_size => 5131249},
+  run => "gc-isolated",phase => second_applied,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  at_us => -576460717260482,
+  dictionary_keys => [quod_editor_gc]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2566600,message_queue_len => 226,reductions => 96048897,
+        stack_size => 55,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => entered,at_us => -576460729591678,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 96153237,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => ready,at_us => -576460729559622,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 96792948,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => expected,at_us => -576460729531470,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567176,message_queue_len => 226,reductions => 96798267,
+        stack_size => 68,total_heap_size => 318201},
+  run => "gc-retained-tail",phase => first_compile_start,
+  at_us => -576460729530944,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22466256,message_queue_len => 226,reductions => 139277964,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "gc-retained-tail",phase => first_compiled,at_us => -576460728283369,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 139906039,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => first_applied,at_us => -576460728273321,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 139911503,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => read_view,at_us => -576460728273018,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 141152153,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => sources_equal,at_us => -576460728249238,
+  detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 141156766,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => second_compile_start,
+  at_us => -576460728248959,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28019296,message_queue_len => 226,reductions => 182808112,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "gc-retained-tail",phase => second_compiled,
+  at_us => -576460727341692,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 2567064,message_queue_len => 226,reductions => 183427645,
+        stack_size => 68,total_heap_size => 318187},
+  run => "gc-retained-tail",phase => second_applied,at_us => -576460727331933,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',quod_editor_gc,rand_seed,
+       sink,sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 387200,message_queue_len => 166,reductions => 101523596,
+        stack_size => 55,total_heap_size => 46422},
+  run => "cleanup-retained-tail-after-v2",phase => entered,
+  at_us => -576460727825812,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 387592,message_queue_len => 166,reductions => 101672759,
+        stack_size => 68,total_heap_size => 46422},
+  run => "cleanup-retained-tail-after-v2",phase => ready,
+  at_us => -576460727775579,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 387592,message_queue_len => 166,reductions => 102374436,
+        stack_size => 68,total_heap_size => 46422},
+  run => "cleanup-retained-tail-after-v2",phase => expected,
+  at_us => -576460727737807,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 387704,message_queue_len => 166,reductions => 102379694,
+        stack_size => 68,total_heap_size => 46436},
+  run => "cleanup-retained-tail-after-v2",phase => first_compile_start,
+  at_us => -576460727737082,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 28013944,message_queue_len => 166,reductions => 151521528,
+        stack_size => 68,total_heap_size => 3499716},
+  run => "cleanup-retained-tail-after-v2",phase => first_compiled,
+  at_us => -576460724004449,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,0}],
+        heap_size => 46422,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 387592,message_queue_len => 166,reductions => 152185761,
+        stack_size => 68,total_heap_size => 46422},
+  run => "cleanup-retained-tail-after-v2",phase => first_applied,
+  at_us => -576460723962837,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 10958,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 704784,message_queue_len => 166,reductions => 152191731,
+        stack_size => 68,total_heap_size => 86071},
+  run => "cleanup-retained-tail-after-v2",phase => read_view,
+  at_us => -576460723961228,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 10958,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 704784,message_queue_len => 166,reductions => 153589752,
+        stack_size => 68,total_heap_size => 86071},
+  run => "cleanup-retained-tail-after-v2",phase => sources_equal,
+  at_us => -576460723853983,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,1}],
+        heap_size => 10958,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 704784,message_queue_len => 166,reductions => 153594298,
+        stack_size => 68,total_heap_size => 86071},
+  run => "cleanup-retained-tail-after-v2",phase => second_compile_start,
+  at_us => -576460723853119,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,24}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7653200,message_queue_len => 176,reductions => 96090426,
+        stack_size => 55,total_heap_size => 954562},
+  run => "host-cleanup-retained-tail-after",phase => entered,
+  at_us => -576460733034877,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,27}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7653592,message_queue_len => 176,reductions => 96191032,
+        stack_size => 68,total_heap_size => 954562},
+  run => "host-cleanup-retained-tail-after",phase => ready,
+  at_us => -576460733022768,
+  detail =>
+      #{compiler =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1},
+        target =>
+            #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+              variable_number => 1}},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,35}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7653592,message_queue_len => 176,reductions => 96796890,
+        stack_size => 68,total_heap_size => 954562},
+  run => "host-cleanup-retained-tail-after",phase => expected,
+  at_us => -576460733016988,
+  detail =>
+      #{bytes => 21008,
+        digest =>
+            <<115,160,188,200,88,238,116,44,155,123,97,96,161,57,2,110,70,249,
+              56,133,46,76,136,100,226,31,36,82,57,191,233,140>>},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,35}],
+        heap_size => 121536,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 7653704,message_queue_len => 176,reductions => 96802174,
+        stack_size => 68,total_heap_size => 954576},
+  run => "host-cleanup-retained-tail-after",phase => first_compile_start,
+  at_us => -576460733016774,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,51}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22461784,message_queue_len => 176,reductions => 136103573,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "host-cleanup-retained-tail-after",phase => first_compiled,
+  at_us => -576460732744465,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,54}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22461784,message_queue_len => 176,reductions => 136716154,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "host-cleanup-retained-tail-after",phase => first_applied,
+  at_us => -576460732739216,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3841},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,54}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22461784,message_queue_len => 176,reductions => 136721584,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "host-cleanup-retained-tail-after",phase => read_view,
+  at_us => -576460732738910,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 1},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,60}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22461784,message_queue_len => 176,reductions => 137921702,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "host-cleanup-retained-tail-after",phase => sources_equal,
+  at_us => -576460732730430,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,60}],
+        heap_size => 318187,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 22461784,message_queue_len => 176,reductions => 137926167,
+        stack_size => 68,total_heap_size => 2805586},
+  run => "host-cleanup-retained-tail-after",phase => second_compile_start,
+  at_us => -576460732730250,
+  detail => #{bytes => 21031},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,63}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32790624,message_queue_len => 176,reductions => 177135323,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "host-cleanup-retained-tail-after",phase => second_compiled,
+  at_us => -576460732439562,detail => #{},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.
+#{pid => <0.514.0>,
+  process =>
+      #{garbage_collection =>
+            [{max_heap_size,#{error_logger => true,
+                              include_shared_binaries => false,kill => true,
+                              size => 0}},
+             {min_bin_vheap_size,46422},
+             {min_heap_size,233},
+             {fullsweep_after,65535},
+             {minor_gcs,65}],
+        heap_size => 514838,
+        max_heap_size =>
+            #{error_logger => true,include_shared_binaries => false,
+              kill => true,size => 0},
+        memory => 32790624,message_queue_len => 176,reductions => 177742296,
+        stack_size => 68,total_heap_size => 4096691},
+  run => "host-cleanup-retained-tail-after",phase => second_applied,
+  at_us => -576460732435056,
+  detail =>
+      #{bindings => 0,checkpoint_depth => 0,observation_sink => none,
+        variable_number => 3848},
+  dictionary_keys =>
+      ['$__current_otel_ctx','$logger_metadata$',rand_seed,sink,
+       sink_projection]}.

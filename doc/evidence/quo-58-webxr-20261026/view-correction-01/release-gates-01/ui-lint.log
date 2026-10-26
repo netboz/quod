@@ -1,0 +1,13 @@
+npm notice run ui@0.0.0 lint
+npm notice run oxlint
+src/Console.tsx:79:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/Console.tsx:337:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+test/gui-question.fixture.tsx:42:19: warning typescript(no-this-alias): Unexpected aliasing of 'this' to local variable. help: Assigning a variable to this instead of properly using arrow lambdas may be a symptom of pre-ES2015 practices or not managing scope well.
+test/gui-question.fixture.tsx:48:14: warning typescript(no-this-alias): Unexpected aliasing of 'this' to local variable. help: Assigning a variable to this instead of properly using arrow lambdas may be a symptom of pre-ES2015 practices or not managing scope well.
+test/gui-question.fixture.tsx:49:12: warning typescript(no-this-alias): Unexpected aliasing of 'this' to local variable. help: Assigning a variable to this instead of properly using arrow lambdas may be a symptom of pre-ES2015 practices or not managing scope well.
+src/World.tsx:93:123: warning react-hooks(exhaustive-deps): React Hook useMemo has unnecessary dependency: agent help: Either include it or remove the dependency array.
+src/World.tsx:93:123: warning react-hooks(exhaustive-deps): React Hook useMemo has unnecessary dependency: identity help: Either include it or remove the dependency array.
+src/World.tsx:261:28: warning react-hooks(exhaustive-deps): React Hook useEffect has missing dependencies: 'space', and 'space.reference' help: Either include it or remove the dependency array.
+src/World.tsx:328:98: warning react-hooks(exhaustive-deps): React Hook useMemo has unnecessary dependency: agent help: Either include it or remove the dependency array.
+src/World.tsx:328:98: warning react-hooks(exhaustive-deps): React Hook useMemo has unnecessary dependency: identity help: Either include it or remove the dependency array.
+src/World.tsx:477:11: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'space' help: Either include it or remove the dependency array.

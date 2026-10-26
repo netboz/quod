@@ -12,7 +12,7 @@ export function authoredRotation([x, y, z]) {
 // One camera rig follows the accepted physical pose. The XR reference space
 // remains device-owned; calibration maps it into the authored camera mount.
 export function createControlledNavigation(scene, camera, canvas, {
-  active = () => false, blocked = () => false, mask = () => {}, feedback = () => {},
+  active = () => false, blocked = () => false, feedback = () => {},
 } = {}) {
   const mount = new TransformNode('physical-viewpoint', scene)
   const trackingOrigin = new TransformNode('tracked-view-origin', scene)
@@ -58,7 +58,7 @@ export function createControlledNavigation(scene, camera, canvas, {
       camera.rotation.copyFrom(saved.rotation)
       camera.inertia = saved.inertia
       ;['keysUp', 'keysDown', 'keysLeft', 'keysRight'].forEach((k, i) => { camera[k] = [...saved.keys[i]] })
-      mask(false); key = null; calibrated = false; reset()
+      key = null; calibrated = false; reset()
       if (xrCamera) xrCamera.parent = null
       return
     }
@@ -106,13 +106,9 @@ export function createControlledNavigation(scene, camera, canvas, {
     if (current === undefined) return
     const control = current?.control
     if (xrCamera) {
-      if (!control || control.viewpoint.trackingRadius === null || current.clearance === null) {
-        mask(true, !control ? 'Physical world unavailable. Movement is paused.'
-          : control.viewpoint.trackingRadius === null ? 'This viewpoint has no VR tracking mapping.'
-          : 'Physical view unavailable. Movement is paused.'); return
-      }
+      if (!control) { reset(); return }
       if (xrCamera.trackingState !== undefined && xrCamera.trackingState !== WebXRTrackingState.TRACKING) {
-        mask(true, 'Headset tracking lost. Movement is paused.'); reset(); return
+        reset(); return
       }
       if (!calibrated) {
         // Recenter heading while preserving tracked pitch and roll. Tilting
@@ -126,15 +122,7 @@ export function createControlledNavigation(scene, camera, canvas, {
       xrCamera.parent = trackingOrigin
       for (const eye of xrCamera.rigCameras) eye.parent = trackingOrigin
       trackingOrigin.computeWorldMatrix(true)
-      const eyes = xrCamera.rigCameras.length ? xrCamera.rigCameras : [xrCamera]
-      const distance = Math.max(...eyes.map(eye => {
-        const point = eye.position.clone()
-        point.rotateByQuaternionToRef(trackingOrigin.rotationQuaternion, point)
-        return point.addInPlace(trackingOrigin.position).length()
-      }))
-      mask(distance > Math.min(current.clearance, control.viewpoint.trackingRadius),
-        'View blocked. Return your head toward your starting position.')
-    } else mask(false)
+    }
     if (!commandReady()) return
     const enabled = !blocked() && (xrCamera !== null || active())
     const pressed = (...keys) => keys.some(k => held.has(k)) ? 1 : 0
@@ -170,7 +158,6 @@ export function createControlledNavigation(scene, camera, canvas, {
         // Babylon copies the last headset position into the desktop camera on
         // XR exit. A controlled desktop view still belongs at its own mount.
         if (current?.control) camera.position.setAll(0)
-        mask(false)
       }
     },
     axes(value) { axes = value },

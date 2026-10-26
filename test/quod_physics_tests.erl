@@ -135,7 +135,7 @@ first_physics_rows(Ns,Anchor,Principal,Gravity) ->
          {physics_body_definition,room,{'Body'},{'_'},controlled,{'_'},
             {live,{entity_ref,Ns,Anchor,pilot},{'_'},{'_'},{'_'}}}},
      {':-',{physics_viewpoint,room,pilot,eye,{'Body'},
-         {pose,{vector,0,700,0},{rotation,0,100,0}},{tracking,view_only,500}},
+         {pose,{vector,0,700,0},{rotation,0,100,0}},view_only},
          {physics_agent,room,pilot,1,{'Body'},{'_'}}},
      {can_view_physics,room,Principal},{can_control_physics_agent,room,Principal,pilot}].
 
@@ -1433,7 +1433,7 @@ install_test_control(F,Pid,World,Motion) -> install_test_control(F,Pid,World,Mot
 install_test_control(#{namespace := Ns,node := Human},Pid,World,Motion,Body) ->
     #{World := #{spec := Before}} = worlds(Ns),
     {Body,Revision,_,_,_,_} = lists:keyfind(Body,1,maps:get(bodies,Before)),
-    View = {viewpoint,eye,{pose,{vector,0,100,0},{rotation,0,0,0}},{tracking,view_only,500}},
+    View = {viewpoint,eye,{pose,{vector,0,100,0},{rotation,0,0,0}},view_only},
     Definition = {controlled_agent,pilot,1,Body,Revision,Motion,View},
     commit(Ns,{',',quod_ct:source_assertion({instance_of,agent,pilot}),
         {',',{assertz,{physics_agent,room,pilot,1,Body,Motion}},
@@ -1657,7 +1657,7 @@ signed_landing_reposition_and_feedback_test_() ->
         Motion = {motion,{grounded,700},2000,1600,500,{query_limits,2,0,8,128},
                   [{teleport,6000,2000,700},{snap,785},reposition]},
         {_,_,Frame,Ref,Initial} = install_test_control(F,Pid,World,Motion),
-        ?assert(is_float(maps:get(view_clearance,Initial))),
+        ?assertNot(maps:is_key(view_clearance,Initial)),
         quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
@@ -2655,7 +2655,7 @@ voxel_missing_coverage_wakes_existing_resource_worker_test_() ->
         assert_no_physics_io(fun() -> reconcile(Ns),reconcile(Ns) end)
     end) end}.
 
-voxel_eye_clearance_uses_the_retained_consumer_demand_test_() ->
+view_renewal_does_not_add_head_collision_terrain_test_() ->
     {timeout,90,fun() -> with_voxel_world(fun(F = #{namespace := Ns}) ->
         Created = door_action(Ns,{voxel_create,room,0,
             {terrain_v1,unbounded,smooth,{field_v1,1,500,[{plane,1000}],9}}}),
@@ -2665,32 +2665,21 @@ voxel_eye_clearance_uses_the_retained_consumer_demand_test_() ->
         {Pid,World} = enable(F),
         #{World := #{spec := #{voxel_resources := Resources}}} = worlds(Ns),
         [Terrain] = lists:usort([Id || {Id,_} <- maps:keys(Resources)]),
-        Support = {Terrain,{chunk_v1,0,0,0}},Eye = {Terrain,{chunk_v1,1,0,0}},
-        {_,Expected,_,First,_} = install_test_control(F,Pid,World,
+        Support = {Terrain,{chunk_v1,0,0,0}},
+        {_,Expected,_,First,Initial} = install_test_control(F,Pid,World,
             {motion,free,2000,1600,1000,{query_limits,2,0,8,128},[reposition]},7),
-        quod_physics:unwatch(Pid,First),
+        ?assertNot(maps:is_key(view_clearance,Initial)),
         await_voxel_chunks(Pid,World,[Support],quod_time:mono_ms()+10000),
-        Runtime = quod_reg:where({quod_runtime,Ns}),ok = sys:suspend(Runtime),
-        Ref = try
-            {ok,R1,Unknown} = quod_physics:watch(Pid,Expected,none),
-            ?assertEqual(null,maps:get(view_clearance,Unknown)),
-            {ok,R2,StillUnknown} = quod_physics:watch(Pid,Expected,R1),
-            ?assertEqual(null,maps:get(view_clearance,StillUnknown)),
-            {messages,Queued} = process_info(Runtime,messages),
-            Demands = [M || M = {physics_terrain_demand,P,W,_,_,_,_} <- Queued,P =:= Pid,W =:= World],
-            ?assertEqual(1,length(Demands)),R2
-        after sys:resume(Runtime) end,
-        await_voxel_chunks(Pid,World,[Support,Eye],quod_time:mono_ms()+10000),
         Renewals = make_ref(),
         assert_no_physics_io(fun() ->
             Last = lists:foldl(fun(_,Previous) ->
-                {ok,Next,Known} = quod_physics:watch(Pid,Expected,Previous),
-                ?assert(maps:get(view_clearance,Known) > 0),
-                ?assert(is_float(maps:get(view_clearance,Known))),Next
-            end,Ref,lists:seq(1,3)),
+                {ok,Next,Frame} = quod_physics:watch(Pid,Expected,Previous),
+                ?assertNot(maps:is_key(view_clearance,Frame)),Next
+            end,First,lists:seq(1,3)),
             reconcile(Ns),self() ! {Renewals,Last},ok
         end),
-        %% Reclamation is a real update, outside the unchanged-renewal trace.
+        #{World := #{spec := #{voxel_resources := After}}} = worlds(Ns),
+        ?assertEqual([Support],lists:sort(maps:keys(After))),
         receive {Renewals,Last} -> quod_physics:unwatch(Pid,Last) end,
         await_voxel_chunks(Pid,World,[Support],quod_time:mono_ms()+10000)
     end) end}.

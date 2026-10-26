@@ -185,18 +185,9 @@ impl World {
         Ok(requests)
     }
 
-    pub(super) fn terrain_requirements(&self,views:Vec<(u64,u64,crate::geometry::V3,f64)>) -> Result<Vec<Requirement>,Atom> {
+    pub(super) fn terrain_requirements(&self) -> Result<Vec<Requirement>,Atom> {
         let parameters = IntegrationParameters { dt:self.dt,..Default::default() };
-        let mut regions = self.step_regions(&parameters).map_err(|_| atoms::non_finite_state())?;
-        for (id,revision,local,radius) in views {
-            let Some((row,handle)) = self.rows.get(&id) else { return Err(atoms::invalid_body()); };
-            if row.1 != revision || !radius.is_finite() || radius <= 0.0 || radius > self.limits.3 {
-                return Err(atoms::invalid_body());
-            }
-            let point = self.bodies[*handle].position().transform_point(
-                crate::geometry::vector(local,self.limits.3).map_err(|_| atoms::invalid_body())?);
-            regions.push(Aabb::from_half_extents(point,Vector::splat(radius)));
-        }
+        let regions = self.step_regions(&parameters).map_err(|_| atoms::non_finite_state())?;
         self.terrain_requests(&regions)
     }
 

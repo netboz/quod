@@ -1,0 +1,14 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_prolog_ontology_tests",
+    "--verbose"
+  ],
+  "tree": "demo-02",
+  "exit": 0,
+  "seconds": 33.62968803598778,
+  "purpose": "diagnose unchanged source-edit timeout, not a release gate replacement"
+}

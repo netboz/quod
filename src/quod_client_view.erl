@@ -696,7 +696,6 @@ frame_json(Frame = #{fence := {World, Authority, Epoch, Generation}, structure :
       epoch => decimal(Epoch), generation => decimal(Generation),
       incarnation => b64(Token), structure => decimal(Structure), tick => decimal(Tick),
       registration => b64(maps:get(registration,Frame)),
-      view_clearance => maps:get(view_clearance,Frame,null),
       control_state => control_feedback(Frame,Control),
       poses => [#{body => decimal(Id), revision => decimal(R),
                   position => tuple_to_list(P), rotation => tuple_to_list(Q)}

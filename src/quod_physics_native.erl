@@ -3,7 +3,7 @@
 -on_load(init/0).
 -export([available/0, load_error/0, new_world/3, install/3, install_hinges/2, control_hinge/4, hinge_samples/1, step/2, sample/1, retire/1]).
 -export([motion_query/5,move_body/5,restore_rest/2,rest_sample/3,push_body/5]).
--export([voxel_surface/4,voxel_prepare/5,geometry_cost/2,terrain_requirements/2]).
+-export([voxel_surface/4,voxel_prepare/5,geometry_cost/2,terrain_requirements/1]).
 init() ->
     %% Optional physics must not make an embedded-mode consensus node fail boot.
     %% Availability follows this one module-load result, including its cause.
@@ -26,7 +26,7 @@ retire(_World) -> erlang:nif_error(nif_not_loaded).
 restore_rest(_World, _Rows) -> erlang:nif_error(nif_not_loaded).
 rest_sample(_World, _Id, _Revision) -> erlang:nif_error(nif_not_loaded).
 push_body(_World, _Id, _Revision, _Impulse, _MaxSpeed) -> erlang:nif_error(nif_not_loaded).
-terrain_requirements(_World, _Views) -> erlang:nif_error(nif_not_loaded).
+terrain_requirements(_World) -> erlang:nif_error(nif_not_loaded).
 
 %% Pure versioned arithmetic; no native world or physics authority is read.
 voxel_surface(_Samples, _Dimensions, _Spacing, _Allowances) -> erlang:nif_error(nif_not_loaded).

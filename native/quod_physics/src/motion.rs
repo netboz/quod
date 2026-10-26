@@ -13,9 +13,6 @@ pub enum Query {
     // normal. Policy chooses these values; the complete body follows a clear
     // straight path, retains its orientation and lands on declared geometry.
     Land(V3, f64, f64, f64),
-    // Sensory clearance around an authored body-local camera mount. This does
-    // not add a collider or move the agent when a human moves their head.
-    View(V3, f64),
 }
 
 // Skin, permitted numerical penetration, slide iterations, narrow-phase tests.
@@ -30,7 +27,6 @@ pub enum Answer {
     Occupied(u64, usize),
     Blocked(u64, usize),
     NoSupport,
-    ViewClearance(f64, usize),
     TerrainCoverage(Vec<crate::terrain::Requirement>),
     Unavailable,
     Unsupported,
@@ -169,28 +165,6 @@ fn solve(world: &World, id: u64, revision: u64, input: Query, (skin,tolerance,it
         shape, checks: 0, remaining: checks, tolerance };
     let mut pose = *body.position();
     let (mut travel,mut turn) = match input {
-        Query::View(local,radius) => {
-            if !radius.is_finite() || radius <= 0.0 || radius > world.limits.3 { return Err(Answer::Invalid); }
-            let local = geometry::vector(local,world.limits.3).map_err(|_| Answer::Invalid)?;
-            let point = pose.transform_point(local);
-            if let Some(ranges) = world.terrain_query_coverage(Aabb::from_half_extents(point,Vector::splat(radius))).map_err(|_| Answer::Unavailable)? {
-                return Err(Answer::TerrainCoverage(ranges));
-            }
-            for _ in 0..world.terrain.len() { space.charge()?; }
-            if world.terrain_point(point).map_err(|_| Answer::Unavailable)?.is_some() {
-                return Ok(Answer::ViewClearance(0.0,space.checks));
-            }
-            let pipeline = space.query;
-            let mut clearance = radius;
-            for (_,other) in pipeline.intersect_aabb_conservative(Aabb::from_half_extents(point,Vector::splat(clearance))) {
-                space.charge()?;
-                let projected = other.shape().project_point(other.position(),point,true);
-                let distance = if projected.is_inside { 0.0 } else { (point-projected.point).length() };
-                if !distance.is_finite() { return Err(Answer::Unavailable); }
-                clearance = clearance.min(distance);
-            }
-            return Ok(Answer::ViewClearance((clearance-skin).max(0.0),space.checks));
-        }
         Query::Place(target) => {
             let target = geometry::transform(target,world.limits.3).map_err(|_| Answer::Invalid)?;
             return Ok(match space.occupied(target)? {
@@ -403,18 +377,6 @@ mod tests {
         assert_eq!(initial,world.sample().unwrap());
         let p = end(apply(&mut world,1,1,land((0.0,2.0,4.0)),LIMITS));
         assert!(p.1 >= 1.0 && p.1 < 1.003 && p.2 == 4.0,"{p:?}");
-    }
-
-    #[test]
-    fn authored_camera_clearance_is_sensory_and_excludes_its_own_body() {
-        let world = world(vec![box_at(3,Kind::Fixed,(2.0,2.0,0.0),(0.1,3.0,2.0))]);
-        let before = world.sample().unwrap();
-        let Answer::ViewClearance(distance,_) = evaluate(&world,1,1,Query::View((1.0,0.0,0.0),2.0),LIMITS)
-            else { panic!("no view clearance"); };
-        assert!(distance > 0.897 && distance < 0.901,"{distance}");
-        assert_eq!(evaluate(&world,1,1,Query::View((2.0,0.0,0.0),2.0),LIMITS),Answer::ViewClearance(0.0,2));
-        assert_eq!(before,world.sample().unwrap());
-        assert_eq!(evaluate(&world,1,1,Query::View((0.0,0.0,0.0),2.0),(0.002,0.0,8,1)),Answer::Exhausted);
     }
 
     #[test]

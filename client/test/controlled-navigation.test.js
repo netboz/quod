@@ -4,6 +4,7 @@ import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { WebXRTrackingState } from '@babylonjs/core/XR/webXRTypes.js'
 import '@babylonjs/core/Culling/ray.js'
 import { configureDesktopCamera } from '../src/navigation.js'
 import { createControlledNavigation } from '../src/controlled-navigation.js'
@@ -11,7 +12,7 @@ import { readControl } from '../src/locomotion.js'
 import { formatClause } from '../src/prolog-term.js'
 
 const control = (mount = 'pose(vector(1000,200,0),rotation(0,1571,0))') => readControl(
-  `control(human,4,controlled_agent(vehicle,2,10,3,motion(grounded(700),2000,1600,500,query_limits(2,0,8,128),[snap(785),teleport(6000,2000,700)]),viewpoint(cockpit,${mount},tracking(view_only,500))))`)
+  `control(human,4,controlled_agent(vehicle,2,10,3,motion(grounded(700),2000,1600,500,query_limits(2,0,8,128),[snap(785),teleport(6000,2000,700)]),viewpoint(cockpit,${mount},view_only)))`)
 
 function fixture(run) {
   const engine = new NullEngine(), scene = new Scene(engine)
@@ -19,15 +20,15 @@ function fixture(run) {
   const camera = new UniversalCamera('camera', new Vector3(0, 2, -5), scene)
   configureDesktopCamera(camera)
   const owner = new EventTarget(); owner.defaultView = new EventTarget()
-  const sent = [], masks = []
+  const sent = []
   const navigation = createControlledNavigation(scene, camera, { ownerDocument: owner }, {
-    active: () => true, mask: (...value) => masks.push(value),
+    active: () => true,
   })
   const current = { fence: 'first', control: control(), poses: new Map([
     ['10:3', { position: [4, 1, 2], rotation: [0, 0, 0, 1] }],
-  ]), feedback: { sequence: '-1', result: 'idle' }, clearance: 0.4,
+  ]), feedback: { sequence: '-1', result: 'idle' },
     command: async input => { sent.push(input); return true } }
-  try { run({ scene, camera, owner, navigation, current, sent, masks }) }
+  try { run({ scene, camera, owner, navigation, current, sent }) }
   finally { navigation.dispose(); scene.dispose(); engine.dispose() }
 }
 
@@ -93,38 +94,55 @@ test('authored off-centre cockpit follows accepted body pose; commands cannot tr
     assert.equal(camera.position.x, 3, 'an observer projection must not reset ongoing travel')
   }))
 
-test('tracked head offsets are calibrated view motion; clearance masks them without moving the body', () => fixture(
-  ({ scene, camera, navigation, current, masks }) => {
+test('tracked stereo views follow unrestricted head motion without moving the controlled body', () => fixture(
+  ({ scene, camera, navigation, current, sent }) => {
     const headset = new UniversalCamera('tracked', new Vector3(0.2, 1.8, 0.1), scene)
     headset.rotationQuaternion = Quaternion.Identity()
+    const eyes = [-0.032, 0.032].map((offset, i) =>
+      new UniversalCamera(`eye:${i}`, headset.position.add(new Vector3(offset, 0, 0)), scene))
+    headset.rigCameras.push(...eyes)
     navigation.update(current); navigation.xr(headset); navigation.render(0)
-    assert.equal(masks.at(-1)[0], false)
     const body = [...current.poses.get('10:3').position]
-    headset.position.x += 0.5
-    navigation.render(16)
-    assert.equal(masks.at(-1)[0], true)
-    assert.deepEqual(current.poses.get('10:3').position, body)
-    headset.position.x -= 0.5
-    navigation.render(32)
-    assert.equal(masks.at(-1)[0], false)
     const origin = headset.parent.position.clone()
-    headset.position.x += 0.1
+    const initial = headset.position.clone()
+    headset.computeWorldMatrix(true)
+    const start = headset.globalPosition.clone()
+    for (const offset of [new Vector3(0.1, 0, 0), new Vector3(0.8, 0.2, 0.3), new Vector3(-2, -0.5, 1)]) {
+      headset.position.copyFrom(initial.add(offset))
+      eyes.forEach((eye, i) => eye.position.copyFrom(headset.position.add(new Vector3(i ? 0.032 : -0.032, 0, 0))))
+      navigation.render(16)
+      headset.computeWorldMatrix(true)
+      eyes.forEach(eye => eye.computeWorldMatrix(true))
+      assert.ok(Math.abs(Vector3.Distance(start, headset.globalPosition) - offset.length()) < 0.000001)
+      assert.ok(Math.abs(Vector3.Distance(eyes[0].globalPosition, eyes[1].globalPosition) - 0.064) < 0.000001)
+      assert.deepEqual(headset.parent.position.asArray(), origin.asArray(), 'head motion never recentres or clamps itself')
+      assert.deepEqual(current.poses.get('10:3').position, body)
+      assert.equal(sent.length, 1, 'head translation must not issue body movement commands')
+    }
     navigation.update(null); navigation.render(40)
     navigation.update(current); navigation.render(41)
     assert.deepEqual(headset.parent.position.asArray(), origin.asArray(), 'view renewal must not recenter tracking')
+    const count = sent.length
+    headset.trackingState = WebXRTrackingState.NOT_TRACKING
+    navigation.axes({ x: 1, y: -1 }); navigation.render(42)
+    assert.equal(sent.length, count, 'lost tracking pauses body input')
+    headset.trackingState = WebXRTrackingState.TRACKING
+    navigation.render(43)
+    assert.equal(formatClause(sent.at(-1)), 'drive(vector(0, 0, 0), angular(0, 0, 0)).')
+    assert.deepEqual(headset.parent.position.asArray(), origin.asArray(), 'tracking recovery preserves the viewpoint')
     camera.position.copyFrom(headset.position)
     navigation.xr(null)
     assert.deepEqual(camera.position.asArray(), [0, 0, 0])
     assert.equal(headset.parent, null)
-    navigation.xr(headset)
-    navigation.update(null); navigation.render(48)
-    assert.equal(masks.at(-1)[0], true)
+    navigation.xr(headset); navigation.render(48)
+    headset.computeWorldMatrix(true)
+    assert.ok(Vector3.Distance(headset.globalPosition, start) < 0.000001, 're-entry calibrates the current head position')
   }))
 
 test('unknown capabilities and implicit movement profiles fail closed', () => {
   assert.throws(() => readControl('control(human,1,controlled_agent(a,1,2,1,motion(walking),viewpoint(eye,none,view_only)))'))
   assert.equal(readControl('none'), null)
-  assert.equal(control().viewpoint.trackingRadius, 0.5)
+  assert.deepEqual(control().viewpoint.position, [1, 0.2, 0])
 })
 
 test('Space jumps once and promptly resumes held travel; unavailable control does not jump', () => fixture(

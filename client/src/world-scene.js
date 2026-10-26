@@ -3,8 +3,7 @@ import { Scene } from '@babylonjs/core/scene.js'
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
-import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js'
-import { Layer } from '@babylonjs/core/Layers/layer.js'
+import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
@@ -94,21 +93,9 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
     },
     error: onResourceError,
   })
-  const contactMask = new Layer('physical-view-contact', null, scene, false, new Color4(1, 1, 1, 1))
-  const contactText = new DynamicTexture('physical-view-contact-text', { width: 2048, height: 1024 }, scene, false)
-  contactMask.texture = contactText
-  contactMask.isEnabled = false
-  let maskText = null
   const playerNavigation = createControlledNavigation(scene, camera, canvas, {
     active: navigation.active,
     blocked: () => Boolean(workspace || menu.root),
-    mask: (visible, text) => {
-      contactMask.isEnabled = visible
-      if (visible && text !== maskText) {
-        maskText = text
-        contactText.drawText(text, null, 540, '40px system-ui, sans-serif', '#FFFFFF', '#000000', true, true)
-      }
-    },
     feedback: text => {
       onResourceError(new Error(text))
       if (immersive) for (const controller of xr?.input.controllers ?? []) {
@@ -290,7 +277,6 @@ export function createWorld(canvas, onPick, onImmersiveChanged = () => {},
       disposal = xrLifecycle.dispose().then(() => {
         controllers.dispose()
         playerNavigation.dispose()
-        contactMask.dispose()
         panel?.dispose()
         painted = clearMarks(painted)
         resources.dispose()

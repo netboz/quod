@@ -15,9 +15,9 @@ planStatus:
 
 # Production WebXR startup correction
 
-Agreed source correction for [QUO-58](nimbalyst://QUO-58), implemented and software-validated; release and deployed acceptance remain pending. One correction must make the supported feature set explicit, remove unwanted resource requests, and close a real session after failed entry. The supported input is held Vive controllers using the completed [QUO-59](nimbalyst://QUO-59) implementation. Bare-hand tracking is excluded.
+Agreed source correction for [QUO-58](nimbalyst://QUO-58), committed and deployed with the completed [QUO-59](nimbalyst://QUO-59) controller implementation. The fresh-ledger demo reached real stereo frames, both controllers, app exit and re-entry. Yan rejected its head-movement blackout, so usable physical acceptance remains incomplete. The follow-up below removes that restriction; its release qualification is blocked by the repeated source-edit timeout recorded below. Bare-hand tracking remains excluded.
 
-The initial launch authorized diagnosis and planning. After the requested Claude Fable plan review and the dependency-owner investigation, Yan explicitly approved implementation of the revised scope on 26 October 2026. The client correction and software verification are complete below. No commit, deployment, governed ontology update, ledger reset, hardware runtime/headset launch or display change occurred. The supplementary browser test used an owned offscreen browser with a named software XR boundary. No additional coding session or worktree was started; failed evidence remains intact.
+The initial launch authorized diagnosis and planning. After the requested Claude Fable plan review and the dependency-owner investigation, Yan explicitly approved implementation of the revised scope on 26 October 2026. At the initial software checkpoint, no commit, deployment, ontology update, ledger reset or hardware launch had occurred. Yan subsequently authorized committing the work and deleting/recreating the candidate ledgers for the demo, as recorded below. No additional coding session or worktree was started; failed evidence remains intact.
 
 ## Diagnosis evidence and pre-correction baseline
 
@@ -240,3 +240,74 @@ The twelve release gates, final release-tree freeze and pinned image, real HTTPS
 After Yan authorized committing both tickets and deleting/recreating the candidate ledgers for the demo, commit `480ba266` passed the full twelve-gate release sequence and was deployed on a freshly founded eight-node candidate. HTTPS headers, world HTML and all 195 assets matched. The real signed controller read then exposed unevaluated unary-minus terms in the Vive model bounds; the existing client fixture had supplied evaluated numeric literals. Physical entry did not start.
 
 The existing Prolog class Eidolon now evaluates its three negative bounds before projection. Client validation and resource policy remain unchanged. The real source/mapping/signed-read regression fails before the correction and all six controller tests pass afterward. [Full deployed assessment and retained evidence](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-01/assessment.md). A corrected frozen release and a separately labelled fresh candidate founding remain required; the failed demo01 evidence is retained, and no live ontology update is planned. No new Claude review was requested or initiated.
+
+
+## Head-movement correction after the real demo
+
+Commits `480ba266`, `1daac001` and evidence commit `5c1a90e6` preserve the
+completed startup/controller work and the demo results. The
+[demo-02 assessment](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/demo-02/assessment.md)
+records all twelve passing release gates, the pinned deployed image, fresh
+candidate founding, production HTTPS checks and real stereo/controller evidence.
+Yan observed repeated blackout during small head movements. This is a failed
+usability result, not final GUI acceptance.
+
+Yan explicitly rejected any fixed head-movement bubble. The restriction was an
+implementation choice, not his requirement. The correction removes the complete
+sensory-clearance path: radius decoding, eye-distance comparison, opaque Layer
+and texture, frame clearance field, native View query and its extra mechanical
+terrain demand. The existing `view_only` mapping now supports both desktop and
+tracked viewing. Entry calibration, stereo-eye parenting, QUO-58 session cleanup,
+QUO-59 controller interpretation/appearance, controlled-body collision checks
+and camera-driven visual terrain interest remain owned by their existing paths.
+No replacement head collision or automatic recentering path is introduced.
+
+A read-only desktop restoration of the deployed account captured clearance
+`0.498 m` and `tracking(view_only,500)`. That is the configured half-metre radius
+minus the existing 2 mm skin. It confirms the limit in the deployed projection;
+it does not resolve whether every physical pose change was real movement or
+native tracking drift. The previous renderer timeout remains a separate
+unresolved observation. See the
+[correction evidence](/home/yan/src/quod/doc/evidence/quo-58-webxr-20261026/view-correction-01/assessment.md).
+
+The obsolete native clearance test is retired with the feature. Existing body
+travel, placement and landing tests remain. Repeated view renewal is now tested
+through the real physics owner for no added head-collision terrain demand and no
+I/O; visual-interest streaming retains its existing signed-owner tests. Client
+regressions check unrestricted head movement, stereo eye separation, retained
+calibration on renewal/tracking recovery, paused body input on tracking loss,
+exit/re-entry and the absence of a full-view layer in the rendered world.
+
+This is an explicit source-format change: freshly founded lobby instances use
+`view_only`; an existing lobby containing `tracking(view_only,500)` does not
+change when packaged sources are rebuilt. A matching founded source is required
+for the new client. The existing governed new-account/lobby creation path can
+load the corrected packaged recipe without updating existing ontologies or
+resetting ledgers. A read-only candidate query confirmed its release-owned
+lobby source path at version 0.7.275, which this correction retains. Use a fresh
+demo account and verify its actual signed control after rollout; existing old
+lobbies remain in their prior format. Yan ruled out an in-place ontology
+update. No further data deletion is part of this correction.
+
+The release sequence is a new frozen tree with all twelve sequential gates,
+then an image pinned by digest and verified packaged sources/assets. A fresh
+physical campaign must use that exact HTTPS app, normal permissions and the
+qualified Vive setup. Save/restore display and trust state; wait for Yan before
+entry; record stereo frames and changing poses, both controllers, unrestricted
+leaning/standing, app exit/re-entry and Yan's observations. Keep it interactive
+and stop only owned processes. Native readiness remains QUO-38; GUI physical
+acceptance remains QUO-24. No additional Claude review or agent was launched.
+
+
+### Follow-up release blocker
+
+The unrestricted-view source and focused regressions are complete. Two clean
+full release sequences each stopped after 4,039 passing EUnit tests at the same
+unchanged source-edit test's five-second timeout. The isolated 20-test editor
+module passes on both the correction and the previous release, but this does
+not replace the failed full gate. All failed logs and STOP markers remain.
+No new image, rollout, ledger reset, ontology update or physical launch followed.
+The next investigation must isolate full-suite state/work behind this timeout;
+it must not raise the deadline, suppress the test or repeatedly rerun the whole
+release without a causal correction. The completed head-view fix is kept
+separate from that qualification blocker.

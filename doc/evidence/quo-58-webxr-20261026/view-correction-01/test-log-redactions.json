@@ -1,0 +1,24 @@
+{
+  "scope": "Private key bytes emitted by supervised test-process failure reports; all test outcomes and other log content retained.",
+  "private_originals": "/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/raw-test-logs",
+  "files": [
+    {
+      "file": "focused-01/physics.log",
+      "redactions": 5,
+      "raw_sha256": "d5523e202d82c638dbb78642dfe327b93e448d333396d884e9cda464858972ae",
+      "public_sha256": "c8653ea7fb19a7e0af2133a79d83952d9a3e374d889ab3d8ba535803d827c051"
+    },
+    {
+      "file": "release-gates-01/eunit.log",
+      "redactions": 32,
+      "raw_sha256": "e7fdd8415731474fda696251e91393faf041bb68104eb270f313aba79847fc63",
+      "public_sha256": "677861a3e845e81ff33c5e862702788c980188313f716533e0911e4437a066d3"
+    },
+    {
+      "file": "release-gates-02/eunit.log",
+      "redactions": 32,
+      "raw_sha256": "95559b35b356a4c0ed19b5ac90a49da24823f9c1a7aa8dd03a09e42bb8372ed5",
+      "public_sha256": "5e6d0cdca78de3f6c4f7aad0afb3b197ec02c559502469714483286691321044"
+    }
+  ]
+}

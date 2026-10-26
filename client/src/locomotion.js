@@ -38,12 +38,7 @@ export function readControl(text) {
     if (up > 1000) throw new Error('invalid movement support')
   } else if (mode.type !== 'atom' || mode.value !== 'free') throw new Error('unsupported movement mode')
   const [name, pose, tracking] = args(view, 'viewpoint', 3)
-  let trackingRadius = null
-  if (tracking.type === 'compound' && tracking.functor === 'tracking') {
-    const [mapping, radius] = args(tracking, 'tracking', 2)
-    if (mapping.type !== 'atom' || mapping.value !== 'view_only') throw new Error('unsupported tracking mapping')
-    trackingRadius = integer(radius, 1) / 1000
-  } else if (tracking.type !== 'atom' || tracking.value !== 'view_only') throw new Error('unsupported tracking mapping')
+  if (tracking.type !== 'atom' || tracking.value !== 'view_only') throw new Error('unsupported tracking mapping')
   const [position, rotation] = args(pose, 'pose', 2)
   if (capabilities.type !== 'list' || capabilities.tail !== null) throw new Error('invalid movement capabilities')
   let teleport = null, snap = null, jump = null, reposition = false
@@ -65,7 +60,7 @@ export function readControl(text) {
     body: identity(body), bodyRevision: identity(bodyRevision),
     grounded, speed: integer(speed, 1) / 1000, turn: integer(turn, 1) / 1000,
     lease: integer(lease, 1), teleport, snap, jump, reposition,
-    viewpoint: { name, position: vector(position, 'vector'), rotation: vector(rotation, 'rotation'), trackingRadius } }
+    viewpoint: { name, position: vector(position, 'vector'), rotation: vector(rotation, 'rotation') } }
 }
 
 export function movementGoal(world, frame, control, sequence, input) {

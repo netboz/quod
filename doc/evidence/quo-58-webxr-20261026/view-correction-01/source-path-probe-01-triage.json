@@ -1,0 +1,5 @@
+{
+  "result": "failed local expected-path assertion after read-only query",
+  "cause": "probe assumed /opt/quod/priv/ontologies/lobby_instance.pl; inspect actual returned paths before interpreting compatibility",
+  "mutation": false
+}

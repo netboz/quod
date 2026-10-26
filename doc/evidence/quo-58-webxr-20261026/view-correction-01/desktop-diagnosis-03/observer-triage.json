@@ -1,0 +1,1 @@
+{"cause":"Missing semicolon between independently authored IIFEs prevented WebSocket observer installation; existing XR observer and app continued. Corrected separate script installed before a read-only page reload.","production_change":false}

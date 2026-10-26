@@ -54,7 +54,7 @@ physics_agent(W,Pilot,1,Body,
     physics_body_definition(W,Body,_,controlled,_,
                             live(entity_ref(Ns,A,Pilot),Assignment,_,_)).
 physics_viewpoint(W,Pilot,eye,Body,
-    pose(vector(0,700,0),rotation(0,0,0)),tracking(view_only,500)) :-
+    pose(vector(0,700,0),rotation(0,0,0)),view_only) :-
     physics_agent(W,Pilot,_,Body,_).
 
 can_initialize_physics(W,Owner) :- lobby_owner(Owner),lobby_physical_space(W,_,_).

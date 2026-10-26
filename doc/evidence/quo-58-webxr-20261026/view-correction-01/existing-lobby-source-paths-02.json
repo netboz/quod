@@ -1,0 +1,14 @@
+{
+  "read_only": true,
+  "job": "quod-finality-candidate-v6-20260926",
+  "version": 110,
+  "allocation": "0445e248-d233-69e8-7225-39ddf17a58a0",
+  "exit": 0,
+  "result": {
+    "root": "F3372F1D729A21D911149EB8D91D8A1FB5C0E94FE5EB1880AA5F0D16DABD92C1",
+    "paths": [
+      "/opt/quod/lib/quod-0.7.275/priv/ontologies/lobby_instance.pl"
+    ],
+    "lobby": "2858A9C41EDC76974D7B2BAA2EFD73649486593D413769F3D7A7201EC264E036"
+  }
+}

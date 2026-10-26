@@ -1,0 +1,7 @@
+{
+  "origin": "https://192.168.1.10:30519/",
+  "simulation": false,
+  "automatic_vr_entry": false,
+  "error": "[Errno 2] No such file or directory: '/home/yan/src/quod/_build/quo-58-webxr-20261026/view-correction-01/desktop-diagnosis-01'",
+  "unexpected_child_exits": {}
+}

@@ -14,7 +14,7 @@ export type PhysicsControl = {
   snap: number | null
   jump: number | null
   reposition: boolean
-  viewpoint: { name: PrologTerm; position: number[]; rotation: number[]; trackingRadius: number | null }
+  viewpoint: { name: PrologTerm; position: number[]; rotation: number[] }
 }
 export function readControl(text: string): PhysicsControl | null
 export function driveInput(velocity: number[], angular?: number[]): PrologTerm

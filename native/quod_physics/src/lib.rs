@@ -742,9 +742,8 @@ fn sample(env: Env, resource: ResourceArc<WorldResource>) -> Result<Sample, Atom
     access(env, resource, |world| world.sample())
 }
 #[rustler::nif(schedule = "DirtyCpu")]
-fn terrain_requirements(env: Env, resource: ResourceArc<WorldResource>,
-                        views:Vec<(u64,u64,geometry::V3,f64)>) -> Result<Vec<terrain::Requirement>, Atom> {
-    access(env, resource, |world| world.terrain_requirements(views))
+fn terrain_requirements(env: Env, resource: ResourceArc<WorldResource>) -> Result<Vec<terrain::Requirement>, Atom> {
+    access(env, resource, |world| world.terrain_requirements())
 }
 #[rustler::nif(schedule = "DirtyCpu")]
 fn motion_query(env: Env, resource: ResourceArc<WorldResource>, id: u64, revision: u64,

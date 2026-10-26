@@ -32,10 +32,8 @@ function readFrame(frame) {
       typeof feedback.pending !== 'boolean' || typeof feedback.result !== 'string' ||
       !Array.isArray(feedback.origin_mm) || feedback.origin_mm.length !== 3 ||
       !feedback.origin_mm.every(n => typeof n === 'string' && /^(?:0|-?[1-9][0-9]*)$/.test(n)))) throw new Error('invalid control feedback')
-  const clearance = frame.view_clearance ?? null
-  if (clearance !== null && (!Number.isFinite(clearance) || clearance < 0)) throw new Error('invalid view clearance')
   return { origin: frame.origin_mm.map(BigInt), originSeq: BigInt(frame.origin_seq),
-    fence: fence(frame), tick: BigInt(frame.tick), poses, feedback, clearance,
+    fence: fence(frame), tick: BigInt(frame.tick), poses, feedback,
     received: performance.now(), physicalFrame: frame }
 }
 

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "npm",
+    "--prefix",
+    "client",
+    "test"
+  ],
+  "exit": 0,
+  "seconds": 1.8862198989954777
+}

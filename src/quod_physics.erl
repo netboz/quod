@@ -82,7 +82,7 @@ handle_current_call({watch, Expected, Previous}, {Pid, _}, S = #s{phase = active
             Watched = refresh_terrain(S#s{viewer = Kept#{pid => Pid, ref => Ref,
                 monitor => M, expected => Registered, tick => maps:get(tick, Frame),
                 terrain_interest => 0, origin_sequence => S#s.origin_sequence, credit => false,delivery => frame}}),
-            {reply, {ok, Ref, view_frame(Frame#{inputs => input_feedback(Watched)},Registered,Watched)},Watched};
+            {reply, {ok, Ref, view_frame(Frame#{inputs => input_feedback(Watched)},Registered)},Watched};
         false when not Ownership, S#s.viewer =/= none -> {reply, {error, view_busy}, S};
         false -> {reply, {error, unavailable}, S}
     end;
@@ -584,17 +584,12 @@ refresh_terrain(S = #s{native = none}) -> S;
 refresh_terrain(S = #s{native = Native,spec = Spec}) ->
     case lists:any(fun({_,_,_,_,Shape,_}) -> element(1,Shape) =:= terrain end,maps:get(bodies,Spec)) of
         false -> S;
-        true -> case native(fun() -> quod_physics_native:terrain_requirements(Native,view_consumers(S)) end) of
+        true -> case native(fun() -> quod_physics_native:terrain_requirements(Native) end) of
             {ok,[]} when S#s.terrain_mechanical =:= initial -> emit_terrain(S);
             {ok,Ranges} -> emit_terrain(S#s{terrain_mechanical = canonical_terrain_ranges(Ranges,S)});
             {error,Reason} -> fail(Reason,S)
         end
     end.
-
-view_consumers(#s{viewer = #{expected := #{control := {control,_,_,
-        {controlled_agent,_,_,Body,Revision,_,{viewpoint,_,{pose,Position,_},{tracking,view_only,Radius}}}}}}})
-  when Radius > 0 -> [{Body,Revision,physical_vector(Position),Radius/1000}];
-view_consumers(_) -> [].
 
 view_regions(Centre,Requests,S = #s{spec = Spec}) ->
     Source = maps:get(voxel_resources,Spec,#{}),
@@ -957,7 +952,7 @@ deliver_pose(S = #s{viewer = V,frame = Frame},Frame,Previous) ->
     case Tick > Previous orelse S#s.origin_sequence > maps:get(origin_sequence,V) of
         true ->
             #{pid := Pid,ref := Ref,expected := Expected} = V,
-            Pid ! {physics_frame,self(),Ref,view_frame(Frame,Expected,S)},
+            Pid ! {physics_frame,self(),Ref,view_frame(Frame,Expected)},
             S#s{viewer = V#{credit => false,tick => Tick,origin_sequence => S#s.origin_sequence,delivery => frame}};
         false -> S
     end.
@@ -994,28 +989,8 @@ terrain_snapshot(Requests,Spec,Source,Focus) ->
         error:_ -> {error,invalid_terrain_binding}
     end.
 
-%% A clearance ball is a conservative sensory allowance for tracked viewing,
-%% never a player collider. It is measured against the retained physical world
-%% and only for the selected viewer, once per delivered authoritative frame.
-view_frame(Frame,Expected,S) ->
-    (view_clearance(Frame,Expected,S))#{registration => maps:get(registration,Expected)}.
-view_clearance(Frame,#{control := {control,_,_,{controlled_agent,_,_,Body,Revision,
-        {motion,_,_,_,_,Limits,_},
-        {viewpoint,_,{pose,Position,_},{tracking,view_only,Radius}}}}},#s{native = Native})
-  when is_integer(Radius),Radius > 0 ->
-    Clearance = case query_input({travel,{vector,0,0,0},{angular,0,0,0}},Limits) of
-        {ok,_,L} ->
-            case native(fun() -> quod_physics_native:motion_query(Native,Body,Revision,
-                    {view,physical_vector(Position),Radius/1000},L) end) of
-                {ok,{view_clearance,Distance,_}} -> Distance;
-                %% refresh_terrain owns eye-region demand on watch and every
-                %% published frame. Projection cannot add another consumer.
-                _ -> null
-            end;
-        error -> null
-    end,
-    Frame#{view_clearance => Clearance};
-view_clearance(Frame,_,_) -> Frame#{view_clearance => null}.
+view_frame(Frame,Expected) ->
+    Frame#{registration => maps:get(registration,Expected)}.
 
 %% Runtime owns this incarnation-scoped invalidation generation. Reading its
 %% shared token costs no mailbox round trip and cannot rebuild domain state.

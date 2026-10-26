@@ -354,18 +354,16 @@ mount follows accepted poses without interpolation through walls. Look remains
 local. Unknown/unavailable worlds freeze commanded travel instead of enabling
 observer flight.
 
-`view_only` supports desktop look. `tracking(view_only, MaxOffsetMm)` additionally
-provides a calibrated XR reference-to-mount mapping. Calibration recentres
-position and heading while preserving tracked pitch and roll. Head motion is view motion;
-it does not change collision shape or body position. For each delivered frame,
-the owner measures a conservative clearance ball around the authored mount
-against the installed world, excluding its own body and using the same query
-allowance. This is sensory clearance, not a new player collider. Each tracked
-eye must stay within that clearance and the authored offset allowance. Otherwise
-an opaque mask asks the human to return; tracking continues behind it. Missing
-clearance, missing mappings, lost tracking and unavailable authority also mask.
-A moved door can reduce clearance at the next authoritative frame; this is not
-a physical barrier against a human moving in their room.
+`view_only` supports desktop look and calibrated XR viewing. Calibration maps
+the entry position and heading to the authored camera mount while preserving
+tracked pitch and roll. Both eyes then follow real head movement without a
+displacement limit, automatic recentering or a full-view collision mask.
+Head motion is local view motion: it does not submit locomotion commands, move
+the controlled body or change its collision shape. Loss of tracking or physical
+authority pauses commanded travel; it does not install a black overlay.
+Controlled-body travel, landing and collision checks remain owned by the
+existing physical runtime. Visual terrain demand follows the camera through
+the existing view-interest stream; it is distinct from mechanical terrain demand.
 
 Default XR mesh teleportation is disabled. On the intended Vive mapping, the
 left grip plus touchpad drives smooth travel; a left-pad left/right click requests

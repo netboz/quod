@@ -1,0 +1,990 @@
+{
+  "controls": [
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": [
+        {
+          "label": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74 \u00b7 me.",
+          "value": "8zcvHXKaIdkRFJ642R2KH7XA6U_l6xiAql8NFtq9ksE\u0000human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74\u0000DHybbB_FLACOxulem238nud-T0Qo9d4kQehUkBXRahg\u0000me."
+        }
+      ],
+      "tag": "SELECT",
+      "text": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74 \u00b7 me.",
+      "type": "select-one",
+      "value": "8zcvHXKaIdkRFJ642R2KH7XA6U_l6xiAql8NFtq9ksE\u0000human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74\u0000DHybbB_FLACOxulem238nud-T0Qo9d4kQehUkBXRahg\u0000me.",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Add agent",
+      "type": "button",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Save encrypted key",
+      "type": "button",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Export encrypted key",
+      "type": "button",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Sign out",
+      "type": "button",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Open console",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Create / operations",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "My worlds",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": true,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Enter VR",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "Reload questions",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "Scene",
+      "options": [
+        {
+          "label": "Personal lobby",
+          "value": "lobby"
+        },
+        {
+          "label": "Software licences",
+          "value": "licence"
+        }
+      ],
+      "tag": "SELECT",
+      "text": "",
+      "type": "select-one",
+      "value": "lobby",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "Appearance",
+      "options": [
+        {
+          "label": "Structure",
+          "value": "edition"
+        },
+        {
+          "label": "Normal",
+          "value": "playing"
+        }
+      ],
+      "tag": "SELECT",
+      "text": "",
+      "type": "select-one",
+      "value": "playing",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "",
+      "options": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "submit",
+      "value": "",
+      "visible": true
+    },
+    {
+      "disabled": false,
+      "id": "",
+      "label": "Inspect",
+      "options": [
+        {
+          "label": "Choose an object or knowledge base",
+          "value": ""
+        },
+        {
+          "label": "console",
+          "value": "object:0"
+        },
+        {
+          "label": "floor",
+          "value": "object:1"
+        },
+        {
+          "label": "roof",
+          "value": "object:2"
+        },
+        {
+          "label": "sky",
+          "value": "object:3"
+        },
+        {
+          "label": "sky/sky",
+          "value": "object:4"
+        },
+        {
+          "label": "quod:agent",
+          "value": "quod:agent:2xdKrGFrLZaj75xZA1vzCTyoEKaXShTrBYOuWzyKjNU"
+        },
+        {
+          "label": "quod:environment",
+          "value": "quod:environment:YmJMcFPZccypH5bdsdkKQr-5__CYpJWfsrh41yilAmE"
+        },
+        {
+          "label": "quod:environment:eidolons",
+          "value": "quod:environment:eidolons:Z19axy_5_IGBU3aQqhjJZGLPHUv2frdoGTNR21fWM1A"
+        },
+        {
+          "label": "quod:gui",
+          "value": "quod:gui:VlsFinqITbe_yN4XlrZur_r_eUqb4VA_avFebhBs4zI"
+        },
+        {
+          "label": "quod:human_user",
+          "value": "quod:human_user:cno7Mkn73zA8GNGbrBwZp_ZuyrlnYqmPooz0-1TVVQk"
+        },
+        {
+          "label": "quod:lens",
+          "value": "quod:lens:PK7b6NnaZFpYTD6_gAveFWTWENFH2b_uA622klgbB_I"
+        },
+        {
+          "label": "quod:licence",
+          "value": "quod:licence:_Iqvt4R8FkJSaxf8xgoVoSQZER2GWQDtNS3znkhiDvA"
+        },
+        {
+          "label": "quod:lobby",
+          "value": "quod:lobby:KFipxB7cdpdNeyuqLv1zZJSGWT1BN2nz16cgHsJk4DY"
+        },
+        {
+          "label": "quod:material",
+          "value": "quod:material:DmaF9ZEozYE98KzL2QIzT1JcvxcXVxdJOmVBIYW1wYQ"
+        },
+        {
+          "label": "quod:material:eidolons",
+          "value": "quod:material:eidolons:FyZTPIz6LhLnbLKBMhDik2KG_sEHbE2Yi-gB8q9hp7g"
+        },
+        {
+          "label": "quod:measure",
+          "value": "quod:measure:xXsDo2kmnbrMYCWCdWR92WQ1tcmfbtK3GWFbbjqzMu8"
+        },
+        {
+          "label": "quod:modelling",
+          "value": "quod:modelling:f7A3ot2O-CxmG-v0Qha3JSiWsh1wj7DgIhSBnjbABrA"
+        },
+        {
+          "label": "quod:names",
+          "value": "quod:names:9dPPf72AR1sHkGyX7gZ4ao97VPDnoxUQSjnvk91paNU"
+        },
+        {
+          "label": "quod:node",
+          "value": "quod:node:YijMohjnzklnoG1kPDl1MOsIBQJkkbEVftTQYZK1vX8"
+        },
+        {
+          "label": "quod:prolog",
+          "value": "quod:prolog:4sdsQ6kkRu_hRlOjkQz0BBZxSk41wPmi-GhqwgPx8Bk"
+        },
+        {
+          "label": "quod:prolog:eidolons",
+          "value": "quod:prolog:eidolons:VNuvzQNUMi_KrvvV8XZ6dphMnyQdveWRhIPLjQouFgQ"
+        },
+        {
+          "label": "quod:rendering",
+          "value": "quod:rendering:0zKcKr3e3i33pSgD5vqV6UlihEyUaboSw9ewCNceG-c"
+        },
+        {
+          "label": "quod:signup",
+          "value": "quod:signup:sKw2BN0-F4NWLuOFytF6OxJO2dUVJG-pmcbyB_4fWPQ"
+        },
+        {
+          "label": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74",
+          "value": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74:DHybbB_FLACOxulem238nud-T0Qo9d4kQehUkBXRahg"
+        },
+        {
+          "label": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74/lobby",
+          "value": "human:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74/lobby:KNw_7cxDvXtrA0cBIRY1TXfLapSNalwtiK0udZaZUaU"
+        }
+      ],
+      "tag": "SELECT",
+      "text": "",
+      "type": "select-one",
+      "value": "",
+      "visible": true
+    }
+  ],
+  "measurement": {
+    "csp": [],
+    "errors": [
+      {
+        "line": 72,
+        "message": "Uncaught TypeError: (intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(intermediate value)(...) is not a function",
+        "source": ""
+      }
+    ],
+    "resources": [
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/main-Dq6EGFK3.css",
+        "type": "link"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/world-mLK6ElOS.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/Session-LnhIM6oB.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/preload-helper-HclGiUj8.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/main-BOtLNZW3.js",
+        "type": "script"
+      },
+      {
+        "bytes": 545,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/auth/challenge",
+        "type": "fetch"
+      },
+      {
+        "bytes": 446,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/auth/complete",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/World-BqbcSLM9.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/locomotion-C73BFU4m.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/performanceConfigurator-UtxC_Odd.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/engineStore-B7HFbPTa.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.scalar.functions-lnL7TJ7T.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.color.pure-O66DKPA8.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/typeStore-Cu_sj2zM.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/texture.pure-C55j_M54.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/decorators-D5uwmq6c.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/decorators.serialization-0tAoZ2rM.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/timingTools-_uiDsfWX.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/fileTools.pure-DJQxscd3.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/logger-CuBYPcDK.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/guid-DFyUF0kX.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/halfFloat-Ce77JD5z.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.plane-C43dxWRf.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/tools.functions-BHN4804L.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.size-BHZaDYSv.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/compatibilityOptions-LFsOr3TN.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/World-DnfJkN1a.css",
+        "type": "link"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/baseTexture.pure-DKCwZRU8.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/lightConstants-pw5q6eKl.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/abstractEngine.pure-X7VQLFoA.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/shaderStore-D-XQlhUT.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/internalTexture-SZsaZuGP.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/sceneComponent-Zm4oAhwj.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/drawWrapper-C2LiMulA.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/node-C4_wmrl6.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pickingInfo-D5La0t_N.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/sceneLoaderFlags-D4PtOGco.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/camera.pure-I9VIVRod.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/smartArray-BRfcgNbX.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.frustum-IQLLcb-n.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.viewport-Cp0w6PSE.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.axis-DKY_6qvA.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/tools.pure-DiBlZ3Vj.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/material.pure-ytkjtExJ.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/thinEngine.pure-27WDWL6p.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/buffer.pure-Bpv7dyCy.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/renderingManager-TktjuWYc.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/deviceInputEvents-DrIN_SWt.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/brdfTextureTools-ESqvt5El.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/postProcess.pure-DBRMSB-M.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/effectRenderer.pure-BSP9GWmn.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pushMaterial-BMI6keaN.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/material.detailMapConfiguration-D4dwx_AG.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/assetContainer-Cp93UvDD.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/instancedMesh.pure-LUgaFfMM.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/light-D1gQddne.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/math.color-Bs-8r5OT.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/mesh.pure-BE2Bs2tI.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrMaterial.pure-B2DTbdIq.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/scene.pure-BEJ-3XXS.js",
+        "type": "script"
+      },
+      {
+        "bytes": 1924,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/ontologies/system",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/world-scene-B7OwQ520.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/sphericalPolynomial.pure-gvfM6bEh.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/textureLoaderManager-CaaEMMcW.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/standardMaterial.pure-D1ZVko-Z.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/universalCamera.pure-BvmRyzWD.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/freeCamera.pure-CxSjNgyM.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/constants-DNxlZnxc.js",
+        "type": "script"
+      },
+      {
+        "bytes": 1115,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/goals/read",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/webXRExperienceHelper-CXb5nnGb.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/renderTargetTexture.pure-DymE6AaE.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/webXRInput-BrSK8pVR.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/webXRMotionControllerManager.pure-DLEuVJJW.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/sceneLoader-CA1GXeTu.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/webXRHTCViveMotionController-HGnc-pmB.js",
+        "type": "script"
+      },
+      {
+        "bytes": 663,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/goals/execute",
+        "type": "fetch"
+      },
+      {
+        "bytes": 1117,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/goals/read",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/models/766c7015b7281f6009838145a06ae8c8b61c37bfc6116be16aaeaba1d8b817ee.glb",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/models/e2342ad365f644003e22372f41a25e833541c6c30b314ac539534e5c3a077121.glb",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/textures/d47c2b1b40f651cab5b4b151c92b66b788ceb2d57e2056a0ce7c469f333c23f4.jpg",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/rgbdDecode.fragment-BQrXAbxc.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/helperFunctions-BXbvU0Ia.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/models/2be70465da809e6e29b8b12aae01a568e54cd150e86f35f790e06a61fc82bc04.glb",
+        "type": "fetch"
+      },
+      {
+        "bytes": 488,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/api/goals/control",
+        "type": "fetch"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/instancedMesh-G0VH--yx.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/postprocess.vertex-DJCmMhI8.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/animation.pure-BSIygVXl.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/glTFLoader-BkZuilXW.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/bone.pure-BOm4J7cH.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/objectModelMapping-D5l3kSa2.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbr.vertex-D98DC75y.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/clipPlaneVertex-BgCTjwUU.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/vertexColorMixing-B7dmaeCQ.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/sceneUboDeclaration-B5VhSG0v.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/logDepthDeclaration-wCvYk_Kr.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/logDepthVertex-DbaC19x4.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/bumpVertexDeclaration-Cb04kLz9.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/morphTargetsVertex-6N5r7oF1.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/bumpVertex-CWhdIpqj.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrBRDFFunctions-BCNINF-p.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/harmonicsFunctions-QSz_WdsQ.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrUboDeclaration-C3goPwfE.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/clipPlaneFragment-DVK0wgyZ.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/fogFragment-CISE_m3s.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/oitFragment-DHYyzuCG.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/lightFragment-x7Xpl9uU.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/reflectionFunction-CivoLMz9.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/bumpFragment-BtJd9tYZ.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrIBLFunctions-CSlJv7qb.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbr.fragment-Iy0GZOMe.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrDebug-0mpC0YDk.js",
+        "type": "script"
+      },
+      {
+        "bytes": 300,
+        "origin": "https://192.168.1.10:30519",
+        "path": "/assets/pbrMaterialLoadingAdapter-DGXOTI0Q.js",
+        "type": "script"
+      }
+    ],
+    "secure": true,
+    "sessions": []
+  },
+  "secure": true,
+  "text": "Click the world to explore \u00b7 ZQSD, WASD or arrows to move \u00b7 Space to jump\nquod \u2234\nkey Jh-GOqjq4Fx1\nhuman:qDfXaLsYkwbGZVpzFUjstqcdkOoXSiSthBWZ3znZW74 \u00b7 me.\nAdd agent\nSave encrypted key\nExport encrypted key\nSign out\nExplorer \u2197\n\nYOUR SPACE\n\nPersonal lobby\n\nPhysical space ready.\n\nOpen console\nCreate / operations\nMy worlds\nEnter VR\n\nVR is unavailable in this browser or device.\n\nReload questions\nAdvanced",
+  "title": "Quod \u00b7 personal lobby",
+  "url": "https://192.168.1.10:30519/",
+  "processes": {
+    "chromedriver": null
+  }
+}

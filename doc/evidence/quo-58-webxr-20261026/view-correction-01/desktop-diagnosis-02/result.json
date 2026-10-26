@@ -1,0 +1,9 @@
+{
+  "origin": "https://192.168.1.10:30519/",
+  "simulation": false,
+  "automatic_vr_entry": false,
+  "error": "{\"value\":{\"error\":\"session not created\",\"message\":\"session not created: Chrome instance exited. Examine ChromeDriver verbose log to determine the cause.\",\"stacktrace\":\"#0 0x5579abe5e19a \\u003Cunknown>\\n#1 0x5579ab7933d5 \\u003Cunknown>\\n#2 0x5579ab7c6ff6 \\u003Cunknown>\\n#3 0x5579ab7c4eb4 \\u003Cunknown>\\n#4 0x5579ab8050b1 \\u003Cunknown>\\n#5 0x5579ab804b5c \\u003Cunknown>\\n#6 0x5579ab7cfb77 \\u003Cunknown>\\n#7 0x5579ab7cee8e \\u003Cunknown>\\n#8 0x5579ab7cf961 \\u003Cunknown>\\n#9 0x5579abe210fc \\u003Cunknown>\\n#10 0x5579abe1f905 \\u003Cunknown>\\n#11 0x5579abe0aca5 \\u003Cunknown>\\n#12 0x5579abe2056a \\u003Cunknown>\\n#13 0x5579abdf39a9 \\u003Cunknown>\\n#14 0x5579abe48758 \\u003Cunknown>\\n#15 0x5579abe488f5 \\u003Cunknown>\\n#16 0x5579abe5cb23 \\u003Cunknown>\\n#17 0x7f46c6c98042 \\u003Cunknown>\\n#18 0x7f46c6d2072c \\u003Cunknown>\\n\"}}",
+  "chromedriver_exit": -15,
+  "trust_remove_exit": 0,
+  "unexpected_child_exits": {}
+}

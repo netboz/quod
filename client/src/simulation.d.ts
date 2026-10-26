@@ -17,7 +17,6 @@ export type SimulationView = {
   fence: string
   control: PhysicsControl | null
   feedback: { sequence: string; pending: boolean; result: string; origin_mm: string[] } | null
-  clearance: number | null
   expires: number
   command?(input: PrologTerm): Promise<boolean>
   interest?(position: number[]): boolean

@@ -4,6 +4,10 @@
 <style>html,body{margin:0;background:#101820}canvas{width:100vw;height:100vh;display:block}</style>
 <canvas id="world"></canvas>
 <script type="module">
-import { runMovementSmoke } from './movement.browser.mjs'
-window.movementSmoke = runMovementSmoke(document.querySelector('canvas'))
+import { runMovementSmoke, runTrackedMovementSmoke } from './movement.browser.mjs'
+window.movementSmoke = (async () => {
+  const canvas = document.querySelector('canvas')
+  const desktop = await runMovementSmoke(canvas)
+  return { ...desktop, tracked: await runTrackedMovementSmoke(canvas) }
+})()
 </script>

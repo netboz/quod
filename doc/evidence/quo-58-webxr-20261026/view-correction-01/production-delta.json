@@ -1,0 +1,59 @@
+{
+  "added": 22,
+  "removed": 131,
+  "net": -109,
+  "files": {
+    "client/src/controlled-navigation.js": {
+      "added": 5,
+      "removed": 18
+    },
+    "client/src/locomotion.d.ts": {
+      "added": 1,
+      "removed": 1
+    },
+    "client/src/locomotion.js": {
+      "added": 2,
+      "removed": 7
+    },
+    "client/src/simulation.d.ts": {
+      "added": 0,
+      "removed": 1
+    },
+    "client/src/simulation.js": {
+      "added": 1,
+      "removed": 3
+    },
+    "client/src/world-scene.js": {
+      "added": 1,
+      "removed": 15
+    },
+    "native/quod_physics/src/lib.rs": {
+      "added": 2,
+      "removed": 3
+    },
+    "native/quod_physics/src/motion.rs": {
+      "added": 0,
+      "removed": 38
+    },
+    "native/quod_physics/src/terrain.rs": {
+      "added": 2,
+      "removed": 11
+    },
+    "priv/ontologies/lobby_instance.pl": {
+      "added": 1,
+      "removed": 1
+    },
+    "src/quod_client_view.erl": {
+      "added": 0,
+      "removed": 1
+    },
+    "src/quod_physics.erl": {
+      "added": 5,
+      "removed": 30
+    },
+    "src/quod_physics_native.erl": {
+      "added": 2,
+      "removed": 2
+    }
+  }
+}

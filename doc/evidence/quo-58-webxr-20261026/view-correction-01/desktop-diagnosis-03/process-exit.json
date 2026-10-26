@@ -1,0 +1,9 @@
+{
+  "exit": 0,
+  "vr_sessions": 0,
+  "display_changes": 0,
+  "trust_removed": true,
+  "original_account_restored": true,
+  "ledger_reset": false,
+  "observer_failure": "retained in observer-triage.json; corrected observer captured first projection"
+}

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_physics_tests,quod_physics_control_tests",
+    "--verbose"
+  ],
+  "exit": 0,
+  "seconds": 175.94087042598403
+}
